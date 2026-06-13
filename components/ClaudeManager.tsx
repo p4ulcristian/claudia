@@ -165,13 +165,13 @@ export default function ClaudeManager() {
   // Reflect what's open in the tab title.
   useEffect(() => {
     let title = "claudia";
-    if (view === "chat") {
+    if (view === "chat" && folder) {
       const name = sessionId
         ? (titleFromEvents(events) ?? "Session")
         : "New session";
-      title = `${name} · claudia`;
+      title = `${shortName(folder)} — ${name}`;
     } else if (view === "sessions" && folder) {
-      title = `${shortName(folder)} · claudia`;
+      title = `${shortName(folder)} — Sessions`;
     }
     document.title = title;
   }, [view, folder, sessionId, events]);
@@ -682,6 +682,13 @@ export default function ClaudeManager() {
             >
               {streaming ? "Queue" : "Send"}
             </button>
+            <button
+              className={"btn" + (gitOpen ? " accent" : " ghost")}
+              onClick={() => setGitOpen((v) => !v)}
+              title="Git"
+            >
+              <FontAwesomeIcon icon={faCodeBranch} />
+            </button>
           </div>
         </div>
       )}
@@ -694,16 +701,6 @@ export default function ClaudeManager() {
           onRefresh={() => void refreshUsage(true)}
           onClose={() => setUsageOpen(false)}
         />
-      )}
-
-      {(view === "sessions" || view === "chat") && folder && (
-        <button
-          className={"git-fab" + (gitOpen ? " is-active" : "")}
-          onClick={() => setGitOpen((v) => !v)}
-          title="Git"
-        >
-          <FontAwesomeIcon icon={faCodeBranch} /> Git
-        </button>
       )}
 
       {gitOpen && folder && (

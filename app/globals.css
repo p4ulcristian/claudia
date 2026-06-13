@@ -705,10 +705,7 @@ body {
 
 /* ---- header task chip + popover -------------------------------------------- */
 .task-chip-wrap {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
   z-index: 16;
 }
 .task-chip {
@@ -756,8 +753,7 @@ body {
 .task-pop {
   position: absolute;
   top: 26px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
   z-index: 19;
   width: 270px;
   max-width: 86vw;
@@ -1411,35 +1407,6 @@ body {
 }
 
 /* ---- git shelf (bottom drawer) ---- */
-.git-fab {
-  position: fixed;
-  left: 20px;
-  bottom: 20px;
-  z-index: 25;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 15px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.git-fab:hover {
-  color: var(--text);
-  border-color: rgba(232, 178, 92, 0.5);
-}
-.git-fab.is-active {
-  background: var(--accent-soft);
-  color: var(--accent-bright);
-  border-color: rgba(232, 178, 92, 0.5);
-}
-
 .git-backdrop {
   position: fixed;
   inset: 0;
