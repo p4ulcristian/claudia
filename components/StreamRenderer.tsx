@@ -284,18 +284,20 @@ function Item({ item }: { item: DisplayItem }) {
 export default function StreamRenderer({
   events,
   streaming,
+  autoScroll,
   onAnswer,
 }: {
   events: ClaudeEvent[];
   streaming: boolean;
+  autoScroll: boolean;
   onAnswer: (text: string) => void;
 }) {
   const items = useMemo(() => foldEvents(events), [events]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [items, streaming]);
+    if (autoScroll) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [items, streaming, autoScroll]);
 
   if (items.length === 0) {
     return (

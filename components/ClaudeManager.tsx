@@ -22,6 +22,7 @@ import StreamRenderer from "./StreamRenderer";
 import UsagePanel from "./UsagePanel";
 import {
   FontAwesomeIcon,
+  faAnglesDown,
   faArrowLeft,
   faChartColumn,
   faFolder,
@@ -52,6 +53,7 @@ export default function ClaudeManager() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const [usageOpen, setUsageOpen] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -308,6 +310,17 @@ export default function ClaudeManager() {
     />
   );
 
+  const autoScrollBtn = (
+    <button
+      className={`icon-btn ${autoScroll ? "is-active" : ""}`}
+      onClick={() => setAutoScroll((v) => !v)}
+      title={autoScroll ? "Auto-scroll on" : "Auto-scroll off"}
+      aria-pressed={autoScroll}
+    >
+      <FontAwesomeIcon icon={faAnglesDown} />
+    </button>
+  );
+
   const sessionPct = usage?.limits.find((l) => /session/i.test(l.name))?.percentUsed;
   const usageBtn = (
     <button
@@ -432,6 +445,7 @@ export default function ClaudeManager() {
                 Stop
               </button>
             )}
+            {autoScrollBtn}
             {usageBtn}
           </div>
 
@@ -442,6 +456,7 @@ export default function ClaudeManager() {
               <StreamRenderer
                 events={events}
                 streaming={streaming}
+                autoScroll={autoScroll}
                 onAnswer={(t) => void sendText(t)}
               />
             )}

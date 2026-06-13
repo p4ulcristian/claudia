@@ -268,6 +268,10 @@ body {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
 }
+.icon-btn.is-active {
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+}
 
 /* ---- list rows ------------------------------------------------------------- */
 .row {
