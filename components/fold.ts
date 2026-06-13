@@ -96,10 +96,7 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
 
     switch (type) {
       case "system":
-        // init banner — keep it terse
-        if (evt.subtype === "init") {
-          items.push({ kind: "system", text: "session started" });
-        }
+        // The init event just says a turn began — redundant in this UI, skip it.
         break;
 
       case "user": {
