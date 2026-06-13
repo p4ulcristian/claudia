@@ -19,6 +19,10 @@ function buildArgs(opts: ResumeOptions): string[] {
     "--verbose",
     "--include-partial-messages",
     "--dangerously-skip-permissions",
+    // AskUserQuestion can't be answered cleanly in headless mode (it auto-denies
+    // and the model rambles), so disable it — claudia chats in plain text.
+    "--disallowed-tools",
+    "AskUserQuestion",
     "--model",
     claudeModel(),
   ];

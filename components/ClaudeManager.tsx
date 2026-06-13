@@ -240,13 +240,25 @@ export default function ClaudeManager() {
     setStreaming(false);
   }, []);
 
-  // Explicitly kill the running job (Stop button), then detach.
+  // Explicitly kill the running job (Stop button / Esc), then detach.
   const stopStream = useCallback(() => {
     const jobId = jobIdRef.current;
     if (jobId) void stopChat({ jobId });
     else if (sessionId) void stopChat({ session: sessionId });
     detach();
   }, [detach, sessionId]);
+
+  // Esc stops the current generation, like the Stop button.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && streaming) {
+        e.preventDefault();
+        stopStream();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [streaming, stopStream]);
 
   // Send arbitrary text as a turn (used by the composer and by question answers).
   const sendText = async (text: string) => {
