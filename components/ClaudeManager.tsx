@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChatStreamMessage,
   ClaudeEvent,
@@ -17,8 +17,10 @@ import {
   removeFolder as apiRemoveFolder,
 } from "./api";
 import { startChat, stopChat, subscribeChat } from "./stream-chat";
+import { foldEvents, type DisplayItem } from "./fold";
 import FolderPicker from "./FolderPicker";
 import StreamRenderer from "./StreamRenderer";
+import TaskChip from "./TaskChip";
 import UsagePanel from "./UsagePanel";
 import {
   FontAwesomeIcon,
@@ -148,6 +150,14 @@ export default function ClaudeManager() {
     const id = setInterval(() => void refreshUsage(true), 10 * 60 * 1000);
     return () => clearInterval(id);
   }, [refreshUsage]);
+
+  // Fold the event stream once; the renderer draws it and the header chip reads
+  // the task list out of it.
+  const items = useMemo(() => foldEvents(events), [events]);
+  const tasks =
+    (items.find((it) => it.kind === "tasks") as
+      | Extract<DisplayItem, { kind: "tasks" }>
+      | undefined)?.tasks ?? [];
 
   // ---- chat transport ----
   // Apply a stream message from a job (live turn or a reconnect snapshot).
@@ -484,6 +494,7 @@ export default function ClaudeManager() {
               {shortName(folder)}
               {sessionId ? ` · ${sessionId.slice(0, 8)}` : " · new"}
             </div>
+            {tasks.length ? <TaskChip tasks={tasks} /> : null}
             <div className="spacer" />
             {modelChooser}
             {streaming && (
@@ -500,7 +511,7 @@ export default function ClaudeManager() {
               <div className="muted center pad">Loading transcript…</div>
             ) : (
               <StreamRenderer
-                events={events}
+                items={items}
                 streaming={streaming}
                 autoScroll={autoScroll}
                 onAnswer={(t) => void sendText(t)}

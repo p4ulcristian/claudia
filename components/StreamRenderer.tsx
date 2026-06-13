@@ -1,24 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ClaudeEvent } from "@/lib/types";
-import {
-  foldEvents,
-  type DisplayItem,
-  type TaskRow,
-  type ToolUseBlock,
-} from "./fold";
+import { useEffect, useRef, useState } from "react";
+import { type DisplayItem, type ToolUseBlock } from "./fold";
 import Markdown from "./Markdown";
 import {
   FontAwesomeIcon,
   faChevronDown,
   faChevronRight,
-  faCircle,
-  faCircleCheck,
   faCircleQuestion,
-  faCircleXmark,
   faGear,
-  faListCheck,
   faSpinner,
   faTerminal,
 } from "./icons";
@@ -99,51 +89,6 @@ function ToolResult({ item }: { item: Extract<DisplayItem, { kind: "tool_result"
         </span>
       </button>
       {open ? <pre>{body}</pre> : null}
-    </div>
-  );
-}
-
-const TASK_ICON = {
-  completed: faCircleCheck,
-  in_progress: faSpinner,
-  stopped: faCircleXmark,
-  pending: faCircle,
-} as const;
-
-// Floating, collapsible task tracker pinned to the top-left of the chat.
-function TaskFloater({ tasks }: { tasks: TaskRow[] }) {
-  const [open, setOpen] = useState(true);
-  const done = tasks.filter((t) => t.status === "completed").length;
-  return (
-    <div className={`task-floater ${open ? "is-open" : "is-collapsed"}`}>
-      <button className="task-floater-head" onClick={() => setOpen((v) => !v)}>
-        <FontAwesomeIcon icon={faListCheck} />
-        <span className="task-floater-title">Tasks</span>
-        <span className="task-floater-count">
-          {done}/{tasks.length}
-        </span>
-        <FontAwesomeIcon
-          className="task-floater-chev"
-          icon={open ? faChevronDown : faChevronRight}
-        />
-      </button>
-      {open ? (
-        <div className="task-floater-body">
-          {tasks.map((t) => {
-            const icon = TASK_ICON[t.status as keyof typeof TASK_ICON] ?? faCircle;
-            const label =
-              t.status === "in_progress" && t.activeForm ? t.activeForm : t.subject;
-            return (
-              <div key={t.id} className={`task-row is-${t.status}`}>
-                <span className="task-ic">
-                  <FontAwesomeIcon icon={icon} spin={t.status === "in_progress"} />
-                </span>
-                <span className="task-subj">{label}</span>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -282,17 +227,16 @@ function Item({ item }: { item: DisplayItem }) {
 }
 
 export default function StreamRenderer({
-  events,
+  items,
   streaming,
   autoScroll,
   onAnswer,
 }: {
-  events: ClaudeEvent[];
+  items: DisplayItem[];
   streaming: boolean;
   autoScroll: boolean;
   onAnswer: (text: string) => void;
 }) {
-  const items = useMemo(() => foldEvents(events), [events]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -315,39 +259,33 @@ export default function StreamRenderer({
     );
   }
 
-  const taskList = items.find((it) => it.kind === "tasks") as
-    | Extract<DisplayItem, { kind: "tasks" }>
-    | undefined;
   const visible = items.filter((it) => it.kind !== "tasks");
 
   return (
-    <>
-      {taskList && taskList.tasks.length ? <TaskFloater tasks={taskList.tasks} /> : null}
-      <div className="stream">
-        {visible.map((item, i) => (
-          <div className="stream-item" key={i}>
-            {item.kind === "question" ? (
-              <QuestionCard
-                item={item}
-                active={!streaming && i === visible.length - 1}
-                onAnswer={onAnswer}
-              />
-            ) : (
-              <Item item={item} />
-            )}
-          </div>
-        ))}
-        {streaming ? (
-          <div className="working">
-            <span className="working-dots">
-              <i />
-              <i />
-              <i />
-            </span>
-          </div>
-        ) : null}
-        <div ref={endRef} />
-      </div>
-    </>
+    <div className="stream">
+      {visible.map((item, i) => (
+        <div className="stream-item" key={i}>
+          {item.kind === "question" ? (
+            <QuestionCard
+              item={item}
+              active={!streaming && i === visible.length - 1}
+              onAnswer={onAnswer}
+            />
+          ) : (
+            <Item item={item} />
+          )}
+        </div>
+      ))}
+      {streaming ? (
+        <div className="working">
+          <span className="working-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+        </div>
+      ) : null}
+      <div ref={endRef} />
+    </div>
   );
 }
