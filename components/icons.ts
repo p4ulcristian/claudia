@@ -24,4 +24,5 @@ export {
   faAnglesDown,
   faCircleStop,
   faClock,
+  faCompress,
 } from "@fortawesome/free-solid-svg-icons";

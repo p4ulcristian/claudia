@@ -8,6 +8,7 @@ import type {
   SessionSummary,
 } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
+import { contextOf, COMPACT_SUGGEST_PCT, COMPACT_AUTO_PCT } from "@/lib/context";
 import {
   addFolder as apiAddFolder,
   getFolders,
@@ -28,6 +29,7 @@ import {
   faArrowLeft,
   faChartColumn,
   faCircleStop,
+  faCompress,
   faFolder,
   faFolderPlus,
   faPlus,
@@ -155,6 +157,8 @@ export default function ClaudeManager() {
   // Fold the event stream once; the renderer draws it and the header chip reads
   // the task list out of it.
   const items = useMemo(() => foldEvents(events), [events]);
+  // Context-window occupancy for this session, derived from the latest usage.
+  const ctx = useMemo(() => contextOf(events, model), [events, model]);
   const tasks =
     (items.find((it) => it.kind === "tasks") as
       | Extract<DisplayItem, { kind: "tasks" }>
@@ -341,6 +345,13 @@ export default function ClaudeManager() {
   const cancelQueued = (index: number) =>
     setQueue((q) => q.filter((_, i) => i !== index));
 
+  // Compact the conversation: /compact is a normal turn the CLI honours even in
+  // headless mode (it summarises history and continues the same session).
+  const compactNow = () => {
+    if (streaming || !folder || !sessionId) return;
+    void sendText("/compact");
+  };
+
   // When a turn finishes, send all queued messages together as one.
   useEffect(() => {
     if (streaming || queue.length === 0) return;
@@ -404,6 +415,28 @@ export default function ClaudeManager() {
       {usageLoading && sessionPct == null ? "…" : sessionPct != null ? `${sessionPct}%` : "Usage"}
     </button>
   );
+
+  // Per-session context meter; clicking it runs /compact. Past ~80% it pulses
+  // and shows the compress icon as a "compact recommended" hint.
+  const ctxPct = ctx ? Math.round(ctx.pct) : 0;
+  const ctxHot = ctx ? ctx.pct >= COMPACT_AUTO_PCT : false;
+  const ctxWarm = ctx ? ctx.pct >= COMPACT_SUGGEST_PCT : false;
+  const ctxChip = ctx ? (
+    <button
+      className={`ctx-chip ${ctxHot ? "hot" : ctxWarm ? "warm" : ""}`}
+      onClick={compactNow}
+      disabled={streaming || !sessionId}
+      title={`Context: ${ctx.tokens.toLocaleString()} / ${ctx.window.toLocaleString()} tokens (${ctxPct}%)${
+        ctxWarm ? " — compact recommended" : ""
+      }. Click to /compact.`}
+    >
+      <span className="ctx-track">
+        <span className="ctx-fill" style={{ width: `${Math.max(4, ctx.pct)}%` }} />
+      </span>
+      <span className="ctx-pct">{ctxPct}%</span>
+      {ctxWarm ? <FontAwesomeIcon icon={faCompress} /> : null}
+    </button>
+  ) : null;
 
   return (
     <div className="cm">
@@ -514,6 +547,7 @@ export default function ClaudeManager() {
             </div>
             {tasks.length ? <TaskChip tasks={tasks} /> : null}
             <div className="spacer" />
+            {ctxChip}
             {modelChooser}
             {streaming && (
               <button className="icon-btn is-danger" onClick={stopStream} title="Stop (Esc)">

@@ -9,6 +9,7 @@ import {
   faChevronRight,
   faCircleQuestion,
   faClock,
+  faCompress,
   faGear,
   faSpinner,
   faTerminal,
@@ -217,6 +218,14 @@ function Item({ item }: { item: DisplayItem }) {
       return <ToolResult item={item} />;
     case "bgtask":
       return <BgTaskCard item={item} />;
+    case "compact":
+      return (
+        <div className="compact-divider">
+          <span>
+            <FontAwesomeIcon icon={faCompress} /> Conversation compacted
+          </span>
+        </div>
+      );
     case "result":
       return (
         <div className={`msg-result ${item.isError ? "is-error" : ""}`}>

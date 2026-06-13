@@ -39,7 +39,8 @@ export type DisplayItem =
   | { kind: "result"; text: string; isError: boolean }
   | { kind: "tasks"; tasks: TaskRow[] }
   | { kind: "bgtask"; taskId: string; description: string; status: string; summary: string | null }
-  | { kind: "question"; id?: string; questions: QuestionSpec[] };
+  | { kind: "question"; id?: string; questions: QuestionSpec[] }
+  | { kind: "compact" };
 
 // Tools we render specially (and whose raw tool_use / tool_result we suppress).
 const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskStop", "TaskList", "TaskGet"]);
@@ -245,6 +246,8 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
             items.push({ kind: "bgtask", taskId: tid, description: "background task", status, summary });
             bgIndexById.set(tid, items.length - 1);
           }
+        } else if (st === "compact_boundary") {
+          items.push({ kind: "compact" });
         }
         // other system subtypes (init, thinking_tokens, …) carry no UI content
         break;
