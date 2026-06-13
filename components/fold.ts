@@ -378,5 +378,27 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
     }
   }
 
-  return items;
+  // Headless mode auto-denies AskUserQuestion, after which the model "recovers"
+  // with a fallback ramble and ends the turn. We can't truly pause the process
+  // (killing it corrupts resume), so instead hide everything between a question
+  // and the user's answer — the card becomes the clear, final call to action.
+  const cleaned: DisplayItem[] = [];
+  let awaitingAnswer = false;
+  for (const it of items) {
+    if (it.kind === "question") {
+      cleaned.push(it);
+      awaitingAnswer = true;
+      continue;
+    }
+    if (awaitingAnswer) {
+      if (it.kind === "user") {
+        awaitingAnswer = false;
+        cleaned.push(it);
+      }
+      continue; // drop the post-denial fallback until the user answers
+    }
+    cleaned.push(it);
+  }
+
+  return cleaned;
 }
