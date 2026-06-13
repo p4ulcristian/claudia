@@ -6,6 +6,7 @@ import type {
   ClaudeEvent,
   FolderPath,
   LiveSession,
+  OverviewSession,
   SessionMeta,
   SessionSummary,
 } from "@/lib/types";
@@ -16,6 +17,7 @@ import {
   deleteSession as apiDeleteSession,
   getFolders,
   getLive,
+  getOverview,
   getSessionMeta,
   getSessions,
   getUsage,
@@ -105,13 +107,15 @@ function SessionRow({
   s,
   doing,
   done,
+  folderLabel,
   onOpen,
   onToggleDone,
   onRemove,
 }: {
-  s: SessionSummary;
+  s: { sessionId: string; title: string; modified: number };
   doing: boolean;
   done: boolean;
+  folderLabel?: string;
   onOpen: () => void;
   onToggleDone: () => void;
   onRemove: () => void;
@@ -134,6 +138,7 @@ function SessionRow({
       <div className="row-main">
         <div className="row-title ellipsis">{s.title}</div>
         <div className="row-sub mono">
+          {folderLabel ? <>{folderLabel} · </> : null}
           {doing ? (
             <span className="doing-tag">
               <FontAwesomeIcon icon={faSpinner} spin /> running
@@ -164,6 +169,7 @@ export default function ClaudeManager() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [live, setLive] = useState<LiveSession[]>([]);
+  const [overview, setOverview] = useState<OverviewSession[]>([]);
   const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
   const [showDone, setShowDone] = useState(false);
 
@@ -260,6 +266,15 @@ export default function ClaudeManager() {
     };
   }, [view]);
 
+  // Home backlog: every not-done session across folders. Fetched on entering the
+  // folders view (and after marks/deletes); done-state is filtered client-side
+  // so checking a session off removes it instantly.
+  useEffect(() => {
+    if (view !== "folders") return;
+    void getOverview().then(setOverview).catch(() => {});
+    void getSessionMeta().then(setSessionMeta).catch(() => {});
+  }, [view]);
+
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
     setUsageLoading(true);
@@ -309,6 +324,12 @@ export default function ClaudeManager() {
         (s) => sessionMeta[s.sessionId]?.done && !liveIds.has(s.sessionId),
       ),
     [sessions, liveIds, sessionMeta],
+  );
+  // Home backlog: not-done sessions across folders, done filtered live so a
+  // just-checked session leaves immediately.
+  const backlog = useMemo(
+    () => overview.filter((o) => !sessionMeta[o.sessionId]?.done),
+    [overview, sessionMeta],
   );
 
   // ---- chat transport ----
@@ -514,8 +535,7 @@ export default function ClaudeManager() {
   };
 
   // Permanently delete a session's transcript (gone from Claude too).
-  const removeSession = async (id: string) => {
-    if (!folder) return;
+  const removeSession = async (f: string, id: string) => {
     if (
       !window.confirm(
         "Delete this session? This permanently removes its transcript.",
@@ -524,14 +544,15 @@ export default function ClaudeManager() {
       return;
     const next = sessions.filter((s) => s.sessionId !== id);
     setSessions(next);
-    writeSessionListCache(folder, next);
+    setOverview((prev) => prev.filter((o) => o.sessionId !== id));
+    writeSessionListCache(f, next);
     void deleteCachedTranscript(id);
     try {
-      await apiDeleteSession(folder, id);
+      await apiDeleteSession(f, id);
     } catch {
-      const fresh = await getSessions(folder);
+      const fresh = await getSessions(f);
       setSessions(fresh);
-      writeSessionListCache(folder, fresh);
+      writeSessionListCache(f, fresh);
     }
   };
 
@@ -729,23 +750,20 @@ export default function ClaudeManager() {
             {usageBtn}
           </div>
           <div className="scroll">
-            {live.length > 0 && (
+            {backlog.length > 0 && (
               <div className="live-section">
-                <div className="git-section-title">Doing now</div>
-                {live.map((l) => (
-                  <div
-                    key={l.sessionId}
-                    className="row live-row"
-                    onClick={() => openSession(l.folder, l.sessionId)}
-                  >
-                    <span className="live-dot" />
-                    <div className="row-main">
-                      <div className="row-title ellipsis">{l.title}</div>
-                      <div className="row-sub mono">
-                        {shortName(l.folder)} · {fmtAgo(l.startedAt)}
-                      </div>
-                    </div>
-                  </div>
+                <div className="git-section-title">In focus</div>
+                {backlog.map((o) => (
+                  <SessionRow
+                    key={o.sessionId}
+                    s={o}
+                    doing={liveIds.has(o.sessionId)}
+                    done={false}
+                    folderLabel={shortName(o.folder)}
+                    onOpen={() => openSession(o.folder, o.sessionId)}
+                    onToggleDone={() => void toggleDone(o.sessionId, true)}
+                    onRemove={() => void removeSession(o.folder, o.sessionId)}
+                  />
                 ))}
               </div>
             )}
@@ -814,7 +832,7 @@ export default function ClaudeManager() {
                     onToggleDone={() =>
                       void toggleDone(s.sessionId, !sessionMeta[s.sessionId]?.done)
                     }
-                    onRemove={() => void removeSession(s.sessionId)}
+                    onRemove={() => void removeSession(folder, s.sessionId)}
                   />
                 ))}
                 {doneSessions.length > 0 && (
@@ -837,7 +855,7 @@ export default function ClaudeManager() {
                           done
                           onOpen={() => openSession(folder, s.sessionId)}
                           onToggleDone={() => void toggleDone(s.sessionId, false)}
-                          onRemove={() => void removeSession(s.sessionId)}
+                          onRemove={() => void removeSession(folder, s.sessionId)}
                         />
                       ))}
                   </>

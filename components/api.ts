@@ -6,6 +6,7 @@ import type {
   FolderPath,
   GitData,
   LiveSession,
+  OverviewSession,
   SessionMeta,
   SessionSummary,
   TranscriptDelta,
@@ -120,6 +121,12 @@ export async function getGit(folder: string): Promise<GitData> {
 /** Sessions with a live job streaming right now, across all folders. */
 export async function getLive(): Promise<LiveSession[]> {
   return (await json<{ sessions: LiveSession[] }>(await fetch("/api/live"))).sessions;
+}
+
+/** Not-done sessions across all folders (home backlog), newest first. */
+export async function getOverview(): Promise<OverviewSession[]> {
+  return (await json<{ sessions: OverviewSession[] }>(await fetch("/api/overview")))
+    .sessions;
 }
 
 /** sessionId → triage meta (done flag). */

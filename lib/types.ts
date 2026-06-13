@@ -72,6 +72,14 @@ export interface GitData extends GitSmartlog {
   error?: string;
 }
 
+/** A not-done session anywhere, for the home "in focus" backlog. */
+export interface OverviewSession {
+  folder: string;
+  sessionId: string;
+  title: string;
+  modified: number;
+}
+
 /** A session with a live job streaming right now. */
 export interface LiveSession {
   folder: string;
