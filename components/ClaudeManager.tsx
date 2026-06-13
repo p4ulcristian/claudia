@@ -77,6 +77,7 @@ export default function ClaudeManager() {
   const [events, setEvents] = useState<ClaudeEvent[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [input, setInput] = useState("");
+  const [queue, setQueue] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -237,6 +238,7 @@ export default function ClaudeManager() {
     setFolder(f);
     setSessionId(id);
     setEvents([]);
+    setQueue([]);
     setError(null);
     setView("chat");
     await attachOrLoad(f, id);
@@ -249,6 +251,7 @@ export default function ClaudeManager() {
     setFolder(f);
     setSessionId(null);
     setEvents([]);
+    setQueue([]);
     setError(null);
     setStreaming(false);
     setView("chat");
@@ -262,11 +265,12 @@ export default function ClaudeManager() {
     setStreaming(false);
   }, []);
 
-  // Explicitly kill the running job (Stop button / Esc), then detach.
+  // Explicitly kill the running job (Stop button / Esc), clear the queue, detach.
   const stopStream = useCallback(() => {
     const jobId = jobIdRef.current;
     if (jobId) void stopChat({ jobId });
     else if (sessionId) void stopChat({ session: sessionId });
+    setQueue([]);
     detach();
   }, [detach, sessionId]);
 
@@ -325,12 +329,26 @@ export default function ClaudeManager() {
     }
   };
 
-  const sendPrompt = () => {
+  // Composer submit: send now if idle, otherwise queue it.
+  const submitInput = () => {
     const t = input.trim();
-    if (!t) return;
+    if (!t || !folder) return;
     setInput("");
-    void sendText(t);
+    if (streaming) setQueue((q) => [...q, t]);
+    else void sendText(t);
   };
+
+  const cancelQueued = (index: number) =>
+    setQueue((q) => q.filter((_, i) => i !== index));
+
+  // When a turn finishes, send the next queued message (chains one at a time).
+  useEffect(() => {
+    if (streaming || queue.length === 0) return;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    void sendText(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming, queue]);
 
   // ---- views ----
   const goHome = () => {
@@ -514,7 +532,9 @@ export default function ClaudeManager() {
                 items={items}
                 streaming={streaming}
                 autoScroll={autoScroll}
+                queue={queue}
                 onAnswer={(t) => void sendText(t)}
+                onCancelQueued={cancelQueued}
               />
             )}
           </div>
@@ -532,16 +552,16 @@ export default function ClaudeManager() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void sendPrompt();
+                  submitInput();
                 }
               }}
             />
             <button
               className="btn accent"
-              disabled={streaming || !input.trim()}
-              onClick={() => void sendPrompt()}
+              disabled={!input.trim()}
+              onClick={submitInput}
             >
-              {streaming ? "…" : "Send"}
+              {streaming ? "Queue" : "Send"}
             </button>
           </div>
         </div>

@@ -8,9 +8,11 @@ import {
   faChevronDown,
   faChevronRight,
   faCircleQuestion,
+  faClock,
   faGear,
   faSpinner,
   faTerminal,
+  faXmark,
 } from "./icons";
 
 // Pull a short, human hint out of a tool's (possibly partial) JSON input.
@@ -230,18 +232,22 @@ export default function StreamRenderer({
   items,
   streaming,
   autoScroll,
+  queue,
   onAnswer,
+  onCancelQueued,
 }: {
   items: DisplayItem[];
   streaming: boolean;
   autoScroll: boolean;
+  queue: string[];
   onAnswer: (text: string) => void;
+  onCancelQueued: (index: number) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (autoScroll) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [items, streaming, autoScroll]);
+  }, [items, streaming, autoScroll, queue]);
 
   if (items.length === 0) {
     return (
@@ -285,6 +291,25 @@ export default function StreamRenderer({
           </span>
         </div>
       ) : null}
+      {queue.map((q, i) => (
+        <div className="stream-item" key={`q${i}`}>
+          <div className="msg msg-user is-queued">
+            <div className="msg-body queued-body">
+              <span className="queued-ic">
+                <FontAwesomeIcon icon={faClock} />
+              </span>
+              <span className="queued-text">{q}</span>
+              <button
+                className="queued-x"
+                onClick={() => onCancelQueued(i)}
+                title="Remove from queue"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
       <div ref={endRef} />
     </div>
   );

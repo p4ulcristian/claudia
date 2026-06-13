@@ -536,6 +536,43 @@ body {
   word-break: break-word;
 }
 
+/* queued (not-yet-sent) messages — dim, dashed, with a cancel button */
+.msg-user.is-queued .queued-body {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 85%;
+  padding: 9px 13px;
+  border: 1px dashed rgba(232, 178, 92, 0.4);
+  border-radius: 16px 16px 4px 16px;
+  background: rgba(232, 178, 92, 0.06);
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+.queued-ic {
+  color: var(--accent);
+  font-size: 12px;
+}
+.queued-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.queued-x {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 5px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.queued-x:hover {
+  color: var(--danger);
+  background: rgba(255, 139, 130, 0.12);
+}
+
 /* streaming caret — a soft glowing bar */
 .cursor {
   display: inline-block;
