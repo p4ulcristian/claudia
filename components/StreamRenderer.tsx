@@ -46,10 +46,6 @@ function ToolCard({ block }: { block: ToolUseBlock }) {
 function AssistantItem({ item }: { item: Extract<DisplayItem, { kind: "assistant" }> }) {
   return (
     <div className="msg msg-assistant">
-      <div className="msg-role">
-        <span className={`dot ${item.streaming ? "is-live" : ""}`} />
-        claudia
-      </div>
       <div className="msg-body">
         {item.blocks.map((b, i) =>
           b.type === "text" ? (
