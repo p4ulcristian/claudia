@@ -291,7 +291,11 @@ export default function ClaudeManager() {
       {view === "folders" && (
         <div className="pane">
           <div className="toolbar">
-            <h1 className="brand">claudia</h1>
+            <div className="brand-wrap">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="brand-logo" src="/claudia.webp" alt="" />
+              <h1 className="brand">claudia</h1>
+            </div>
             <div className="spacer" />
             <button className="btn accent" onClick={() => setPickerOpen(true)}>
               <FontAwesomeIcon icon={faFolderPlus} /> Add folder

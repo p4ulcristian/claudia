@@ -1,4 +1,8 @@
-# claudia
+<p align="center">
+  <img src="public/claudia.png" alt="claudia" width="128" height="128" />
+</p>
+
+<h1 align="center">claudia</h1>
 
 A small, self-hostable **Next.js** web UI for your local
 [Claude Code](https://www.anthropic.com/claude-code) CLI. Point it at any
