@@ -52,6 +52,7 @@ import {
   faCodeBranch,
   faCircle,
   faCircleCheck,
+  faClock,
   faSpinner,
 } from "./icons";
 
@@ -117,6 +118,13 @@ function SessionRow({
   onRemove: () => void;
 }) {
   const waiting = active && !doing;
+  // doing = solid dot (live), waiting = clock (your turn), done = check.
+  const stateIcon = doing ? faCircle : waiting ? faClock : faCircleCheck;
+  const stateTitle = doing
+    ? "Doing — click to mark done"
+    : waiting
+      ? "Waiting — click to mark done"
+      : "Done — click to bring to focus";
   return (
     <div
       className={`row session-row${doing ? " session-doing" : ""}${
@@ -126,13 +134,13 @@ function SessionRow({
     >
       <button
         className="icon-btn done-toggle"
-        title={active ? "Mark done" : "Bring to focus"}
+        title={stateTitle}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
         }}
       >
-        <FontAwesomeIcon icon={active ? faCircleCheck : faCircle} />
+        <FontAwesomeIcon icon={stateIcon} />
       </button>
       <div className="row-main">
         <div className="row-title ellipsis">{s.title}</div>
@@ -524,6 +532,11 @@ export default function ClaudeManager() {
     }
   };
 
+  // The one toggle used by every session row, on home and in the folder list:
+  // flip between active (in focus) and done based on current state.
+  const toggleActive = (id: string, f: string, title: string) =>
+    active[id] ? markDone(id) : activate(id, f, title);
+
   // Permanently delete a session's transcript (gone from Claude too).
   const removeSession = async (f: string, id: string) => {
     if (
@@ -759,7 +772,7 @@ export default function ClaudeManager() {
                     doing={liveIds.has(a.sessionId)}
                     folderLabel={shortName(a.folder)}
                     onOpen={() => openSession(a.folder, a.sessionId)}
-                    onToggle={() => void markDone(a.sessionId)}
+                    onToggle={() => void toggleActive(a.sessionId, a.folder, a.title)}
                     onRemove={() => void removeSession(a.folder, a.sessionId)}
                   />
                 ))}
@@ -828,11 +841,7 @@ export default function ClaudeManager() {
                     active={isActive}
                     doing={liveIds.has(s.sessionId)}
                     onOpen={() => openSession(folder, s.sessionId)}
-                    onToggle={() =>
-                      isActive
-                        ? void markDone(s.sessionId)
-                        : void activate(s.sessionId, folder, s.title)
-                    }
+                    onToggle={() => void toggleActive(s.sessionId, folder, s.title)}
                     onRemove={() => void removeSession(folder, s.sessionId)}
                   />
                 );

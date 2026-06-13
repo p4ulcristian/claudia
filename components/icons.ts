@@ -26,4 +26,5 @@ export {
   faClock,
   faCompress,
   faCodeBranch,
+  faUpRightFromSquare,
 } from "@fortawesome/free-solid-svg-icons";

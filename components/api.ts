@@ -5,7 +5,9 @@ import type {
   ClaudeEvent,
   FolderPath,
   ActiveMap,
+  GitCommitDetail,
   GitData,
+  GitFileDiff,
   LiveSession,
   SessionSummary,
   TranscriptDelta,
@@ -114,6 +116,48 @@ export function writeSessionListCache(
 export async function getGit(folder: string): Promise<GitData> {
   return json<GitData>(
     await fetch(`/api/git?folder=${encodeURIComponent(folder)}`),
+  );
+}
+
+/** Files + metadata for a single commit. */
+export async function getCommit(
+  folder: string,
+  hash: string,
+): Promise<GitCommitDetail> {
+  return json<GitCommitDetail>(
+    await fetch(
+      `/api/git?folder=${encodeURIComponent(folder)}&commit=${encodeURIComponent(hash)}`,
+    ),
+  );
+}
+
+/** Lazy-loaded unified diff for one file within a commit. */
+export async function getCommitFileDiff(
+  folder: string,
+  hash: string,
+  file: string,
+): Promise<GitFileDiff> {
+  return json<GitFileDiff>(
+    await fetch(
+      `/api/git?folder=${encodeURIComponent(folder)}&commit=${encodeURIComponent(
+        hash,
+      )}&file=${encodeURIComponent(file)}`,
+    ),
+  );
+}
+
+/** Lazy-loaded unified diff for one working-tree file (uncommitted changes). */
+export async function getWorktreeFileDiff(
+  folder: string,
+  file: string,
+  untracked: boolean,
+): Promise<GitFileDiff> {
+  return json<GitFileDiff>(
+    await fetch(
+      `/api/git?folder=${encodeURIComponent(folder)}&worktree=1&file=${encodeURIComponent(
+        file,
+      )}${untracked ? "&untracked=1" : ""}`,
+    ),
   );
 }
 

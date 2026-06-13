@@ -72,6 +72,44 @@ export interface GitData extends GitSmartlog {
   error?: string;
 }
 
+/** One file touched by a commit. */
+export interface GitFileChange {
+  /** Single-letter status: A added, M modified, D deleted, R renamed, C copied, T type-changed. */
+  status: string;
+  path: string;
+  /** Previous path, for renames/copies. */
+  oldPath?: string;
+  /** Lines added; -1 for binary files. */
+  additions: number;
+  /** Lines deleted; -1 for binary files. */
+  deletions: number;
+}
+
+/** Full detail for a single commit: metadata + the files it changed. */
+export interface GitCommitDetail {
+  hash: string;
+  parents: string[];
+  author: string;
+  authorEmail: string;
+  /** Relative date, e.g. "2 days ago". */
+  when: string;
+  /** Absolute date string. */
+  date: string;
+  subject: string;
+  /** Commit message body (everything after the subject line). */
+  body: string;
+  files: GitFileChange[];
+  isMerge: boolean;
+}
+
+/** Lazy-loaded unified diff for one file within a commit. */
+export interface GitFileDiff {
+  path: string;
+  /** Raw unified-diff text (first-parent vs commit). */
+  patch: string;
+  binary: boolean;
+}
+
 /** A session with a live job streaming right now. */
 export interface LiveSession {
   folder: string;
