@@ -10,6 +10,8 @@ folder on your machine and:
 - **Open a transcript** or start a new session
 - **Resume / chat live**, streaming Claude's output token-by-token. Stop cancels
   the request and kills the spawned process.
+- **Usage** — a 📊 panel that reads your `/usage` limits (session + weekly bars,
+  reset times, session cost/tokens) straight from the Claude TUI.
 
 The chat view renders Markdown (headings, code blocks, tables, lists),
 collapsible tool calls, and live streaming — over a warm, dark theme.
@@ -23,6 +25,9 @@ collapsible tool calls, and live streaming — over a warm, dark theme.
 ## Requirements
 
 - **Node.js 18.18+** (20+ recommended) and npm
+- A **C/C++ build toolchain** (for the `node-pty` native module used by the Usage
+  panel): `build-essential` + `python3` on Linux, Xcode CLT on macOS, or
+  windows-build-tools on Windows. `npm install` builds it automatically.
 - The **Claude Code CLI** installed and authenticated. Verify with:
   ```bash
   claude --version

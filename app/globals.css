@@ -780,6 +780,118 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* ---- usage panel ----------------------------------------------------------- */
+.usage-modal {
+  max-width: 620px;
+}
+.usage-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+.usage-section-title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin: 18px 0 10px;
+}
+.usage-section-title:first-child {
+  margin-top: 0;
+}
+.usage-limit {
+  margin-bottom: 14px;
+}
+.usage-limit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.usage-limit-name {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+.usage-limit-pct {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent-bright);
+}
+.usage-bar {
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+  box-shadow: 0 0 12px rgba(232, 178, 92, 0.5);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.usage-bar-fill.warm {
+  background: linear-gradient(90deg, var(--accent-bright), var(--rose));
+}
+.usage-bar-fill.hot {
+  background: linear-gradient(90deg, var(--rose), var(--danger));
+  box-shadow: 0 0 14px rgba(255, 139, 130, 0.55);
+}
+.usage-reset {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+.usage-stat {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.usage-stat-k {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+.usage-stat-v {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text);
+}
+.usage-insights {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.usage-insights li {
+  margin: 5px 0;
+}
+.usage-insights li::marker {
+  color: var(--accent);
+}
+.usage-kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.usage-foot {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+}
+
 /* ---- composer -------------------------------------------------------------- */
 .error {
   padding: 7px 18px;

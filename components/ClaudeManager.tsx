@@ -12,6 +12,7 @@ import {
 import { streamChat } from "./stream-chat";
 import FolderPicker from "./FolderPicker";
 import StreamRenderer from "./StreamRenderer";
+import UsagePanel from "./UsagePanel";
 
 type View = "folders" | "sessions" | "chat";
 
@@ -33,6 +34,8 @@ export default function ClaudeManager() {
   const [view, setView] = useState<View>("folders");
   const [folders, setFolders] = useState<FolderPath[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const [usageOpen, setUsageOpen] = useState(false);
 
   const [folder, setFolder] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -153,6 +156,9 @@ export default function ClaudeManager() {
           <div className="toolbar">
             <h1 className="brand">claudia</h1>
             <div className="spacer" />
+            <button className="btn ghost" onClick={() => setUsageOpen(true)}>
+              📊 Usage
+            </button>
             <button className="btn accent" onClick={() => setPickerOpen(true)}>
               📂 Add folder
             </button>
@@ -187,6 +193,7 @@ export default function ClaudeManager() {
           {pickerOpen && (
             <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
           )}
+          {usageOpen && <UsagePanel onClose={() => setUsageOpen(false)} />}
         </div>
       )}
 

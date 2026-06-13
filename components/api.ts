@@ -6,6 +6,7 @@ import type {
   FolderPath,
   SessionSummary,
 } from "@/lib/types";
+import type { UsageData } from "@/lib/usage";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -64,4 +65,8 @@ export async function loadSession(
       ),
     )
   ).events;
+}
+
+export async function getUsage(refresh = false): Promise<UsageData> {
+  return json<UsageData>(await fetch(`/api/usage${refresh ? "?refresh=1" : ""}`));
 }
