@@ -341,12 +341,12 @@ export default function ClaudeManager() {
   const cancelQueued = (index: number) =>
     setQueue((q) => q.filter((_, i) => i !== index));
 
-  // When a turn finishes, send the next queued message (chains one at a time).
+  // When a turn finishes, send all queued messages together as one.
   useEffect(() => {
     if (streaming || queue.length === 0) return;
-    const [next, ...rest] = queue;
-    setQueue(rest);
-    void sendText(next);
+    const combined = queue.join("\n\n");
+    setQueue([]);
+    void sendText(combined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming, queue]);
 
