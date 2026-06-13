@@ -1,8 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import type { UsageData } from "@/lib/usage";
-import { getUsage } from "./api";
 
 function Bar({ pct }: { pct: number }) {
   const hot = pct >= 80;
@@ -17,27 +15,19 @@ function Bar({ pct }: { pct: number }) {
   );
 }
 
-export default function UsagePanel({ onClose }: { onClose: () => void }) {
-  const [data, setData] = useState<UsageData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await getUsage(refresh));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
+export default function UsagePanel({
+  data,
+  loading,
+  error,
+  onRefresh,
+  onClose,
+}: {
+  data: UsageData | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
   const s = data?.session;
 
   return (
@@ -45,7 +35,7 @@ export default function UsagePanel({ onClose }: { onClose: () => void }) {
       <div className="modal usage-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">📊 Usage</div>
-          <button className="btn ghost" disabled={loading} onClick={() => void load(true)}>
+          <button className="btn ghost" disabled={loading} onClick={onRefresh}>
             {loading ? "…" : "↻ Refresh"}
           </button>
           <button className="icon-btn" onClick={onClose}>
@@ -159,8 +149,9 @@ export default function UsagePanel({ onClose }: { onClose: () => void }) {
 
               {data.capturedAt && (
                 <div className="usage-foot muted">
-                  captured {new Date(data.capturedAt).toLocaleTimeString()} · approximate,
-                  from local sessions on this machine
+                  captured {new Date(data.capturedAt).toLocaleTimeString()} ·
+                  auto-refreshes every 10 min · approximate, from local sessions on this
+                  machine
                 </div>
               )}
             </>

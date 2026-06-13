@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClaudeEvent, FolderPath, SessionSummary } from "@/lib/types";
+import type { UsageData } from "@/lib/usage";
 import {
   addFolder as apiAddFolder,
   getFolders,
   getSessions,
+  getUsage,
   loadSession,
   removeFolder as apiRemoveFolder,
 } from "./api";
@@ -36,6 +38,9 @@ export default function ClaudeManager() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const [usageOpen, setUsageOpen] = useState(false);
+  const [usage, setUsage] = useState<UsageData | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState<string | null>(null);
 
   const [folder, setFolder] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -57,6 +62,25 @@ export default function ClaudeManager() {
     void refreshFolders();
     return () => abortRef.current?.abort();
   }, [refreshFolders]);
+
+  // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
+  const refreshUsage = useCallback(async (force: boolean) => {
+    setUsageLoading(true);
+    setUsageError(null);
+    try {
+      setUsage(await getUsage(force));
+    } catch (e) {
+      setUsageError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUsage(true);
+    const id = setInterval(() => void refreshUsage(true), 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [refreshUsage]);
 
   // ---- folders ----
   const onAddFolder = async (path: string) => {
@@ -193,7 +217,15 @@ export default function ClaudeManager() {
           {pickerOpen && (
             <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
           )}
-          {usageOpen && <UsagePanel onClose={() => setUsageOpen(false)} />}
+          {usageOpen && (
+            <UsagePanel
+              data={usage}
+              loading={usageLoading}
+              error={usageError}
+              onRefresh={() => void refreshUsage(true)}
+              onClose={() => setUsageOpen(false)}
+            />
+          )}
         </div>
       )}
 
