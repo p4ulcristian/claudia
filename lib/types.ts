@@ -24,6 +24,54 @@ export interface TranscriptDelta {
   reset: boolean;
 }
 
+// ---- git smartlog (sidebar) ----
+
+export type GitRefType = "head" | "branch" | "remote" | "tag" | "detached";
+
+export interface GitRef {
+  type: GitRefType;
+  name: string;
+}
+
+export interface GitCommit {
+  hash: string;
+  parents: string[];
+  author: string;
+  /** Relative date, e.g. "2 days ago". */
+  when: string;
+  refs: GitRef[];
+  subject: string;
+  /** Lane column assigned by the graph layout. */
+  col: number;
+}
+
+export interface GitSmartlog {
+  commits: GitCommit[];
+  head: string;
+  currentBranch: string;
+  detached: boolean;
+}
+
+/** One changed file: x = staged (index) code, y = unstaged (worktree) code. */
+export interface GitStatusFile {
+  x: string;
+  y: string;
+  path: string;
+}
+
+export interface GitStatus {
+  ahead: number;
+  behind: number;
+  files: GitStatusFile[];
+}
+
+/** Combined payload for the git drawer. `error` set when the folder isn't a repo. */
+export interface GitData extends GitSmartlog {
+  repo: { name: string; path: string };
+  status: GitStatus;
+  error?: string;
+}
+
 /** An entry in the server-side directory browser. */
 export interface DirEntry {
   name: string;

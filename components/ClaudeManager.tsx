@@ -27,6 +27,7 @@ import {
 import { startChat, stopChat, subscribeChat } from "./stream-chat";
 import { foldEvents, type DisplayItem } from "./fold";
 import FolderPicker from "./FolderPicker";
+import GitPanel from "./GitPanel";
 import StreamRenderer from "./StreamRenderer";
 import TaskChip from "./TaskChip";
 import UsagePanel from "./UsagePanel";
@@ -41,6 +42,7 @@ import {
   faFolderPlus,
   faPlus,
   faXmark,
+  faCodeBranch,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -89,6 +91,7 @@ export default function ClaudeManager() {
   const [view, setView] = useState<View>("folders");
   const [folders, setFolders] = useState<FolderPath[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [gitOpen, setGitOpen] = useState(false);
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -691,6 +694,20 @@ export default function ClaudeManager() {
           onRefresh={() => void refreshUsage(true)}
           onClose={() => setUsageOpen(false)}
         />
+      )}
+
+      {(view === "sessions" || view === "chat") && folder && (
+        <button
+          className={"git-fab" + (gitOpen ? " is-active" : "")}
+          onClick={() => setGitOpen((v) => !v)}
+          title="Git"
+        >
+          <FontAwesomeIcon icon={faCodeBranch} /> Git
+        </button>
+      )}
+
+      {gitOpen && folder && (
+        <GitPanel folder={folder} onClose={() => setGitOpen(false)} />
       )}
     </div>
   );

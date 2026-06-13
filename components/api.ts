@@ -4,6 +4,7 @@ import type {
   BrowseResult,
   ClaudeEvent,
   FolderPath,
+  GitData,
   SessionSummary,
   TranscriptDelta,
 } from "@/lib/types";
@@ -105,6 +106,13 @@ export function writeSessionListCache(
   } catch {
     // quota / unavailable — cache is best-effort
   }
+}
+
+/** Git smartlog + working-tree status for a folder. */
+export async function getGit(folder: string): Promise<GitData> {
+  return json<GitData>(
+    await fetch(`/api/git?folder=${encodeURIComponent(folder)}`),
+  );
 }
 
 export async function getUsage(refresh = false): Promise<UsageData> {
