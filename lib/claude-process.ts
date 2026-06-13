@@ -8,6 +8,8 @@ export interface ResumeOptions {
   /** Present → resume that session; absent → start a new one. */
   sessionId?: string | null;
   prompt: string;
+  /** Model id to run; falls back to CLAUDE_MODEL / the default (Opus). */
+  model?: string;
   /** Aborting this kills the spawned process and ends the stream. */
   signal?: AbortSignal;
 }
@@ -24,7 +26,7 @@ function buildArgs(opts: ResumeOptions): string[] {
     "--disallowed-tools",
     "AskUserQuestion",
     "--model",
-    claudeModel(),
+    opts.model?.trim() || claudeModel(),
   ];
   if (opts.sessionId) args.push("--resume", opts.sessionId);
   args.push("-p", String(opts.prompt));

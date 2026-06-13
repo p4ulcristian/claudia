@@ -6,6 +6,7 @@ export interface StreamChatParams {
   folder: string;
   sessionId: string | null;
   prompt: string;
+  model: string;
   signal: AbortSignal;
 }
 
@@ -57,6 +58,7 @@ export async function startChat(
       folder: params.folder,
       sessionId: params.sessionId,
       prompt: params.prompt,
+      model: params.model,
     }),
     signal: params.signal,
   });

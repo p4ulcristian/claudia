@@ -272,6 +272,42 @@ body {
   color: var(--accent-bright);
   background: var(--accent-soft);
 }
+.icon-btn.is-danger {
+  color: var(--danger);
+}
+.icon-btn.is-danger:hover {
+  color: var(--danger);
+  background: rgba(255, 139, 130, 0.14);
+}
+
+/* model chooser */
+.model-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 28px 7px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background-color: var(--surface-2);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 3.5 L5 6.5 L8 3.5' stroke='%23908aa0' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color 0.18s ease;
+}
+.model-select:hover {
+  border-color: rgba(232, 178, 92, 0.4);
+}
+.model-select:focus {
+  outline: none;
+  border-color: rgba(232, 178, 92, 0.55);
+}
+.model-select option {
+  background: #15131c;
+  color: var(--text);
+}
 
 /* ---- list rows ------------------------------------------------------------- */
 .row {

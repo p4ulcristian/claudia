@@ -22,4 +22,5 @@ export {
   faTerminal,
   faSpinner,
   faAnglesDown,
+  faCircleStop,
 } from "@fortawesome/free-solid-svg-icons";

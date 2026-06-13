@@ -102,6 +102,7 @@ export async function startJob(opts: {
   folder: string;
   sessionId: string | null;
   prompt: string;
+  model?: string;
 }): Promise<Job> {
   if (opts.sessionId) {
     const prev = getJobBySession(opts.sessionId);
@@ -140,6 +141,7 @@ export async function startJob(opts: {
         folder: opts.folder,
         sessionId: opts.sessionId,
         prompt: opts.prompt,
+        model: opts.model,
         signal: job.ac.signal,
       })) {
         if (msg.kind === "event") {

@@ -14,6 +14,7 @@ interface ChatBody {
   folder?: string;
   sessionId?: string | null;
   prompt?: string;
+  model?: string;
 }
 
 const SSE_HEADERS = {
@@ -88,6 +89,7 @@ export async function POST(req: Request) {
     folder,
     sessionId: body.sessionId ?? null,
     prompt,
+    model: body.model,
   });
   return streamJob(job);
 }

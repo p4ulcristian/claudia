@@ -25,6 +25,7 @@ import {
   faAnglesDown,
   faArrowLeft,
   faChartColumn,
+  faCircleStop,
   faFolder,
   faFolderPlus,
   faPlus,
@@ -32,6 +33,14 @@ import {
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
+
+const MODELS = [
+  { id: "claude-opus-4-8", label: "Opus 4.8" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+  { id: "claude-fable-5", label: "Fable 5" },
+];
+const DEFAULT_MODEL = "claude-opus-4-8";
 
 function shortName(p: string): string {
   const clean = p.replace(/\/+$/, "");
@@ -54,6 +63,7 @@ export default function ClaudeManager() {
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -250,6 +260,24 @@ export default function ClaudeManager() {
     detach();
   }, [detach, sessionId]);
 
+  // Remember the chosen model across reloads (default Opus).
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem("claudia-model");
+      if (m) setModel(m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const changeModel = (id: string) => {
+    setModel(id);
+    try {
+      localStorage.setItem("claudia-model", id);
+    } catch {
+      /* ignore */
+    }
+  };
+
   // Esc stops the current generation, like the Stop button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -280,7 +308,7 @@ export default function ClaudeManager() {
     abortRef.current = ac;
 
     try {
-      await startChat({ folder, sessionId, prompt, signal: ac.signal }, handleMsg);
+      await startChat({ folder, sessionId, prompt, model, signal: ac.signal }, handleMsg);
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
       setStreaming(false);
@@ -308,6 +336,22 @@ export default function ClaudeManager() {
       title="Home"
       onClick={goHome}
     />
+  );
+
+  const modelChooser = (
+    <select
+      className="model-select"
+      value={model}
+      onChange={(e) => changeModel(e.target.value)}
+      title="Model"
+    >
+      {MODELS.every((m) => m.id !== model) ? <option value={model}>{model}</option> : null}
+      {MODELS.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.label}
+        </option>
+      ))}
+    </select>
   );
 
   const autoScrollBtn = (
@@ -346,6 +390,7 @@ export default function ClaudeManager() {
             <button className="btn accent" onClick={() => setPickerOpen(true)}>
               <FontAwesomeIcon icon={faFolderPlus} /> Add folder
             </button>
+            {modelChooser}
             {usageBtn}
           </div>
           <div className="scroll">
@@ -440,9 +485,10 @@ export default function ClaudeManager() {
               {sessionId ? ` · ${sessionId.slice(0, 8)}` : " · new"}
             </div>
             <div className="spacer" />
+            {modelChooser}
             {streaming && (
-              <button className="btn danger" onClick={stopStream}>
-                Stop
+              <button className="icon-btn is-danger" onClick={stopStream} title="Stop (Esc)">
+                <FontAwesomeIcon icon={faCircleStop} />
               </button>
             )}
             {autoScrollBtn}
