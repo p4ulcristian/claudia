@@ -1436,12 +1436,15 @@ body {
 .session-row .done-toggle:hover {
   color: var(--accent-bright);
 }
-.session-done .done-toggle {
+.session-row.session-waiting .done-toggle,
+.session-row.session-doing .done-toggle {
   color: var(--accent);
 }
-.session-done .row-title {
-  text-decoration: line-through;
-  color: var(--text-muted);
+.waiting-tag {
+  color: var(--text-secondary);
+}
+.session-waiting {
+  border-left: 2px solid var(--border-strong);
 }
 .session-row .row-del {
   flex: 0 0 auto;
@@ -1461,27 +1464,7 @@ body {
 .doing-tag {
   color: var(--accent-bright);
 }
-.done-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin: 10px 0 2px;
-  padding: 6px 10px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-muted);
-}
-.done-group-head:hover {
-  color: var(--text-secondary);
-}
-
-/* home "Doing now" section */
+/* home "In focus" section */
 .live-section {
   margin-bottom: 14px;
 }

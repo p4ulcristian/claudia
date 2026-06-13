@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ActiveMap,
   ChatStreamMessage,
   ClaudeEvent,
   FolderPath,
   LiveSession,
-  OverviewSession,
-  SessionMeta,
   SessionSummary,
 } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
@@ -15,16 +14,15 @@ import { contextOf, COMPACT_SUGGEST_PCT, COMPACT_AUTO_PCT } from "@/lib/context"
 import {
   addFolder as apiAddFolder,
   deleteSession as apiDeleteSession,
+  getActive,
   getFolders,
   getLive,
-  getOverview,
-  getSessionMeta,
   getSessions,
   getUsage,
   loadSessionDelta,
   readSessionListCache,
   removeFolder as apiRemoveFolder,
-  setSessionDone,
+  setSessionActive,
   writeSessionListCache,
 } from "./api";
 import {
@@ -55,8 +53,6 @@ import {
   faCircle,
   faCircleCheck,
   faSpinner,
-  faChevronDown,
-  faChevronRight,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -101,39 +97,42 @@ function fmtAgo(ms: number): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-// One session row in the list: done-toggle on the left, title + meta (or a
-// "running" tag when doing), delete on the right.
+// One session row: a focus toggle (filled = active/in-focus, hollow = done) on
+// the left, title + meta (running / waiting / timestamp), delete on the right.
 function SessionRow({
   s,
+  active,
   doing,
-  done,
   folderLabel,
   onOpen,
-  onToggleDone,
+  onToggle,
   onRemove,
 }: {
   s: { sessionId: string; title: string; modified: number };
+  active: boolean;
   doing: boolean;
-  done: boolean;
   folderLabel?: string;
   onOpen: () => void;
-  onToggleDone: () => void;
+  onToggle: () => void;
   onRemove: () => void;
 }) {
+  const waiting = active && !doing;
   return (
     <div
-      className={`row session-row${doing ? " session-doing" : ""}${done ? " session-done" : ""}`}
+      className={`row session-row${doing ? " session-doing" : ""}${
+        waiting ? " session-waiting" : ""
+      }`}
       onClick={onOpen}
     >
       <button
         className="icon-btn done-toggle"
-        title={done ? "Mark not done" : "Mark done"}
+        title={active ? "Mark done" : "Bring to focus"}
         onClick={(e) => {
           e.stopPropagation();
-          onToggleDone();
+          onToggle();
         }}
       >
-        <FontAwesomeIcon icon={done ? faCircleCheck : faCircle} />
+        <FontAwesomeIcon icon={active ? faCircleCheck : faCircle} />
       </button>
       <div className="row-main">
         <div className="row-title ellipsis">{s.title}</div>
@@ -143,6 +142,8 @@ function SessionRow({
             <span className="doing-tag">
               <FontAwesomeIcon icon={faSpinner} spin /> running
             </span>
+          ) : waiting ? (
+            <span className="waiting-tag">waiting</span>
           ) : (
             fmtAgo(s.modified)
           )}{" "}
@@ -169,9 +170,7 @@ export default function ClaudeManager() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [live, setLive] = useState<LiveSession[]>([]);
-  const [overview, setOverview] = useState<OverviewSession[]>([]);
-  const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
-  const [showDone, setShowDone] = useState(false);
+  const [active, setActive] = useState<ActiveMap>({});
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -249,30 +248,26 @@ export default function ClaudeManager() {
     else window.history.replaceState(null, "", target);
   }, [view, folder, sessionId]);
 
-  // Poll the live ("doing") sessions while browsing folders or a session list,
-  // so the home section and the per-row badges stay fresh.
+  // While browsing folders or a session list, poll the live ("doing") set and
+  // the active set so the home "in focus" list, newly-sent sessions, and the
+  // per-row badges stay fresh. Both payloads are small.
   useEffect(() => {
     if (view !== "folders" && view !== "sessions") return;
     let alive = true;
-    const tick = () =>
+    const tick = () => {
       getLive()
         .then((l) => alive && setLive(l))
         .catch(() => {});
-    void tick();
+      getActive()
+        .then((a) => alive && setActive(a))
+        .catch(() => {});
+    };
+    tick();
     const id = setInterval(tick, 4000);
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, [view]);
-
-  // Home backlog: every not-done session across folders. Fetched on entering the
-  // folders view (and after marks/deletes); done-state is filtered client-side
-  // so checking a session off removes it instantly.
-  useEffect(() => {
-    if (view !== "folders") return;
-    void getOverview().then(setOverview).catch(() => {});
-    void getSessionMeta().then(setSessionMeta).catch(() => {});
   }, [view]);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
@@ -304,32 +299,15 @@ export default function ClaudeManager() {
       | Extract<DisplayItem, { kind: "tasks" }>
       | undefined)?.tasks ?? [];
 
-  // Session triage groupings for the sessions list. A running ("doing") session
-  // always counts as active even if also marked done. Done (and not running)
-  // sinks into a collapsible group. Within a group, list stays newest-first.
+  // "doing" = a live job is streaming. "active" = in the home set (sessionMeta).
   const liveIds = useMemo(() => new Set(live.map((l) => l.sessionId)), [live]);
-  const activeSessions = useMemo(
+  // Home "in focus" list: the active set, most-recently-active first.
+  const activeList = useMemo(
     () =>
-      sessions
-        .filter((s) => liveIds.has(s.sessionId) || !sessionMeta[s.sessionId]?.done)
-        .sort(
-          (a, b) =>
-            (liveIds.has(b.sessionId) ? 1 : 0) - (liveIds.has(a.sessionId) ? 1 : 0),
-        ),
-    [sessions, liveIds, sessionMeta],
-  );
-  const doneSessions = useMemo(
-    () =>
-      sessions.filter(
-        (s) => sessionMeta[s.sessionId]?.done && !liveIds.has(s.sessionId),
-      ),
-    [sessions, liveIds, sessionMeta],
-  );
-  // Home backlog: not-done sessions across folders, done filtered live so a
-  // just-checked session leaves immediately.
-  const backlog = useMemo(
-    () => overview.filter((o) => !sessionMeta[o.sessionId]?.done),
-    [overview, sessionMeta],
+      Object.entries(active)
+        .map(([sessionId, e]) => ({ sessionId, ...e }))
+        .sort((a, b) => b.lastActiveAt - a.lastActiveAt),
+    [active],
   );
 
   // ---- chat transport ----
@@ -436,7 +414,6 @@ export default function ClaudeManager() {
       } else {
         setSessionId(null);
         setView("sessions");
-        void getSessionMeta().then(setSessionMeta).catch(() => {});
         const cached = readSessionListCache(f);
         if (cached) setSessions(cached);
         else setLoading(true);
@@ -481,7 +458,6 @@ export default function ClaudeManager() {
   const openFolder = async (f: string) => {
     setFolder(f);
     setView("sessions");
-    void getSessionMeta().then(setSessionMeta).catch(() => {});
     // Render the last known list instantly, then revalidate in the background.
     const cached = readSessionListCache(f);
     if (cached) {
@@ -524,13 +500,27 @@ export default function ClaudeManager() {
     setView("chat");
   };
 
-  // Toggle a session's "done" mark (optimistic, then confirm from the server).
-  const toggleDone = async (id: string, done: boolean) => {
-    setSessionMeta((m) => ({ ...m, [id]: { ...m[id], done } }));
+  // Bring a session to focus (done → active). Optimistic, then confirm.
+  const activate = async (id: string, f: string, title: string) => {
+    setActive((m) => ({ ...m, [id]: { folder: f, title, lastActiveAt: Date.now() } }));
     try {
-      setSessionMeta(await setSessionDone(id, done));
+      setActive(await setSessionActive(id, true, f, title));
     } catch {
-      /* leave the optimistic value; next folder open re-syncs */
+      /* next poll re-syncs */
+    }
+  };
+
+  // Mark a session done (active → done; leaves the home list). Optimistic.
+  const markDone = async (id: string) => {
+    setActive((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+    try {
+      setActive(await setSessionActive(id, false));
+    } catch {
+      /* next poll re-syncs */
     }
   };
 
@@ -544,7 +534,11 @@ export default function ClaudeManager() {
       return;
     const next = sessions.filter((s) => s.sessionId !== id);
     setSessions(next);
-    setOverview((prev) => prev.filter((o) => o.sessionId !== id));
+    setActive((m) => {
+      const n = { ...m };
+      delete n[id];
+      return n;
+    });
     writeSessionListCache(f, next);
     void deleteCachedTranscript(id);
     try {
@@ -750,19 +744,23 @@ export default function ClaudeManager() {
             {usageBtn}
           </div>
           <div className="scroll">
-            {backlog.length > 0 && (
+            {activeList.length > 0 && (
               <div className="live-section">
                 <div className="git-section-title">In focus</div>
-                {backlog.map((o) => (
+                {activeList.map((a) => (
                   <SessionRow
-                    key={o.sessionId}
-                    s={o}
-                    doing={liveIds.has(o.sessionId)}
-                    done={false}
-                    folderLabel={shortName(o.folder)}
-                    onOpen={() => openSession(o.folder, o.sessionId)}
-                    onToggleDone={() => void toggleDone(o.sessionId, true)}
-                    onRemove={() => void removeSession(o.folder, o.sessionId)}
+                    key={a.sessionId}
+                    s={{
+                      sessionId: a.sessionId,
+                      title: a.title,
+                      modified: a.lastActiveAt,
+                    }}
+                    active
+                    doing={liveIds.has(a.sessionId)}
+                    folderLabel={shortName(a.folder)}
+                    onOpen={() => openSession(a.folder, a.sessionId)}
+                    onToggle={() => void markDone(a.sessionId)}
+                    onRemove={() => void removeSession(a.folder, a.sessionId)}
                   />
                 ))}
               </div>
@@ -821,46 +819,24 @@ export default function ClaudeManager() {
             ) : sessions.length === 0 ? (
               <div className="muted center pad">No sessions in this folder yet.</div>
             ) : (
-              <>
-                {activeSessions.map((s) => (
+              sessions.map((s) => {
+                const isActive = !!active[s.sessionId];
+                return (
                   <SessionRow
                     key={s.sessionId}
                     s={s}
+                    active={isActive}
                     doing={liveIds.has(s.sessionId)}
-                    done={!!sessionMeta[s.sessionId]?.done}
                     onOpen={() => openSession(folder, s.sessionId)}
-                    onToggleDone={() =>
-                      void toggleDone(s.sessionId, !sessionMeta[s.sessionId]?.done)
+                    onToggle={() =>
+                      isActive
+                        ? void markDone(s.sessionId)
+                        : void activate(s.sessionId, folder, s.title)
                     }
                     onRemove={() => void removeSession(folder, s.sessionId)}
                   />
-                ))}
-                {doneSessions.length > 0 && (
-                  <>
-                    <button
-                      className="done-group-head"
-                      onClick={() => setShowDone((v) => !v)}
-                    >
-                      <FontAwesomeIcon
-                        icon={showDone ? faChevronDown : faChevronRight}
-                      />
-                      Done ({doneSessions.length})
-                    </button>
-                    {showDone &&
-                      doneSessions.map((s) => (
-                        <SessionRow
-                          key={s.sessionId}
-                          s={s}
-                          doing={false}
-                          done
-                          onOpen={() => openSession(folder, s.sessionId)}
-                          onToggleDone={() => void toggleDone(s.sessionId, false)}
-                          onRemove={() => void removeSession(folder, s.sessionId)}
-                        />
-                      ))}
-                  </>
-                )}
-              </>
+                );
+              })
             )}
           </div>
         </div>

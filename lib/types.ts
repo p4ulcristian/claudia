@@ -72,14 +72,6 @@ export interface GitData extends GitSmartlog {
   error?: string;
 }
 
-/** A not-done session anywhere, for the home "in focus" backlog. */
-export interface OverviewSession {
-  folder: string;
-  sessionId: string;
-  title: string;
-  modified: number;
-}
-
 /** A session with a live job streaming right now. */
 export interface LiveSession {
   folder: string;
@@ -89,10 +81,15 @@ export interface LiveSession {
   startedAt: number;
 }
 
-/** Per-session user triage state (persisted server-side, keyed by sessionId). */
-export interface SessionMeta {
-  done?: boolean;
+// Active-session set: a session is "active" (shown on home) when present here;
+// absent ⇒ done (the default). Keyed by sessionId, persisted server-side.
+export interface ActiveEntry {
+  folder: string;
+  title: string;
+  /** Epoch millis of the last time it went/stayed active. */
+  lastActiveAt: number;
 }
+export type ActiveMap = Record<string, ActiveEntry>;
 
 /** An entry in the server-side directory browser. */
 export interface DirEntry {

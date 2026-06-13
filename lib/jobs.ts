@@ -1,7 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { resume } from "./claude-process";
 import { loadSession } from "./sessions";
+import { setActive } from "./session-meta";
 import type { ChatStreamMessage, ClaudeEvent, JobStatus } from "./types";
+
+// First human message in a transcript, for a session label.
+function titleFromEvents(events: ClaudeEvent[]): string | null {
+  for (const evt of events) {
+    if (evt.type !== "user") continue;
+    const content = evt.message?.content;
+    const text =
+      typeof content === "string"
+        ? content
+        : typeof (evt as { content?: unknown }).content === "string"
+          ? ((evt as { content?: string }).content as string)
+          : null;
+    const t = text?.trim();
+    if (t && !t.startsWith("<")) return t.length > 80 ? `${t.slice(0, 80)}…` : t;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Long-running chat jobs.
@@ -137,6 +155,13 @@ export async function startJob(opts: {
   jobs.set(job.id, job);
   if (opts.sessionId) bySession.set(opts.sessionId, job.id);
 
+  // Engaging with a session (sending a message) marks it active for the home
+  // list. Title from the first user message, else the prompt. Fire-and-forget.
+  const title = titleFromEvents(job.events) ?? opts.prompt.slice(0, 80);
+  if (opts.sessionId) {
+    void setActive(opts.sessionId, opts.folder, title, Date.now());
+  }
+
   // Drive the process in the background, decoupled from any request lifecycle.
   void (async () => {
     try {
@@ -153,6 +178,8 @@ export async function startJob(opts: {
         } else if (msg.kind === "session-id") {
           job.sessionId = msg.sessionId;
           if (!bySession.has(msg.sessionId)) bySession.set(msg.sessionId, job.id);
+          // New session just got its id — mark it active for the home list.
+          void setActive(msg.sessionId, job.folder, title, Date.now());
           broadcast(job, msg);
         } else if (msg.kind === "error") {
           job.status = "error";

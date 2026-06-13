@@ -4,10 +4,9 @@ import type {
   BrowseResult,
   ClaudeEvent,
   FolderPath,
+  ActiveMap,
   GitData,
   LiveSession,
-  OverviewSession,
-  SessionMeta,
   SessionSummary,
   TranscriptDelta,
 } from "@/lib/types";
@@ -123,32 +122,27 @@ export async function getLive(): Promise<LiveSession[]> {
   return (await json<{ sessions: LiveSession[] }>(await fetch("/api/live"))).sessions;
 }
 
-/** Not-done sessions across all folders (home backlog), newest first. */
-export async function getOverview(): Promise<OverviewSession[]> {
-  return (await json<{ sessions: OverviewSession[] }>(await fetch("/api/overview")))
-    .sessions;
+/** The active-session set (sessionId → {folder,title,lastActiveAt}). */
+export async function getActive(): Promise<ActiveMap> {
+  return (await json<{ active: ActiveMap }>(await fetch("/api/session-meta"))).active;
 }
 
-/** sessionId → triage meta (done flag). */
-export async function getSessionMeta(): Promise<Record<string, SessionMeta>> {
-  return (
-    await json<{ meta: Record<string, SessionMeta> }>(await fetch("/api/session-meta"))
-  ).meta;
-}
-
-export async function setSessionDone(
+/** Mark a session active (folder+title required) or done (active=false). */
+export async function setSessionActive(
   sessionId: string,
-  done: boolean,
-): Promise<Record<string, SessionMeta>> {
+  active: boolean,
+  folder?: string,
+  title?: string,
+): Promise<ActiveMap> {
   return (
-    await json<{ meta: Record<string, SessionMeta> }>(
+    await json<{ active: ActiveMap }>(
       await fetch("/api/session-meta", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId, done }),
+        body: JSON.stringify({ sessionId, active, folder, title }),
       }),
     )
-  ).meta;
+  ).active;
 }
 
 /** Permanently delete a session's transcript file. */
