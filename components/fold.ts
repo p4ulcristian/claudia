@@ -40,7 +40,7 @@ export type DisplayItem =
   | { kind: "tasks"; tasks: TaskRow[] }
   | { kind: "bgtask"; taskId: string; description: string; status: string; summary: string | null }
   | { kind: "question"; id?: string; questions: QuestionSpec[] }
-  | { kind: "compact" };
+  | { kind: "compacting"; done: boolean };
 
 // Tools we render specially (and whose raw tool_use / tool_result we suppress).
 const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskStop", "TaskList", "TaskGet"]);
@@ -91,6 +91,7 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
   let taskSeq = 0;
   const bgIndexById = new Map<string, number>(); // background task_id -> item index
   const suppressedToolIds = new Set<string>(); // tool_use ids whose result we hide
+  let openCompactIdx: number | null = null; // an in-progress compaction, if any
 
   const newAssistant = (id?: string, streaming = false): number => {
     items.push({ kind: "assistant", id, blocks: [], streaming });
@@ -246,8 +247,21 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
             items.push({ kind: "bgtask", taskId: tid, description: "background task", status, summary });
             bgIndexById.set(tid, items.length - 1);
           }
+        } else if (st === "status" && (evt as Record<string, unknown>).status === "compacting") {
+          // Compaction started — show a live "compacting…" card with a timer.
+          if (openCompactIdx === null) {
+            items.push({ kind: "compacting", done: false });
+            openCompactIdx = items.length - 1;
+          }
         } else if (st === "compact_boundary") {
-          items.push({ kind: "compact" });
+          // Compaction finished. Close the live card if we opened one; otherwise
+          // (a replayed transcript only persists the boundary) emit a done card.
+          if (openCompactIdx !== null) {
+            (items[openCompactIdx] as Extract<DisplayItem, { kind: "compacting" }>).done = true;
+            openCompactIdx = null;
+          } else {
+            items.push({ kind: "compacting", done: true });
+          }
         }
         // other system subtypes (init, thinking_tokens, …) carry no UI content
         break;

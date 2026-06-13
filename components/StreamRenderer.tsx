@@ -96,6 +96,53 @@ function ToolResult({ item }: { item: Extract<DisplayItem, { kind: "tool_result"
   );
 }
 
+function fmtDur(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+}
+
+// Live "compacting…" card with an elapsed timer. While the compaction runs it
+// ticks; when the boundary arrives it freezes to the final duration. A card
+// that mounts already-done (replayed transcript) shows a plain divider — we
+// never observed it live, so we have no duration to report.
+function CompactingCard({ item }: { item: Extract<DisplayItem, { kind: "compacting" }> }) {
+  const [start] = useState(() => Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  const [frozen, setFrozen] = useState<number | null>(null);
+  const mountedDone = useRef(item.done);
+
+  useEffect(() => {
+    if (item.done) return;
+    const id = setInterval(() => setElapsed(Date.now() - start), 250);
+    return () => clearInterval(id);
+  }, [item.done, start]);
+
+  useEffect(() => {
+    if (item.done && !mountedDone.current && frozen === null) {
+      setFrozen(Date.now() - start);
+    }
+  }, [item.done, start, frozen]);
+
+  if (item.done) {
+    return (
+      <div className="compact-divider">
+        <span>
+          <FontAwesomeIcon icon={faCompress} /> Conversation compacted
+          {!mountedDone.current && frozen != null ? ` · ${fmtDur(frozen)}` : ""}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="compacting-card">
+      <FontAwesomeIcon icon={faCompress} />
+      <span className="compacting-label">Compacting conversation…</span>
+      <span className="compacting-timer">{fmtDur(elapsed)}</span>
+    </div>
+  );
+}
+
 function BgTaskCard({ item }: { item: Extract<DisplayItem, { kind: "bgtask" }> }) {
   const running = item.status === "running";
   return (
@@ -218,14 +265,8 @@ function Item({ item }: { item: DisplayItem }) {
       return <ToolResult item={item} />;
     case "bgtask":
       return <BgTaskCard item={item} />;
-    case "compact":
-      return (
-        <div className="compact-divider">
-          <span>
-            <FontAwesomeIcon icon={faCompress} /> Conversation compacted
-          </span>
-        </div>
-      );
+    case "compacting":
+      return <CompactingCard item={item} />;
     case "result":
       return (
         <div className={`msg-result ${item.isError ? "is-error" : ""}`}>
@@ -275,6 +316,8 @@ export default function StreamRenderer({
   }
 
   const visible = items.filter((it) => it.kind !== "tasks");
+  // While compacting, the card shows its own status + timer — hide the generic dots.
+  const compacting = visible.some((it) => it.kind === "compacting" && !it.done);
 
   return (
     <div className="stream">
@@ -291,7 +334,7 @@ export default function StreamRenderer({
           )}
         </div>
       ))}
-      {streaming ? (
+      {streaming && !compacting ? (
         <div className="working">
           <span className="working-dots">
             <i />

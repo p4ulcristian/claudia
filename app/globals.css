@@ -1168,6 +1168,28 @@ body {
   }
 }
 
+/* live "compacting…" card with elapsed timer */
+.compacting-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  margin: 6px 2px;
+  border: 1px solid rgba(255, 143, 176, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 143, 176, 0.07);
+  color: var(--text);
+  font-size: 13px;
+  animation: ctx-pulse 1.9s ease-in-out infinite;
+}
+.compacting-label {
+  color: var(--text-secondary);
+}
+.compacting-timer {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-bright);
+}
+
 /* compacted-conversation divider in the stream */
 .compact-divider {
   display: flex;
