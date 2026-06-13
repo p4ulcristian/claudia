@@ -62,15 +62,59 @@ export default function ClaudeManager() {
   const [loading, setLoading] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  // Skip the first URL-sync run so it doesn't wipe the query string before the
+  // restore-from-URL effect has read it.
+  const skipUrlSync = useRef(true);
 
   const refreshFolders = useCallback(async () => {
     setFolders(await getFolders());
   }, []);
 
+  // On load, restore the view from the URL so a refresh lands on the same convo.
   useEffect(() => {
     void refreshFolders();
+
+    const sp = new URLSearchParams(window.location.search);
+    const f = sp.get("folder");
+    const sess = sp.get("session");
+    if (f) {
+      setFolder(f);
+      if (sess === "new") {
+        setSessionId(null);
+        setView("chat");
+      } else if (sess) {
+        setSessionId(sess);
+        setView("chat");
+        setLoading(true);
+        loadSession(f, sess)
+          .then(setEvents)
+          .catch(() => setError("Could not load that session."))
+          .finally(() => setLoading(false));
+      } else {
+        setView("sessions");
+        setLoading(true);
+        getSessions(f)
+          .then(setSessions)
+          .finally(() => setLoading(false));
+      }
+    }
+
     return () => abortRef.current?.abort();
-  }, [refreshFolders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mirror navigation state into the URL (replace, so back still leaves the app).
+  useEffect(() => {
+    if (skipUrlSync.current) {
+      skipUrlSync.current = false;
+      return;
+    }
+    const sp = new URLSearchParams();
+    if (folder && (view === "sessions" || view === "chat")) sp.set("folder", folder);
+    if (view === "chat") sp.set("session", sessionId ?? "new");
+    const qs = sp.toString();
+    window.history.replaceState(null, "", qs ? `/?${qs}` : "/");
+  }, [view, folder, sessionId]);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
