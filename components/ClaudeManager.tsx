@@ -173,6 +173,17 @@ export default function ClaudeManager() {
   };
 
   // ---- views ----
+  const sessionPct = usage?.limits.find((l) => /session/i.test(l.name))?.percentUsed;
+  const usageBtn = (
+    <button
+      className="btn ghost usage-btn"
+      onClick={() => setUsageOpen(true)}
+      title="Usage stats"
+    >
+      📊 {usageLoading && sessionPct == null ? "…" : sessionPct != null ? `${sessionPct}%` : "Usage"}
+    </button>
+  );
+
   return (
     <div className="cm">
       {view === "folders" && (
@@ -180,12 +191,10 @@ export default function ClaudeManager() {
           <div className="toolbar">
             <h1 className="brand">claudia</h1>
             <div className="spacer" />
-            <button className="btn ghost" onClick={() => setUsageOpen(true)}>
-              📊 Usage
-            </button>
             <button className="btn accent" onClick={() => setPickerOpen(true)}>
               📂 Add folder
             </button>
+            {usageBtn}
           </div>
           <div className="scroll">
             {folders.length === 0 ? (
@@ -217,15 +226,6 @@ export default function ClaudeManager() {
           {pickerOpen && (
             <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
           )}
-          {usageOpen && (
-            <UsagePanel
-              data={usage}
-              loading={usageLoading}
-              error={usageError}
-              onRefresh={() => void refreshUsage(true)}
-              onClose={() => setUsageOpen(false)}
-            />
-          )}
         </div>
       )}
 
@@ -240,6 +240,7 @@ export default function ClaudeManager() {
             <button className="btn accent" onClick={() => newSession(folder)}>
               + New session
             </button>
+            {usageBtn}
           </div>
           <div className="scroll">
             {loading ? (
@@ -288,6 +289,7 @@ export default function ClaudeManager() {
                 Stop
               </button>
             )}
+            {usageBtn}
           </div>
 
           <div className="chat-scroll">
@@ -324,6 +326,16 @@ export default function ClaudeManager() {
             </button>
           </div>
         </div>
+      )}
+
+      {usageOpen && (
+        <UsagePanel
+          data={usage}
+          loading={usageLoading}
+          error={usageError}
+          onRefresh={() => void refreshUsage(true)}
+          onClose={() => setUsageOpen(false)}
+        />
       )}
     </div>
   );

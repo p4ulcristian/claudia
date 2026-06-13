@@ -100,6 +100,7 @@ body {
 .cm {
   display: flex;
   flex-direction: column;
+  position: relative;
   height: 100vh;
   max-width: 900px;
   margin: 0 auto;
@@ -780,7 +781,13 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* ---- usage panel ----------------------------------------------------------- */
+/* ---- usage button + panel -------------------------------------------------- */
+.usage-btn {
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: center;
+}
+
 .usage-modal {
   max-width: 620px;
 }
