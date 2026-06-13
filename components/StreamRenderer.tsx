@@ -16,38 +16,62 @@ import {
   faXmark,
 } from "./icons";
 
-// Pull a short, human hint out of a tool's (possibly partial) JSON input.
-function toolSummary(input: string): string {
-  if (!input) return "";
-  try {
-    const o = JSON.parse(input) as Record<string, unknown>;
-    const pick =
-      o.file_path ?? o.path ?? o.pattern ?? o.command ?? o.query ?? o.url ?? o.prompt;
-    if (typeof pick === "string") return pick.length > 64 ? pick.slice(0, 63) + "…" : pick;
-  } catch {
-    /* partial JSON mid-stream */
+// Collapse whitespace and clip to a single short line for the header hint.
+function truncate(s: string, n = 72): string {
+  const line = s.replace(/\s+/g, " ").trim();
+  return line.length > n ? line.slice(0, n - 1) + "…" : line;
+}
+
+function pickSummary(o: Record<string, unknown>): string {
+  const pick =
+    o.description ?? o.file_path ?? o.path ?? o.pattern ?? o.command ?? o.query ?? o.url ?? o.prompt;
+  return typeof pick === "string" ? pick : "";
+}
+
+// Per-tool presentation: an icon, a short header summary, and what to reveal
+// when expanded. Bash shows its `description` as the summary and the actual
+// command as a shell snippet; other tools show their prettified JSON input.
+function toolView(
+  name: string,
+  input: string,
+): { icon: typeof faGear; summary: string; command?: string; json?: string } {
+  let parsed: Record<string, unknown> | null = null;
+  if (input) {
+    try {
+      parsed = JSON.parse(input) as Record<string, unknown>;
+    } catch {
+      /* partial JSON mid-stream */
+    }
   }
-  return "";
+  if (name === "Bash") {
+    const command = typeof parsed?.command === "string" ? parsed.command : "";
+    const description = typeof parsed?.description === "string" ? parsed.description : "";
+    if (command) return { icon: faTerminal, summary: truncate(description || command), command };
+    return { icon: faTerminal, summary: "", json: input }; // mid-stream / no command yet
+  }
+  return { icon: faGear, summary: parsed ? truncate(pickSummary(parsed)) : "", json: input };
 }
 
 function ToolCard({ block }: { block: ToolUseBlock }) {
   const [open, setOpen] = useState(false);
-  const summary = toolSummary(block.input);
+  const { icon, summary, command, json } = toolView(block.name, block.input);
+  const hasDetail = Boolean(command || json);
   return (
     <div className={`tool-block ${open ? "is-open" : ""}`}>
       <button className="tool-name" onClick={() => setOpen((v) => !v)}>
         <span className="tool-icon">
-          <FontAwesomeIcon icon={faGear} />
+          <FontAwesomeIcon icon={icon} />
         </span>
         <span className="tool-label">{block.name}</span>
         {summary ? <span className="tool-summary">{summary}</span> : null}
-        {block.input ? (
+        {hasDetail ? (
           <span className="chev">
             <FontAwesomeIcon icon={open ? faChevronDown : faChevronRight} />
           </span>
         ) : null}
       </button>
-      {open && block.input ? <pre className="tool-input">{block.input}</pre> : null}
+      {open && command ? <pre className="tool-cmd">{command}</pre> : null}
+      {open && !command && json ? <pre className="tool-input">{json}</pre> : null}
     </div>
   );
 }
