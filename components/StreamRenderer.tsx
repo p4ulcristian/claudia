@@ -307,6 +307,7 @@ export default function StreamRenderer({
   streaming,
   autoScroll,
   queue,
+  sessionId,
   onAnswer,
   onCancelQueued,
 }: {
@@ -314,13 +315,24 @@ export default function StreamRenderer({
   streaming: boolean;
   autoScroll: boolean;
   queue: string[];
+  sessionId: string | null;
   onAnswer: (text: string) => void;
   onCancelQueued: (index: number) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  // Jump instantly on the first paint of a chat; animate only later updates.
+  // A smooth scroll on open would visibly travel the whole transcript top→bottom.
+  const didInitialScroll = useRef(false);
 
   useEffect(() => {
-    if (autoScroll) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    didInitialScroll.current = false;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!autoScroll) return;
+    const behavior = didInitialScroll.current ? "smooth" : "instant";
+    endRef.current?.scrollIntoView({ behavior, block: "end" });
+    if (items.length) didInitialScroll.current = true;
   }, [items, streaming, autoScroll, queue]);
 
   if (items.length === 0) {

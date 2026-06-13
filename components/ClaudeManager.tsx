@@ -890,6 +890,7 @@ export default function ClaudeManager() {
                 streaming={streaming}
                 autoScroll={autoScroll}
                 queue={queue}
+                sessionId={sessionId}
                 onAnswer={(t) => void sendText(t)}
                 onCancelQueued={cancelQueued}
               />
