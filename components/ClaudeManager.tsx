@@ -475,7 +475,7 @@ export default function ClaudeManager() {
               className="icon-btn"
               onClick={() => {
                 detach();
-                setView("sessions");
+                void openFolder(folder);
               }}
             >
               <FontAwesomeIcon icon={faArrowLeft} />
