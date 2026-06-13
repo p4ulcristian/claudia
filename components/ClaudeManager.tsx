@@ -274,6 +274,21 @@ export default function ClaudeManager() {
   };
 
   // ---- views ----
+  const goHome = () => {
+    detach();
+    setView("folders");
+  };
+  const homeLogo = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="brand-logo"
+      src="/claudia.webp"
+      alt="claudia"
+      title="Home"
+      onClick={goHome}
+    />
+  );
+
   const sessionPct = usage?.limits.find((l) => /session/i.test(l.name))?.percentUsed;
   const usageBtn = (
     <button
@@ -292,8 +307,7 @@ export default function ClaudeManager() {
         <div className="pane">
           <div className="toolbar">
             <div className="brand-wrap">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="brand-logo" src="/claudia.webp" alt="" />
+              {homeLogo}
               <h1 className="brand">claudia</h1>
             </div>
             <div className="spacer" />
@@ -340,6 +354,7 @@ export default function ClaudeManager() {
       {view === "sessions" && folder && (
         <div className="pane">
           <div className="toolbar">
+            {homeLogo}
             <button className="icon-btn" onClick={() => setView("folders")}>
               <FontAwesomeIcon icon={faArrowLeft} />
             </button>
@@ -378,6 +393,7 @@ export default function ClaudeManager() {
       {view === "chat" && folder && (
         <div className="pane">
           <div className="toolbar">
+            {homeLogo}
             <button
               className="icon-btn"
               onClick={() => {
