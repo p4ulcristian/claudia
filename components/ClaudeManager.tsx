@@ -117,44 +117,15 @@ export default function ClaudeManager() {
   // Skip the first URL-sync run so it doesn't wipe the query string before the
   // restore-from-URL effect has read it.
   const skipUrlSync = useRef(true);
+  // Previous nav target — lets the mirror effect push (real navigation) vs
+  // replace (in-place change, e.g. a new session getting its assigned id).
+  const lastNav = useRef<{ view: View; folder: string | null }>({
+    view: "folders",
+    folder: null,
+  });
 
   const refreshFolders = useCallback(async () => {
     setFolders(await getFolders());
-  }, []);
-
-  // On load, restore the view from the URL so a refresh lands on the same convo.
-  useEffect(() => {
-    warmTranscriptCache();
-    void refreshFolders();
-
-    const sp = new URLSearchParams(window.location.search);
-    const f = sp.get("folder");
-    const sess = sp.get("session");
-    if (f) {
-      setFolder(f);
-      if (sess === "new") {
-        setSessionId(null);
-        setView("chat");
-      } else if (sess) {
-        setSessionId(sess);
-        setView("chat");
-        void attachOrLoad(f, sess);
-      } else {
-        setView("sessions");
-        const cached = readSessionListCache(f);
-        if (cached) setSessions(cached);
-        else setLoading(true);
-        getSessions(f)
-          .then((fresh) => {
-            setSessions(fresh);
-            writeSessionListCache(f, fresh);
-          })
-          .finally(() => setLoading(false));
-      }
-    }
-
-    return () => abortRef.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-focus the composer whenever a chat opens (new or existing session).
@@ -176,8 +147,14 @@ export default function ClaudeManager() {
     document.title = title;
   }, [view, folder, sessionId, events]);
 
-  // Mirror navigation state into the URL (replace, so back still leaves the app).
+  // Mirror navigation state into the URL. Push a real history entry when the
+  // view or folder changed (navigation, so back/forward can traverse), but
+  // replace for in-place changes like a new session receiving its assigned id.
   useEffect(() => {
+    const navChanged =
+      lastNav.current.view !== view || lastNav.current.folder !== folder;
+    lastNav.current = { view, folder };
+
     if (skipUrlSync.current) {
       skipUrlSync.current = false;
       return;
@@ -186,7 +163,10 @@ export default function ClaudeManager() {
     if (folder && (view === "sessions" || view === "chat")) sp.set("folder", folder);
     if (view === "chat") sp.set("session", sessionId ?? "new");
     const qs = sp.toString();
-    window.history.replaceState(null, "", qs ? `/?${qs}` : "/");
+    const target = qs ? `/?${qs}` : "/";
+    if (target === window.location.pathname + window.location.search) return;
+    if (navChanged) window.history.pushState(null, "", target);
+    else window.history.replaceState(null, "", target);
   }, [view, folder, sessionId]);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
@@ -290,6 +270,69 @@ export default function ClaudeManager() {
     },
     [handleMsg],
   );
+
+  // Restore view/folder/session from a URL query string. Used on load and on
+  // browser back/forward (popstate). Handles the home case so navigating back
+  // to "/" resets out of a deeper view.
+  const applyUrl = useCallback(
+    (search: string) => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      const sp = new URLSearchParams(search);
+      const f = sp.get("folder");
+      const sess = sp.get("session");
+      if (!f) {
+        setSessionId(null);
+        setEvents([]);
+        setStreaming(false);
+        setFolder(null);
+        setView("folders");
+        return;
+      }
+      setFolder(f);
+      if (sess === "new") {
+        setSessionId(null);
+        setEvents([]);
+        setStreaming(false);
+        setView("chat");
+      } else if (sess) {
+        setSessionId(sess);
+        setView("chat");
+        void attachOrLoad(f, sess);
+      } else {
+        setSessionId(null);
+        setView("sessions");
+        const cached = readSessionListCache(f);
+        if (cached) setSessions(cached);
+        else setLoading(true);
+        getSessions(f)
+          .then((fresh) => {
+            setSessions(fresh);
+            writeSessionListCache(f, fresh);
+          })
+          .finally(() => setLoading(false));
+      }
+    },
+    [attachOrLoad],
+  );
+
+  // On load: warm caches, restore from the URL, and listen for back/forward.
+  useEffect(() => {
+    warmTranscriptCache();
+    void refreshFolders();
+    applyUrl(window.location.search);
+
+    const onPop = () => {
+      skipUrlSync.current = true; // popstate already changed the URL; don't re-push
+      applyUrl(window.location.search);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      abortRef.current?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---- folders ----
   const onAddFolder = async (path: string) => {
