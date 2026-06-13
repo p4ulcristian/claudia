@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
 import { sessionDir } from "./claude-home";
-import type { ClaudeEvent, SessionSummary } from "./types";
+import type { ClaudeEvent, SessionSummary, TranscriptDelta } from "./types";
 
 function parseLine(line: string): ClaudeEvent | null {
   try {
@@ -81,25 +81,10 @@ export async function listSessions(folder: string): Promise<SessionSummary[]> {
   return summaries.sort((a, b) => b.modified - a.modified);
 }
 
-/**
- * Parse a session transcript into a list of raw events for the renderer.
- * Drops unparseable and structural-only lines.
- */
-export async function loadSession(
-  folder: string,
-  sessionId: string,
-): Promise<ClaudeEvent[]> {
-  const file = path.join(sessionDir(folder), `${sessionId}.jsonl`);
-  let exists = true;
-  try {
-    await fsp.access(file);
-  } catch {
-    exists = false;
-  }
-  if (!exists) return [];
-
+/** Read a transcript file (optionally from a byte offset), parsed and filtered. */
+async function readEvents(file: string, start = 0): Promise<ClaudeEvent[]> {
   const rl = readline.createInterface({
-    input: fs.createReadStream(file, { encoding: "utf8" }),
+    input: fs.createReadStream(file, { encoding: "utf8", start }),
     crlfDelay: Infinity,
   });
   const events: ClaudeEvent[] = [];
@@ -110,4 +95,48 @@ export async function loadSession(
     events.push(evt);
   }
   return events;
+}
+
+/**
+ * Parse a session transcript into a list of raw events for the renderer.
+ * Drops unparseable and structural-only lines.
+ */
+export async function loadSession(
+  folder: string,
+  sessionId: string,
+): Promise<ClaudeEvent[]> {
+  const file = path.join(sessionDir(folder), `${sessionId}.jsonl`);
+  try {
+    await fsp.access(file);
+  } catch {
+    return [];
+  }
+  return readEvents(file);
+}
+
+/**
+ * Load a transcript incrementally. Given the byte offset (`since`) the caller
+ * already has, return only the events appended past it. `.jsonl` is append-only
+ * and every complete line ends in "\n", so a quiescent file size is always a
+ * clean line boundary. `reset` signals the caller must drop its cache: the file
+ * is missing, was loaded fresh, or shrank/was rewritten (since > size).
+ */
+export async function loadSessionDelta(
+  folder: string,
+  sessionId: string,
+  since = 0,
+): Promise<TranscriptDelta> {
+  const file = path.join(sessionDir(folder), `${sessionId}.jsonl`);
+  let stat;
+  try {
+    stat = await fsp.stat(file);
+  } catch {
+    return { events: [], size: 0, modified: 0, reset: true };
+  }
+  const size = stat.size;
+  const modified = stat.mtimeMs;
+  const reset = since <= 0 || since > size;
+  if (!reset && since === size) return { events: [], size, modified, reset: false };
+  const events = await readEvents(file, reset ? 0 : since);
+  return { events, size, modified, reset };
 }

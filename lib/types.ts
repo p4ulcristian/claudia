@@ -13,6 +13,17 @@ export interface SessionSummary {
   size: number;
 }
 
+/** Incremental transcript load — events appended past a byte offset. */
+export interface TranscriptDelta {
+  events: ClaudeEvent[];
+  /** New total file size in bytes — the next `since`. */
+  size: number;
+  /** Last-modified time, epoch millis. */
+  modified: number;
+  /** True => discard any cache and treat `events` as the full transcript. */
+  reset: boolean;
+}
+
 /** An entry in the server-side directory browser. */
 export interface DirEntry {
   name: string;

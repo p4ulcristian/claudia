@@ -14,9 +14,16 @@ import {
   getFolders,
   getSessions,
   getUsage,
-  loadSession,
+  loadSessionDelta,
+  readSessionListCache,
   removeFolder as apiRemoveFolder,
+  writeSessionListCache,
 } from "./api";
+import {
+  getCachedTranscript,
+  putCachedTranscript,
+  warmTranscriptCache,
+} from "./transcriptCache";
 import { startChat, stopChat, subscribeChat } from "./stream-chat";
 import { foldEvents, type DisplayItem } from "./fold";
 import FolderPicker from "./FolderPicker";
@@ -52,6 +59,24 @@ function shortName(p: string): string {
   return clean.split("/").pop() || clean;
 }
 
+// First human message in a transcript, for the tab title. Mirrors the
+// server-side firstUserText used for session summaries.
+function titleFromEvents(events: ClaudeEvent[]): string | null {
+  for (const evt of events) {
+    if (evt.type !== "user") continue;
+    const content = evt.message?.content;
+    const text =
+      typeof content === "string"
+        ? content
+        : typeof evt.content === "string"
+          ? (evt.content as string)
+          : null;
+    const t = text?.trim();
+    if (t && !t.startsWith("<")) return t.length > 60 ? `${t.slice(0, 60)}…` : t;
+  }
+  return null;
+}
+
 function fmtAgo(ms: number): string {
   const s = Math.floor((Date.now() - ms) / 1000);
   if (s < 60) return `${s}s ago`;
@@ -85,6 +110,7 @@ export default function ClaudeManager() {
 
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // Skip the first URL-sync run so it doesn't wipe the query string before the
   // restore-from-URL effect has read it.
   const skipUrlSync = useRef(true);
@@ -95,6 +121,7 @@ export default function ClaudeManager() {
 
   // On load, restore the view from the URL so a refresh lands on the same convo.
   useEffect(() => {
+    warmTranscriptCache();
     void refreshFolders();
 
     const sp = new URLSearchParams(window.location.search);
@@ -111,9 +138,14 @@ export default function ClaudeManager() {
         void attachOrLoad(f, sess);
       } else {
         setView("sessions");
-        setLoading(true);
+        const cached = readSessionListCache(f);
+        if (cached) setSessions(cached);
+        else setLoading(true);
         getSessions(f)
-          .then(setSessions)
+          .then((fresh) => {
+            setSessions(fresh);
+            writeSessionListCache(f, fresh);
+          })
           .finally(() => setLoading(false));
       }
     }
@@ -121,6 +153,25 @@ export default function ClaudeManager() {
     return () => abortRef.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-focus the composer whenever a chat opens (new or existing session).
+  useEffect(() => {
+    if (view === "chat") inputRef.current?.focus();
+  }, [view, sessionId]);
+
+  // Reflect what's open in the tab title.
+  useEffect(() => {
+    let title = "claudia";
+    if (view === "chat") {
+      const name = sessionId
+        ? (titleFromEvents(events) ?? "Session")
+        : "New session";
+      title = `${name} · claudia`;
+    } else if (view === "sessions" && folder) {
+      title = `${shortName(folder)} · claudia`;
+    }
+    document.title = title;
+  }, [view, folder, sessionId, events]);
 
   // Mirror navigation state into the URL (replace, so back still leaves the app).
   useEffect(() => {
@@ -194,18 +245,39 @@ export default function ClaudeManager() {
   // Reconnect to a running job for this session, else load its transcript.
   const attachOrLoad = useCallback(
     async (f: string, id: string) => {
-      setLoading(true);
       setError(null);
+      // Paint from cache first — before any network — so a cached session
+      // appears instantly. The running-check and delta fetch run behind it.
+      const cached = await getCachedTranscript(id);
+      if (cached) {
+        setEvents(cached.events);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
       const ac = new AbortController();
       abortRef.current = ac;
       try {
         const running = await subscribeChat(id, handleMsg, ac.signal);
         if (running) {
-          setStreaming(true); // snapshot fills events and settles state
+          setStreaming(true); // snapshot replaces events with live state
         } else {
           abortRef.current = null;
-          setEvents(await loadSession(f, id));
+          const res = await loadSessionDelta(f, id, cached?.size ?? 0);
+          const events =
+            !cached || res.reset
+              ? res.events
+              : res.events.length
+                ? [...cached.events, ...res.events]
+                : cached.events;
+          if (!cached || res.reset || res.events.length) setEvents(events);
           setLoading(false);
+          void putCachedTranscript({
+            sessionId: id,
+            events,
+            size: res.size,
+            modified: res.modified,
+          });
         }
       } catch (e) {
         abortRef.current = null;
@@ -227,11 +299,20 @@ export default function ClaudeManager() {
 
   const openFolder = async (f: string) => {
     setFolder(f);
-    setSessions([]);
-    setLoading(true);
     setView("sessions");
+    // Render the last known list instantly, then revalidate in the background.
+    const cached = readSessionListCache(f);
+    if (cached) {
+      setSessions(cached);
+      setLoading(false);
+    } else {
+      setSessions([]);
+      setLoading(true);
+    }
     try {
-      setSessions(await getSessions(f));
+      const fresh = await getSessions(f);
+      setSessions(fresh);
+      writeSessionListCache(f, fresh);
     } finally {
       setLoading(false);
     }
@@ -577,6 +658,7 @@ export default function ClaudeManager() {
 
           <div className="composer">
             <textarea
+              ref={inputRef}
               value={input}
               placeholder={
                 sessionId ? "Reply to resume this session…" : "Start a new session…"

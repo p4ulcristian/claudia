@@ -5,6 +5,7 @@ import type {
   ClaudeEvent,
   FolderPath,
   SessionSummary,
+  TranscriptDelta,
 } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
 
@@ -65,6 +66,45 @@ export async function loadSession(
       ),
     )
   ).events;
+}
+
+/** Load only the transcript events appended past `since` bytes. */
+export async function loadSessionDelta(
+  folder: string,
+  sessionId: string,
+  since: number,
+): Promise<TranscriptDelta> {
+  return json<TranscriptDelta & { sessionId: string }>(
+    await fetch(
+      `/api/sessions/${encodeURIComponent(sessionId)}?folder=${encodeURIComponent(
+        folder,
+      )}&since=${since}`,
+    ),
+  );
+}
+
+// ---- session-list cache (localStorage; the list is tiny) ----
+
+const listKey = (folder: string) => `claudia-sessions:${folder}`;
+
+export function readSessionListCache(folder: string): SessionSummary[] | null {
+  try {
+    const raw = localStorage.getItem(listKey(folder));
+    return raw ? (JSON.parse(raw) as SessionSummary[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionListCache(
+  folder: string,
+  sessions: SessionSummary[],
+): void {
+  try {
+    localStorage.setItem(listKey(folder), JSON.stringify(sessions));
+  } catch {
+    // quota / unavailable — cache is best-effort
+  }
 }
 
 export async function getUsage(refresh = false): Promise<UsageData> {
