@@ -36,13 +36,26 @@ function usageTokens(usage: Record<string, unknown> | undefined): number | null 
 }
 
 /**
+ * The context window for a model id. The CLI doesn't report it in the stream,
+ * so we map it: Haiku is 200k; the 1M-capable family (Opus 4.6+, Sonnet 4.6,
+ * Fable 5) runs at 1M in this deployment — verified empirically, a plain
+ * `claude-opus-4-8` session reached 380k tokens. An explicit `[1m]` suffix is
+ * always 1M; anything unrecognised defaults to the safe 200k.
+ */
+function windowForModel(model?: string): number {
+  const m = (model || "").toLowerCase();
+  if (m.includes("[1m]")) return WINDOW_1M;
+  if (m.includes("haiku")) return WINDOW_200K;
+  if (/opus|sonnet|fable/.test(m)) return WINDOW_1M;
+  return WINDOW_200K;
+}
+
+/**
  * Current context occupancy, from the most recent assistant message that
  * carries usage. Returns null until at least one turn has produced usage.
  *
- * Window: 1M for `[1m]` model ids, else 200k — but if we already observe more
- * than 200k tokens the session is plainly on a 1M window regardless of the
- * alias, so bump it. (The window is genuinely ambiguous below 200k; the meter
- * is approximate by nature.)
+ * Window comes from the model id; if we ever observe more tokens than that
+ * window, the session is plainly on a larger one, so bump to 1M.
  */
 export function contextOf(events: ClaudeEvent[], model?: string): ContextInfo | null {
   let tokens: number | null = null;
@@ -57,8 +70,8 @@ export function contextOf(events: ClaudeEvent[], model?: string): ContextInfo | 
   }
   if (tokens == null) return null;
 
-  let window = model && /\[1m\]/i.test(model) ? WINDOW_1M : WINDOW_200K;
-  if (tokens > WINDOW_200K) window = WINDOW_1M;
+  let window = windowForModel(model);
+  if (tokens > window) window = WINDOW_1M;
 
   return { tokens, window, pct: Math.min(100, (tokens / window) * 100) };
 }
