@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClaudeEvent, FolderPath, SessionSummary } from "@/lib/types";
+import type {
+  ChatStreamMessage,
+  ClaudeEvent,
+  FolderPath,
+  SessionSummary,
+} from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
 import {
   addFolder as apiAddFolder,
@@ -11,7 +16,7 @@ import {
   loadSession,
   removeFolder as apiRemoveFolder,
 } from "./api";
-import { streamChat } from "./stream-chat";
+import { startChat, stopChat, subscribeChat } from "./stream-chat";
 import FolderPicker from "./FolderPicker";
 import StreamRenderer from "./StreamRenderer";
 import UsagePanel from "./UsagePanel";
@@ -62,6 +67,7 @@ export default function ClaudeManager() {
   const [loading, setLoading] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  const jobIdRef = useRef<string | null>(null);
   // Skip the first URL-sync run so it doesn't wipe the query string before the
   // restore-from-URL effect has read it.
   const skipUrlSync = useRef(true);
@@ -85,11 +91,7 @@ export default function ClaudeManager() {
       } else if (sess) {
         setSessionId(sess);
         setView("chat");
-        setLoading(true);
-        loadSession(f, sess)
-          .then(setEvents)
-          .catch(() => setError("Could not load that session."))
-          .finally(() => setLoading(false));
+        void attachOrLoad(f, sess);
       } else {
         setView("sessions");
         setLoading(true);
@@ -135,6 +137,58 @@ export default function ClaudeManager() {
     return () => clearInterval(id);
   }, [refreshUsage]);
 
+  // ---- chat transport ----
+  // Apply a stream message from a job (live turn or a reconnect snapshot).
+  const handleMsg = useCallback((msg: ChatStreamMessage) => {
+    switch (msg.kind) {
+      case "snapshot":
+        jobIdRef.current = msg.jobId;
+        setEvents(msg.events);
+        if (msg.sessionId) setSessionId(msg.sessionId);
+        setLoading(false);
+        setStreaming(msg.status === "running");
+        if (msg.status === "error" && msg.error) setError(msg.error);
+        break;
+      case "event":
+        setEvents((prev) => [...prev, msg.event]);
+        break;
+      case "session-id":
+        setSessionId(msg.sessionId);
+        break;
+      case "error":
+        setError(msg.message);
+        break;
+      case "done":
+        setStreaming(false);
+        break;
+    }
+  }, []);
+
+  // Reconnect to a running job for this session, else load its transcript.
+  const attachOrLoad = useCallback(
+    async (f: string, id: string) => {
+      setLoading(true);
+      setError(null);
+      const ac = new AbortController();
+      abortRef.current = ac;
+      try {
+        const running = await subscribeChat(id, handleMsg, ac.signal);
+        if (running) {
+          setStreaming(true); // snapshot fills events and settles state
+        } else {
+          abortRef.current = null;
+          setEvents(await loadSession(f, id));
+          setLoading(false);
+        }
+      } catch (e) {
+        abortRef.current = null;
+        setError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+      }
+    },
+    [handleMsg],
+  );
+
   // ---- folders ----
   const onAddFolder = async (path: string) => {
     setFolders(await apiAddFolder(path));
@@ -162,29 +216,37 @@ export default function ClaudeManager() {
     setSessionId(id);
     setEvents([]);
     setError(null);
-    setLoading(true);
     setView("chat");
-    try {
-      setEvents(await loadSession(f, id));
-    } finally {
-      setLoading(false);
-    }
+    await attachOrLoad(f, id);
   };
 
   const newSession = (f: string) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    jobIdRef.current = null;
     setFolder(f);
     setSessionId(null);
     setEvents([]);
     setError(null);
+    setStreaming(false);
     setView("chat");
   };
 
   // ---- chat ----
-  const stopStream = useCallback(() => {
+  // Detach from the stream without killing the job (refresh / navigate away).
+  const detach = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);
   }, []);
+
+  // Explicitly kill the running job (Stop button), then detach.
+  const stopStream = useCallback(() => {
+    const jobId = jobIdRef.current;
+    if (jobId) void stopChat({ jobId });
+    else if (sessionId) void stopChat({ session: sessionId });
+    detach();
+  }, [detach, sessionId]);
 
   const sendPrompt = async () => {
     const prompt = input.trim();
@@ -195,7 +257,7 @@ export default function ClaudeManager() {
       message: { role: "user", content: prompt },
       timestamp: new Date().toISOString(),
     };
-    setEvents((prev) => [...prev, userEvent]);
+    setEvents((prev) => [...prev, userEvent]); // optimistic; snapshot reconciles
     setInput("");
     setError(null);
     setStreaming(true);
@@ -204,21 +266,7 @@ export default function ClaudeManager() {
     abortRef.current = ac;
 
     try {
-      await streamChat({ folder, sessionId, prompt, signal: ac.signal }, (msg) => {
-        switch (msg.kind) {
-          case "event":
-            setEvents((prev) => [...prev, msg.event]);
-            break;
-          case "session-id":
-            setSessionId(msg.sessionId);
-            break;
-          case "error":
-            setError(msg.message);
-            break;
-          case "done":
-            break;
-        }
-      });
+      await startChat({ folder, sessionId, prompt, signal: ac.signal }, handleMsg);
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
       setStreaming(false);
@@ -329,7 +377,7 @@ export default function ClaudeManager() {
             <button
               className="icon-btn"
               onClick={() => {
-                stopStream();
+                detach();
                 setView("sessions");
               }}
             >

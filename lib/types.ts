@@ -56,7 +56,18 @@ export interface ClaudeEvent {
  * Messages the SSE chat stream sends to the client. Mirrors the behaviour of
  * the original entity's stream kinds, over plain SSE instead of a WS stream.
  */
+export type JobStatus = "running" | "done" | "error" | "stopped";
+
 export type ChatStreamMessage =
+  | {
+      // Full current state of a job — sent first to any (re)connecting client.
+      kind: "snapshot";
+      jobId: string;
+      sessionId: string | null;
+      events: ClaudeEvent[];
+      status: JobStatus;
+      error?: string;
+    }
   | { kind: "event"; event: ClaudeEvent }
   | { kind: "session-id"; sessionId: string }
   | { kind: "done" }
