@@ -15,12 +15,37 @@ export interface ToolUseBlock {
 }
 export type AssistantBlock = TextBlock | ToolUseBlock;
 
+export interface TaskRow {
+  id: string;
+  subject: string;
+  status: string; // pending | in_progress | completed | stopped
+  activeForm?: string;
+}
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+export interface QuestionSpec {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: QuestionOption[];
+}
+
 export type DisplayItem =
-  | { kind: "system"; text: string }
   | { kind: "user"; text: string }
   | { kind: "assistant"; id?: string; blocks: AssistantBlock[]; streaming: boolean }
   | { kind: "tool_result"; text: string; isError: boolean }
-  | { kind: "result"; text: string; isError: boolean };
+  | { kind: "result"; text: string; isError: boolean }
+  | { kind: "tasks"; tasks: TaskRow[] }
+  | { kind: "bgtask"; taskId: string; description: string; status: string; summary: string | null }
+  | { kind: "question"; id?: string; questions: QuestionSpec[] };
+
+// Tools we render specially (and whose raw tool_use / tool_result we suppress).
+const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskStop", "TaskList", "TaskGet"]);
+function isSpecialTool(name: string): boolean {
+  return TASK_TOOLS.has(name) || name === "TodoWrite" || name === "AskUserQuestion";
+}
 
 function asText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -40,49 +65,31 @@ function asText(content: unknown): string {
   return "";
 }
 
-// Pull text + tool_use blocks out of a complete assistant message.content array.
-function blocksFromContent(content: unknown): AssistantBlock[] {
-  if (typeof content === "string") return [{ type: "text", text: content }];
-  if (!Array.isArray(content)) return [];
-  const blocks: AssistantBlock[] = [];
-  for (const raw of content) {
-    if (!raw || typeof raw !== "object") continue;
-    const o = raw as Record<string, unknown>;
-    if (o.type === "text" && typeof o.text === "string") {
-      blocks.push({ type: "text", text: o.text });
-    } else if (o.type === "tool_use") {
-      blocks.push({
-        type: "tool_use",
-        id: typeof o.id === "string" ? o.id : undefined,
-        name: typeof o.name === "string" ? o.name : "tool",
-        input: o.input ? JSON.stringify(o.input, null, 2) : "",
-      });
-    }
-  }
-  return blocks;
-}
-
 /**
  * Fold a list of Claude events into renderable items.
  *
- * A single assistant message is delivered as MULTIPLE events that all share one
+ * A single assistant message is delivered as MULTIPLE events that share one
  * message `id`: the live partial stream (message_start → content_block_* deltas)
- * and one authoritative `assistant` event per content block (each carrying only
- * its own block). To avoid showing the same turn several times we fold every
- * event with a given id into ONE item:
- *   - when the partial stream is present (live), it builds the blocks
- *     token-by-token and the authoritative `assistant` events are ignored;
- *   - when it is absent (replaying a saved transcript), the `assistant` events
- *     accumulate their blocks into the same item.
+ * and one authoritative `assistant` event per content block. We fold every event
+ * with a given id into ONE item (live builds it; replay accumulates).
+ *
+ * On top of that, three tools get richer treatment: Task* tools fold into a
+ * single live checklist, background `Bash` shells surface as status cards via
+ * the system `task_*` events, and `AskUserQuestion` becomes an answerable card.
  */
 export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
   const items: DisplayItem[] = [];
-  // message id -> index of its assistant item
-  const byId = new Map<string, number>();
-  // ids that produced a live partial stream (so we ignore their `assistant`s)
-  const partialIds = new Set<string>();
-  // the message currently being streamed
-  let curIdx: number | null = null;
+  const byId = new Map<string, number>(); // message id -> assistant item index
+  const partialIds = new Set<string>(); // ids with a live partial stream
+  let curIdx: number | null = null; // message currently streaming
+
+  // ---- aggregate state for special tools ----
+  const tasks: TaskRow[] = [];
+  const taskIndexById = new Map<string, number>();
+  let tasksItemIdx: number | null = null;
+  let taskSeq = 0;
+  const bgIndexById = new Map<string, number>(); // background task_id -> item index
+  const suppressedToolIds = new Set<string>(); // tool_use ids whose result we hide
 
   const newAssistant = (id?: string, streaming = false): number => {
     items.push({ kind: "assistant", id, blocks: [], streaming });
@@ -91,22 +98,167 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
     return idx;
   };
 
+  const ensureTasksItem = () => {
+    if (tasksItemIdx === null) {
+      items.push({ kind: "tasks", tasks });
+      tasksItemIdx = items.length - 1;
+    }
+  };
+
+  // Handle a tool_use that we render specially. Returns true if it was special
+  // (so the caller skips adding it as a normal tool card).
+  const handleSpecialTool = (
+    name: string,
+    id: string | undefined,
+    input: Record<string, unknown>,
+  ): boolean => {
+    if (!isSpecialTool(name)) return false;
+    if (id) suppressedToolIds.add(id);
+
+    if (name === "AskUserQuestion") {
+      const raw = Array.isArray(input.questions) ? input.questions : [];
+      const questions: QuestionSpec[] = raw.map((q) => {
+        const o = (q ?? {}) as Record<string, unknown>;
+        const opts = Array.isArray(o.options) ? o.options : [];
+        return {
+          question: String(o.question ?? ""),
+          header: typeof o.header === "string" ? o.header : undefined,
+          multiSelect: o.multiSelect === true,
+          options: opts.map((op) => {
+            const oo = (op ?? {}) as Record<string, unknown>;
+            return {
+              label: String(oo.label ?? ""),
+              description: typeof oo.description === "string" ? oo.description : undefined,
+            };
+          }),
+        };
+      });
+      if (questions.length) items.push({ kind: "question", id, questions });
+      return true;
+    }
+
+    if (name === "TodoWrite") {
+      const todos = Array.isArray(input.todos) ? input.todos : [];
+      tasks.length = 0;
+      taskIndexById.clear();
+      todos.forEach((t, i) => {
+        const o = (t ?? {}) as Record<string, unknown>;
+        tasks.push({
+          id: String(i + 1),
+          subject: String(o.content ?? "task"),
+          status: String(o.status ?? "pending"),
+          activeForm: typeof o.activeForm === "string" ? o.activeForm : undefined,
+        });
+      });
+      ensureTasksItem();
+      return true;
+    }
+
+    if (name === "TaskCreate") {
+      taskSeq += 1;
+      const tid = String(taskSeq);
+      tasks.push({
+        id: tid,
+        subject: String(input.subject ?? "task"),
+        status: "pending",
+        activeForm: typeof input.description === "string" ? input.description : undefined,
+      });
+      taskIndexById.set(tid, tasks.length - 1);
+      ensureTasksItem();
+      return true;
+    }
+    if (name === "TaskUpdate") {
+      const tid = String(input.taskId ?? "");
+      const i = taskIndexById.get(tid);
+      if (i !== undefined) {
+        if (typeof input.status === "string") tasks[i].status = input.status;
+        if (typeof input.activeForm === "string") tasks[i].activeForm = input.activeForm;
+      }
+      ensureTasksItem();
+      return true;
+    }
+    if (name === "TaskStop") {
+      const tid = String(input.taskId ?? "");
+      const i = taskIndexById.get(tid);
+      if (i !== undefined) tasks[i].status = "stopped";
+      return true;
+    }
+    // TaskList / TaskGet — read-only, just suppress the noise.
+    return true;
+  };
+
+  // Pull text + tool_use blocks from a complete assistant message.content array,
+  // routing special tools to handleSpecialTool instead of rendering them raw.
+  const blocksFromContent = (content: unknown): AssistantBlock[] => {
+    if (typeof content === "string") return [{ type: "text", text: content }];
+    if (!Array.isArray(content)) return [];
+    const blocks: AssistantBlock[] = [];
+    for (const raw of content) {
+      if (!raw || typeof raw !== "object") continue;
+      const o = raw as Record<string, unknown>;
+      if (o.type === "text" && typeof o.text === "string") {
+        blocks.push({ type: "text", text: o.text });
+      } else if (o.type === "tool_use") {
+        const name = typeof o.name === "string" ? o.name : "tool";
+        const id = typeof o.id === "string" ? o.id : undefined;
+        if (handleSpecialTool(name, id, (o.input as Record<string, unknown>) ?? {})) continue;
+        blocks.push({
+          type: "tool_use",
+          id,
+          name,
+          input: o.input ? JSON.stringify(o.input, null, 2) : "",
+        });
+      }
+    }
+    return blocks;
+  };
+
   for (const evt of events) {
     const type = evt.type;
 
     switch (type) {
-      case "system":
-        // The init event just says a turn began — redundant in this UI, skip it.
+      case "system": {
+        const st = evt.subtype;
+        if (st === "task_started") {
+          const tid = String((evt as Record<string, unknown>).task_id ?? "");
+          if (tid && !bgIndexById.has(tid)) {
+            items.push({
+              kind: "bgtask",
+              taskId: tid,
+              description: String((evt as Record<string, unknown>).description ?? "background task"),
+              status: "running",
+              summary: null,
+            });
+            bgIndexById.set(tid, items.length - 1);
+          }
+        } else if (st === "task_notification") {
+          const o = evt as Record<string, unknown>;
+          const tid = String(o.task_id ?? "");
+          const status = String(o.status ?? "done");
+          const summary = o.summary != null ? String(o.summary) : null;
+          const i = bgIndexById.get(tid);
+          if (i !== undefined) {
+            const it = items[i] as Extract<DisplayItem, { kind: "bgtask" }>;
+            it.status = status;
+            it.summary = summary;
+          } else if (tid) {
+            items.push({ kind: "bgtask", taskId: tid, description: "background task", status, summary });
+            bgIndexById.set(tid, items.length - 1);
+          }
+        }
+        // other system subtypes (init, thinking_tokens, …) carry no UI content
         break;
+      }
 
       case "user": {
         const content = evt.message?.content ?? (evt as { content?: unknown }).content;
-        // Tool results arrive as user-role messages with an array content.
         if (Array.isArray(content)) {
           for (const raw of content) {
             if (raw && typeof raw === "object") {
               const o = raw as Record<string, unknown>;
               if (o.type === "tool_result") {
+                const tid = typeof o.tool_use_id === "string" ? o.tool_use_id : "";
+                if (tid && suppressedToolIds.has(tid)) continue; // special tool — hidden
                 items.push({
                   kind: "tool_result",
                   text: asText(o.content),
@@ -126,10 +278,7 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
 
       case "assistant": {
         const id = (evt.message as { id?: string } | undefined)?.id;
-        // Already rendered live from the partial stream; `message_stop` settles
-        // the streaming flag, so ignore the authoritative copy here.
-        if (id && partialIds.has(id)) break;
-        // Replay (or no partial stream): accumulate blocks into the id's item.
+        if (id && partialIds.has(id)) break; // already built live
         const idx = id && byId.has(id) ? byId.get(id)! : newAssistant(id, false);
         const item = items[idx] as Extract<DisplayItem, { kind: "assistant" }>;
         item.blocks.push(...blocksFromContent(evt.message?.content));
@@ -177,6 +326,24 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
         }
         break;
       }
+      case "content_block_stop": {
+        // When a special tool's input has fully streamed, route it and drop the
+        // raw block (the aggregate card renders it instead).
+        if (curIdx === null) break;
+        const item = items[curIdx] as Extract<DisplayItem, { kind: "assistant" }>;
+        const last = item.blocks[item.blocks.length - 1];
+        if (last && last.type === "tool_use" && isSpecialTool(last.name)) {
+          let input: Record<string, unknown> = {};
+          try {
+            input = last.input ? (JSON.parse(last.input) as Record<string, unknown>) : {};
+          } catch {
+            /* partial / unparseable — handle with what we have */
+          }
+          handleSpecialTool(last.name, last.id, input);
+          item.blocks.pop();
+        }
+        break;
+      }
       case "message_stop": {
         if (curIdx !== null) {
           (items[curIdx] as Extract<DisplayItem, { kind: "assistant" }>).streaming = false;
@@ -186,13 +353,9 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
       }
 
       case "result": {
-        const text =
-          typeof evt.result === "string" ? evt.result : asText(evt.result);
+        const text = typeof evt.result === "string" ? evt.result : asText(evt.result);
         const trimmed = text.trim();
         if (!trimmed) break;
-        // The result event echoes the final answer; if it merely repeats the
-        // last assistant message's text, don't render it a second time. Only
-        // surface it on error or when it adds something new.
         const lastAssistant = [...items]
           .reverse()
           .find((it) => it.kind === "assistant") as

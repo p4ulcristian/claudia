@@ -248,8 +248,9 @@ export default function ClaudeManager() {
     detach();
   }, [detach, sessionId]);
 
-  const sendPrompt = async () => {
-    const prompt = input.trim();
+  // Send arbitrary text as a turn (used by the composer and by question answers).
+  const sendText = async (text: string) => {
+    const prompt = text.trim();
     if (!prompt || streaming || !folder) return;
 
     const userEvent: ClaudeEvent = {
@@ -258,7 +259,6 @@ export default function ClaudeManager() {
       timestamp: new Date().toISOString(),
     };
     setEvents((prev) => [...prev, userEvent]); // optimistic; snapshot reconciles
-    setInput("");
     setError(null);
     setStreaming(true);
 
@@ -271,6 +271,13 @@ export default function ClaudeManager() {
       if (abortRef.current === ac) abortRef.current = null;
       setStreaming(false);
     }
+  };
+
+  const sendPrompt = () => {
+    const t = input.trim();
+    if (!t) return;
+    setInput("");
+    void sendText(t);
   };
 
   // ---- views ----
@@ -420,7 +427,11 @@ export default function ClaudeManager() {
             {loading ? (
               <div className="muted center pad">Loading transcript…</div>
             ) : (
-              <StreamRenderer events={events} streaming={streaming} />
+              <StreamRenderer
+                events={events}
+                streaming={streaming}
+                onAnswer={(t) => void sendText(t)}
+              />
             )}
           </div>
 

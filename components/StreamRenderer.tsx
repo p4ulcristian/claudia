@@ -2,12 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeEvent } from "@/lib/types";
-import { foldEvents, type DisplayItem, type ToolUseBlock } from "./fold";
+import {
+  foldEvents,
+  type DisplayItem,
+  type ToolUseBlock,
+} from "./fold";
 import Markdown from "./Markdown";
-import { FontAwesomeIcon, faChevronDown, faChevronRight, faGear } from "./icons";
+import {
+  FontAwesomeIcon,
+  faChevronDown,
+  faChevronRight,
+  faCircle,
+  faCircleCheck,
+  faCircleQuestion,
+  faCircleXmark,
+  faGear,
+  faListCheck,
+  faSpinner,
+  faTerminal,
+} from "./icons";
 
-// Pull a short, human hint out of a tool's (possibly partial) JSON input so a
-// collapsed tool card can read "Read · lib/sessions.ts" instead of "{...}".
+// Pull a short, human hint out of a tool's (possibly partial) JSON input.
 function toolSummary(input: string): string {
   if (!input) return "";
   try {
@@ -16,7 +31,7 @@ function toolSummary(input: string): string {
       o.file_path ?? o.path ?? o.pattern ?? o.command ?? o.query ?? o.url ?? o.prompt;
     if (typeof pick === "string") return pick.length > 64 ? pick.slice(0, 63) + "…" : pick;
   } catch {
-    // partial JSON mid-stream — ignore
+    /* partial JSON mid-stream */
   }
   return "";
 }
@@ -87,10 +102,150 @@ function ToolResult({ item }: { item: Extract<DisplayItem, { kind: "tool_result"
   );
 }
 
+const TASK_ICON = {
+  completed: faCircleCheck,
+  in_progress: faSpinner,
+  stopped: faCircleXmark,
+  pending: faCircle,
+} as const;
+
+function TasksCard({ item }: { item: Extract<DisplayItem, { kind: "tasks" }> }) {
+  const done = item.tasks.filter((t) => t.status === "completed").length;
+  return (
+    <div className="tasks-card">
+      <div className="tasks-head">
+        <FontAwesomeIcon icon={faListCheck} />
+        <span>Tasks</span>
+        <span className="tasks-count">
+          {done}/{item.tasks.length}
+        </span>
+      </div>
+      {item.tasks.map((t) => {
+        const icon = TASK_ICON[t.status as keyof typeof TASK_ICON] ?? faCircle;
+        const label = t.status === "in_progress" && t.activeForm ? t.activeForm : t.subject;
+        return (
+          <div key={t.id} className={`task-row is-${t.status}`}>
+            <span className="task-ic">
+              <FontAwesomeIcon icon={icon} spin={t.status === "in_progress"} />
+            </span>
+            <span className="task-subj">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BgTaskCard({ item }: { item: Extract<DisplayItem, { kind: "bgtask" }> }) {
+  const running = item.status === "running";
+  return (
+    <div className={`bgtask-card ${running ? "is-running" : "is-done"}`}>
+      <span className="bgtask-ic">
+        <FontAwesomeIcon icon={faTerminal} />
+      </span>
+      <span className="bgtask-desc">{item.description}</span>
+      <span className="bgtask-status">
+        {running ? (
+          <>
+            <FontAwesomeIcon icon={faSpinner} spin /> running
+          </>
+        ) : (
+          item.summary || item.status
+        )}
+      </span>
+    </div>
+  );
+}
+
+function QuestionCard({
+  item,
+  active,
+  onAnswer,
+}: {
+  item: Extract<DisplayItem, { kind: "question" }>;
+  active: boolean;
+  onAnswer: (text: string) => void;
+}) {
+  const [sel, setSel] = useState<Record<number, string[]>>({});
+  const [sent, setSent] = useState(false);
+  const single = item.questions.length === 1 && !item.questions[0]?.multiSelect;
+  const disabled = !active || sent;
+
+  const format = (s: Record<number, string[]>) =>
+    item.questions
+      .map((q, qi) => `${q.header || q.question}: ${(s[qi] || []).join(", ")}`)
+      .join("\n");
+
+  const pick = (qi: number, label: string, multi?: boolean) => {
+    if (disabled) return;
+    if (single) {
+      setSent(true);
+      onAnswer(label);
+      return;
+    }
+    setSel((prev) => {
+      const cur = new Set(prev[qi] || []);
+      if (multi) {
+        cur.has(label) ? cur.delete(label) : cur.add(label);
+      } else {
+        cur.clear();
+        cur.add(label);
+      }
+      return { ...prev, [qi]: [...cur] };
+    });
+  };
+
+  const allAnswered = item.questions.every((_, qi) => (sel[qi] || []).length > 0);
+  const send = () => {
+    if (disabled || !allAnswered) return;
+    setSent(true);
+    onAnswer(format(sel));
+  };
+
+  return (
+    <div className={`question-card ${disabled ? "is-disabled" : ""}`}>
+      <div className="question-head">
+        <FontAwesomeIcon icon={faCircleQuestion} />
+        <span>{item.questions.length > 1 ? "Questions" : "Question"}</span>
+      </div>
+      {item.questions.map((q, qi) => (
+        <div key={qi} className="question-q">
+          {q.header ? <div className="question-label">{q.header}</div> : null}
+          <div className="question-text">{q.question}</div>
+          <div className="question-opts">
+            {q.options.map((op, oi) => {
+              const selected = (sel[qi] || []).includes(op.label);
+              return (
+                <button
+                  key={oi}
+                  className={`question-opt ${selected ? "selected" : ""}`}
+                  disabled={disabled}
+                  title={op.description}
+                  onClick={() => pick(qi, op.label, q.multiSelect)}
+                >
+                  {op.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {!single ? (
+        <button
+          className="btn accent question-send"
+          disabled={disabled || !allAnswered}
+          onClick={send}
+        >
+          Send answer
+        </button>
+      ) : null}
+      {sent ? <div className="question-sent muted">answer sent</div> : null}
+    </div>
+  );
+}
+
 function Item({ item }: { item: DisplayItem }) {
   switch (item.kind) {
-    case "system":
-      return <div className="msg-system">{item.text}</div>;
     case "user":
       return (
         <div className="msg msg-user">
@@ -101,6 +256,10 @@ function Item({ item }: { item: DisplayItem }) {
       return <AssistantItem item={item} />;
     case "tool_result":
       return <ToolResult item={item} />;
+    case "tasks":
+      return <TasksCard item={item} />;
+    case "bgtask":
+      return <BgTaskCard item={item} />;
     case "result":
       return (
         <div className={`msg-result ${item.isError ? "is-error" : ""}`}>
@@ -115,9 +274,11 @@ function Item({ item }: { item: DisplayItem }) {
 export default function StreamRenderer({
   events,
   streaming,
+  onAnswer,
 }: {
   events: ClaudeEvent[];
   streaming: boolean;
+  onAnswer: (text: string) => void;
 }) {
   const items = useMemo(() => foldEvents(events), [events]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -146,7 +307,15 @@ export default function StreamRenderer({
     <div className="stream">
       {items.map((item, i) => (
         <div className="stream-item" key={i}>
-          <Item item={item} />
+          {item.kind === "question" ? (
+            <QuestionCard
+              item={item}
+              active={!streaming && i === items.length - 1}
+              onAnswer={onAnswer}
+            />
+          ) : (
+            <Item item={item} />
+          )}
         </div>
       ))}
       {streaming ? (

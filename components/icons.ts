@@ -14,4 +14,11 @@ export {
   faChevronDown,
   faGear,
   faRotateRight,
+  faCheck,
+  faCircleCheck,
+  faCircleXmark,
+  faCircleQuestion,
+  faListCheck,
+  faTerminal,
+  faSpinner,
 } from "@fortawesome/free-solid-svg-icons";
