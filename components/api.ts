@@ -5,6 +5,8 @@ import type {
   ClaudeEvent,
   FolderPath,
   GitData,
+  LiveSession,
+  SessionMeta,
   SessionSummary,
   TranscriptDelta,
 } from "@/lib/types";
@@ -112,6 +114,46 @@ export function writeSessionListCache(
 export async function getGit(folder: string): Promise<GitData> {
   return json<GitData>(
     await fetch(`/api/git?folder=${encodeURIComponent(folder)}`),
+  );
+}
+
+/** Sessions with a live job streaming right now, across all folders. */
+export async function getLive(): Promise<LiveSession[]> {
+  return (await json<{ sessions: LiveSession[] }>(await fetch("/api/live"))).sessions;
+}
+
+/** sessionId → triage meta (done flag). */
+export async function getSessionMeta(): Promise<Record<string, SessionMeta>> {
+  return (
+    await json<{ meta: Record<string, SessionMeta> }>(await fetch("/api/session-meta"))
+  ).meta;
+}
+
+export async function setSessionDone(
+  sessionId: string,
+  done: boolean,
+): Promise<Record<string, SessionMeta>> {
+  return (
+    await json<{ meta: Record<string, SessionMeta> }>(
+      await fetch("/api/session-meta", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId, done }),
+      }),
+    )
+  ).meta;
+}
+
+/** Permanently delete a session's transcript file. */
+export async function deleteSession(
+  folder: string,
+  sessionId: string,
+): Promise<void> {
+  await json<{ ok: boolean }>(
+    await fetch(
+      `/api/sessions/${encodeURIComponent(sessionId)}?folder=${encodeURIComponent(folder)}`,
+      { method: "DELETE" },
+    ),
   );
 }
 

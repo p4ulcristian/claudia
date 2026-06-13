@@ -22,6 +22,8 @@ interface Job {
   events: ClaudeEvent[];
   status: JobStatus;
   error?: string;
+  /** Epoch millis the job was started — for "running for Xs" in the UI. */
+  startedAt: number;
   ac: AbortController;
   subscribers: Set<Subscriber>;
   ended: boolean;
@@ -127,6 +129,7 @@ export async function startJob(opts: {
     sessionId: opts.sessionId,
     events: [...base, userEvent],
     status: "running",
+    startedAt: Date.now(),
     ac: new AbortController(),
     subscribers: new Set(),
     ended: false,
@@ -182,4 +185,9 @@ export function stopJob(ref: { jobId?: string; sessionId?: string }): boolean {
     finalize(job, "stopped");
   }
   return true;
+}
+
+/** All jobs currently in the registry (running + within the grace window). */
+export function listJobs(): Job[] {
+  return Array.from(jobs.values());
 }

@@ -102,6 +102,21 @@ export async function putCachedTranscript(
   void evict(db);
 }
 
+export async function deleteCachedTranscript(sessionId: string): Promise<void> {
+  const db = await openDB();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const store = tx(db, "readwrite");
+      store.delete(sessionId);
+      store.transaction.oncomplete = () => resolve();
+      store.transaction.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
 // Trim the store to MAX_ENTRIES, dropping the least-recently-opened first.
 async function evict(db: IDBDatabase): Promise<void> {
   return new Promise((resolve) => {

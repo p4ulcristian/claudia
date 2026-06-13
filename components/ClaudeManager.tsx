@@ -5,21 +5,28 @@ import type {
   ChatStreamMessage,
   ClaudeEvent,
   FolderPath,
+  LiveSession,
+  SessionMeta,
   SessionSummary,
 } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
 import { contextOf, COMPACT_SUGGEST_PCT, COMPACT_AUTO_PCT } from "@/lib/context";
 import {
   addFolder as apiAddFolder,
+  deleteSession as apiDeleteSession,
   getFolders,
+  getLive,
+  getSessionMeta,
   getSessions,
   getUsage,
   loadSessionDelta,
   readSessionListCache,
   removeFolder as apiRemoveFolder,
+  setSessionDone,
   writeSessionListCache,
 } from "./api";
 import {
+  deleteCachedTranscript,
   getCachedTranscript,
   putCachedTranscript,
   warmTranscriptCache,
@@ -43,6 +50,11 @@ import {
   faPlus,
   faXmark,
   faCodeBranch,
+  faCircle,
+  faCircleCheck,
+  faSpinner,
+  faChevronDown,
+  faChevronRight,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -87,11 +99,73 @@ function fmtAgo(ms: number): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// One session row in the list: done-toggle on the left, title + meta (or a
+// "running" tag when doing), delete on the right.
+function SessionRow({
+  s,
+  doing,
+  done,
+  onOpen,
+  onToggleDone,
+  onRemove,
+}: {
+  s: SessionSummary;
+  doing: boolean;
+  done: boolean;
+  onOpen: () => void;
+  onToggleDone: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={`row session-row${doing ? " session-doing" : ""}${done ? " session-done" : ""}`}
+      onClick={onOpen}
+    >
+      <button
+        className="icon-btn done-toggle"
+        title={done ? "Mark not done" : "Mark done"}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleDone();
+        }}
+      >
+        <FontAwesomeIcon icon={done ? faCircleCheck : faCircle} />
+      </button>
+      <div className="row-main">
+        <div className="row-title ellipsis">{s.title}</div>
+        <div className="row-sub mono">
+          {doing ? (
+            <span className="doing-tag">
+              <FontAwesomeIcon icon={faSpinner} spin /> running
+            </span>
+          ) : (
+            fmtAgo(s.modified)
+          )}{" "}
+          · {s.sessionId.slice(0, 8)}
+        </div>
+      </div>
+      <button
+        className="icon-btn row-del"
+        title="Delete session"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+      >
+        <FontAwesomeIcon icon={faXmark} />
+      </button>
+    </div>
+  );
+}
+
 export default function ClaudeManager() {
   const [view, setView] = useState<View>("folders");
   const [folders, setFolders] = useState<FolderPath[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
+  const [live, setLive] = useState<LiveSession[]>([]);
+  const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
+  const [showDone, setShowDone] = useState(false);
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -169,6 +243,23 @@ export default function ClaudeManager() {
     else window.history.replaceState(null, "", target);
   }, [view, folder, sessionId]);
 
+  // Poll the live ("doing") sessions while browsing folders or a session list,
+  // so the home section and the per-row badges stay fresh.
+  useEffect(() => {
+    if (view !== "folders" && view !== "sessions") return;
+    let alive = true;
+    const tick = () =>
+      getLive()
+        .then((l) => alive && setLive(l))
+        .catch(() => {});
+    void tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [view]);
+
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
     setUsageLoading(true);
@@ -197,6 +288,28 @@ export default function ClaudeManager() {
     (items.find((it) => it.kind === "tasks") as
       | Extract<DisplayItem, { kind: "tasks" }>
       | undefined)?.tasks ?? [];
+
+  // Session triage groupings for the sessions list. A running ("doing") session
+  // always counts as active even if also marked done. Done (and not running)
+  // sinks into a collapsible group. Within a group, list stays newest-first.
+  const liveIds = useMemo(() => new Set(live.map((l) => l.sessionId)), [live]);
+  const activeSessions = useMemo(
+    () =>
+      sessions
+        .filter((s) => liveIds.has(s.sessionId) || !sessionMeta[s.sessionId]?.done)
+        .sort(
+          (a, b) =>
+            (liveIds.has(b.sessionId) ? 1 : 0) - (liveIds.has(a.sessionId) ? 1 : 0),
+        ),
+    [sessions, liveIds, sessionMeta],
+  );
+  const doneSessions = useMemo(
+    () =>
+      sessions.filter(
+        (s) => sessionMeta[s.sessionId]?.done && !liveIds.has(s.sessionId),
+      ),
+    [sessions, liveIds, sessionMeta],
+  );
 
   // ---- chat transport ----
   // Apply a stream message from a job (live turn or a reconnect snapshot).
@@ -302,6 +415,7 @@ export default function ClaudeManager() {
       } else {
         setSessionId(null);
         setView("sessions");
+        void getSessionMeta().then(setSessionMeta).catch(() => {});
         const cached = readSessionListCache(f);
         if (cached) setSessions(cached);
         else setLoading(true);
@@ -346,6 +460,7 @@ export default function ClaudeManager() {
   const openFolder = async (f: string) => {
     setFolder(f);
     setView("sessions");
+    void getSessionMeta().then(setSessionMeta).catch(() => {});
     // Render the last known list instantly, then revalidate in the background.
     const cached = readSessionListCache(f);
     if (cached) {
@@ -386,6 +501,38 @@ export default function ClaudeManager() {
     setError(null);
     setStreaming(false);
     setView("chat");
+  };
+
+  // Toggle a session's "done" mark (optimistic, then confirm from the server).
+  const toggleDone = async (id: string, done: boolean) => {
+    setSessionMeta((m) => ({ ...m, [id]: { ...m[id], done } }));
+    try {
+      setSessionMeta(await setSessionDone(id, done));
+    } catch {
+      /* leave the optimistic value; next folder open re-syncs */
+    }
+  };
+
+  // Permanently delete a session's transcript (gone from Claude too).
+  const removeSession = async (id: string) => {
+    if (!folder) return;
+    if (
+      !window.confirm(
+        "Delete this session? This permanently removes its transcript.",
+      )
+    )
+      return;
+    const next = sessions.filter((s) => s.sessionId !== id);
+    setSessions(next);
+    writeSessionListCache(folder, next);
+    void deleteCachedTranscript(id);
+    try {
+      await apiDeleteSession(folder, id);
+    } catch {
+      const fresh = await getSessions(folder);
+      setSessions(fresh);
+      writeSessionListCache(folder, fresh);
+    }
   };
 
   // ---- chat ----
@@ -582,6 +729,26 @@ export default function ClaudeManager() {
             {usageBtn}
           </div>
           <div className="scroll">
+            {live.length > 0 && (
+              <div className="live-section">
+                <div className="git-section-title">Doing now</div>
+                {live.map((l) => (
+                  <div
+                    key={l.sessionId}
+                    className="row live-row"
+                    onClick={() => openSession(l.folder, l.sessionId)}
+                  >
+                    <span className="live-dot" />
+                    <div className="row-main">
+                      <div className="row-title ellipsis">{l.title}</div>
+                      <div className="row-sub mono">
+                        {shortName(l.folder)} · {fmtAgo(l.startedAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {folders.length === 0 ? (
               <div className="muted center pad">
                 No folders yet. Add one above to see its Claude sessions.
@@ -636,20 +803,46 @@ export default function ClaudeManager() {
             ) : sessions.length === 0 ? (
               <div className="muted center pad">No sessions in this folder yet.</div>
             ) : (
-              sessions.map((s) => (
-                <div
-                  key={s.sessionId}
-                  className="row"
-                  onClick={() => openSession(folder, s.sessionId)}
-                >
-                  <div className="row-main">
-                    <div className="row-title ellipsis">{s.title}</div>
-                    <div className="row-sub mono">
-                      {fmtAgo(s.modified)} · {s.sessionId.slice(0, 8)}
-                    </div>
-                  </div>
-                </div>
-              ))
+              <>
+                {activeSessions.map((s) => (
+                  <SessionRow
+                    key={s.sessionId}
+                    s={s}
+                    doing={liveIds.has(s.sessionId)}
+                    done={!!sessionMeta[s.sessionId]?.done}
+                    onOpen={() => openSession(folder, s.sessionId)}
+                    onToggleDone={() =>
+                      void toggleDone(s.sessionId, !sessionMeta[s.sessionId]?.done)
+                    }
+                    onRemove={() => void removeSession(s.sessionId)}
+                  />
+                ))}
+                {doneSessions.length > 0 && (
+                  <>
+                    <button
+                      className="done-group-head"
+                      onClick={() => setShowDone((v) => !v)}
+                    >
+                      <FontAwesomeIcon
+                        icon={showDone ? faChevronDown : faChevronRight}
+                      />
+                      Done ({doneSessions.length})
+                    </button>
+                    {showDone &&
+                      doneSessions.map((s) => (
+                        <SessionRow
+                          key={s.sessionId}
+                          s={s}
+                          doing={false}
+                          done
+                          onOpen={() => openSession(folder, s.sessionId)}
+                          onToggleDone={() => void toggleDone(s.sessionId, false)}
+                          onRemove={() => void removeSession(s.sessionId)}
+                        />
+                      ))}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>

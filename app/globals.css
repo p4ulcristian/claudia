@@ -1428,6 +1428,75 @@ body {
   }
 }
 
+/* ---- session triage (doing / done / live) ---- */
+.session-row .done-toggle {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.session-row .done-toggle:hover {
+  color: var(--accent-bright);
+}
+.session-done .done-toggle {
+  color: var(--accent);
+}
+.session-done .row-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.session-row .row-del {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.session-row:hover .row-del {
+  opacity: 1;
+}
+.session-row .row-del:hover {
+  color: var(--danger);
+}
+.session-doing {
+  border-left: 2px solid var(--accent);
+}
+.doing-tag {
+  color: var(--accent-bright);
+}
+.done-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 10px 0 2px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.done-group-head:hover {
+  color: var(--text-secondary);
+}
+
+/* home "Doing now" section */
+.live-section {
+  margin-bottom: 14px;
+}
+.live-row {
+  border-left: 2px solid var(--accent);
+}
+.live-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
 /* ---- git shelf (bottom drawer) ---- */
 .git-backdrop {
   position: fixed;

@@ -81,6 +81,19 @@ export async function listSessions(folder: string): Promise<SessionSummary[]> {
   return summaries.sort((a, b) => b.modified - a.modified);
 }
 
+/** Permanently delete a session transcript (the `claude` session file). */
+export async function deleteSession(
+  folder: string,
+  sessionId: string,
+): Promise<void> {
+  const file = path.join(sessionDir(folder), `${sessionId}.jsonl`);
+  try {
+    await fsp.unlink(file);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+}
+
 /** Read a transcript file (optionally from a byte offset), parsed and filtered. */
 async function readEvents(file: string, start = 0): Promise<ClaudeEvent[]> {
   const rl = readline.createInterface({

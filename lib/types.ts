@@ -72,6 +72,20 @@ export interface GitData extends GitSmartlog {
   error?: string;
 }
 
+/** A session with a live job streaming right now. */
+export interface LiveSession {
+  folder: string;
+  sessionId: string;
+  title: string;
+  /** Epoch millis the job started. */
+  startedAt: number;
+}
+
+/** Per-session user triage state (persisted server-side, keyed by sessionId). */
+export interface SessionMeta {
+  done?: boolean;
+}
+
 /** An entry in the server-side directory browser. */
 export interface DirEntry {
   name: string;
