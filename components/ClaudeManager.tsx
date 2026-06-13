@@ -15,6 +15,15 @@ import { streamChat } from "./stream-chat";
 import FolderPicker from "./FolderPicker";
 import StreamRenderer from "./StreamRenderer";
 import UsagePanel from "./UsagePanel";
+import {
+  FontAwesomeIcon,
+  faArrowLeft,
+  faChartColumn,
+  faFolder,
+  faFolderPlus,
+  faPlus,
+  faXmark,
+} from "./icons";
 
 type View = "folders" | "sessions" | "chat";
 
@@ -180,7 +189,8 @@ export default function ClaudeManager() {
       onClick={() => setUsageOpen(true)}
       title="Usage stats"
     >
-      📊 {usageLoading && sessionPct == null ? "…" : sessionPct != null ? `${sessionPct}%` : "Usage"}
+      <FontAwesomeIcon icon={faChartColumn} />{" "}
+      {usageLoading && sessionPct == null ? "…" : sessionPct != null ? `${sessionPct}%` : "Usage"}
     </button>
   );
 
@@ -192,7 +202,7 @@ export default function ClaudeManager() {
             <h1 className="brand">claudia</h1>
             <div className="spacer" />
             <button className="btn accent" onClick={() => setPickerOpen(true)}>
-              📂 Add folder
+              <FontAwesomeIcon icon={faFolderPlus} /> Add folder
             </button>
             {usageBtn}
           </div>
@@ -204,7 +214,9 @@ export default function ClaudeManager() {
             ) : (
               folders.map((f) => (
                 <div key={f} className="row" onClick={() => openFolder(f)}>
-                  <span className="dir-icon">📁</span>
+                  <span className="dir-icon">
+                    <FontAwesomeIcon icon={faFolder} />
+                  </span>
                   <div className="row-main">
                     <div className="row-title">{shortName(f)}</div>
                     <div className="row-sub mono">{f}</div>
@@ -217,7 +229,7 @@ export default function ClaudeManager() {
                       void onRemoveFolder(f);
                     }}
                   >
-                    ✕
+                    <FontAwesomeIcon icon={faXmark} />
                   </button>
                 </div>
               ))
@@ -233,12 +245,12 @@ export default function ClaudeManager() {
         <div className="pane">
           <div className="toolbar">
             <button className="icon-btn" onClick={() => setView("folders")}>
-              ←
+              <FontAwesomeIcon icon={faArrowLeft} />
             </button>
             <div className="title">{shortName(folder)}</div>
             <div className="spacer" />
             <button className="btn accent" onClick={() => newSession(folder)}>
-              + New session
+              <FontAwesomeIcon icon={faPlus} /> New session
             </button>
             {usageBtn}
           </div>
@@ -277,7 +289,7 @@ export default function ClaudeManager() {
                 setView("sessions");
               }}
             >
-              ←
+              <FontAwesomeIcon icon={faArrowLeft} />
             </button>
             <div className="title mono ellipsis">
               {shortName(folder)}

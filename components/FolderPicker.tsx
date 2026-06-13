@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BrowseResult } from "@/lib/types";
 import { browse } from "./api";
+import {
+  FontAwesomeIcon,
+  faArrowUp,
+  faChevronRight,
+  faCircle,
+  faFolder,
+  faFolderOpen,
+  faPlus,
+  faXmark,
+} from "./icons";
 
 export default function FolderPicker({
   onAdd,
@@ -31,9 +41,11 @@ export default function FolderPicker({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <span className="modal-title">📁 Choose a folder</span>
+          <span className="modal-title">
+            <FontAwesomeIcon icon={faFolderOpen} /> Choose a folder
+          </span>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
-            ✕
+            <FontAwesomeIcon icon={faXmark} />
           </button>
         </div>
 
@@ -44,7 +56,7 @@ export default function FolderPicker({
             onClick={() => result?.parent && browseTo(result.parent)}
             title="Up one level"
           >
-            ↑
+            <FontAwesomeIcon icon={faArrowUp} />
           </button>
           <span className="path">{result?.path ?? "…"}</span>
         </div>
@@ -55,10 +67,18 @@ export default function FolderPicker({
           ) : result && result.dirs.length > 0 ? (
             result.dirs.map((d) => (
               <div key={d.path} className="dir-row" onClick={() => browseTo(d.path)}>
-                <span className="dir-icon">📂</span>
+                <span className="dir-icon">
+                  <FontAwesomeIcon icon={faFolder} />
+                </span>
                 <span className="dir-name">{d.name}</span>
-                {d.hasSessions ? <span className="badge">● sessions</span> : null}
-                <span className="chev">›</span>
+                {d.hasSessions ? (
+                  <span className="badge">
+                    <FontAwesomeIcon icon={faCircle} /> sessions
+                  </span>
+                ) : null}
+                <span className="chev">
+                  <FontAwesomeIcon icon={faChevronRight} />
+                </span>
               </div>
             ))
           ) : (
@@ -77,7 +97,7 @@ export default function FolderPicker({
             disabled={!result?.path}
             onClick={() => result?.path && onAdd(result.path)}
           >
-            + Add this folder
+            <FontAwesomeIcon icon={faPlus} /> Add this folder
           </button>
         </div>
       </div>

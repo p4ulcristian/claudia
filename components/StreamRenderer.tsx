@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeEvent } from "@/lib/types";
 import { foldEvents, type DisplayItem, type ToolUseBlock } from "./fold";
 import Markdown from "./Markdown";
+import { FontAwesomeIcon, faChevronDown, faChevronRight, faGear } from "./icons";
 
 // Pull a short, human hint out of a tool's (possibly partial) JSON input so a
 // collapsed tool card can read "Read · lib/sessions.ts" instead of "{...}".
@@ -26,10 +27,16 @@ function ToolCard({ block }: { block: ToolUseBlock }) {
   return (
     <div className={`tool-block ${open ? "is-open" : ""}`}>
       <button className="tool-name" onClick={() => setOpen((v) => !v)}>
-        <span className="tool-icon">⚙</span>
+        <span className="tool-icon">
+          <FontAwesomeIcon icon={faGear} />
+        </span>
         <span className="tool-label">{block.name}</span>
         {summary ? <span className="tool-summary">{summary}</span> : null}
-        {block.input ? <span className="chev">{open ? "▾" : "▸"}</span> : null}
+        {block.input ? (
+          <span className="chev">
+            <FontAwesomeIcon icon={open ? faChevronDown : faChevronRight} />
+          </span>
+        ) : null}
       </button>
       {open && block.input ? <pre className="tool-input">{block.input}</pre> : null}
     </div>
@@ -75,7 +82,9 @@ function ToolResult({ item }: { item: Extract<DisplayItem, { kind: "tool_result"
       <button className="tool-result-label" onClick={() => setOpen((v) => !v)}>
         {item.isError ? "error" : "result"}
         <span className="tool-result-meta">{chars}</span>
-        <span className="chev">{open ? "▾" : "▸"}</span>
+        <span className="chev">
+          <FontAwesomeIcon icon={open ? faChevronDown : faChevronRight} />
+        </span>
       </button>
       {open ? <pre>{body}</pre> : null}
     </div>

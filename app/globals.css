@@ -398,6 +398,10 @@ body {
   color: var(--accent);
   font-family: var(--mono);
 }
+.badge svg {
+  font-size: 0.7em;
+  vertical-align: middle;
+}
 .chev {
   color: var(--text-muted);
   font-size: 11px;

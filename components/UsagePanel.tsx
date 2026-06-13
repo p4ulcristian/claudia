@@ -1,6 +1,7 @@
 "use client";
 
 import type { UsageData } from "@/lib/usage";
+import { FontAwesomeIcon, faChartColumn, faRotateRight, faXmark } from "./icons";
 
 function Bar({ pct }: { pct: number }) {
   const hot = pct >= 80;
@@ -34,12 +35,20 @@ export default function UsagePanel({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal usage-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-title">📊 Usage</div>
+          <div className="modal-title">
+            <FontAwesomeIcon icon={faChartColumn} /> Usage
+          </div>
           <button className="btn ghost" disabled={loading} onClick={onRefresh}>
-            {loading ? "…" : "↻ Refresh"}
+            {loading ? (
+              "…"
+            ) : (
+              <>
+                <FontAwesomeIcon icon={faRotateRight} /> Refresh
+              </>
+            )}
           </button>
           <button className="icon-btn" onClick={onClose}>
-            ✕
+            <FontAwesomeIcon icon={faXmark} />
           </button>
         </div>
 
