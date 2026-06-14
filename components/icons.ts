@@ -27,4 +27,5 @@ export {
   faCompress,
   faCodeBranch,
   faUpRightFromSquare,
+  faPencil,
 } from "@fortawesome/free-solid-svg-icons";

@@ -6,16 +6,21 @@ import type {
   ChatStreamMessage,
   ClaudeEvent,
   FolderPath,
+  FolderMetaMap,
   LiveSession,
   SessionSummary,
+  TitleMap,
 } from "@/lib/types";
+import { FOLDER_COLORS } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
 import { contextOf, COMPACT_SUGGEST_PCT, COMPACT_AUTO_PCT } from "@/lib/context";
 import {
   addFolder as apiAddFolder,
   deleteSession as apiDeleteSession,
-  getActive,
+  getSessionMeta,
   getFolders,
+  getFolderMeta,
+  setFolderColor as apiSetFolderColor,
   getLive,
   getSessions,
   getUsage,
@@ -23,6 +28,7 @@ import {
   readSessionListCache,
   removeFolder as apiRemoveFolder,
   setSessionActive,
+  setSessionTitle,
   writeSessionListCache,
 } from "./api";
 import {
@@ -54,6 +60,7 @@ import {
   faCircleCheck,
   faClock,
   faSpinner,
+  faPencil,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -105,17 +112,21 @@ function SessionRow({
   active,
   doing,
   folderLabel,
+  colorClass,
   onOpen,
   onToggle,
   onRemove,
+  onRename,
 }: {
   s: { sessionId: string; title: string; modified: number };
   active: boolean;
   doing: boolean;
   folderLabel?: string;
+  colorClass?: string;
   onOpen: () => void;
   onToggle: () => void;
   onRemove: () => void;
+  onRename: (title: string) => void;
 }) {
   const waiting = active && !doing;
   // doing = solid dot (live), waiting = clock (your turn), done = check.
@@ -125,12 +136,24 @@ function SessionRow({
     : waiting
       ? "Waiting — click to mark done"
       : "Done — click to bring to focus";
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(s.title);
+  const startEdit = () => {
+    setDraft(s.title);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (draft.trim() !== s.title) onRename(draft.trim());
+  };
+
   return (
     <div
       className={`row session-row${doing ? " session-doing" : ""}${
         waiting ? " session-waiting" : ""
-      }`}
-      onClick={onOpen}
+      }${colorClass ? ` ${colorClass}` : ""}`}
+      onClick={editing ? undefined : onOpen}
     >
       <button
         className="icon-btn done-toggle"
@@ -143,7 +166,23 @@ function SessionRow({
         <FontAwesomeIcon icon={stateIcon} />
       </button>
       <div className="row-main">
-        <div className="row-title ellipsis">{s.title}</div>
+        {editing ? (
+          <input
+            className="row-title-edit"
+            value={draft}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              else if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder="Session title"
+          />
+        ) : (
+          <div className="row-title ellipsis">{s.title}</div>
+        )}
         <div className="row-sub mono">
           {folderLabel ? <>{folderLabel} · </> : null}
           {doing ? (
@@ -158,6 +197,16 @@ function SessionRow({
           · {s.sessionId.slice(0, 8)}
         </div>
       </div>
+      <button
+        className="icon-btn row-edit"
+        title="Rename session"
+        onClick={(e) => {
+          e.stopPropagation();
+          startEdit();
+        }}
+      >
+        <FontAwesomeIcon icon={faPencil} />
+      </button>
       <button
         className="icon-btn row-del"
         title="Delete session"
@@ -179,6 +228,9 @@ export default function ClaudeManager() {
   const [gitOpen, setGitOpen] = useState(false);
   const [live, setLive] = useState<LiveSession[]>([]);
   const [active, setActive] = useState<ActiveMap>({});
+  const [titles, setTitles] = useState<TitleMap>({});
+  const [folderMeta, setFolderMeta] = useState<FolderMetaMap>({});
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -266,8 +318,12 @@ export default function ClaudeManager() {
       getLive()
         .then((l) => alive && setLive(l))
         .catch(() => {});
-      getActive()
-        .then((a) => alive && setActive(a))
+      getSessionMeta()
+        .then((m) => {
+          if (!alive) return;
+          setActive(m.active);
+          setTitles(m.titles);
+        })
         .catch(() => {});
     };
     tick();
@@ -440,6 +496,9 @@ export default function ClaudeManager() {
   useEffect(() => {
     warmTranscriptCache();
     void refreshFolders();
+    getFolderMeta()
+      .then(setFolderMeta)
+      .catch(() => {});
     applyUrl(window.location.search);
 
     const onPop = () => {
@@ -462,6 +521,25 @@ export default function ClaudeManager() {
   const onRemoveFolder = async (path: string) => {
     setFolders(await apiRemoveFolder(path));
   };
+
+  // Set a folder's theme color (or clear it). Optimistic, then confirm.
+  const onSetFolderColor = async (f: string, color: string | null) => {
+    setFolderMeta((m) => {
+      const next = { ...m };
+      if (color) next[f] = { color: color as (typeof FOLDER_COLORS)[number] };
+      else delete next[f];
+      return next;
+    });
+    try {
+      setFolderMeta(await apiSetFolderColor(f, color));
+    } catch {
+      /* keep optimistic value; next load re-syncs */
+    }
+  };
+
+  // The CSS classes that tint a row/pane for a folder's chosen color, or "".
+  const tintClass = (f: string | null | undefined): string =>
+    f && folderMeta[f] ? `folder-tint folder-color-${folderMeta[f].color}` : "";
 
   const openFolder = async (f: string) => {
     setFolder(f);
@@ -536,6 +614,22 @@ export default function ClaudeManager() {
   // flip between active (in focus) and done based on current state.
   const toggleActive = (id: string, f: string, title: string) =>
     active[id] ? markDone(id) : activate(id, f, title);
+
+  // Rename a session. Optimistic on the titles map (which always wins at render
+  // time); an empty title clears the override back to the derived title.
+  const renameSession = async (id: string, title: string) => {
+    setTitles((m) => {
+      const next = { ...m };
+      if (title) next[id] = title;
+      else delete next[id];
+      return next;
+    });
+    try {
+      setTitles(await setSessionTitle(id, title));
+    } catch {
+      /* next poll re-syncs */
+    }
+  };
 
   // Permanently delete a session's transcript (gone from Claude too).
   const removeSession = async (f: string, id: string) => {
@@ -668,15 +762,17 @@ export default function ClaudeManager() {
     detach();
     setView("folders");
   };
+  // Badge counts the in-focus sessions (doing + waiting) so the logo carries a
+  // running "how many sessions need me" number across every view.
+  const homeBadgeCount = activeList.length;
   const homeLogo = (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      className="brand-logo"
-      src="/claudia.webp"
-      alt="claudia"
-      title="Home"
-      onClick={goHome}
-    />
+    <span className="brand-logo-wrap" onClick={goHome} title="Home">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="brand-logo" src="/claudia.webp" alt="claudia" />
+      {homeBadgeCount > 0 ? (
+        <span className="brand-badge">{homeBadgeCount}</span>
+      ) : null}
+    </span>
   );
 
   const modelChooser = (
@@ -765,15 +861,17 @@ export default function ClaudeManager() {
                     key={a.sessionId}
                     s={{
                       sessionId: a.sessionId,
-                      title: a.title,
+                      title: titles[a.sessionId] ?? a.title,
                       modified: a.lastActiveAt,
                     }}
                     active
                     doing={liveIds.has(a.sessionId)}
                     folderLabel={shortName(a.folder)}
+                    colorClass={tintClass(a.folder)}
                     onOpen={() => openSession(a.folder, a.sessionId)}
                     onToggle={() => void toggleActive(a.sessionId, a.folder, a.title)}
                     onRemove={() => void removeSession(a.folder, a.sessionId)}
+                    onRename={(t) => void renameSession(a.sessionId, t)}
                   />
                 ))}
               </div>
@@ -784,13 +882,69 @@ export default function ClaudeManager() {
               </div>
             ) : (
               folders.map((f) => (
-                <div key={f} className="row" onClick={() => openFolder(f)}>
+                <div
+                  key={f}
+                  className={`row${tintClass(f) ? ` ${tintClass(f)}` : ""}`}
+                  onClick={() => openFolder(f)}
+                >
                   <span className="dir-icon">
                     <FontAwesomeIcon icon={faFolder} />
                   </span>
                   <div className="row-main">
                     <div className="row-title">{shortName(f)}</div>
                     <div className="row-sub mono">{f}</div>
+                  </div>
+                  <div
+                    className="folder-color-pick"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      className={`color-dot${
+                        folderMeta[f]?.color
+                          ? ` folder-color-${folderMeta[f].color}`
+                          : " color-dot-none"
+                      }`}
+                      title="Folder color"
+                      aria-label="Choose folder color"
+                      onClick={() =>
+                        setColorPickerFor(colorPickerFor === f ? null : f)
+                      }
+                    />
+                    {colorPickerFor === f && (
+                      <>
+                        <div
+                          className="color-popup-backdrop"
+                          onClick={() => setColorPickerFor(null)}
+                        />
+                        <div className="color-popup">
+                          {FOLDER_COLORS.map((c) => (
+                            <button
+                              key={c}
+                              className={`swatch folder-color-${c}${
+                                folderMeta[f]?.color === c ? " on" : ""
+                              }`}
+                              title={c}
+                              aria-label={`Set ${c}`}
+                              onClick={() => {
+                                void onSetFolderColor(f, c);
+                                setColorPickerFor(null);
+                              }}
+                            />
+                          ))}
+                          <button
+                            className={`swatch swatch-none${
+                              folderMeta[f]?.color ? "" : " on"
+                            }`}
+                            title="No color"
+                            aria-label="Clear color"
+                            onClick={() => {
+                              void onSetFolderColor(f, null);
+                              setColorPickerFor(null);
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                   <button
                     className="icon-btn"
@@ -813,7 +967,7 @@ export default function ClaudeManager() {
       )}
 
       {view === "sessions" && folder && (
-        <div className="pane">
+        <div className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}>
           <div className="toolbar">
             {homeLogo}
             <button className="icon-btn" onClick={() => setView("folders")}>
@@ -834,15 +988,19 @@ export default function ClaudeManager() {
             ) : (
               sessions.map((s) => {
                 const isActive = !!active[s.sessionId];
+                // titles map wins so an optimistic rename shows before refetch.
+                const title = titles[s.sessionId] ?? s.title;
                 return (
                   <SessionRow
                     key={s.sessionId}
-                    s={s}
+                    s={{ ...s, title }}
                     active={isActive}
                     doing={liveIds.has(s.sessionId)}
+                    colorClass={tintClass(folder)}
                     onOpen={() => openSession(folder, s.sessionId)}
-                    onToggle={() => void toggleActive(s.sessionId, folder, s.title)}
+                    onToggle={() => void toggleActive(s.sessionId, folder, title)}
                     onRemove={() => void removeSession(folder, s.sessionId)}
+                    onRename={(t) => void renameSession(s.sessionId, t)}
                   />
                 );
               })
@@ -852,7 +1010,7 @@ export default function ClaudeManager() {
       )}
 
       {view === "chat" && folder && (
-        <div className="pane">
+        <div className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}>
           <div className="toolbar">
             {homeLogo}
             <button

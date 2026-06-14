@@ -3,6 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
 import { sessionDir } from "./claude-home";
+import { getTitles } from "./session-title";
 import type { ClaudeEvent, SessionSummary, TranscriptDelta } from "./types";
 
 function parseLine(line: string): ClaudeEvent | null {
@@ -65,13 +66,17 @@ export async function listSessions(folder: string): Promise<SessionSummary[]> {
     return [];
   }
   const files = entries.filter((n) => n.endsWith(".jsonl"));
+  const titles = await getTitles();
   const summaries = await Promise.all(
     files.map(async (name): Promise<SessionSummary> => {
       const full = path.join(dir, name);
+      const sessionId = name.replace(/\.jsonl$/, "");
       const stat = await fsp.stat(full);
-      const title = (await firstUserText(full)) ?? "(no messages)";
+      // Custom title wins; otherwise derive from the first user message.
+      const title =
+        titles[sessionId] ?? (await firstUserText(full)) ?? "(no messages)";
       return {
-        sessionId: name.replace(/\.jsonl$/, ""),
+        sessionId,
         title,
         modified: stat.mtimeMs,
         size: stat.size,

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { clearActive, getActive, setActive } from "@/lib/session-meta";
+import { getTitles } from "@/lib/session-title";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ active: await getActive() });
+  const [active, titles] = await Promise.all([getActive(), getTitles()]);
+  return NextResponse.json({ active, titles });
 }
 
 export async function POST(req: Request) {

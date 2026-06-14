@@ -4,12 +4,14 @@ import type {
   BrowseResult,
   ClaudeEvent,
   FolderPath,
+  FolderMetaMap,
   ActiveMap,
   GitCommitDetail,
   GitData,
   GitFileDiff,
   LiveSession,
   SessionSummary,
+  TitleMap,
   TranscriptDelta,
 } from "@/lib/types";
 import type { UsageData } from "@/lib/usage";
@@ -45,6 +47,29 @@ export async function removeFolder(path: string): Promise<FolderPath[]> {
       }),
     )
   ).folders;
+}
+
+/** Per-folder theme metadata (colors), keyed by folder path. */
+export async function getFolderMeta(): Promise<FolderMetaMap> {
+  return (
+    await json<{ folderMeta: FolderMetaMap }>(await fetch("/api/folder-meta"))
+  ).folderMeta;
+}
+
+/** Set (or clear, with a null color) a folder's theme color. */
+export async function setFolderColor(
+  folder: string,
+  color: string | null,
+): Promise<FolderMetaMap> {
+  return (
+    await json<{ folderMeta: FolderMetaMap }>(
+      await fetch("/api/folder-meta", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ folder, color }),
+      }),
+    )
+  ).folderMeta;
 }
 
 export async function browse(path: string | null): Promise<BrowseResult> {
@@ -166,9 +191,28 @@ export async function getLive(): Promise<LiveSession[]> {
   return (await json<{ sessions: LiveSession[] }>(await fetch("/api/live"))).sessions;
 }
 
-/** The active-session set (sessionId → {folder,title,lastActiveAt}). */
-export async function getActive(): Promise<ActiveMap> {
-  return (await json<{ active: ActiveMap }>(await fetch("/api/session-meta"))).active;
+/** The active-session set plus custom titles, in one fetch. */
+export async function getSessionMeta(): Promise<{ active: ActiveMap; titles: TitleMap }> {
+  const { active, titles } = await json<{ active: ActiveMap; titles?: TitleMap }>(
+    await fetch("/api/session-meta"),
+  );
+  return { active, titles: titles ?? {} };
+}
+
+/** Set (or clear, with an empty title) a session's custom title. */
+export async function setSessionTitle(
+  sessionId: string,
+  title: string,
+): Promise<TitleMap> {
+  return (
+    await json<{ titles: TitleMap }>(
+      await fetch("/api/session-title", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId, title }),
+      }),
+    )
+  ).titles;
 }
 
 /** Mark a session active (folder+title required) or done (active=false). */

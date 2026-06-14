@@ -129,6 +129,34 @@ export interface ActiveEntry {
 }
 export type ActiveMap = Record<string, ActiveEntry>;
 
+/** Custom, user-set session titles keyed by sessionId. Overrides the
+ * first-message-derived title and persists across active/done. */
+export type TitleMap = Record<string, string>;
+
+/** The fixed palette of folder theme colors. Named (not freeform hex) so each
+ * maps to a CSS class whose tint is tuned for the dark theme. */
+export const FOLDER_COLORS = [
+  "violet",
+  "indigo",
+  "blue",
+  "cyan",
+  "teal",
+  "green",
+  "lime",
+  "amber",
+  "orange",
+  "red",
+  "rose",
+  "pink",
+] as const;
+export type FolderColor = (typeof FOLDER_COLORS)[number];
+
+/** Per-folder presentation metadata, keyed by folder path. */
+export interface FolderMeta {
+  color: FolderColor;
+}
+export type FolderMetaMap = Record<FolderPath, FolderMeta>;
+
 /** An entry in the server-side directory browser. */
 export interface DirEntry {
   name: string;

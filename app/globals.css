@@ -135,18 +135,41 @@ body {
   align-items: center;
   gap: 11px;
 }
+.brand-logo-wrap {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  line-height: 0;
+}
 .brand-logo {
   height: 34px;
   width: 34px;
   border-radius: 9px;
   display: block;
-  cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   transition: transform 0.14s ease, box-shadow 0.2s ease;
 }
-.brand-logo:hover {
+.brand-logo-wrap:hover .brand-logo {
   transform: translateY(-1px) scale(1.04);
   box-shadow: 0 4px 16px rgba(232, 178, 92, 0.3);
+}
+/* Counter on the logo's bottom-right: filled with the logo's terracotta,
+   the number knocked out in the logo's cream background color. */
+.brand-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #c8714d;
+  color: #f6f1ea;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 .brand {
   margin: 0;
@@ -1451,17 +1474,39 @@ body {
 .session-waiting {
   border-left: 2px solid var(--accent-bright);
 }
-.session-row .row-del {
+.session-row .row-del,
+.session-row .row-edit {
   flex: 0 0 auto;
   color: var(--text-muted);
   opacity: 0;
   transition: opacity 0.12s, color 0.12s;
 }
-.session-row:hover .row-del {
+.session-row:hover .row-del,
+.session-row:hover .row-edit {
   opacity: 1;
 }
 .session-row .row-del:hover {
   color: var(--danger);
+}
+.session-row .row-edit:hover {
+  color: var(--accent-bright);
+}
+/* Inline rename field — sits in place of .row-title. */
+.row-title-edit {
+  width: 100%;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid rgba(232, 178, 92, 0.42);
+  border-radius: 7px;
+  padding: 2px 7px;
+  outline: none;
+  font-family: inherit;
+}
+.row-title-edit:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .session-doing {
   border-left: 2px solid #3fb950;
@@ -1483,6 +1528,147 @@ body {
   border-radius: 50%;
   background: var(--accent-bright);
   animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+/* ---- per-folder color themes ----
+   Each class sets --fc (the folder color as "r, g, b"); the rules below read it
+   so the row borders, pane wash, swatches, and dot are all written once. */
+.folder-color-violet {
+  --fc: 154, 125, 255;
+}
+.folder-color-indigo {
+  --fc: 129, 140, 248;
+}
+.folder-color-blue {
+  --fc: 96, 165, 250;
+}
+.folder-color-cyan {
+  --fc: 56, 189, 248;
+}
+.folder-color-teal {
+  --fc: 45, 212, 191;
+}
+.folder-color-green {
+  --fc: 63, 185, 80;
+}
+.folder-color-lime {
+  --fc: 132, 204, 22;
+}
+.folder-color-amber {
+  --fc: 232, 178, 92;
+}
+.folder-color-orange {
+  --fc: 251, 146, 60;
+}
+.folder-color-red {
+  --fc: 248, 113, 113;
+}
+.folder-color-rose {
+  --fc: 255, 143, 176;
+}
+.folder-color-pink {
+  --fc: 244, 114, 182;
+}
+
+/* Cards (folder rows + session rows) carry the folder color on the border only;
+   the surface is left untouched. */
+.row.folder-tint {
+  border-color: rgba(var(--fc), 0.45);
+  border-left: 3px solid rgb(var(--fc));
+}
+.row.folder-tint:hover {
+  border-color: rgba(var(--fc), 0.65);
+}
+/* Session rows reserve the left edge for doing/waiting state, so the folder
+   color rides the rest of the border ring. */
+.session-row.folder-tint {
+  border-color: rgba(var(--fc), 0.4);
+}
+.session-row.folder-tint:hover {
+  border-color: rgba(var(--fc), 0.6);
+}
+
+/* Sessions + chat panes: wash the whole view in the folder color and tint the
+   header title, so an open session/chat is themed to its folder. */
+.pane.folder-tint {
+  background: rgba(var(--fc), 0.055);
+}
+.pane.folder-tint .title {
+  color: rgb(var(--fc));
+}
+
+/* The always-visible color button on each folder row. */
+.folder-color-pick {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+.color-dot {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgb(var(--fc));
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.color-dot:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+.color-dot-none {
+  background: #6b6577;
+}
+
+/* Color-choice popup, anchored under the dot. */
+.color-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+}
+.color-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 168px;
+  padding: 11px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  animation: rise 0.14s ease both;
+}
+.swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgb(var(--fc));
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.swatch:hover {
+  transform: scale(1.18);
+}
+.swatch.on {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px rgb(var(--fc));
+}
+/* "No color" swatch: neutral grey, with its own selected ring color. */
+.swatch-none {
+  --fc: 107, 101, 119;
+}
+.swatch-none.on {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px #6b6577;
 }
 
 /* ---- git shelf (bottom drawer) ---- */
