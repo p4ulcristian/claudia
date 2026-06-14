@@ -79,6 +79,27 @@ function shortName(p: string): string {
   return clean.split("/").pop() || clean;
 }
 
+// The in-app URL for a folder (sessions view) or a folder+session (chat). Rows
+// render this as a real href so Ctrl/Cmd/middle-click open it in a new tab.
+function hrefFor(folder: string, sessionId?: string | null): string {
+  const sp = new URLSearchParams();
+  sp.set("folder", folder);
+  if (sessionId !== undefined) sp.set("session", sessionId ?? "new");
+  return `/?${sp.toString()}`;
+}
+
+// True when the browser should handle a click itself (open in a new tab/window)
+// rather than us intercepting it for in-app navigation.
+function isModifiedClick(e: {
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  button: number;
+}): boolean {
+  return e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1;
+}
+
 // First human message in a transcript, for the tab title. Mirrors the
 // server-side firstUserText used for session summaries.
 function titleFromEvents(events: ClaudeEvent[]): string | null {
@@ -113,6 +134,7 @@ function SessionRow({
   doing,
   folderLabel,
   colorClass,
+  href,
   onOpen,
   onToggle,
   onRemove,
@@ -123,6 +145,7 @@ function SessionRow({
   doing: boolean;
   folderLabel?: string;
   colorClass?: string;
+  href: string;
   onOpen: () => void;
   onToggle: () => void;
   onRemove: () => void;
@@ -149,16 +172,22 @@ function SessionRow({
   };
 
   return (
-    <div
+    <a
+      href={editing ? undefined : href}
       className={`row session-row${doing ? " session-doing" : ""}${
         waiting ? " session-waiting" : ""
       }${colorClass ? ` ${colorClass}` : ""}`}
-      onClick={editing ? undefined : onOpen}
+      onClick={(e) => {
+        if (editing || isModifiedClick(e)) return; // let the browser open it
+        e.preventDefault();
+        onOpen();
+      }}
     >
       <button
         className="icon-btn done-toggle"
         title={stateTitle}
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           onToggle();
         }}
@@ -171,7 +200,10 @@ function SessionRow({
             className="row-title-edit"
             value={draft}
             autoFocus
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => {
@@ -201,6 +233,7 @@ function SessionRow({
         className="icon-btn row-edit"
         title="Rename session"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           startEdit();
         }}
@@ -211,13 +244,14 @@ function SessionRow({
         className="icon-btn row-del"
         title="Delete session"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           onRemove();
         }}
       >
         <FontAwesomeIcon icon={faXmark} />
       </button>
-    </div>
+    </a>
   );
 }
 
@@ -868,6 +902,7 @@ export default function ClaudeManager() {
                     doing={liveIds.has(a.sessionId)}
                     folderLabel={shortName(a.folder)}
                     colorClass={tintClass(a.folder)}
+                    href={hrefFor(a.folder, a.sessionId)}
                     onOpen={() => openSession(a.folder, a.sessionId)}
                     onToggle={() => void toggleActive(a.sessionId, a.folder, a.title)}
                     onRemove={() => void removeSession(a.folder, a.sessionId)}
@@ -876,89 +911,101 @@ export default function ClaudeManager() {
                 ))}
               </div>
             )}
-            {folders.length === 0 ? (
-              <div className="muted center pad">
-                No folders yet. Add one above to see its Claude sessions.
-              </div>
-            ) : (
-              folders.map((f) => (
-                <div
-                  key={f}
-                  className={`row${tintClass(f) ? ` ${tintClass(f)}` : ""}`}
-                  onClick={() => openFolder(f)}
-                >
-                  <span className="dir-icon">
-                    <FontAwesomeIcon icon={faFolder} />
-                  </span>
-                  <div className="row-main">
-                    <div className="row-title">{shortName(f)}</div>
-                    <div className="row-sub mono">{f}</div>
-                  </div>
-                  <div
-                    className="folder-color-pick"
-                    onClick={(e) => e.stopPropagation()}
+            <div className="folder-section">
+              <div className="git-section-title">Folders</div>
+              {folders.length === 0 ? (
+                <div className="muted center pad">
+                  No folders yet. Add one above to see its Claude sessions.
+                </div>
+              ) : (
+                folders.map((f) => (
+                  <a
+                    key={f}
+                    href={hrefFor(f)}
+                    className={`row${tintClass(f) ? ` ${tintClass(f)}` : ""}`}
+                    onClick={(e) => {
+                      if (isModifiedClick(e)) return; // let the browser open it
+                      e.preventDefault();
+                      void openFolder(f);
+                    }}
                   >
-                    <button
-                      className={`color-dot${
-                        folderMeta[f]?.color
-                          ? ` folder-color-${folderMeta[f].color}`
-                          : " color-dot-none"
-                      }`}
-                      title="Folder color"
-                      aria-label="Choose folder color"
-                      onClick={() =>
-                        setColorPickerFor(colorPickerFor === f ? null : f)
-                      }
-                    />
-                    {colorPickerFor === f && (
-                      <>
-                        <div
-                          className="color-popup-backdrop"
-                          onClick={() => setColorPickerFor(null)}
-                        />
-                        <div className="color-popup">
-                          {FOLDER_COLORS.map((c) => (
+                    <span className="dir-icon">
+                      <FontAwesomeIcon icon={faFolder} />
+                    </span>
+                    <div className="row-main">
+                      <div className="row-title">{shortName(f)}</div>
+                      <div className="row-sub mono">{f}</div>
+                    </div>
+                    <div
+                      className="folder-color-pick"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      <button
+                        className={`color-dot${
+                          folderMeta[f]?.color
+                            ? ` folder-color-${folderMeta[f].color}`
+                            : " color-dot-none"
+                        }`}
+                        title="Folder color"
+                        aria-label="Choose folder color"
+                        onClick={() =>
+                          setColorPickerFor(colorPickerFor === f ? null : f)
+                        }
+                      />
+                      {colorPickerFor === f && (
+                        <>
+                          <div
+                            className="color-popup-backdrop"
+                            onClick={() => setColorPickerFor(null)}
+                          />
+                          <div className="color-popup">
+                            {FOLDER_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                className={`swatch folder-color-${c}${
+                                  folderMeta[f]?.color === c ? " on" : ""
+                                }`}
+                                title={c}
+                                aria-label={`Set ${c}`}
+                                onClick={() => {
+                                  void onSetFolderColor(f, c);
+                                  setColorPickerFor(null);
+                                }}
+                              />
+                            ))}
                             <button
-                              key={c}
-                              className={`swatch folder-color-${c}${
-                                folderMeta[f]?.color === c ? " on" : ""
+                              className={`swatch swatch-none${
+                                folderMeta[f]?.color ? "" : " on"
                               }`}
-                              title={c}
-                              aria-label={`Set ${c}`}
+                              title="No color"
+                              aria-label="Clear color"
                               onClick={() => {
-                                void onSetFolderColor(f, c);
+                                void onSetFolderColor(f, null);
                                 setColorPickerFor(null);
                               }}
                             />
-                          ))}
-                          <button
-                            className={`swatch swatch-none${
-                              folderMeta[f]?.color ? "" : " on"
-                            }`}
-                            title="No color"
-                            aria-label="Clear color"
-                            onClick={() => {
-                              void onSetFolderColor(f, null);
-                              setColorPickerFor(null);
-                            }}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    className="icon-btn"
-                    title="Remove folder"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void onRemoveFolder(f);
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faXmark} />
-                  </button>
-                </div>
-              ))
-            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      className="icon-btn"
+                      title="Remove folder"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void onRemoveFolder(f);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faXmark} />
+                    </button>
+                  </a>
+                ))
+              )}
+            </div>
           </div>
           {pickerOpen && (
             <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
@@ -997,6 +1044,7 @@ export default function ClaudeManager() {
                     active={isActive}
                     doing={liveIds.has(s.sessionId)}
                     colorClass={tintClass(folder)}
+                    href={hrefFor(folder, s.sessionId)}
                     onOpen={() => openSession(folder, s.sessionId)}
                     onToggle={() => void toggleActive(s.sessionId, folder, title)}
                     onRemove={() => void removeSession(folder, s.sessionId)}
