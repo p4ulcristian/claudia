@@ -28,4 +28,6 @@ export {
   faCodeBranch,
   faUpRightFromSquare,
   faPencil,
+  faMicrochip,
+  faGaugeHigh,
 } from "@fortawesome/free-solid-svg-icons";

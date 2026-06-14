@@ -61,6 +61,9 @@ import {
   faClock,
   faSpinner,
   faPencil,
+  faMicrochip,
+  faGaugeHigh,
+  faCheck,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -255,6 +258,63 @@ function SessionRow({
   );
 }
 
+// Header breadcrumbs: project › session. The project crumb navigates back to
+// the folder's session list; the session crumb is the conversation title and is
+// editable inline (click to rename), mirroring SessionRow's rename pattern.
+function Breadcrumbs({
+  project,
+  onProject,
+  title,
+  onRename,
+}: {
+  project: string;
+  onProject: () => void;
+  title: string;
+  onRename?: (t: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const startEdit = () => {
+    if (!onRename) return;
+    setDraft(title);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (onRename && draft.trim() !== title) onRename(draft.trim());
+  };
+  return (
+    <div className="crumbs">
+      <button className="crumb" title="Back to sessions" onClick={onProject}>
+        {project}
+      </button>
+      <span className="crumb-sep">›</span>
+      {editing ? (
+        <input
+          className="row-title-edit crumb-edit"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") setEditing(false);
+          }}
+          placeholder="Conversation title"
+        />
+      ) : (
+        <span
+          className={`crumb-current ellipsis${onRename ? " editable" : ""}`}
+          title={onRename ? "Rename conversation" : undefined}
+          onClick={startEdit}
+        >
+          {title}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ClaudeManager() {
   const [view, setView] = useState<View>("folders");
   const [folders, setFolders] = useState<FolderPath[]>([]);
@@ -267,6 +327,7 @@ export default function ClaudeManager() {
   const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
 
   const [usageOpen, setUsageOpen] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -809,20 +870,44 @@ export default function ClaudeManager() {
     </span>
   );
 
+  const modelLabel = MODELS.find((m) => m.id === model)?.label ?? model;
   const modelChooser = (
-    <select
-      className="model-select"
-      value={model}
-      onChange={(e) => changeModel(e.target.value)}
-      title="Model"
-    >
-      {MODELS.every((m) => m.id !== model) ? <option value={model}>{model}</option> : null}
-      {MODELS.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.label}
-        </option>
-      ))}
-    </select>
+    <div className="model-pick">
+      <button
+        className="icon-btn"
+        title={`Model: ${modelLabel}`}
+        aria-label={`Model: ${modelLabel}`}
+        onClick={() => setModelMenuOpen((v) => !v)}
+      >
+        <FontAwesomeIcon icon={faMicrochip} />
+      </button>
+      {modelMenuOpen && (
+        <>
+          <div
+            className="color-popup-backdrop"
+            onClick={() => setModelMenuOpen(false)}
+          />
+          <div className="model-menu">
+            {MODELS.map((m) => (
+              <button
+                key={m.id}
+                className={`model-menu-item${m.id === model ? " on" : ""}`}
+                onClick={() => {
+                  changeModel(m.id);
+                  setModelMenuOpen(false);
+                }}
+              >
+                <FontAwesomeIcon
+                  icon={faCheck}
+                  className="model-menu-check"
+                />
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 
   const autoScrollBtn = (
@@ -855,18 +940,15 @@ export default function ClaudeManager() {
   const ctxWarm = ctx ? ctx.pct >= COMPACT_SUGGEST_PCT : false;
   const ctxChip = ctx ? (
     <button
-      className={`ctx-chip ${ctxHot ? "hot" : ctxWarm ? "warm" : ""}`}
+      className={`btn ghost ctx-chip ${ctxHot ? "hot" : ctxWarm ? "warm" : ""}`}
       onClick={compactNow}
       disabled={streaming || !sessionId}
       title={`Context: ${ctx.tokens.toLocaleString()} / ${ctx.window.toLocaleString()} tokens (${ctxPct}%)${
         ctxWarm ? " — compact recommended" : ""
       }. Click to /compact.`}
     >
-      <span className="ctx-track">
-        <span className="ctx-fill" style={{ width: `${Math.max(4, ctx.pct)}%` }} />
-      </span>
-      <span className="ctx-pct">{ctxPct}%</span>
-      {ctxWarm ? <FontAwesomeIcon icon={faCompress} /> : null}
+      <FontAwesomeIcon icon={ctxWarm ? faCompress : faGaugeHigh} />{" "}
+      {ctxPct}%
     </button>
   ) : null;
 
@@ -993,6 +1075,18 @@ export default function ClaudeManager() {
                     </div>
                     <button
                       className="icon-btn"
+                      title="New session"
+                      aria-label="New session"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        newSession(f);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faPlus} />
+                    </button>
+                    <button
+                      className="icon-btn"
                       title="Remove folder"
                       onClick={(e) => {
                         e.preventDefault();
@@ -1061,29 +1155,33 @@ export default function ClaudeManager() {
         <div className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}>
           <div className="toolbar">
             {homeLogo}
-            <button
-              className="icon-btn"
-              onClick={() => {
+            <Breadcrumbs
+              project={shortName(folder)}
+              onProject={() => {
                 detach();
                 void openFolder(folder);
               }}
-            >
-              <FontAwesomeIcon icon={faArrowLeft} />
-            </button>
-            <div className="title mono ellipsis">
-              {shortName(folder)}
-              {sessionId ? ` · ${sessionId.slice(0, 8)}` : " · new"}
-            </div>
+              title={
+                sessionId
+                  ? (titles[sessionId] ?? titleFromEvents(events) ?? "Session")
+                  : "new"
+              }
+              onRename={
+                sessionId
+                  ? (t) => void renameSession(sessionId, t)
+                  : undefined
+              }
+            />
             {tasks.length ? <TaskChip tasks={tasks} /> : null}
             <div className="spacer" />
-            {ctxChip}
-            {modelChooser}
             {streaming && (
               <button className="icon-btn is-danger" onClick={stopStream} title="Stop (Esc)">
                 <FontAwesomeIcon icon={faCircleStop} />
               </button>
             )}
             {autoScrollBtn}
+            {modelChooser}
+            {ctxChip}
             {usageBtn}
           </div>
 
