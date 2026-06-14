@@ -5,6 +5,7 @@ import { type DisplayItem, type ToolUseBlock } from "./fold";
 import Markdown from "./Markdown";
 import {
   FontAwesomeIcon,
+  faAnglesDown,
   faChevronDown,
   faChevronRight,
   faCircleQuestion,
@@ -413,7 +414,6 @@ function Item({ item }: { item: DisplayItem }) {
 export default function StreamRenderer({
   items,
   streaming,
-  autoScroll,
   queue,
   sessionId,
   onAnswer,
@@ -421,27 +421,65 @@ export default function StreamRenderer({
 }: {
   items: DisplayItem[];
   streaming: boolean;
-  autoScroll: boolean;
   queue: string[];
   sessionId: string | null;
   onAnswer: (text: string) => void;
   onCancelQueued: (index: number) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   // Jump instantly on the first paint of a chat; animate only later updates.
   // A smooth scroll on open would visibly travel the whole transcript top→bottom.
   const didInitialScroll = useRef(false);
+  // "Stick to bottom": auto-scroll only while the user is pinned at the bottom.
+  // Scrolling up pauses it (so a streaming answer doesn't yank the view back);
+  // scrolling back down — or sending a turn — re-pins.
+  const stuck = useRef(true);
+  const prevLen = useRef(0);
+  const [showJump, setShowJump] = useState(false);
+
+  // The scrollable ancestor is the .chat-scroll wrapper around this component.
+  const scroller = () => rootRef.current?.parentElement ?? null;
+  const scrollToBottom = (behavior: ScrollBehavior) => {
+    const el = scroller();
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+  };
 
   useEffect(() => {
     didInitialScroll.current = false;
+    stuck.current = true;
+    prevLen.current = 0;
+    setShowJump(false);
+  }, [sessionId]);
+
+  // Watch the user's scroll position; pin within ~120px of the bottom.
+  useEffect(() => {
+    const el = scroller();
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      stuck.current = atBottom;
+      setShowJump(!atBottom);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
   }, [sessionId]);
 
   useEffect(() => {
-    if (!autoScroll) return;
+    const vis = items.filter((it) => it.kind !== "tasks");
+    const last = vis[vis.length - 1];
+    // A new user turn (sending) always snaps back to the bottom.
+    if (vis.length > prevLen.current && last?.kind === "user") {
+      stuck.current = true;
+    }
+    prevLen.current = vis.length;
+    if (!stuck.current) return;
     const behavior = didInitialScroll.current ? "smooth" : "instant";
-    endRef.current?.scrollIntoView({ behavior, block: "end" });
-    if (items.length) didInitialScroll.current = true;
-  }, [items, streaming, autoScroll, queue]);
+    scrollToBottom(behavior);
+    if (vis.length) didInitialScroll.current = true;
+    setShowJump(false);
+  }, [items, streaming, queue]);
 
   if (items.length === 0) {
     return (
@@ -464,7 +502,7 @@ export default function StreamRenderer({
   const compacting = visible.some((it) => it.kind === "compacting" && !it.done);
 
   return (
-    <div className="stream">
+    <div className="stream" ref={rootRef}>
       {visible.map((item, i) => (
         <div className="stream-item" key={i}>
           {item.kind === "question" ? (
@@ -507,6 +545,19 @@ export default function StreamRenderer({
         </div>
       ))}
       <div ref={endRef} />
+      {showJump ? (
+        <button
+          className="jump-latest"
+          onClick={() => {
+            stuck.current = true;
+            setShowJump(false);
+            scrollToBottom("smooth");
+          }}
+          title="Jump to latest"
+        >
+          <FontAwesomeIcon icon={faAnglesDown} /> Jump to latest
+        </button>
+      ) : null}
     </div>
   );
 }

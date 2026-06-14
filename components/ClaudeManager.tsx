@@ -46,7 +46,6 @@ import TaskChip from "./TaskChip";
 import UsagePanel from "./UsagePanel";
 import {
   FontAwesomeIcon,
-  faAnglesDown,
   faArrowLeft,
   faChartColumn,
   faCircleStop,
@@ -119,6 +118,67 @@ function titleFromEvents(events: ClaudeEvent[]): string | null {
     if (t && !t.startsWith("<")) return t.length > 60 ? `${t.slice(0, 60)}…` : t;
   }
   return null;
+}
+
+// ---- equality guards -------------------------------------------------------
+// The poll loop and cache-then-revalidate flows re-fetch lists every few
+// seconds. Re-applying an identical payload churns state identity (new array /
+// object), which re-renders rows, re-sorts the in-focus list, and resets the
+// transcript scroll. These compare incoming data to what's on screen so we
+// only commit real changes.
+function sameIds(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const s = new Set(a);
+  return b.every((x) => s.has(x));
+}
+function sameTitles(a: TitleMap, b: TitleMap): boolean {
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  return ak.every((k) => a[k] === b[k]);
+}
+// Active rows render from membership + title + folder; lastActiveAt only feeds
+// ordering (handled separately), so ignore it here to avoid per-tick churn.
+function sameActive(a: ActiveMap, b: ActiveMap): boolean {
+  const ak = Object.keys(a);
+  if (ak.length !== Object.keys(b).length) return false;
+  return ak.every(
+    (k) => b[k] && a[k].title === b[k].title && a[k].folder === b[k].folder,
+  );
+}
+function sameSessions(a: SessionSummary[], b: SessionSummary[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (s, i) =>
+      s.sessionId === b[i].sessionId &&
+      s.title === b[i].title &&
+      s.modified === b[i].modified,
+  );
+}
+function eventsKey(e: ClaudeEvent[]): string {
+  if (!e.length) return "0";
+  const last = e[e.length - 1] as ClaudeEvent & { uuid?: string };
+  return `${e.length}:${last.timestamp ?? ""}:${last.uuid ?? ""}`;
+}
+function sameEvents(a: ClaudeEvent[], b: ClaudeEvent[]): boolean {
+  return a.length === b.length && eventsKey(a) === eventsKey(b);
+}
+
+// Placeholder rows shown while a list loads, sized like real rows so the
+// container reserves its height and content doesn't jump in on arrival.
+function SkeletonRows({ count = 5 }: { count?: number }) {
+  return (
+    <div className="skeletons" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div className="skeleton-row" key={i}>
+          <div className="skeleton-dot" />
+          <div className="skeleton-main">
+            <div className="skeleton-line w60" />
+            <div className="skeleton-line w40" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function fmtAgo(ms: number): string {
@@ -328,8 +388,17 @@ export default function ClaudeManager() {
 
   const [usageOpen, setUsageOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [model, setModel] = useState(DEFAULT_MODEL);
+  // Read the stored model in the initializer so the first render already has
+  // it — otherwise the context % would compute against the default model and
+  // visibly correct itself a tick later.
+  const [model, setModel] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_MODEL;
+    try {
+      return localStorage.getItem("claudia-model") || DEFAULT_MODEL;
+    } catch {
+      return DEFAULT_MODEL;
+    }
+  });
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -348,6 +417,13 @@ export default function ClaudeManager() {
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Bumped on every optimistic active/title edit. A meta poll that started
+  // before the edit captures the old value; comparing generations lets us drop
+  // its stale result instead of clobbering the optimistic update.
+  const metaGenRef = useRef(0);
+  // Frozen display order for the in-focus list so existing rows keep their
+  // place across polls; new sessions prepend, removed ones drop out.
+  const activeOrderRef = useRef<string[]>([]);
   // Skip the first URL-sync run so it doesn't wipe the query string before the
   // restore-from-URL effect has read it.
   const skipUrlSync = useRef(true);
@@ -403,21 +479,34 @@ export default function ClaudeManager() {
     else window.history.replaceState(null, "", target);
   }, [view, folder, sessionId]);
 
-  // While browsing folders or a session list, poll the live ("doing") set and
-  // the active set so the home "in focus" list, newly-sent sessions, and the
-  // per-row badges stay fresh. Both payloads are small.
+  // Poll the live ("doing") set and the active set on every view — not just the
+  // folder/session lists — so the logo's "in focus" badge is correct on the chat
+  // page and immediately after a refresh into any page, not only once you visit
+  // home. Both payloads are small. Runs once on mount and every 4s thereafter.
   useEffect(() => {
-    if (view !== "folders" && view !== "sessions") return;
     let alive = true;
     const tick = () => {
       getLive()
-        .then((l) => alive && setLive(l))
+        .then((l) => {
+          if (!alive) return;
+          setLive((prev) =>
+            sameIds(
+              prev.map((p) => p.sessionId),
+              l.map((p) => p.sessionId),
+            )
+              ? prev
+              : l,
+          );
+        })
         .catch(() => {});
+      // Snapshot the mutation generation; if an optimistic edit lands while this
+      // request is in flight, the result is stale — drop it.
+      const gen = metaGenRef.current;
       getSessionMeta()
         .then((m) => {
-          if (!alive) return;
-          setActive(m.active);
-          setTitles(m.titles);
+          if (!alive || metaGenRef.current !== gen) return;
+          setActive((prev) => (sameActive(prev, m.active) ? prev : m.active));
+          setTitles((prev) => (sameTitles(prev, m.titles) ? prev : m.titles));
         })
         .catch(() => {});
     };
@@ -427,7 +516,7 @@ export default function ClaudeManager() {
       alive = false;
       clearInterval(id);
     };
-  }, [view]);
+  }, []);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
@@ -460,14 +549,22 @@ export default function ClaudeManager() {
 
   // "doing" = a live job is streaming. "active" = in the home set (sessionMeta).
   const liveIds = useMemo(() => new Set(live.map((l) => l.sessionId)), [live]);
-  // Home "in focus" list: the active set, most-recently-active first.
-  const activeList = useMemo(
-    () =>
-      Object.entries(active)
-        .map(([sessionId, e]) => ({ sessionId, ...e }))
-        .sort((a, b) => b.lastActiveAt - a.lastActiveAt),
-    [active],
-  );
+  // Home "in focus" list. Order is frozen in a ref so a 4s poll that only bumps
+  // lastActiveAt never reshuffles rows under the cursor: existing rows keep
+  // their place, newly-active sessions prepend (most recent first), removed
+  // ones drop out.
+  const activeList = useMemo(() => {
+    const ids = Object.keys(active);
+    const present = new Set(ids);
+    const kept = activeOrderRef.current.filter((id) => present.has(id));
+    const known = new Set(kept);
+    const added = ids
+      .filter((id) => !known.has(id))
+      .sort((a, b) => active[b].lastActiveAt - active[a].lastActiveAt);
+    const order = [...added, ...kept];
+    activeOrderRef.current = order;
+    return order.map((sessionId) => ({ sessionId, ...active[sessionId] }));
+  }, [active]);
 
   // ---- chat transport ----
   // Apply a stream message from a job (live turn or a reconnect snapshot).
@@ -475,7 +572,10 @@ export default function ClaudeManager() {
     switch (msg.kind) {
       case "snapshot":
         jobIdRef.current = msg.jobId;
-        setEvents(msg.events);
+        // Reconnect snapshot is authoritative, but skip the swap if it matches
+        // what we already painted from cache — avoids a scroll reset / flashing
+        // the optimistic bubble we just appended.
+        setEvents((prev) => (sameEvents(prev, msg.events) ? prev : msg.events));
         if (msg.sessionId) setSessionId(msg.sessionId);
         setLoading(false);
         setStreaming(msg.status === "running");
@@ -524,7 +624,8 @@ export default function ClaudeManager() {
               : res.events.length
                 ? [...cached.events, ...res.events]
                 : cached.events;
-          if (!cached || res.reset || res.events.length) setEvents(events);
+          if (!cached || res.reset || res.events.length)
+            setEvents((prev) => (sameEvents(prev, events) ? prev : events));
           setLoading(false);
           void putCachedTranscript({
             sessionId: id,
@@ -578,7 +679,7 @@ export default function ClaudeManager() {
         else setLoading(true);
         getSessions(f)
           .then((fresh) => {
-            setSessions(fresh);
+            setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
             writeSessionListCache(f, fresh);
           })
           .finally(() => setLoading(false));
@@ -650,7 +751,7 @@ export default function ClaudeManager() {
     }
     try {
       const fresh = await getSessions(f);
-      setSessions(fresh);
+      setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
       writeSessionListCache(f, fresh);
     } finally {
       setLoading(false);
@@ -683,6 +784,7 @@ export default function ClaudeManager() {
 
   // Bring a session to focus (done → active). Optimistic, then confirm.
   const activate = async (id: string, f: string, title: string) => {
+    metaGenRef.current++;
     setActive((m) => ({ ...m, [id]: { folder: f, title, lastActiveAt: Date.now() } }));
     try {
       setActive(await setSessionActive(id, true, f, title));
@@ -693,6 +795,7 @@ export default function ClaudeManager() {
 
   // Mark a session done (active → done; leaves the home list). Optimistic.
   const markDone = async (id: string) => {
+    metaGenRef.current++;
     setActive((m) => {
       const next = { ...m };
       delete next[id];
@@ -713,6 +816,7 @@ export default function ClaudeManager() {
   // Rename a session. Optimistic on the titles map (which always wins at render
   // time); an empty title clears the override back to the derived title.
   const renameSession = async (id: string, title: string) => {
+    metaGenRef.current++;
     setTitles((m) => {
       const next = { ...m };
       if (title) next[id] = title;
@@ -736,6 +840,7 @@ export default function ClaudeManager() {
       return;
     const next = sessions.filter((s) => s.sessionId !== id);
     setSessions(next);
+    metaGenRef.current++;
     setActive((m) => {
       const n = { ...m };
       delete n[id];
@@ -745,9 +850,16 @@ export default function ClaudeManager() {
     void deleteCachedTranscript(id);
     try {
       await apiDeleteSession(f, id);
-    } catch {
+    } catch (e) {
+      // The optimistic removal failed server-side; refetch will bring the row
+      // back, so tell the user why instead of letting it silently reappear.
+      window.alert(
+        `Couldn't delete this session: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
       const fresh = await getSessions(f);
-      setSessions(fresh);
+      setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
       writeSessionListCache(f, fresh);
     }
   };
@@ -769,15 +881,7 @@ export default function ClaudeManager() {
     detach();
   }, [detach, sessionId]);
 
-  // Remember the chosen model across reloads (default Opus).
-  useEffect(() => {
-    try {
-      const m = localStorage.getItem("claudia-model");
-      if (m) setModel(m);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // Remember the chosen model across reloads (read lazily in the initializer).
   const changeModel = (id: string) => {
     setModel(id);
     try {
@@ -910,17 +1014,6 @@ export default function ClaudeManager() {
     </div>
   );
 
-  const autoScrollBtn = (
-    <button
-      className={`icon-btn ${autoScroll ? "is-active" : ""}`}
-      onClick={() => setAutoScroll((v) => !v)}
-      title={autoScroll ? "Auto-scroll on" : "Auto-scroll off"}
-      aria-pressed={autoScroll}
-    >
-      <FontAwesomeIcon icon={faAnglesDown} />
-    </button>
-  );
-
   const sessionPct = usage?.limits.find((l) => /session/i.test(l.name))?.percentUsed;
   const usageBtn = (
     <button
@@ -938,19 +1031,25 @@ export default function ClaudeManager() {
   const ctxPct = ctx ? Math.round(ctx.pct) : 0;
   const ctxHot = ctx ? ctx.pct >= COMPACT_AUTO_PCT : false;
   const ctxWarm = ctx ? ctx.pct >= COMPACT_SUGGEST_PCT : false;
-  const ctxChip = ctx ? (
+  // Always rendered (placeholder "—" until a context reading exists) so the pill
+  // reserves its width instead of popping into the toolbar after the first turn.
+  const ctxChip = (
     <button
       className={`btn ghost ctx-chip ${ctxHot ? "hot" : ctxWarm ? "warm" : ""}`}
       onClick={compactNow}
-      disabled={streaming || !sessionId}
-      title={`Context: ${ctx.tokens.toLocaleString()} / ${ctx.window.toLocaleString()} tokens (${ctxPct}%)${
-        ctxWarm ? " — compact recommended" : ""
-      }. Click to /compact.`}
+      disabled={!ctx || streaming || !sessionId}
+      title={
+        ctx
+          ? `Context: ${ctx.tokens.toLocaleString()} / ${ctx.window.toLocaleString()} tokens (${ctxPct}%)${
+              ctxWarm ? " — compact recommended" : ""
+            }. Click to /compact.`
+          : "Context usage (no reading yet)"
+      }
     >
       <FontAwesomeIcon icon={ctxWarm ? faCompress : faGaugeHigh} />{" "}
-      {ctxPct}%
+      {ctx ? `${ctxPct}%` : "—"}
     </button>
-  ) : null;
+  );
 
   return (
     <div className="cm">
@@ -1123,7 +1222,7 @@ export default function ClaudeManager() {
           </div>
           <div className="scroll">
             {loading ? (
-              <div className="muted center pad">Loading…</div>
+              <SkeletonRows count={6} />
             ) : sessions.length === 0 ? (
               <div className="muted center pad">No sessions in this folder yet.</div>
             ) : (
@@ -1179,7 +1278,6 @@ export default function ClaudeManager() {
                 <FontAwesomeIcon icon={faCircleStop} />
               </button>
             )}
-            {autoScrollBtn}
             {modelChooser}
             {ctxChip}
             {usageBtn}
@@ -1187,12 +1285,11 @@ export default function ClaudeManager() {
 
           <div className="chat-scroll">
             {loading ? (
-              <div className="muted center pad">Loading transcript…</div>
+              <SkeletonRows count={4} />
             ) : (
               <StreamRenderer
                 items={items}
                 streaming={streaming}
-                autoScroll={autoScroll}
                 queue={queue}
                 sessionId={sessionId}
                 onAnswer={(t) => void sendText(t)}

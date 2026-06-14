@@ -531,6 +531,32 @@ body {
   max-width: var(--measure);
   margin: 0 auto;
 }
+/* "Jump to latest" pill — sticks to the bottom of the scroll viewport while the
+   user has scrolled up away from a streaming answer. */
+.jump-latest {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  margin-top: -8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent-bright);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  animation: rise 0.16s ease both;
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+.jump-latest:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 26px rgba(232, 178, 92, 0.4);
+}
 .stream-item {
   animation: rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1223,6 +1249,8 @@ body {
    as it fills; the icon swaps to a compress glyph once compact is suggested. */
 .ctx-chip {
   font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: center;
 }
 .ctx-chip:disabled {
   cursor: default;
@@ -1546,6 +1574,63 @@ body {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
+/* Loading skeletons — reserve list height so content doesn't jump in. */
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.skeleton-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: none;
+}
+.skeleton-main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+}
+.skeleton-line {
+  height: 10px;
+  border-radius: 5px;
+}
+.skeleton-line.w60 {
+  width: 60%;
+}
+.skeleton-line.w40 {
+  width: 40%;
+}
+.skeleton-dot,
+.skeleton-line {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 70%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
 /* Header breadcrumbs: project › session. */
 .crumbs {
   display: flex;
