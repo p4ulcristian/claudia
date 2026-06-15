@@ -172,6 +172,92 @@ body {
   text-align: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
+.brand-logo-click {
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+}
+/* Hover popover anchored under the logo, listing the in-focus sessions. */
+.logo-pop {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  z-index: 30;
+  width: 280px;
+  max-width: 86vw;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: rgba(17, 15, 24, 0.94);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  cursor: default;
+  animation: rise 0.18s ease both;
+}
+.logo-pop-head {
+  padding: 9px 13px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+}
+.logo-pop-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.logo-pop-empty {
+  padding: 12px 13px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.logo-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 13px;
+  background: none;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+}
+.logo-pop-item:first-of-type {
+  border-top: none;
+}
+.logo-pop-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.logo-pop-item .lp-ic {
+  width: 14px;
+  flex: none;
+  text-align: center;
+  font-size: 11px;
+}
+.logo-pop-item .lp-doing {
+  color: var(--accent-bright);
+}
+.logo-pop-item .lp-waiting {
+  color: var(--text-muted);
+}
+.logo-pop-item .lp-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.logo-pop-item .lp-folder {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .brand {
   margin: 0;
   font-size: 18px;

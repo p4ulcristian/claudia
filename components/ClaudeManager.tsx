@@ -63,6 +63,8 @@ import {
   faMicrochip,
   faGaugeHigh,
   faCheck,
+  faVolumeHigh,
+  faVolumeXmark,
 } from "./icons";
 
 type View = "folders" | "sessions" | "chat";
@@ -403,6 +405,19 @@ export default function ClaudeManager() {
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
 
+  // Mute for the "a session finished" chime. Read in the initializer so the
+  // toolbar button shows the right icon on first paint.
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("claudia-sound-muted") === "true";
+    } catch {
+      return false;
+    }
+  });
+  // Logo hover popover listing the in-focus sessions and their state.
+  const [logoPopOpen, setLogoPopOpen] = useState(false);
+
   const [folder, setFolder] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
 
@@ -416,7 +431,31 @@ export default function ClaudeManager() {
 
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  // Monotonic "which stream owns the chat view" token. Every navigation or new
+  // turn bumps it; async results (stream frames, cached paints, delta loads)
+  // carry the generation they were started under and are dropped if it no longer
+  // matches. Without this a background reader from a session you've left keeps
+  // calling setEvents/setStreaming into whatever chat is now on screen — frames
+  // land in the wrong chat, or in a fresh "new session".
+  const streamGenRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Finish-sound plumbing. prevLiveRef holds last tick's running set so the poll
+  // can spot sessions that just stopped; seededLiveRef skips the very first tick
+  // (so a refresh mid-run doesn't false-fire). The audio element is created
+  // lazily. view/session/muted are mirrored into refs because the poll effect
+  // runs once (empty deps) and would otherwise read stale values.
+  const prevLiveRef = useRef<Set<string>>(new Set());
+  const seededLiveRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const viewRef = useRef(view);
+  const sessionIdRef = useRef(sessionId);
+  const mutedRef = useRef(muted);
+  viewRef.current = view;
+  sessionIdRef.current = sessionId;
+  mutedRef.current = muted;
+  // Delayed-close timer so moving the cursor from the logo into the popover
+  // (across the small gap) doesn't dismiss it.
+  const logoPopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bumped on every optimistic active/title edit. A meta poll that started
   // before the edit captures the old value; comparing generations lets us drop
   // its stale result instead of clobbering the optimistic update.
@@ -479,6 +518,24 @@ export default function ClaudeManager() {
     else window.history.replaceState(null, "", target);
   }, [view, folder, sessionId]);
 
+  // Play the finish chime, creating the audio element on first use. Multiple
+  // simultaneous finishes collapse to one play (rewinds to start). Autoplay
+  // rejections are ignored — in practice the user has clicked by now.
+  const playFinishSound = useCallback(() => {
+    try {
+      let a = audioRef.current;
+      if (!a) {
+        a = new Audio("/finished.mp3");
+        a.volume = 0.5;
+        audioRef.current = a;
+      }
+      a.currentTime = 0;
+      void a.play().catch(() => {});
+    } catch {
+      /* no audio available */
+    }
+  }, []);
+
   // Poll the live ("doing") set and the active set on every view — not just the
   // folder/session lists — so the logo's "in focus" badge is correct on the chat
   // page and immediately after a refresh into any page, not only once you visit
@@ -489,6 +546,28 @@ export default function ClaudeManager() {
       getLive()
         .then((l) => {
           if (!alive) return;
+          const nextIds = new Set(l.map((p) => p.sessionId));
+          if (!seededLiveRef.current) {
+            // First tick after mount only establishes the baseline.
+            seededLiveRef.current = true;
+          } else {
+            // Sessions present last tick but gone now just finished. Play the
+            // chime unless you're already watching that exact session focused —
+            // you'd see it finish, so the sound would be noise.
+            const finished = [...prevLiveRef.current].filter(
+              (id) => !nextIds.has(id),
+            );
+            const worthSound = finished.some(
+              (id) =>
+                !(
+                  viewRef.current === "chat" &&
+                  sessionIdRef.current === id &&
+                  document.visibilityState === "visible"
+                ),
+            );
+            if (worthSound && !mutedRef.current) playFinishSound();
+          }
+          prevLiveRef.current = nextIds;
           setLive((prev) =>
             sameIds(
               prev.map((p) => p.sessionId),
@@ -516,7 +595,7 @@ export default function ClaudeManager() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [playFinishSound]);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
@@ -567,8 +646,21 @@ export default function ClaudeManager() {
   }, [active]);
 
   // ---- chat transport ----
+  // Abort the current stream and bump the generation so any frames still in
+  // flight from it are ignored. Call before starting a new stream or leaving
+  // the chat view.
+  const invalidateStream = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamGenRef.current++;
+  }, []);
+
   // Apply a stream message from a job (live turn or a reconnect snapshot).
-  const handleMsg = useCallback((msg: ChatStreamMessage) => {
+  // `gen` is the stream generation this handler was bound to; if the view has
+  // since moved on (navigation, new turn) the message belongs to a session we
+  // left, so drop it rather than writing it into the current chat.
+  const applyMsg = useCallback((gen: number, msg: ChatStreamMessage) => {
+    if (gen !== streamGenRef.current) return;
     switch (msg.kind) {
       case "snapshot":
         jobIdRef.current = msg.jobId;
@@ -599,10 +691,16 @@ export default function ClaudeManager() {
   // Reconnect to a running job for this session, else load its transcript.
   const attachOrLoad = useCallback(
     async (f: string, id: string) => {
+      // Take ownership of the chat view: abort any prior stream and claim a
+      // fresh generation. Every state write below is gated on it still being
+      // current, so a rapid open A → open B can't paint A's transcript into B.
+      invalidateStream();
+      const gen = streamGenRef.current;
       setError(null);
       // Paint from cache first — before any network — so a cached session
       // appears instantly. The running-check and delta fetch run behind it.
       const cached = await getCachedTranscript(id);
+      if (gen !== streamGenRef.current) return;
       if (cached) {
         setEvents(cached.events);
         setLoading(false);
@@ -612,12 +710,14 @@ export default function ClaudeManager() {
       const ac = new AbortController();
       abortRef.current = ac;
       try {
-        const running = await subscribeChat(id, handleMsg, ac.signal);
+        const running = await subscribeChat(id, (m) => applyMsg(gen, m), ac.signal);
+        if (gen !== streamGenRef.current) return;
         if (running) {
           setStreaming(true); // snapshot replaces events with live state
         } else {
-          abortRef.current = null;
+          if (abortRef.current === ac) abortRef.current = null;
           const res = await loadSessionDelta(f, id, cached?.size ?? 0);
+          if (gen !== streamGenRef.current) return;
           const events =
             !cached || res.reset
               ? res.events
@@ -635,12 +735,13 @@ export default function ClaudeManager() {
           });
         }
       } catch (e) {
-        abortRef.current = null;
+        if (gen !== streamGenRef.current) return;
+        if (abortRef.current === ac) abortRef.current = null;
         setError(e instanceof Error ? e.message : String(e));
         setLoading(false);
       }
     },
-    [handleMsg],
+    [applyMsg, invalidateStream],
   );
 
   // Restore view/folder/session from a URL query string. Used on load and on
@@ -648,8 +749,7 @@ export default function ClaudeManager() {
   // to "/" resets out of a deeper view.
   const applyUrl = useCallback(
     (search: string) => {
-      abortRef.current?.abort();
-      abortRef.current = null;
+      invalidateStream();
       const sp = new URLSearchParams(search);
       const f = sp.get("folder");
       const sess = sp.get("session");
@@ -685,7 +785,7 @@ export default function ClaudeManager() {
           .finally(() => setLoading(false));
       }
     },
-    [attachOrLoad],
+    [attachOrLoad, invalidateStream],
   );
 
   // On load: warm caches, restore from the URL, and listen for back/forward.
@@ -770,8 +870,7 @@ export default function ClaudeManager() {
   };
 
   const newSession = (f: string) => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    invalidateStream();
     jobIdRef.current = null;
     setFolder(f);
     setSessionId(null);
@@ -867,10 +966,9 @@ export default function ClaudeManager() {
   // ---- chat ----
   // Detach from the stream without killing the job (refresh / navigate away).
   const detach = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    invalidateStream();
     setStreaming(false);
-  }, []);
+  }, [invalidateStream]);
 
   // Explicitly kill the running job (Stop button / Esc), clear the queue, detach.
   const stopStream = useCallback(() => {
@@ -889,6 +987,19 @@ export default function ClaudeManager() {
     } catch {
       /* ignore */
     }
+  };
+
+  // Toggle (and persist) the finish chime mute.
+  const toggleMuted = () => {
+    setMuted((m) => {
+      const next = !m;
+      try {
+        localStorage.setItem("claudia-sound-muted", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   };
 
   // Esc stops the current generation, like the Stop button.
@@ -917,14 +1028,24 @@ export default function ClaudeManager() {
     setError(null);
     setStreaming(true);
 
+    // Claim a fresh generation for this turn so any lingering frames from a
+    // prior stream are ignored, and so a navigation mid-turn stops us flipping
+    // this session's streaming flag from a turn that no longer owns the view.
+    streamGenRef.current++;
+    const gen = streamGenRef.current;
     const ac = new AbortController();
     abortRef.current = ac;
 
     try {
-      await startChat({ folder, sessionId, prompt, model, signal: ac.signal }, handleMsg);
+      await startChat(
+        { folder, sessionId, prompt, model, signal: ac.signal },
+        (m) => applyMsg(gen, m),
+      );
     } finally {
-      if (abortRef.current === ac) abortRef.current = null;
-      setStreaming(false);
+      if (gen === streamGenRef.current) {
+        if (abortRef.current === ac) abortRef.current = null;
+        setStreaming(false);
+      }
     }
   };
 
@@ -964,13 +1085,70 @@ export default function ClaudeManager() {
   // Badge counts the in-focus sessions (doing + waiting) so the logo carries a
   // running "how many sessions need me" number across every view.
   const homeBadgeCount = activeList.length;
+  // In-focus sessions for the hover popover, doing (live) sorted before waiting.
+  const logoPopList = [...activeList].sort(
+    (a, b) =>
+      Number(liveIds.has(b.sessionId)) - Number(liveIds.has(a.sessionId)),
+  );
+  const openLogoPop = () => {
+    if (logoPopTimer.current) clearTimeout(logoPopTimer.current);
+    setLogoPopOpen(true);
+  };
+  const closeLogoPopSoon = () => {
+    if (logoPopTimer.current) clearTimeout(logoPopTimer.current);
+    logoPopTimer.current = setTimeout(() => setLogoPopOpen(false), 150);
+  };
   const homeLogo = (
-    <span className="brand-logo-wrap" onClick={goHome} title="Home">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="brand-logo" src="/claudia.webp" alt="claudia" />
-      {homeBadgeCount > 0 ? (
-        <span className="brand-badge">{homeBadgeCount}</span>
-      ) : null}
+    <span
+      className="brand-logo-wrap"
+      onMouseEnter={openLogoPop}
+      onMouseLeave={closeLogoPopSoon}
+    >
+      <span className="brand-logo-click" onClick={goHome} title="Home">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="brand-logo" src="/claudia.webp" alt="claudia" />
+        {homeBadgeCount > 0 ? (
+          <span className="brand-badge">{homeBadgeCount}</span>
+        ) : null}
+      </span>
+      {logoPopOpen && (
+        <div
+          className="logo-pop"
+          onMouseEnter={openLogoPop}
+          onMouseLeave={closeLogoPopSoon}
+        >
+          <div className="logo-pop-head">In focus</div>
+          <div className="logo-pop-body">
+            {logoPopList.length === 0 ? (
+              <div className="logo-pop-empty">No sessions in focus</div>
+            ) : (
+              logoPopList.map((a) => {
+                const doing = liveIds.has(a.sessionId);
+                return (
+                  <button
+                    key={a.sessionId}
+                    className="logo-pop-item"
+                    onClick={() => {
+                      setLogoPopOpen(false);
+                      void openSession(a.folder, a.sessionId);
+                    }}
+                    title={doing ? "Doing — running now" : "Waiting — your turn"}
+                  >
+                    <FontAwesomeIcon
+                      icon={doing ? faCircle : faClock}
+                      className={`lp-ic ${doing ? "lp-doing" : "lp-waiting"}`}
+                    />
+                    <span className="lp-title ellipsis">
+                      {titles[a.sessionId] ?? a.title}
+                    </span>
+                    <span className="lp-folder mono">{shortName(a.folder)}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </span>
   );
 
@@ -1012,6 +1190,17 @@ export default function ClaudeManager() {
         </>
       )}
     </div>
+  );
+
+  const soundBtn = (
+    <button
+      className="icon-btn"
+      onClick={toggleMuted}
+      title={muted ? "Finish sound off — click to unmute" : "Finish sound on — click to mute"}
+      aria-label={muted ? "Unmute finish sound" : "Mute finish sound"}
+    >
+      <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
+    </button>
   );
 
   const sessionPct = usage?.limits.find((l) => /session/i.test(l.name))?.percentUsed;
@@ -1065,6 +1254,7 @@ export default function ClaudeManager() {
               <FontAwesomeIcon icon={faFolderPlus} /> Add folder
             </button>
             {modelChooser}
+            {soundBtn}
             {usageBtn}
           </div>
           <div className="scroll">
@@ -1218,6 +1408,7 @@ export default function ClaudeManager() {
             <button className="btn accent" onClick={() => newSession(folder)}>
               <FontAwesomeIcon icon={faPlus} /> New session
             </button>
+            {soundBtn}
             {usageBtn}
           </div>
           <div className="scroll">
@@ -1280,6 +1471,7 @@ export default function ClaudeManager() {
             )}
             {modelChooser}
             {ctxChip}
+            {soundBtn}
             {usageBtn}
           </div>
 

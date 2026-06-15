@@ -30,4 +30,6 @@ export {
   faPencil,
   faMicrochip,
   faGaugeHigh,
+  faVolumeHigh,
+  faVolumeXmark,
 } from "@fortawesome/free-solid-svg-icons";
