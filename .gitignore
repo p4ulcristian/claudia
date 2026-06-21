@@ -28,3 +28,7 @@ next-env.d.ts
 
 # graphify: regenerable per-version AST cache (keep the graph, drop the cache)
 /graphify-out/cache/
+
+# editor / LSP caches
+/.clj-kondo/
+/.lsp/

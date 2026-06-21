@@ -1,6 +1,7 @@
 // Central Font Awesome icon exports so components import from one place.
 export { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 export {
+  faBars,
   faChartColumn,
   faFolder,
   faFolderOpen,
@@ -32,4 +33,6 @@ export {
   faGaugeHigh,
   faVolumeHigh,
   faVolumeXmark,
+  faPaperPlane,
+  faLayerGroup,
 } from "@fortawesome/free-solid-svg-icons";

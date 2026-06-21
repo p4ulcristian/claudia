@@ -100,16 +100,13 @@ body {
    sits on this — never directly on the moving gradient — so it stays crisp. */
 .cm {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   position: relative;
   height: 100vh;
-  max-width: 900px;
-  margin: 0 auto;
+  width: 100%;
   background: var(--panel);
   backdrop-filter: blur(22px) saturate(120%);
   -webkit-backdrop-filter: blur(22px) saturate(120%);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
   box-shadow: 0 0 1px rgba(255, 255, 255, 0.05), 0 40px 120px rgba(0, 0, 0, 0.55);
 }
 
@@ -136,12 +133,6 @@ body {
   align-items: center;
   gap: 11px;
 }
-.brand-logo-wrap {
-  position: relative;
-  display: inline-block;
-  cursor: pointer;
-  line-height: 0;
-}
 .brand-logo {
   height: 34px;
   width: 34px;
@@ -150,7 +141,14 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   transition: transform 0.14s ease, box-shadow 0.2s ease;
 }
-.brand-logo-wrap:hover .brand-logo {
+/* The logo is the Home button; the badge anchors to it. */
+.brand-logo-click {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+}
+.brand-logo-click:hover .brand-logo {
   transform: translateY(-1px) scale(1.04);
   box-shadow: 0 4px 16px rgba(232, 178, 92, 0.3);
 }
@@ -172,90 +170,125 @@ body {
   text-align: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
-.brand-logo-click {
-  display: inline-block;
-  line-height: 0;
-  cursor: pointer;
-}
-/* Hover popover anchored under the logo, listing the in-focus sessions. */
-.logo-pop {
-  position: absolute;
-  top: 44px;
-  left: 0;
-  z-index: 30;
-  width: 280px;
-  max-width: 86vw;
-  border: 1px solid var(--border-strong);
-  border-radius: 13px;
-  background: rgba(17, 15, 24, 0.94);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
-  cursor: default;
-  animation: rise 0.18s ease both;
-}
-.logo-pop-head {
-  padding: 9px 13px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-bottom: 1px solid var(--border);
-}
-.logo-pop-body {
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 4px 0;
-}
-.logo-pop-empty {
-  padding: 12px 13px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.logo-pop-item {
+
+/* ---- session tabs: a strip under the chat toolbar, one tab per in-focus
+   session. Click a tab to switch sessions; the × marks it done (closes it). --- */
+.tab-strip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 13px;
-  background: none;
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  text-align: left;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: background 0.15s ease;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
 }
-.logo-pop-item:first-of-type {
-  border-top: none;
-}
-.logo-pop-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.logo-pop-item .lp-ic {
-  width: 14px;
-  flex: none;
-  text-align: center;
-  font-size: 11px;
-}
-.logo-pop-item .lp-doing {
-  color: var(--accent-bright);
-}
-.logo-pop-item .lp-waiting {
-  color: var(--text-muted);
-}
-.logo-pop-item .lp-title {
+.tab-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 1;
   min-width: 0;
-  font-size: 13.5px;
+  overflow-x: auto;
+  /* Keep horizontal scrolling but hide the scrollbar chrome. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.tab-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 200px;
+  padding: 6px 9px 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.tab:hover {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.tab-active {
+  background: var(--accent-soft);
+  border-color: rgba(232, 178, 92, 0.32);
   color: var(--text);
 }
-.logo-pop-item .lp-folder {
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 450;
+  color: inherit;
+}
+
+/* Trailing slot: a live dot when running, swapped for the × on hover. The two
+   never share the slot — display toggles (not opacity) so the pulse animation,
+   which drives opacity, can't bleed the dot through under the ×. */
+.tab-end {
   flex: none;
-  font-size: 11px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  box-shadow: 0 0 6px rgba(232, 178, 92, 0.55);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+.tab-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: none;
+  background: none;
+  padding: 0;
+  border-radius: 50%;
   color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+.tab:hover .tab-dot {
+  display: none;
+}
+.tab:hover .tab-close {
+  display: flex;
+}
+.tab-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+.tab-new {
+  flex: none;
+}
+
+/* Tinted tabs carry their folder's color in the title (and active wash). */
+.tab.folder-tint .tab-title {
+  color: rgba(var(--fc), 0.92);
+}
+.tab.folder-tint:hover {
+  background: rgba(var(--fc), 0.08);
+}
+.tab.folder-tint.tab-active {
+  background: rgba(var(--fc), 0.14);
+  border-color: rgba(var(--fc), 0.42);
+}
+.tab.folder-tint .tab-dot {
+  background: rgb(var(--fc));
+  box-shadow: 0 0 6px rgba(var(--fc), 0.55);
 }
 
 .brand {
@@ -592,6 +625,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dir-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  text-align: right;
+}
+.dir-icon.tinted {
+  color: rgb(var(--fc));
+}
 .badge {
   font-size: 10px;
   color: var(--accent);
@@ -619,29 +663,37 @@ body {
 }
 /* "Jump to latest" pill — sticks to the bottom of the scroll viewport while the
    user has scrolled up away from a streaming answer. */
+/* A subtle glossy glass pill so text scrolling beneath stays readable. */
 .jump-latest {
   position: sticky;
-  bottom: 8px;
+  bottom: 10px;
   align-self: center;
   margin-top: -8px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--bg);
-  background: var(--accent-bright);
-  border: none;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(40, 34, 54, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
   animation: rise 0.16s ease both;
-  transition: transform 0.12s ease, box-shadow 0.2s ease;
+  transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.2s ease,
+    color 0.2s ease;
 }
 .jump-latest:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 26px rgba(232, 178, 92, 0.4);
+  color: var(--text);
+  background: rgba(40, 34, 54, 0.6);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .stream-item {
   animation: rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -655,6 +707,17 @@ body {
 }
 .working {
   padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* "answering for Xs" counter beside the working dots */
+.working-timer {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
 
 .msg-system {
@@ -922,6 +985,54 @@ body {
   max-height: 220px;
   overflow: auto;
   animation: rise 0.2s ease both;
+}
+
+/* A tool's output, folded into its call card (sits flush below the detail). */
+.tool-out {
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.22);
+}
+.tool-out.is-error {
+  border-top-color: rgba(255, 139, 130, 0.4);
+}
+.tool-out-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.tool-out.is-error .tool-out-label {
+  color: var(--danger);
+}
+.tool-out-meta {
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+.tool-out pre {
+  margin: 0;
+  padding: 2px 13px 11px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+/* Failure tag in the collapsed call header. */
+.tool-err {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--mono);
+  color: var(--danger);
 }
 
 .msg-result {
@@ -1722,10 +1833,17 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
   font-size: 14px;
 }
 .crumb {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: none;
   border: none;
   padding: 2px 4px;
@@ -1748,6 +1866,7 @@ body {
   flex: none;
 }
 .crumb-current {
+  flex: 0 1 auto;
   font-weight: 650;
   color: var(--text);
   min-width: 0;
@@ -1778,6 +1897,36 @@ body {
   margin-bottom: 24px;
   padding-bottom: 24px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Folders section header carries the Add-folder action on its right. */
+.folder-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn.btn-sm {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+/* A folder row plus its in-focus sessions nested beneath it. */
+.folder-group {
+  margin-bottom: 8px;
+}
+.folder-group > .row {
+  margin-bottom: 0;
+}
+.folder-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0 22px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.folder-sessions .session-row {
+  margin-bottom: 0;
 }
 .live-row {
   border-left: 2px solid var(--accent);
@@ -2315,4 +2464,464 @@ body {
 }
 .diff-line.ctx {
   color: var(--text-secondary);
+}
+
+/* ==== sidebar + main two-column shell ====================================== */
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.sidebar {
+  flex: 0 0 264px;
+  width: 264px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.022), transparent);
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sb-head .brand-logo {
+  height: 30px;
+  width: 30px;
+}
+.sb-head .brand {
+  font-size: 16px;
+}
+.sb-new {
+  margin: 10px 12px 2px;
+  justify-content: center;
+}
+.sb-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 8px 8px 16px;
+}
+.sb-section {
+  margin-top: 10px;
+}
+.sb-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-muted);
+}
+.sb-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.sb-add {
+  font-size: 13px;
+  padding: 2px 6px;
+}
+
+/* a session row in the rail — a little card with a colored left edge */
+.sb-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.16s ease;
+}
+.sb-row:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+.sb-selected,
+.sb-selected:hover {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.sb-state {
+  flex: 0 0 auto;
+  width: 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 1px;
+}
+.sb-state-btn {
+  padding: 0;
+  height: auto;
+}
+.sb-doing .sb-state {
+  color: #3fb950;
+}
+.sb-waiting .sb-state {
+  color: var(--accent-bright);
+}
+.sb-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sb-title {
+  font-size: 13px;
+  line-height: 1.32;
+  color: var(--text);
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sb-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-act {
+  flex: 0 0 auto;
+  opacity: 0;
+  font-size: 12px;
+  padding: 2px 5px;
+  align-self: center;
+}
+.sb-row:hover .sb-act {
+  opacity: 0.85;
+}
+.sb-act.sb-del:hover {
+  color: var(--danger);
+}
+.sb-act.sb-edit:hover {
+  color: var(--accent-bright);
+}
+/* folder color rides the left edge of a tinted rail row */
+.sb-row.folder-tint {
+  border-left-color: rgb(var(--fc));
+}
+.sb-row.folder-tint:hover {
+  border-color: rgba(var(--fc), 0.5);
+  border-left-color: rgb(var(--fc));
+}
+
+/* folders tree */
+.sb-folder {
+  margin-bottom: 4px;
+}
+.sb-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 7px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.14s ease;
+}
+.sb-folder-row:hover {
+  background: var(--surface);
+}
+.sb-chev {
+  flex: 0 0 auto;
+  width: 11px;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.sb-folder-ic {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.sb-folder-row.folder-tint .sb-folder-ic {
+  color: rgb(var(--fc));
+}
+.sb-folder-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-folder-live {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+/* folder color dot + new/remove actions reveal on hover to stay quiet */
+.sb-folder-row .folder-color-pick {
+  opacity: 0;
+}
+.sb-folder-row:hover .folder-color-pick,
+.sb-folder-row .folder-color-pick:has(.color-popup) {
+  opacity: 1;
+}
+.sb-folder-act {
+  flex: 0 0 auto;
+  opacity: 0;
+  font-size: 12px;
+  padding: 2px 5px;
+}
+.sb-folder-row:hover .sb-folder-act {
+  opacity: 0.85;
+}
+.sb-folder-act.sb-del:hover {
+  color: var(--danger);
+}
+.sb-folder-sessions {
+  margin: 4px 0 6px 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+/* the last card in a folder shouldn't add trailing space before the next folder */
+.sb-folder-sessions .sb-row:last-child {
+  margin-bottom: 0;
+}
+.sb-loading,
+.sb-empty {
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sb-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* mobile scrim — hidden on desktop, shown under the overlay sidebar */
+.sb-backdrop {
+  display: none;
+}
+
+/* thin chat header (sidebar toggle + breadcrumb title) */
+/* The header floats over the top of the transcript rather than taking a row in
+   the flex column — so showing/hiding it slides it in and out without resizing
+   the scroll area, which would otherwise shift the reading position. */
+.chat-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17, 15, 24, 0.72);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  transition: transform 0.24s ease, opacity 0.18s ease;
+}
+.chat-head.is-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* Invisible strip along the very top; hovering it reveals the hidden header.
+   Sits beneath the header (lower z-index) so it only catches the pointer once
+   the header has slid away. */
+.head-hover-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  z-index: 1;
+}
+.chat-head.is-hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-bottom-color: transparent;
+}
+.chat-head .crumbs {
+  font-size: 13.5px;
+}
+/* logo in the header doubles as the sidebar toggle; sized just under the rail's */
+.chat-head-logo {
+  flex: 0 0 auto;
+}
+.chat-head-logo .brand-logo {
+  height: 28px;
+  width: 28px;
+}
+
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* ==== floating composer (circle → popover) ================================= */
+.fab {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 5;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--accent-bright);
+  background: rgba(40, 34, 54, 0.7);
+  border: 1px solid rgba(232, 178, 92, 0.45);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.14s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.fab:hover {
+  transform: translateY(-2px);
+  background: rgba(50, 42, 66, 0.8);
+  box-shadow: 0 12px 30px rgba(232, 178, 92, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.fab.is-open {
+  color: var(--text-secondary);
+}
+.fab.is-streaming {
+  animation: fab-pulse 1.5s ease-in-out infinite;
+}
+@keyframes fab-pulse {
+  0%,
+  100% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 0 rgba(232, 178, 92, 0.5);
+  }
+  50% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 9px rgba(232, 178, 92, 0);
+  }
+}
+
+.composer-pop {
+  position: absolute;
+  left: 18px;
+  bottom: 80px;
+  z-index: 6;
+  width: min(720px, calc(100% - 36px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(17, 15, 24, 0.88);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(22px) saturate(120%);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+  animation: rise 0.16s ease both;
+}
+.composer-pop textarea {
+  width: 100%;
+  resize: none;
+  padding: 11px 14px;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+  min-height: 46px;
+  max-height: 260px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.composer-pop textarea::placeholder {
+  color: var(--text-muted);
+}
+.composer-pop textarea:focus {
+  outline: none;
+  border-color: rgba(232, 178, 92, 0.55);
+  box-shadow: 0 0 0 3px rgba(232, 178, 92, 0.1);
+}
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.composer-pop .error {
+  padding: 0 2px 2px;
+}
+
+/* home / empty main pane */
+.home-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.home-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* narrow screens: the sidebar floats over the chat as an overlay */
+@media (max-width: 760px) {
+  .sidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 26;
+    width: min(82vw, 300px);
+    flex-basis: auto;
+    background: rgba(17, 15, 24, 0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+  }
+  .sb-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    background: rgba(0, 0, 0, 0.5);
+    animation: rise 0.18s ease both;
+  }
 }

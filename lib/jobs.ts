@@ -101,6 +101,7 @@ export function snapshotOf(job: Job): ChatStreamMessage {
     events: job.events,
     status: job.status,
     error: job.error,
+    startedAt: job.startedAt,
   };
 }
 

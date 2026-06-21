@@ -103,12 +103,13 @@ export async function loadSessionDelta(
   folder: string,
   sessionId: string,
   since: number,
+  knownMtime = 0,
 ): Promise<TranscriptDelta> {
   return json<TranscriptDelta & { sessionId: string }>(
     await fetch(
       `/api/sessions/${encodeURIComponent(sessionId)}?folder=${encodeURIComponent(
         folder,
-      )}&since=${since}`,
+      )}&since=${since}&mtime=${knownMtime}`,
     ),
   );
 }
@@ -189,6 +190,16 @@ export async function getWorktreeFileDiff(
 /** Sessions with a live job streaming right now, across all folders. */
 export async function getLive(): Promise<LiveSession[]> {
   return (await json<{ sessions: LiveSession[] }>(await fetch("/api/live"))).sessions;
+}
+
+/** Per-process boot id; changes when the server restarts. Used to detect that
+ * an open tab is now running against a rebuilt server and should reload. */
+export async function getVersion(): Promise<string> {
+  return (
+    await json<{ bootId: string }>(
+      await fetch("/api/version", { cache: "no-store" }),
+    )
+  ).bootId;
 }
 
 /** The active-session set plus custom titles, in one fetch. */

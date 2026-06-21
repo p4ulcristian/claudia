@@ -143,6 +143,7 @@ export async function loadSessionDelta(
   folder: string,
   sessionId: string,
   since = 0,
+  knownMtime = 0,
 ): Promise<TranscriptDelta> {
   const file = path.join(sessionDir(folder), `${sessionId}.jsonl`);
   let stat;
@@ -154,7 +155,15 @@ export async function loadSessionDelta(
   const size = stat.size;
   const modified = stat.mtimeMs;
   const reset = since <= 0 || since > size;
-  if (!reset && since === size) return { events: [], size, modified, reset: false };
+  if (!reset && since === size) {
+    // Same byte length but a newer mtime means the file was rewritten in place
+    // (an edit or compaction that happened to land on the same size). The cached
+    // prefix can no longer be trusted, so force a full reload instead of the
+    // usual "nothing new" short-circuit.
+    if (knownMtime && modified !== knownMtime)
+      return { events: await readEvents(file, 0), size, modified, reset: true };
+    return { events: [], size, modified, reset: false };
+  }
   const events = await readEvents(file, reset ? 0 : since);
   return { events, size, modified, reset };
 }

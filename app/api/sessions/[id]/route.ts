@@ -19,7 +19,8 @@ export async function GET(
   const sinceParam = searchParams.get("since");
   if (sinceParam !== null) {
     const since = Number.parseInt(sinceParam, 10) || 0;
-    const delta = await loadSessionDelta(folder, id, since);
+    const mtime = Number.parseFloat(searchParams.get("mtime") ?? "") || 0;
+    const delta = await loadSessionDelta(folder, id, since, mtime);
     return NextResponse.json({ sessionId: id, ...delta });
   }
 

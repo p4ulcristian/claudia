@@ -211,6 +211,8 @@ export type ChatStreamMessage =
       events: ClaudeEvent[];
       status: JobStatus;
       error?: string;
+      /** Epoch millis the turn was spawned — for the "answering for Xs" timer. */
+      startedAt: number;
     }
   | { kind: "event"; event: ClaudeEvent }
   | { kind: "session-id"; sessionId: string }

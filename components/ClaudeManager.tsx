@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   ActiveMap,
   ChatStreamMessage,
@@ -22,6 +23,7 @@ import {
   getFolderMeta,
   setFolderColor as apiSetFolderColor,
   getLive,
+  getVersion,
   getSessions,
   getUsage,
   loadSessionDelta,
@@ -34,20 +36,24 @@ import {
 import {
   deleteCachedTranscript,
   getCachedTranscript,
+  peekCachedTranscript,
   putCachedTranscript,
   warmTranscriptCache,
 } from "./transcriptCache";
+import type { CachedTranscript } from "./transcriptCache";
 import { startChat, stopChat, subscribeChat } from "./stream-chat";
 import { foldEvents, type DisplayItem } from "./fold";
 import FolderPicker from "./FolderPicker";
+import NewSessionPicker from "./NewSessionPicker";
 import GitPanel from "./GitPanel";
 import StreamRenderer from "./StreamRenderer";
 import TaskChip from "./TaskChip";
 import UsagePanel from "./UsagePanel";
 import {
   FontAwesomeIcon,
-  faArrowLeft,
   faChartColumn,
+  faChevronDown,
+  faChevronRight,
   faCircleStop,
   faCompress,
   faFolder,
@@ -55,10 +61,11 @@ import {
   faPlus,
   faXmark,
   faCodeBranch,
+  faPaperPlane,
+  faLayerGroup,
   faCircle,
   faCircleCheck,
   faClock,
-  faSpinner,
   faPencil,
   faMicrochip,
   faGaugeHigh,
@@ -67,7 +74,10 @@ import {
   faVolumeXmark,
 } from "./icons";
 
-type View = "folders" | "sessions" | "chat";
+// Two states now: "home" (no conversation open — main shows the welcome) and
+// "chat" (a session, new or existing, open in the main pane). Folder/session
+// browsing lives in the always-present sidebar, not in separate screens.
+type View = "home" | "chat";
 
 const MODELS = [
   { id: "claude-opus-4-8", label: "Opus 4.8" },
@@ -191,75 +201,91 @@ function fmtAgo(ms: number): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-// One session row: a focus toggle (filled = active/in-focus, hollow = done) on
-// the left, title + meta (running / waiting / timestamp), delete on the right.
-function SessionRow({
-  s,
-  active,
-  doing,
-  folderLabel,
+// A compact session row for the sidebar. State icon on the left (running / your
+// turn / done), full title that wraps so nothing is truncated, optional sub line
+// (folder name or timestamp). Trailing action is either "mark done" (in-focus
+// list) or "delete" (folder list); rename is offered on hover.
+function SbRow({
+  title,
+  sub,
+  state,
   colorClass,
+  selected,
   href,
   onOpen,
-  onToggle,
-  onRemove,
+  onPrefetch,
+  trailing,
+  onTrailing,
+  onToggleState,
   onRename,
 }: {
-  s: { sessionId: string; title: string; modified: number };
-  active: boolean;
-  doing: boolean;
-  folderLabel?: string;
+  title: string;
+  sub?: string;
+  state: "doing" | "waiting" | "done";
   colorClass?: string;
+  selected?: boolean;
   href: string;
   onOpen: () => void;
-  onToggle: () => void;
-  onRemove: () => void;
-  onRename: (title: string) => void;
+  onPrefetch?: () => void;
+  trailing: "done" | "delete";
+  onTrailing: () => void;
+  onToggleState?: () => void;
+  onRename?: (title: string) => void;
 }) {
-  const waiting = active && !doing;
-  // doing = solid dot (live), waiting = clock (your turn), done = check.
-  const stateIcon = doing ? faCircle : waiting ? faClock : faCircleCheck;
-  const stateTitle = doing
-    ? "Doing — click to mark done"
-    : waiting
-      ? "Waiting — click to mark done"
-      : "Done — click to bring to focus";
+  const stateIcon =
+    state === "doing" ? faCircle : state === "waiting" ? faClock : faCircleCheck;
+  const stateTitle = onToggleState
+    ? state === "done"
+      ? "Done — click to bring to focus"
+      : "In focus — click to mark done"
+    : state === "doing"
+      ? "Running"
+      : state === "waiting"
+        ? "Waiting — your turn"
+        : "Done";
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(s.title);
+  const [draft, setDraft] = useState(title);
   const startEdit = () => {
-    setDraft(s.title);
+    setDraft(title);
     setEditing(true);
   };
   const commit = () => {
     setEditing(false);
-    if (draft.trim() !== s.title) onRename(draft.trim());
+    if (onRename && draft.trim() !== title) onRename(draft.trim());
   };
 
   return (
     <a
       href={editing ? undefined : href}
-      className={`row session-row${doing ? " session-doing" : ""}${
-        waiting ? " session-waiting" : ""
-      }${colorClass ? ` ${colorClass}` : ""}`}
+      className={`sb-row sb-${state}${selected ? " sb-selected" : ""}${
+        colorClass ? ` ${colorClass}` : ""
+      }`}
+      onPointerEnter={onPrefetch}
       onClick={(e) => {
         if (editing || isModifiedClick(e)) return; // let the browser open it
         e.preventDefault();
         onOpen();
       }}
     >
-      <button
-        className="icon-btn done-toggle"
-        title={stateTitle}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggle();
-        }}
-      >
-        <FontAwesomeIcon icon={stateIcon} />
-      </button>
-      <div className="row-main">
+      {onToggleState ? (
+        <button
+          className="icon-btn sb-state sb-state-btn"
+          title={stateTitle}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleState();
+          }}
+        >
+          <FontAwesomeIcon icon={stateIcon} />
+        </button>
+      ) : (
+        <span className="sb-state" title={stateTitle}>
+          <FontAwesomeIcon icon={stateIcon} />
+        </span>
+      )}
+      <span className="sb-main">
         {editing ? (
           <input
             className="row-title-edit"
@@ -278,40 +304,32 @@ function SessionRow({
             placeholder="Session title"
           />
         ) : (
-          <div className="row-title ellipsis">{s.title}</div>
+          <>
+            <span className="sb-title">{title}</span>
+            {sub ? <span className="sb-sub mono">{sub}</span> : null}
+          </>
         )}
-        <div className="row-sub mono">
-          {folderLabel ? <>{folderLabel} · </> : null}
-          {doing ? (
-            <span className="doing-tag">
-              <FontAwesomeIcon icon={faSpinner} spin /> running
-            </span>
-          ) : waiting ? (
-            <span className="waiting-tag">waiting</span>
-          ) : (
-            fmtAgo(s.modified)
-          )}{" "}
-          · {s.sessionId.slice(0, 8)}
-        </div>
-      </div>
+      </span>
+      {onRename && !editing ? (
+        <button
+          className="icon-btn sb-act sb-edit"
+          title="Rename session"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startEdit();
+          }}
+        >
+          <FontAwesomeIcon icon={faPencil} />
+        </button>
+      ) : null}
       <button
-        className="icon-btn row-edit"
-        title="Rename session"
+        className={`icon-btn sb-act ${trailing === "delete" ? "sb-del" : "sb-done"}`}
+        title={trailing === "delete" ? "Delete session" : "Mark done (remove from focus)"}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          startEdit();
-        }}
-      >
-        <FontAwesomeIcon icon={faPencil} />
-      </button>
-      <button
-        className="icon-btn row-del"
-        title="Delete session"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onRemove();
+          onTrailing();
         }}
       >
         <FontAwesomeIcon icon={faXmark} />
@@ -377,10 +395,299 @@ function Breadcrumbs({
   );
 }
 
+// The left navigation rail. Two regions, both fed by data the manager already
+// computes: "In focus" (the in-focus sessions, formerly the tab strip) and
+// "Folders" (each folder expands inline to its full session list, replacing the
+// old separate folders/sessions screens). Footer carries the global toggles.
+function Sidebar({
+  badgeCount,
+  onToggle,
+  onNewSession,
+  folders,
+  folderMeta,
+  expanded,
+  sessionsByFolder,
+  activeList,
+  liveIds,
+  titles,
+  currentSessionId,
+  tintClass,
+  onOpenSession,
+  onPrefetch,
+  onMarkDone,
+  onToggleActive,
+  onRemoveSession,
+  onRenameSession,
+  onToggleFolder,
+  onNewInFolder,
+  onAddFolder,
+  onRemoveFolder,
+  colorPickerFor,
+  setColorPickerFor,
+  onSetFolderColor,
+  soundBtn,
+  usageBtn,
+}: {
+  badgeCount: number;
+  onToggle: () => void;
+  onNewSession: () => void;
+  folders: FolderPath[];
+  folderMeta: FolderMetaMap;
+  expanded: Set<string>;
+  sessionsByFolder: Record<string, SessionSummary[] | undefined>;
+  activeList: { sessionId: string; folder: string; title: string; lastActiveAt: number }[];
+  liveIds: Set<string>;
+  titles: TitleMap;
+  currentSessionId: string | null;
+  tintClass: (f: string | null | undefined) => string;
+  onOpenSession: (folder: string, id: string) => void;
+  onPrefetch: (folder: string, id: string) => void;
+  onMarkDone: (id: string) => void;
+  onToggleActive: (id: string, folder: string, title: string) => void;
+  onRemoveSession: (folder: string, id: string) => void;
+  onRenameSession: (id: string, title: string) => void;
+  onToggleFolder: (folder: string) => void;
+  onNewInFolder: (folder: string) => void;
+  onAddFolder: () => void;
+  onRemoveFolder: (folder: string) => void;
+  colorPickerFor: string | null;
+  setColorPickerFor: (f: string | null) => void;
+  onSetFolderColor: (f: string, color: string | null) => void;
+  soundBtn: ReactNode;
+  usageBtn: ReactNode;
+}) {
+  const activeIds = new Set(activeList.map((a) => a.sessionId));
+
+  return (
+    <aside className="sidebar">
+      <div className="sb-head">
+        <span className="brand-logo-click" onClick={onToggle} title="Toggle sidebar">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brand-logo" src="/claudia.webp" alt="claudia" />
+          {badgeCount > 0 ? <span className="brand-badge">{badgeCount}</span> : null}
+        </span>
+        <div className="spacer" />
+        <button className="icon-btn" onClick={onToggle} title="Collapse sidebar">
+          <FontAwesomeIcon icon={faChevronRight} flip="horizontal" />
+        </button>
+      </div>
+
+      <button className="btn accent sb-new" onClick={onNewSession}>
+        <FontAwesomeIcon icon={faPlus} /> New session
+      </button>
+
+      <div className="sb-scroll">
+        {activeList.length > 0 && (
+          <div className="sb-section">
+            <div className="sb-section-head">
+              <span>In focus</span>
+              <span className="sb-count">{activeList.length}</span>
+            </div>
+            {activeList.map((a) => (
+              <SbRow
+                key={a.sessionId}
+                title={titles[a.sessionId] ?? a.title}
+                sub={shortName(a.folder)}
+                state={liveIds.has(a.sessionId) ? "doing" : "waiting"}
+                colorClass={tintClass(a.folder)}
+                selected={a.sessionId === currentSessionId}
+                href={hrefFor(a.folder, a.sessionId)}
+                onOpen={() => onOpenSession(a.folder, a.sessionId)}
+                onPrefetch={() => onPrefetch(a.folder, a.sessionId)}
+                trailing="done"
+                onTrailing={() => onMarkDone(a.sessionId)}
+                onRename={(t) => onRenameSession(a.sessionId, t)}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="sb-section">
+          <div className="sb-section-head">
+            <span>Folders</span>
+            <button className="icon-btn sb-add" title="Add folder" onClick={onAddFolder}>
+              <FontAwesomeIcon icon={faFolderPlus} />
+            </button>
+          </div>
+          {folders.length === 0 ? (
+            <div className="sb-empty">No folders yet.</div>
+          ) : (
+            folders.map((f) => {
+              const isExp = expanded.has(f);
+              const list = sessionsByFolder[f];
+              const folderLive = activeList.some(
+                (a) => a.folder === f && liveIds.has(a.sessionId),
+              );
+              return (
+                <div className="sb-folder" key={f}>
+                  <div
+                    className={`sb-folder-row${tintClass(f) ? ` ${tintClass(f)}` : ""}`}
+                    onClick={() => onToggleFolder(f)}
+                    title={f}
+                  >
+                    <span className="sb-chev">
+                      <FontAwesomeIcon icon={isExp ? faChevronDown : faChevronRight} />
+                    </span>
+                    <span className="sb-folder-ic">
+                      <FontAwesomeIcon icon={faFolder} />
+                    </span>
+                    <span className="sb-folder-name">{shortName(f)}</span>
+                    {folderLive && <span className="sb-folder-live" aria-hidden />}
+                    <div
+                      className="folder-color-pick"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <button
+                        className={`color-dot${
+                          folderMeta[f]?.color
+                            ? ` folder-color-${folderMeta[f].color}`
+                            : " color-dot-none"
+                        }`}
+                        title="Folder color"
+                        aria-label="Choose folder color"
+                        onClick={() =>
+                          setColorPickerFor(colorPickerFor === f ? null : f)
+                        }
+                      />
+                      {colorPickerFor === f && (
+                        <>
+                          <div
+                            className="color-popup-backdrop"
+                            onClick={() => setColorPickerFor(null)}
+                          />
+                          <div className="color-popup">
+                            {FOLDER_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                className={`swatch folder-color-${c}${
+                                  folderMeta[f]?.color === c ? " on" : ""
+                                }`}
+                                title={c}
+                                aria-label={`Set ${c}`}
+                                onClick={() => {
+                                  onSetFolderColor(f, c);
+                                  setColorPickerFor(null);
+                                }}
+                              />
+                            ))}
+                            <button
+                              className={`swatch swatch-none${
+                                folderMeta[f]?.color ? "" : " on"
+                              }`}
+                              title="No color"
+                              aria-label="Clear color"
+                              onClick={() => {
+                                onSetFolderColor(f, null);
+                                setColorPickerFor(null);
+                              }}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      className="icon-btn sb-folder-act"
+                      title="New session here"
+                      aria-label="New session"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewInFolder(f);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faPlus} />
+                    </button>
+                    <button
+                      className="icon-btn sb-folder-act sb-del"
+                      title="Remove folder"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveFolder(f);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faXmark} />
+                    </button>
+                  </div>
+                  {isExp && (
+                    <div className="sb-folder-sessions">
+                      {list === undefined ? (
+                        <div className="sb-loading">Loading…</div>
+                      ) : list.length === 0 ? (
+                        <div className="sb-empty">No sessions yet.</div>
+                      ) : (
+                        list.map((s) => {
+                          const live = liveIds.has(s.sessionId);
+                          const state = live
+                            ? "doing"
+                            : activeIds.has(s.sessionId)
+                              ? "waiting"
+                              : "done";
+                          const title = titles[s.sessionId] ?? s.title;
+                          return (
+                            <SbRow
+                              key={s.sessionId}
+                              title={title}
+                              sub={
+                                state === "done"
+                                  ? fmtAgo(s.modified)
+                                  : state === "doing"
+                                    ? "running"
+                                    : "waiting"
+                              }
+                              state={state}
+                              colorClass={tintClass(f)}
+                              selected={s.sessionId === currentSessionId}
+                              href={hrefFor(f, s.sessionId)}
+                              onOpen={() => onOpenSession(f, s.sessionId)}
+                              onPrefetch={() => onPrefetch(f, s.sessionId)}
+                              trailing="delete"
+                              onTrailing={() => onRemoveSession(f, s.sessionId)}
+                              onToggleState={() =>
+                                onToggleActive(s.sessionId, f, title)
+                              }
+                              onRename={(t) => onRenameSession(s.sessionId, t)}
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div className="sb-foot">
+        {soundBtn}
+        {usageBtn}
+      </div>
+    </aside>
+  );
+}
+
 export default function ClaudeManager() {
-  const [view, setView] = useState<View>("folders");
+  const [view, setView] = useState<View>("home");
   const [folders, setFolders] = useState<FolderPath[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Sidebar open/collapsed, persisted so it survives reloads (read in the
+  // initializer so the first paint is correct, like model/muted below).
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return localStorage.getItem("claudia-sidebar") !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  // Which folders are expanded in the sidebar tree, and the (lazily fetched)
+  // session list per folder. Independent of `folder` (the open chat's folder).
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [sessionsByFolder, setSessionsByFolder] = useState<
+    Record<string, SessionSummary[] | undefined>
+  >({});
   const [gitOpen, setGitOpen] = useState(false);
   const [live, setLive] = useState<LiveSession[]>([]);
   const [active, setActive] = useState<ActiveMap>({});
@@ -415,19 +722,29 @@ export default function ClaudeManager() {
       return false;
     }
   });
-  // Logo hover popover listing the in-focus sessions and their state.
-  const [logoPopOpen, setLogoPopOpen] = useState(false);
+  // The tab strip's "+" opens a quick chooser over watched folders; "Browse…"
+  // there escalates to the full filesystem picker (newTabPicker).
+  const [newSessionPicker, setNewSessionPicker] = useState(false);
+  const [newTabPicker, setNewTabPicker] = useState(false);
 
   const [folder, setFolder] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [events, setEvents] = useState<ClaudeEvent[]>([]);
   const [streaming, setStreaming] = useState(false);
+  // Epoch millis the current turn began (server-sourced via snapshot, or set
+  // optimistically on send). Drives the "answering for Xs" timer; null when idle.
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [queue, setQueue] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // The thin chat header auto-hides while you scroll the transcript down and
+  // slides back when you scroll up (or reach the top).
+  const [headHidden, setHeadHidden] = useState(false);
+  // The composer lives in a floating circle that expands into the input on
+  // demand, so the transcript gets the full height while you read.
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const jobIdRef = useRef<string | null>(null);
@@ -439,13 +756,27 @@ export default function ClaudeManager() {
   // land in the wrong chat, or in a fresh "new session".
   const streamGenRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // The floating composer popover + its circle, for click-away detection.
+  const composerPopRef = useRef<HTMLDivElement | null>(null);
+  const fabRef = useRef<HTMLButtonElement | null>(null);
+  // Hover-intent timer so a quick mouse pass over the circle doesn't open it.
+  const fabHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The chat scroll viewport, watched to drive the header auto-hide.
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastChatTop = useRef(0);
+  // Idle timer: hides the header a few seconds after the last interaction.
+  const headHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Finish-sound plumbing. prevLiveRef holds last tick's running set so the poll
   // can spot sessions that just stopped; seededLiveRef skips the very first tick
   // (so a refresh mid-run doesn't false-fire). The audio element is created
   // lazily. view/session/muted are mirrored into refs because the poll effect
   // runs once (empty deps) and would otherwise read stale values.
-  const prevLiveRef = useRef<Set<string>>(new Set());
+  const prevLiveRef = useRef<Map<string, string>>(new Map());
   const seededLiveRef = useRef(false);
+  // Server boot id from the last poll. The first tick records it; a later tick
+  // seeing a different id means the service restarted under us, so the tab is
+  // running stale JS against a rebuilt server — reload to pick up fresh chunks.
+  const bootIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const viewRef = useRef(view);
   const sessionIdRef = useRef(sessionId);
@@ -453,9 +784,12 @@ export default function ClaudeManager() {
   viewRef.current = view;
   sessionIdRef.current = sessionId;
   mutedRef.current = muted;
-  // Delayed-close timer so moving the cursor from the logo into the popover
-  // (across the small gap) doesn't dismiss it.
-  const logoPopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Current chat's display name, mirrored for the finish notification (applyMsg
+  // runs from a stable callback and would otherwise read a stale title).
+  const chatTitleRef = useRef("");
+  chatTitleRef.current = sessionId
+    ? (titles[sessionId] ?? titleFromEvents(events) ?? "Session")
+    : "New session";
   // Bumped on every optimistic active/title edit. A meta poll that started
   // before the edit captures the old value; comparing generations lets us drop
   // its stale result instead of clobbering the optimistic update.
@@ -469,7 +803,7 @@ export default function ClaudeManager() {
   // Previous nav target — lets the mirror effect push (real navigation) vs
   // replace (in-place change, e.g. a new session getting its assigned id).
   const lastNav = useRef<{ view: View; folder: string | null }>({
-    view: "folders",
+    view: "home",
     folder: null,
   });
 
@@ -477,10 +811,138 @@ export default function ClaudeManager() {
     setFolders(await getFolders());
   }, []);
 
-  // Auto-focus the composer whenever a chat opens (new or existing session).
+  // Persisted sidebar toggle.
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("claudia-sidebar", next ? "open" : "closed");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  // Mirror of sessionsByFolder so the stable callbacks below can check "is this
+  // folder already loaded?" without taking the map as a dependency (which would
+  // churn their identity on every list update).
+  const sessionsByFolderRef = useRef(sessionsByFolder);
+  sessionsByFolderRef.current = sessionsByFolder;
+
+  // Fetch a folder's session list into the tree: paint the cache instantly, then
+  // revalidate over the network. Skips the commit when nothing changed.
+  const loadFolderSessions = useCallback(async (f: string) => {
+    const cached = readSessionListCache(f);
+    if (cached) setSessionsByFolder((m) => ({ ...m, [f]: cached }));
+    try {
+      const fresh = await getSessions(f);
+      setSessionsByFolder((m) => {
+        const prev = m[f];
+        if (prev && sameSessions(prev, fresh)) return m;
+        return { ...m, [f]: fresh };
+      });
+      writeSessionListCache(f, fresh);
+    } catch {
+      /* keep whatever cache we painted */
+    }
+  }, []);
+
+  // Expand a folder in the tree (and load it if we haven't yet). Idempotent.
+  const expandFolder = useCallback(
+    (f: string) => {
+      setExpanded((s) => (s.has(f) ? s : new Set(s).add(f)));
+      if (!sessionsByFolderRef.current[f]) void loadFolderSessions(f);
+    },
+    [loadFolderSessions],
+  );
+
+  // Sidebar folder header click: toggle expansion, lazily loading on first open.
+  const toggleFolder = useCallback(
+    (f: string) => {
+      setExpanded((s) => {
+        const next = new Set(s);
+        if (next.has(f)) {
+          next.delete(f);
+        } else {
+          next.add(f);
+          if (!sessionsByFolderRef.current[f]) void loadFolderSessions(f);
+        }
+        return next;
+      });
+    },
+    [loadFolderSessions],
+  );
+
+  // Focus the input the moment the composer opens, so you can type instantly.
   useEffect(() => {
-    if (view === "chat") inputRef.current?.focus();
-  }, [view, sessionId]);
+    if (composerOpen) inputRef.current?.focus();
+  }, [composerOpen]);
+
+  // Click anywhere outside the composer popover (or its circle) collapses it.
+  // Uses pointerdown on the document so it doesn't block transcript scrolling.
+  useEffect(() => {
+    if (!composerOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (composerPopRef.current?.contains(t) || fabRef.current?.contains(t)) return;
+      setComposerOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [composerOpen]);
+
+  // Surface errors by popping the composer open (that's where they render).
+  useEffect(() => {
+    if (error) setComposerOpen(true);
+  }, [error]);
+
+  // Arm the idle timer that hides the header after a short pause.
+  const HEAD_IDLE_MS = 1500;
+  const armHeadHide = useCallback(() => {
+    if (headHideTimer.current) clearTimeout(headHideTimer.current);
+    headHideTimer.current = setTimeout(() => setHeadHidden(true), HEAD_IDLE_MS);
+  }, []);
+  // Reveal, then re-arm the idle hide (scroll / open).
+  const revealHead = useCallback(() => {
+    setHeadHidden(false);
+    armHeadHide();
+  }, [armHeadHide]);
+  // Reveal and keep shown — no idle hide while the pointer is over the top edge
+  // or the header itself.
+  const holdHead = useCallback(() => {
+    setHeadHidden(false);
+    if (headHideTimer.current) clearTimeout(headHideTimer.current);
+  }, []);
+
+  // Auto-hide the chat header: hide on downward scroll or after an idle period;
+  // reveal on upward scroll, near the top, or when a chat opens. Re-attaches per
+  // chat (the viewport remounts on view swap).
+  useEffect(() => {
+    revealHead();
+    const el = chatScrollRef.current;
+    if (!el) {
+      return () => {
+        if (headHideTimer.current) clearTimeout(headHideTimer.current);
+      };
+    }
+    lastChatTop.current = el.scrollTop;
+    const onScroll = () => {
+      const top = el.scrollTop;
+      const prev = lastChatTop.current;
+      lastChatTop.current = top;
+      if (top < 24) revealHead();
+      else if (top > prev + 6) {
+        if (headHideTimer.current) clearTimeout(headHideTimer.current);
+        setHeadHidden(true);
+      } else if (top < prev - 6) revealHead();
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (headHideTimer.current) clearTimeout(headHideTimer.current);
+    };
+  }, [view, sessionId, loading, revealHead]);
 
   // Reflect what's open in the tab title.
   useEffect(() => {
@@ -490,8 +952,6 @@ export default function ClaudeManager() {
         ? (titleFromEvents(events) ?? "Session")
         : "New session";
       title = `${shortName(folder)} — ${name}`;
-    } else if (view === "sessions" && folder) {
-      title = `${shortName(folder)} — Sessions`;
     }
     document.title = title;
   }, [view, folder, sessionId, events]);
@@ -509,8 +969,10 @@ export default function ClaudeManager() {
       return;
     }
     const sp = new URLSearchParams();
-    if (folder && (view === "sessions" || view === "chat")) sp.set("folder", folder);
-    if (view === "chat") sp.set("session", sessionId ?? "new");
+    if (view === "chat" && folder) {
+      sp.set("folder", folder);
+      sp.set("session", sessionId ?? "new");
+    }
     const qs = sp.toString();
     const target = qs ? `/?${qs}` : "/";
     if (target === window.location.pathname + window.location.search) return;
@@ -536,6 +998,63 @@ export default function ClaudeManager() {
     }
   }, []);
 
+  // Ask for OS-notification permission. Browsers reject requestPermission()
+  // outside a user gesture and prompting on load is hostile, so callers only
+  // invoke this from a real interaction (first click/keypress, or unmuting).
+  // No-op once the user has already allowed or denied.
+  const ensureNotifyPermission = useCallback(() => {
+    try {
+      if (
+        typeof Notification !== "undefined" &&
+        Notification.permission === "default"
+      ) {
+        void Notification.requestPermission().catch(() => {});
+      }
+    } catch {
+      /* notifications unavailable */
+    }
+  }, []);
+
+  // Pop an OS banner that a turn finished — but only when the tab is hidden. If
+  // it's on screen the chime and the live UI already tell you, so a banner would
+  // just be noise. Gated on the same mute toggle as the sound. Clicking it
+  // brings the window forward.
+  const showFinishNotification = useCallback((body: string) => {
+    try {
+      if (mutedRef.current) return;
+      if (typeof Notification === "undefined") return;
+      if (Notification.permission !== "granted") return;
+      if (document.visibilityState === "visible") return;
+      const n = new Notification("claudia — finished", {
+        body,
+        tag: "claudia-finish", // collapse multiple finishes into one banner
+      });
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch {
+      /* notifications unavailable */
+    }
+  }, []);
+
+  // Request notification permission on the first user gesture, covering both
+  // people who start a turn here and people who only watch. Asks once; unmuting
+  // later (toggleMuted) re-asks if it was skipped because the chime was muted.
+  useEffect(() => {
+    const ask = () => {
+      if (!mutedRef.current) ensureNotifyPermission();
+      window.removeEventListener("pointerdown", ask);
+      window.removeEventListener("keydown", ask);
+    };
+    window.addEventListener("pointerdown", ask);
+    window.addEventListener("keydown", ask);
+    return () => {
+      window.removeEventListener("pointerdown", ask);
+      window.removeEventListener("keydown", ask);
+    };
+  }, [ensureNotifyPermission]);
+
   // Poll the live ("doing") set and the active set on every view — not just the
   // folder/session lists — so the logo's "in focus" badge is correct on the chat
   // page and immediately after a refresh into any page, not only once you visit
@@ -551,23 +1070,26 @@ export default function ClaudeManager() {
             // First tick after mount only establishes the baseline.
             seededLiveRef.current = true;
           } else {
-            // Sessions present last tick but gone now just finished. Play the
-            // chime unless you're already watching that exact session focused —
-            // you'd see it finish, so the sound would be noise.
-            const finished = [...prevLiveRef.current].filter(
+            // Sessions present last tick but gone now just finished. Skip the
+            // one you're watching focused — its finish is announced precisely by
+            // the SSE "done" frame, so handling it here too would double up.
+            const finished = [...prevLiveRef.current.keys()].filter(
               (id) => !nextIds.has(id),
             );
-            const worthSound = finished.some(
+            const background = finished.filter(
               (id) =>
-                !(
-                  viewRef.current === "chat" &&
-                  sessionIdRef.current === id &&
-                  document.visibilityState === "visible"
-                ),
+                !(viewRef.current === "chat" && sessionIdRef.current === id),
             );
-            if (worthSound && !mutedRef.current) playFinishSound();
+            if (background.length && !mutedRef.current) playFinishSound();
+            if (background.length === 1) {
+              showFinishNotification(
+                prevLiveRef.current.get(background[0]) ?? "A session finished",
+              );
+            } else if (background.length > 1) {
+              showFinishNotification(`${background.length} sessions finished`);
+            }
           }
-          prevLiveRef.current = nextIds;
+          prevLiveRef.current = new Map(l.map((p) => [p.sessionId, p.title]));
           setLive((prev) =>
             sameIds(
               prev.map((p) => p.sessionId),
@@ -588,6 +1110,17 @@ export default function ClaudeManager() {
           setTitles((prev) => (sameTitles(prev, m.titles) ? prev : m.titles));
         })
         .catch(() => {});
+      // Reload if the server restarted: the first reachable tick records the
+      // boot id, a later differing id means we're a stale tab on a rebuilt
+      // server. Failed fetches (the rebuild's downtime) just skip — we only act
+      // on a successful response carrying a new id.
+      getVersion()
+        .then((boot) => {
+          if (!alive) return;
+          if (bootIdRef.current === null) bootIdRef.current = boot;
+          else if (bootIdRef.current !== boot) window.location.reload();
+        })
+        .catch(() => {});
     };
     tick();
     const id = setInterval(tick, 4000);
@@ -595,7 +1128,7 @@ export default function ClaudeManager() {
       alive = false;
       clearInterval(id);
     };
-  }, [playFinishSound]);
+  }, [playFinishSound, showFinishNotification]);
 
   // ---- usage: fresh on load, then auto-refresh every 10 minutes ----
   const refreshUsage = useCallback(async (force: boolean) => {
@@ -617,8 +1150,29 @@ export default function ClaudeManager() {
   }, [refreshUsage]);
 
   // Fold the event stream once; the renderer draws it and the header chip reads
-  // the task list out of it.
-  const items = useMemo(() => foldEvents(events), [events]);
+  // the task list out of it. Reconcile against the previous fold: an item whose
+  // key+sig is unchanged keeps its exact object identity, so the memoized row
+  // skips re-rendering even when the events array is swapped wholesale (a reset
+  // or live snapshot). This is what turns a "reload" into an invisible merge.
+  const prevItemsRef = useRef<{ sid: string | null; items: DisplayItem[] }>({
+    sid: null,
+    items: [],
+  });
+  const items = useMemo(() => {
+    const next = foldEvents(events);
+    // Only reuse objects from the SAME session — keys are per-session ordinals,
+    // so reusing across a session switch could bind a row to the wrong content.
+    const byKey = new Map<string, DisplayItem>();
+    if (prevItemsRef.current.sid === sessionId) {
+      for (const it of prevItemsRef.current.items) if (it.key) byKey.set(it.key, it);
+    }
+    const reconciled = next.map((it) => {
+      const prev = it.key ? byKey.get(it.key) : undefined;
+      return prev && prev.sig === it.sig ? prev : it;
+    });
+    prevItemsRef.current = { sid: sessionId, items: reconciled };
+    return reconciled;
+  }, [events, sessionId]);
   // Context-window occupancy for this session, derived from the latest usage.
   const ctx = useMemo(() => contextOf(events, model), [events, model]);
   const tasks =
@@ -644,6 +1198,22 @@ export default function ClaudeManager() {
     activeOrderRef.current = order;
     return order.map((sessionId) => ({ sessionId, ...active[sessionId] }));
   }, [active]);
+
+  // Warm the hot in-memory cache from IDB for every listed session, so opening
+  // any of them is a synchronous Stage-0 hit (no skeleton). IDB-only — cheap, no
+  // network; the network top-up happens on hover (prefetchSession) or open.
+  useEffect(() => {
+    const listed = Object.values(sessionsByFolder)
+      .flat()
+      .filter((s): s is SessionSummary => !!s);
+    const ids = [
+      ...activeList.map((a) => a.sessionId),
+      ...listed.map((s) => s.sessionId),
+    ];
+    for (const id of ids.slice(0, 40)) {
+      if (!peekCachedTranscript(id)) void getCachedTranscript(id);
+    }
+  }, [activeList, sessionsByFolder]);
 
   // ---- chat transport ----
   // Abort the current stream and bump the generation so any frames still in
@@ -671,6 +1241,7 @@ export default function ClaudeManager() {
         if (msg.sessionId) setSessionId(msg.sessionId);
         setLoading(false);
         setStreaming(msg.status === "running");
+        setTurnStartedAt(msg.status === "running" ? msg.startedAt : null);
         if (msg.status === "error" && msg.error) setError(msg.error);
         break;
       case "event":
@@ -684,40 +1255,68 @@ export default function ClaudeManager() {
         break;
       case "done":
         setStreaming(false);
+        setTurnStartedAt(null);
+        // Chime for the session you're watching. The live poll deliberately
+        // skips the focused session (see below), so this is its only sound; it
+        // fires the moment the turn ends rather than up to a poll-tick later.
+        if (!mutedRef.current) playFinishSound();
+        // And a banner if you've tabbed away from it.
+        showFinishNotification(chatTitleRef.current || "Your turn is ready");
         break;
     }
-  }, []);
+  }, [playFinishSound, showFinishNotification]);
 
   // Reconnect to a running job for this session, else load its transcript.
   const attachOrLoad = useCallback(
-    async (f: string, id: string) => {
+    async (f: string, id: string, seed?: CachedTranscript | null) => {
       // Take ownership of the chat view: abort any prior stream and claim a
       // fresh generation. Every state write below is gated on it still being
       // current, so a rapid open A → open B can't paint A's transcript into B.
       invalidateStream();
       const gen = streamGenRef.current;
       setError(null);
-      // Paint from cache first — before any network — so a cached session
-      // appears instantly. The running-check and delta fetch run behind it.
-      const cached = await getCachedTranscript(id);
+      // The caller may pass a synchronous seed (peekCachedTranscript) it already
+      // painted — in that case skip the async IDB read and re-paint entirely.
+      // Otherwise read IDB and paint from it before any network.
+      const cached = seed ?? (await getCachedTranscript(id));
       if (gen !== streamGenRef.current) return;
-      if (cached) {
-        setEvents(cached.events);
-        setLoading(false);
-      } else {
-        setLoading(true);
+      if (!seed) {
+        if (cached) {
+          setEvents(cached.events);
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
       }
       const ac = new AbortController();
       abortRef.current = ac;
       try {
+        // Fire the delta fetch concurrently with the live-check instead of
+        // waiting to learn it's not live first — for the common (not-live) case
+        // this removes a whole round-trip from the time-to-settle. If the session
+        // turns out to be live, the snapshot wins and this result is discarded.
+        const deltaPromise = loadSessionDelta(
+          f,
+          id,
+          cached?.size ?? 0,
+          cached?.modified ?? 0,
+        ).catch(() => null);
         const running = await subscribeChat(id, (m) => applyMsg(gen, m), ac.signal);
         if (gen !== streamGenRef.current) return;
         if (running) {
           setStreaming(true); // snapshot replaces events with live state
         } else {
+          // No live job for this session: it's just a saved transcript. Clear
+          // any streaming flag inherited from the chat we navigated away from,
+          // otherwise the new chat shows phantom "..." working dots.
+          setStreaming(false);
           if (abortRef.current === ac) abortRef.current = null;
-          const res = await loadSessionDelta(f, id, cached?.size ?? 0);
+          const res = await deltaPromise;
           if (gen !== streamGenRef.current) return;
+          if (!res) {
+            setLoading(false); // delta failed; keep whatever cache we painted
+            return;
+          }
           const events =
             !cached || res.reset
               ? res.events
@@ -744,6 +1343,25 @@ export default function ClaudeManager() {
     [applyMsg, invalidateStream],
   );
 
+  // Watchdog for a stuck "streaming" state. `streaming` is normally cleared by
+  // the SSE "done" frame, but a stalled/half-open connection (proxy buffering,
+  // a dropped socket) can leave the reader hanging with no terminal frame — so
+  // the chat shows "Claude is answering" forever while nothing arrives. The 4s
+  // live poll is authoritative about what's actually running: if we believe a
+  // session is streaming but the server reports no running job for it, the turn
+  // really ended. We give the poll a couple of cycles to catch a just-started
+  // turn (it can lag the stream by up to 4s), then reconcile: drop the flag and
+  // reload the saved transcript so the final answer shows.
+  useEffect(() => {
+    if (!streaming || !sessionId || !folder) return;
+    if (liveIds.has(sessionId)) return; // server confirms it's running
+    const t = setTimeout(() => {
+      setStreaming(false);
+      void attachOrLoad(folder, sessionId);
+    }, 9000);
+    return () => clearTimeout(t);
+  }, [streaming, sessionId, folder, liveIds, attachOrLoad]);
+
   // Restore view/folder/session from a URL query string. Used on load and on
   // browser back/forward (popstate). Handles the home case so navigating back
   // to "/" resets out of a deeper view.
@@ -758,34 +1376,37 @@ export default function ClaudeManager() {
         setEvents([]);
         setStreaming(false);
         setFolder(null);
-        setView("folders");
+        setView("home");
         return;
       }
-      setFolder(f);
       if (sess === "new") {
+        setFolder(f);
         setSessionId(null);
         setEvents([]);
         setStreaming(false);
         setView("chat");
+        setComposerOpen(true);
+        expandFolder(f);
       } else if (sess) {
+        setFolder(f);
         setSessionId(sess);
+        const seed = peekCachedTranscript(sess);
+        setEvents(seed ? seed.events : []);
+        setLoading(!seed);
         setView("chat");
-        void attachOrLoad(f, sess);
+        setComposerOpen(false);
+        expandFolder(f);
+        void attachOrLoad(f, sess, seed);
       } else {
+        // Folder-only URL: nothing open in main, just reveal the folder's
+        // sessions in the sidebar tree.
         setSessionId(null);
-        setView("sessions");
-        const cached = readSessionListCache(f);
-        if (cached) setSessions(cached);
-        else setLoading(true);
-        getSessions(f)
-          .then((fresh) => {
-            setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
-            writeSessionListCache(f, fresh);
-          })
-          .finally(() => setLoading(false));
+        setFolder(null);
+        setView("home");
+        expandFolder(f);
       }
     },
-    [attachOrLoad, invalidateStream],
+    [attachOrLoad, invalidateStream, expandFolder],
   );
 
   // On load: warm caches, restore from the URL, and listen for back/forward.
@@ -818,6 +1439,18 @@ export default function ClaudeManager() {
     setFolders(await apiRemoveFolder(path));
   };
 
+  // Tab-strip "+": pick a folder (adding it to the watched set if new), then
+  // open a fresh session in it. apiAddFolder is idempotent for known folders.
+  const startNewSessionInFolder = async (path: string) => {
+    setNewTabPicker(false);
+    try {
+      setFolders(await apiAddFolder(path));
+    } catch {
+      /* already watched / add failed — open the session anyway */
+    }
+    newSession(path);
+  };
+
   // Set a folder's theme color (or clear it). Optimistic, then confirm.
   const onSetFolderColor = async (f: string, color: string | null) => {
     setFolderMeta((m) => {
@@ -837,36 +1470,87 @@ export default function ClaudeManager() {
   const tintClass = (f: string | null | undefined): string =>
     f && folderMeta[f] ? `folder-tint folder-color-${folderMeta[f].color}` : "";
 
-  const openFolder = async (f: string) => {
-    setFolder(f);
-    setView("sessions");
-    // Render the last known list instantly, then revalidate in the background.
-    const cached = readSessionListCache(f);
-    if (cached) {
-      setSessions(cached);
-      setLoading(false);
-    } else {
-      setSessions([]);
-      setLoading(true);
-    }
-    try {
-      const fresh = await getSessions(f);
-      setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
-      writeSessionListCache(f, fresh);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Reveal a folder in the sidebar tree, opening the sidebar if collapsed. Used
+  // by the chat header's project crumb to surface the open session's siblings.
+  const revealFolder = useCallback(
+    (f: string) => {
+      setSidebarOpen(true);
+      try {
+        localStorage.setItem("claudia-sidebar", "open");
+      } catch {
+        /* ignore */
+      }
+      expandFolder(f);
+    },
+    [expandFolder],
+  );
 
   // ---- sessions ----
+  // Warm a session's transcript into the cache before it's opened, so the open
+  // is a synchronous Stage-0 hit (no skeleton, no reconcile flash). Called on
+  // row hover and, in bulk, for listed sessions. Cheap and idempotent: dedupes
+  // in-flight fetches, and skips entirely once the session is hot in memory.
+  const prefetchingRef = useRef<Set<string>>(new Set());
+  const prefetchSession = useCallback((f: string, id: string) => {
+    if (peekCachedTranscript(id) || prefetchingRef.current.has(id)) return;
+    prefetchingRef.current.add(id);
+    void (async () => {
+      try {
+        // Pull any prior-page-load entry from IDB into the hot mem layer first;
+        // that alone already makes the next open synchronous.
+        const cached = await getCachedTranscript(id);
+        // Then top it up over the network so the eventual open's reconcile is a
+        // no-op (the cache already holds the newest events).
+        const res = await loadSessionDelta(
+          f,
+          id,
+          cached?.size ?? 0,
+          cached?.modified ?? 0,
+        );
+        const events =
+          !cached || res.reset
+            ? res.events
+            : res.events.length
+              ? [...cached.events, ...res.events]
+              : cached.events;
+        await putCachedTranscript({
+          sessionId: id,
+          events,
+          size: res.size,
+          modified: res.modified,
+        });
+      } catch {
+        /* best-effort warming — the open path remains the source of truth */
+      } finally {
+        prefetchingRef.current.delete(id);
+      }
+    })();
+  }, []);
+
+  // On a narrow screen the sidebar is an overlay; collapse it after a pick so the
+  // chat is visible. Not persisted — desktop keeps its remembered open state.
+  const closeSidebarOnMobile = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 760) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
   const openSession = async (f: string, id: string) => {
     setFolder(f);
     setSessionId(id);
-    setEvents([]);
+    // Synchronous cache hit → paint the transcript in this same render so the
+    // chat opens already at the bottom, no empty/loading flash. On a miss show
+    // the skeleton (never the "no messages yet" empty state) while we fetch.
+    const seed = peekCachedTranscript(id);
+    setEvents(seed ? seed.events : []);
+    setLoading(!seed);
     setQueue([]);
     setError(null);
     setView("chat");
-    await attachOrLoad(f, id);
+    setComposerOpen(false); // existing session opens in reading mode
+    expandFolder(f);
+    closeSidebarOnMobile();
+    await attachOrLoad(f, id, seed);
   };
 
   const newSession = (f: string) => {
@@ -879,6 +1563,9 @@ export default function ClaudeManager() {
     setError(null);
     setStreaming(false);
     setView("chat");
+    setComposerOpen(true); // a fresh session opens ready to type
+    expandFolder(f);
+    closeSidebarOnMobile();
   };
 
   // Bring a session to focus (done → active). Optimistic, then confirm.
@@ -937,8 +1624,8 @@ export default function ClaudeManager() {
       )
     )
       return;
-    const next = sessions.filter((s) => s.sessionId !== id);
-    setSessions(next);
+    const next = (sessionsByFolder[f] ?? []).filter((s) => s.sessionId !== id);
+    setSessionsByFolder((m) => ({ ...m, [f]: next }));
     metaGenRef.current++;
     setActive((m) => {
       const n = { ...m };
@@ -957,9 +1644,7 @@ export default function ClaudeManager() {
           e instanceof Error ? e.message : String(e)
         }`,
       );
-      const fresh = await getSessions(f);
-      setSessions((prev) => (sameSessions(prev, fresh) ? prev : fresh));
-      writeSessionListCache(f, fresh);
+      void loadFolderSessions(f);
     }
   };
 
@@ -968,6 +1653,7 @@ export default function ClaudeManager() {
   const detach = useCallback(() => {
     invalidateStream();
     setStreaming(false);
+    setTurnStartedAt(null);
   }, [invalidateStream]);
 
   // Explicitly kill the running job (Stop button / Esc), clear the queue, detach.
@@ -989,30 +1675,34 @@ export default function ClaudeManager() {
     }
   };
 
-  // Toggle (and persist) the finish chime mute.
+  // Toggle (and persist) the finish chime + notification mute. Turning alerts
+  // back on is a good moment to (re)request notification permission.
   const toggleMuted = () => {
-    setMuted((m) => {
-      const next = !m;
-      try {
-        localStorage.setItem("claudia-sound-muted", String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    const next = !muted;
+    if (!next) ensureNotifyPermission();
+    setMuted(next);
+    try {
+      localStorage.setItem("claudia-sound-muted", String(next));
+    } catch {
+      /* ignore */
+    }
   };
 
   // Esc stops the current generation, like the Stop button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && streaming) {
+      if (e.key !== "Escape") return;
+      if (streaming) {
         e.preventDefault();
         stopStream();
+      } else if (composerOpen) {
+        e.preventDefault();
+        setComposerOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [streaming, stopStream]);
+  }, [streaming, stopStream, composerOpen]);
 
   // Send arbitrary text as a turn (used by the composer and by question answers).
   const sendText = async (text: string) => {
@@ -1027,6 +1717,7 @@ export default function ClaudeManager() {
     setEvents((prev) => [...prev, userEvent]); // optimistic; snapshot reconciles
     setError(null);
     setStreaming(true);
+    setTurnStartedAt(Date.now()); // optimistic; the snapshot's startedAt reconciles
 
     // Claim a fresh generation for this turn so any lingering frames from a
     // prior stream are ignored, and so a navigation mid-turn stops us flipping
@@ -1056,6 +1747,8 @@ export default function ClaudeManager() {
     setInput("");
     if (streaming) setQueue((q) => [...q, t]);
     else void sendText(t);
+    // Collapse back to the circle so the reply streams into full height.
+    setComposerOpen(false);
   };
 
   const cancelQueued = (index: number) =>
@@ -1077,80 +1770,9 @@ export default function ClaudeManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming, queue]);
 
-  // ---- views ----
-  const goHome = () => {
-    detach();
-    setView("folders");
-  };
   // Badge counts the in-focus sessions (doing + waiting) so the logo carries a
-  // running "how many sessions need me" number across every view.
+  // running "how many sessions need me" number.
   const homeBadgeCount = activeList.length;
-  // In-focus sessions for the hover popover, doing (live) sorted before waiting.
-  const logoPopList = [...activeList].sort(
-    (a, b) =>
-      Number(liveIds.has(b.sessionId)) - Number(liveIds.has(a.sessionId)),
-  );
-  const openLogoPop = () => {
-    if (logoPopTimer.current) clearTimeout(logoPopTimer.current);
-    setLogoPopOpen(true);
-  };
-  const closeLogoPopSoon = () => {
-    if (logoPopTimer.current) clearTimeout(logoPopTimer.current);
-    logoPopTimer.current = setTimeout(() => setLogoPopOpen(false), 150);
-  };
-  const homeLogo = (
-    <span
-      className="brand-logo-wrap"
-      onMouseEnter={openLogoPop}
-      onMouseLeave={closeLogoPopSoon}
-    >
-      <span className="brand-logo-click" onClick={goHome} title="Home">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="brand-logo" src="/claudia.webp" alt="claudia" />
-        {homeBadgeCount > 0 ? (
-          <span className="brand-badge">{homeBadgeCount}</span>
-        ) : null}
-      </span>
-      {logoPopOpen && (
-        <div
-          className="logo-pop"
-          onMouseEnter={openLogoPop}
-          onMouseLeave={closeLogoPopSoon}
-        >
-          <div className="logo-pop-head">In focus</div>
-          <div className="logo-pop-body">
-            {logoPopList.length === 0 ? (
-              <div className="logo-pop-empty">No sessions in focus</div>
-            ) : (
-              logoPopList.map((a) => {
-                const doing = liveIds.has(a.sessionId);
-                return (
-                  <button
-                    key={a.sessionId}
-                    className="logo-pop-item"
-                    onClick={() => {
-                      setLogoPopOpen(false);
-                      void openSession(a.folder, a.sessionId);
-                    }}
-                    title={doing ? "Doing — running now" : "Waiting — your turn"}
-                  >
-                    <FontAwesomeIcon
-                      icon={doing ? faCircle : faClock}
-                      className={`lp-ic ${doing ? "lp-doing" : "lp-waiting"}`}
-                    />
-                    <span className="lp-title ellipsis">
-                      {titles[a.sessionId] ?? a.title}
-                    </span>
-                    <span className="lp-folder mono">{shortName(a.folder)}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </span>
-  );
 
   const modelLabel = MODELS.find((m) => m.id === model)?.label ?? model;
   const modelChooser = (
@@ -1196,8 +1818,8 @@ export default function ClaudeManager() {
     <button
       className="icon-btn"
       onClick={toggleMuted}
-      title={muted ? "Finish sound off — click to unmute" : "Finish sound on — click to mute"}
-      aria-label={muted ? "Unmute finish sound" : "Mute finish sound"}
+      title={muted ? "Finish alerts off — click to enable sound + notifications" : "Finish alerts on — click to mute"}
+      aria-label={muted ? "Enable finish alerts" : "Mute finish alerts"}
     >
       <FontAwesomeIcon icon={muted ? faVolumeXmark : faVolumeHigh} />
     </button>
@@ -1240,290 +1862,214 @@ export default function ClaudeManager() {
     </button>
   );
 
+  // The thin chat header: sidebar toggle + the project › title breadcrumb. The
+  // toolbar's old right-hand cluster (model / ctx / tasks) has moved down into
+  // the composer so the transcript gets the full height.
+  const headLogo = (
+    <span
+      className="brand-logo-click chat-head-logo"
+      onClick={toggleSidebar}
+      title="Toggle sidebar"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="brand-logo" src="/claudia.webp" alt="claudia" />
+      {homeBadgeCount > 0 ? (
+        <span className="brand-badge">{homeBadgeCount}</span>
+      ) : null}
+    </span>
+  );
+  const chatHead = (
+    <div
+      className={`chat-head${headHidden ? " is-hidden" : ""}`}
+      onMouseEnter={holdHead}
+      onMouseLeave={armHeadHide}
+    >
+      {headLogo}
+      {view === "chat" && folder ? (
+        <Breadcrumbs
+          project={shortName(folder)}
+          onProject={() => revealFolder(folder)}
+          title={
+            sessionId
+              ? (titles[sessionId] ?? titleFromEvents(events) ?? "Session")
+              : "New session"
+          }
+          onRename={
+            sessionId ? (t) => void renameSession(sessionId, t) : undefined
+          }
+        />
+      ) : null}
+    </div>
+  );
+
   return (
-    <div className="cm">
-      {view === "folders" && (
-        <div className="pane">
-          <div className="toolbar">
-            <div className="brand-wrap">
-              {homeLogo}
-              <h1 className="brand">claudia</h1>
-            </div>
-            <div className="spacer" />
-            <button className="btn accent" onClick={() => setPickerOpen(true)}>
-              <FontAwesomeIcon icon={faFolderPlus} /> Add folder
-            </button>
-            {modelChooser}
-            {soundBtn}
-            {usageBtn}
-          </div>
-          <div className="scroll">
-            {activeList.length > 0 && (
-              <div className="live-section">
-                <div className="git-section-title">In focus</div>
-                {activeList.map((a) => (
-                  <SessionRow
-                    key={a.sessionId}
-                    s={{
-                      sessionId: a.sessionId,
-                      title: titles[a.sessionId] ?? a.title,
-                      modified: a.lastActiveAt,
-                    }}
-                    active
-                    doing={liveIds.has(a.sessionId)}
-                    folderLabel={shortName(a.folder)}
-                    colorClass={tintClass(a.folder)}
-                    href={hrefFor(a.folder, a.sessionId)}
-                    onOpen={() => openSession(a.folder, a.sessionId)}
-                    onToggle={() => void toggleActive(a.sessionId, a.folder, a.title)}
-                    onRemove={() => void removeSession(a.folder, a.sessionId)}
-                    onRename={(t) => void renameSession(a.sessionId, t)}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="folder-section">
-              <div className="git-section-title">Folders</div>
-              {folders.length === 0 ? (
-                <div className="muted center pad">
-                  No folders yet. Add one above to see its Claude sessions.
-                </div>
+    <div className={`cm${sidebarOpen ? " sidebar-open" : " sidebar-closed"}`}>
+      {sidebarOpen && (
+        <>
+          <Sidebar
+            badgeCount={homeBadgeCount}
+            onToggle={toggleSidebar}
+            onNewSession={() => setNewSessionPicker(true)}
+            folders={folders}
+            folderMeta={folderMeta}
+            expanded={expanded}
+            sessionsByFolder={sessionsByFolder}
+            activeList={activeList}
+            liveIds={liveIds}
+            titles={titles}
+            currentSessionId={sessionId}
+            tintClass={tintClass}
+            onOpenSession={(f, id) => void openSession(f, id)}
+            onPrefetch={(f, id) => prefetchSession(f, id)}
+            onMarkDone={(id) => void markDone(id)}
+            onToggleActive={(id, f, t) => void toggleActive(id, f, t)}
+            onRemoveSession={(f, id) => void removeSession(f, id)}
+            onRenameSession={(id, t) => void renameSession(id, t)}
+            onToggleFolder={toggleFolder}
+            onNewInFolder={(f) => newSession(f)}
+            onAddFolder={() => setPickerOpen(true)}
+            onRemoveFolder={(f) => void onRemoveFolder(f)}
+            colorPickerFor={colorPickerFor}
+            setColorPickerFor={setColorPickerFor}
+            onSetFolderColor={(f, c) => void onSetFolderColor(f, c)}
+            soundBtn={soundBtn}
+            usageBtn={usageBtn}
+          />
+          {/* Mobile-only scrim; the sidebar floats over the chat there. */}
+          <div className="sb-backdrop" onClick={toggleSidebar} />
+        </>
+      )}
+
+      <div className="main">
+        {view === "chat" && folder ? (
+          <div
+            className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}
+          >
+            <div className="head-hover-zone" onMouseEnter={holdHead} />
+            {chatHead}
+
+            <div className="chat-scroll" ref={chatScrollRef}>
+              {loading ? (
+                <SkeletonRows count={4} />
               ) : (
-                folders.map((f) => (
-                  <a
-                    key={f}
-                    href={hrefFor(f)}
-                    className={`row${tintClass(f) ? ` ${tintClass(f)}` : ""}`}
-                    onClick={(e) => {
-                      if (isModifiedClick(e)) return; // let the browser open it
-                      e.preventDefault();
-                      void openFolder(f);
-                    }}
-                  >
-                    <span className="dir-icon">
-                      <FontAwesomeIcon icon={faFolder} />
-                    </span>
-                    <div className="row-main">
-                      <div className="row-title">{shortName(f)}</div>
-                      <div className="row-sub mono">{f}</div>
-                    </div>
-                    <div
-                      className="folder-color-pick"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      <button
-                        className={`color-dot${
-                          folderMeta[f]?.color
-                            ? ` folder-color-${folderMeta[f].color}`
-                            : " color-dot-none"
-                        }`}
-                        title="Folder color"
-                        aria-label="Choose folder color"
-                        onClick={() =>
-                          setColorPickerFor(colorPickerFor === f ? null : f)
-                        }
-                      />
-                      {colorPickerFor === f && (
-                        <>
-                          <div
-                            className="color-popup-backdrop"
-                            onClick={() => setColorPickerFor(null)}
-                          />
-                          <div className="color-popup">
-                            {FOLDER_COLORS.map((c) => (
-                              <button
-                                key={c}
-                                className={`swatch folder-color-${c}${
-                                  folderMeta[f]?.color === c ? " on" : ""
-                                }`}
-                                title={c}
-                                aria-label={`Set ${c}`}
-                                onClick={() => {
-                                  void onSetFolderColor(f, c);
-                                  setColorPickerFor(null);
-                                }}
-                              />
-                            ))}
-                            <button
-                              className={`swatch swatch-none${
-                                folderMeta[f]?.color ? "" : " on"
-                              }`}
-                              title="No color"
-                              aria-label="Clear color"
-                              onClick={() => {
-                                void onSetFolderColor(f, null);
-                                setColorPickerFor(null);
-                              }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <button
-                      className="icon-btn"
-                      title="New session"
-                      aria-label="New session"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        newSession(f);
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faPlus} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      title="Remove folder"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void onRemoveFolder(f);
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faXmark} />
-                    </button>
-                  </a>
-                ))
+                <StreamRenderer
+                  items={items}
+                  streaming={streaming}
+                  startedAt={turnStartedAt}
+                  queue={queue}
+                  sessionId={sessionId}
+                  onAnswer={(t) => void sendText(t)}
+                  onCancelQueued={cancelQueued}
+                />
               )}
             </div>
-          </div>
-          {pickerOpen && (
-            <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
-          )}
-        </div>
-      )}
 
-      {view === "sessions" && folder && (
-        <div className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}>
-          <div className="toolbar">
-            {homeLogo}
-            <button className="icon-btn" onClick={() => setView("folders")}>
-              <FontAwesomeIcon icon={faArrowLeft} />
-            </button>
-            <div className="title">{shortName(folder)}</div>
-            <div className="spacer" />
-            <button className="btn accent" onClick={() => newSession(folder)}>
-              <FontAwesomeIcon icon={faPlus} /> New session
-            </button>
-            {soundBtn}
-            {usageBtn}
-          </div>
-          <div className="scroll">
-            {loading ? (
-              <SkeletonRows count={6} />
-            ) : sessions.length === 0 ? (
-              <div className="muted center pad">No sessions in this folder yet.</div>
-            ) : (
-              sessions.map((s) => {
-                const isActive = !!active[s.sessionId];
-                // titles map wins so an optimistic rename shows before refetch.
-                const title = titles[s.sessionId] ?? s.title;
-                return (
-                  <SessionRow
-                    key={s.sessionId}
-                    s={{ ...s, title }}
-                    active={isActive}
-                    doing={liveIds.has(s.sessionId)}
-                    colorClass={tintClass(folder)}
-                    href={hrefFor(folder, s.sessionId)}
-                    onOpen={() => openSession(folder, s.sessionId)}
-                    onToggle={() => void toggleActive(s.sessionId, folder, title)}
-                    onRemove={() => void removeSession(folder, s.sessionId)}
-                    onRename={(t) => void renameSession(s.sessionId, t)}
-                  />
-                );
-              })
+            {/* Floating composer: a circle that expands into the input. */}
+            {composerOpen && (
+              <div className="composer-pop" ref={composerPopRef}>
+                {error && <div className="error mono">error: {error}</div>}
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  placeholder={
+                    sessionId
+                      ? "Reply to resume this session…"
+                      : "Start a new session…"
+                  }
+                  rows={1}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submitInput();
+                    }
+                  }}
+                />
+                <div className="composer-row">
+                  {/* Live signals live in the panel (visible while composing). */}
+                  <div className="composer-tools">
+                    {tasks.length ? <TaskChip tasks={tasks} /> : null}
+                    {ctxChip}
+                    {modelChooser}
+                  </div>
+                  <div className="spacer" />
+                  {streaming && (
+                    <button
+                      className="btn danger"
+                      onClick={stopStream}
+                      title="Stop (Esc)"
+                      aria-label="Stop"
+                    >
+                      <FontAwesomeIcon icon={faCircleStop} />
+                    </button>
+                  )}
+                  <button
+                    className="btn accent"
+                    disabled={!input.trim()}
+                    onClick={submitInput}
+                    title={streaming ? "Queue" : "Send"}
+                    aria-label={streaming ? "Queue" : "Send"}
+                  >
+                    <FontAwesomeIcon
+                      icon={streaming ? faLayerGroup : faPaperPlane}
+                    />
+                  </button>
+                  <button
+                    className={"btn" + (gitOpen ? " accent" : " ghost")}
+                    onClick={() => setGitOpen((v) => !v)}
+                    title="Git"
+                  >
+                    <FontAwesomeIcon icon={faCodeBranch} />
+                  </button>
+                </div>
+              </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {view === "chat" && folder && (
-        <div className={`pane${tintClass(folder) ? ` ${tintClass(folder)}` : ""}`}>
-          <div className="toolbar">
-            {homeLogo}
-            <Breadcrumbs
-              project={shortName(folder)}
-              onProject={() => {
-                detach();
-                void openFolder(folder);
+            <button
+              ref={fabRef}
+              className={`fab${streaming ? " is-streaming" : ""}${
+                composerOpen ? " is-open" : ""
+              }`}
+              onClick={() => setComposerOpen((v) => !v)}
+              onPointerEnter={(e) => {
+                // Mouse only — touch uses the tap. Open after a short rest so a
+                // quick pass-over doesn't trigger it.
+                if (e.pointerType === "touch" || composerOpen) return;
+                if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
+                fabHoverTimer.current = setTimeout(() => setComposerOpen(true), 140);
               }}
-              title={
-                sessionId
-                  ? (titles[sessionId] ?? titleFromEvents(events) ?? "Session")
-                  : "new"
-              }
-              onRename={
-                sessionId
-                  ? (t) => void renameSession(sessionId, t)
-                  : undefined
-              }
-            />
-            {tasks.length ? <TaskChip tasks={tasks} /> : null}
-            <div className="spacer" />
-            {streaming && (
-              <button className="icon-btn is-danger" onClick={stopStream} title="Stop (Esc)">
-                <FontAwesomeIcon icon={faCircleStop} />
+              onPointerLeave={() => {
+                if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
+              }}
+              title={composerOpen ? "Close composer (Esc)" : "Write a message"}
+              aria-label={composerOpen ? "Close composer" : "Write a message"}
+            >
+              <FontAwesomeIcon icon={composerOpen ? faXmark : faPencil} />
+            </button>
+          </div>
+        ) : (
+          <div className="pane home-pane">
+            <div className="head-hover-zone" onMouseEnter={holdHead} />
+            {chatHead}
+            <div className="home-empty">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="home-logo" src="/claudia.webp" alt="claudia" />
+              <p>
+                Pick a session from the sidebar, or start a new one.
+              </p>
+              <button
+                className="btn accent"
+                onClick={() => setNewSessionPicker(true)}
+              >
+                <FontAwesomeIcon icon={faPlus} /> New session
               </button>
-            )}
-            {modelChooser}
-            {ctxChip}
-            {soundBtn}
-            {usageBtn}
+            </div>
           </div>
+        )}
+      </div>
 
-          <div className="chat-scroll">
-            {loading ? (
-              <SkeletonRows count={4} />
-            ) : (
-              <StreamRenderer
-                items={items}
-                streaming={streaming}
-                queue={queue}
-                sessionId={sessionId}
-                onAnswer={(t) => void sendText(t)}
-                onCancelQueued={cancelQueued}
-              />
-            )}
-          </div>
-
-          {error && <div className="error mono">error: {error}</div>}
-
-          <div className="composer">
-            <textarea
-              ref={inputRef}
-              value={input}
-              placeholder={
-                sessionId ? "Reply to resume this session…" : "Start a new session…"
-              }
-              rows={1}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitInput();
-                }
-              }}
-            />
-            <button
-              className="btn accent"
-              disabled={!input.trim()}
-              onClick={submitInput}
-            >
-              {streaming ? "Queue" : "Send"}
-            </button>
-            <button
-              className={"btn" + (gitOpen ? " accent" : " ghost")}
-              onClick={() => setGitOpen((v) => !v)}
-              title="Git"
-            >
-              <FontAwesomeIcon icon={faCodeBranch} />
-            </button>
-          </div>
-        </div>
+      {pickerOpen && (
+        <FolderPicker onAdd={onAddFolder} onClose={() => setPickerOpen(false)} />
       )}
 
       {usageOpen && (
@@ -1538,6 +2084,29 @@ export default function ClaudeManager() {
 
       {gitOpen && folder && (
         <GitPanel folder={folder} onClose={() => setGitOpen(false)} />
+      )}
+
+      {newSessionPicker && (
+        <NewSessionPicker
+          folders={folders}
+          meta={folderMeta}
+          onPick={(p) => {
+            setNewSessionPicker(false);
+            startNewSessionInFolder(p);
+          }}
+          onBrowse={() => {
+            setNewSessionPicker(false);
+            setNewTabPicker(true);
+          }}
+          onClose={() => setNewSessionPicker(false)}
+        />
+      )}
+
+      {newTabPicker && (
+        <FolderPicker
+          onAdd={startNewSessionInFolder}
+          onClose={() => setNewTabPicker(false)}
+        />
       )}
     </div>
   );

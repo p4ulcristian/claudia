@@ -22,6 +22,19 @@ export interface CachedTranscript {
   lastAccess: number;
 }
 
+// Synchronous mirror of the IDB store for this page-load. IndexedDB reads are
+// async, so the first paint of a chat always had to await one — yielding an
+// empty/loading frame even for a session we'd cached. This map lets an already-
+// touched session paint with zero await: instant transcript, instant scroll to
+// bottom, no flash. IDB remains the source of truth and survives reloads; this
+// is just a hot front layer that fills as sessions are read or written.
+const mem = new Map<string, CachedTranscript>();
+
+/** Synchronous cache hit, or null if this session hasn't been touched yet. */
+export function peekCachedTranscript(sessionId: string): CachedTranscript | null {
+  return mem.get(sessionId) ?? null;
+}
+
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
 function openDB(): Promise<IDBDatabase | null> {
@@ -70,6 +83,7 @@ export async function getCachedTranscript(
       req.onsuccess = () => {
         const entry = req.result as CachedTranscript | undefined;
         if (!entry || entry.version !== CACHE_VERSION) return resolve(null);
+        mem.set(sessionId, entry);
         resolve(entry);
       };
       req.onerror = () => resolve(null);
@@ -89,6 +103,7 @@ export async function putCachedTranscript(
     version: CACHE_VERSION,
     lastAccess: entry.lastAccess ?? Date.now(),
   };
+  mem.set(record.sessionId, record);
   await new Promise<void>((resolve) => {
     try {
       const store = tx(db, "readwrite");
@@ -103,6 +118,7 @@ export async function putCachedTranscript(
 }
 
 export async function deleteCachedTranscript(sessionId: string): Promise<void> {
+  mem.delete(sessionId);
   const db = await openDB();
   if (!db) return;
   await new Promise<void>((resolve) => {

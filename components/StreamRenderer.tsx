@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { type DisplayItem, type ToolUseBlock } from "./fold";
 import Markdown from "./Markdown";
 import {
@@ -151,18 +151,20 @@ function DiffBody({ sections }: { sections: DiffSection[] }) {
 
 function ToolCard({ block }: { block: ToolUseBlock }) {
   const { icon, summary, command, json, diff } = toolView(block.name, block.input);
+  const result = block.result;
   const [open, setOpen] = useState(false);
-  const hasDetail = Boolean(command || json || diff);
+  const hasDetail = Boolean(command || json || diff || result);
 
-  // Diffs are useful at a glance, so auto-open the card the first time one
-  // appears — but only once, so a manual collapse afterward sticks.
+  // Diffs and errors are worth seeing at a glance, so auto-open the card the
+  // first time one appears — but only once, so a manual collapse afterward sticks.
   const autoOpened = useRef(false);
+  const wantOpen = Boolean(diff) || result?.isError === true;
   useEffect(() => {
-    if (diff && !autoOpened.current) {
+    if (wantOpen && !autoOpened.current) {
       autoOpened.current = true;
       setOpen(true);
     }
-  }, [diff]);
+  }, [wantOpen]);
 
   return (
     <div className={`tool-block ${open ? "is-open" : ""}`}>
@@ -172,6 +174,7 @@ function ToolCard({ block }: { block: ToolUseBlock }) {
         </span>
         <span className="tool-label">{block.name}</span>
         {summary ? <span className="tool-summary">{summary}</span> : null}
+        {result?.isError ? <span className="tool-err">error</span> : null}
         {hasDetail ? (
           <span className="chev">
             <FontAwesomeIcon icon={open ? faChevronDown : faChevronRight} />
@@ -181,6 +184,17 @@ function ToolCard({ block }: { block: ToolUseBlock }) {
       {open && diff ? <DiffBody sections={diff} /> : null}
       {open && !diff && command ? <pre className="tool-cmd">{command}</pre> : null}
       {open && !diff && !command && json ? <pre className="tool-input">{json}</pre> : null}
+      {open && result ? (
+        <div className={`tool-out ${result.isError ? "is-error" : ""}`}>
+          <div className="tool-out-label">
+            {result.isError ? "error" : "result"}
+            <span className="tool-out-meta">
+              {result.text ? `${result.text.length} chars` : "empty"}
+            </span>
+          </div>
+          <pre>{result.text || "(empty)"}</pre>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -384,7 +398,9 @@ function QuestionCard({
   );
 }
 
-function Item({ item }: { item: DisplayItem }) {
+// Memoized so a reconcile that reuses an item's object identity (unchanged
+// key+sig) skips re-rendering that row entirely — no flash on swap.
+const Item = memo(function Item({ item }: { item: DisplayItem }) {
   switch (item.kind) {
     case "user":
       return (
@@ -409,11 +425,28 @@ function Item({ item }: { item: DisplayItem }) {
     default:
       return null;
   }
+});
+
+/** Live "answering for Xs" label. Ticks every second while `startedAt` is set
+ * (a turn is in flight); freezes/clears when it goes null. Server-sourced
+ * startedAt means the count reflects the true turn age even after a reconnect. */
+function ElapsedTimer({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const label =
+    secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
+  return <span className="working-timer mono">{label}</span>;
 }
 
 export default function StreamRenderer({
   items,
   streaming,
+  startedAt,
   queue,
   sessionId,
   onAnswer,
@@ -421,6 +454,7 @@ export default function StreamRenderer({
 }: {
   items: DisplayItem[];
   streaming: boolean;
+  startedAt: number | null;
   queue: string[];
   sessionId: string | null;
   onAnswer: (text: string) => void;
@@ -436,6 +470,8 @@ export default function StreamRenderer({
   // scrolling back down — or sending a turn — re-pins.
   const stuck = useRef(true);
   const prevLen = useRef(0);
+  // Last observed scrollTop, so onScroll can tell which way the user moved.
+  const lastTop = useRef(0);
   const [showJump, setShowJump] = useState(false);
 
   // The scrollable ancestor is the .chat-scroll wrapper around this component.
@@ -449,18 +485,29 @@ export default function StreamRenderer({
     didInitialScroll.current = false;
     stuck.current = true;
     prevLen.current = 0;
+    lastTop.current = 0;
     setShowJump(false);
   }, [sessionId]);
 
   // Watch the user's scroll position; pin within ~120px of the bottom.
+  // Only a genuine *upward* scroll unpins — the auto-scroll below only ever
+  // moves down, so its own scroll events (which lag behind fast-growing content
+  // mid-animation) can't spuriously flip us out of "stuck" and pop the pill.
   useEffect(() => {
     const el = scroller();
     if (!el) return;
     const onScroll = () => {
-      const atBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      stuck.current = atBottom;
-      setShowJump(!atBottom);
+      const top = el.scrollTop;
+      const goingUp = top < lastTop.current - 2;
+      lastTop.current = top;
+      const atBottom = el.scrollHeight - top - el.clientHeight < 120;
+      if (atBottom) {
+        stuck.current = true;
+        setShowJump(false);
+      } else if (goingUp) {
+        stuck.current = false;
+        setShowJump(true);
+      }
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
@@ -475,7 +522,9 @@ export default function StreamRenderer({
     }
     prevLen.current = vis.length;
     if (!stuck.current) return;
-    const behavior = didInitialScroll.current ? "smooth" : "instant";
+    // Instant while streaming so the follow never lags behind growing content;
+    // smooth only for discrete post-stream updates (e.g. a queued turn landing).
+    const behavior = !didInitialScroll.current || streaming ? "instant" : "smooth";
     scrollToBottom(behavior);
     if (vis.length) didInitialScroll.current = true;
     setShowJump(false);
@@ -485,10 +534,13 @@ export default function StreamRenderer({
     return (
       <div className="empty">
         {streaming ? (
-          <span className="working-dots">
-            <i />
-            <i />
-            <i />
+          <span className="working">
+            <span className="working-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+            {startedAt != null ? <ElapsedTimer startedAt={startedAt} /> : null}
           </span>
         ) : (
           "No messages yet. Say something below."
@@ -504,7 +556,7 @@ export default function StreamRenderer({
   return (
     <div className="stream" ref={rootRef}>
       {visible.map((item, i) => (
-        <div className="stream-item" key={i}>
+        <div className="stream-item" key={item.key ?? i}>
           {item.kind === "question" ? (
             <QuestionCard
               item={item}
@@ -523,6 +575,7 @@ export default function StreamRenderer({
             <i />
             <i />
           </span>
+          {startedAt != null ? <ElapsedTimer startedAt={startedAt} /> : null}
         </div>
       ) : null}
       {queue.map((q, i) => (

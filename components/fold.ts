@@ -12,6 +12,9 @@ export interface ToolUseBlock {
   id?: string;
   name: string;
   input: string; // accumulated JSON, possibly partial
+  // The tool's output, folded back onto its call so the two render as one card.
+  // Undefined while the tool is still running (no result yet).
+  result?: { text: string; isError: boolean };
 }
 export type AssistantBlock = TextBlock | ToolUseBlock;
 
@@ -32,7 +35,7 @@ export interface QuestionSpec {
   options: QuestionOption[];
 }
 
-export type DisplayItem =
+export type DisplayItem = (
   | { kind: "user"; text: string }
   | { kind: "assistant"; id?: string; blocks: AssistantBlock[]; streaming: boolean }
   | { kind: "tool_result"; text: string; isError: boolean }
@@ -40,7 +43,15 @@ export type DisplayItem =
   | { kind: "tasks"; tasks: TaskRow[] }
   | { kind: "bgtask"; taskId: string; description: string; status: string; summary: string | null }
   | { kind: "question"; id?: string; questions: QuestionSpec[] }
-  | { kind: "compacting"; done: boolean };
+  | { kind: "compacting"; done: boolean }
+) & {
+  /** Stable identity across re-folds — the React list key. Lets a reconcile
+   * reuse the same DOM node instead of remounting (no flash, no scroll jump). */
+  key?: string;
+  /** Cheap content signature. Same key + same sig ⇒ nothing visible changed, so
+   * the previous item object can be reused and the row skips re-rendering. */
+  sig?: string;
+};
 
 // Tools we render specially (and whose raw tool_use / tool_result we suppress).
 const TASK_TOOLS = new Set(["TaskCreate", "TaskUpdate", "TaskStop", "TaskList", "TaskGet"]);
@@ -91,6 +102,8 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
   let taskSeq = 0;
   const bgIndexById = new Map<string, number>(); // background task_id -> item index
   const suppressedToolIds = new Set<string>(); // tool_use ids whose result we hide
+  // tool_use id -> its block, so a later tool_result can be folded onto the call.
+  const toolBlocksById = new Map<string, ToolUseBlock>();
   let openCompactIdx: number | null = null; // an in-progress compaction, if any
 
   const newAssistant = (id?: string, streaming = false): number => {
@@ -204,12 +217,14 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
         const name = typeof o.name === "string" ? o.name : "tool";
         const id = typeof o.id === "string" ? o.id : undefined;
         if (handleSpecialTool(name, id, (o.input as Record<string, unknown>) ?? {})) continue;
-        blocks.push({
+        const block: ToolUseBlock = {
           type: "tool_use",
           id,
           name,
           input: o.input ? JSON.stringify(o.input, null, 2) : "",
-        });
+        };
+        blocks.push(block);
+        if (id) toolBlocksById.set(id, block);
       }
     }
     return blocks;
@@ -276,11 +291,16 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
               if (o.type === "tool_result") {
                 const tid = typeof o.tool_use_id === "string" ? o.tool_use_id : "";
                 if (tid && suppressedToolIds.has(tid)) continue; // special tool — hidden
-                items.push({
-                  kind: "tool_result",
+                const result = {
                   text: asText(o.content),
                   isError: o.is_error === true,
-                });
+                };
+                // Fold the output onto its originating call so they share one
+                // card. Orphan results (no matching call in view, e.g. a partial
+                // transcript) still render as their own block.
+                const call = tid ? toolBlocksById.get(tid) : undefined;
+                if (call) call.result = result;
+                else items.push({ kind: "tool_result", ...result });
               }
             }
           }
@@ -316,12 +336,14 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
         const cb = (evt as { content_block?: Record<string, unknown> }).content_block;
         const item = items[curIdx] as Extract<DisplayItem, { kind: "assistant" }>;
         if (cb?.type === "tool_use") {
-          item.blocks.push({
+          const block: ToolUseBlock = {
             type: "tool_use",
             id: typeof cb.id === "string" ? cb.id : undefined,
             name: typeof cb.name === "string" ? cb.name : "tool",
             input: "",
-          });
+          };
+          item.blocks.push(block);
+          if (block.id) toolBlocksById.set(block.id, block);
         } else if (cb?.type === "text") {
           item.blocks.push({ type: "text", text: "" });
         }
@@ -417,5 +439,85 @@ export function foldEvents(events: ClaudeEvent[]): DisplayItem[] {
     cleaned.push(it);
   }
 
-  return cleaned;
+  return decorate(cleaned);
+}
+
+// Stable key for a display item. Items with a natural id (assistant message id,
+// tool id, background task id) use it; the rest get a per-kind ordinal. The
+// folded list is deterministic and append-only, so "the Nth user message" is a
+// stable slot across re-folds — exactly what React needs to avoid remounting.
+function keyFor(it: DisplayItem, ord: (k: string) => number): string {
+  switch (it.kind) {
+    case "assistant":
+      return `a:${it.id ?? `#${ord("a")}`}`;
+    case "question":
+      return `q:${it.id ?? `#${ord("q")}`}`;
+    case "bgtask":
+      return `bg:${it.taskId}`;
+    case "tasks":
+      return "tasks";
+    case "compacting":
+      return `cmp:#${ord("cmp")}`;
+    case "user":
+      return `u:#${ord("u")}`;
+    case "result":
+      return `r:#${ord("r")}`;
+    case "tool_result":
+      return `tr:#${ord("tr")}`;
+  }
+}
+
+// A cheap signature of an item's rendered content. Transcript content is
+// immutable once written, so a length is a sufficient discriminator within a
+// stable key slot; streaming items grow, so their length changing is exactly the
+// signal to re-render them.
+// A cheap content fingerprint: length plus head/tail samples. Distinguishes
+// different texts (even same-length ones) without hashing the whole string, so
+// the reconcile never reuses a row that merely happens to match a length.
+function fp(s: string): string {
+  return `${s.length}~${s.slice(0, 24)}~${s.slice(-12)}`;
+}
+
+function sigFor(it: DisplayItem): string {
+  switch (it.kind) {
+    case "user":
+      return `u${fp(it.text)}`;
+    case "assistant":
+      return (
+        (it.streaming ? "s|" : "f|") +
+        it.blocks
+          .map((b) =>
+            b.type === "text"
+              ? `t${b.text.length}`
+              : `x${b.name}:${b.input.length}:${
+                  b.result ? `${b.result.isError ? "e" : ""}${b.result.text.length}` : "-"
+                }`,
+          )
+          .join(",")
+      );
+    case "tool_result":
+      return `${it.isError ? "e" : ""}${fp(it.text)}`;
+    case "result":
+      return `${it.isError ? "e" : ""}${fp(it.text)}`;
+    case "tasks":
+      return it.tasks.map((t) => `${t.id}.${t.status}.${t.subject.length}`).join(",");
+    case "bgtask":
+      return `${it.status}.${it.summary?.length ?? -1}`;
+    case "compacting":
+      return it.done ? "1" : "0";
+    case "question":
+      return `${it.questions.length}`;
+  }
+}
+
+// Assign a stable key + content signature to every item. Consumed by the
+// renderer (list key) and by the fold-reconcile in ClaudeManager (object reuse).
+function decorate(items: DisplayItem[]): DisplayItem[] {
+  const counters: Record<string, number> = {};
+  const ord = (k: string) => (counters[k] = (counters[k] ?? -1) + 1);
+  for (const it of items) {
+    it.key = keyFor(it, ord);
+    it.sig = sigFor(it);
+  }
+  return items;
 }
