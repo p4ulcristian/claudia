@@ -171,6 +171,23 @@ export interface BrowseResult {
   dirs: DirEntry[];
 }
 
+/** A node in the inline code editor's file tree. Paths are relative to root. */
+export interface FileNode {
+  name: string;
+  path: string;
+  dir: boolean;
+  children?: FileNode[];
+}
+
+/** A single file loaded into the inline editor. */
+export interface FileContent {
+  path: string;
+  /** Text source for "text"; a data: URL for "image". */
+  content: string;
+  language: string;
+  kind: "text" | "image";
+}
+
 /**
  * A raw Claude transcript / stream event. The `claude` CLI emits these as
  * newline-delimited JSON; we keep them opaque and let the renderer pick out

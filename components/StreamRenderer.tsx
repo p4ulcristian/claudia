@@ -1,6 +1,13 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { type DisplayItem, type ToolUseBlock } from "./fold";
 import Markdown from "./Markdown";
 import {
@@ -10,13 +17,19 @@ import {
   faChevronRight,
   faCircleQuestion,
   faClock,
+  faCode,
   faCompress,
+  faFileLines,
   faGear,
   faPencil,
   faSpinner,
   faTerminal,
   faXmark,
 } from "./icons";
+
+// Lets deeply-nested tool cards request the inline editor open a file without
+// prop-drilling through the memoized Item rows. Null when no handler is wired.
+const OpenFileContext = createContext<((path: string) => void) | null>(null);
 
 // Collapse whitespace and clip to a single short line for the header hint.
 function truncate(s: string, n = 72): string {
@@ -106,6 +119,8 @@ function toolView(
   command?: string;
   json?: string;
   diff?: DiffSection[];
+  /** Absolute path of the file this tool touched, if any — drives the editor button. */
+  filePath?: string;
 } {
   let parsed: Record<string, unknown> | null = null;
   if (input) {
@@ -115,6 +130,7 @@ function toolView(
       /* partial JSON mid-stream */
     }
   }
+  const fp = typeof parsed?.file_path === "string" ? parsed.file_path : undefined;
   if (name === "Bash") {
     const command = typeof parsed?.command === "string" ? parsed.command : "";
     const description = typeof parsed?.description === "string" ? parsed.description : "";
@@ -123,11 +139,19 @@ function toolView(
   }
   if (name === "Edit" || name === "MultiEdit" || name === "Write") {
     const diff = parsed ? buildDiffSections(name, parsed) : null;
-    const file = typeof parsed?.file_path === "string" ? basename(parsed.file_path) : "";
+    const file = fp ? basename(fp) : "";
     // Once the strings have streamed in we show the diff; until then fall back to
     // the raw partial JSON so the card isn't empty mid-stream.
-    if (diff) return { icon: faPencil, summary: truncate(file), diff };
-    return { icon: faPencil, summary: truncate(file), json: input };
+    if (diff) return { icon: faPencil, summary: truncate(file), diff, filePath: fp };
+    return { icon: faPencil, summary: truncate(file), json: input, filePath: fp };
+  }
+  if (name === "Read") {
+    return {
+      icon: faFileLines,
+      summary: fp ? truncate(basename(fp)) : "",
+      json: input,
+      filePath: fp,
+    };
   }
   return { icon: faGear, summary: parsed ? truncate(pickSummary(parsed)) : "", json: input };
 }
@@ -150,7 +174,11 @@ function DiffBody({ sections }: { sections: DiffSection[] }) {
 }
 
 function ToolCard({ block }: { block: ToolUseBlock }) {
-  const { icon, summary, command, json, diff } = toolView(block.name, block.input);
+  const { icon, summary, command, json, diff, filePath } = toolView(
+    block.name,
+    block.input,
+  );
+  const openFile = useContext(OpenFileContext);
   const result = block.result;
   const [open, setOpen] = useState(false);
   const hasDetail = Boolean(command || json || diff || result);
@@ -175,6 +203,26 @@ function ToolCard({ block }: { block: ToolUseBlock }) {
         <span className="tool-label">{block.name}</span>
         {summary ? <span className="tool-summary">{summary}</span> : null}
         {result?.isError ? <span className="tool-err">error</span> : null}
+        {filePath && openFile ? (
+          <span
+            className="tool-open"
+            role="button"
+            tabIndex={0}
+            title="Open in editor"
+            onClick={(e) => {
+              e.stopPropagation();
+              openFile(filePath);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                openFile(filePath);
+              }
+            }}
+          >
+            <FontAwesomeIcon icon={faCode} />
+          </span>
+        ) : null}
         {hasDetail ? (
           <span className="chev">
             <FontAwesomeIcon icon={open ? faChevronDown : faChevronRight} />
@@ -207,19 +255,11 @@ function AssistantItem({ item }: { item: Extract<DisplayItem, { kind: "assistant
           b.type === "text" ? (
             <div key={i} className="text-block">
               <Markdown text={b.text} />
-              {item.streaming && i === item.blocks.length - 1 ? (
-                <span className="cursor" />
-              ) : null}
             </div>
           ) : (
             <ToolCard key={i} block={b} />
           ),
         )}
-        {item.blocks.length === 0 && item.streaming ? (
-          <div className="text-block">
-            <span className="cursor" />
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -427,38 +467,26 @@ const Item = memo(function Item({ item }: { item: DisplayItem }) {
   }
 });
 
-/** Live "answering for Xs" label. Ticks every second while `startedAt` is set
- * (a turn is in flight); freezes/clears when it goes null. Server-sourced
- * startedAt means the count reflects the true turn age even after a reconnect. */
-function ElapsedTimer({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [startedAt]);
-  const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
-  const label =
-    secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
-  return <span className="working-timer mono">{label}</span>;
-}
+// Remembers each session's scroll position for this page-load, so switching back
+// to a chat lands where you left it instead of snapping to the bottom.
+const scrollPositions = new Map<string, number>();
 
 export default function StreamRenderer({
   items,
   streaming,
-  startedAt,
   queue,
   sessionId,
   onAnswer,
   onCancelQueued,
+  onOpenFile,
 }: {
   items: DisplayItem[];
   streaming: boolean;
-  startedAt: number | null;
   queue: string[];
   sessionId: string | null;
   onAnswer: (text: string) => void;
   onCancelQueued: (index: number) => void;
+  onOpenFile?: (path: string) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -472,6 +500,8 @@ export default function StreamRenderer({
   const prevLen = useRef(0);
   // Last observed scrollTop, so onScroll can tell which way the user moved.
   const lastTop = useRef(0);
+  // A remembered scrollTop to re-apply once this session's items have rendered.
+  const pendingRestore = useRef<number | null>(null);
   const [showJump, setShowJump] = useState(false);
 
   // The scrollable ancestor is the .chat-scroll wrapper around this component.
@@ -483,10 +513,14 @@ export default function StreamRenderer({
 
   useEffect(() => {
     didInitialScroll.current = false;
-    stuck.current = true;
     prevLen.current = 0;
     lastTop.current = 0;
     setShowJump(false);
+    // If we have a remembered position for this session, restore it once items
+    // render; otherwise pin to the bottom as before.
+    const saved = sessionId ? scrollPositions.get(sessionId) : undefined;
+    pendingRestore.current = saved ?? null;
+    stuck.current = saved == null;
   }, [sessionId]);
 
   // Watch the user's scroll position; pin within ~120px of the bottom.
@@ -498,6 +532,7 @@ export default function StreamRenderer({
     if (!el) return;
     const onScroll = () => {
       const top = el.scrollTop;
+      if (sessionId) scrollPositions.set(sessionId, top); // remember per session
       const goingUp = top < lastTop.current - 2;
       lastTop.current = top;
       const atBottom = el.scrollHeight - top - el.clientHeight < 120;
@@ -521,6 +556,21 @@ export default function StreamRenderer({
       stuck.current = true;
     }
     prevLen.current = vis.length;
+    // Restore a remembered scroll position on the first paint after a switch,
+    // instead of jumping to the bottom.
+    if (pendingRestore.current != null) {
+      const el = scroller();
+      if (el) {
+        el.scrollTop = pendingRestore.current;
+        // If that spot is effectively the bottom, keep following new content.
+        stuck.current =
+          el.scrollHeight - pendingRestore.current - el.clientHeight < 120;
+        setShowJump(!stuck.current);
+      }
+      pendingRestore.current = null;
+      if (vis.length) didInitialScroll.current = true;
+      return;
+    }
     if (!stuck.current) return;
     // Instant while streaming so the follow never lags behind growing content;
     // smooth only for discrete post-stream updates (e.g. a queued turn landing).
@@ -540,7 +590,6 @@ export default function StreamRenderer({
               <i />
               <i />
             </span>
-            {startedAt != null ? <ElapsedTimer startedAt={startedAt} /> : null}
           </span>
         ) : (
           "No messages yet. Say something below."
@@ -554,6 +603,7 @@ export default function StreamRenderer({
   const compacting = visible.some((it) => it.kind === "compacting" && !it.done);
 
   return (
+    <OpenFileContext.Provider value={onOpenFile ?? null}>
     <div className="stream" ref={rootRef}>
       {visible.map((item, i) => (
         <div className="stream-item" key={item.key ?? i}>
@@ -575,7 +625,6 @@ export default function StreamRenderer({
             <i />
             <i />
           </span>
-          {startedAt != null ? <ElapsedTimer startedAt={startedAt} /> : null}
         </div>
       ) : null}
       {queue.map((q, i) => (
@@ -597,6 +646,13 @@ export default function StreamRenderer({
           </div>
         </div>
       ))}
+      {!streaming && !compacting && visible.length > 0 && queue.length === 0 ? (
+        <div className="end-of-chat" aria-hidden>
+          <span className="end-of-chat-line" />
+          <span className="end-of-chat-text">end of conversation</span>
+          <span className="end-of-chat-line" />
+        </div>
+      ) : null}
       <div ref={endRef} />
       {showJump ? (
         <button
@@ -612,5 +668,6 @@ export default function StreamRenderer({
         </button>
       ) : null}
     </div>
+    </OpenFileContext.Provider>
   );
 }

@@ -329,6 +329,9 @@ body {
 
 .chat-scroll {
   padding: 22px clamp(16px, 4vw, 34px);
+  /* Breathing room past the last message so it can scroll up clear of the
+     floating composer instead of being pinned to the bottom edge. */
+  padding-bottom: clamp(160px, 30vh, 360px);
 }
 
 .pad {
@@ -699,6 +702,39 @@ body {
   animation: rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Quiet "you've reached the bottom" marker — shown only when idle so the end
+   of the transcript reads as a deliberate stop, not a cut-off. */
+.end-of-chat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px auto 0;
+  padding: 0 4px;
+  width: 100%;
+  user-select: none;
+  animation: rise 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.end-of-chat-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to var(--end-dir, right),
+    transparent,
+    rgba(255, 255, 255, 0.12)
+  );
+}
+.end-of-chat-line:last-child {
+  --end-dir: left;
+}
+.end-of-chat-text {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .empty {
   color: var(--text-muted);
   font-size: 13px;
@@ -800,19 +836,6 @@ body {
 .queued-x:hover {
   color: var(--danger);
   background: rgba(255, 139, 130, 0.12);
-}
-
-/* streaming caret — a soft glowing bar */
-.cursor {
-  display: inline-block;
-  width: 8px;
-  height: 1.05em;
-  margin-left: 2px;
-  border-radius: 2px;
-  background: var(--accent-bright);
-  box-shadow: 0 0 10px rgba(255, 207, 122, 0.9);
-  vertical-align: text-bottom;
-  animation: pulse-dot 1.1s ease-in-out infinite;
 }
 
 /* ---- tool cards (collapsible glass) --------------------------------------- */
@@ -1020,10 +1043,30 @@ body {
   font-size: 11.5px;
   font-family: var(--mono);
   color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
+  /* Preserve indentation/structure (HTML, code) and scroll sideways instead of
+     wrapping — wrapping flattens nesting so the structure is unreadable. */
+  white-space: pre;
+  tab-size: 2;
+  line-height: 1.5;
   max-height: 220px;
   overflow: auto;
+}
+/* Open-in-editor affordance in a tool card header (Read / Edit / Write). */
+.tool-open {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tool-open:hover {
+  background: rgba(232, 178, 92, 0.18);
+  color: var(--accent);
 }
 /* Failure tag in the collapsed call header. */
 .tool-err {
@@ -2146,6 +2189,79 @@ body {
   width: 100%;
   margin: 0 auto;
 }
+
+/* Inline code editor: a taller shelf split into file tree + Monaco. */
+.code-shelf {
+  height: 92vh;
+  max-height: none;
+}
+.code-dirty {
+  color: var(--accent, #e8b25c);
+  font-size: 8px;
+}
+.code-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  /* Without an explicit row track the implicit row sizes to content, so Monaco
+     (height:100%) collapses to 0. Pin the row to fill the shelf. */
+  grid-template-rows: 100%;
+  min-height: 0;
+}
+.code-tree {
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
+  font-size: 13px;
+}
+.code-dir-row,
+.code-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 8px;
+  background: none;
+  border: none;
+  color: var(--fg, #d8d3e0);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  font: inherit;
+}
+.code-dir-row:hover,
+.code-file:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.code-file.active {
+  background: rgba(232, 178, 92, 0.16);
+  color: #fff;
+}
+.code-editor {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+.code-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  background:
+    repeating-conic-gradient(#1a1822 0% 25%, #221f2c 0% 50%) 50% / 24px 24px;
+}
+.code-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.code-empty {
+  padding: 24px;
+  opacity: 0.6;
+  font-size: 13px;
+}
 .git-section-title {
   font-size: 10.5px;
   text-transform: uppercase;
@@ -2771,6 +2887,14 @@ body {
 .chat-head .crumbs {
   font-size: 13.5px;
 }
+/* Code + git toggles pinned to the header's right edge. */
+.chat-head-tools {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 /* logo in the header doubles as the sidebar toggle; sized just under the rail's */
 .chat-head-logo {
   flex: 0 0 auto;
@@ -2788,11 +2912,38 @@ body {
 }
 
 /* ==== floating composer (circle → popover) ================================= */
-.fab {
+.fab-wrap {
   position: absolute;
   left: 18px;
   bottom: 18px;
   z-index: 5;
+  width: 50px;
+  height: 50px;
+}
+/* curved elapsed-time label hugging the circle's bottom arc */
+/* Centered on the 50px circle with plain px offsets (the SVG is 100px, so -25px
+   centers it; -31px adds a small upward nudge). Avoids a percentage calc() in
+   `transform`, which the browser rejects on SVG elements. */
+.fab-timer {
+  position: absolute;
+  left: -25px;
+  top: -31px;
+  width: 100px;
+  height: 100px;
+  pointer-events: none;
+  overflow: visible;
+  animation: rise 0.2s ease both;
+}
+.fab-timer text {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  fill: var(--accent-bright);
+}
+.fab {
+  position: absolute;
+  inset: 0;
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -2880,6 +3031,102 @@ body {
 }
 .composer-pop .error {
   padding: 0 2px 2px;
+}
+
+/* ==== session quick-switch dots (bottom-right, stacking upward) ============ */
+.session-dots {
+  --fc: 232, 178, 92; /* default accent; a folder-color-* class on a dot overrides */
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 12px;
+}
+.sdot-wrap {
+  position: relative;
+  display: flex;
+}
+/* the × to mark a session done (drop it from focus), shown on hover */
+.sdot-x {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 9px;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.sdot-wrap:hover .sdot-x {
+  opacity: 1;
+}
+.sdot-x:hover {
+  color: var(--danger);
+  border-color: rgba(255, 139, 130, 0.5);
+}
+.sdot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  color: rgb(var(--fc));
+  background: rgba(var(--fc), 0.13);
+  border: 1.5px solid rgba(var(--fc), 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.14s ease, background 0.18s ease, box-shadow 0.2s ease;
+}
+.sdot:hover {
+  transform: translateY(-2px) scale(1.06);
+  background: rgba(var(--fc), 0.24);
+}
+.sdot-current {
+  color: #1a1410;
+  background: rgb(var(--fc));
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px rgba(var(--fc), 0.6);
+}
+.sdot-busy {
+  animation: sdot-pulse 1.5s ease-in-out infinite;
+}
+/* the "+" circle at the top of the stack — start a new session */
+.sdot-new {
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  font-size: 14px;
+}
+.sdot-new:hover {
+  color: var(--accent-bright);
+  background: var(--accent-soft);
+  border-color: rgba(232, 178, 92, 0.5);
+}
+@keyframes sdot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--fc), 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(var(--fc), 0);
+  }
 }
 
 /* home / empty main pane */

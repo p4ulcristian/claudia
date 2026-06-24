@@ -46,6 +46,7 @@ import { foldEvents, type DisplayItem } from "./fold";
 import FolderPicker from "./FolderPicker";
 import NewSessionPicker from "./NewSessionPicker";
 import GitPanel from "./GitPanel";
+import CodePanel from "./CodePanel";
 import StreamRenderer from "./StreamRenderer";
 import TaskChip from "./TaskChip";
 import UsagePanel from "./UsagePanel";
@@ -61,6 +62,7 @@ import {
   faPlus,
   faXmark,
   faCodeBranch,
+  faCode,
   faPaperPlane,
   faLayerGroup,
   faCircle,
@@ -668,6 +670,101 @@ function Sidebar({
   );
 }
 
+// The live "answering for Xs" elapsed time, curved over the top arc of the
+// composer circle (the circle hugs the screen's bottom edge, so there's no room
+// below it). An SVG <textPath> rides a concentric arc just outside the circle so
+// the digits follow its curvature; centered (startOffset 50%) so it stays put as
+// it grows from "42s" to "1m 04s". Ticks once a second.
+function FabTimer({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const label =
+    secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s`;
+  return (
+    <svg
+      className="fab-timer"
+      width="100"
+      height="100"
+      viewBox="0 0 100 100"
+      aria-hidden
+    >
+      <path id="fab-arc" d="M 22 28 A 36 36 0 0 1 78 28" fill="none" />
+      <text>
+        <textPath href="#fab-arc" startOffset="50%" textAnchor="middle">
+          {label}
+        </textPath>
+      </text>
+    </svg>
+  );
+}
+
+// Quick-switch circles for the in-focus sessions, pinned bottom-right and
+// stacking upward (mirroring the composer circle at bottom-left). Each is
+// numbered by position and colored by its folder; the current session's circle
+// is filled, and a circle whose session is streaming pulses.
+function SessionDots({
+  sessions,
+  liveIds,
+  currentSessionId,
+  tintClass,
+  onOpen,
+  onMarkDone,
+  onNew,
+}: {
+  sessions: { sessionId: string; folder: string; title: string }[];
+  liveIds: Set<string>;
+  currentSessionId: string | null;
+  tintClass: (f: string | null | undefined) => string;
+  onOpen: (folder: string, id: string) => void;
+  onMarkDone: (id: string) => void;
+  onNew: () => void;
+}) {
+  return (
+    <div className="session-dots">
+      {sessions.map((s, i) => {
+        const current = s.sessionId === currentSessionId;
+        const busy = liveIds.has(s.sessionId);
+        return (
+          <div className="sdot-wrap" key={s.sessionId}>
+            <button
+              className={`sdot${current ? " sdot-current" : ""}${
+                busy ? " sdot-busy" : ""
+              }${tintClass(s.folder) ? ` ${tintClass(s.folder)}` : ""}`}
+              onClick={() => onOpen(s.folder, s.sessionId)}
+              title={`${s.title} — ${shortName(s.folder)}`}
+              aria-label={`Switch to ${s.title}`}
+            >
+              {i + 1}
+            </button>
+            <button
+              className="sdot-x"
+              onClick={() => onMarkDone(s.sessionId)}
+              title="Mark done (remove from focus)"
+              aria-label="Mark done"
+            >
+              <FontAwesomeIcon icon={faXmark} />
+            </button>
+          </div>
+        );
+      })}
+      {/* Last circle: start a new session (mirrors the old tab strip's +). */}
+      <button
+        className="sdot sdot-new"
+        onClick={onNew}
+        title="New session"
+        aria-label="New session"
+      >
+        <FontAwesomeIcon icon={faPlus} />
+      </button>
+    </div>
+  );
+}
+
 export default function ClaudeManager() {
   const [view, setView] = useState<View>("home");
   const [folders, setFolders] = useState<FolderPath[]>([]);
@@ -689,6 +786,9 @@ export default function ClaudeManager() {
     Record<string, SessionSummary[] | undefined>
   >({});
   const [gitOpen, setGitOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
+  // Relative path to open in the editor when launched from a tool card.
+  const [codeTarget, setCodeTarget] = useState<string | undefined>(undefined);
   const [live, setLive] = useState<LiveSession[]>([]);
   const [active, setActive] = useState<ActiveMap>({});
   const [titles, setTitles] = useState<TitleMap>({});
@@ -897,17 +997,22 @@ export default function ClaudeManager() {
     if (error) setComposerOpen(true);
   }, [error]);
 
-  // Arm the idle timer that hides the header after a short pause.
+  // Idle pause before the header hides; longer right after a session switch so
+  // you can read titles while toggling between workspaces.
   const HEAD_IDLE_MS = 1500;
-  const armHeadHide = useCallback(() => {
+  const HEAD_SWITCH_MS = 5000;
+  const armHeadHide = useCallback((ms = HEAD_IDLE_MS) => {
     if (headHideTimer.current) clearTimeout(headHideTimer.current);
-    headHideTimer.current = setTimeout(() => setHeadHidden(true), HEAD_IDLE_MS);
+    headHideTimer.current = setTimeout(() => setHeadHidden(true), ms);
   }, []);
-  // Reveal, then re-arm the idle hide (scroll / open).
-  const revealHead = useCallback(() => {
-    setHeadHidden(false);
-    armHeadHide();
-  }, [armHeadHide]);
+  // Reveal, then re-arm the idle hide (scroll / open). Pass a longer ms on switch.
+  const revealHead = useCallback(
+    (ms = HEAD_IDLE_MS) => {
+      setHeadHidden(false);
+      armHeadHide(ms);
+    },
+    [armHeadHide],
+  );
   // Reveal and keep shown — no idle hide while the pointer is over the top edge
   // or the header itself.
   const holdHead = useCallback(() => {
@@ -919,7 +1024,7 @@ export default function ClaudeManager() {
   // reveal on upward scroll, near the top, or when a chat opens. Re-attaches per
   // chat (the viewport remounts on view swap).
   useEffect(() => {
-    revealHead();
+    revealHead(HEAD_SWITCH_MS); // hold the title ~5s after opening/switching
     const el = chatScrollRef.current;
     if (!el) {
       return () => {
@@ -1182,6 +1287,10 @@ export default function ClaudeManager() {
 
   // "doing" = a live job is streaming. "active" = in the home set (sessionMeta).
   const liveIds = useMemo(() => new Set(live.map((l) => l.sessionId)), [live]);
+  // Mirror for stable callbacks (attachOrLoad) that need the live set without
+  // taking it as a dependency.
+  const liveIdsRef = useRef(liveIds);
+  liveIdsRef.current = liveIds;
   // Home "in focus" list. Order is frozen in a ref so a 4s poll that only bumps
   // lastActiveAt never reshuffles rows under the cursor: existing rows keep
   // their place, newly-active sessions prepend (most recent first), removed
@@ -1290,49 +1399,56 @@ export default function ClaudeManager() {
       }
       const ac = new AbortController();
       abortRef.current = ac;
+      // The 4s poll already tells us which sessions are live, so for the common
+      // not-live case we skip the SSE reconnect entirely — that removes a whole
+      // round-trip from a switch, making it settle from cache alone. We only
+      // open the SSE when the poll says this session is actually running. (A
+      // session that goes live *while* open is picked up by the effect below.)
+      const live = liveIdsRef.current.has(id);
       try {
-        // Fire the delta fetch concurrently with the live-check instead of
-        // waiting to learn it's not live first — for the common (not-live) case
-        // this removes a whole round-trip from the time-to-settle. If the session
-        // turns out to be live, the snapshot wins and this result is discarded.
         const deltaPromise = loadSessionDelta(
           f,
           id,
           cached?.size ?? 0,
           cached?.modified ?? 0,
         ).catch(() => null);
-        const running = await subscribeChat(id, (m) => applyMsg(gen, m), ac.signal);
-        if (gen !== streamGenRef.current) return;
-        if (running) {
-          setStreaming(true); // snapshot replaces events with live state
-        } else {
-          // No live job for this session: it's just a saved transcript. Clear
-          // any streaming flag inherited from the chat we navigated away from,
-          // otherwise the new chat shows phantom "..." working dots.
-          setStreaming(false);
-          if (abortRef.current === ac) abortRef.current = null;
-          const res = await deltaPromise;
+
+        if (live) {
+          const running = await subscribeChat(id, (m) => applyMsg(gen, m), ac.signal);
           if (gen !== streamGenRef.current) return;
-          if (!res) {
-            setLoading(false); // delta failed; keep whatever cache we painted
+          if (running) {
+            setStreaming(true); // snapshot replaces events with live state
             return;
           }
-          const events =
-            !cached || res.reset
-              ? res.events
-              : res.events.length
-                ? [...cached.events, ...res.events]
-                : cached.events;
-          if (!cached || res.reset || res.events.length)
-            setEvents((prev) => (sameEvents(prev, events) ? prev : events));
-          setLoading(false);
-          void putCachedTranscript({
-            sessionId: id,
-            events,
-            size: res.size,
-            modified: res.modified,
-          });
+          // Poll was stale (job just ended) — fall through and settle from disk.
         }
+
+        // Not live: settle from cache + delta, no SSE. Clear any streaming flag
+        // inherited from the chat we navigated away from, otherwise the new chat
+        // shows phantom "..." working dots.
+        setStreaming(false);
+        if (abortRef.current === ac) abortRef.current = null;
+        const res = await deltaPromise;
+        if (gen !== streamGenRef.current) return;
+        if (!res) {
+          setLoading(false); // delta failed; keep whatever cache we painted
+          return;
+        }
+        const events =
+          !cached || res.reset
+            ? res.events
+            : res.events.length
+              ? [...cached.events, ...res.events]
+              : cached.events;
+        if (!cached || res.reset || res.events.length)
+          setEvents((prev) => (sameEvents(prev, events) ? prev : events));
+        setLoading(false);
+        void putCachedTranscript({
+          sessionId: id,
+          events,
+          size: res.size,
+          modified: res.modified,
+        });
       } catch (e) {
         if (gen !== streamGenRef.current) return;
         if (abortRef.current === ac) abortRef.current = null;
@@ -1361,6 +1477,35 @@ export default function ClaudeManager() {
     }, 9000);
     return () => clearTimeout(t);
   }, [streaming, sessionId, folder, liveIds, attachOrLoad]);
+
+  // Subscribe to a session's live stream WITHOUT repainting from cache — the
+  // snapshot frame supplies the events, so this never flashes stale content.
+  const reconnectLive = useCallback(
+    async (id: string) => {
+      invalidateStream();
+      const gen = streamGenRef.current;
+      const ac = new AbortController();
+      abortRef.current = ac;
+      try {
+        const running = await subscribeChat(id, (m) => applyMsg(gen, m), ac.signal);
+        if (gen !== streamGenRef.current) return;
+        if (running) setStreaming(true);
+        else if (abortRef.current === ac) abortRef.current = null;
+      } catch {
+        if (abortRef.current === ac) abortRef.current = null;
+      }
+    },
+    [applyMsg, invalidateStream],
+  );
+
+  // Because attachOrLoad now skips the SSE for sessions the poll didn't mark
+  // live, a session that turns live *while* you're viewing it (started
+  // elsewhere, learned on the next 4s tick) wouldn't stream. When the poll adds
+  // the open session to the live set and we're not already streaming, reconnect.
+  useEffect(() => {
+    if (view !== "chat" || !sessionId) return;
+    if (liveIds.has(sessionId) && !streaming) void reconnectLive(sessionId);
+  }, [liveIds, view, sessionId, streaming, reconnectLive]);
 
   // Restore view/folder/session from a URL query string. Used on load and on
   // browser back/forward (popstate). Handles the home case so navigating back
@@ -1526,6 +1671,47 @@ export default function ClaudeManager() {
       }
     })();
   }, []);
+
+  // Network top-up for a session's cache, ALWAYS (unlike prefetchSession, which
+  // bails when the session is already hot). Used to keep the in-focus sessions'
+  // caches current in the background, so switching to one is a synchronous,
+  // already-fresh paint with no on-open settle.
+  const keepFreshSession = useCallback(async (f: string, id: string) => {
+    try {
+      const cached = peekCachedTranscript(id) ?? (await getCachedTranscript(id));
+      const res = await loadSessionDelta(
+        f,
+        id,
+        cached?.size ?? 0,
+        cached?.modified ?? 0,
+      );
+      if (!res.reset && !res.events.length) return; // nothing new — leave cache
+      const events =
+        !cached || res.reset ? res.events : [...cached.events, ...res.events];
+      await putCachedTranscript({
+        sessionId: id,
+        events,
+        size: res.size,
+        modified: res.modified,
+      });
+    } catch {
+      /* best-effort background refresh */
+    }
+  }, []);
+
+  // Tick the in-focus sessions' caches fresh every few seconds (skipping the one
+  // that's open — that's handled live). Bounded by the in-focus count.
+  useEffect(() => {
+    const tick = () => {
+      for (const a of activeList) {
+        if (a.sessionId === sessionIdRef.current) continue;
+        void keepFreshSession(a.folder, a.sessionId);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, [activeList, keepFreshSession]);
 
   // On a narrow screen the sidebar is an overlay; collapse it after a pick so the
   // chat is visible. Not persisted — desktop keeps its remembered open state.
@@ -1882,7 +2068,7 @@ export default function ClaudeManager() {
     <div
       className={`chat-head${headHidden ? " is-hidden" : ""}`}
       onMouseEnter={holdHead}
-      onMouseLeave={armHeadHide}
+      onMouseLeave={() => armHeadHide()}
     >
       {headLogo}
       {view === "chat" && folder ? (
@@ -1898,6 +2084,24 @@ export default function ClaudeManager() {
             sessionId ? (t) => void renameSession(sessionId, t) : undefined
           }
         />
+      ) : null}
+      {view === "chat" && folder ? (
+        <div className="chat-head-tools">
+          <button
+            className={"btn" + (codeOpen ? " accent" : " ghost")}
+            onClick={() => setCodeOpen((v) => !v)}
+            title="Code editor"
+          >
+            <FontAwesomeIcon icon={faCode} />
+          </button>
+          <button
+            className={"btn" + (gitOpen ? " accent" : " ghost")}
+            onClick={() => setGitOpen((v) => !v)}
+            title="Git"
+          >
+            <FontAwesomeIcon icon={faCodeBranch} />
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -1955,11 +2159,20 @@ export default function ClaudeManager() {
                 <StreamRenderer
                   items={items}
                   streaming={streaming}
-                  startedAt={turnStartedAt}
                   queue={queue}
                   sessionId={sessionId}
                   onAnswer={(t) => void sendText(t)}
                   onCancelQueued={cancelQueued}
+                  onOpenFile={(abs) => {
+                    // Tool paths are absolute; the editor works in paths
+                    // relative to the folder root.
+                    const rel =
+                      folder && abs.startsWith(folder)
+                        ? abs.slice(folder.length).replace(/^\/+/, "")
+                        : abs;
+                    setCodeTarget(rel);
+                    setCodeOpen(true);
+                  }}
                 />
               )}
             </div>
@@ -2014,38 +2227,53 @@ export default function ClaudeManager() {
                       icon={streaming ? faLayerGroup : faPaperPlane}
                     />
                   </button>
-                  <button
-                    className={"btn" + (gitOpen ? " accent" : " ghost")}
-                    onClick={() => setGitOpen((v) => !v)}
-                    title="Git"
-                  >
-                    <FontAwesomeIcon icon={faCodeBranch} />
-                  </button>
                 </div>
               </div>
             )}
 
-            <button
-              ref={fabRef}
-              className={`fab${streaming ? " is-streaming" : ""}${
-                composerOpen ? " is-open" : ""
-              }`}
-              onClick={() => setComposerOpen((v) => !v)}
-              onPointerEnter={(e) => {
-                // Mouse only — touch uses the tap. Open after a short rest so a
-                // quick pass-over doesn't trigger it.
-                if (e.pointerType === "touch" || composerOpen) return;
-                if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
-                fabHoverTimer.current = setTimeout(() => setComposerOpen(true), 140);
-              }}
-              onPointerLeave={() => {
-                if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
-              }}
-              title={composerOpen ? "Close composer (Esc)" : "Write a message"}
-              aria-label={composerOpen ? "Close composer" : "Write a message"}
-            >
-              <FontAwesomeIcon icon={composerOpen ? faXmark : faPencil} />
-            </button>
+            <SessionDots
+              sessions={activeList.map((a) => ({
+                sessionId: a.sessionId,
+                folder: a.folder,
+                title: titles[a.sessionId] ?? a.title,
+              }))}
+              liveIds={liveIds}
+              currentSessionId={sessionId}
+              tintClass={tintClass}
+              onOpen={(f, id) => void openSession(f, id)}
+              onMarkDone={(id) => void markDone(id)}
+              onNew={() => setNewSessionPicker(true)}
+            />
+
+            <div className="fab-wrap">
+              {streaming && turnStartedAt != null && (
+                <FabTimer startedAt={turnStartedAt} />
+              )}
+              <button
+                ref={fabRef}
+                className={`fab${streaming ? " is-streaming" : ""}${
+                  composerOpen ? " is-open" : ""
+                }`}
+                onClick={() => setComposerOpen((v) => !v)}
+                onPointerEnter={(e) => {
+                  // Mouse only — touch uses the tap. Open after a short rest so a
+                  // quick pass-over doesn't trigger it.
+                  if (e.pointerType === "touch" || composerOpen) return;
+                  if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
+                  fabHoverTimer.current = setTimeout(
+                    () => setComposerOpen(true),
+                    140,
+                  );
+                }}
+                onPointerLeave={() => {
+                  if (fabHoverTimer.current) clearTimeout(fabHoverTimer.current);
+                }}
+                title={composerOpen ? "Close composer (Esc)" : "Write a message"}
+                aria-label={composerOpen ? "Close composer" : "Write a message"}
+              >
+                <FontAwesomeIcon icon={composerOpen ? faXmark : faPencil} />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="pane home-pane">
@@ -2084,6 +2312,14 @@ export default function ClaudeManager() {
 
       {gitOpen && folder && (
         <GitPanel folder={folder} onClose={() => setGitOpen(false)} />
+      )}
+
+      {codeOpen && folder && (
+        <CodePanel
+          folder={folder}
+          initialPath={codeTarget}
+          onClose={() => setCodeOpen(false)}
+        />
       )}
 
       {newSessionPicker && (

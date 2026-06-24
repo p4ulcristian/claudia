@@ -9,6 +9,8 @@ import type {
   GitCommitDetail,
   GitData,
   GitFileDiff,
+  FileNode,
+  FileContent,
   LiveSession,
   SessionSummary,
   TitleMap,
@@ -142,6 +144,42 @@ export function writeSessionListCache(
 export async function getGit(folder: string): Promise<GitData> {
   return json<GitData>(
     await fetch(`/api/git?folder=${encodeURIComponent(folder)}`),
+  );
+}
+
+/** Recursive file tree for the inline editor (heavy/VCS dirs pruned). */
+export async function getFileTree(folder: string): Promise<FileNode[]> {
+  return (
+    await json<{ tree: FileNode[] }>(
+      await fetch(`/api/files?folder=${encodeURIComponent(folder)}`),
+    )
+  ).tree;
+}
+
+/** Contents + language hint for one file. */
+export async function readFile(
+  folder: string,
+  path: string,
+): Promise<FileContent> {
+  return json<FileContent>(
+    await fetch(
+      `/api/files?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(path)}`,
+    ),
+  );
+}
+
+/** Write a file back to disk. */
+export async function saveFile(
+  folder: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  await json<{ ok: true }>(
+    await fetch(`/api/files?folder=${encodeURIComponent(folder)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, content }),
+    }),
   );
 }
 
