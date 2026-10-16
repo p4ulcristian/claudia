@@ -234,6 +234,31 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   const fresh = useRef(new Set<string>());
   const run = useRef(0);
   const box = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+
+  // Zoom around a point of the diagram box (px from its top-left).
+  const zoomAt = (px: number, py: number, factor: number) =>
+    setView((v) => {
+      const k = Math.min(4, Math.max(0.3, v.k * factor));
+      const lx = layer.current?.offsetLeft ?? 0, ly = layer.current?.offsetTop ?? 0;
+      const ux = (px - lx - v.x) / v.k, uy = (py - ly - v.y) / v.k;
+      return { k, x: px - lx - ux * k, y: py - ly - uy * k };
+    });
+
+  // Ctrl+wheel and trackpad pinch zoom the picture, not the page. React's wheel
+  // listener is passive and can't stop the browser zoom, so this one is native.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0025));
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [laid]);
 
   const dir = useRef<Variant | null>(null);
   const [width, setWidth] = useState(0);
@@ -277,12 +302,8 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   if (!laid) return <div className="diagram" ref={box} />;
   const changedSet = new Set(changed);
   const pad = PAD;
-  const onWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    setView((v) => ({ ...v, k: Math.min(3, Math.max(0.3, v.k * (e.deltaY < 0 ? 1.1 : 0.9))) }));
-  };
   const onDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest(".zoom-ctl")) return;
     const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
     const move = (m: PointerEvent) => setView((v) => ({ ...v, x: start.vx + m.clientX - start.x, y: start.vy + m.clientY - start.y }));
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
@@ -290,7 +311,13 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
     window.addEventListener("pointerup", up);
   };
   return (
-    <div className="diagram" ref={box} onWheel={onWheel} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })}>
+    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={(e) => !(e.target as HTMLElement).closest(".zoom-ctl") && setView({ k: 1, x: 0, y: 0 })}>
+      <div className="zoom-ctl">
+        <button onClick={() => { const r = box.current!.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1 / 1.25); }} title="Zoom out (Ctrl+wheel)">−</button>
+        <button onClick={() => setView({ k: 1, x: 0, y: 0 })} title="Fit (double-click)">{Math.round(view.k * 100)}%</button>
+        <button onClick={() => { const r = box.current!.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1.25); }} title="Zoom in (Ctrl+wheel)">+</button>
+      </div>
+      <div className="zoom-layer" ref={layer} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
           {COLORS.map((c) => (
@@ -299,7 +326,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
             </marker>
           ))}
         </defs>
-        <g style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, transformOrigin: "center" }}>
+        <g>
           {laid.groups.map((g) => (
             <g key={g.id} className={`group c-${g.group.color ?? "grey"}`} style={{ transform: `translate(${g.x}px, ${g.y}px)` }}>
               <rect width={g.w} height={g.h} rx={13} />
@@ -326,6 +353,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
           ))}
         </g>
       </svg>
+      </div>
     </div>
   );
 }

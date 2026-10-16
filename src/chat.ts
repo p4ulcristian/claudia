@@ -93,6 +93,12 @@ export function toolLabel(name: string) {
 
 const stripReminders = (s: string) => s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
 
+// An answer to AskUserQuestion, as the user's own message in the chat.
+function answerText(questions: Question[], answers: Record<string, string>) {
+  const pairs = questions.map((q) => [q.header || q.question, answers[q.question] ?? ""] as const).filter(([, a]) => a);
+  return pairs.length === 1 ? pairs[0][1] : pairs.map(([h, a]) => `**${h}:** ${a}`).join("\n");
+}
+
 // Slash commands are stored as tagged user text; show the command and its output plainly.
 // Claude Code stores "background task finished" notices as user messages; show them as a note.
 function taskNotice(text: string): string | null {
@@ -130,10 +136,12 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
   const msgs = await getSessionMessages(sessionId, { dir: WORK });
   const items: Item[] = [];
   const tools = new Map<string, Extract<Item, { k: "tool" }>>();
+  const asked = new Map<string, Question[]>();
   for (const m of msgs) {
     if (m.parent_tool_use_id) continue;
     const msg = m.message as any;
     if (m.type === "assistant") {
+      for (const b of msg?.content ?? []) if (b.type === "tool_use" && b.name === "AskUserQuestion") asked.set(b.id, b.input?.questions ?? []);
       for (const it of assistantItems(m.uuid, msg?.content ?? [])) {
         items.push(it);
         if (it.k === "tool") tools.set(it.id, it);
@@ -157,6 +165,14 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
         if (b.type === "tool_result") {
           const t = tools.get(b.tool_use_id);
           if (t) t.result = { error: !!b.is_error, text: short(resultText(b.content), 4000) };
+          const qs = asked.get(b.tool_use_id);
+          if (qs && !b.is_error) {
+            // The result reads: … "question"="answer" …
+            const answers: Record<string, string> = {};
+            for (const [, q, a] of resultText(b.content).matchAll(/"((?:[^"\\]|\\.)*)"="((?:[^"\\]|\\.)*)"/g)) answers[q] = a;
+            const text = answerText(qs, answers);
+            if (text) items.push({ k: "user", uuid: `answer-${b.tool_use_id}`, text, images: 0 });
+          }
         } else if (b.type === "text") texts.push(stripReminders(b.text));
         else if (b.type === "image") images++;
       }
@@ -276,6 +292,8 @@ export class Chat {
     this.asks.delete(id);
     w.resolve({ behavior: "allow", updatedInput: { ...w.input, answers } });
     this.emit({ t: "ask_done", id });
+    const text = answerText(w.value.questions, answers);
+    if (text) this.emit({ t: "user", item: { k: "user", uuid: `answer-${id}`, text, images: 0 } });
   }
 
   permit(id: string, allow: boolean) {
