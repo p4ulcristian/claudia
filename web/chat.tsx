@@ -1,10 +1,10 @@
 // The left half: the conversation, kept short, with tool steps folded away.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { md } from "./md";
-import type { Item } from "./types";
+import type { Command, Item } from "./types";
 
 type Tool = Extract<Item, { k: "tool" }>;
-type Block = { k: "user" | "text"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
+type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
 
 function blocks(items: Item[]): Block[] {
   const out: Block[] = [];
@@ -53,6 +53,20 @@ function Steps({ tools, live }: { tools: Tool[]; live: boolean }) {
         {errors > 0 && <span className="err-count">{errors} failed</span>}
       </button>
       {open && <ul>{tools.map((t) => <Step key={t.id} t={t} />)}</ul>}
+    </div>
+  );
+}
+
+// A subagent's messages, in the same compact form as the main chat.
+export function Transcript({ items, live }: { items: Item[]; live: boolean }) {
+  const bs = blocks(items);
+  return (
+    <div className="transcript">
+      {bs.map((b, i) =>
+        b.k === "steps" ? <Steps key={b.id} tools={b.tools} live={live && i === bs.length - 1} />
+          : b.k === "text" ? <div key={(b.item as any).id} className="msg claude small"><Markdown text={(b.item as any).text} /></div>
+          : null,
+      )}
     </div>
   );
 }
@@ -122,6 +136,10 @@ export function Messages(props: {
             </div>
           );
         }
+        if (b.k === "note") {
+          const it = b.item as Extract<Item, { k: "note" }>;
+          return <pre key={`note-${it.id}-${i}`} className="note-line">{it.text}</pre>;
+        }
         const it = b.item as Extract<Item, { k: "text" }>;
         return <div key={it.id} className="msg claude"><Markdown text={it.text} /></div>;
       })}
@@ -139,10 +157,26 @@ export function Messages(props: {
 
 type Img = { media_type: string; data: string; url: string };
 
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string }) {
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; commands: Command[]; tools?: React.ReactNode }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<Img[]>([]);
+  const [pick, setPick] = useState(0);
+  const [menuOff, setMenuOff] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
+
+  // "/" at the start, before any space: offer the slash commands.
+  const slash = /^\/(\S*)$/.exec(text);
+  const matches = slash && !menuOff
+    ? props.commands.filter((c) => c.name.toLowerCase().includes(slash[1].toLowerCase()))
+        .sort((a, b) => Number(!b.name.startsWith(slash[1])) - Number(!a.name.startsWith(slash[1])))
+        .slice(0, 8)
+    : [];
+  useEffect(() => setPick(0), [text]);
+  const complete = (c: Command) => {
+    setText(`/${c.name} `);
+    setMenuOff(false);
+    ta.current?.focus();
+  };
 
   useEffect(() => ta.current?.focus(), [props.focusKey]);
   useLayoutEffect(() => {
@@ -188,20 +222,39 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
           ))}
         </div>
       )}
+      {matches.length > 0 && (
+        <ul className="slash-menu" role="listbox">
+          {matches.map((c, i) => (
+            <li key={c.name} role="option" aria-selected={i === pick} className={i === pick ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); complete(c); }} onMouseEnter={() => setPick(i)}>
+              <b>/{c.name}</b>{c.hint && <span className="hint"> {c.hint}</span>}
+              <span className="desc">{c.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="input-row">
         <textarea
           ref={ta}
           rows={1}
           value={text}
           placeholder={props.asking ? "Answer on the right, or type an answer here…" : props.running ? "Add to this turn…" : "Message Claude…"}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); if (!e.target.value.startsWith("/")) setMenuOff(false); }}
           onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
           onKeyDown={(e) => {
+            if (matches.length) {
+              if (e.key === "ArrowDown") { e.preventDefault(); return setPick((p) => (p + 1) % matches.length); }
+              if (e.key === "ArrowUp") { e.preventDefault(); return setPick((p) => (p - 1 + matches.length) % matches.length); }
+              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); return complete(matches[pick]); }
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return setMenuOff(true); }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
           }}
         />
-        {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
-        <button className="send primary" onClick={send} disabled={!text.trim() && !images.length} title="Send (Enter)">Send</button>
+        <div className="toolbar">
+          <div className="tools">{props.tools}</div>
+          {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
+          <button className="send primary" onClick={send} disabled={!text.trim() && !images.length} title="Send (Enter)">Send</button>
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
 import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
 import { store } from "./src/db";
+import { getMeta, onMeta, probe } from "./src/meta";
+import { open as openFile } from "node:fs/promises";
 
 const PORT = Number(process.env.PORT ?? 4510);
 const chats = new Map<string, Chat>();
@@ -54,6 +56,11 @@ async function openChat(ws: Sock, id: string) {
       partial: c.partial,
       asks: [...c.asks.values()].map((w) => w.value),
       permits: [...c.permits.values()].map((w) => w.value),
+      tasks: [...c.tasks.values()],
+      subs: Object.fromEntries(c.subs),
+      context: c.context,
+      settings: c.settings,
+      model: c.model,
     }),
   );
   ws.data.off = c.on((ev: ChatEvent) => ws.send(JSON.stringify({ t: "event", chat: id, ev })));
@@ -70,6 +77,24 @@ Bun.serve({
     "/": index,
     "/c/:id": index,
     "/api/chats": { GET: async (req) => json(await listChats(new URL(req.url).searchParams.get("all") === "1")) },
+    // The last part of a background task's output file (only files the task reported).
+    "/api/chats/:id/tasks/:task/output": {
+      GET: async (req) => {
+        const file = chats.get(req.params.id)?.tasks.get(req.params.task)?.outputFile;
+        if (!file) return json({ text: "" });
+        try {
+          const f = await openFile(file, "r");
+          const { size } = await f.stat();
+          const len = Math.min(size, 16_000);
+          const buf = Buffer.alloc(len);
+          await f.read(buf, 0, len, size - len);
+          await f.close();
+          return json({ text: buf.toString("utf8"), truncated: size > len });
+        } catch {
+          return json({ text: "" });
+        }
+      },
+    },
     "/api/chats/:id": {
       PATCH: async (req) => {
         const { title } = (await req.json()) as { title: string };
@@ -94,7 +119,10 @@ Bun.serve({
   },
   websocket: {
     maxPayloadLength: 64 * 1024 * 1024,
-    open: (ws: Sock) => void socks.add(ws),
+    open: (ws: Sock) => {
+      socks.add(ws);
+      ws.send(JSON.stringify({ t: "meta", meta: getMeta() }));
+    },
     close: (ws: Sock) => {
       ws.data.off?.();
       socks.delete(ws);
@@ -114,6 +142,13 @@ Bun.serve({
           case "stop": return await chats.get(m.chat)?.stop();
           case "answer": return chats.get(m.chat)?.answer(m.id, m.answers ?? {});
           case "permit": return chats.get(m.chat)?.permit(m.id, !!m.allow);
+          case "settings": {
+            const next: Record<string, string | null> = {};
+            if ("model" in m) next.model = m.model || null;
+            if ("effort" in m) next.effort = m.effort || null;
+            return await chat(m.chat).setSettings(next);
+          }
+          case "stop_task": return await chats.get(m.chat)?.stopTask(String(m.task));
         }
       } catch (err) {
         ws.send(JSON.stringify({ t: "event", chat: m.chat, ev: { t: "error", text: String((err as Error)?.message ?? err) } }));
@@ -121,5 +156,10 @@ Bun.serve({
     },
   },
 });
+
+// Models, commands and plan usage: read now, then every 5 minutes, and soon after each turn (see Chat).
+onMeta((meta) => { for (const s of socks) s.send(JSON.stringify({ t: "meta", meta })); });
+probe(WORK);
+setInterval(() => socks.size && probe(WORK), 5 * 60_000);
 
 console.log(`Claudia on http://claudia.localhost:${PORT} (chats in ${WORK})`);

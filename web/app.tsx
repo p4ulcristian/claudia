@@ -3,7 +3,9 @@ import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
 import { AskPanel, PermitPanel } from "./panels";
-import type { Ask, ChatEvent, ChatRow, Item, Permit, Picture, Scene } from "./types";
+import { TasksPanel } from "./tasks";
+import { Meters, Pickers } from "./usage";
+import type { Ask, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
 const empty: Scene = { title: "", nodes: [], edges: [], groups: [], cards: [] };
@@ -24,11 +26,17 @@ type Live = {
   asks: Ask[];
   permits: Permit[];
   lastTurn?: { drew: boolean; stopped?: boolean };
+  tasks: Task[];
+  subs: Record<string, Item[]>;
+  context: Context | null;
+  settings: Settings;
+  model: string;
 };
 
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null }, model: "",
 });
 
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
@@ -101,7 +109,14 @@ function apply(l: Live, ev: ChatEvent): Live {
     case "status": return { ...l, running: ev.running, note: ev.note, since: ev.running && !l.running ? Date.now() : l.since, partial: ev.running ? l.partial : "" };
     case "turn_end": return { ...l, lastTurn: { drew: ev.drew, stopped: ev.stopped }, error: ev.error };
     case "error": return { ...l, error: ev.text };
+    case "tasks": return { ...l, tasks: ev.tasks };
+    case "sub": return { ...l, subs: { ...l.subs, [ev.parent]: [...(l.subs[ev.parent] ?? []), ...ev.items].slice(-300) } };
+    case "sub_result":
+      return { ...l, subs: { ...l.subs, [ev.parent]: (l.subs[ev.parent] ?? []).map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text } } : it)) } };
+    case "context": return { ...l, context: ev.context };
+    case "settings": return { ...l, settings: ev.settings, model: ev.model || l.model };
   }
+  return l;
 }
 
 // Below this width the chat list slides over the chat instead of taking a column.
@@ -134,6 +149,7 @@ function App() {
   const [viewing, setViewing] = useState<string | null>(null);
   const [split, setSplit] = useState(() => Number(store.get("split")) || 0.42);
   const [editing, setEditing] = useState(false);
+  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], defaultModel: "", at: 0 });
   const currentRef = useRef(current);
   currentRef.current = current;
 
@@ -146,12 +162,14 @@ function App() {
   const { send, up } = useSocket(
     (m) => {
       if (m.t === "chats_changed") return void loadChats();
+      if (m.t === "meta") return void setMeta(m.meta);
       if (m.chat !== currentRef.current) return;
       if (m.t === "history") {
         const last = m.pictures.at(-1);
         setLive((l) => ({
           ...l, loaded: true, items: m.items, partial: m.partial, running: m.running, since: m.since || Date.now(), scene: m.scene,
           changed: last?.changed ?? [], seq: l.seq + 1, pictures: m.pictures, asks: m.asks, permits: m.permits,
+          tasks: m.tasks ?? [], subs: m.subs ?? {}, context: m.context, settings: m.settings, model: m.model,
         }));
       } else if (m.t === "event") setLive((l) => apply(l, m.ev));
     },
@@ -315,13 +333,23 @@ function App() {
             viewing={viewing}
             onView={setViewing}
           />
-          <Composer running={live.running} asking={live.asks.length > 0} onSend={onSend} onStop={onStop} focusKey={current} />
+          <Composer
+            running={live.running}
+            asking={live.asks.length > 0}
+            onSend={onSend}
+            onStop={onStop}
+            focusKey={current}
+            commands={meta.commands}
+            tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
+          />
+          <Meters meta={meta} context={live.context} />
         </section>
         <div className="divider" onPointerDown={dragSplit} />
         <section className="right">
           <div className="right-scroll">
-          {(live.asks.length > 0 || live.permits.length > 0) && (
+          {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0) && (
             <div className="interface">
+              {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
               {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
               {live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
             </div>

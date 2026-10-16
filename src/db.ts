@@ -17,6 +17,12 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   -- One row per turn that changed the picture; turn_uuid = the user message it answers.
+  -- Model and effort picked for a chat; null = the user's Claude Code default.
+  CREATE TABLE IF NOT EXISTS chat_settings (
+    session_id TEXT PRIMARY KEY,
+    model TEXT,
+    effort TEXT
+  );
   CREATE TABLE IF NOT EXISTS pictures (
     session_id TEXT NOT NULL,
     turn_uuid TEXT NOT NULL,
@@ -32,9 +38,15 @@ const q = {
   ours: db.query<{ session_id: string }, []>("SELECT session_id FROM chats"),
   dropChat: db.query("DELETE FROM chats WHERE session_id = ?"),
   dropPictures: db.query("DELETE FROM pictures WHERE session_id = ?"),
+  dropSettings: db.query("DELETE FROM chat_settings WHERE session_id = ?"),
   savePicture: db.query(
     `INSERT INTO pictures (session_id, turn_uuid, scene, changed, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (session_id, turn_uuid) DO UPDATE SET scene = excluded.scene, changed = excluded.changed`,
+  ),
+  settings: db.query<{ model: string | null; effort: string | null }, [string]>("SELECT model, effort FROM chat_settings WHERE session_id = ?"),
+  saveSettings: db.query(
+    `INSERT INTO chat_settings (session_id, model, effort) VALUES (?, ?, ?)
+     ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort`,
   ),
   pictures: db.query<{ turn_uuid: string; scene: string; changed: string; created_at: number }, [string]>(
     "SELECT turn_uuid, scene, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
@@ -47,7 +59,10 @@ export const store = {
   deleteChat(id: string) {
     q.dropChat.run(id);
     q.dropPictures.run(id);
+    q.dropSettings.run(id);
   },
+  settings: (id: string) => q.settings.get(id) ?? { model: null, effort: null },
+  saveSettings: (id: string, model: string | null, effort: string | null) => q.saveSettings.run(id, model, effort),
   savePicture: (id: string, turn: string, scene: Scene, changed: string[]) =>
     q.savePicture.run(id, turn, JSON.stringify(scene), JSON.stringify(changed), Date.now()),
   pictures: (id: string) =>
