@@ -1,0 +1,208 @@
+// The left half: the conversation, kept short, with tool steps folded away.
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { md } from "./md";
+import type { Item } from "./types";
+
+type Tool = Extract<Item, { k: "tool" }>;
+type Block = { k: "user" | "text"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
+
+function blocks(items: Item[]): Block[] {
+  const out: Block[] = [];
+  for (const it of items) {
+    if (it.k === "tool") {
+      const last = out[out.length - 1];
+      if (last?.k === "steps") last.tools.push(it);
+      else out.push({ k: "steps", tools: [it], id: it.id });
+    } else out.push({ k: it.k, item: it });
+  }
+  return out;
+}
+
+function Step({ t }: { t: Tool }) {
+  const [open, setOpen] = useState(false);
+  const state = !t.result ? "busy" : t.result.error ? "err" : "ok";
+  return (
+    <li className={`step ${state}`}>
+      <button className="step-row" onClick={() => setOpen(!open)}>
+        <span className="step-dot" />
+        <b>{t.name}</b>
+        <span className="step-title">{t.title}</span>
+      </button>
+      {open && (
+        <div className="step-detail">
+          <pre>{t.detail}</pre>
+          {t.result && <pre className={t.result.error ? "err" : ""}>{t.result.text || "(no output)"}</pre>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Steps({ tools, live }: { tools: Tool[]; live: boolean }) {
+  const [open, setOpen] = useState(false);
+  const busy = tools.some((t) => !t.result);
+  const errors = tools.filter((t) => t.result?.error).length;
+  const names = [...new Set(tools.map((t) => t.name))].slice(0, 4).join(", ");
+  const current = busy ? tools.find((t) => !t.result) : null;
+  return (
+    <div className={`steps ${busy && live ? "busy" : ""}`}>
+      <button className="steps-head" onClick={() => setOpen(!open)}>
+        <span className={`chev ${open ? "open" : ""}`}>›</span>
+        <span>{tools.length} {tools.length === 1 ? "step" : "steps"}</span>
+        <span className="muted">{current && live ? `${current.name} ${current.title}` : names}</span>
+        {errors > 0 && <span className="err-count">{errors} failed</span>}
+      </button>
+      {open && <ul>{tools.map((t) => <Step key={t.id} t={t} />)}</ul>}
+    </div>
+  );
+}
+
+function Markdown({ text }: { text: string }) {
+  return <div className="md" dangerouslySetInnerHTML={{ __html: md(text) }} />;
+}
+
+function Elapsed({ since }: { since: number }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.floor((Date.now() - since) / 1000);
+  return <>{s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`}</>;
+}
+
+export function Messages(props: {
+  items: Item[];
+  partial: string;
+  running: boolean;
+  runningSince: number;
+  note?: string;
+  error?: string;
+  stopped: boolean;
+  pictureTurns: Set<string>;
+  viewing: string | null;
+  onView: (turn: string | null) => void;
+}) {
+  const { items, partial, running } = props;
+  const ref = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const bs = blocks(items);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [items, partial, running]);
+
+  return (
+    <div
+      className="messages"
+      ref={ref}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      }}
+    >
+      {!items.length && !running && <div className="hello"><h2>What are we working on?</h2><p className="muted">Claude answers short here and explains on the right.</p></div>}
+      {bs.map((b, i) => {
+        if (b.k === "steps") return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} />;
+        if (b.k === "user") {
+          const it = b.item as Extract<Item, { k: "user" }>;
+          const has = props.pictureTurns.has(it.uuid);
+          return (
+            <div key={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
+              <div className="bubble">
+                {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
+                <Markdown text={it.text} />
+              </div>
+              {has && (
+                <button className="pic-link" title="Show the picture from this turn" onClick={() => props.onView(props.viewing === it.uuid ? null : it.uuid)}>
+                  {props.viewing === it.uuid ? "back to live" : "picture"}
+                </button>
+              )}
+            </div>
+          );
+        }
+        const it = b.item as Extract<Item, { k: "text" }>;
+        return <div key={it.id} className="msg claude"><Markdown text={it.text} /></div>;
+      })}
+      {partial && <div className="msg claude streaming"><Markdown text={partial} /></div>}
+      {running && (
+        <div className="working">
+          <span className="pulse" /> {props.note ?? "Working"} · <Elapsed since={props.runningSince} />
+        </div>
+      )}
+      {props.stopped && !running && <div className="muted small">Stopped.</div>}
+      {props.error && <div className="error-line">{props.error}</div>}
+    </div>
+  );
+}
+
+type Img = { media_type: string; data: string; url: string };
+
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string }) {
+  const [text, setText] = useState("");
+  const [images, setImages] = useState<Img[]>([]);
+  const ta = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => ta.current?.focus(), [props.focusKey]);
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 260) + "px";
+  }, [text]);
+
+  const addFiles = (files: FileList | File[]) => {
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith("image/")) continue;
+      const r = new FileReader();
+      r.onload = () => {
+        const url = String(r.result);
+        setImages((xs) => [...xs, { media_type: f.type, data: url.split(",")[1], url }]);
+      };
+      r.readAsDataURL(f);
+    }
+  };
+
+  const send = () => {
+    const t = text.trim();
+    if (!t && !images.length) return;
+    props.onSend(t, images);
+    setText("");
+    setImages([]);
+  };
+
+  return (
+    <div
+      className="composer"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+    >
+      {images.length > 0 && (
+        <div className="thumbs">
+          {images.map((im, i) => (
+            <div key={i} className="thumb">
+              <img src={im.url} alt="" />
+              <button onClick={() => setImages((xs) => xs.filter((_, j) => j !== i))} title="Remove">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="input-row">
+        <textarea
+          ref={ta}
+          rows={1}
+          value={text}
+          placeholder={props.asking ? "Answer on the right, or type an answer here…" : props.running ? "Add to this turn…" : "Message Claude…"}
+          onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
+          }}
+        />
+        {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
+        <button className="send primary" onClick={send} disabled={!text.trim() && !images.length} title="Send (Enter)">Send</button>
+      </div>
+    </div>
+  );
+}

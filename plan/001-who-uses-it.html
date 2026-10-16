@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>claudeXplain</title>
+<link rel="stylesheet" href="/board.css">
+<style>
+  .split { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; min-height: 190px; }
+  .split .step { border-radius: 9px; padding: 12px 14px; border: 1.5px solid; display: grid; gap: 6px; align-content: start; }
+  .split .step b { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .split .step span { font-size: 13.5px; }
+  .dots { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+  .dot { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--blue); display: grid; place-items: center; font-size: 11px; }
+  .order li.now { font-weight: 600; }
+  .order li.later { color: var(--muted); }
+</style>
+<main>
+  <div>
+    <h1>claudeXplain</h1>
+    <p class="muted">~/Work/tools/claudeXplain · empty git repo · nothing built yet</p>
+  </div>
+
+  <section class="panel">
+    <h2>The vision</h2>
+    <div class="split">
+      <div class="step grey"><b>Left · chat</b>
+        <span>Claude, several chats, history, Markdown answers, everything a real chat app has.</span></div>
+      <div class="step blue"><b>Right · picture</b>
+        <span>Claude draws what it is doing on every turn: circles, arrows, boxes.</span>
+        <div class="dots"><div class="dot">A</div>→<div class="dot">B</div>→<div class="dot">C</div></div></div>
+    </div>
+    <p class="muted" style="margin-top:10px">This board window is already a rough version of the right side: Claude writes a page, the window shows it within a second.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Decisions, one at a time</h2>
+    <ol class="order">
+      <li class="now">Who uses it ← now</li>
+      <li class="later">What runs Claude underneath (follows from 1)</li>
+      <li class="later">How Claude draws: free pages or a fixed set of shapes</li>
+      <li class="later">When it draws: every turn, or when it has something to show</li>
+      <li class="later">Where chats are stored, what "history" covers</li>
+      <li class="later">Desktop window or web page behind the gate</li>
+    </ol>
+  </section>
+
+  <section class="panel">
+    <h2>1 · Who uses it</h2>
+    <div class="grid">
+      <div class="flow"><div class="step green"><b>A · You, on destiny</b>
+        <span>+ Claude Code runs underneath on your subscription: no extra bill</span>
+        <span>+ Claude can read files, run commands, search the web, as now</span>
+        <span>+ chats are Claude Code sessions: history and resume already exist</span>
+        <span>− only works where you are logged in to Claude</span>
+        <span>− subscription usage limits apply</span></div></div>
+      <div class="flow"><div class="step amber"><b>B · Others too (team, public)</b>
+        <span>+ anyone with a login can use it</span>
+        <span>− needs an API key: every message is billed</span>
+        <span>− tools, storage and history all built by us</span>
+        <span>− a subscription can't be shared with others</span></div></div>
+    </div>
+    <p style="margin-top:10px"><span class="tag green">my lean · A</span> Build it for you first. The chat side talks to Claude through one small layer, so B can be added later without a rewrite.</p>
+  </section>
+</main>
