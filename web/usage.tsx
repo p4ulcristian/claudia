@@ -41,17 +41,17 @@ export function Pickers(props: { meta: Meta; settings: Settings; model: string; 
   const running = prettyModel(model || (settings.model ? "" : meta.defaultModel));
   return (
     <>
-      <label className="pick" title={running ? `This chat runs on ${running}` : "Model for this chat"}>
+      <label className="pick model" title={running ? `Model: ${running}${settings.model ? "" : " (your default)"}` : "Model for this chat"}>
         <select value={settings.model ?? ""} onChange={(e) => props.onSettings({ model: e.target.value || null })}>
-          <option value="">{!settings.model && running ? `${running} (default)` : "Default model"}</option>
+          <option value="">{!settings.model && running ? running : "Default model"}</option>
           {meta.models.filter((m) => m.value !== "default").map((m) => <option key={m.value} value={m.value}>{m.name}</option>)}
         </select>
       </label>
       {efforts.length > 0 && (
-        <label className="pick" title="Effort for this chat">
+        <label className="pick effort" title={`Effort: ${settings.effort ?? "your default"}`}>
           <select value={settings.effort ?? ""} onChange={(e) => props.onSettings({ effort: e.target.value || null })}>
-            <option value="">Effort: default</option>
-            {efforts.map((e) => <option key={e} value={e}>Effort: {e}</option>)}
+            <option value="">effort</option>
+            {efforts.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         </label>
       )}
