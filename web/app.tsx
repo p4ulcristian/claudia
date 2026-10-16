@@ -61,7 +61,7 @@ function useSocket(onMsg: (m: any) => void, onOpen: () => void) {
     let dead = false;
     let retry = 300;
     const connect = () => {
-      const s = new WebSocket(`ws://${location.host}/ws`);
+      const s = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
       ws.current = s;
       s.onopen = () => {
         retry = 300;

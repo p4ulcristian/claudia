@@ -8,6 +8,7 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile } from "node:fs/promises";
+import { serveTunnel } from "./src/tunnel";
 
 const PORT = Number(process.env.PORT ?? 4510);
 const chats = new Map<string, Chat>();
@@ -174,3 +175,6 @@ probe(WORK);
 setInterval(() => socks.size && probe(WORK), 5 * 60_000);
 
 console.log(`Claudia on http://claudia.localhost:${PORT} (chats in ${WORK})`);
+
+// Reachable through a reverse proxy: only when the unit sets both (drop-in, not in this repo).
+if (process.env.TUNNEL_HOST && process.env.ALLOWED_EMAIL) serveTunnel(process.env.TUNNEL_HOST, PORT, process.env.ALLOWED_EMAIL);

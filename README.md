@@ -14,7 +14,7 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 4. The picture stays; Claude changes it when a turn changes something. Small talk leaves it.
 5. Chats are Claude Code sessions (`~/.claude/projects`), so `claude --resume` and the history window see them. The app keeps only the pictures (`~/.local/share/claudia/app.db`).
 6. Every chat runs in `~/Work`, where the full memory lives.
-7. A desktop window on destiny only.
+7. A desktop window on my own machine; reachable from elsewhere through a login-gated reverse proxy (`TUNNEL_HOST` + `ALLOWED_EMAIL`).
 
 8. File changes show in a Changes panel on the right: one diff per file per turn, each explained in one line by Haiku right after the turn. Copies come from a hook before Claude's Edit/Write tools, and from a git snapshot of the working folder's repo (a separate index file; the user's index is untouched), so shell edits count too.
 9. A working folder per chat that Claudia tracks (the session itself stays in ~/Work for the full memory): set when Claude first edits a file, or by Claude with `mcp__workspace__set_folder`, any time. See `plan/diffs-and-folders.md`.
