@@ -184,7 +184,7 @@ function NodeShape({ n, pulse, fresh }: { n: LaidNode; pulse: number; fresh: boo
 
 const PAD = 14;
 function availSize(el: HTMLElement | null) {
-  const stage = el?.closest(".stage") as HTMLElement | null;
+  const stage = el?.closest(".right-scroll") as HTMLElement | null;
   const w = (stage?.clientWidth ?? 800) - 36;
   return { w, h: Math.max(320, (stage?.clientHeight ?? 700) * 0.62) };
 }
@@ -204,7 +204,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
 
   // Lay out again when the pane changes width noticeably (window resize, divider drag).
   useEffect(() => {
-    const stage = box.current?.closest(".stage");
+    const stage = box.current?.closest(".right-scroll");
     if (!stage) return;
     let t: Timer | undefined;
     const ro = new ResizeObserver(([e]) => {

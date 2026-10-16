@@ -104,12 +104,31 @@ function apply(l: Live, ev: ChatEvent): Live {
   }
 }
 
+// Below this width the chat list slides over the chat instead of taking a column.
+function useNarrow() {
+  const q = "(max-width: 1099px)";
+  const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
+  useEffect(() => {
+    const m = matchMedia(q);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
 function App() {
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [all, setAll] = useState(store.get("all") === "1");
   const [search, setSearch] = useState("");
   const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
-  const toggleSidebar = useCallback(() => setSidebarState((s) => { store.set("sidebar", s ? "0" : "1"); return !s; }), []);
+  const narrow = useNarrow();
+  const [drawer, setDrawer] = useState(false);
+  const toggleSidebar = useCallback(() => {
+    if (narrow) return setDrawer((d) => !d);
+    setSidebarState((s) => { store.set("sidebar", s ? "0" : "1"); return !s; });
+  }, [narrow]);
+  const showSidebar = narrow ? drawer : sidebar;
   const [current, setCurrent] = useState<string>(() => idFromPath() ?? crypto.randomUUID());
   const [live, setLive] = useState<Live>(() => fresh(current));
   const [viewing, setViewing] = useState<string | null>(null);
@@ -144,6 +163,7 @@ function App() {
     setLive(fresh(id));
     setViewing(null);
     setEditing(false);
+    setDrawer(false);
     if (push) history.pushState(null, "", `/c/${id}`);
     send({ t: "open", chat: id });
   }, [send]);
@@ -224,8 +244,9 @@ function App() {
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
 
   return (
-    <div className={`app ${sidebar ? "" : "no-sidebar"}`}>
-      <div className="sidebar-slot" aria-hidden={!sidebar} inert={!sidebar}>
+    <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
+      {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
+      <div className="sidebar-slot" aria-hidden={!showSidebar} inert={!showSidebar}>
         <aside className="sidebar">
           <div className="brand">
             <span className="logo" />claudeXplain
@@ -250,10 +271,10 @@ function App() {
           </label>
         </aside>
       </div>
-      <main className="split" style={{ gridTemplateColumns: `${split}fr 6px ${1 - split}fr` }}>
+      <main className="split" style={{ gridTemplateColumns: `minmax(300px, ${split}fr) 6px minmax(280px, ${1 - split}fr)` }}>
         <section className="left">
           <header className="chat-head">
-            {!sidebar && <button className="icon" onClick={toggleSidebar} title="Show chats (Ctrl+B)">☰</button>}
+            {!showSidebar && <button className="icon" onClick={toggleSidebar} title="Show chats (Ctrl+B)">☰</button>}
             {editing ? (
               <input
                 className="title-edit"
@@ -289,6 +310,7 @@ function App() {
         </section>
         <div className="divider" onPointerDown={dragSplit} />
         <section className="right">
+          <div className="right-scroll">
           {(live.asks.length > 0 || live.permits.length > 0) && (
             <div className="interface">
               {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
@@ -297,6 +319,7 @@ function App() {
           )}
           <div className={`stage ${viewing ? "past" : ""}`}>
             <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} />
+          </div>
           </div>
           <footer className="timeline">
             {live.pictures.length > 0 && (
