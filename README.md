@@ -1,9 +1,9 @@
-# claudeXplain
+# Claudia
 
 Chat with Claude on the left; Claude explains on the right, in a picture it draws as it works. Chat stays short, like two friends talking; the explaining lives in the picture. When Claude asks you something, the right side shows it as buttons.
 
-- Open: `omarchy-launch-webapp http://claudexplain.localhost:4510/`
-- Service: `claudexplain.service` (user unit, symlinked into ~/.config/systemd/user). After code changes: `systemctl --user restart claudexplain`
+- Open: `omarchy-launch-webapp http://claudia.localhost:4510/`
+- Service: `claudia.service` (user unit, symlinked into ~/.config/systemd/user). After code changes: `systemctl --user restart claudia`
 - Dev with hot reload: stop the service, run `bun --hot server.ts`
 
 ## Decisions (2026-10-16)
@@ -12,7 +12,7 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 2. Claude runs through the Claude Agent SDK; drawing is Claude's own tool (`mcp__picture__draw`).
 3. The picture is a fixed set of parts (circles, boxes, arrows, groups, and readable cards: text, list, table, code). The app lays them out (ELK) and animates what changed.
 4. The picture stays; Claude changes it when a turn changes something. Small talk leaves it.
-5. Chats are Claude Code sessions (`~/.claude/projects`), so `claude --resume` and the history window see them. The app keeps only the pictures (`~/.local/share/claudexplain/app.db`).
+5. Chats are Claude Code sessions (`~/.claude/projects`), so `claude --resume` and the history window see them. The app keeps only the pictures (`~/.local/share/claudia/app.db`).
 6. Every chat runs in `~/Work`, where the full memory lives.
 7. A desktop window on destiny only.
 

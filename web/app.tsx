@@ -178,7 +178,7 @@ function App() {
 
   const row = chats.find((c) => c.id === current);
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
-  useEffect(() => { document.title = `${title} · claudeXplain`; }, [title]);
+  useEffect(() => { document.title = `${title} · Claudia`; }, [title]);
 
   const onSend = (text: string, images: { media_type: string; data: string }[]) => {
     setViewing(null);
@@ -261,7 +261,7 @@ function App() {
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
       <div className="sidebar-slot" aria-hidden={!showSidebar} inert={!showSidebar}>
         <aside className="sidebar">
-          <div className="brand"><span className="logo" />claudeXplain</div>
+          <div className="brand"><span className="logo" />Claudia</div>
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>

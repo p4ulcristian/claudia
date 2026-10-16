@@ -1,4 +1,4 @@
-// claudeXplain: chat on the left, Claude's picture on the right.
+// Claudia: chat on the left, Claude's picture on the right.
 import { listSessions, renameSession, deleteSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
@@ -122,4 +122,4 @@ Bun.serve({
   },
 });
 
-console.log(`claudeXplain on http://claudexplain.localhost:${PORT} (chats in ${WORK})`);
+console.log(`Claudia on http://claudia.localhost:${PORT} (chats in ${WORK})`);

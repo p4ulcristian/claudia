@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Scene } from "./scene";
 
-const dir = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "claudexplain");
+const dir = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "claudia");
 mkdirSync(dir, { recursive: true });
 
 const db = new Database(join(dir, "app.db"));

@@ -7,7 +7,7 @@ import { pictureServer, SYSTEM_APPEND } from "./prompt";
 import { applyDraw, emptyScene, type DrawInput, type Scene } from "./scene";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
-export const WORK = process.env.CLAUDEXPLAIN_CWD ?? join(homedir(), "Work");
+export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
 const IDLE_MS = 15 * 60_000;
 const DRAW_TOOL = "mcp__picture__draw";
 
