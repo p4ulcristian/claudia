@@ -156,6 +156,7 @@ code, pre { font-family: var(--mono); }
 .option.on { border-color: var(--violet); background: var(--violet-bg); }
 .o-text { display: grid; gap: 2px; min-width: 0; }
 .o-text b { font-weight: 600; }
+.o-num { display: inline-block; min-width: 18px; margin-right: 6px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px var(--mono); color: var(--muted); text-align: center; }
 .o-text .md { color: var(--muted); font-size: 13px; }
 .mark { flex: none; width: 16px; height: 16px; border: 1.5px solid var(--muted); margin-top: 2px; position: relative; }
 .mark.dot { border-radius: 50%; }
@@ -166,7 +167,8 @@ code, pre { font-family: var(--mono); }
 .option.other { align-items: center; cursor: text; }
 .option.other input { flex: 1; border: 0; outline: none; background: none; }
 .preview { margin: 0; font-size: 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; max-height: 260px; overflow: auto; }
-.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.key-hint { margin-right: auto; }
 .actions button:not(.primary) { border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; }
 
 /* Right: the picture */

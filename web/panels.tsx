@@ -1,5 +1,5 @@
 // The right half as an interface: Claude's questions and permission asks.
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { md } from "./md";
 import type { Ask, Permit } from "./types";
 
@@ -18,17 +18,46 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
     if (!ready) return;
     onAnswer(Object.fromEntries(ask.questions.map((q, i) => [q.question, answerOf(i)])));
   };
+  const toggleOption = (i: number, label: string) =>
+    setPicked((s) => {
+      const cur = s[i] ?? [];
+      if (!ask.questions[i].multiSelect) return { ...s, [i]: cur[0] === label ? [] : [label] };
+      return { ...s, [i]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label] };
+    });
+
+  // Keyboard: Enter answers (unless there's typed text in the chat box, which answers by itself);
+  // 1–9 pick an option of the first question still without one.
+  const keys = useRef({ submit, toggleOption, picked, other });
+  keys.current = { submit, toggleOption, picked, other };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t.closest?.("textarea, input:not([type=checkbox]):not([type=radio]), [contenteditable]");
+      const { submit, toggleOption, picked, other } = keys.current;
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        if (t instanceof HTMLTextAreaElement && t.value.trim()) return;
+        e.preventDefault();
+        submit();
+        return;
+      }
+      const n = Number(e.key);
+      if (typing || e.ctrlKey || e.metaKey || e.altKey || !(n >= 1 && n <= 9)) return;
+      const qi = ask.questions.findIndex((_, i) => !(picked[i]?.length || other[i]?.trim()));
+      const i = qi < 0 ? 0 : qi;
+      const opt = ask.questions[i]?.options[n - 1];
+      if (!opt) return;
+      e.preventDefault();
+      toggleOption(i, opt.label);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ask]);
 
   return (
-    <section className="panel ask" onKeyDown={(e) => e.key === "Enter" && (e.ctrlKey || e.metaKey) && submit()}>
+    <section className="panel ask">
       {ask.questions.map((q, i) => {
         const multi = !!q.multiSelect;
-        const toggle = (label: string) =>
-          setPicked((s) => {
-            const cur = s[i] ?? [];
-            if (!multi) return { ...s, [i]: cur[0] === label ? [] : [label] };
-            return { ...s, [i]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label] };
-          });
+        const toggle = (label: string) => toggleOption(i, label);
         const preview = q.options.find((o) => o.label === (focus[i] ?? picked[i]?.[0]))?.preview;
         return (
           <div className="question" key={i}>
@@ -38,7 +67,7 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
             </div>
             <h3>{q.question}</h3>
             <div className="options" role={multi ? "group" : "radiogroup"}>
-              {q.options.map((o) => {
+              {q.options.map((o, n) => {
                 const on = (picked[i] ?? []).includes(o.label);
                 return (
                   <button
@@ -53,7 +82,7 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
                   >
                     <span className={`mark ${multi ? "box" : "dot"}`} />
                     <span className="o-text">
-                      <b>{o.label}</b>
+                      <b>{n < 9 && <span className="o-num">{n + 1}</span>}{o.label}</b>
                       {o.description && <span className="md" dangerouslySetInnerHTML={{ __html: md(o.description) }} />}
                     </span>
                   </button>
@@ -77,6 +106,7 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
         );
       })}
       <div className="actions">
+        <span className="muted small key-hint">1–{Math.min(9, Math.max(...ask.questions.map((q) => q.options.length)))} to pick · Enter to answer</span>
         <button className="primary" disabled={!ready} onClick={submit}>Answer</button>
       </div>
     </section>
