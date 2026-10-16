@@ -4,8 +4,9 @@ import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
 import { AskPanel, PermitPanel } from "./panels";
 import { TasksPanel } from "./tasks";
+import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
-import type { Ask, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
+import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
 const empty: Scene = { title: "", nodes: [], edges: [], groups: [], cards: [] };
@@ -31,12 +32,15 @@ type Live = {
   context: Context | null;
   settings: Settings;
   model: string;
+  changes: ChangeMeta[];
+  // Changes Haiku hasn't explained yet (only those made while this page was open).
+  pendingExplain: number[];
 };
 
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null }, model: "",
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null }, model: "", changes: [], pendingExplain: [],
 });
 
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
@@ -115,6 +119,11 @@ function apply(l: Live, ev: ChatEvent): Live {
       return { ...l, subs: { ...l.subs, [ev.parent]: (l.subs[ev.parent] ?? []).map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text } } : it)) } };
     case "context": return { ...l, context: ev.context };
     case "settings": return { ...l, settings: ev.settings, model: ev.model || l.model };
+    case "changes": return { ...l, changes: [...l.changes, ...ev.changes], pendingExplain: [...l.pendingExplain, ...ev.changes.filter((c) => !c.skipped).map((c) => c.id)] };
+    case "explained": {
+      const lines = new Map(ev.lines.map((x) => [x.id, x.line]));
+      return { ...l, changes: l.changes.map((c) => (lines.has(c.id) ? { ...c, explanation: lines.get(c.id)! } : c)), pendingExplain: l.pendingExplain.filter((id) => !lines.has(id)) };
+    }
   }
   return l;
 }
@@ -169,7 +178,7 @@ function App() {
         setLive((l) => ({
           ...l, loaded: true, items: m.items, partial: m.partial, running: m.running, since: m.since || Date.now(), scene: m.scene,
           changed: last?.changed ?? [], seq: l.seq + 1, pictures: m.pictures, asks: m.asks, permits: m.permits,
-          tasks: m.tasks ?? [], subs: m.subs ?? {}, context: m.context, settings: m.settings, model: m.model,
+          tasks: m.tasks ?? [], subs: m.subs ?? {}, context: m.context, settings: m.settings, model: m.model, changes: m.changes ?? [],
         }));
       } else if (m.t === "event") setLive((l) => apply(l, m.ev));
     },
@@ -251,6 +260,17 @@ function App() {
     return pic ? { scene: pic.scene, changed: pic.changed, seq: live.seq + 1000 + upTo } : { scene: empty, changed: [], seq: 0 };
   }, [viewing, live.scene, live.changed, live.seq, live.pictures, live.items]);
 
+  // Changes of the turn being looked at: an earlier turn when stepping back, else the latest turn with changes.
+  const changeTurns = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of live.changes) m.set(c.turn, (m.get(c.turn) ?? 0) + 1);
+    return m;
+  }, [live.changes]);
+  const changesTurn = viewing ?? live.changes.at(-1)?.turn ?? null;
+  const shownChanges = changesTurn ? live.changes.filter((c) => c.turn === changesTurn) : [];
+  const lastUser = [...live.items].reverse().find((i) => i.k === "user") as Extract<Item, { k: "user" }> | undefined;
+  const changesLabel = viewing ? "Earlier turn" : changesTurn === lastUser?.uuid ? "This turn" : "Last turn with changes";
+
   // Step through the pictures Claude made in this chat; the newest one is "live".
   const picIndex = viewing ? live.pictures.findIndex((p) => p.turn === viewing) : live.pictures.length - 1;
   const showPicture = (i: number) => {
@@ -313,6 +333,7 @@ function App() {
             ) : (
               <h1 onDoubleClick={() => row && setEditing(true)} title={row ? "Double-click to rename" : ""}>{title}</h1>
             )}
+            {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
             {row && (
               <div className="head-actions">
                 <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
@@ -330,6 +351,7 @@ function App() {
             error={live.error}
             stopped={!!live.lastTurn?.stopped}
             pictureTurns={pictureTurns}
+            changeTurns={changeTurns}
             viewing={viewing}
             onView={setViewing}
           />
@@ -347,9 +369,10 @@ function App() {
         <div className="divider" onPointerDown={dragSplit} />
         <section className="right">
           <div className="right-scroll">
-          {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0) && (
+          {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
             <div className="interface">
               {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
+              {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} pending={live.pendingExplain} />}
               {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
               {live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
             </div>

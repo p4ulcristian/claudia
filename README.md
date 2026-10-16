@@ -16,6 +16,9 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 6. Every chat runs in `~/Work`, where the full memory lives.
 7. A desktop window on destiny only.
 
+8. File changes show in a Changes panel on the right: one diff per file per turn, each explained in one line by Haiku right after the turn. Copies come from a hook before Claude's Edit/Write tools, and from a git snapshot of the working folder's repo (a separate index file; the user's index is untouched), so shell edits count too.
+9. A working folder per chat that Claudia tracks (the session itself stays in ~/Work for the full memory): set when Claude first edits a file, or by Claude with `mcp__workspace__set_folder`, any time. See `plan/diffs-and-folders.md`.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files
@@ -24,5 +27,7 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/chat.ts`: one chat = one Agent SDK session; turns, questions, stop, history
 - `src/prompt.ts`: what Claude is told about the two halves, and the draw tool
 - `src/scene.ts`: the picture's parts and how a draw call changes them
-- `src/db.ts`: pictures per turn
+- `src/changes.ts`: before/after copies, git snapshots, diffs, the Haiku explainer
+- `src/meta.ts`: models, slash commands and plan limits, read by a short probe
+- `src/db.ts`: pictures, changes and chat settings
 - `web/`: the page (React): `chat.tsx` left, `picture.tsx` + `panels.tsx` right

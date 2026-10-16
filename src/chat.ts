@@ -1,16 +1,20 @@
 // One chat = one Claude Code session, driven through the Agent SDK.
 import { query, getSessionMessages, getSessionInfo, type Query, type SDKMessage, type SDKUserMessage, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { stat } from "node:fs/promises";
 import { store } from "./db";
 import { refreshSoon } from "./meta";
-import { pictureServer, SYSTEM_APPEND } from "./prompt";
+import { pictureServer, workspaceServer, SYSTEM_APPEND } from "./prompt";
+import { EDIT_TOOLS, blobState, editedPath, explain, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
+import { DATA_DIR } from "./db";
 import { applyDraw, emptyScene, type DrawInput, type Scene } from "./scene";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
 const IDLE_MS = 15 * 60_000;
 const DRAW_TOOL = "mcp__picture__draw";
+const FOLDER_TOOL = "mcp__workspace__set_folder";
 
 export type Item =
   | { k: "user"; uuid: string; text: string; images: number }
@@ -35,7 +39,7 @@ export type Task = {
   outputFile?: string;
 };
 export type Context = { used: number; max: number; percent: number; model: string };
-export type Settings = { model: string | null; effort: string | null };
+export type Settings = { model: string | null; effort: string | null; folder: string | null };
 
 export type Question = {
   question: string;
@@ -63,7 +67,9 @@ export type ChatEvent =
   | { t: "sub"; parent: string; items: Item[] }
   | { t: "sub_result"; parent: string; id: string; error: boolean; text: string }
   | { t: "context"; context: Context }
-  | { t: "settings"; settings: Settings; model?: string };
+  | { t: "settings"; settings: Settings; model?: string }
+  | { t: "changes"; changes: ChangeMeta[] }
+  | { t: "explained"; lines: { id: number; line: string }[] };
 
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const base = (p: unknown) => String(p ?? "").split("/").pop() ?? "";
@@ -80,6 +86,7 @@ export function toolTitle(name: string, input: any): string {
     case "Agent": case "Task": return short(i.description ?? "", 80);
     case "TodoWrite": return `${(i.todos ?? []).length} todos`;
     case DRAW_TOOL: return i.title ? `picture: ${i.title}` : "picture";
+    case FOLDER_TOOL: return String(i.path ?? "").replace(homedir(), "~");
     case "AskUserQuestion": return (i.questions ?? []).map((q: Question) => q.header).join(", ");
     default: return "";
   }
@@ -87,6 +94,7 @@ export function toolTitle(name: string, input: any): string {
 
 export function toolLabel(name: string) {
   if (name === DRAW_TOOL) return "Draw";
+  if (name === FOLDER_TOOL) return "Folder";
   if (name === "AskUserQuestion") return "Ask";
   return name.startsWith("mcp__") ? name.split("__").slice(1).join(" ") : name;
 }
@@ -212,6 +220,11 @@ export class Chat {
   private turn = "";
   private drew = false;
   private stopping = false;
+  private turnText = "";
+  // Files touched since the last turn ended: their content before the first touch.
+  private before = new Map<string, FileState>();
+  // Git repos snapshotted at the start of the turn (or when the folder was set): repo root → tree.
+  private trees = new Map<string, Promise<string | null>>();
   running = false;
   since = 0;
   partial = "";
@@ -233,12 +246,103 @@ export class Chat {
   async setSettings(next: Partial<Settings>) {
     const prev = this.settings;
     this.settings = { ...prev, ...next };
-    store.saveSettings(this.id, this.settings.model, this.settings.effort);
+    store.saveSettings(this.id, this.settings);
     if (this.q) {
       if ("model" in next) await this.q.setModel(next.model ?? undefined).catch(() => {});
       if ("effort" in next) await this.q.applyFlagSettings({ effortLevel: (next.effort ?? null) as any }).catch(() => {});
     }
     this.emit({ t: "settings", settings: this.settings, model: this.model });
+  }
+
+  // The project Claude works in. The session stays in ~/Work; this is what Claudia shows and diffs follow.
+  setFolder(folder: string) {
+    if (this.settings.folder === folder) return;
+    if (this.running) this.snapshot(folder);
+    this.settings = { ...this.settings, folder };
+    store.saveSettings(this.id, this.settings);
+    this.emit({ t: "settings", settings: this.settings, model: this.model });
+    this.onChange();
+  }
+
+  private async folderTool(path: string): Promise<string> {
+    const abs = resolve(WORK, path.replace(/^~(?=\/|$)/, homedir()));
+    const st = await stat(abs).catch(() => null);
+    if (!st?.isDirectory()) return `No folder at ${abs}. Nothing changed.`;
+    this.setFolder(abs);
+    const read = async (f: string) => (await Bun.file(join(abs, f)).exists() ? (await Bun.file(join(abs, f)).text()).slice(0, 6000) : "");
+    const claudeMd = (await read("CLAUDE.md")) || (await read(".claude/CLAUDE.md"));
+    const git = Bun.spawnSync(["git", "-C", abs, "status", "--short", "--branch"], { stderr: "ignore" });
+    const status = git.success ? git.stdout.toString().split("\n").slice(0, 40).join("\n") : "(not a git repository)";
+    return [
+      `Working folder is now ${abs}. Run commands there (cd ${abs} && …).`,
+      claudeMd ? `\n<claude-md path="${abs}/CLAUDE.md">\n${claudeMd}\n</claude-md>` : "\n(no CLAUDE.md in this folder)",
+      `\n<git-status>\n${status}\n</git-status>`,
+    ].join("\n");
+  }
+
+  private indexFile(root: string) {
+    return join(DATA_DIR, "index", `${this.id}-${Bun.hash(root).toString(36)}`);
+  }
+
+  private async snapshot(folder: string) {
+    const root = await repoRoot(folder);
+    if (!root || this.trees.has(root)) return;
+    this.trees.set(root, snapshotTree(root, this.indexFile(root)).catch(() => null));
+  }
+
+  // Before Claude first touches a file in this turn, keep what it looked like.
+  private async beforeEdit(input: any) {
+    const path = editedPath(input);
+    if (path && !this.before.has(path)) this.before.set(path, await readState(path));
+    return { continue: true };
+  }
+
+  private async afterEdit(input: any) {
+    const path = editedPath(input);
+    if (path && !this.settings.folder) this.setFolder(projectOf(path));
+    return { continue: true };
+  }
+
+  // After a turn: compare every touched file with its copy, store the changes, then let Haiku explain them.
+  private async finishChanges(turn: string, request: string) {
+    const trees = [...this.trees];
+    this.trees = new Map();
+    // Shell edits inside snapshotted repos: compare the folder with its start-of-turn tree.
+    for (const [root, start] of trees) {
+      const a = await start;
+      if (!a) continue;
+      const b = await snapshotTree(root, this.indexFile(root));
+      if (!b || a === b) continue;
+      for (const { rel, abs } of await treeChanges(root, a, b))
+        if (!this.before.has(abs)) this.before.set(abs, await blobState(root, a, rel));
+    }
+    if (!this.before.size) return;
+    const touched = [...this.before];
+    this.before = new Map();
+    const made: { meta: ChangeMeta; before: string | null; after: string | null }[] = [];
+    for (const [path, before] of touched) {
+      const after = await readState(path);
+      if (before.text === after.text && before.skipped === after.skipped) continue;
+      const meta = store.addChange(this.id, turn, path, before, after, lineCounts(before.text, after.text));
+      made.push({ meta, before: before.text, after: after.text });
+    }
+    if (!made.length) return;
+    this.emit({ t: "changes", changes: made.map((m) => m.meta) });
+    const explainable = made.filter((m) => !m.meta.skipped);
+    if (!explainable.length) return;
+    try {
+      const lines = await explain(WORK, request, explainable.map((m) => ({ path: m.meta.path, before: m.before, after: m.after })));
+      const done: { id: number; line: string }[] = [];
+      for (const m of explainable) {
+        const line = lines.get(m.meta.path);
+        if (!line) continue;
+        store.explainChange(m.meta.id, line);
+        done.push({ id: m.meta.id, line });
+      }
+      if (done.length) this.emit({ t: "explained", lines: done });
+    } catch (err) {
+      console.error(`[${this.id.slice(0, 8)}] explain failed:`, err);
+    }
   }
 
   async stopTask(taskId: string) {
@@ -271,7 +375,9 @@ export class Chat {
     if (text) content.push({ type: "text", text });
     if (!this.q) await this.start();
     this.turn = uuid;
+    this.turnText = text;
     this.drew = false;
+    if (this.settings.folder) this.snapshot(this.settings.folder);
     this.setRunning(true);
     this.emit({ t: "user", item: { k: "user", uuid, text, images: images.length } });
     this.inbox!.push({ type: "user", uuid: uuid as any, session_id: this.id, parent_tool_use_id: null, message: { role: "user", content } });
@@ -340,8 +446,12 @@ export class Chat {
         cwd: WORK,
         ...(exists ? { resume: this.id } : { sessionId: this.id }),
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
-        mcpServers: { picture: pictureServer((i) => this.draw(i)) },
-        allowedTools: [DRAW_TOOL],
+        mcpServers: { picture: pictureServer((i) => this.draw(i)), workspace: workspaceServer((p) => this.folderTool(p)) },
+        allowedTools: [DRAW_TOOL, FOLDER_TOOL],
+        hooks: {
+          PreToolUse: [{ matcher: EDIT_TOOLS, hooks: [async (input: any) => this.beforeEdit(input.tool_input)] }],
+          PostToolUse: [{ matcher: EDIT_TOOLS, hooks: [async (input: any) => this.afterEdit(input.tool_input)] }],
+        },
         // Same as the user's terminal Claude (defaultMode bypassPermissions).
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
@@ -519,6 +629,7 @@ export class Chat {
         this.setRunning(false);
         this.readContext();
         refreshSoon(WORK);
+        this.finishChanges(this.turn, this.turnText);
         return;
       }
       case "rate_limit_event":

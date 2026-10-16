@@ -94,6 +94,7 @@ export function Messages(props: {
   error?: string;
   stopped: boolean;
   pictureTurns: Set<string>;
+  changeTurns: Map<string, number>;
   viewing: string | null;
   onView: (turn: string | null) => void;
 }) {
@@ -121,7 +122,8 @@ export function Messages(props: {
         if (b.k === "steps") return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} />;
         if (b.k === "user") {
           const it = b.item as Extract<Item, { k: "user" }>;
-          const has = props.pictureTurns.has(it.uuid);
+          const files = props.changeTurns.get(it.uuid) ?? 0;
+          const has = props.pictureTurns.has(it.uuid) || files > 0;
           return (
             <div key={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
@@ -130,7 +132,7 @@ export function Messages(props: {
               </div>
               {has && (
                 <button className="pic-link" title="Show the picture from this turn" onClick={() => props.onView(props.viewing === it.uuid ? null : it.uuid)}>
-                  {props.viewing === it.uuid ? "back to live" : "picture"}
+                  {props.viewing === it.uuid ? "back to live" : [props.pictureTurns.has(it.uuid) && "picture", files && `${files} ${files === 1 ? "file" : "files"}`].filter(Boolean).join(" · ")}
                 </button>
               )}
             </div>

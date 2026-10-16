@@ -18,4 +18,4 @@ Data source (stated, not a choice): before Claude edits or writes a file, Claudi
    - Cost, accepted: the project's own .claude/settings.json and its memory notes aren't loaded; `claude --resume` from inside the project won't list the chat.
 6. Memory: settled by 5 (stays ~/Work, full memory always).
 
-Status: plan complete, not built.
+Status: built 2026-10-16. Addition while building: shell edits are caught by a git snapshot of the working folder's repo at the start of each turn (Claude often edits with sed/echo, which the Edit/Write hook can't see). Outside git, only Edit/Write edits are caught.

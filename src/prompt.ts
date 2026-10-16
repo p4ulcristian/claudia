@@ -23,6 +23,9 @@ How to draw well:
 When you need the user to choose, use AskUserQuestion: it shows on the right as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
 
 The draw call costs the user nothing to read, so prefer drawing over writing.
+
+## Working folder
+The chat runs in ~/Work. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. (If you edit a file first, the folder is set to that file's project automatically.) Run commands in the working folder (cd <folder> && …). The user sees the working folder, and the file changes you make are shown to them as diffs, each explained in one line, so don't list your edits in the chat.
 `.trim();
 
 const colour = z.enum(COLORS).optional();
@@ -76,6 +79,23 @@ const drawShape = {
     .describe("Readable parts shown under the diagram"),
   remove: z.array(z.string()).optional().describe('Ids to remove: nodes, groups, cards, or arrows as "from->to"'),
 };
+
+// The working-folder tool, one per chat like the picture.
+export function workspaceServer(onSet: (path: string) => Promise<string>) {
+  return createSdkMcpServer({
+    name: "workspace",
+    version: "1.0.0",
+    alwaysLoad: true,
+    tools: [
+      tool(
+        "set_folder",
+        "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects.",
+        { path: z.string().describe("The project's root folder") },
+        async (args) => ({ content: [{ type: "text", text: await onSet(args.path) }] }),
+      ),
+    ],
+  });
+}
 
 // One server per chat, so each draw call lands in the chat that made it.
 export function pictureServer(onDraw: (input: DrawInput) => string) {

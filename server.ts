@@ -3,7 +3,9 @@ import { listSessions, renameSession, deleteSession } from "@anthropic-ai/claude
 import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
 import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
-import { store } from "./src/db";
+import { DATA_DIR, store } from "./src/db";
+import { readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile } from "node:fs/promises";
 
@@ -61,6 +63,7 @@ async function openChat(ws: Sock, id: string) {
       context: c.context,
       settings: c.settings,
       model: c.model,
+      changes: store.changes(id),
     }),
   );
   ws.data.off = c.on((ev: ChatEvent) => ws.send(JSON.stringify({ t: "event", chat: id, ev })));
@@ -95,6 +98,13 @@ Bun.serve({
         }
       },
     },
+    // One change's before and after, for the diff view.
+    "/api/chats/:id/changes/:change": {
+      GET: (req) => {
+        const row = store.change(req.params.id, Number(req.params.change));
+        return row ? json(row) : json({ error: "not found" }, 404);
+      },
+    },
     "/api/chats/:id": {
       PATCH: async (req) => {
         const { title } = (await req.json()) as { title: string };
@@ -108,6 +118,7 @@ Bun.serve({
         chats.delete(id);
         await deleteSession(id, { dir: WORK }).catch(() => {});
         store.deleteChat(id);
+        for (const f of await readdir(join(DATA_DIR, "index")).catch(() => [] as string[])) if (f.startsWith(`${id}-`)) await rm(join(DATA_DIR, "index", f), { force: true });
         broadcastChats();
         return json({ ok: true });
       },

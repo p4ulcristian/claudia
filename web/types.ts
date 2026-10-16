@@ -1,5 +1,6 @@
 export type { Item, Ask, Permit, Question, ChatEvent, Task, Context, Settings } from "../src/chat";
 export type { Meta, ModelOption, Command, Limit } from "../src/meta";
+export type { ChangeMeta } from "../src/changes";
 export type { Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "../src/scene";
 import type { Scene } from "../src/scene";
 
