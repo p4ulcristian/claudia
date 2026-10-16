@@ -196,6 +196,11 @@ function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && live.running) { e.preventDefault(); onStop(); }
+      const typing = (e.target as HTMLElement).closest?.("input, textarea, [contenteditable]");
+      if (!typing && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        showPicture(picIndex + (e.key === "ArrowLeft" ? -1 : 1));
+      }
       if (e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); newChat(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
@@ -227,6 +232,13 @@ function App() {
     const pic = live.pictures.filter((p) => (pos.get(p.turn) ?? Infinity) <= upTo).at(-1);
     return pic ? { scene: pic.scene, changed: pic.changed, seq: live.seq + 1000 + upTo } : { scene: empty, changed: [], seq: 0 };
   }, [viewing, live.scene, live.changed, live.seq, live.pictures, live.items]);
+
+  // Step through the pictures Claude made in this chat; the newest one is "live".
+  const picIndex = viewing ? live.pictures.findIndex((p) => p.turn === viewing) : live.pictures.length - 1;
+  const showPicture = (i: number) => {
+    if (i < 0 || i >= live.pictures.length) return;
+    setViewing(i === live.pictures.length - 1 ? null : live.pictures[i].turn);
+  };
 
   const dragSplit = (e: React.PointerEvent) => {
     const main = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
@@ -319,6 +331,13 @@ function App() {
           </div>
           </div>
           <footer className="timeline">
+            {live.pictures.length > 1 && (
+              <div className="pager">
+                <button className="chev-btn" disabled={picIndex <= 0} onClick={() => showPicture(picIndex - 1)} title="Previous picture (←)">‹</button>
+                <span className="muted small">{picIndex + 1} / {live.pictures.length}</span>
+                <button className="chev-btn" disabled={picIndex >= live.pictures.length - 1} onClick={() => showPicture(picIndex + 1)} title="Next picture (→)">›</button>
+              </div>
+            )}
             {live.pictures.length > 0 && (
               <div className="dots">
                 {live.pictures.map((p, i) => {

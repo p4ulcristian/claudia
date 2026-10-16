@@ -229,6 +229,11 @@ code, pre { font-family: var(--mono); }
 
 .timeline { display: flex; align-items: center; gap: 12px; padding: 8px 18px; border-top: 1px solid var(--line); min-height: 38px; }
 .timeline .dots { display: flex; gap: 5px; flex-wrap: wrap; }
+.pager { display: flex; align-items: center; gap: 6px; }
+.pager .small { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+.chev-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); font-size: 18px; line-height: 1; display: grid; place-items: center; color: var(--fg); }
+.chev-btn:hover:not(:disabled) { border-color: var(--accent); }
+.chev-btn:disabled { opacity: 0.3; cursor: default; }
 .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .tdot:hover { background: var(--muted); }
 .tdot.on { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
