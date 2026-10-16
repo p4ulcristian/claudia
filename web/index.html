@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
   </head>
   <body>
+    <script>
+      // Set the theme before the first paint, so the page doesn't flash.
+      try {
+        const t = localStorage.getItem("theme") || "dark";
+        document.documentElement.dataset.theme = t === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : t;
+      } catch { document.documentElement.dataset.theme = "dark"; }
+    </script>
     <div id="root"></div>
     <script type="module" src="./app.tsx"></script>
   </body>

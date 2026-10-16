@@ -128,6 +128,21 @@ function apply(l: Live, ev: ChatEvent): Live {
   return l;
 }
 
+// Dark, light, or "auto" (follow the system). Dark by default: the system signal can flip on its own.
+function useTheme() {
+  const [theme, setTheme] = useState(() => store.get("theme") || "dark");
+  useEffect(() => {
+    store.set("theme", theme);
+    const m = matchMedia("(prefers-color-scheme: light)");
+    const apply = () => (document.documentElement.dataset.theme = theme === "auto" ? (m.matches ? "light" : "dark") : theme);
+    apply();
+    if (theme !== "auto") return;
+    m.addEventListener("change", apply);
+    return () => m.removeEventListener("change", apply);
+  }, [theme]);
+  return [theme, setTheme] as const;
+}
+
 // Below this width the chat list slides over the chat instead of taking a column.
 function useNarrow() {
   const q = "(max-width: 1099px)";
@@ -147,6 +162,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
   const narrow = useNarrow();
+  const [theme, setTheme] = useTheme();
   const [drawer, setDrawer] = useState(false);
   const toggleSidebar = useCallback(() => {
     if (narrow) return setDrawer((d) => !d);
@@ -313,10 +329,20 @@ function App() {
             ))}
             {!list.length && <p className="muted small">{q ? "No match." : "No chats yet."}</p>}
           </nav>
-          <label className="toggle">
-            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
-            Show all ~/Work sessions
-          </label>
+          <div className="side-foot">
+            <label className="toggle">
+              <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+              Show all ~/Work sessions
+            </label>
+            <label className="theme-pick">
+              Theme
+              <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="auto">Follow system</option>
+              </select>
+            </label>
+          </div>
         </aside>
       </div>
       <main className="split" style={{ gridTemplateColumns: `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
