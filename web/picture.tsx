@@ -7,6 +7,7 @@ import type { Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types
 const elk = new ELK();
 const COLORS = ["green", "red", "amber", "blue", "grey", "violet"];
 const FONT = '600 14px "Instrument Sans", system-ui, sans-serif';
+const GROUP_FONT = '600 10.5px "Instrument Sans", system-ui, sans-serif';
 const NOTE_FONT = '400 12px "Instrument Sans", system-ui, sans-serif';
 
 const canvas = document.createElement("canvas").getContext("2d")!;
@@ -27,24 +28,27 @@ function wrap(s: string, max: number): string[] {
   return lines.slice(0, 3);
 }
 
-type LaidNode = { id: string; x: number; y: number; w: number; h: number; d: number; lines: string[]; node: SceneNode };
+type LaidNode = { id: string; x: number; y: number; w: number; h: number; d: number; lines: string[]; notes: string[]; node: SceneNode };
 type LaidGroup = { id: string; x: number; y: number; w: number; h: number; group: SceneGroup };
 type LaidEdge = { id: string; d: string; edge: SceneEdge; label?: { x: number; y: number; w: number; h: number } };
 type Laid = { w: number; h: number; nodes: LaidNode[]; groups: LaidGroup[]; edges: LaidEdge[] };
 
+// Labels and notes wrap, so one long note can't make a node (and the picture) wide.
+const NOTE_LINE = 15;
 function size(n: SceneNode) {
   const shape = n.shape ?? "circle";
-  const lines = wrap(n.label || n.id, shape === "circle" ? 14 : 22);
+  const lines = wrap(n.label || n.id, shape === "circle" ? 14 : 18);
+  const notes = n.note ? wrap(n.note, 24).slice(0, 2) : [];
   const tw = Math.max(...lines.map((l) => textW(l)), 0);
-  const nw = n.note ? textW(n.note, NOTE_FONT) : 0;
+  const nw = Math.max(...notes.map((l) => textW(l, NOTE_FONT)), 0);
   if (shape === "circle") {
     const d = Math.max(60, tw + 26, lines.length * 16 + 26);
-    return { lines, d, w: Math.max(d, n.note ? nw + 8 : 0), h: d + (n.note ? 22 : 0) };
+    return { lines, notes, d, w: Math.max(d, notes.length ? nw + 8 : 0), h: d + (notes.length ? 8 + notes.length * NOTE_LINE : 0) };
   }
   let w = Math.max(96, tw + 32, nw + 28);
-  let h = 22 + lines.length * 17 + (n.note ? 16 : 0);
+  let h = 22 + lines.length * 17 + notes.length * NOTE_LINE;
   if (shape === "diamond") { w *= 1.45; h *= 1.7; }
-  return { lines, d: 0, w, h };
+  return { lines, notes, d: 0, w, h };
 }
 
 function roundPath(pts: { x: number; y: number }[], r = 9) {
@@ -64,14 +68,39 @@ function roundPath(pts: { x: number; y: number }[], r = 9) {
 
 const eid = (e: SceneEdge) => `${e.from}->${e.to}`;
 
-async function layout(scene: Scene, direction: "RIGHT" | "DOWN"): Promise<Laid> {
+type Variant = "RIGHT" | "DOWN" | "DOWN-STACKED";
+
+// Hidden arrows between a group's unconnected members, so top-to-bottom layouts
+// stack them in a column instead of one wide row.
+function stackEdges(scene: Scene) {
+  const linked = new Set(scene.edges.flatMap((e) => [`${e.from}|${e.to}`, `${e.to}|${e.from}`]));
+  const out: { id: string; sources: string[]; targets: string[] }[] = [];
+  for (const g of scene.groups) {
+    const members = scene.nodes.filter((n) => n.group === g.id);
+    for (let i = 1; i < members.length; i++) {
+      const a = members[i - 1].id, b = members[i].id;
+      if (!linked.has(`${a}|${b}`)) out.push({ id: `~${a}~${b}`, sources: [a], targets: [b] });
+    }
+  }
+  return out;
+}
+
+const minSize = (w: number, h: number, direction: string) => (direction === "DOWN" ? `(${h}, ${w})` : `(${w}, ${h})`);
+
+async function layout(scene: Scene, variant: Variant): Promise<Laid> {
+  const direction = variant === "RIGHT" ? "RIGHT" : "DOWN";
   const sizes = new Map(scene.nodes.map((n) => [n.id, size(n)]));
   const groupIds = new Set(scene.groups.map((g) => g.id));
   const leaf = (n: SceneNode) => ({ id: n.id, width: sizes.get(n.id)!.w, height: sizes.get(n.id)!.h });
   const children: any[] = [
     ...scene.groups.map((g) => ({
       id: g.id,
-      layoutOptions: { "elk.padding": "[top=36,left=18,bottom=18,right=18]" },
+      layoutOptions: {
+        "elk.padding": "[top=36,left=18,bottom=18,right=18]",
+        // The frame is at least as wide as its title. ELK swaps the minimum's width and height in DOWN layouts.
+        "elk.nodeSize.constraints": "MINIMUM_SIZE",
+        "elk.nodeSize.minimum": minSize(Math.ceil(textW(g.label.toUpperCase(), GROUP_FONT) + g.label.length * 0.85 + 34), 60, direction),
+      },
       children: scene.nodes.filter((n) => n.group === g.id).map(leaf),
     })).filter((g) => g.children.length),
     ...scene.nodes.filter((n) => !n.group || !groupIds.has(n.group)).map(leaf),
@@ -83,8 +112,8 @@ async function layout(scene: Scene, direction: "RIGHT" | "DOWN"): Promise<Laid> 
       "elk.direction": direction,
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       "elk.edgeRouting": "ORTHOGONAL",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "64",
-      "elk.spacing.nodeNode": "30",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "48",
+      "elk.spacing.nodeNode": "22",
       "elk.spacing.edgeLabel": "4",
       "elk.edgeLabels.inline": "true",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
@@ -92,12 +121,15 @@ async function layout(scene: Scene, direction: "RIGHT" | "DOWN"): Promise<Laid> 
       "elk.padding": "[top=12,left=12,bottom=12,right=12]",
     },
     children,
-    edges: scene.edges.map((e) => ({
-      id: eid(e),
-      sources: [e.from],
-      targets: [e.to],
-      labels: e.label ? [{ text: e.label, width: textW(e.label, NOTE_FONT) + 12, height: 18 }] : [],
-    })),
+    edges: [
+      ...scene.edges.map((e) => ({
+        id: eid(e),
+        sources: [e.from],
+        targets: [e.to],
+        labels: e.label ? [{ text: e.label, width: textW(e.label, NOTE_FONT) + 12, height: 18 }] : [],
+      })),
+      ...(variant === "DOWN-STACKED" ? stackEdges(scene) : []),
+    ],
   });
 
   const offset = new Map<string, { x: number; y: number }>([["root", { x: 0, y: 0 }]]);
@@ -110,15 +142,16 @@ async function layout(scene: Scene, direction: "RIGHT" | "DOWN"): Promise<Laid> 
       out.groups.push({ id: c.id, x: c.x!, y: c.y!, w: c.width!, h: c.height!, group: groupById.get(c.id)! });
       for (const k of c.children ?? []) {
         const s = sizes.get(k.id)!;
-        out.nodes.push({ id: k.id, x: c.x! + k.x!, y: c.y! + k.y!, w: k.width!, h: k.height!, d: s.d, lines: s.lines, node: byId.get(k.id)! });
+        out.nodes.push({ id: k.id, x: c.x! + k.x!, y: c.y! + k.y!, w: k.width!, h: k.height!, d: s.d, lines: s.lines, notes: s.notes, node: byId.get(k.id)! });
       }
     } else {
       const s = sizes.get(c.id)!;
-      out.nodes.push({ id: c.id, x: c.x!, y: c.y!, w: c.width!, h: c.height!, d: s.d, lines: s.lines, node: byId.get(c.id)! });
+      out.nodes.push({ id: c.id, x: c.x!, y: c.y!, w: c.width!, h: c.height!, d: s.d, lines: s.lines, notes: s.notes, node: byId.get(c.id)! });
     }
   }
   const edgeById = new Map(scene.edges.map((e) => [eid(e), e]));
   for (const e of (graph.edges ?? []) as any[]) {
+    if (!edgeById.has(e.id)) continue; // a hidden stacking arrow
     const o = offset.get(e.container ?? "root") ?? { x: 0, y: 0 };
     const sec = e.sections?.[0];
     if (!sec) continue;
@@ -142,7 +175,7 @@ function NodeShape({ n, pulse, fresh }: { n: LaidNode; pulse: number; fresh: boo
   const isCircle = shape === "circle";
   const cx = n.w / 2;
   const cy = isCircle ? n.d / 2 : n.h / 2;
-  const textTop = cy - ((n.lines.length - 1) * 16) / 2 - (!isCircle && node.note ? 7 : 0);
+  const textTop = cy - ((n.lines.length - 1) * 16) / 2 - (!isCircle ? (n.notes.length * NOTE_LINE) / 2 : 0);
   let outline: React.ReactNode;
   if (isCircle) outline = <circle className="body" cx={cx} cy={cy} r={n.d / 2} />;
   else if (shape === "diamond") outline = <polygon className="body" points={`${cx},1 ${n.w - 1},${cy} ${cx},${n.h - 1} 1,${cy}`} />;
@@ -163,9 +196,9 @@ function NodeShape({ n, pulse, fresh }: { n: LaidNode; pulse: number; fresh: boo
           <tspan key={i} x={cx} dy={i ? 16 : 0}>{l}</tspan>
         ))}
       </text>
-      {node.note && (
+      {n.notes.length > 0 && (
         <text className="note" x={cx} y={isCircle ? n.d + 15 : textTop + (n.lines.length - 1) * 16 + 17} textAnchor="middle" dominantBaseline="middle">
-          {node.note}
+          {n.notes.map((l, i) => <tspan key={i} x={cx} dy={i ? NOTE_LINE : 0}>{l}</tspan>)}
         </text>
       )}
       {node.state === "done" && (
@@ -186,9 +219,12 @@ const PAD = 14;
 function availSize(el: HTMLElement | null) {
   const stage = el?.closest(".right-scroll") as HTMLElement | null;
   const w = (stage?.clientWidth ?? 800) - 36;
-  return { w, h: Math.max(320, (stage?.clientHeight ?? 700) * 0.62) };
+  return { w, h: Math.max(320, (stage?.clientHeight ?? 700) * 0.8) };
 }
-const fit = (l: Laid, a: { w: number; h: number }) => Math.min(a.w / (l.w + PAD * 2), a.h / (l.h + PAD * 2));
+// Fit the width; the right side scrolls, so the picture may be up to twice the visible height.
+const fit = (l: Laid, a: { w: number; h: number }) => Math.min(a.w / (l.w + PAD * 2), (a.h * 2) / (l.h + PAD * 2));
+
+const VARIANTS: Variant[] = ["RIGHT", "DOWN", "DOWN-STACKED"];
 
 function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq: number }) {
   const [laid, setLaid] = useState<Laid | null>(null);
@@ -199,7 +235,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   const run = useRef(0);
   const box = useRef<HTMLDivElement>(null);
 
-  const dir = useRef<"RIGHT" | "DOWN" | null>(null);
+  const dir = useRef<Variant | null>(null);
   const [width, setWidth] = useState(0);
 
   // Lay out again when the pane changes width noticeably (window resize, divider drag).
@@ -220,19 +256,19 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
     if (!scene.nodes.length) { setLaid(null); dir.current = null; return; }
     const avail = availSize(box.current);
     document.fonts.ready
-      .then(() => Promise.all([layout(scene, "RIGHT"), layout(scene, "DOWN")]))
-      .then(([right, down]) => {
+      .then(() => Promise.all(VARIANTS.map((v) => layout(scene, v))))
+      .then((all) => {
         if (mine !== run.current) return;
-        // Pick the direction that fits the pane; switch only when clearly better, so the picture doesn't flip.
-        const fr = fit(right, avail), fd = fit(down, avail);
-        const keep = dir.current;
-        let pick: "RIGHT" | "DOWN" = fr >= fd ? "RIGHT" : "DOWN";
-        if (keep && keep !== pick && Math.max(fr, fd) < 1.3 * (keep === "RIGHT" ? fr : fd)) pick = keep;
-        dir.current = pick;
-        const l = pick === "RIGHT" ? right : down;
+        // Pick the layout that fits the pane best; switch only when clearly better, so the picture doesn't jump.
+        const fits = all.map((l) => fit(l, avail));
+        let best = fits.indexOf(Math.max(...fits));
+        const kept = dir.current ? VARIANTS.indexOf(dir.current) : -1;
+        if (kept >= 0 && fits[best] < 1.25 * fits[kept]) best = kept;
+        dir.current = VARIANTS[best];
+        const l = all[best];
         fresh.current = new Set([...l.nodes.map((n) => n.id), ...l.edges.map((e) => e.id)].filter((id) => !known.current.has(id)));
         known.current = new Set([...l.nodes.map((n) => n.id), ...l.edges.map((e) => e.id)]);
-        setScale(Math.max(0.72, Math.min(1.2, fit(l, avail))));
+        setScale(Math.max(0.5, Math.min(1.2, fit(l, avail))));
         setLaid(l);
       })
       .catch((e) => console.error("layout", e));

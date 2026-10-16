@@ -246,12 +246,10 @@ function App() {
   return (
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
+      <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
       <div className="sidebar-slot" aria-hidden={!showSidebar} inert={!showSidebar}>
         <aside className="sidebar">
-          <div className="brand">
-            <span className="logo" />claudeXplain
-            <button className="icon collapse" onClick={toggleSidebar} title="Hide chats (Ctrl+B)">‹</button>
-          </div>
+          <div className="brand"><span className="logo" />claudeXplain</div>
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>
@@ -271,10 +269,9 @@ function App() {
           </label>
         </aside>
       </div>
-      <main className="split" style={{ gridTemplateColumns: `minmax(300px, ${split}fr) 6px minmax(280px, ${1 - split}fr)` }}>
+      <main className="split" style={{ gridTemplateColumns: `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
         <section className="left">
           <header className="chat-head">
-            {!showSidebar && <button className="icon" onClick={toggleSidebar} title="Show chats (Ctrl+B)">☰</button>}
             {editing ? (
               <input
                 className="title-edit"
