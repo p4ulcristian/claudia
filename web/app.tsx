@@ -108,7 +108,8 @@ function App() {
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [all, setAll] = useState(store.get("all") === "1");
   const [search, setSearch] = useState("");
-  const [sidebar, setSidebar] = useState(store.get("sidebar") !== "0");
+  const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
+  const toggleSidebar = useCallback(() => setSidebarState((s) => { store.set("sidebar", s ? "0" : "1"); return !s; }), []);
   const [current, setCurrent] = useState<string>(() => idFromPath() ?? crypto.randomUUID());
   const [live, setLive] = useState<Live>(() => fresh(current));
   const [viewing, setViewing] = useState<string | null>(null);
@@ -178,7 +179,7 @@ function App() {
       if (e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); newChat(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
-        setSidebar((s) => { store.set("sidebar", s ? "0" : "1"); return !s; });
+        toggleSidebar();
       }
     };
     window.addEventListener("keydown", key);
@@ -224,9 +225,12 @@ function App() {
 
   return (
     <div className={`app ${sidebar ? "" : "no-sidebar"}`}>
-      {sidebar && (
+      <div className="sidebar-slot" aria-hidden={!sidebar} inert={!sidebar}>
         <aside className="sidebar">
-          <div className="brand"><span className="logo" />claudeXplain</div>
+          <div className="brand">
+            <span className="logo" />claudeXplain
+            <button className="icon collapse" onClick={toggleSidebar} title="Hide chats (Ctrl+B)">‹</button>
+          </div>
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>
@@ -245,11 +249,11 @@ function App() {
             Show all ~/Work sessions
           </label>
         </aside>
-      )}
+      </div>
       <main className="split" style={{ gridTemplateColumns: `${split}fr 6px ${1 - split}fr` }}>
         <section className="left">
           <header className="chat-head">
-            <button className="icon" onClick={() => setSidebar(!sidebar)} title="Chats (Ctrl+B)">☰</button>
+            {!sidebar && <button className="icon" onClick={toggleSidebar} title="Show chats (Ctrl+B)">☰</button>}
             {editing ? (
               <input
                 className="title-edit"
