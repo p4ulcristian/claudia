@@ -180,7 +180,7 @@ code, pre { font-family: var(--mono); }
 
 .diagram { cursor: grab; touch-action: none; display: flex; justify-content: safe center; overflow: auto; min-height: 120px; }
 .diagram:active { cursor: grabbing; }
-.diagram svg { flex: none; display: block; overflow: visible; user-select: none; }
+.diagram svg { flex: none; display: block; overflow: visible; user-select: none; max-width: 100%; height: auto; }
 .diagram g { transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1); }
 .c-green { --c: var(--green); --cb: var(--green-bg); }
 .c-red { --c: var(--red); --cb: var(--red-bg); }
