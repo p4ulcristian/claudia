@@ -30,7 +30,6 @@ db.exec(`
     removed INTEGER NOT NULL,
     status TEXT NOT NULL,
     skipped TEXT,
-    explanation TEXT,
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (session_id, created_at);
@@ -74,9 +73,8 @@ const q = {
     `INSERT INTO changes (session_id, turn_uuid, path, before, after, added, removed, status, skipped, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   ),
-  explainChange: db.query("UPDATE changes SET explanation = ? WHERE id = ?"),
   changes: db.query<any, [string]>(
-    "SELECT id, turn_uuid AS turn, path, added, removed, status, skipped, explanation FROM changes WHERE session_id = ? ORDER BY created_at, id",
+    "SELECT id, turn_uuid AS turn, path, added, removed, status, skipped FROM changes WHERE session_id = ? ORDER BY created_at, id",
   ),
   change: db.query<{ path: string; before: string | null; after: string | null; skipped: string | null }, [number, string]>(
     "SELECT path, before, after, skipped FROM changes WHERE id = ? AND session_id = ?",
@@ -102,9 +100,8 @@ export const store = {
     const status = before.text === null && !before.skipped ? "added" : after.text === null && !after.skipped ? "deleted" : "modified";
     const skipped = before.skipped ?? after.skipped ?? null;
     const row = q.addChange.get(id, turn, path, before.text, after.text, counts.added, counts.removed, status, skipped, Date.now())!;
-    return { id: row.id, turn, path, ...counts, status, skipped: skipped ?? undefined, explanation: null };
+    return { id: row.id, turn, path, ...counts, status, skipped: skipped ?? undefined };
   },
-  explainChange: (changeId: number, line: string) => q.explainChange.run(line, changeId),
   changes: (id: string): ChangeMeta[] => q.changes.all(id).map((r) => ({ ...r, skipped: r.skipped ?? undefined })),
   change: (id: string, changeId: number) => q.change.get(changeId, id),
   savePicture: (id: string, turn: string, scene: Scene, changed: string[]) =>

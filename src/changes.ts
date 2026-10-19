@@ -1,7 +1,5 @@
-// File changes per turn: a copy before Claude first touches a file, compared after the turn,
-// explained by Haiku in one line per file.
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { diffLines, createTwoFilesPatch } from "diff";
+// File changes per turn: a copy before Claude first touches a file, compared after the turn.
+import { diffLines } from "diff";
 import { stat } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -17,7 +15,6 @@ export type ChangeMeta = {
   removed: number;
   status: "added" | "deleted" | "modified";
   skipped?: string;
-  explanation: string | null;
 };
 
 export function editedPath(input: any): string | null {
@@ -54,61 +51,6 @@ export function projectOf(path: string): string {
   const r = Bun.spawnSync(["git", "-C", dir, "rev-parse", "--show-toplevel"], { stderr: "ignore" });
   const root = r.success ? r.stdout.toString().trim() : "";
   return root || dir;
-}
-
-const EXPLAIN_SCHEMA = {
-  type: "object",
-  properties: {
-    files: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: { path: { type: "string" }, line: { type: "string" } },
-        required: ["path", "line"],
-      },
-    },
-  },
-  required: ["files"],
-};
-
-// One Haiku call per turn: what each file's change does, in one plain line.
-export async function explain(cwd: string, request: string, changes: { path: string; before: string | null; after: string | null }[]) {
-  const budget = 60_000;
-  let used = 0;
-  const parts: string[] = [];
-  for (const c of changes) {
-    const patch = createTwoFilesPatch(c.path, c.path, c.before ?? "", c.after ?? "", "before", "after", { context: 2 });
-    const piece = patch.length > 12_000 ? patch.slice(0, 12_000) + "\n[diff cut]" : patch;
-    if (used + piece.length > budget) { parts.push(`(${c.path}: diff left out, too long)`); continue; }
-    used += piece.length;
-    parts.push(piece);
-  }
-  const prompt = `The user asked Claude:\n<request>\n${request.slice(0, 4000)}\n</request>\n\nClaude then changed these files:\n<diffs>\n${parts.join("\n")}\n</diffs>\n\nFor each file, write one plain line (at most 14 words) saying what the change does and, if the request shows it, why. No file names in the line, no "this change". Answer for every file path exactly as given.`;
-  const q = query({
-    prompt,
-    options: {
-      cwd,
-      model: "haiku",
-      persistSession: false,
-      settingSources: [],
-      tools: [],
-      maxTurns: 1,
-      systemPrompt: "You summarize code changes for a busy developer: short, concrete, plain words.",
-      outputFormat: { type: "json_schema", schema: EXPLAIN_SCHEMA },
-    },
-  });
-  const lines = new Map<string, string>();
-  try {
-    for await (const m of q) {
-      if (m.type === "result" && m.subtype === "success") {
-        const out = (m as any).structured_output as { files?: { path: string; line: string }[] } | undefined;
-        for (const f of out?.files ?? []) lines.set(f.path, f.line.trim());
-      }
-    }
-  } finally {
-    q.close();
-  }
-  return lines;
 }
 
 // Whole-folder snapshots for git repos, so edits made with shell commands count too.

@@ -1,4 +1,4 @@
-// The Changes panel: files Claude changed in a turn, Haiku's line for each, the diff on click.
+// The Changes panel: files Claude changed in a turn, the diff on click.
 import React, { useEffect, useMemo, useState } from "react";
 import { structuredPatch, diffWordsWithSpace } from "diff";
 import type { ChangeMeta } from "./types";
@@ -154,7 +154,7 @@ function DiffView({ chat, change, split }: { chat: string; change: ChangeMeta; s
   );
 }
 
-export function ChangesPanel({ chat, changes, folder, label, pending }: { chat: string; changes: ChangeMeta[]; folder: string | null; label: string; pending: number[] }) {
+export function ChangesPanel({ chat, changes, folder, label }: { chat: string; changes: ChangeMeta[]; folder: string | null; label: string }) {
   const [open, setOpen] = useState(() => store.get("changes-open") !== "0");
   const [split, setSplit] = useState(() => store.get("diff-split") === "1");
   const [shown, setShown] = useState<number | null>(null);
@@ -184,7 +184,6 @@ export function ChangesPanel({ chat, changes, folder, label, pending }: { chat: 
                 {c.status !== "modified" && <span className={`chip ${c.status === "added" ? "green" : "red"}`}>{c.status === "added" ? "new" : "deleted"}</span>}
                 <span className="counts"><span className="plus">+{c.added}</span> <span className="minus">−{c.removed}</span></span>
               </button>
-              <p className={`explain small ${c.explanation ? "" : "muted"}`}>{c.explanation ?? (pending.includes(c.id) ? "Haiku is reading the change…" : "")}</p>
               {shown === c.id && <DiffView chat={chat} change={c} split={split} />}
             </li>
           ))}

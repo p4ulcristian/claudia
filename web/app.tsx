@@ -33,14 +33,12 @@ type Live = {
   settings: Settings;
   model: string;
   changes: ChangeMeta[];
-  // Changes Haiku hasn't explained yet (only those made while this page was open).
-  pendingExplain: number[];
 };
 
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null }, model: "", changes: [], pendingExplain: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null }, model: "", changes: [],
 });
 
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
@@ -119,11 +117,7 @@ function apply(l: Live, ev: ChatEvent): Live {
       return { ...l, subs: { ...l.subs, [ev.parent]: (l.subs[ev.parent] ?? []).map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text } } : it)) } };
     case "context": return { ...l, context: ev.context };
     case "settings": return { ...l, settings: ev.settings, model: ev.model || l.model };
-    case "changes": return { ...l, changes: [...l.changes, ...ev.changes], pendingExplain: [...l.pendingExplain, ...ev.changes.filter((c) => !c.skipped).map((c) => c.id)] };
-    case "explained": {
-      const lines = new Map(ev.lines.map((x) => [x.id, x.line]));
-      return { ...l, changes: l.changes.map((c) => (lines.has(c.id) ? { ...c, explanation: lines.get(c.id)! } : c)), pendingExplain: l.pendingExplain.filter((id) => !lines.has(id)) };
-    }
+    case "changes": return { ...l, changes: [...l.changes, ...ev.changes] };
   }
   return l;
 }
@@ -174,7 +168,7 @@ function App() {
   const [viewing, setViewing] = useState<string | null>(null);
   const [split, setSplit] = useState(() => Number(store.get("split")) || 0.42);
   const [editing, setEditing] = useState(false);
-  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], defaultModel: "", at: 0 });
+  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", defaultModel: "", at: 0 });
   const currentRef = useRef(current);
   currentRef.current = current;
 
@@ -398,7 +392,7 @@ function App() {
           {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
             <div className="interface">
               {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
-              {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} pending={live.pendingExplain} />}
+              {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} />}
               {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
               {live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
             </div>

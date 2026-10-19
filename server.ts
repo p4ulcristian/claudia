@@ -6,6 +6,7 @@ import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
 import { DATA_DIR, store } from "./src/db";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { watch } from "node:fs";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile } from "node:fs/promises";
 import { serveTunnel } from "./src/tunnel";
@@ -173,6 +174,9 @@ Bun.serve({
 onMeta((meta) => { for (const s of socks) s.send(JSON.stringify({ t: "meta", meta })); });
 probe(WORK);
 setInterval(() => socks.size && probe(WORK), 5 * 60_000);
+// The desktop widget switched accounts (claude-account's state file): show the new plan's limits now.
+const runtime = process.env.XDG_RUNTIME_DIR;
+if (runtime) watch(runtime, (_, file) => file === "claude-account" && probe(WORK));
 
 console.log(`Claudia on http://claudia.localhost:${PORT} (chats in ${WORK})`);
 

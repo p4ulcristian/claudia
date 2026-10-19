@@ -285,6 +285,7 @@ code, pre { font-family: var(--mono); }
 .meter.amber .m-num { color: var(--amber); }
 .meter.red .m-num { color: var(--red); }
 .m-num { font-variant-numeric: tabular-nums; color: var(--fg); }
+.m-account { white-space: nowrap; color: var(--fg); }
 
 /* Slash-command menu */
 .composer { position: relative; }
@@ -333,7 +334,6 @@ code, pre { font-family: var(--mono); }
 .change .counts { font-size: 12px; white-space: nowrap; }
 .chip.green { color: var(--green); background: var(--green-bg); }
 .chip.red { color: var(--red); background: var(--red-bg); }
-.explain { margin: 0 0 4px 15px; }
 .diff-wrap { margin: 2px 0 8px; display: grid; gap: 6px; justify-items: start; }
 .diff { width: 100%; border-collapse: collapse; font: 12px/1.45 var(--mono); background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; table-layout: fixed; }
 .diff td { padding: 0 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; border: 0; }

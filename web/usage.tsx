@@ -61,11 +61,14 @@ export function Pickers(props: { meta: Meta; settings: Settings; model: string; 
 
 export function Meters({ meta, context }: { meta: Meta; context: Context | null }) {
   if (!context && !meta.limits.length) return null;
+  // The account comes from the desktop widget (claude-account); "me" is the user's own.
+  const plan = meta.account && meta.account !== "me" ? `${meta.account[0].toUpperCase()}${meta.account.slice(1)}'s plan` : "Your plan";
   return (
     <div className="meters">
       {context && <Meter label="Context" percent={context.percent} title={`${tokens(context.used)} of ${tokens(context.max)} tokens (${prettyModel(context.model)})`} />}
+      {meta.account && <span className="m-account" title="Switch in the Claude section of the desktop widget">{plan}</span>}
       {meta.limits.map((l: Limit) => (
-        <Meter key={l.key} label={l.label} percent={l.percent} title={`${l.label} limit: ${l.percent}% used${l.resetsAt ? `, resets ${resets(l.resetsAt)}` : ""}`} />
+        <Meter key={l.key} label={l.label} percent={l.percent} title={`${plan}, ${l.label} limit: ${l.percent}% used${l.resetsAt ? `, resets ${resets(l.resetsAt)}` : ""}`} />
       ))}
     </div>
   );

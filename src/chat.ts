@@ -4,9 +4,10 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { store } from "./db";
-import { refreshSoon } from "./meta";
+import { noteLimits, refreshSoon } from "./meta";
+import { account, type Account } from "./account";
 import { pictureServer, workspaceServer, SYSTEM_APPEND } from "./prompt";
-import { EDIT_TOOLS, blobState, editedPath, explain, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
+import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
 import { applyDraw, emptyScene, type DrawInput, type Scene } from "./scene";
 
@@ -68,8 +69,7 @@ export type ChatEvent =
   | { t: "sub_result"; parent: string; id: string; error: boolean; text: string }
   | { t: "context"; context: Context }
   | { t: "settings"; settings: Settings; model?: string }
-  | { t: "changes"; changes: ChangeMeta[] }
-  | { t: "explained"; lines: { id: number; line: string }[] };
+  | { t: "changes"; changes: ChangeMeta[] };
 
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const base = (p: unknown) => String(p ?? "").split("/").pop() ?? "";
@@ -214,13 +214,14 @@ type Waiting<T> = { value: T; resolve: (r: PermissionResult) => void; input: Rec
 
 export class Chat {
   private q: Query | null = null;
+  // The claude-account name this chat's Claude Code process was started on.
+  private account = "";
   private inbox: Inbox | null = null;
   private idle: Timer | null = null;
   private listeners = new Set<(e: ChatEvent) => void>();
   private turn = "";
   private drew = false;
   private stopping = false;
-  private turnText = "";
   // Files touched since the last turn ended: their content before the first touch.
   private before = new Map<string, FileState>();
   // Git repos snapshotted at the start of the turn (or when the folder was set): repo root → tree.
@@ -303,8 +304,8 @@ export class Chat {
     return { continue: true };
   }
 
-  // After a turn: compare every touched file with its copy, store the changes, then let Haiku explain them.
-  private async finishChanges(turn: string, request: string) {
+  // After a turn: compare every touched file with its copy, store the changes.
+  private async finishChanges(turn: string) {
     const trees = [...this.trees];
     this.trees = new Map();
     // Shell edits inside snapshotted repos: compare the folder with its start-of-turn tree.
@@ -319,34 +320,22 @@ export class Chat {
     if (!this.before.size) return;
     const touched = [...this.before];
     this.before = new Map();
-    const made: { meta: ChangeMeta; before: string | null; after: string | null }[] = [];
+    const made: ChangeMeta[] = [];
     for (const [path, before] of touched) {
       const after = await readState(path);
       if (before.text === after.text && before.skipped === after.skipped) continue;
-      const meta = store.addChange(this.id, turn, path, before, after, lineCounts(before.text, after.text));
-      made.push({ meta, before: before.text, after: after.text });
+      made.push(store.addChange(this.id, turn, path, before, after, lineCounts(before.text, after.text)));
     }
     if (!made.length) return;
-    this.emit({ t: "changes", changes: made.map((m) => m.meta) });
-    const explainable = made.filter((m) => !m.meta.skipped);
-    if (!explainable.length) return;
-    try {
-      const lines = await explain(WORK, request, explainable.map((m) => ({ path: m.meta.path, before: m.before, after: m.after })));
-      const done: { id: number; line: string }[] = [];
-      for (const m of explainable) {
-        const line = lines.get(m.meta.path);
-        if (!line) continue;
-        store.explainChange(m.meta.id, line);
-        done.push({ id: m.meta.id, line });
-      }
-      if (done.length) this.emit({ t: "explained", lines: done });
-    } catch (err) {
-      console.error(`[${this.id.slice(0, 8)}] explain failed:`, err);
-    }
+    this.emit({ t: "changes", changes: made });
   }
 
   async stopTask(taskId: string) {
     await this.q?.stopTask(taskId).catch(() => {});
+    // A task whose agent was stopped never reports its end: Stop always
+    // clears it here, whether or not the SDK still knew it.
+    const t = this.tasks.get(taskId);
+    if (t && t.status === "running") this.patchTask(taskId, { status: "stopped", endedAt: Date.now() });
   }
 
   private emitTasks() {
@@ -356,7 +345,16 @@ export class Chat {
 
   private patchTask(id: string, patch: Partial<Task>) {
     const t = this.tasks.get(id);
-    if (t) this.tasks.set(id, { ...t, ...patch });
+    if (t) {
+      // A finished agent sent another message runs again without a new
+      // task_started: its timer restarts from now.
+      const again = patch.status === "running" && t.status !== "running";
+      this.tasks.set(id, { ...t, ...patch, ...(again ? { startedAt: Date.now(), endedAt: undefined } : {}) });
+    } else if (patch.status === "running") {
+      // Tasks live in memory only: one resumed after a restart of this
+      // service shows up on its first progress.
+      this.tasks.set(id, { id, description: "Agent", kind: "task", background: true, startedAt: Date.now(), ...patch, status: "running" });
+    }
     this.emitTasks();
   }
 
@@ -373,9 +371,15 @@ export class Chat {
     const uuid = crypto.randomUUID();
     const content: any[] = images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } }));
     if (text) content.push({ type: "text", text });
-    if (!this.q) await this.start();
+    const acct = await account().catch((err) => {
+      this.emit({ t: "error", text: String(err?.message ?? err) });
+      return null;
+    });
+    if (!acct) return;
+    // The desktop widget switched accounts since this chat's Claude Code started: start it again on the new one.
+    if (this.q && !this.running && this.account !== acct.name) this.close();
+    if (!this.q) await this.start(acct);
     this.turn = uuid;
-    this.turnText = text;
     this.drew = false;
     if (this.settings.folder) this.snapshot(this.settings.folder);
     this.setRunning(true);
@@ -436,14 +440,16 @@ export class Chat {
     return `Picture updated: ${scene.nodes.length} nodes, ${scene.edges.length} arrows, ${scene.cards.length} cards.`;
   }
 
-  private async start() {
+  private async start(acct: Account) {
     const exists = !!(await getSessionInfo(this.id, { dir: WORK }).catch(() => undefined));
     if (!exists) store.addChat(this.id);
     this.inbox = new Inbox();
+    this.account = acct.name;
     this.q = query({
       prompt: this.inbox,
       options: {
         cwd: WORK,
+        env: acct.env,
         ...(exists ? { resume: this.id } : { sessionId: this.id }),
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
         mcpServers: { picture: pictureServer((i) => this.draw(i)), workspace: workspaceServer((p) => this.folderTool(p)) },
@@ -560,6 +566,8 @@ export class Chat {
         return this.emitTasks();
       case "task_progress":
         return this.patchTask(m.task_id, {
+          status: "running",
+          ...(m.description ? { description: m.description } : {}),
           tokens: m.usage?.total_tokens,
           toolUses: m.usage?.tool_uses,
           lastTool: m.last_tool_name,
@@ -567,7 +575,8 @@ export class Chat {
         });
       case "task_updated": {
         const p = m.patch ?? {};
-        const status = p.status === "completed" ? "completed" : p.status === "failed" ? "failed" : p.status === "killed" ? "stopped" : undefined;
+        const status = p.status === "completed" ? "completed" : p.status === "failed" ? "failed" : p.status === "killed" ? "stopped"
+          : p.status === "running" || p.status === "pending" ? "running" : undefined;
         return this.patchTask(m.task_id, {
           ...(status ? { status, endedAt: Date.now() } : {}),
           ...(p.description ? { description: p.description } : {}),
@@ -629,10 +638,11 @@ export class Chat {
         this.setRunning(false);
         this.readContext();
         refreshSoon(WORK);
-        this.finishChanges(this.turn, this.turnText);
+        this.finishChanges(this.turn);
         return;
       }
       case "rate_limit_event":
+        noteLimits(this.account, m.rate_limit_info);
         refreshSoon(WORK, 4000);
         return;
       case "system":

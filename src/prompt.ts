@@ -25,7 +25,7 @@ When you need the user to choose, use AskUserQuestion: it shows on the right as 
 The draw call costs the user nothing to read, so prefer drawing over writing.
 
 ## Working folder
-The chat runs in ~/Work. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. (If you edit a file first, the folder is set to that file's project automatically.) Run commands in the working folder (cd <folder> && …). The user sees the working folder, and the file changes you make are shown to them as diffs, each explained in one line, so don't list your edits in the chat.
+The chat runs in ~/Work. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. (If you edit a file first, the folder is set to that file's project automatically.) Run commands in the working folder (cd <folder> && …). The user sees the working folder, and the file changes you make are shown to them as diffs, so don't list your edits in the chat.
 `.trim();
 
 const colour = z.enum(COLORS).optional();
