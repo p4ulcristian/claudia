@@ -247,6 +247,16 @@ code, pre { font-family: var(--mono); }
 .chev-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); font-size: 18px; line-height: 1; display: grid; place-items: center; color: var(--fg); }
 .chev-btn:hover:not(:disabled) { border-color: var(--accent); }
 .chev-btn:disabled { opacity: 0.3; cursor: default; }
+.fold-btn { margin-left: auto; }
+/* Folded picture pane: a thin strip that opens it again */
+.fold-strip .unfold { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; color: var(--muted); }
+.fold-strip .unfold:hover { color: var(--fg); background: var(--panel); }
+.fold-strip .chev { font-size: 18px; line-height: 1; }
+.fold-strip .fold-label { writing-mode: vertical-rl; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.fold-strip .fold-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
+.fold-strip .unfold.unseen { color: var(--fg); }
+.split.folded .divider { cursor: default; }
+.split.folded .divider:hover { background: var(--line); width: 1px; margin: 0 2.5px; }
 .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .tdot:hover { background: var(--muted); }
 .tdot.on { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
@@ -267,6 +277,10 @@ code, pre { font-family: var(--mono); }
 @media (max-width: 679px) {
   .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .divider { display: none; }
+  .split.folded { grid-template-rows: minmax(0, 1fr) auto; }
+  .fold-strip .unfold { flex-direction: row; justify-content: center; padding: 8px 0; }
+  .fold-strip .chev { rotate: 90deg; }
+  .fold-strip .fold-label { writing-mode: horizontal-tb; }
 }
 
 /* Strip above the input: model, effort, context, plan limits */

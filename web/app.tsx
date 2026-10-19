@@ -167,6 +167,9 @@ function App() {
   const [live, setLive] = useState<Live>(() => fresh(current));
   const [viewing, setViewing] = useState<string | null>(null);
   const [split, setSplit] = useState(() => Number(store.get("split")) || 0.42);
+  // Folding the picture pane gives the chat the full width; foldedAt marks which pictures are unseen.
+  const [foldedAt, setFoldedAt] = useState(() => (store.get("folded") === "1" ? Date.now() : 0));
+  const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
   const [editing, setEditing] = useState(false);
   const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", defaultModel: "", at: 0 });
   const currentRef = useRef(current);
@@ -239,6 +242,7 @@ function App() {
         showPicture(picIndex + (e.key === "ArrowLeft" ? -1 : 1));
       }
       if (e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); newChat(); }
+      if (e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); toggleFold(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
         toggleSidebar();
@@ -300,6 +304,10 @@ function App() {
     window.addEventListener("pointerup", up);
   };
 
+  // A question or permission request waits in the pane, so it opens the pane while it's pending.
+  const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
+  const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
+
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
 
@@ -339,7 +347,7 @@ function App() {
           </div>
         </aside>
       </div>
-      <main className="split" style={{ gridTemplateColumns: `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
+      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
         <section className="left">
           <header className="chat-head">
             {editing ? (
@@ -386,7 +394,16 @@ function App() {
           />
           <Meters meta={meta} context={live.context} />
         </section>
-        <div className="divider" onPointerDown={dragSplit} />
+        <div className="divider" onPointerDown={folded ? undefined : dragSplit} />
+        {folded ? (
+          <section className="right fold-strip">
+            <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"}>
+              <span className="chev">‹</span>
+              <span className="fold-label">Picture</span>
+              {unseen && <span className="fold-dot" />}
+            </button>
+          </section>
+        ) : (
         <section className="right">
           <div className="right-scroll">
           {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
@@ -422,8 +439,10 @@ function App() {
                 : live.lastTurn && !live.lastTurn.drew && live.pictures.length ? "Picture not changed this turn"
                 : live.pictures.length ? "Live" : ""}
             </span>
+            <button className="chev-btn fold-btn" onClick={toggleFold} disabled={live.asks.length > 0 || live.permits.length > 0} title="Hide picture (Alt+P)">›</button>
           </footer>
         </section>
+        )}
       </main>
     </div>
   );
