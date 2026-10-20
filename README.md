@@ -25,7 +25,7 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 
 ## Files
 
-- `server.ts`: HTTP + WebSocket, chat list, rename, delete
+- `server.ts`: HTTP + WebSocket, chat list, rename, archive
 - `src/chat.ts`: one chat = one Agent SDK session; turns, questions, stop, history
 - `src/prompt.ts`: what Claude is told about the two halves, and the draw tool
 - `src/scene.ts`: the picture's parts and how a draw call changes them
