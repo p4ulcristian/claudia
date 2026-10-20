@@ -1,0 +1,13 @@
+[Unit]
+Description=Claudia runner: the Claude sessions behind Claudia's page
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+WorkingDirectory=%h/Work/tools/claudia
+Environment=NODE_ENV=production
+ExecStart=%h/.local/bin/bun %h/Work/tools/claudia/runner.ts
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

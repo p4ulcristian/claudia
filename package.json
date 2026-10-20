@@ -25,6 +25,7 @@
   },
   "scripts": {
     "dev": "bun --hot server.ts",
+    "runner": "bun runner.ts",
     "start": "bun server.ts",
     "check": "bunx -p typescript@5 tsc --noEmit -p ."
   }

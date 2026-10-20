@@ -1,7 +1,9 @@
 [Unit]
 Description=Claudia: chat on the left, Claude's picture on the right
 PartOf=graphical-session.target
-After=graphical-session.target
+After=graphical-session.target claudia-runner.service
+# Wants, not Requires: restarting the page must not restart the runner (it holds the chats).
+Wants=claudia-runner.service
 
 [Service]
 WorkingDirectory=%h/Work/tools/claudia

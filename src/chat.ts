@@ -237,6 +237,10 @@ export class Chat {
   asks = new Map<string, Waiting<Ask>>();
   permits = new Map<string, Waiting<Permit>>();
   tasks = new Map<string, Task>();
+  // Sent messages Claude Code hasn't written to the session file yet (a message sent mid-turn waits
+  // until Claude takes it in), so a chat opened again in that time still shows them. Keyed by uuid,
+  // which the session file keeps.
+  private unsaved = new Map<string, Item>();
   // Subagent transcripts, by the tool_use id of the Agent call that started them.
   subs = new Map<string, Item[]>();
   context: Context | null = null;
@@ -387,7 +391,9 @@ export class Chat {
     this.drew = false;
     if (this.settings.folder) this.snapshot(this.settings.folder);
     this.setRunning(true);
-    this.emit({ t: "user", item: { k: "user", uuid, text, images: images.length } });
+    const item: Item = { k: "user", uuid, text, images: images.length };
+    this.unsaved.set(uuid, item);
+    this.emit({ t: "user", item });
     this.inbox!.push({ type: "user", uuid: uuid as any, session_id: this.id, parent_tool_use_id: null, message: { role: "user", content } });
   }
 
@@ -416,6 +422,13 @@ export class Chat {
     this.permits.delete(id);
     w.resolve(allow ? { behavior: "allow", updatedInput: w.input } : { behavior: "deny", message: "The user said no." });
     this.emit({ t: "permit_done", id });
+  }
+
+  // The loaded history plus what was sent but isn't in the session file yet.
+  withUnsaved(items: Item[]): Item[] {
+    const saved = new Set(items.flatMap((it) => (it.k === "user" ? [it.uuid] : [])));
+    for (const id of this.unsaved.keys()) if (saved.has(id)) this.unsaved.delete(id);
+    return [...items, ...this.unsaved.values()];
   }
 
   close() {

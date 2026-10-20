@@ -452,3 +452,18 @@ code, pre { font-family: var(--mono); }
 .card th { font: 700 12px var(--sans); text-transform: none; letter-spacing: 0; }
 .chip { font: 700 13px var(--hand); text-transform: none; letter-spacing: 0; }
 .fold-strip .fold-label { font: 700 14px var(--hand); text-transform: none; letter-spacing: 0; }
+
+/* La Linea: one chalk line along the bottom; the man in it acts out what Claude is doing (web/linea.tsx). */
+/* The line man's stage: sits on the composer's ledge, over the last chat lines, click-through (web/linea.tsx). */
+.linea { position: absolute; left: 0; right: 0; bottom: calc(100% - 8px); width: 100%; pointer-events: none; z-index: 4; overflow: hidden; }
+.linea .line { fill: none; stroke: var(--fg); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.linea .hole { fill: #120d0a; }
+.linea .bubble path { fill: var(--bg2); stroke: var(--fg); stroke-width: 1.4; stroke-linejoin: round; }
+.linea .bubble text { fill: var(--fg); font-family: var(--hand); font-weight: 700; text-anchor: middle; }
+.linea .bubble.angry text { fill: var(--red); }
+.linea .sfx { fill: var(--amber); font: 700 14px var(--hand); text-anchor: middle; }
+.linea .pencil { stroke: var(--amber); stroke-width: 5; stroke-linecap: round; }
+.linea .lead { stroke: #3b3b3b; stroke-width: 2.6; stroke-linecap: round; }
+.linea .rubber { stroke: #e98fa0; stroke-width: 5.6; stroke-linecap: round; }
+.linea .glove { fill: var(--bg2); stroke: var(--fg); stroke-width: 1.6; }
+.linea .sleeve { fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-linecap: round; }

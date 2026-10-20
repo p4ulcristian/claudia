@@ -3,8 +3,10 @@
 Chat with Claude on the left; Claude explains on the right, in a picture it draws as it works. Chat stays short, like two friends talking; the explaining lives in the picture. When Claude asks you something, the right side shows it as buttons.
 
 - Open: `omarchy-launch-webapp http://claudia.localhost:4510/`
-- Service: `claudia.service` (user unit, symlinked into ~/.config/systemd/user). After code changes: `systemctl --user restart claudia`
-- Dev with hot reload: stop the service, run `bun --hot server.ts`
+- Two services (user units, symlinked into ~/.config/systemd/user), so the page can restart without stopping chats:
+  - `claudia.service` (`server.ts`, :4510): the page, and a pass-through of `/api` and `/ws` to the runner. After edits to `web/`, `server.ts`, `src/proxy.ts`, `src/tunnel.ts`: `systemctl --user restart claudia`. Chats keep running; the page reconnects.
+  - `claudia-runner.service` (`runner.ts`, 127.0.0.1:4511): the Claude sessions, the chat socket, the API. After edits to `runner.ts` or the rest of `src/`: `systemctl --user restart claudia-runner`. This stops every running chat.
+- Dev with hot reload: stop `claudia`, run `bun --hot server.ts` (the runner keeps serving chats)
 
 ## Decisions (2026-10-16)
 
@@ -25,7 +27,9 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 
 ## Files
 
-- `server.ts`: HTTP + WebSocket, chat list, rename, archive
+- `server.ts`: the page; passes `/api` and `/ws` to the runner; the gate tunnel
+- `runner.ts`: chats, WebSocket, chat list, rename, archive
+- `src/proxy.ts`: request and socket pass-through (server → runner, tunnel → server)
 - `src/chat.ts`: one chat = one Agent SDK session; turns, questions, stop, history
 - `src/prompt.ts`: what Claude is told about the two halves, and the draw tool
 - `src/scene.ts`: the picture's parts and how a draw call changes them
@@ -33,4 +37,4 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/account.ts`: the account and token claude-account has selected
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
-- `web/`: the page (React): `chat.tsx` left, `picture.tsx` + `panels.tsx` right
+- `web/`: the page (React): `chat.tsx` left, `picture.tsx` + `panels.tsx` right, `linea.tsx` the line man along the bottom
