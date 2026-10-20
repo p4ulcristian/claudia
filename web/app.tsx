@@ -7,7 +7,6 @@ import { TasksPanel } from "./tasks";
 import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
-import { Linea } from "./linea";
 import { Brand, NoProfile, brandName, Settings as SettingsDialog, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
@@ -320,13 +319,6 @@ function App() {
     }
   }, [live.settings.color]);
 
-  // Failed and finished tool calls; the line man (linea.tsx) acts on new ones.
-  const toolTally = useMemo(() => {
-    let errors = 0, oks = 0;
-    for (const it of live.items) if (it.k === "tool" && it.result) it.result.error ? errors++ : oks++;
-    return { errors, oks };
-  }, [live.items]);
-
   const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
 
@@ -440,16 +432,6 @@ function App() {
             onStop={onStop}
             focusKey={current}
             commands={meta.commands}
-            ledge={
-              <Linea
-                chat={current}
-                loaded={live.loaded}
-                running={live.running}
-                waiting={live.asks.length > 0 || live.permits.length > 0}
-                errors={toolTally.errors}
-                oks={toolTally.oks}
-              />
-            }
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />
           <Meters meta={meta} context={live.context} />

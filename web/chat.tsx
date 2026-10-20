@@ -159,7 +159,7 @@ export function Messages(props: {
 
 type Img = { media_type: string; data: string; url: string };
 
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; commands: Command[]; tools?: React.ReactNode; ledge?: React.ReactNode }) {
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; commands: Command[]; tools?: React.ReactNode }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<Img[]>([]);
   const [pick, setPick] = useState(0);
@@ -214,7 +214,6 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
     >
-      {props.ledge}
       {images.length > 0 && (
         <div className="thumbs">
           {images.map((im, i) => (

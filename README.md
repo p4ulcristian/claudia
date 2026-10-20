@@ -43,4 +43,4 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
 - `deploy/`: a shared server: `install.sh`, the page unit and the per-profile runner unit
-- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` right, `linea.tsx` the line man along the bottom
+- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` right
