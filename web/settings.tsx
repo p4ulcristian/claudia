@@ -155,7 +155,8 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
 }
 
 // The logo: the wordmark, then a chip with this instance's name (CLAUDIA_NAME), whose Claude token
-// is in use, and the version, so two Claudias tell themselves apart and show they run the same code.
+// is in use, and the commit (the version when there is none), so two Claudias tell themselves apart
+// and show they run the same code.
 export const brandName = (name: string | null | undefined) => (name ? `Claudia ${name}` : "Claudia");
 
 // token = whose Claude subscription the chats run on right now (the saved token's name).
@@ -169,7 +170,7 @@ export function Brand({ me, token }: { me: Me | null; token?: string | null }) {
         <span className="instance" title={`Claudia ${me.version}${me.commit ? ` (${me.commit})` : ""}${me.name ? ` on ${me.name}` : ""}${token ? `, on ${token}'s Claude subscription` : ""}`}>
           {me.name && <span className="instance-name">{me.name}</span>}
           {token && <span className="instance-token">{token}</span>}
-          <span className="instance-version">v{me.version}</span>
+          <span className="instance-version">{me.commit ?? `v${me.version}`}</span>
         </span>
       )}
     </div>

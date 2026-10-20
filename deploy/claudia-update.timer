@@ -1,0 +1,10 @@
+# Check GitHub's main every five minutes.
+[Unit]
+Description=Claudia update check
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

@@ -9,6 +9,7 @@
 #                          CLAUDIA_TOKEN_FILE=/var/lib/claudia/claude-token, PATH for the runners' tools
 #   /etc/claudia/profiles  `<profile> <sign-in email>` per line
 # Optional: /etc/claudia/setup-profile <profile>, run after a profile's user is made (tools, repos).
+# After the first run, claudia-update.timer keeps the server on GitHub's main (deploy/update.sh).
 # Restarting runners stops their chats: only runners whose code changed are restarted, and only
 # with --restart-runners.
 set -euo pipefail
@@ -31,6 +32,8 @@ rsync -a --delete --chown=root:root --chmod=D755,F644 \
 
 install -m 0644 /srv/claudia/deploy/claudia-page.service /etc/systemd/system/claudia-page.service
 install -m 0644 /srv/claudia/deploy/claudia-runner@.service /etc/systemd/system/claudia-runner@.service
+install -m 0644 /srv/claudia/deploy/claudia-update.service /etc/systemd/system/claudia-update.service
+install -m 0644 /srv/claudia/deploy/claudia-update.timer /etc/systemd/system/claudia-update.timer
 systemctl daemon-reload
 
 # One Linux user per profile; home 0700 so profiles can't read each other.
@@ -50,5 +53,7 @@ while read -r name email _; do
 done < /etc/claudia/profiles
 
 systemctl enable --quiet claudia-page.service
+# From here on the server follows GitHub's main by itself (deploy/update.sh).
+systemctl enable --quiet --now claudia-update.timer
 systemctl restart claudia-page.service
 echo "Claudia installed; runners: $(systemctl list-units --plain --no-legend 'claudia-runner@*' | awk '{print $1}' | tr '\n' ' ')"

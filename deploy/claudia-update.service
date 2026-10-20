@@ -1,0 +1,10 @@
+# Bring /srv/claudia up to GitHub's main when it moved (deploy/update.sh); started by the timer.
+[Unit]
+Description=Claudia update from GitHub main
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+StateDirectory=claudia-update
+ExecStart=/bin/bash /srv/claudia/deploy/update.sh
