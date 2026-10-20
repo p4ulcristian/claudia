@@ -13,8 +13,8 @@ EnvironmentFile=/etc/claudia/env
 Environment=NODE_ENV=production RUNNER_SOCKET=/run/claudia-%i/runner.sock
 WorkingDirectory=/srv/claudia
 RuntimeDirectory=claudia-%i
-RuntimeDirectoryMode=0700
-ExecStartPre=+/usr/bin/setfacl -m u:claudia:x -m d:u:claudia:rw /run/claudia-%i
+RuntimeDirectoryMode=0710
+ExecStartPre=+/usr/bin/setfacl -m u:claudia:x,m::x -m d:u:claudia:rw /run/claudia-%i
 ExecStart=/usr/local/bin/bun /srv/claudia/runner.ts
 Restart=always
 RestartSec=3
