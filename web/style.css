@@ -504,3 +504,20 @@ svg.logo { flex: none; color: var(--fg); }
 .panel h3, .o-text, .panel .md, .panel p { overflow-wrap: anywhere; }
 .panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel pre { max-width: 100%; overflow-x: auto; }
+
+/* Whose chats: one tab per profile (web/settings.tsx ProfileTabs). */
+.profile-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.profile-tabs button { flex: 1; min-width: 0; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; justify-content: center; }
+.profile-tabs button:hover { color: var(--fg); }
+.profile-tabs button.on { background: var(--panel2); color: var(--fg); font-weight: 600; }
+.profile-tabs .you { font-size: 10px; color: var(--accent); font-weight: 600; }
+.read-only-note { padding: 14px 16px; text-align: center; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+
+/* Background tasks: every row is one line, cut with … however long the command or description;
+   the full text is in the row's details (and its tooltip). */
+.tasks ul { grid-template-columns: minmax(0, 1fr); }
+.tasks li, .task-row, .task-body, .task-body > *, .task-children, .task-children-head, .steps, .steps ul, .steps li, .step-row { min-width: 0; max-width: 100%; }
+.task-children-head, .step-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-title { flex: 1; }
+.task-body .step-detail pre, .task-body pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.read-only .task-stop { display: none; }

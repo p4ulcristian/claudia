@@ -3,7 +3,8 @@
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 export type Target = { tcp: string } | { unix: string };
-export type PipeData = { target: Target; upstream: WebSocket | null; queue: (string | Buffer)[] };
+// readOnly: only "open" messages pass (reading someone else's chats).
+export type PipeData = { target: Target; readOnly: boolean; upstream: WebSocket | null; queue: (string | Buffer)[] };
 type Pipe = ServerWebSocket<PipeData>;
 
 export function forward(req: Request, target: Target) {
@@ -21,8 +22,16 @@ export function forward(req: Request, target: Target) {
   } as RequestInit).catch(() => new Response("Claudia's runner is not up", { status: 502 }));
 }
 
-export function upgrade(req: Request, server: Server<PipeData>, target: Target) {
-  return server.upgrade(req, { data: { target, upstream: null, queue: [] } });
+export function upgrade(req: Request, server: Server<PipeData>, target: Target, readOnly = false) {
+  return server.upgrade(req, { data: { target, readOnly, upstream: null, queue: [] } });
+}
+
+function opensOnly(m: string | Buffer) {
+  try {
+    return JSON.parse(String(m)).t === "open";
+  } catch {
+    return false;
+  }
 }
 
 // One upstream socket per browser socket; when either side closes, so does the other.
@@ -39,6 +48,7 @@ export function pipe(): WebSocketHandler<PipeData> {
       up.onerror = () => ws.close();
     },
     message(ws: Pipe, m) {
+      if (ws.data.readOnly && !opensOnly(m)) return;
       const up = ws.data.upstream;
       if (up?.readyState === WebSocket.OPEN) up.send(m);
       else ws.data.queue.push(m);

@@ -8,7 +8,7 @@ import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { GithubPrompt } from "./github-prompt";
-import { Brand, NoProfile, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
+import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
@@ -179,6 +179,14 @@ function App() {
     for (const c of rows) known.current.set(c.id, c);
     setChats(rows);
   }, [all, archivedView]);
+  // Someone else's chats are read only: no new chat there, so open their latest one instead.
+  const readOnly = me?.readOnly ?? false;
+  const landed = useRef(false);
+  useEffect(() => {
+    if (!readOnly || landed.current || idFromPath() || !chats.length) return;
+    landed.current = true;
+    open(chats[0].id);
+  }, [readOnly, chats]);
   useEffect(() => { loadChats(); store.set("all", all ? "1" : "0"); }, [loadChats]);
 
   const { send, up } = useSocket(
@@ -329,15 +337,15 @@ function App() {
   if (me && !me.profile) return <NoProfile me={me} />;
 
   return (
-    <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
-      {me?.profile && !settingsOpen && <GithubPrompt profile={me.profile} />}
+    <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""} ${readOnly ? "read-only" : ""}`}>
+      {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
       <div className="sidebar-slot">
         {!showSidebar && (
           <nav className="rail" aria-label="Chats">
-            <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>
+            {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
             {list.map((c) => (
               <button
                 key={c.id}
@@ -354,7 +362,8 @@ function App() {
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
           <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />
-          <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
+          {me && <ProfileTabs me={me} />}
+          {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>
             {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
@@ -380,16 +389,16 @@ function App() {
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
             </label>
-            <button className="archived-toggle" onClick={() => setSettingsOpen(true)} title={me?.email ? `Signed in as ${me.email}` : undefined}>
+            {!readOnly && <button className="archived-toggle" onClick={() => setSettingsOpen(true)} title={me?.email ? `Signed in as ${me.email}` : undefined}>
               ⚙ Settings
-            </button>
+            </button>}
           </div>
         </aside>
       </div>
       <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
         <section className="left">
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
-            <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />
+            {!readOnly && <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />}
             {editing ? (
               <input
                 className="title-edit"
@@ -399,10 +408,10 @@ function App() {
                 onKeyDown={(e) => { if (e.key === "Enter") rename(e.currentTarget.value); if (e.key === "Escape") setEditing(false); }}
               />
             ) : (
-              <h1 onDoubleClick={() => row && setEditing(true)} title={row ? "Double-click to rename" : ""}>{title}</h1>
+              <h1 onDoubleClick={() => row && !readOnly && setEditing(true)} title={row ? "Double-click to rename" : ""}>{title}</h1>
             )}
             {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
-            {row && (
+            {row && !readOnly && (
               <div className="head-actions">
                 <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
                 {row.archived ? (
@@ -427,7 +436,9 @@ function App() {
             viewing={viewing}
             onView={setViewing}
           />
-          <Composer
+          {readOnly ? (
+            <div className="read-only-note">{me?.viewing ? `${me.viewing[0].toUpperCase()}${me.viewing.slice(1)}'s chat` : "Someone else's chat"} · read only</div>
+          ) : <Composer
             running={live.running}
             asking={live.asks.length > 0}
             onSend={onSend}
@@ -435,7 +446,7 @@ function App() {
             focusKey={current}
             commands={meta.commands}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
-          />
+          />}
           <Meters
             meta={meta}
             context={live.context}
@@ -462,8 +473,8 @@ function App() {
             <div className="interface">
               {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
               {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} />}
-              {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
-              {live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
+              {!readOnly && live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
+              {!readOnly && live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
             </div>
           )}
           <div className={`stage ${viewing ? "past" : ""}`}>

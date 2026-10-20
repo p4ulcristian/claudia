@@ -6,7 +6,7 @@ import type { Server } from "bun";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
 import { NAME } from "./src/mode";
 import { COMMIT, VERSION } from "./src/version";
-import { LOCAL_PROFILE, cleanName, cleanToken, saveToken, savedTokens, tokenNote, useToken, who } from "./src/profiles";
+import { LOCAL_PROFILE, profileNames, viewOf, cleanName, cleanToken, saveToken, savedTokens, tokenNote, useToken, who } from "./src/profiles";
 
 const PORT = Number(process.env.PORT ?? 4510);
 const GATE_HOST = process.env.GATE_HOST;
@@ -17,7 +17,8 @@ function serve(hostname: string, gate: boolean) {
   // Who this is, which profile, the instance's name and version, and the Claude tokens (names only).
   const me = (req: Request) => {
     const w = who(req, gate);
-    return json({ name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
+    const v = w.profile ? viewOf(req, w.profile) : null;
+    return json({ name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, profiles: w.profile ? profileNames() : [], viewing: v?.profile.name ?? null, readOnly: v?.readOnly ?? false, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
   };
   const tokens = () => json({ ok: true, claudeToken: tokenNote(), claudeTokens: savedTokens() });
 
@@ -63,8 +64,11 @@ function serve(hostname: string, gate: boolean) {
       if (path !== "/ws" && !path.startsWith("/api/")) return new Response("Not found", { status: 404 });
       const w = who(req, gate);
       if (!w.profile) return json({ error: w.email ? `no Claudia profile for ${w.email}` : "not signed in" }, 403);
-      if (path === "/ws") return upgrade(req, server, w.profile.runner) ? undefined : new Response("Upgrade failed", { status: 400 });
-      return forward(req, w.profile.runner);
+      // Another profile's chats: read only, enforced here (GETs, and only "open" on the socket).
+      const v = viewOf(req, w.profile);
+      if (path === "/ws") return upgrade(req, server, v.profile.runner, v.readOnly) ? undefined : new Response("Upgrade failed", { status: 400 });
+      if (v.readOnly && req.method !== "GET") return json({ error: `${v.profile.name}'s chats are read only for you` }, 403);
+      return forward(req, v.profile.runner);
     },
     websocket: pipe(),
   });

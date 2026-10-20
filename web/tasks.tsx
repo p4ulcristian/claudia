@@ -42,7 +42,7 @@ function TaskRow({ chat, task, items, onStop }: { chat: string; task: Task; item
         <button className="task-main" onClick={() => setOpen(!open)}>
           <span className={`chev ${open ? "open" : ""}`}>›</span>
           <span className="task-dot" />
-          <span className="task-desc">{task.description}</span>
+          <span className="task-desc" title={task.description}>{task.description}</span>
           <span className="chip" title={task.kind}>{isAgent ? "agent" : "shell"}</span>
         </button>
         <span className="task-meta muted small">

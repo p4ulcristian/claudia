@@ -43,6 +43,22 @@ function find(match: (p: Profile) => boolean): Profile | null {
   }
 }
 
+export function profileNames(): string[] {
+  try {
+    return profiles().map((p) => p.name);
+  } catch {
+    return [];
+  }
+}
+
+// Whose chats the page shows: the claudia_view cookie names a profile; anyone signed in may read
+// any profile's chats, only the profile's own person may write (readOnly otherwise).
+export function viewOf(req: Request, own: Profile): { profile: Profile; readOnly: boolean } {
+  const name = req.headers.get("cookie")?.match(/(?:^|;\s*)claudia_view=([a-z][a-z0-9-]{0,30})/)?.[1];
+  const other = name && name !== own.name ? find((p) => p.name === name) : null;
+  return other ? { profile: other, readOnly: true } : { profile: own, readOnly: false };
+}
+
 export type Who = { email: string | null; profile: Profile | null };
 
 // gate = the request came in on the gate's listener.

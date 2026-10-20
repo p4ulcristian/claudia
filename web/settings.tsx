@@ -7,7 +7,8 @@ import { GITHUB_TOKEN_URL } from "./github-prompt";
 
 export type TokenNote = { by: string; at: number; name?: string | null };
 export type SavedToken = { name: string; by: string; at: number };
-export type Me = { name: string | null; version: string; commit: string | null; email: string | null; profile: string | null; claudeToken: TokenNote | null; claudeTokens: SavedToken[] };
+// profiles = every profile here; viewing = whose chats the page shows; readOnly = someone else's.
+export type Me = { name: string | null; version: string; commit: string | null; email: string | null; profile: string | null; profiles: string[]; viewing: string | null; readOnly: boolean; claudeToken: TokenNote | null; claudeTokens: SavedToken[] };
 
 type GithubUser = { login: string; name: string | null } | null;
 type Prefs = { chatColors: "each" | "none" };
@@ -181,6 +182,26 @@ export function NoProfile({ me }: { me: Me }) {
     <div className="no-profile">
       <Brand me={me} />
       <p>There is no profile here for {me.email ?? "this sign-in"} yet. Ask Paul to add one.</p>
+    </div>
+  );
+}
+
+// Whose chats the sidebar lists. Everyone can read every profile's chats; only your own can be
+// written in (the page server enforces it). The choice is a cookie, so every request follows it.
+export function ProfileTabs({ me }: { me: Me }) {
+  if (me.profiles.length < 2) return null;
+  const pick = (name: string) => {
+    document.cookie = `claudia_view=${name}; path=/; max-age=31536000; samesite=lax`;
+    location.href = "/";
+  };
+  const cap = (n: string) => n[0].toUpperCase() + n.slice(1);
+  return (
+    <div className="profile-tabs" role="tablist" aria-label="Whose chats">
+      {me.profiles.map((p) => (
+        <button key={p} role="tab" aria-selected={p === me.viewing} className={p === me.viewing ? "on" : ""} onClick={() => p !== me.viewing && pick(p)} title={p === me.profile ? "Your chats" : `${cap(p)}'s chats (read only)`}>
+          {cap(p)}{p === me.profile && <span className="you">you</span>}
+        </button>
+      ))}
     </div>
   );
 }
