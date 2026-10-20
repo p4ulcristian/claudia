@@ -1,12 +1,10 @@
 // Claudia: chat on the left, Claude's picture on the right.
-import { listSessions, renameSession, deleteSession } from "@anthropic-ai/claude-agent-sdk";
+import { listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
 import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
 import { CHAT_COLORS, pickColor } from "./src/colors";
-import { DATA_DIR, store } from "./src/db";
-import { readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { store } from "./src/db";
 import { watch } from "node:fs";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile } from "node:fs/promises";
@@ -33,11 +31,14 @@ function chat(id: string) {
   return c;
 }
 
-async function listChats(all: boolean) {
+async function listChats(all: boolean, archivedView: boolean) {
   const ours = store.ourChats();
+  const archived = store.archived();
   const colors = store.colors();
   const sessions = await listSessions({ dir: WORK, includeWorktrees: false });
-  const shown = sessions.filter((s) => all || ours.has(s.sessionId) || chats.has(s.sessionId));
+  const shown = sessions.filter((s) =>
+    archivedView ? archived.has(s.sessionId) : !archived.has(s.sessionId) && (all || ours.has(s.sessionId) || chats.has(s.sessionId)),
+  );
   // Chats from before colours, or never opened here, get one the first time they're listed.
   for (const s of shown) {
     if (colors.has(s.sessionId)) continue;
@@ -55,6 +56,7 @@ async function listChats(all: boolean) {
       ours: ours.has(s.sessionId),
       running: chats.get(s.sessionId)?.running ?? false,
       color: colors.get(s.sessionId) ?? null,
+      archived: archived.has(s.sessionId),
     }));
 }
 
@@ -97,7 +99,12 @@ Bun.serve({
   routes: {
     "/": index,
     "/c/:id": index,
-    "/api/chats": { GET: async (req) => json(await listChats(new URL(req.url).searchParams.get("all") === "1")) },
+    "/api/chats": {
+      GET: async (req) => {
+        const p = new URL(req.url).searchParams;
+        return json(await listChats(p.get("all") === "1", p.get("archived") === "1"));
+      },
+    },
     // The last part of a background task's output file (only files the task reported).
     "/api/chats/:id/tasks/:task/output": {
       GET: async (req) => {
@@ -124,19 +131,14 @@ Bun.serve({
       },
     },
     "/api/chats/:id": {
+      // Rename and/or archive: { title?, archived? }
       PATCH: async (req) => {
-        const { title } = (await req.json()) as { title: string };
-        await renameSession(req.params.id, String(title).slice(0, 200), { dir: WORK });
-        broadcastChats();
-        return json({ ok: true });
-      },
-      DELETE: async (req) => {
         const id = req.params.id;
-        chats.get(id)?.close();
-        chats.delete(id);
-        await deleteSession(id, { dir: WORK }).catch(() => {});
-        store.deleteChat(id);
-        for (const f of await readdir(join(DATA_DIR, "index")).catch(() => [] as string[])) if (f.startsWith(`${id}-`)) await rm(join(DATA_DIR, "index", f), { force: true });
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const body = (await req.json()) as { title?: string; archived?: boolean };
+        if (typeof body.title === "string") await renameSession(id, body.title.slice(0, 200), { dir: WORK });
+        if (body.archived === true) store.archive(id);
+        if (body.archived === false) store.unarchive(id);
         broadcastChats();
         return json({ ok: true });
       },
@@ -164,6 +166,7 @@ Bun.serve({
           case "open": return await openChat(ws, m.chat);
           case "send": {
             const c = chat(m.chat);
+            store.unarchive(m.chat); // writing to an archived chat brings it back
             if (ws.data.chat !== m.chat) await openChat(ws, m.chat);
             await c.send(String(m.text ?? ""), m.images ?? []);
             return broadcastChats();

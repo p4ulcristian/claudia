@@ -1,7 +1,7 @@
 # Claudia's look
 
 Chosen 2026-10-20 from three directions (`plan/design/directions.html`): **B · Chalkboard**.
-Not applied yet; the app still wears the old dark-green look.
+Applied 2026-10-20. Fonts: Atkinson Hyperlegible (text), Kalam (handwriting), JetBrains Mono (code, paths, diffs). The light theme is the same idea as a whiteboard: white board, marker colours, an aluminium tray.
 
 Why it fits: Claudia is someone talking while drawing on a board. The look comes from that, not from the usual app defaults.
 

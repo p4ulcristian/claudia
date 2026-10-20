@@ -41,6 +41,11 @@ db.exec(`
     model TEXT,
     effort TEXT
   );
+  -- Chats put away: hidden from the list and the rail, everything kept.
+  CREATE TABLE IF NOT EXISTS archived (
+    session_id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS pictures (
     session_id TEXT NOT NULL,
     turn_uuid TEXT NOT NULL,
@@ -61,9 +66,9 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 const q = {
   addChat: db.query("INSERT OR IGNORE INTO chats (session_id, created_at) VALUES (?, ?)"),
   ours: db.query<{ session_id: string }, []>("SELECT session_id FROM chats"),
-  dropChat: db.query("DELETE FROM chats WHERE session_id = ?"),
-  dropPictures: db.query("DELETE FROM pictures WHERE session_id = ?"),
-  dropSettings: db.query("DELETE FROM chat_settings WHERE session_id = ?"),
+  archive: db.query("INSERT OR IGNORE INTO archived (session_id, at) VALUES (?, ?)"),
+  unarchive: db.query("DELETE FROM archived WHERE session_id = ?"),
+  archived: db.query<{ session_id: string }, []>("SELECT session_id FROM archived"),
   savePicture: db.query(
     `INSERT INTO pictures (session_id, turn_uuid, scene, changed, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (session_id, turn_uuid) DO UPDATE SET scene = excluded.scene, changed = excluded.changed`,
@@ -88,7 +93,6 @@ const q = {
   change: db.query<{ path: string; before: string | null; after: string | null; skipped: string | null }, [number, string]>(
     "SELECT path, before, after, skipped FROM changes WHERE id = ? AND session_id = ?",
   ),
-  dropChanges: db.query("DELETE FROM changes WHERE session_id = ?"),
   pictures: db.query<{ turn_uuid: string; scene: string; changed: string; created_at: number }, [string]>(
     "SELECT turn_uuid, scene, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
   ),
@@ -97,12 +101,9 @@ const q = {
 export const store = {
   addChat: (id: string) => q.addChat.run(id, Date.now()),
   ourChats: () => new Set(q.ours.all().map((r) => r.session_id)),
-  deleteChat(id: string) {
-    q.dropChat.run(id);
-    q.dropPictures.run(id);
-    q.dropSettings.run(id);
-    q.dropChanges.run(id);
-  },
+  archive: (id: string) => q.archive.run(id, Date.now()),
+  unarchive: (id: string) => q.unarchive.run(id),
+  archived: () => new Set(q.archived.all().map((r) => r.session_id)),
   settings: (id: string): Settings => q.settings.get(id) ?? { model: null, effort: null, folder: null, color: null },
   saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color),
   colors: () => new Map(q.colors.all().map((r) => [r.session_id, r.color])),

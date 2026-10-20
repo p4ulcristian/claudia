@@ -4,5 +4,5 @@ export type { ChangeMeta } from "../src/changes";
 export type { Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "../src/scene";
 import type { Scene } from "../src/scene";
 
-export type ChatRow = { id: string; title: string; at: number; ours: boolean; running: boolean; color: string | null };
+export type ChatRow = { id: string; title: string; at: number; ours: boolean; running: boolean; color: string | null; archived: boolean };
 export type Picture = { turn: string; scene: Scene; changed: string[]; at: number };

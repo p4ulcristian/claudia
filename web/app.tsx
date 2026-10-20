@@ -154,6 +154,9 @@ function useNarrow() {
 function App() {
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [all, setAll] = useState(store.get("all") === "1");
+  const [archivedView, setArchivedView] = useState(false);
+  // Every chat seen in any list, so the open one keeps its title while the other list shows.
+  const known = useRef(new Map<string, ChatRow>());
   const [search, setSearch] = useState("");
   const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
   const narrow = useNarrow();
@@ -177,9 +180,12 @@ function App() {
   currentRef.current = current;
 
   const loadChats = useCallback(async () => {
-    const r = await fetch(`/api/chats${all ? "?all=1" : ""}`);
-    if (r.ok) setChats(await r.json());
-  }, [all]);
+    const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
+    if (!r.ok) return;
+    const rows: ChatRow[] = await r.json();
+    for (const c of rows) known.current.set(c.id, c);
+    setChats(rows);
+  }, [all, archivedView]);
   useEffect(() => { loadChats(); store.set("all", all ? "1" : "0"); }, [loadChats]);
 
   const { send, up } = useSocket(
@@ -217,7 +223,7 @@ function App() {
     return () => window.removeEventListener("popstate", pop);
   }, [open]);
 
-  const row = chats.find((c) => c.id === current);
+  const row = chats.find((c) => c.id === current) ?? known.current.get(current);
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
   useEffect(() => { document.title = `${title} · Claudia`; }, [title]);
 
@@ -258,10 +264,13 @@ function App() {
     if (!t.trim() || t === title) return;
     await fetch(`/api/chats/${current}`, { method: "PATCH", body: JSON.stringify({ title: t.trim() }) });
   };
-  const remove = async () => {
-    if (!confirm(`Delete "${title}"? This deletes the Claude Code session too.`)) return;
-    await fetch(`/api/chats/${current}`, { method: "DELETE" });
-    newChat();
+  // Archive hides the chat and moves on to the next one; in the archived view it brings it back.
+  const setArchived = async (archived: boolean) => {
+    await fetch(`/api/chats/${current}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+    if (!archived) return;
+    const next = chats.find((c) => c.id !== current);
+    if (next) open(next.id);
+    else newChat();
   };
 
   // Which picture to show: live, or the one that was current at an older message.
@@ -364,9 +373,12 @@ function App() {
                 <span className="when">{ago(c.at)}</span>
               </button>
             ))}
-            {!list.length && <p className="muted small">{q ? "No match." : "No chats yet."}</p>}
+            {!list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
           </nav>
           <div className="side-foot">
+            <button className={`archived-toggle ${archivedView ? "on" : ""}`} onClick={() => setArchivedView((v) => !v)}>
+              <ArchiveIcon /> {archivedView ? "Back to chats" : "Archived"}
+            </button>
             <label className="toggle">
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
@@ -401,7 +413,11 @@ function App() {
             {row && (
               <div className="head-actions">
                 <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
-                <button className="icon" onClick={remove} title="Delete">🗑</button>
+                {row.archived ? (
+                  <button className="icon" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
+                ) : (
+                  <button className="icon" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
+                )}
               </div>
             )}
             {!up && <span className="offline">reconnecting…</span>}
@@ -485,3 +501,14 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+// A box with a lid; the arrow points out of it for Unarchive.
+function ArchiveIcon({ out }: { out?: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="13" height="3.5" rx="0.8" />
+      <path d="M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6" />
+      {out ? <path d="M8 12V8.2M6.3 9.8 8 8.1l1.7 1.7" /> : <path d="M6.3 9h3.4" />}
+    </svg>
+  );
+}

@@ -6,9 +6,9 @@ import type { Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types
 
 const elk = new ELK();
 const COLORS = ["green", "red", "amber", "blue", "grey", "violet"];
-const FONT = '600 14px "Instrument Sans", system-ui, sans-serif';
-const GROUP_FONT = '600 10.5px "Instrument Sans", system-ui, sans-serif';
-const NOTE_FONT = '400 12px "Instrument Sans", system-ui, sans-serif';
+const FONT = '700 15px Kalam, cursive';
+const GROUP_FONT = '700 14px Kalam, cursive';
+const NOTE_FONT = '400 12px "Atkinson Hyperlegible", system-ui, sans-serif';
 
 const canvas = document.createElement("canvas").getContext("2d")!;
 function textW(s: string, font = FONT) {
@@ -99,7 +99,7 @@ async function layout(scene: Scene, variant: Variant): Promise<Laid> {
         "elk.padding": "[top=36,left=18,bottom=18,right=18]",
         // The frame is at least as wide as its title. ELK swaps the minimum's width and height in DOWN layouts.
         "elk.nodeSize.constraints": "MINIMUM_SIZE",
-        "elk.nodeSize.minimum": minSize(Math.ceil(textW(g.label.toUpperCase(), GROUP_FONT) + g.label.length * 0.85 + 34), 60, direction),
+        "elk.nodeSize.minimum": minSize(Math.ceil(textW(g.label, GROUP_FONT) + 34), 60, direction),
       },
       children: scene.nodes.filter((n) => n.group === g.id).map(leaf),
     })).filter((g) => g.children.length),
@@ -320,6 +320,11 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
       <div className="zoom-layer" ref={layer} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
+          {/* Chalk: lines wobble a little, like they were drawn by hand. One region covers the whole picture. */}
+          <filter id="chalk" filterUnits="userSpaceOnUse" x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80}>
+            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
           {COLORS.map((c) => (
             <marker key={c} id={`arrow-${c}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" className={`arrowhead c-${c}`} />
