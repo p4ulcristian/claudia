@@ -65,11 +65,16 @@ function TaskRow({ chat, task, items, onStop }: { chat: string; task: Task; item
 }
 
 export function TasksPanel({ chat, tasks, subs, onStop }: { chat: string; tasks: Task[]; subs: Record<string, Item[]>; onStop: (id: string) => void }) {
-  const running = tasks.filter((t) => t.status === "running");
   const [open, setOpen] = useState(true);
-  useTick(running.length > 0);
+  const seen = tasks.filter((t) => !t.ambient);
+  const ids = new Set(seen.map((t) => t.id));
+  // An agent's own commands sit under it; the list shows what Claude started.
+  const top = seen.filter((t) => !t.parentId || !ids.has(t.parentId));
+  const kids = (id: string) => seen.filter((t) => t.parentId === id);
+  const running = top.filter((t) => t.status === "running");
+  useTick(seen.some((t) => t.status === "running"));
   // Running first, then the most recent finished ones.
-  const shown = [...running, ...tasks.filter((t) => t.status !== "running").sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0)).slice(0, 6)];
+  const shown = [...running, ...top.filter((t) => t.status !== "running").sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0)).slice(0, 6)];
   return (
     <section className="panel tasks">
       <button className="tasks-head" onClick={() => setOpen(!open)}>
@@ -79,9 +84,30 @@ export function TasksPanel({ chat, tasks, subs, onStop }: { chat: string; tasks:
       </button>
       {open && (
         <ul>
-          {shown.map((t) => <TaskRow key={t.id} chat={chat} task={t} items={t.toolUseId ? subs[t.toolUseId] : undefined} onStop={() => onStop(t.id)} />)}
+          {shown.map((t) => (
+            <React.Fragment key={t.id}>
+              <TaskRow chat={chat} task={t} items={t.toolUseId ? subs[t.toolUseId] : undefined} onStop={() => onStop(t.id)} />
+              <Children chat={chat} tasks={kids(t.id)} onStop={onStop} />
+            </React.Fragment>
+          ))}
         </ul>
       )}
     </section>
+  );
+}
+
+// An agent's commands, folded: one line saying how many run, opened on a click.
+function Children({ chat, tasks, onStop }: { chat: string; tasks: Task[]; onStop: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const running = tasks.filter((t) => t.status === "running");
+  if (!running.length) return null;
+  return (
+    <li className="task-children">
+      <button className="task-children-head muted small" onClick={() => setOpen(!open)}>
+        <span className={`chev ${open ? "open" : ""}`}>›</span>
+        {running.length === 1 ? "1 command of this agent" : `${running.length} commands of this agent`}
+      </button>
+      {open && <ul>{running.map((t) => <TaskRow key={t.id} chat={chat} task={t} onStop={() => onStop(t.id)} />)}</ul>}
+    </li>
   );
 }

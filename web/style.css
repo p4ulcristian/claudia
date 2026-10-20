@@ -360,3 +360,8 @@ code, pre { font-family: var(--mono); }
 .diff mark { color: inherit; border-radius: 2px; padding: 0 1px; }
 .diff tr.del mark, .diff td.del mark { background: color-mix(in srgb, var(--red) 40%, transparent); }
 .diff tr.add mark, .diff td.add mark { background: color-mix(in srgb, var(--green) 40%, transparent); }
+
+/* an agent's own commands, folded under its row */
+.task-children { list-style: none; margin: 0 0 4px 22px; }
+.task-children-head { background: none; border: 0; padding: 2px 0; cursor: pointer; color: inherit; display: flex; gap: 6px; align-items: center; }
+.task-children ul { margin: 2px 0 0; padding: 0; }

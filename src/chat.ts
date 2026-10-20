@@ -38,6 +38,10 @@ export type Task = {
   lastTool?: string;
   summary?: string;
   outputFile?: string;
+  // The agent task that launched it (a subagent's shell); absent for the main thread's own.
+  parentId?: string;
+  // Housekeeping the SDK marks as not activity: never shown.
+  ambient?: boolean;
 };
 export type Context = { used: number; max: number; percent: number; model: string };
 export type Settings = { model: string | null; effort: string | null; folder: string | null };
@@ -562,8 +566,29 @@ export class Chat {
           status: "running",
           background: !!m.is_backgrounded,
           startedAt: Date.now(),
+          parentId: m.parent_task_id,
+          ambient: !!m.skip_transcript,
         });
         return this.emitTasks();
+      case "background_tasks_changed": {
+        // The SDK's whole list of live background tasks (replace, not patch):
+        // a running one missing from it has ended, even if no notification
+        // came (its agent was stopped first); a live one we never saw start
+        // (after a restart of this service) is added.
+        type Live = { task_id: string; description: string; task_type?: string; subagent_type?: string; parent_task_id?: string; ambient?: boolean };
+        const live = new Map(((m.tasks ?? []) as Live[]).map((t) => [t.task_id, t] as const));
+        for (const [id, t] of this.tasks)
+          if (t.status === "running" && t.background && !live.has(id))
+            this.tasks.set(id, { ...t, status: "stopped", endedAt: Date.now() });
+        for (const [id, t] of live)
+          if (!this.tasks.has(id))
+            this.tasks.set(id, {
+              id, description: t.description, kind: t.subagent_type ?? t.task_type ?? "task", status: "running",
+              background: true, startedAt: Date.now(), parentId: t.parent_task_id, ambient: !!t.ambient,
+            });
+          else if (t.ambient) this.tasks.set(id, { ...this.tasks.get(id)!, ambient: true });
+        return this.emitTasks();
+      }
       case "task_progress":
         return this.patchTask(m.task_id, {
           status: "running",
