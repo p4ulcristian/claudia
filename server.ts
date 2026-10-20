@@ -3,6 +3,7 @@ import { listSessions, renameSession, deleteSession } from "@anthropic-ai/claude
 import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
 import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
+import { CHAT_COLORS } from "./src/colors";
 import { DATA_DIR, store } from "./src/db";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,6 +31,7 @@ function chat(id: string) {
 
 async function listChats(all: boolean) {
   const ours = store.ourChats();
+  const colors = store.colors();
   const sessions = await listSessions({ dir: WORK, includeWorktrees: false });
   return sessions
     .filter((s) => all || ours.has(s.sessionId) || chats.has(s.sessionId))
@@ -39,6 +41,7 @@ async function listChats(all: boolean) {
       at: s.lastModified,
       ours: ours.has(s.sessionId),
       running: chats.get(s.sessionId)?.running ?? false,
+      color: colors.get(s.sessionId) ?? null,
     }));
 }
 
@@ -159,7 +162,9 @@ Bun.serve({
             const next: Record<string, string | null> = {};
             if ("model" in m) next.model = m.model || null;
             if ("effort" in m) next.effort = m.effort || null;
-            return await chat(m.chat).setSettings(next);
+            if ("color" in m) next.color = (CHAT_COLORS as readonly string[]).includes(m.color) ? m.color : null;
+            await chat(m.chat).setSettings(next);
+            return "color" in m ? broadcastChats() : undefined;
           }
           case "stop_task": return await chats.get(m.chat)?.stopTask(String(m.task));
         }

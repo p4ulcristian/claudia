@@ -44,7 +44,7 @@ export type Task = {
   ambient?: boolean;
 };
 export type Context = { used: number; max: number; percent: number; model: string };
-export type Settings = { model: string | null; effort: string | null; folder: string | null };
+export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null };
 
 export type Question = {
   question: string;

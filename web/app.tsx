@@ -6,6 +6,7 @@ import { AskPanel, PermitPanel } from "./panels";
 import { TasksPanel } from "./tasks";
 import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
+import { ColorPicker, chatColorVar } from "./colors";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
@@ -38,7 +39,7 @@ type Live = {
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null }, model: "", changes: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null }, model: "", changes: [],
 });
 
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
@@ -323,7 +324,12 @@ function App() {
           <nav>
             {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
             {list.map((c) => (
-              <button key={c.id} className={`chat-row ${c.id === current ? "active" : ""}`} onClick={() => open(c.id)}>
+              <button
+                key={c.id}
+                className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
+                style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
+                onClick={() => open(c.id)}
+              >
                 {c.running && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
                 <span className="when">{ago(c.at)}</span>
@@ -347,9 +353,10 @@ function App() {
           </div>
         </aside>
       </div>
-      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
+      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)`, "--accent": chatColorVar(live.settings.color) } as React.CSSProperties}>
         <section className="left">
-          <header className="chat-head">
+          <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
+            <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />
             {editing ? (
               <input
                 className="title-edit"

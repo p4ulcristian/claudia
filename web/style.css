@@ -7,6 +7,9 @@
   --amber: #e2ad45; --amber-bg: #33280f; --blue: #6fb3f0; --blue-bg: #15283a;
   --grey: #9aa8a3; --grey-bg: #232c29; --violet: #b49cf2; --violet-bg: #2a2242;
   --accent: var(--green);
+  /* Chat colours (see src/colors.ts): eight hues far enough apart to tell at a glance. */
+  --c-red: #f0785f; --c-orange: #f39a4a; --c-yellow: #e8cf4a; --c-green: #4cc68d;
+  --c-teal: #3fc1c0; --c-blue: #6fb3f0; --c-violet: #b49cf2; --c-pink: #f080b8;
   --sans: "Instrument Sans", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
@@ -16,6 +19,8 @@
   --green: #1f8a5b; --green-bg: #e2f3ea; --red: #c4452f; --red-bg: #fbe9e4;
   --amber: #b07a10; --amber-bg: #fbf0d6; --blue: #2d6fb0; --blue-bg: #e3eef9;
   --grey: #6c7a75; --grey-bg: #eceff0; --violet: #6b4fc4; --violet-bg: #eee8fb;
+  --c-red: #c4452f; --c-orange: #c8641a; --c-yellow: #a58a00; --c-green: #1f8a5b;
+  --c-teal: #138585; --c-blue: #2d6fb0; --c-violet: #6b4fc4; --c-pink: #c2407f;
   color-scheme: light;
 }
 
@@ -60,6 +65,9 @@ code, pre { font-family: var(--mono); }
 .chat-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; text-align: left; min-height: 34px; }
 .chat-row:hover { background: var(--panel); }
 .chat-row.active { background: var(--panel2); box-shadow: inset 2px 0 0 var(--accent); }
+.chat-row.colored { box-shadow: inset 3px 0 0 var(--chat); background: color-mix(in srgb, var(--chat) 9%, transparent); }
+.chat-row.colored:hover { background: color-mix(in srgb, var(--chat) 15%, transparent); }
+.chat-row.colored.active { background: color-mix(in srgb, var(--chat) 22%, var(--panel2)); box-shadow: inset 3px 0 0 var(--chat); }
 .chat-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
 .chat-row .when { color: var(--muted); font-size: 11.5px; }
 .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 1.4s ease-in-out infinite; flex: none; }
@@ -365,3 +373,16 @@ code, pre { font-family: var(--mono); }
 .task-children { list-style: none; margin: 0 0 4px 22px; }
 .task-children-head { background: none; border: 0; padding: 2px 0; cursor: pointer; color: inherit; display: flex; gap: 6px; align-items: center; }
 .task-children ul { margin: 2px 0 0; padding: 0; }
+
+/* Chat colour: dot in the header, palette under it. */
+.chat-head.colored { box-shadow: inset 0 -2px 0 var(--accent); }
+.color-pick { position: relative; flex: none; display: grid; }
+.color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
+.color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
+.color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
+.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(3, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.swatch { width: 26px; height: 26px; border-radius: 50%; }
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
+.swatch.none { border: 1.5px dashed var(--muted); position: relative; }
+.swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }

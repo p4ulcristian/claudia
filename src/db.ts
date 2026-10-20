@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Scene } from "./scene";
 import type { ChangeMeta, FileState } from "./changes";
+import type { Settings } from "./chat";
 
 const dir = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"), "claudia");
 mkdirSync(join(dir, "index"), { recursive: true });
@@ -53,6 +54,9 @@ db.exec(`
 // Added after the first release: the chat's working folder.
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "folder"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN folder TEXT");
+// And its colour from the palette, to tell chats apart at a glance.
+if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "color"))
+  db.exec("ALTER TABLE chat_settings ADD COLUMN color TEXT");
 
 const q = {
   addChat: db.query("INSERT OR IGNORE INTO chats (session_id, created_at) VALUES (?, ?)"),
@@ -64,11 +68,12 @@ const q = {
     `INSERT INTO pictures (session_id, turn_uuid, scene, changed, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (session_id, turn_uuid) DO UPDATE SET scene = excluded.scene, changed = excluded.changed`,
   ),
-  settings: db.query<{ model: string | null; effort: string | null; folder: string | null }, [string]>("SELECT model, effort, folder FROM chat_settings WHERE session_id = ?"),
+  settings: db.query<Settings, [string]>("SELECT model, effort, folder, color FROM chat_settings WHERE session_id = ?"),
   saveSettings: db.query(
-    `INSERT INTO chat_settings (session_id, model, effort, folder) VALUES (?, ?, ?, ?)
-     ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort, folder = excluded.folder`,
+    `INSERT INTO chat_settings (session_id, model, effort, folder, color) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort, folder = excluded.folder, color = excluded.color`,
   ),
+  colors: db.query<{ session_id: string; color: string }, []>("SELECT session_id, color FROM chat_settings WHERE color IS NOT NULL"),
   addChange: db.query<{ id: number }, [string, string, string, string | null, string | null, number, number, string, string | null, number]>(
     `INSERT INTO changes (session_id, turn_uuid, path, before, after, added, removed, status, skipped, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -94,8 +99,9 @@ export const store = {
     q.dropSettings.run(id);
     q.dropChanges.run(id);
   },
-  settings: (id: string) => q.settings.get(id) ?? { model: null, effort: null, folder: null },
-  saveSettings: (id: string, s: { model: string | null; effort: string | null; folder: string | null }) => q.saveSettings.run(id, s.model, s.effort, s.folder),
+  settings: (id: string): Settings => q.settings.get(id) ?? { model: null, effort: null, folder: null, color: null },
+  saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color),
+  colors: () => new Map(q.colors.all().map((r) => [r.session_id, r.color])),
   addChange(id: string, turn: string, path: string, before: FileState, after: FileState, counts: { added: number; removed: number }): ChangeMeta {
     const status = before.text === null && !before.skipped ? "added" : after.text === null && !after.skipped ? "deleted" : "modified";
     const skipped = before.skipped ?? after.skipped ?? null;
