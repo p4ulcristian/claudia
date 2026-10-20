@@ -306,6 +306,13 @@ function App() {
   };
 
   // A question or permission request waits in the pane, so it opens the pane while it's pending.
+  // The chat's colour themes the whole window (style.css, ":root[data-chat]").
+  useEffect(() => {
+    const root = document.documentElement;
+    if (live.settings.color) root.dataset.chat = live.settings.color;
+    else delete root.dataset.chat;
+  }, [live.settings.color]);
+
   const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
 
@@ -353,7 +360,7 @@ function App() {
           </div>
         </aside>
       </div>
-      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)`, "--accent": chatColorVar(live.settings.color) } as React.CSSProperties}>
+      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
         <section className="left">
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
             <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />

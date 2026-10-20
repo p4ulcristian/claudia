@@ -24,6 +24,30 @@
   color-scheme: light;
 }
 
+/* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
+   so switching chats repaints the window. Diff and picture colours keep their meaning. */
+:root[data-chat="red"] { --hue: var(--c-red); }
+:root[data-chat="orange"] { --hue: var(--c-orange); }
+:root[data-chat="yellow"] { --hue: var(--c-yellow); }
+:root[data-chat="green"] { --hue: var(--c-green); }
+:root[data-chat="teal"] { --hue: var(--c-teal); }
+:root[data-chat="blue"] { --hue: var(--c-blue); }
+:root[data-chat="violet"] { --hue: var(--c-violet); }
+:root[data-chat="pink"] { --hue: var(--c-pink); }
+:root[data-chat] {
+  --bg: color-mix(in oklch, var(--hue) 21%, #0b0e0d); --bg2: color-mix(in oklch, var(--hue) 15%, #080a0a);
+  --panel: color-mix(in oklch, var(--hue) 26%, #111514); --panel2: color-mix(in oklch, var(--hue) 33%, #161b1a);
+  --line: color-mix(in oklch, var(--hue) 45%, #20272a);
+  --fg: color-mix(in oklch, var(--hue) 14%, #f1f4f3); --muted: color-mix(in oklch, var(--hue) 45%, #8a9592);
+  --accent: var(--hue);
+}
+:root[data-theme="light"][data-chat] {
+  --bg: color-mix(in oklch, var(--hue) 14%, #fafbfb); --bg2: color-mix(in oklch, var(--hue) 20%, #f0f2f2);
+  --panel: color-mix(in oklch, var(--hue) 7%, #fff); --panel2: color-mix(in oklch, var(--hue) 11%, #fbfcfc);
+  --line: color-mix(in oklch, var(--hue) 30%, #d5dbd9);
+  --fg: color-mix(in oklch, var(--hue) 25%, #121816); --muted: color-mix(in oklch, var(--hue) 40%, #5b6763);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); overflow: hidden; }
