@@ -155,7 +155,10 @@ function DiffView({ chat, change, split }: { chat: string; change: ChangeMeta; s
 }
 
 export function ChangesPanel({ chat, changes, folder, label }: { chat: string; changes: ChangeMeta[]; folder: string | null; label: string }) {
-  const [open, setOpen] = useState(() => store.get("changes-open") !== "0");
+  // Folded until opened; a new chat or a new turn's changes fold it again.
+  const [open, setOpen] = useState(false);
+  const newest = changes.at(-1)?.id;
+  useEffect(() => setOpen(false), [chat, newest]);
   const [split, setSplit] = useState(() => store.get("diff-split") === "1");
   const [shown, setShown] = useState<number | null>(null);
   const added = changes.reduce((n, c) => n + c.added, 0);
@@ -163,7 +166,7 @@ export function ChangesPanel({ chat, changes, folder, label }: { chat: string; c
   return (
     <section className="panel changes">
       <div className="changes-head">
-        <button className="tasks-head" onClick={() => { setOpen(!open); store.set("changes-open", open ? "0" : "1"); }}>
+        <button className="tasks-head" onClick={() => setOpen(!open)}>
           <span className={`chev ${open ? "open" : ""}`}>›</span>
           <b>Changes</b>
           <span className="muted small">{label} · {changes.length} {changes.length === 1 ? "file" : "files"} · <span className="plus">+{added}</span> <span className="minus">−{removed}</span></span>
