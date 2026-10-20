@@ -1,0 +1,2 @@
+# git archive (how deploy/install.sh gets the code) writes the commit into it.
+src/commit.txt export-subst

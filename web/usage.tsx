@@ -59,14 +59,22 @@ export function Pickers(props: { meta: Meta; settings: Settings; model: string; 
   );
 }
 
-export function Meters({ meta, context }: { meta: Meta; context: Context | null }) {
+// saved = the Claude tokens saved in Settings; with two or more, the plan label switches between them.
+export function Meters({ meta, context, saved, onSwitch }: { meta: Meta; context: Context | null; saved: string[]; onSwitch: (name: string) => void }) {
   if (!context && !meta.limits.length) return null;
-  // The token pasted in Settings (src/account.ts), shared by every profile of this Claudia.
-  const plan = "Plan";
+  // The token in use (src/account.ts), shared by every profile of this Claudia.
+  const plan = meta.accountLabel ? `${meta.accountLabel}'s plan` : "Plan";
   return (
     <div className="meters">
       {context && <Meter label="Context" percent={context.percent} title={`${tokens(context.used)} of ${tokens(context.max)} tokens (${prettyModel(context.model)})`} />}
-      {meta.account && <span className="m-account" title="Replace the token in Settings">{plan}</span>}
+      {meta.account && saved.length > 1 ? (
+        <label className="pick m-account" title="Switch the Claude subscription for every chat here (applies on each chat's next message)">
+          <select value={meta.accountLabel ?? ""} onChange={(e) => onSwitch(e.target.value)}>
+            {!saved.includes(meta.accountLabel ?? "") && <option value="">{plan}</option>}
+            {saved.map((n) => <option key={n} value={n}>{n}'s plan</option>)}
+          </select>
+        </label>
+      ) : meta.account && <span className="m-account" title="Add or switch tokens in Settings">{plan}</span>}
       {meta.limits.map((l: Limit) => (
         <Meter key={l.key} label={l.label} percent={l.percent} title={`${plan}, ${l.label} limit: ${l.percent}% used${l.resetsAt ? `, resets ${resets(l.resetsAt)}` : ""}`} />
       ))}

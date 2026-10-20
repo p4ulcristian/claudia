@@ -7,11 +7,12 @@ export type ModelOption = { value: string; name: string; efforts: string[] };
 export type Command = { name: string; description: string; hint: string };
 export type Limit = { key: string; label: string; percent: number; resetsAt: string | null };
 // account = the token name the chats run on (src/account.ts); limits are that token's plan.
-export type Meta = { models: ModelOption[]; commands: Command[]; limits: Limit[]; account: string; defaultModel: string; at: number };
+// accountLabel = whose it is ("Paul"), from Settings.
+export type Meta = { models: ModelOption[]; commands: Command[]; limits: Limit[]; account: string; accountLabel: string | null; defaultModel: string; at: number };
 
 const LIMIT_LABELS: Record<string, string> = { five_hour: "5-hour", seven_day: "Week", seven_day_opus: "Week, Opus", seven_day_sonnet: "Week, Sonnet" };
 
-let meta: Meta = { models: [], commands: [], limits: [], account: "", defaultModel: "", at: 0 };
+let meta: Meta = { models: [], commands: [], limits: [], account: "", accountLabel: null, defaultModel: "", at: 0 };
 // The last limits seen per account, so switching back shows them before the next turn.
 const limitsOf = new Map<string, Limit[]>();
 const listeners = new Set<(m: Meta) => void>();
@@ -88,6 +89,7 @@ export function probe(cwd: string): Promise<void> {
         commands: commands.map((c) => ({ name: c.name, description: c.description, hint: c.argumentHint })).sort((a, b) => a.name.localeCompare(b.name)),
         limits,
         account: acct.name,
+        accountLabel: acct.label,
         defaultModel,
       });
     } catch (err) {

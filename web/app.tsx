@@ -7,7 +7,8 @@ import { TasksPanel } from "./tasks";
 import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
-import { Brand, NoProfile, brandName, Settings as SettingsDialog, type Me } from "./settings";
+import { GithubPrompt } from "./github-prompt";
+import { Brand, NoProfile, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
@@ -160,7 +161,7 @@ function App() {
   const [foldedAt, setFoldedAt] = useState(() => (store.get("folded") === "1" ? Date.now() : 0));
   const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
   const [editing, setEditing] = useState(false);
-  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", defaultModel: "", at: 0 });
+  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", accountLabel: null, defaultModel: "", at: 0 });
   // This Claudia's name, and who is signed in with which profile.
   const [me, setMe] = useState<Me | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -325,10 +326,11 @@ function App() {
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
 
-  if (me && !me.profile) return <NoProfile email={me.email} name={me.name} />;
+  if (me && !me.profile) return <NoProfile me={me} />;
 
   return (
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
+      {me?.profile && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
@@ -351,7 +353,7 @@ function App() {
           </nav>
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
-          <Brand name={me?.name} />
+          <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>
@@ -434,7 +436,15 @@ function App() {
             commands={meta.commands}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />
-          <Meters meta={meta} context={live.context} />
+          <Meters
+            meta={meta}
+            context={live.context}
+            saved={me?.claudeTokens.map((t) => t.name) ?? []}
+            onSwitch={async (name) => {
+              const next = await useClaudeToken(name);
+              if (next) setMe((m) => m && { ...m, ...next });
+            }}
+          />
         </section>
         <div className="divider" onPointerDown={folded ? undefined : dragSplit} />
         {folded ? (

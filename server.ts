@@ -5,7 +5,8 @@ import index from "./web/index.html";
 import type { Server } from "bun";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
 import { NAME } from "./src/mode";
-import { LOCAL_PROFILE, cleanToken, setToken, tokenNote, who } from "./src/profiles";
+import { COMMIT, VERSION } from "./src/version";
+import { LOCAL_PROFILE, cleanName, cleanToken, saveToken, savedTokens, tokenNote, useToken, who } from "./src/profiles";
 
 const PORT = Number(process.env.PORT ?? 4510);
 const GATE_HOST = process.env.GATE_HOST;
@@ -13,20 +14,36 @@ const GATE_HOST = process.env.GATE_HOST;
 const json = (v: unknown, status = 200) => Response.json(v, { status });
 
 function serve(hostname: string, gate: boolean) {
-  // Who this is, which profile, the instance's name and the token note.
+  // Who this is, which profile, the instance's name and version, and the Claude tokens (names only).
   const me = (req: Request) => {
     const w = who(req, gate);
-    return json({ name: NAME, email: w.email, profile: w.profile?.name ?? null, claudeToken: tokenNote() });
+    return json({ name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
   };
+  const tokens = () => json({ ok: true, claudeToken: tokenNote(), claudeTokens: savedTokens() });
 
+  // Save a token under a name (same name = replaced) and switch to it.
   const putToken = async (req: Request) => {
     const w = who(req, gate);
     if (!w.profile) return json({ error: "not allowed" }, 403);
-    const token = cleanToken(((await req.json().catch(() => ({}))) as { token?: string }).token);
+    const body = (await req.json().catch(() => ({}))) as { name?: string; token?: string };
+    const name = cleanName(body.name);
+    if (!name) return json({ error: "Give it a name, like Paul (letters, digits, spaces, up to 24)." }, 400);
+    const token = cleanToken(body.token);
     if (!token) return json({ error: "That doesn't look like a Claude token (sk-ant-…). Make one with `claude setup-token`." }, 400);
-    await setToken(token, w.email ?? w.profile.name);
-    console.log(`Claude token replaced by ${w.email ?? w.profile.name}`);
-    return json({ ok: true, claudeToken: tokenNote() });
+    await saveToken(name, token, w.email ?? w.profile.name);
+    console.log(`Claude token "${name}" saved by ${w.email ?? w.profile.name}`);
+    return tokens();
+  };
+
+  // Switch to a saved token.
+  const useSaved = async (req: Request) => {
+    const w = who(req, gate);
+    if (!w.profile) return json({ error: "not allowed" }, 403);
+    const name = cleanName(((await req.json().catch(() => ({}))) as { name?: string }).name);
+    if (!name || !savedTokens().some((t) => t.name.toLowerCase() === name.toLowerCase())) return json({ error: "No saved token by that name." }, 404);
+    await useToken(name, w.email ?? w.profile.name);
+    console.log(`Claude token switched to "${name}" by ${w.email ?? w.profile.name}`);
+    return tokens();
   };
 
   return Bun.serve<PipeData>({
@@ -39,6 +56,7 @@ function serve(hostname: string, gate: boolean) {
       "/c/:id": index,
       "/api/me": { GET: me },
       "/api/claude-token": { PUT: putToken },
+      "/api/claude-token/use": { POST: useSaved },
     },
     fetch(req: Request, server: Server<PipeData>) {
       const path = new URL(req.url).pathname;

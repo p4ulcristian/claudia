@@ -1,13 +1,13 @@
 // Page side: which profile a request belongs to, where that profile's runner listens, and the
-// Claude token pasted in Settings.
+// Claude tokens saved in Settings (one of them in use).
 //
 // Two ways in. The gate's listener (GATE_HOST) believes the login header, because only the gate
 // can reach it (a firewall rule) and the gate's login sets it. The local listener (127.0.0.1, the
 // desktop window) ignores any header and is the LOCAL_PROFILE, or nobody.
-import { readFileSync, statSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { TOKEN_FILE, TOKEN_NOTE } from "./mode";
+import { TOKEN_FILE, TOKEN_NOTE, TOKENS_DIR } from "./mode";
 import type { Target } from "./proxy";
 
 // One profile per line: `<name> <email> [runner]` (# comments). runner = host:port, or a unix
@@ -55,7 +55,10 @@ export function who(req: Request, gate: boolean): Who {
   return { email, profile: email ? find((p) => p.email === email) : null };
 }
 
-export type TokenNote = { by: string; at: number };
+// name = whose subscription it is (the saved token's name); null for a token pasted before tokens had names.
+export type TokenNote = { by: string; at: number; name?: string | null };
+// A token saved in Settings: its name, who saved it and when.
+export type SavedToken = { name: string; by: string; at: number };
 
 export function tokenNote(): TokenNote | null {
   try {
@@ -66,17 +69,52 @@ export function tokenNote(): TokenNote | null {
   }
 }
 
+export function savedTokens(): SavedToken[] {
+  let files: string[];
+  try {
+    files = readdirSync(TOKENS_DIR);
+  } catch {
+    return [];
+  }
+  const list: SavedToken[] = [];
+  for (const f of files.filter((f) => f.endsWith(".json")))
+    try {
+      list.push(JSON.parse(readFileSync(`${TOKENS_DIR}/${f}`, "utf8")));
+    } catch {}
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Long-term tokens from `claude setup-token`. Pasting a wrapped line can add spaces: drop them.
 export function cleanToken(raw: unknown) {
   const token = String(raw ?? "").replace(/\s+/g, "");
   return /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(token) ? token : null;
 }
 
-// Replaced in one step (write beside, then rename), so a runner never reads half a token. On the
-// box the folder is setgid to the runners' group, so the new file is theirs to read (0640).
-export async function setToken(token: string, by: string) {
+// A name for a saved token ("Paul", "Ananda"); its file is the lower-case name.
+export function cleanName(raw: unknown) {
+  const name = String(raw ?? "").trim();
+  return /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,23}$/.test(name) ? name : null;
+}
+const keyOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+// Saved under its name (same name = replaced), readable by the page only, and switched to.
+export async function saveToken(name: string, token: string, by: string) {
+  await mkdir(TOKENS_DIR, { recursive: true, mode: 0o700 });
+  const file = `${TOKENS_DIR}/${keyOf(name)}`;
+  await writeFile(`${file}.new`, token + "\n", { mode: 0o600 });
+  await rename(`${file}.new`, file);
+  await writeFile(`${file}.json`, JSON.stringify({ name, by, at: Date.now() } satisfies SavedToken), { mode: 0o600 });
+  await useToken(name, by);
+}
+
+// Copies a saved token over the one in use, in one step (write beside, then rename), so a runner
+// never reads half a token. The note goes first: the runners re-read it when the token file changes.
+// On the box the folder is setgid to the runners' group, so the new file is theirs to read (0640).
+export async function useToken(name: string, by: string) {
+  const token = (await readFile(`${TOKENS_DIR}/${keyOf(name)}`, "utf8")).trim();
+  const saved = savedTokens().find((t) => keyOf(t.name) === keyOf(name));
   await mkdir(dirname(TOKEN_FILE), { recursive: true });
+  await writeFile(TOKEN_NOTE, JSON.stringify({ by, at: Date.now(), name: saved?.name ?? name } satisfies TokenNote), { mode: 0o644 });
   await writeFile(`${TOKEN_FILE}.new`, token + "\n", { mode: 0o640 });
   await rename(`${TOKEN_FILE}.new`, TOKEN_FILE);
-  await writeFile(TOKEN_NOTE, JSON.stringify({ by, at: Date.now() } satisfies TokenNote), { mode: 0o644 });
 }

@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Claudia logo options</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Kalam:wght@700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root { --bg:#2c3833; --bg2:#232c28; --fg:#eceee6; --muted:#a3b0a7; --line:#4a5a52; --accent:#f2e3a0; --pink:#f080b8; }
+body { margin:0; background:var(--bg2); color:var(--fg); font:15px "Atkinson Hyperlegible",sans-serif; padding:32px; }
+h1 { font:700 28px Kalam; margin:0 0 6px; } p.lead { color:var(--muted); margin:0 0 28px; }
+.grid { display:grid; grid-template-columns:repeat(3, minmax(280px,1fr)); gap:22px; }
+.opt { background:var(--bg); border:1px solid var(--line); border-radius:14px; padding:22px; display:grid; gap:18px; }
+.opt h2 { margin:0; font-size:15px; } .opt h2 b { font:700 22px Kalam; margin-right:8px; color:var(--accent); }
+.sizes { display:flex; align-items:end; gap:22px; color:var(--fg); }
+.sizes svg:nth-child(1){width:16px;height:16px} .sizes svg:nth-child(2){width:24px;height:24px} .sizes svg:nth-child(3){width:64px;height:64px}
+.header { display:flex; align-items:center; gap:7px; background:var(--bg2); border-radius:10px; padding:12px 14px; font:700 19px Kalam; }
+.header svg { width:20px; height:20px; flex:none; }
+.chip { display:inline-flex; gap:5px; align-items:center; padding:2px 7px; border:1px solid var(--line); border-radius:999px; font:600 11px "Atkinson Hyperlegible"; }
+.chip i { font:500 10px "JetBrains Mono"; color:var(--muted); font-style:normal; padding-left:5px; border-left:1px solid var(--line); }
+.icon { width:96px; height:96px; border-radius:22px; background:linear-gradient(160deg,#36443e,#232c28); display:grid; place-items:center; color:var(--fg); box-shadow:0 6px 20px rgb(0 0 0/.35); }
+.icon svg { width:60px; height:60px; }
+.why { color:var(--muted); font-size:13.5px; margin:0; }
+</style></head><body>
+<h1>Claudia: logo options</h1>
+<p class="lead">Each at 16 / 24 / 64 px, in the sidebar header, and as the launcher icon.</p>
+<div class="grid">
+
+<div class="opt"><h2><b>A</b>Speech bubble with a drawing</h2>
+<template id="A"><svg viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5h18a4 4 0 0 1 4 4v11a4 4 0 0 1-4 4H15l-6.5 5v-5H7a4 4 0 0 1-4-4V9a4 4 0 0 1 4-4z" stroke="currentColor" stroke-width="2.4"/><path d="M13.2 14.5h5.6" stroke="#f2e3a0" stroke-width="2.2"/><circle cx="10.5" cy="14.5" r="2.7" fill="#f2e3a0"/><circle cx="21.5" cy="14.5" r="2.5" stroke="#f2e3a0" stroke-width="2.1"/></svg></template>
+<p class="why">Talking (bubble) and drawing (two joined nodes) in one shape. Reads as "chat" at 16 px.</p></div>
+
+<div class="opt"><h2><b>B</b>C drawn as a graph</h2>
+<template id="B"><svg viewBox="0 0 32 32" fill="none" stroke-linecap="round"><path d="M24.5 8.6A10.5 10.5 0 1 0 24.5 23.4" stroke="currentColor" stroke-width="3.2"/><path d="M24.5 23.4 28 16.2" stroke="#f2e3a0" stroke-width="2.2"/><circle cx="24.6" cy="8.4" r="3" fill="#f2e3a0"/><circle cx="28" cy="16" r="2.4" fill="#2c3833" stroke="#f2e3a0" stroke-width="2"/></svg></template>
+<p class="why">A chalk "C" whose ends are nodes of a little diagram. A letter mark: most brand-like, least literal.</p></div>
+
+<div class="opt"><h2><b>C</b>The two halves</h2>
+<template id="C"><svg viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="26" height="22" rx="5" stroke="currentColor" stroke-width="2.4"/><path d="M14 5.5v21" stroke="currentColor" stroke-width="1.6" opacity=".55"/><path d="M7 11.5h3.5M7 16h3.5M7 20.5h2.2" stroke="currentColor" stroke-width="2"/><path d="M19.6 12.4 24.4 19.6" stroke="#f2e3a0" stroke-width="2"/><circle cx="19.2" cy="11.8" r="2.4" fill="#f2e3a0"/><circle cx="24.8" cy="20.2" r="2.3" stroke="#f2e3a0" stroke-width="2"/></svg></template>
+<p class="why">The app itself: chat lines on the left, the picture on the right. Most literal; busiest at 16 px.</p></div>
+
+</div>
+<script>
+for (const opt of document.querySelectorAll(".opt")) {
+  const svg = opt.querySelector("template").innerHTML;
+  const sizes = `<div class="sizes">${svg}${svg}${svg}</div>`;
+  const header = `<div class="header">${svg}Claudia <span class="chip">box<i>v1.0.0</i></span></div>`;
+  const icon = `<div class="icon">${svg}</div>`;
+  opt.querySelector("h2").insertAdjacentHTML("afterend", sizes + header + icon);
+}
+</script>
+</body></html>

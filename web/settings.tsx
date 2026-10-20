@@ -1,41 +1,63 @@
-// Settings: this profile's preferences and GitHub login, and the Claude token every profile of
-// this Claudia runs on (anyone signed in can replace it; nobody can read it back).
+// Settings: this profile's preferences and GitHub login, and the Claude tokens every profile of
+// this Claudia can run on (saved by name; anyone signed in can add, replace or switch; nobody can
+// read one back).
 import React, { useEffect, useState } from "react";
+import { Logo } from "./logo";
+import { GITHUB_TOKEN_URL } from "./github-prompt";
 
-export type Me = { name: string | null; email: string | null; profile: string | null; claudeToken: { by: string; at: number } | null };
+export type TokenNote = { by: string; at: number; name?: string | null };
+export type SavedToken = { name: string; by: string; at: number };
+export type Me = { name: string | null; version: string; commit: string | null; email: string | null; profile: string | null; claudeToken: TokenNote | null; claudeTokens: SavedToken[] };
 
 type GithubUser = { login: string; name: string | null } | null;
 type Prefs = { chatColors: "each" | "none" };
 
 const when = (at: number) => new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-function TokenForm({ placeholder, save }: { placeholder: string; save: (token: string) => Promise<string | null> }) {
+// named = also asks for a name (the Claude tokens are saved by name).
+function TokenForm({ placeholder, named, save }: { placeholder: string; named?: boolean; save: (token: string, name: string) => Promise<string | null> }) {
   const [value, setValue] = useState("");
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ready = value.trim() && (!named || name.trim());
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!value.trim()) return;
+    if (!ready) return;
     setBusy(true);
-    const err = await save(value);
+    const err = await save(value, name.trim());
     setBusy(false);
     setError(err);
-    if (!err) setValue("");
+    if (!err) {
+      setValue("");
+      setName("");
+    }
   };
   return (
-    <form className="token-form" onSubmit={submit}>
+    <form className={`token-form ${named ? "named" : ""}`} onSubmit={submit}>
+      {named && <input className="token-name" autoComplete="off" spellCheck={false} placeholder="Whose (Paul)" value={name} onChange={(e) => setName(e.target.value)} />}
       <input type="password" autoComplete="off" spellCheck={false} placeholder={placeholder} value={value} onChange={(e) => setValue(e.target.value)} />
-      <button disabled={busy || !value.trim()}>{busy ? "Saving…" : "Save"}</button>
+      <button disabled={busy || !ready}>{busy ? "Saving…" : "Save"}</button>
       {error && <p className="token-error">{error}</p>}
     </form>
   );
 }
 
-async function put(url: string, token: string): Promise<{ ok: any } | { error: string }> {
-  const r = await fetch(url, { method: "PUT", body: JSON.stringify({ token }) });
+async function call(method: string, url: string, body: object): Promise<{ ok: any } | { error: string }> {
+  const r = await fetch(url, { method, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   return r.ok ? { ok: j } : { error: String(j.error ?? `HTTP ${r.status}`) };
 }
+const put = (url: string, body: object) => call("PUT", url, body);
+
+// Switch every chat of this Claudia to a saved Claude token; returns the new token fields of Me.
+export async function useClaudeToken(name: string): Promise<Pick<Me, "claudeToken" | "claudeTokens"> | null> {
+  const r = await call("POST", "/api/claude-token/use", { name });
+  return "error" in r ? null : { claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens };
+}
+
+// The name of the token in use, if it is a saved one.
+export const tokenInUse = (me: Me) => (me.claudeToken?.name ? me.claudeTokens.find((t) => t.name === me.claudeToken!.name)?.name ?? null : null);
 
 export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; close: () => void }) {
   const [github, setGithub] = useState<GithubUser | undefined>(undefined);
@@ -49,6 +71,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
+  const inUse = tokenInUse(me);
   const savePrefs = async (next: Partial<Prefs>) => {
     const r = await fetch("/api/prefs", { method: "PATCH", body: JSON.stringify(next) });
     if (r.ok) setPrefs(await r.json());
@@ -80,15 +103,30 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
         <section>
           <h3>Claude subscription <span className="muted small">shared by every profile here</span></h3>
           <p className="small">
-            {me.claudeToken ? <>Set by {me.claudeToken.by}, {when(me.claudeToken.at)}.</> : <>Not set yet: no chat can run.</>}{" "}
-            A new one applies to every chat on its next message. Make one with <code>claude setup-token</code>.
+            {!me.claudeToken ? <>None in use yet: no chat can run.</> : !inUse ? <>In use: a token without a name, set by {me.claudeToken.by}, {when(me.claudeToken.at)}. Save it again under a name to keep it in the list.</> : <>Switched to <b>{inUse}</b> by {me.claudeToken.by}, {when(me.claudeToken.at)}.</>}{" "}
+            A switch applies to every chat on its next message.
           </p>
+          {me.claudeTokens.length > 0 && (
+            <div className="choice">
+              {me.claudeTokens.map((t) => (
+                <label key={t.name}>
+                  <input type="radio" name="claudeToken" checked={t.name === inUse} onChange={async () => {
+                    const next = await useClaudeToken(t.name);
+                    if (next) onMe({ ...me, ...next });
+                  }} />
+                  {t.name} <span className="muted small">saved by {t.by}, {when(t.at)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          <p className="small">Add one, or replace one by its name: make it with <code>claude setup-token</code>. Saving switches to it.</p>
           <TokenForm
-            placeholder={me.claudeToken ? "Replace with a new token (sk-ant-…)" : "Claude token (sk-ant-…)"}
-            save={async (token) => {
-              const r = await put("/api/claude-token", token);
+            named
+            placeholder="Claude token (sk-ant-…)"
+            save={async (token, name) => {
+              const r = await put("/api/claude-token", { name, token });
               if ("error" in r) return r.error;
-              onMe({ ...me, claudeToken: r.ok.claudeToken });
+              onMe({ ...me, claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens });
               return null;
             }}
           />
@@ -98,12 +136,12 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
           <h3>GitHub <span className="muted small">yours only</span></h3>
           <p className="small">
             {github === undefined ? "Checking…" : github ? <>Pushes and pull requests come from <b>@{github.login}</b>.</> : <>Not connected: Claude can't push or open pull requests for you.</>}{" "}
-            Use a fine-grained token for the Iron Rainbow repo with Contents and Pull requests set to read and write.
+            <a href={GITHUB_TOKEN_URL} target="_blank" rel="noreferrer">Create a token on GitHub</a> (the boxes come ticked) and paste it here.
           </p>
           <TokenForm
-            placeholder={github ? "Replace with a new token" : "GitHub token (github_pat_…)"}
+            placeholder={github ? "Replace with a new token" : "GitHub token (ghp_…)"}
             save={async (token) => {
-              const r = await put("/api/github", token);
+              const r = await put("/api/github", { token });
               if ("error" in r) return r.error;
               setGithub(r.ok.user);
               return null;
@@ -115,24 +153,34 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
   );
 }
 
-// The instance's name (CLAUDIA_NAME) as a subtitle under the logo, so two Claudias don't look alike.
+// The logo: the wordmark, then a chip with this instance's name (CLAUDIA_NAME), whose Claude token
+// is in use, and the version, so two Claudias tell themselves apart and show they run the same code.
 export const brandName = (name: string | null | undefined) => (name ? `Claudia ${name}` : "Claudia");
 
-export function Brand({ name }: { name: string | null | undefined }) {
+// token = whose Claude subscription the chats run on right now (the saved token's name).
+export function Brand({ me, token }: { me: Me | null; token?: string | null }) {
   return (
     <div className="brand">
-      <span className="logo" />
-      <span className="brand-text">Claudia{name && <small className="brand-sub">{name}</small>}</span>
+      <Logo />
+      <span className="wordmark">Claudia</span>
+      {me && <span className="brand-break" />}
+      {me && (
+        <span className="instance" title={`Claudia ${me.version}${me.commit ? ` (${me.commit})` : ""}${me.name ? ` on ${me.name}` : ""}${token ? `, on ${token}'s Claude subscription` : ""}`}>
+          {me.name && <span className="instance-name">{me.name}</span>}
+          {token && <span className="instance-token">{token}</span>}
+          <span className="instance-version">v{me.version}</span>
+        </span>
+      )}
     </div>
   );
 }
 
 // Signed in, but this Claudia has no profile for the email: nothing to open.
-export function NoProfile({ email, name }: { email: string | null; name: string | null }) {
+export function NoProfile({ me }: { me: Me }) {
   return (
     <div className="no-profile">
-      <Brand name={name} />
-      <p>There is no profile here for {email ?? "this sign-in"} yet. Ask Paul to add one.</p>
+      <Brand me={me} />
+      <p>There is no profile here for {me.email ?? "this sign-in"} yet. Ask Paul to add one.</p>
     </div>
   );
 }

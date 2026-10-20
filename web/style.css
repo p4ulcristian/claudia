@@ -50,7 +50,7 @@ code, pre { font-family: var(--mono); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
 /* One menu button, always in the same top-left spot. */
 .menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
-.sidebar .brand { padding-left: 40px; min-height: 30px; }
+.sidebar .brand { padding-left: 34px; min-height: 30px; }
 .app.narrow .chat-head { padding-left: 52px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -63,7 +63,6 @@ code, pre { font-family: var(--mono); }
 /* Sidebar */
 .sidebar { border-right: 1px solid var(--line); background: var(--bg2); display: flex; flex-direction: column; gap: 10px; padding: 14px 10px; min-height: 0; }
 .brand { font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 2px 6px; letter-spacing: -0.01em; }
-.logo { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--green); box-shadow: 9px 0 0 -4px var(--blue); }
 .new { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; text-align: left; background: var(--panel); font-weight: 500; }
 .new:hover { border-color: var(--accent); }
 .search { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; }
@@ -404,8 +403,7 @@ code, pre { font-family: var(--mono); }
 
 /* ---------- Chalkboard ---------- */
 /* Handwriting for what is written on the board: brand, titles, your lines, diagram labels. */
-.brand { font: 700 22px var(--hand); letter-spacing: 0; }
-.logo { border-color: var(--fg); box-shadow: 9px 0 0 -4px var(--accent); }
+.brand { font: 700 19px var(--hand); letter-spacing: 0; gap: 6px; padding-right: 0; }
 .sidebar { border-right: 6px solid var(--wood); }
 .rail { border-right: 6px solid var(--wood); width: 58px; }
 .app.no-sidebar { grid-template-columns: 58px 1fr; }
@@ -468,12 +466,41 @@ code, pre { font-family: var(--mono); }
 .token-form input:focus { border-color: var(--blue); }
 .token-form button { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--panel2); }
 .token-form button:disabled { opacity: 0.5; }
+.token-form.named { grid-template-columns: 9em 1fr auto; }
+.token-form .token-name { font-family: var(--sans); }
 .token-error { grid-column: 1 / -1; color: var(--red); font-size: 12.5px; }
 .no-profile { min-height: 100vh; display: grid; place-content: center; gap: 12px; text-align: center; padding: 24px; }
 .no-profile .brand { justify-content: center; }
 
-/* The instance's name under the logo (CLAUDIA_NAME). */
-.brand-text { display: grid; line-height: 1.05; }
-.brand-sub { font: 400 13px var(--sans); color: var(--muted); letter-spacing: 0.02em; }
+/* The logo's chip: this instance's name and version, quiet beside the wordmark. */
+.wordmark { line-height: 1; }
+/* The chip gets its own row under the mark, so nothing in it is cut short. */
+.brand { flex-wrap: wrap; row-gap: 7px; }
+.brand-break { flex-basis: 100%; height: 0; }
+.brand .instance { max-width: 100%; }
+.instance { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in oklch, var(--panel) 70%, transparent); font: 600 11px var(--sans); letter-spacing: 0.01em; white-space: nowrap; transform: translateY(1px); }
+.instance-name { color: var(--fg); overflow: hidden; text-overflow: ellipsis; }
+.instance-version { font: 500 10px var(--mono); color: var(--muted); }
+.instance-token { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.instance > * + * { padding-left: 5px; border-left: 1px solid var(--line); }
 .choice { display: grid; gap: 6px; font-size: 13px; }
 .choice label { display: flex; gap: 8px; align-items: center; }
+
+/* The mark (web/logo.tsx) and the GitHub popup (web/github-prompt.tsx). */
+svg.logo { flex: none; color: var(--fg); }
+.github-prompt p { margin: 0; }
+.prompt-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13.5px; }
+.prompt-steps a { color: var(--accent); }
+.prompt-actions { display: flex; align-items: center; gap: 10px; }
+.prompt-actions button { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--panel2); }
+.prompt-actions button.primary { border-color: var(--accent); }
+
+/* The right side never scrolls sideways: a long unbroken line (a bash command, a path, a token)
+   wraps inside its panel instead of widening it. Grid columns may shrink below their content;
+   questions and permission asks wrap everything; other code blocks scroll inside themselves. */
+.right-scroll { overflow-x: hidden; }
+.panel { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.panel > *, .question, .options, .option, .o-text, .q-head { min-width: 0; }
+.panel h3, .o-text, .panel .md, .panel p { overflow-wrap: anywhere; }
+.panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.panel pre { max-width: 100%; overflow-x: auto; }
