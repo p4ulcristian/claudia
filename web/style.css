@@ -1,6 +1,6 @@
 @import "highlight.js/styles/github-dark.css";
 
-/* Chalkboard (DESIGN.md): slate board, chalk colours, a wooden ledge. Light = a whiteboard. */
+/* Chalkboard (DESIGN.md): slate board, chalk colours, a wooden ledge. Dark only. */
 :root {
   --bg: #2f3b36; --bg2: #27312d; --panel: #36443e; --panel2: #3d4c45; --fg: #eceee6; --muted: #a3b0a7; --line: #4a5a52;
   --board: #2c3833;
@@ -18,21 +18,6 @@
   --sans: "Atkinson Hyperlegible", system-ui, sans-serif; --hand: "Kalam", cursive; --mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
-/* Light only when chosen (or "auto" and the system is light); see the theme picker. */
-:root[data-theme="light"] {
-  --bg: #f3f5f4; --bg2: #e9eeec; --panel: #fff; --panel2: #f6f8f7; --fg: #17201d; --muted: #5d6b66; --line: #d3dbd8;
-  --board: #fbfcfb; --accent: #1f4d8f;
-  --wood: #c3c9cc; --wood2: #a7afb3; --wood-hi: #dde2e4;
-  --green: #1f8a5b; --green-bg: #e2f3ea; --red: #c4452f; --red-bg: #fbe9e4;
-  --amber: #b07a10; --amber-bg: #fbf0d6; --blue: #2d6fb0; --blue-bg: #e3eef9;
-  --grey: #6c7a75; --grey-bg: #eceff0; --violet: #6b4fc4; --violet-bg: #eee8fb;
-  --c-red: #c4452f; --c-orange: #c8641a; --c-amber: #b07a10; --c-yellow: #9a8700;
-  --c-lime: #5f8f12; --c-green: #1f8a5b; --c-teal: #13806f; --c-cyan: #0e7f99;
-  --c-sky: #2d6fb0; --c-blue: #3150d0; --c-indigo: #5446c8; --c-violet: #6b4fc4;
-  --c-purple: #8a3fb5; --c-magenta: #b02f9a; --c-pink: #c2407f; --c-brown: #8a5a32;
-  --on-hue: #fff;
-  color-scheme: light;
-}
 
 /* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
    so switching chats repaints the window. Diff and picture colours keep their meaning. */
@@ -44,13 +29,6 @@
   --fg: color-mix(in oklch, var(--hue) 8%, #eef0e8); --muted: color-mix(in oklch, var(--hue) 25%, #a0ada5);
   /* coloured chalk: the chat's hue, chalky */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
-}
-:root[data-theme="light"][data-chat] {
-  --accent: var(--hue); --board: color-mix(in oklch, var(--hue) 5%, #fdfefd);
-  --bg: color-mix(in oklch, var(--hue) 14%, #fafbfb); --bg2: color-mix(in oklch, var(--hue) 20%, #f0f2f2);
-  --panel: color-mix(in oklch, var(--hue) 7%, #fff); --panel2: color-mix(in oklch, var(--hue) 11%, #fbfcfc);
-  --line: color-mix(in oklch, var(--hue) 30%, #d5dbd9);
-  --fg: color-mix(in oklch, var(--hue) 25%, #121816); --muted: color-mix(in oklch, var(--hue) 40%, #5b6763);
 }
 
 * { box-sizing: border-box; }
@@ -102,8 +80,6 @@ code, pre { font-family: var(--mono); }
 .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 1.4s ease-in-out infinite; flex: none; }
 .toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; padding: 0 6px; }
 .side-foot { display: grid; gap: 6px; }
-.theme-pick { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; padding: 0 6px; }
-.theme-pick select { font: 500 12px var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; }
 
 /* Chat */
 .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); min-height: 50px; }
@@ -436,7 +412,6 @@ code, pre { font-family: var(--mono); }
 .chat-row.colored, .chat-row.colored:hover { box-shadow: none; background: none; }
 .chat-row.colored:hover { background: rgb(255 255 255 / 5%); }
 .chat-row.colored.active, .chat-row.active { box-shadow: none; background: rgb(255 255 255 / 8%); }
-:root[data-theme="light"] .chat-row.colored.active, :root[data-theme="light"] .chat-row.active { background: rgb(0 0 0 / 6%); }
 .chat-row.colored::before { content: ""; width: 14px; height: 6px; border-radius: 3px; background: var(--chat); transform: rotate(-8deg); flex: none; }
 .archived-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; padding: 2px 6px; text-align: left; }
 .archived-toggle:hover, .archived-toggle.on { color: var(--fg); }
@@ -451,7 +426,7 @@ code, pre { font-family: var(--mono); }
 .msg.user.viewing .bubble { outline: 0; text-decoration: underline 2px; text-underline-offset: 4px; }
 .messages { font-size: 15px; line-height: 1.6; }
 
-/* The ledge: the composer sits on a wooden chalk tray (aluminium on the whiteboard). */
+/* The ledge: the composer sits on a wooden chalk tray. */
 .composer { background: linear-gradient(var(--wood), var(--wood2)); box-shadow: inset 0 3px 0 var(--wood-hi); padding: 12px 14px; }
 .input-row { background: var(--bg2); border: 0; border-radius: 6px; }
 .input-row:focus-within { box-shadow: 0 0 0 2px var(--accent); }
@@ -473,7 +448,6 @@ code, pre { font-family: var(--mono); }
 
 /* Readable parts stay plain, but labels are written, not stamped in capitals. */
 .card { background: color-mix(in oklch, var(--board) 85%, #fff 4%); border: 0; border-left: 3px solid var(--c); border-top: 0; border-radius: 4px; }
-:root[data-theme="light"] .card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--c); }
 .card h3 { font: 700 18px var(--hand); text-transform: none; letter-spacing: 0; }
 .card th { font: 700 12px var(--sans); text-transform: none; letter-spacing: 0; }
 .chip { font: 700 13px var(--hand); text-transform: none; letter-spacing: 0; }
