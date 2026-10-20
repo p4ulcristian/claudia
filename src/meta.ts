@@ -6,7 +6,7 @@ import { account } from "./account";
 export type ModelOption = { value: string; name: string; efforts: string[] };
 export type Command = { name: string; description: string; hint: string };
 export type Limit = { key: string; label: string; percent: number; resetsAt: string | null };
-// account = the claude-account name the chats run on; limits are that account's plan.
+// account = the token name the chats run on (src/account.ts); limits are that token's plan.
 export type Meta = { models: ModelOption[]; commands: Command[]; limits: Limit[]; account: string; defaultModel: string; at: number };
 
 const LIMIT_LABELS: Record<string, string> = { five_hour: "5-hour", seven_day: "Week", seven_day_opus: "Week, Opus", seven_day_sonnet: "Week, Sonnet" };

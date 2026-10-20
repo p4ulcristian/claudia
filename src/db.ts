@@ -46,6 +46,11 @@ db.exec(`
     session_id TEXT PRIMARY KEY,
     at INTEGER NOT NULL
   );
+  -- This profile's preferences (each profile's runner has its own store).
+  CREATE TABLE IF NOT EXISTS prefs (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS pictures (
     session_id TEXT NOT NULL,
     turn_uuid TEXT NOT NULL,
@@ -63,7 +68,13 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "color"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN color TEXT");
 
+// chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
+export type Prefs = { chatColors: "each" | "none" };
+const PREF_DEFAULTS: Prefs = { chatColors: "each" };
+
 const q = {
+  prefs: db.query<{ key: string; value: string }, []>("SELECT key, value FROM prefs"),
+  setPref: db.query("INSERT INTO prefs (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
   addChat: db.query("INSERT OR IGNORE INTO chats (session_id, created_at) VALUES (?, ?)"),
   ours: db.query<{ session_id: string }, []>("SELECT session_id FROM chats"),
   archive: db.query("INSERT OR IGNORE INTO archived (session_id, at) VALUES (?, ?)"),
@@ -99,6 +110,15 @@ const q = {
 };
 
 export const store = {
+  prefs(): Prefs {
+    const out: Prefs = { ...PREF_DEFAULTS };
+    for (const r of q.prefs.all()) if (r.key === "chatColors" && (r.value === "each" || r.value === "none")) out.chatColors = r.value;
+    return out;
+  },
+  setPrefs(next: Partial<Prefs>) {
+    if (next.chatColors === "each" || next.chatColors === "none") q.setPref.run("chatColors", next.chatColors);
+    return store.prefs();
+  },
   addChat: (id: string) => q.addChat.run(id, Date.now()),
   ourChats: () => new Set(q.ours.all().map((r) => r.session_id)),
   archive: (id: string) => q.archive.run(id, Date.now()),

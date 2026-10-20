@@ -467,3 +467,27 @@ code, pre { font-family: var(--mono); }
 .linea .rubber { stroke: #e98fa0; stroke-width: 5.6; stroke-linecap: round; }
 .linea .glove { fill: var(--bg2); stroke: var(--fg); stroke-width: 1.6; }
 .linea .sleeve { fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-linecap: round; }
+
+
+/* Settings (server mode) */
+.settings-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; z-index: 50; }
+.settings { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.4); }
+.settings header { display: flex; align-items: center; justify-content: space-between; }
+.settings h2 { margin: 0; font: 700 22px var(--hand); }
+.settings h3 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+.settings section { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.settings p { margin: 0; }
+.token-form { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.token-form input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; font-family: var(--mono); font-size: 12.5px; }
+.token-form input:focus { border-color: var(--blue); }
+.token-form button { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--panel2); }
+.token-form button:disabled { opacity: 0.5; }
+.token-error { grid-column: 1 / -1; color: var(--red); font-size: 12.5px; }
+.no-profile { min-height: 100vh; display: grid; place-content: center; gap: 12px; text-align: center; padding: 24px; }
+.no-profile .brand { justify-content: center; }
+
+/* The instance's name under the logo (CLAUDIA_NAME). */
+.brand-text { display: grid; line-height: 1.05; }
+.brand-sub { font: 400 13px var(--sans); color: var(--muted); letter-spacing: 0.02em; }
+.choice { display: grid; gap: 6px; font-size: 13px; }
+.choice label { display: flex; gap: 8px; align-items: center; }

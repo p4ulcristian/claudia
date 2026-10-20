@@ -8,6 +8,7 @@ import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { Linea } from "./linea";
+import { Brand, NoProfile, brandName, Settings as SettingsDialog, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
@@ -161,6 +162,13 @@ function App() {
   const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
   const [editing, setEditing] = useState(false);
   const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", defaultModel: "", at: 0 });
+  // This Claudia's name, and who is signed in with which profile.
+  const [me, setMe] = useState<Me | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  useEffect(() => {
+    fetch("/api/me").then((r) => r.json()).then(setMe, () => setMe(null));
+  }, []);
   const currentRef = useRef(current);
   currentRef.current = current;
 
@@ -210,7 +218,7 @@ function App() {
 
   const row = chats.find((c) => c.id === current) ?? known.current.get(current);
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
-  useEffect(() => { document.title = `${title} · Claudia`; }, [title]);
+  useEffect(() => { document.title = `${title} · ${brandName(me?.name)}`; }, [title, me]);
 
   const onSend = (text: string, images: { media_type: string; data: string }[]) => {
     setViewing(null);
@@ -325,8 +333,11 @@ function App() {
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
 
+  if (me && !me.profile) return <NoProfile email={me.email} name={me.name} />;
+
   return (
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
+      {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
       <div className="sidebar-slot">
@@ -348,7 +359,7 @@ function App() {
           </nav>
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
-          <div className="brand"><span className="logo" />Claudia</div>
+          <Brand name={me?.name} />
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
           <nav>
@@ -375,6 +386,9 @@ function App() {
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
             </label>
+            <button className="archived-toggle" onClick={() => setSettingsOpen(true)} title={me?.email ? `Signed in as ${me.email}` : undefined}>
+              ⚙ Settings
+            </button>
           </div>
         </aside>
       </div>

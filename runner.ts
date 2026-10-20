@@ -7,9 +7,14 @@ import { CHAT_COLORS, pickColor } from "./src/colors";
 import { store } from "./src/db";
 import { watch } from "node:fs";
 import { getMeta, onMeta, probe } from "./src/meta";
-import { open as openFile } from "node:fs/promises";
+import { open as openFile, chmod, unlink } from "node:fs/promises";
+import { basename, dirname } from "node:path";
+import { TOKEN_FILE } from "./src/mode";
+import { githubUser, setGithubToken } from "./src/github";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
+// On the box: a unix socket only the page can reach (the unit's runtime folder grants it).
+const SOCKET = process.env.RUNNER_SOCKET;
 const chats = new Map<string, Chat>();
 type Sock = ServerWebSocket<{ chat: string | null; off: (() => void) | null }>;
 const socks = new Set<Sock>();
@@ -24,8 +29,8 @@ function chat(id: string) {
   let c = chats.get(id);
   if (!c) {
     chats.set(id, (c = new Chat(id, broadcastChats)));
-    // Every chat gets a colour of its own from the start.
-    if (!c.settings.color) void c.setSettings({ color: pickColor(store.colors().values()) });
+    // Every chat gets a colour of its own from the start, unless the preference says no.
+    if (!c.settings.color && store.prefs().chatColors === "each") void c.setSettings({ color: pickColor(store.colors().values()) });
   }
   return c;
 }
@@ -39,7 +44,7 @@ async function listChats(all: boolean, archivedView: boolean) {
     archivedView ? archived.has(s.sessionId) : !archived.has(s.sessionId) && (all || ours.has(s.sessionId) || chats.has(s.sessionId)),
   );
   // Chats from before colours, or never opened here, get one the first time they're listed.
-  for (const s of shown) {
+  for (const s of store.prefs().chatColors === "each" ? shown : []) {
     if (colors.has(s.sessionId)) continue;
     const color = pickColor(colors.values());
     colors.set(s.sessionId, color);
@@ -90,11 +95,29 @@ async function openChat(ws: Sock, id: string) {
 
 const json = (v: unknown, status = 200) => Response.json(v, { status });
 
+if (SOCKET) await unlink(SOCKET).catch(() => {});
+
 Bun.serve({
-  hostname: "127.0.0.1",
-  port: PORT,
+  // (cast: Bun's types want the unix and hostname/port forms written out separately)
+  ...((SOCKET ? { unix: SOCKET } : { hostname: "127.0.0.1", port: PORT }) as { hostname: string; port: number }),
   idleTimeout: 0,
   routes: {
+    // This profile's preferences (each runner has its own store).
+    "/api/prefs": {
+      GET: () => json(store.prefs()),
+      PATCH: async (req) => json(store.setPrefs((await req.json()) as Record<string, unknown> as any)),
+    },
+    // This profile's GitHub login (the token itself never comes back).
+    "/api/github": {
+      GET: async () => json({ user: await githubUser() }),
+      PUT: async (req) => {
+        try {
+          return json({ user: await setGithubToken(((await req.json()) as { token?: string }).token) });
+        } catch (err) {
+          return json({ error: (err as Error).message }, 400);
+        }
+      },
+    },
     "/api/chats": {
       GET: async (req) => {
         const p = new URL(req.url).searchParams;
@@ -191,8 +214,8 @@ Bun.serve({
 onMeta((meta) => { for (const s of socks) s.send(JSON.stringify({ t: "meta", meta })); });
 probe(WORK);
 setInterval(() => socks.size && probe(WORK), 5 * 60_000);
-// The desktop widget switched accounts (claude-account's state file): show the new plan's limits now.
-const runtime = process.env.XDG_RUNTIME_DIR;
-if (runtime) watch(runtime, (_, file) => file === "claude-account" && probe(WORK));
+// Someone replaced the token in Settings: show the new plan's limits now.
+watch(dirname(TOKEN_FILE), (_, file) => file === basename(TOKEN_FILE) && probe(WORK));
 
-console.log(`Claudia runner on 127.0.0.1:${PORT} (chats in ${WORK})`);
+if (SOCKET) await chmod(SOCKET, 0o660);
+console.log(`Claudia runner on ${SOCKET ?? `127.0.0.1:${PORT}`} (chats in ${WORK})`);

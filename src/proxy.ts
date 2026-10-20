@@ -1,33 +1,37 @@
-// Passing requests and the chat socket on to another local listener. The web server uses it to
-// reach the runner (chats live there), and the gate's tunnel uses it to reach the web server.
+// Passing requests and the chat socket on from the page to a profile's runner, where the chats live.
+// A target is a local port or a profile runner's unix socket.
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 
-export type PipeData = { upstream: WebSocket | null; queue: (string | Buffer)[] };
+export type Target = { tcp: string } | { unix: string };
+export type PipeData = { target: Target; upstream: WebSocket | null; queue: (string | Buffer)[] };
 type Pipe = ServerWebSocket<PipeData>;
 
-export function forward(req: Request, target: string) {
+export function forward(req: Request, target: Target) {
   const url = new URL(req.url);
   const headers = new Headers(req.headers);
   headers.delete("accept-encoding");
   headers.delete("host");
-  return fetch(`http://${target}${url.pathname}${url.search}`, {
+  const base = "tcp" in target ? `http://${target.tcp}` : "http://localhost";
+  return fetch(`${base}${url.pathname}${url.search}`, {
     method: req.method,
     headers,
     body: req.body,
     redirect: "manual",
-  }).catch(() => new Response("Claudia's runner is not up", { status: 502 }));
+    ...("unix" in target ? { unix: target.unix } : {}),
+  } as RequestInit).catch(() => new Response("Claudia's runner is not up", { status: 502 }));
 }
 
-export function upgrade(req: Request, server: Server<PipeData>) {
-  return server.upgrade(req, { data: { upstream: null, queue: [] } });
+export function upgrade(req: Request, server: Server<PipeData>, target: Target) {
+  return server.upgrade(req, { data: { target, upstream: null, queue: [] } });
 }
 
 // One upstream socket per browser socket; when either side closes, so does the other.
-export function pipe(target: string): WebSocketHandler<PipeData> {
+export function pipe(): WebSocketHandler<PipeData> {
   return {
     maxPayloadLength: 64 * 1024 * 1024,
     open(ws: Pipe) {
-      const up = new WebSocket(`ws://${target}/ws`);
+      const t = ws.data.target;
+      const up = new WebSocket("tcp" in t ? `ws://${t.tcp}/ws` : `ws+unix://${t.unix}:/ws`);
       ws.data.upstream = up;
       up.onopen = () => { for (const m of ws.data.queue.splice(0)) up.send(m); };
       up.onmessage = (e) => ws.send(e.data as string);

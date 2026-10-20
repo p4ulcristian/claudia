@@ -1,30 +1,24 @@
-// Which Claude subscription Claudia runs on: the one claude-account has selected
-// (the Claude section of the desktop widget), the same as new terminal sessions.
-// The token comes from the kernel keyring through claude-account, which reads it
-// from 1Password when it isn't loaded yet; it is held in memory only.
+// Which Claude subscription Claudia runs on: the long-term token (`claude setup-token`) pasted in
+// Settings, kept in a file (src/mode.ts TOKEN_FILE) and read again on every turn. Every profile of
+// an instance runs on it.
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { TOKEN_FILE } from "./mode";
+
 export type Account = { name: string; env: Record<string, string> };
 
-// The service's environment with the account's token, or without any token (= the `claude /login`).
-function envWith(name: string, token: string) {
+// The service's environment with the token.
+function envWith(token: string) {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== "CLAUDE_CODE_OAUTH_TOKEN") env[k] = v;
-  env.CLAUDE_ACCOUNT = name;
-  if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token;
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+  env.CLAUDE_CODE_OAUTH_TOKEN = token;
   return env;
 }
 
-// Without claude-account the chats run on the `claude /login`.
-const LOGIN: Account = { name: "me", env: envWith("me", "") };
-
+// The name carries a hash of the token, so replacing it restarts each chat's Claude Code on its next
+// turn, and the usage meters keep each token's limits apart.
 export async function account(): Promise<Account> {
-  let proc;
-  try {
-    proc = Bun.spawn(["claude-account", "token"], { stdout: "pipe", stderr: "pipe" });
-  } catch {
-    return LOGIN;
-  }
-  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  if (code !== 0) throw new Error(`claude-account: ${err.trim() || `exit ${code}`}`);
-  const { name, token } = JSON.parse(out) as { name: string; token: string };
-  return { name, env: envWith(name, token) };
+  const token = (await readFile(TOKEN_FILE, "utf8").catch(() => "")).trim();
+  if (!token) throw new Error("No Claude token yet: add one in Settings (bottom left).");
+  return { name: `token-${createHash("sha256").update(token).digest("hex").slice(0, 8)}`, env: envWith(token) };
 }

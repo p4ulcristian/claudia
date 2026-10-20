@@ -218,7 +218,7 @@ type Waiting<T> = { value: T; resolve: (r: PermissionResult) => void; input: Rec
 
 export class Chat {
   private q: Query | null = null;
-  // The claude-account name this chat's Claude Code process was started on.
+  // The account (token) name this chat's Claude Code process was started on.
   private account = "";
   private inbox: Inbox | null = null;
   private idle: Timer | null = null;
@@ -384,7 +384,7 @@ export class Chat {
       return null;
     });
     if (!acct) return;
-    // The desktop widget switched accounts since this chat's Claude Code started: start it again on the new one.
+    // The token was replaced since this chat's Claude Code started: start it again on the new one.
     if (this.q && !this.running && this.account !== acct.name) this.close();
     if (!this.q) await this.start(acct);
     this.turn = uuid;

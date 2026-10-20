@@ -10,7 +10,7 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 ## Decisions (2026-10-16)
 
-1. Only Paul uses it, on his Claude subscription.
+1. Only the owner uses it, on their Claude subscription. (Since 2026-10-20 also a team instance, see 11.)
 2. Claude runs through the Claude Agent SDK; drawing is Claude's own tool (`mcp__picture__draw`).
 3. The picture is a fixed set of parts (circles, boxes, arrows, groups, and readable cards: text, list, table, code). The app lays them out (ELK) and animates what changed.
 4. The picture stays; Claude changes it when a turn changes something. Small talk leaves it.
@@ -21,20 +21,26 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 8. File changes show in a Changes panel on the right: one diff per file per turn. Copies come from a hook before Claude's Edit/Write tools, and from a git snapshot of the working folder's repo (a separate index file; the user's index is untouched), so shell edits count too.
 9. A working folder per chat that Claudia tracks (the session itself stays in ~/Work for the full memory): set when Claude first edits a file, or by Claude with `mcp__workspace__set_folder`, any time. See `plan/diffs-and-folders.md`.
 
-10. The subscription follows `claude-account`, the script behind the desktop widget's account switch (since 2026-10-17): Claudia asks it for the selected account's long-term token (`claude-account token`) and gives it to Claude Code as `CLAUDE_CODE_OAUTH_TOKEN`. A switch takes effect on each chat's next turn (Claude Code starts again on the new account and resumes the session). Without `claude-account` the chats use the `claude /login`. A long-term token gets no usage readout, so the limits under the input come from the last turn's rate-limit event, kept per account.
+10. The subscription is one long-term token (`claude setup-token`) pasted in Settings, kept in a file and read again on every turn; every profile of an instance runs on it, and anyone signed in can replace it (never read it back). A new token applies to each chat on its next message. A long-term token gets no usage readout, so the limits under the input come from the last turn's rate-limit event.
+
+11. Profiles (2026-10-20, `plan/box-and-profiles.md`): the same code runs everywhere; an instance differs only by its settings. The gate's signed-in email picks a profile from the instance's profiles list (`<profile> <email> [runner]`); each profile has its own runner, store, preferences and GitHub login. The desktop window (127.0.0.1) is `CLAUDIA_LOCAL_PROFILE`; the gate's listener (`GATE_HOST`) believes the login header, so only the gate may reach it. `CLAUDIA_NAME` shows under the logo. On a shared server each profile's runner is its own Linux user (`claudia-<profile>`, `deploy/`).
 
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files
 
-- `server.ts`: the page; passes `/api` and `/ws` to the runner; the gate tunnel
+- `server.ts`: the page; picks the profile and passes `/api` and `/ws` to its runner; the gate's listener
 - `runner.ts`: chats, WebSocket, chat list, rename, archive
-- `src/proxy.ts`: request and socket pass-through (server → runner, tunnel → server)
+- `src/proxy.ts`: request and socket pass-through (page → runner, by port or unix socket)
+- `src/profiles.ts`: which profile a request is, where its runner listens; the Claude token file
+- `src/mode.ts`: what sets an instance apart: token file, name
+- `src/github.ts`: the profile's GitHub login (gh), used for pushes and pull requests
 - `src/chat.ts`: one chat = one Agent SDK session; turns, questions, stop, history
 - `src/prompt.ts`: what Claude is told about the two halves, and the draw tool
 - `src/scene.ts`: the picture's parts and how a draw call changes them
 - `src/changes.ts`: before/after copies, git snapshots, diffs
-- `src/account.ts`: the account and token claude-account has selected
+- `src/account.ts`: the Claude token the chats run on
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
-- `web/`: the page (React): `chat.tsx` left, `picture.tsx` + `panels.tsx` right, `linea.tsx` the line man along the bottom
+- `deploy/`: a shared server: `install.sh`, the page unit and the per-profile runner unit
+- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` right, `linea.tsx` the line man along the bottom
