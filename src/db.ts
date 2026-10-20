@@ -74,6 +74,10 @@ const q = {
      ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort, folder = excluded.folder, color = excluded.color`,
   ),
   colors: db.query<{ session_id: string; color: string }, []>("SELECT session_id, color FROM chat_settings WHERE color IS NOT NULL"),
+  setColor: db.query(
+    `INSERT INTO chat_settings (session_id, color) VALUES (?, ?)
+     ON CONFLICT (session_id) DO UPDATE SET color = excluded.color`,
+  ),
   addChange: db.query<{ id: number }, [string, string, string, string | null, string | null, number, number, string, string | null, number]>(
     `INSERT INTO changes (session_id, turn_uuid, path, before, after, added, removed, status, skipped, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -102,6 +106,7 @@ export const store = {
   settings: (id: string): Settings => q.settings.get(id) ?? { model: null, effort: null, folder: null, color: null },
   saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color),
   colors: () => new Map(q.colors.all().map((r) => [r.session_id, r.color])),
+  setColor: (id: string, color: string) => q.setColor.run(id, color),
   addChange(id: string, turn: string, path: string, before: FileState, after: FileState, counts: { added: number; removed: number }): ChangeMeta {
     const status = before.text === null && !before.skipped ? "added" : after.text === null && !after.skipped ? "deleted" : "modified";
     const skipped = before.skipped ?? after.skipped ?? null;

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claudia: three directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@300;400;600;800&family=Kalam:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #d9d9d4; font: 15px/1.5 system-ui; color: #222; }
+  .intro { max-width: 1440px; margin: 40px auto 18px; padding: 0 8px; }
+  .intro h1 { font: 800 28px/1.1 Archivo, sans-serif; margin: 0 0 6px; }
+  .intro p { margin: 0; max-width: 70ch; }
+  .label { max-width: 1440px; margin: 46px auto 10px; padding: 0 8px; font: 700 20px Archivo, sans-serif; }
+  .label span { font-weight: 400; color: #555; font-size: 15px; margin-left: 10px; }
+  .mock { width: 1440px; height: 820px; margin: 0 auto; display: grid; grid-template-columns: 250px 1fr 1.15fr; overflow: hidden; box-shadow: 0 2px 30px rgb(0 0 0 / 18%); }
+  .mock svg { display: block; }
+  .row { display: block; text-decoration: none; color: inherit; }
+
+  /* ---------- A · Drafting table ---------- */
+  .a { --ink: #1f4d8f; font-family: Overpass, sans-serif; background: #e6e9e3; color: #23282a; }
+  .a aside { border-right: 1px solid #b9c0ba; padding: 22px 0; background: #dfe3dc; }
+  .a .brand { padding: 0 22px 18px; font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
+  .a .brand i { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--ink); margin-right: 8px; transform: translateY(1px); }
+  .a .row { padding: 9px 22px 9px 26px; font-size: 14px; position: relative; color: #3b4245; }
+  .a .row::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 8px; background: var(--c); }
+  .a .row.on { background: #eef1ec; color: #111; font-weight: 600; }
+  .a .chat { display: flex; flex-direction: column; border-right: 1px solid #b9c0ba; background: #eef0ec; }
+  .a .head { padding: 18px 28px; border-bottom: 2px solid var(--ink); display: flex; align-items: baseline; gap: 14px; }
+  .a .head h2 { margin: 0; font-size: 19px; font-weight: 800; }
+  .a .head small { color: #67706f; font-size: 13px; }
+  .a .msgs { flex: 1; padding: 26px 28px; display: flex; flex-direction: column; gap: 20px; font-size: 15.5px; line-height: 1.6; }
+  .a .you { border-left: 3px solid var(--ink); padding: 2px 0 2px 14px; color: #0f1f36; font-weight: 600; }
+  .a .me p { margin: 0; max-width: 60ch; }
+  .a .step { font-size: 13px; color: #67706f; padding-left: 14px; border-left: 1px dashed #9aa39f; }
+  .a .composer { margin: 0 28px 24px; border: 1.5px solid #8d9792; background: #f7f8f5; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; color: #7b8481; }
+  .a .composer b { background: var(--ink); color: #fff; padding: 7px 16px; font-weight: 600; }
+  .a .sheet { position: relative; background-color: #f4f6f1;
+    background-image: linear-gradient(#c9d6dd 1px, transparent 1px), linear-gradient(90deg, #c9d6dd 1px, transparent 1px), linear-gradient(#e2e9ec 1px, transparent 1px), linear-gradient(90deg, #e2e9ec 1px, transparent 1px);
+    background-size: 64px 64px, 64px 64px, 16px 16px, 16px 16px; }
+  .a .sheet svg { position: absolute; inset: 40px 40px 140px 40px; width: calc(100% - 80px); height: calc(100% - 180px); }
+  .a .tblock { position: absolute; right: 28px; bottom: 28px; border: 2px solid #23282a; background: #f4f6f1; display: grid; grid-template-columns: auto auto; font-size: 12px; }
+  .a .tblock div { padding: 5px 12px; border-right: 1px solid #23282a; border-bottom: 1px solid #23282a; }
+  .a .tblock div:nth-child(2n) { border-right: 0; font-weight: 600; }
+  .a .tblock div:nth-last-child(-n+2) { border-bottom: 0; }
+
+  /* ---------- B · Chalkboard ---------- */
+  .b { --chalk: #f4a8c6; font-family: "Atkinson Hyperlegible", sans-serif; color: #e9ece4; background: #2c3833; }
+  .b aside { background: #26302c; padding: 22px 0; border-right: 6px solid #6f5236; }
+  .b .brand { padding: 0 22px 20px; font: 700 26px Kalam, cursive; color: #f1efe6; }
+  .b .row { padding: 8px 22px; font-size: 14.5px; color: #b9c3bb; display: flex; gap: 10px; align-items: center; }
+  .b .row::before { content: ""; width: 14px; height: 6px; border-radius: 3px; background: var(--c); opacity: .9; transform: rotate(-8deg); flex: none; }
+  .b .row.on { color: #fff; background: rgb(255 255 255 / 6%); }
+  .b .chat { display: flex; flex-direction: column; background: #303d37; border-right: 1px solid #3f4d46; }
+  .b .head { padding: 18px 28px 14px; }
+  .b .head h2 { margin: 0; font: 700 25px Kalam, cursive; color: #fff; }
+  .b .head svg { margin-top: 2px; }
+  .b .msgs { flex: 1; padding: 10px 28px 20px; display: flex; flex-direction: column; gap: 18px; font-size: 16px; line-height: 1.6; }
+  .b .you { align-self: flex-end; max-width: 75%; color: var(--chalk); font: 400 19px/1.4 Kalam, cursive; text-align: right; }
+  .b .me p { margin: 0; max-width: 58ch; }
+  .b .step { font-size: 13px; color: #93a198; }
+  .b .ledge { height: 74px; background: linear-gradient(#7a5a3b, #5d4329); display: flex; align-items: center; padding: 0 20px; gap: 14px; box-shadow: inset 0 3px 0 #94704b; }
+  .b .composer { flex: 1; background: #2a3530; border-radius: 6px; padding: 12px 16px; color: #8f9c94; display: flex; justify-content: space-between; align-items: center; }
+  .b .composer b { color: #2a3530; background: var(--chalk); padding: 6px 15px; border-radius: 4px; font-weight: 700; }
+  .b .board { position: relative; background: radial-gradient(ellipse at 30% 20%, #3a4842 0%, #2f3b36 55%, #29342f 100%); }
+  .b .board svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* ---------- C · Poster ---------- */
+  .c { --hue: #e8452c; font-family: Archivo, sans-serif; background: #f6f5f0; color: #111; }
+  .c aside { background: var(--hue); padding: 26px 0; color: #111; }
+  .c .brand { padding: 0 24px 26px; font: 900 34px/0.9 Archivo; font-stretch: 125%; letter-spacing: -0.02em; }
+  .c .row { padding: 9px 24px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  .c .row::before { content: ""; width: 16px; height: 16px; background: var(--c); border: 2px solid #111; flex: none; }
+  .c .row.on { background: #111; color: var(--hue); }
+  .c .row.on::before { border-color: var(--hue); }
+  .c .chat { display: flex; flex-direction: column; border-right: 3px solid #111; }
+  .c .head { padding: 20px 30px 16px; border-bottom: 3px solid #111; }
+  .c .head h2 { margin: 0; font: 900 46px/0.95 Archivo; font-stretch: 112%; letter-spacing: -0.025em; }
+  .c .msgs { flex: 1; padding: 24px 30px; display: flex; flex-direction: column; gap: 18px; font-size: 16px; line-height: 1.55; font-stretch: 100%; }
+  .c .you { align-self: flex-end; max-width: 75%; background: #111; color: #f6f5f0; padding: 10px 16px; font-weight: 600; }
+  .c .me p { margin: 0; max-width: 58ch; }
+  .c .step { font-size: 13px; color: #6a6a66; font-weight: 600; }
+  .c .composer { margin: 0 30px 26px; border: 3px solid #111; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; color: #77756f; background: #fff; }
+  .c .composer b { background: var(--hue); color: #111; padding: 8px 18px; font-weight: 800; border: 2px solid #111; }
+  .c .canvas { position: relative; background: #fbfaf6; }
+  .c .canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Claudia: three directions</h1>
+  <p>Same screen, same fake chat, three looks taken from what Claudia is: talking on the left while a diagram gets drawn on the right. Each shows how a chat's colour carries the theme. Pick one, mix two, or say none.</p>
+</div>
+
+<!-- ======================= A ======================= -->
+<div class="label">A · Drafting table <span>light vellum, grid paper, the chat colour is the ink, a title block names the sheet</span></div>
+<div class="mock a">
+  <aside>
+    <div class="brand"><i></i>Claudia</div>
+    <a class="row on" style="--c:#1f4d8f">Login wall for the shop</a>
+    <a class="row" style="--c:#c4452f">Invoice PDF layout</a>
+    <a class="row" style="--c:#1f8a5b">Nightly backup check</a>
+    <a class="row" style="--c:#c8641a">Printer discovery</a>
+    <a class="row" style="--c:#6b4fc4">Groundwork access rules</a>
+    <a class="row" style="--c:#a58a00">Podcast episode 26</a>
+  </aside>
+  <section class="chat">
+    <div class="head"><h2>Login wall for the shop</h2><small>tools/shop</small></div>
+    <div class="msgs">
+      <div class="you">Who gets past the login now, and who doesn't?</div>
+      <div class="step">3 steps · read Caddyfile, auth config</div>
+      <div class="me"><p>Only the admins group reaches the shop. Everyone else lands on the sign-in page, and after signing in they get a 403 unless they're in admins.</p></div>
+      <div class="you">Let the team group in too.</div>
+      <div class="me"><p>Added team next to admins. Sessions pick it up at the hourly refresh.</p></div>
+    </div>
+    <div class="composer">Message Claude… <b>Send</b></div>
+  </section>
+  <section class="sheet">
+    <svg viewBox="0 0 640 520" font-family="Overpass" font-size="15">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 1 L10 5 L0 9 z" fill="#1f4d8f"/></marker></defs>
+      <g fill="none" stroke="#1f4d8f" stroke-width="1.6">
+        <rect x="24" y="40" width="150" height="64"/>
+        <rect x="246" y="40" width="150" height="64"/>
+        <path d="M321 170 L401 220 L321 270 L241 220 Z"/>
+        <rect x="246" y="360" width="150" height="64" stroke-width="2.6"/>
+        <rect x="470" y="190" width="140" height="60" stroke-dasharray="5 4"/>
+        <path d="M174 72 H244" marker-end="url(#ah)"/>
+        <path d="M321 104 V168" marker-end="url(#ah)"/>
+        <path d="M321 270 V358" marker-end="url(#ah)"/>
+        <path d="M401 220 H468" marker-end="url(#ah)"/>
+      </g>
+      <g fill="#1d2326" text-anchor="middle">
+        <text x="99" y="78" font-weight="600">Browser</text>
+        <text x="321" y="78" font-weight="600">Gate</text>
+        <text x="321" y="216" font-weight="600">admins or</text><text x="321" y="234" font-weight="600">team?</text>
+        <text x="321" y="397" font-weight="800">Shop</text>
+        <text x="540" y="225">403</text>
+      </g>
+      <g fill="#1f4d8f" font-size="13">
+        <text x="330" y="320">yes</text><text x="420" y="210">no</text><text x="182" y="62">https</text>
+      </g>
+      <g stroke="#7d8a8f" stroke-width="1" fill="#7d8a8f" font-size="11">
+        <path d="M246 446 H396 M246 440 V452 M396 440 V452"/><text x="321" y="466" text-anchor="middle" stroke="none">team added 12:40</text>
+      </g>
+    </svg>
+    <div class="tblock"><div>Chat</div><div>Login wall for the shop</div><div>Sheet</div><div>3 of 3</div><div>Changed</div><div>team path, 403 branch</div></div>
+  </section>
+</div>
+
+<!-- ======================= B ======================= -->
+<div class="label">B · Chalkboard <span>slate board, chalk diagrams that look drawn by hand, the chat colour is the coloured chalk</span></div>
+<div class="mock b">
+  <aside>
+    <div class="brand">Claudia</div>
+    <a class="row on" style="--c:#f4a8c6">Login wall for the shop</a>
+    <a class="row" style="--c:#f39a7f">Invoice PDF layout</a>
+    <a class="row" style="--c:#9fd8a8">Nightly backup check</a>
+    <a class="row" style="--c:#f6c56b">Printer discovery</a>
+    <a class="row" style="--c:#b9a6f4">Groundwork access rules</a>
+    <a class="row" style="--c:#8fd0e6">Podcast episode 26</a>
+  </aside>
+  <section class="chat">
+    <div class="head"><h2>Login wall for the shop</h2>
+      <svg width="250" height="8"><path d="M2 5 C60 2 120 7 248 3" stroke="#f4a8c6" stroke-width="3" fill="none" stroke-linecap="round" opacity=".85"/></svg></div>
+    <div class="msgs">
+      <div class="you">Who gets past the login now, and who doesn't?</div>
+      <div class="step">3 steps · read Caddyfile, auth config</div>
+      <div class="me"><p>Only the admins group reaches the shop. Everyone else lands on the sign-in page, and after signing in they get a 403 unless they're in admins.</p></div>
+      <div class="you">Let the team group in too.</div>
+      <div class="me"><p>Added team next to admins. Sessions pick it up at the hourly refresh.</p></div>
+    </div>
+    <div class="ledge"><div class="composer">Message Claude… <b>Send</b></div></div>
+  </section>
+  <section class="board">
+    <svg viewBox="0 0 640 820" preserveAspectRatio="xMidYMid meet" font-family="Kalam">
+      <defs>
+        <filter id="chalk"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.6"/></filter>
+        <marker id="bh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#efeee6" stroke-width="1.6" stroke-linecap="round"/></marker>
+      </defs>
+      <g filter="url(#chalk)" fill="none" stroke="#efeee6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M44 170 C90 166 160 168 196 172 C198 200 197 222 194 236 C150 239 90 238 46 234 C43 210 42 190 44 170 Z"/>
+        <path d="M262 168 C310 165 372 170 410 170 C412 196 411 220 408 236 C360 240 300 238 264 236 C261 212 260 190 262 168 Z"/>
+        <path d="M336 300 C368 322 396 342 420 362 C396 384 368 404 336 424 C306 404 278 384 252 362 C280 340 306 320 336 300 Z"/>
+        <path d="M262 500 C310 496 372 500 410 502 C413 530 411 552 408 568 C360 572 300 570 264 568 C260 546 259 522 262 500 Z" stroke="#f4a8c6" stroke-width="3.4"/>
+        <path d="M200 203 C222 201 240 203 258 203" marker-end="url(#bh)"/>
+        <path d="M336 240 C337 258 336 276 336 294" marker-end="url(#bh)"/>
+        <path d="M336 428 C337 450 336 474 336 494" marker-end="url(#bh)"/>
+        <path d="M424 362 C460 360 490 361 520 362" marker-end="url(#bh)"/>
+        <path d="M262 600 C300 612 360 612 410 598" stroke="#f4a8c6" stroke-width="2.2"/>
+      </g>
+      <g fill="#efeee6" font-size="24" text-anchor="middle" filter="url(#chalk)">
+        <text x="120" y="212">Browser</text>
+        <text x="336" y="212">Gate</text>
+        <text x="336" y="358" font-size="20">admins or</text><text x="336" y="382" font-size="20" fill="#f4a8c6">team?</text>
+        <text x="336" y="544" fill="#f4a8c6" font-weight="700">Shop</text>
+        <text x="560" y="372">403</text>
+        <text x="350" y="470" font-size="18">yes</text><text x="470" y="350" font-size="18">no</text>
+        <text x="336" y="640" font-size="19" fill="#f4a8c6">team added!</text>
+      </g>
+    </svg>
+  </section>
+</div>
+
+<!-- ======================= C ======================= -->
+<div class="label">C · Poster <span>the chat colour as a solid block, very large type, flat shapes with heavy outlines</span></div>
+<div class="mock c">
+  <aside>
+    <div class="brand">CLAU<br>DIA</div>
+    <a class="row on" style="--c:#e8452c">Login wall for the shop</a>
+    <a class="row" style="--c:#2f6fe0">Invoice PDF layout</a>
+    <a class="row" style="--c:#21a366">Nightly backup check</a>
+    <a class="row" style="--c:#f5c400">Printer discovery</a>
+    <a class="row" style="--c:#8a5cf0">Groundwork access rules</a>
+    <a class="row" style="--c:#ff7eb6">Podcast episode 26</a>
+  </aside>
+  <section class="chat">
+    <div class="head"><h2>Login wall<br>for the shop</h2></div>
+    <div class="msgs">
+      <div class="you">Who gets past the login now, and who doesn't?</div>
+      <div class="step">3 steps: read Caddyfile, auth config</div>
+      <div class="me"><p>Only the admins group reaches the shop. Everyone else lands on the sign-in page, and after signing in they get a 403 unless they're in admins.</p></div>
+      <div class="you">Let the team group in too.</div>
+      <div class="me"><p>Added team next to admins. Sessions pick it up at the hourly refresh.</p></div>
+    </div>
+    <div class="composer">Message Claude… <b>Send</b></div>
+  </section>
+  <section class="canvas">
+    <svg viewBox="0 0 640 820" preserveAspectRatio="xMidYMid meet" font-family="Archivo" font-weight="800">
+      <defs><marker id="ch" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#111"/></marker></defs>
+      <g stroke="#111" stroke-width="4">
+        <rect x="40" y="150" width="170" height="80" fill="#fff"/>
+        <rect x="262" y="150" width="170" height="80" fill="#f5c400"/>
+        <path d="M347 300 L437 370 L347 440 L257 370 Z" fill="#fff"/>
+        <rect x="248" y="510" width="198" height="104" fill="#e8452c"/>
+        <circle cx="545" cy="370" r="44" fill="#111"/>
+        <path d="M210 190 H254 M347 230 V292 M347 440 V502 M437 370 H493" fill="none" marker-end="url(#ch)"/>
+      </g>
+      <g text-anchor="middle" fill="#111">
+        <text x="125" y="198" font-size="24">Browser</text>
+        <text x="347" y="198" font-size="24">Gate</text>
+        <text x="347" y="366" font-size="17">ADMINS</text><text x="347" y="388" font-size="17">OR TEAM?</text>
+        <text x="347" y="575" font-size="40" font-weight="900">SHOP</text>
+        <text x="545" y="380" font-size="26" fill="#f6f5f0">403</text>
+        <text x="368" y="478" font-size="16" text-anchor="start">yes</text><text x="462" y="358" font-size="16">no</text>
+      </g>
+    </svg>
+  </section>
+</div>
+
+<div style="height:60px"></div>
+</body>
+</html>

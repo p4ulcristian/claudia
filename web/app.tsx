@@ -309,8 +309,13 @@ function App() {
   // The chat's colour themes the whole window (style.css, ":root[data-chat]").
   useEffect(() => {
     const root = document.documentElement;
-    if (live.settings.color) root.dataset.chat = live.settings.color;
-    else delete root.dataset.chat;
+    if (live.settings.color) {
+      root.dataset.chat = live.settings.color;
+      root.style.setProperty("--hue", `var(--c-${live.settings.color})`);
+    } else {
+      delete root.dataset.chat;
+      root.style.removeProperty("--hue");
+    }
   }, [live.settings.color]);
 
   const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
@@ -323,8 +328,25 @@ function App() {
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""}`}>
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
-      <div className="sidebar-slot" aria-hidden={!showSidebar} inert={!showSidebar}>
-        <aside className="sidebar">
+      <div className="sidebar-slot">
+        {!showSidebar && (
+          <nav className="rail" aria-label="Chats">
+            <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>
+            {list.map((c) => (
+              <button
+                key={c.id}
+                className={`rail-dot ${c.id === current ? "on" : ""} ${c.running ? "running" : ""}`}
+                style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
+                onClick={() => open(c.id)}
+                title={c.title}
+                aria-label={c.title}
+              >
+                {(c.title.trim()[0] ?? "?").toUpperCase()}
+              </button>
+            ))}
+          </nav>
+        )}
+        <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
           <div className="brand"><span className="logo" />Claudia</div>
           <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>
           <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />

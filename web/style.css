@@ -7,9 +7,12 @@
   --amber: #e2ad45; --amber-bg: #33280f; --blue: #6fb3f0; --blue-bg: #15283a;
   --grey: #9aa8a3; --grey-bg: #232c29; --violet: #b49cf2; --violet-bg: #2a2242;
   --accent: var(--green);
-  /* Chat colours (see src/colors.ts): eight hues far enough apart to tell at a glance. */
-  --c-red: #f0785f; --c-orange: #f39a4a; --c-yellow: #e8cf4a; --c-green: #4cc68d;
-  --c-teal: #3fc1c0; --c-blue: #6fb3f0; --c-violet: #b49cf2; --c-pink: #f080b8;
+  /* Chat colours (see src/colors.ts), and the text colour that sits on them. */
+  --c-red: #f0785f; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
+  --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
+  --c-sky: #6fb3f0; --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
+  --c-purple: #d08cf0; --c-magenta: #f06ad8; --c-pink: #f080b8; --c-brown: #c49a72;
+  --on-hue: #0b0e0d;
   --sans: "Instrument Sans", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
@@ -19,21 +22,16 @@
   --green: #1f8a5b; --green-bg: #e2f3ea; --red: #c4452f; --red-bg: #fbe9e4;
   --amber: #b07a10; --amber-bg: #fbf0d6; --blue: #2d6fb0; --blue-bg: #e3eef9;
   --grey: #6c7a75; --grey-bg: #eceff0; --violet: #6b4fc4; --violet-bg: #eee8fb;
-  --c-red: #c4452f; --c-orange: #c8641a; --c-yellow: #a58a00; --c-green: #1f8a5b;
-  --c-teal: #138585; --c-blue: #2d6fb0; --c-violet: #6b4fc4; --c-pink: #c2407f;
+  --c-red: #c4452f; --c-orange: #c8641a; --c-amber: #b07a10; --c-yellow: #9a8700;
+  --c-lime: #5f8f12; --c-green: #1f8a5b; --c-teal: #13806f; --c-cyan: #0e7f99;
+  --c-sky: #2d6fb0; --c-blue: #3150d0; --c-indigo: #5446c8; --c-violet: #6b4fc4;
+  --c-purple: #8a3fb5; --c-magenta: #b02f9a; --c-pink: #c2407f; --c-brown: #8a5a32;
+  --on-hue: #fff;
   color-scheme: light;
 }
 
 /* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
    so switching chats repaints the window. Diff and picture colours keep their meaning. */
-:root[data-chat="red"] { --hue: var(--c-red); }
-:root[data-chat="orange"] { --hue: var(--c-orange); }
-:root[data-chat="yellow"] { --hue: var(--c-yellow); }
-:root[data-chat="green"] { --hue: var(--c-green); }
-:root[data-chat="teal"] { --hue: var(--c-teal); }
-:root[data-chat="blue"] { --hue: var(--c-blue); }
-:root[data-chat="violet"] { --hue: var(--c-violet); }
-:root[data-chat="pink"] { --hue: var(--c-pink); }
 :root[data-chat] {
   --bg: color-mix(in oklch, var(--hue) 21%, #0b0e0d); --bg2: color-mix(in oklch, var(--hue) 15%, #080a0a);
   --panel: color-mix(in oklch, var(--hue) 26%, #111514); --panel2: color-mix(in oklch, var(--hue) 33%, #161b1a);
@@ -62,13 +60,13 @@ code, pre { font-family: var(--mono); }
 
 /* Layout */
 .app { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; transition: grid-template-columns 0.22s ease; }
-.app.no-sidebar { grid-template-columns: 0px 1fr; }
+.app.no-sidebar { grid-template-columns: 52px 1fr; }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
 /* One menu button, always in the same top-left spot. */
 .menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
 .sidebar .brand { padding-left: 40px; min-height: 30px; }
-.app.no-sidebar .chat-head, .app.narrow .chat-head { padding-left: 52px; }
+.app.narrow .chat-head { padding-left: 52px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .right-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
@@ -304,7 +302,9 @@ code, pre { font-family: var(--mono); }
 .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
 .app.narrow, .app.narrow.no-sidebar { grid-template-columns: 1fr; }
 .app.narrow .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; transition: width 0.22s ease; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
-.app.narrow.no-sidebar .sidebar-slot { width: 0; box-shadow: none; }
+.app.narrow.no-sidebar .sidebar-slot { width: 52px; box-shadow: none; }
+.app.narrow.no-sidebar main { margin-left: 52px; }
+.app.narrow.no-sidebar .chat-head { padding-left: 16px; }
 
 @media (max-width: 679px) {
   .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
@@ -404,9 +404,17 @@ code, pre { font-family: var(--mono); }
 .color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
 .color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
 .color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
-.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(3, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(4, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
+
+/* Sidebar closed: one coloured circle per chat, like chat heads. */
+.rail { width: 52px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 52px 0 14px; overflow-y: auto; scrollbar-width: none; background: var(--bg2); border-right: 1px solid var(--line); }
+.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 14px var(--sans); color: var(--on-hue); background: var(--chat, var(--grey)); transition: transform 0.12s ease; position: relative; }
+.rail-dot:hover { transform: scale(1.1); }
+.rail-dot.on { box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--fg); }
+.rail-dot.running::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--chat, var(--grey)); animation: breathe 1.4s ease-in-out infinite; }
+.rail-dot.add { background: none; border: 1.5px dashed var(--muted); color: var(--muted); font-size: 18px; font-weight: 400; }

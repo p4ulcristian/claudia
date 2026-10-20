@@ -3,7 +3,7 @@ import { listSessions, renameSession, deleteSession } from "@anthropic-ai/claude
 import type { ServerWebSocket } from "bun";
 import index from "./web/index.html";
 import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
-import { CHAT_COLORS } from "./src/colors";
+import { CHAT_COLORS, pickColor } from "./src/colors";
 import { DATA_DIR, store } from "./src/db";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,7 +25,11 @@ function broadcastChats() {
 
 function chat(id: string) {
   let c = chats.get(id);
-  if (!c) chats.set(id, (c = new Chat(id, broadcastChats)));
+  if (!c) {
+    chats.set(id, (c = new Chat(id, broadcastChats)));
+    // Every chat gets a colour of its own from the start.
+    if (!c.settings.color) void c.setSettings({ color: pickColor(store.colors().values()) });
+  }
   return c;
 }
 
@@ -33,8 +37,17 @@ async function listChats(all: boolean) {
   const ours = store.ourChats();
   const colors = store.colors();
   const sessions = await listSessions({ dir: WORK, includeWorktrees: false });
-  return sessions
-    .filter((s) => all || ours.has(s.sessionId) || chats.has(s.sessionId))
+  const shown = sessions.filter((s) => all || ours.has(s.sessionId) || chats.has(s.sessionId));
+  // Chats from before colours, or never opened here, get one the first time they're listed.
+  for (const s of shown) {
+    if (colors.has(s.sessionId)) continue;
+    const color = pickColor(colors.values());
+    colors.set(s.sessionId, color);
+    const open = chats.get(s.sessionId);
+    if (open) void open.setSettings({ color });
+    else store.setColor(s.sessionId, color);
+  }
+  return shown
     .map((s) => ({
       id: s.sessionId,
       title: s.customTitle || s.summary || s.firstPrompt || "New chat",
