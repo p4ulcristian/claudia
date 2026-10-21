@@ -5,7 +5,7 @@ Applied 2026-10-20. Fonts: Atkinson Hyperlegible (text), Kalam (handwriting), Je
 
 Why it fits: Claudia is someone talking while drawing on a board. The look comes from that, not from the usual app defaults.
 
-- **Board**: the picture pane is a slate board (mid-dark green-grey, faint uneven wash), not near-black.
+- **Board**: the picture pane is a slate board (mid-dark neutral grey since 2026-10-22, faint uneven wash), not near-black.
 - **Chalk**: diagram lines and labels look hand-drawn (slight wobble, a handwriting face for labels); the chat's colour is the coloured chalk for what changed.
 - **Talk**: chat text in a warm, very readable sans; the user's lines in the handwriting face, in the chat's chalk colour.
 - **Ledge**: the composer sits on a wooden chalk ledge, the one bold detail.

@@ -2,11 +2,11 @@
 
 /* Chalkboard (DESIGN.md): slate board, chalk colours, a wooden ledge. Dark only. */
 :root {
-  --bg: #2f3b36; --bg2: #27312d; --panel: #36443e; --panel2: #3d4c45; --fg: #eceee6; --muted: #a3b0a7; --line: #4a5a52;
-  --board: #2c3833;
+  --bg: #383838; --bg2: #2e2e2e; --panel: #404040; --panel2: #484848; --fg: #ededed; --muted: #acacac; --line: #565656;
+  --board: #353535;
   --green: #a3dbab; --green-bg: #34483d; --red: #f39a7f; --red-bg: #4a3632;
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
-  --grey: #b9c3bb; --grey-bg: #3a4641; --violet: #bba8f2; --violet-bg: #3d3b50;
+  --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
   --wood: #7a5a3b; --wood2: #5d4329; --wood-hi: #94704b;
   /* Chat colours (see src/colors.ts), and the text colour that sits on them. */
@@ -19,12 +19,14 @@
   color-scheme: dark;
 }
 
-/* A chat's colour tints panels, lines and text, so switching chats repaints the window; the
-   backgrounds stay plain. Diff and picture colours keep their meaning. */
+/* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
+   so switching chats repaints the window. Diff and picture colours keep their meaning. */
 :root[data-chat] {
-  --panel: color-mix(in oklch, var(--hue) 20%, #33403a); --panel2: color-mix(in oklch, var(--hue) 24%, #3a4842);
-  --line: color-mix(in oklch, var(--hue) 32%, #47564f);
-  --fg: color-mix(in oklch, var(--hue) 8%, #eef0e8); --muted: color-mix(in oklch, var(--hue) 25%, #a0ada5);
+  --bg: color-mix(in oklch, var(--hue) 18%, #343434); --bg2: color-mix(in oklch, var(--hue) 14%, #2a2a2a);
+  --board: color-mix(in oklch, var(--hue) 15%, #323232);
+  --panel: color-mix(in oklch, var(--hue) 20%, #3c3c3c); --panel2: color-mix(in oklch, var(--hue) 24%, #444444);
+  --line: color-mix(in oklch, var(--hue) 32%, #525252);
+  --fg: color-mix(in oklch, var(--hue) 8%, #efefef); --muted: color-mix(in oklch, var(--hue) 25%, #a9a9a9);
   /* coloured chalk: the chat's hue, chalky */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
 }
