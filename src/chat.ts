@@ -222,6 +222,9 @@ export class Chat implements SessionHandler {
   private stopping = false;
   // Rebuilding state from the host's buffer after a runner restart: no side effects.
   private replaying = false;
+  // This session's tools are older than the runner's and couldn't be swapped: start Claude Code
+  // again (resumed) once the turn and its background work are done.
+  private staleTools = false;
   // Files touched since the last turn ended: their content before the first touch.
   private before = new Map<string, FileState>();
   // Git repos snapshotted at the start of the turn (or when the folder was set): repo root → tree.
@@ -350,9 +353,16 @@ export class Chat implements SessionHandler {
     if (t && t.status === "running") this.patchTask(taskId, { status: "stopped", endedAt: Date.now() });
   }
 
+  private restartIfStale() {
+    if (!this.staleTools || this.running || [...this.tasks.values()].some((t) => t.status === "running")) return;
+    this.staleTools = false;
+    this.close();
+  }
+
   private emitTasks() {
     this.emit({ t: "tasks", tasks: [...this.tasks.values()] });
     this.onChange();
+    if (!this.replaying) this.restartIfStale();
   }
 
   private patchTask(id: string, patch: Partial<Task>) {
@@ -565,7 +575,14 @@ export class Chat implements SessionHandler {
     this.setRunning(live.busy);
     // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
     if (kv.tools !== TOOLS_VERSION)
-      session.setMcp(TOOLS).then(() => session.kv("tools", TOOLS_VERSION), (err) => console.error(`[${this.id.slice(0, 8)}] tools not updated: ${err?.message ?? err}`));
+      session.setMcp(TOOLS).then(
+        () => session.kv("tools", TOOLS_VERSION),
+        (err) => {
+          console.error(`[${this.id.slice(0, 8)}] tools not swapped (${err?.message ?? err}); restarting after this turn`);
+          this.staleTools = true;
+          this.restartIfStale();
+        },
+      );
     if (live.busy) this.since = Number(kv.since ?? Date.now());
     else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
     return this;
@@ -749,7 +766,7 @@ export class Chat implements SessionHandler {
         if (this.replaying) return;
         this.readContext();
         refreshSoon(WORK);
-        this.finishChanges(this.turn);
+        this.finishChanges(this.turn).finally(() => this.restartIfStale());
         return;
       }
       case "rate_limit_event":
