@@ -106,7 +106,7 @@ export function toolLabel(name: string) {
   return name.startsWith("mcp__") ? name.split("__").slice(1).join(" ") : name;
 }
 
-const stripReminders = (s: string) => s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+export const stripReminders = (s: string) => s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
 
 // An answer to AskUserQuestion, as the user's own message in the chat.
 function answerText(questions: Question[], answers: Record<string, string>) {
@@ -130,7 +130,7 @@ function commandParts(text: string): { command?: string; output?: string } | nul
   return { command: name ? `${name.startsWith("/") ? name : "/" + name}${args ? " " + args : ""}` : undefined, output: out };
 }
 
-function resultText(content: unknown): string {
+export function resultText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map((b: any) => (b.type === "text" ? b.text : b.type === "image" ? "[image]" : "")).join("\n");
   return "";

@@ -6,3 +6,4 @@ import type { Scene } from "../src/scene";
 
 export type ChatRow = { id: string; title: string; at: number; ours: boolean; running: boolean; color: string | null; archived: boolean };
 export type Picture = { turn: string; scene: Scene; changed: string[]; at: number };
+export type { Timeline, Lane as TimelineLane, TimelineEvent, Detail as TimelineDetail } from "../src/timeline";

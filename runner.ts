@@ -11,6 +11,7 @@ import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
+import { timeline, timelineDetail } from "./src/timeline";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
 // On the box: a unix socket only the page can reach (the unit's runtime folder grants it).
@@ -144,6 +145,27 @@ Bun.serve({
         } catch {
           return json({ text: "" });
         }
+      },
+    },
+    // What the chat and each of its subagents did, when (from the session files). ?v= the version the
+    // page has: the same version comes back as { same: true } instead of the whole timeline again.
+    "/api/chats/:id/timeline": {
+      GET: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const c = chats.get(id);
+        const agents = new Set([...(c?.tasks.values() ?? [])].filter((t) => t.status === "running" && t.toolUseId).map((t) => t.toolUseId!));
+        const t = await timeline(id, c?.running ?? false, agents);
+        if (!t) return json({ error: "not found" }, 404);
+        return new URL(req.url).searchParams.get("v") === t.v ? json({ same: true, v: t.v, now: t.now }) : json(t);
+      },
+    },
+    // One step of the timeline in full.
+    "/api/chats/:id/timeline/:lane/:event": {
+      GET: async (req) => {
+        if (!uuidRe.test(req.params.id)) return json({ error: "bad id" }, 400);
+        const d = await timelineDetail(req.params.id, req.params.lane, decodeURIComponent(req.params.event)).catch(() => null);
+        return d ? json(d) : json({ error: "not found" }, 404);
       },
     },
     // One change's before and after, for the diff view.

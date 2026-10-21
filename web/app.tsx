@@ -4,6 +4,7 @@ import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
 import { AskPanel, PermitPanel } from "./panels";
 import { TasksPanel } from "./tasks";
+import { TimelineView } from "./timeline";
 import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
@@ -174,6 +175,11 @@ function App() {
   // Folding the picture pane gives the chat the full width; foldedAt marks which pictures are unseen.
   const [foldedAt, setFoldedAt] = useState(() => (store.get("folded") === "1" ? Date.now() : 0));
   const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
+  // The right half shows Claude's picture, or the timeline of what the chat and its agents did.
+  const [rightView, setRightViewState] = useState<"picture" | "timeline">(() => (store.get("right") === "timeline" ? "timeline" : "picture"));
+  // Pictures drawn after this, while the timeline shows, get a dot on the Picture tab.
+  const [timelineAt, setTimelineAt] = useState(() => Date.now());
+  const setRightView = useCallback((v: "picture" | "timeline") => { store.set("right", v); setRightViewState(v); setTimelineAt(Date.now()); }, []);
   const [editing, setEditing] = useState(false);
   // A question fills the window; peeking hides it to look at the picture, and a new question shows again.
   const [peek, setPeek] = useState(false);
@@ -264,12 +270,13 @@ function App() {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && live.running) { e.preventDefault(); onStop(); }
       const typing = (e.target as HTMLElement).closest?.("input, textarea, [contenteditable]");
-      if (!typing && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      if (!typing && rightView === "picture" && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         e.preventDefault();
         showPicture(picIndex + (e.key === "ArrowLeft" ? -1 : 1));
       }
       if (e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); newChat(); }
       if (e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); toggleFold(); }
+      if (e.altKey && e.key.toLowerCase() === "t") { e.preventDefault(); setRightView(rightView === "timeline" ? "picture" : "timeline"); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
         toggleSidebar();
@@ -349,6 +356,7 @@ function App() {
 
   const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
+  const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
@@ -495,10 +503,20 @@ function App() {
           </section>
         ) : (
         <section className="right">
+          {rightView === "timeline" ? (
+          <div className="right-tl">
+            {!readOnly && live.permits.length > 0 && (
+              <div className="interface">
+                {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
+              </div>
+            )}
+            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} />
+          </div>
+          ) : (
           <div className="right-scroll">
           {(live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
             <div className="interface">
-              {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
+              {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} onTimeline={() => setRightView("timeline")} />}
               {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} />}
               {!readOnly && live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
             </div>
@@ -507,7 +525,13 @@ function App() {
             <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} />
           </div>
           </div>
+          )}
           <footer className="timeline">
+            <div className="view-switch" role="tablist">
+              <button className={rightView === "picture" ? "on" : ""} onClick={() => setRightView("picture")} title={pictureBehind ? "New picture · show (Alt+T)" : "Claude's picture (Alt+T)"}>Picture{pictureBehind && <span className="fold-dot" />}</button>
+              <button className={rightView === "timeline" ? "on" : ""} onClick={() => setRightView("timeline")} title="What the chat and its agents did, on a time axis (Alt+T)">Timeline</button>
+            </div>
+            {rightView === "picture" && <>
             {live.pictures.length > 1 && (
               <div className="pager">
                 <button className="chev-btn" disabled={picIndex <= 0} onClick={() => showPicture(picIndex - 1)} title="Previous picture (←)">‹</button>
@@ -528,6 +552,7 @@ function App() {
                 : live.lastTurn && !live.lastTurn.drew && live.pictures.length ? "Picture not changed this turn"
                 : live.pictures.length ? "Live" : ""}
             </span>
+            </>}
             <button className="chev-btn fold-btn" onClick={toggleFold} disabled={live.asks.length > 0 || live.permits.length > 0} title="Hide picture (Alt+P)">›</button>
           </footer>
         </section>

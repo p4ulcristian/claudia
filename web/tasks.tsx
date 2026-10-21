@@ -64,7 +64,7 @@ function TaskRow({ chat, task, items, onStop }: { chat: string; task: Task; item
   );
 }
 
-export function TasksPanel({ chat, tasks, subs, onStop }: { chat: string; tasks: Task[]; subs: Record<string, Item[]>; onStop: (id: string) => void }) {
+export function TasksPanel({ chat, tasks, subs, onStop, onTimeline }: { chat: string; tasks: Task[]; subs: Record<string, Item[]>; onStop: (id: string) => void; onTimeline: () => void }) {
   const [open, setOpen] = useState(true);
   const seen = tasks.filter((t) => !t.ambient);
   const ids = new Set(seen.map((t) => t.id));
@@ -77,11 +77,14 @@ export function TasksPanel({ chat, tasks, subs, onStop }: { chat: string; tasks:
   const shown = [...running, ...top.filter((t) => t.status !== "running").sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0)).slice(0, 6)];
   return (
     <section className="panel tasks">
-      <button className="tasks-head" onClick={() => setOpen(!open)}>
-        <span className={`chev ${open ? "open" : ""}`}>›</span>
-        <b>Background</b>
-        <span className="muted small">{running.length ? `${running.length} running` : "nothing running"}</span>
-      </button>
+      <div className="changes-head">
+        <button className="tasks-head" onClick={() => setOpen(!open)}>
+          <span className={`chev ${open ? "open" : ""}`}>›</span>
+          <b>Background</b>
+          <span className="muted small">{running.length ? `${running.length} running` : "nothing running"}</span>
+        </button>
+        <button className="link" onClick={onTimeline} title="Every agent's steps on one time axis (Alt+T)">Timeline</button>
+      </div>
       {open && (
         <ul>
           {shown.map((t) => (

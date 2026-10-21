@@ -25,6 +25,8 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 11. Profiles (2026-10-20, `plan/box-and-profiles.md`): the same code runs everywhere; an instance differs only by its settings. The gate's signed-in email picks a profile from the instance's profiles list (`<profile> <email> [runner]`); each profile has its own runner, store, preferences and GitHub login. The desktop window (127.0.0.1) is `CLAUDIA_LOCAL_PROFILE`; the gate's listener (`GATE_HOST`) believes the login header, so only the gate may reach it. `CLAUDIA_NAME` shows under the logo. On a shared server each profile's runner is its own Linux user (`claudia-<profile>`, `deploy/`).
 
+12. A timeline (2026-10-21) in place of the picture (Picture | Timeline at the bottom right, Alt+T): the chat and every subagent as lanes on one time axis, tool calls as bars as long as they ran, quiet stretches folded. Built from the session files themselves (`<session>.jsonl` and `<session>/subagents/agent-*.jsonl` + `.meta.json`), so it survives runner restarts; a step opens in full from its place in the file.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files
@@ -42,5 +44,6 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/account.ts`: the Claude token the chats run on
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
+- `src/timeline.ts`: lanes and steps from the session files, read only from where the last read stopped
 - `deploy/`: a shared server: `install.sh`, the page unit, the per-profile runner unit, and `update.sh` + its timer (follows GitHub main every 5 min; runners not restarted)
-- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` right
+- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right
