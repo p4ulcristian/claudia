@@ -21,6 +21,8 @@ How to draw well:
 - This is a programmer's tool: when code is the point (the change you made, the function at fault, a config, a command to run), show the real snippet in a code card: set lang, title it with the file and line (src/chat.ts:412), and keep it to the lines that matter (up to about 40).
 - Keep it to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note.
 
+Page cards: when boxes and arrows can't show it, a card can be your own small HTML page (kind "page"): a real chart of numbers, sliders on a formula, a state machine to click through, two or three UI mockups side by side, colours or fonts to compare in place, a graph too big for 12 nodes. Use Claudia's CSS variables so it matches. Keep the drawing as the default; reach for a page when the user would want to see the numbers, try something, or compare how things look. Keep pages small (a few KB) and self-contained.
+
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
 
 The draw call costs the user nothing to read, so prefer drawing over writing.
@@ -65,7 +67,7 @@ const drawShape = {
     .array(
       z.object({
         id: z.string(),
-        kind: z.enum(CARD_KINDS).optional().describe("text (Markdown), list, table, code"),
+        kind: z.enum(CARD_KINDS).optional().describe("text (Markdown), list, table, code, page (your own HTML page)"),
         title: z.string().optional(),
         color: colour,
         text: z.string().optional().describe("For text cards; short Markdown"),
@@ -74,6 +76,13 @@ const drawShape = {
         rows: z.array(z.array(z.string())).optional().describe("For table cards"),
         code: z.string().optional(),
         lang: z.string().optional(),
+        html: z
+          .string()
+          .optional()
+          .describe(
+            "For page cards: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent.",
+          ),
+        height: z.number().optional().describe("For page cards: height in px; left out, the card fits the page"),
       }),
     )
     .optional()
@@ -81,7 +90,6 @@ const drawShape = {
   remove: z.array(z.string()).optional().describe('Ids to remove: nodes, groups, cards, or arrows as "from->to"'),
 };
 
-// The working-folder tool, one per chat like the picture.
 // The tools Claudia gives Claude. The session host serves them and asks the runner to run each call.
 export const WORKSPACE_MCP: McpDef = {
   version: "1.0.0",

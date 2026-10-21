@@ -532,7 +532,7 @@ svg.logo { flex: none; color: var(--fg); }
 .queued-tag { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
 
 /* Code and tables need room: they take a row of their own, across the whole picture. */
-.cards > .card.k-code, .cards > .card.k-table { grid-column: 1 / -1; }
+.cards > .card.k-code, .cards > .card.k-table, .cards > .card.k-page { grid-column: 1 / -1; }
 .card .code { margin: 0; }
 .card .code pre { max-height: 60vh; font-size: 12.5px; }
 .card th { white-space: nowrap; }
@@ -648,3 +648,4 @@ svg.logo { flex: none; color: var(--fg); }
 .act-pop { position: absolute; top: calc(100% + 6px); right: 0; width: min(560px, calc(100cqw - 24px)); max-height: min(70vh, 640px); overflow: auto; border-radius: 12px; box-shadow: 0 10px 34px rgb(0 0 0 / 0.38); animation: rise 0.16s ease-out; }
 .act-pop > .panel { animation: none; }
 .tasks-head:disabled { cursor: default; color: inherit; opacity: 1; }
+.page-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; transition: height 0.15s ease-out; }

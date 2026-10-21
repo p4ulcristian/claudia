@@ -30,6 +30,8 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 13. A session host (2026-10-22): each chat's Agent SDK query runs in `host.ts`, not the runner. The host knows nothing about Claudia: it streams messages to the runner and passes every callback (the picture and folder tools, the edit hooks, permission asks) to it as an rpc, waiting while the runner restarts. On reconnect it hands back each live session: whether a turn is running, the current turn's messages (plus background tasks' state), what the runner stored there (turn, before-copies of files, unsent messages), and unanswered rpcs, so questions show again.
 
+14. Page cards (2026-10-22): a card can be Claude's own small HTML page (`kind: "page"`, `html`) for what boxes and arrows can't show: charts, sliders, clickable mockups, visual picks. It runs in a sandboxed iframe (`allow-scripts` only: no access to Claudia, its cookies or API), with a CSP that allows only inline code plus scripts/styles from cdn.jsdelivr.net, Claudia's theme as CSS variables, its fonts, and a height fitted to the page. Measured cost: ~1.5k tokens for a page vs ~0.45k for a drawing.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files

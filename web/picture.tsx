@@ -363,6 +363,40 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   );
 }
 
+// What a page card's frame gets from Claudia: the theme as CSS variables, the fonts, a fitted height.
+const THEME_VARS = ["--bg", "--bg2", "--panel", "--panel2", "--fg", "--muted", "--line", "--accent", "--green", "--red", "--amber", "--blue", "--grey", "--violet",
+  "--green-bg", "--red-bg", "--amber-bg", "--blue-bg", "--grey-bg", "--violet-bg", "--sans", "--mono", "--hand"];
+const FONTS = "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap";
+const PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:";
+
+function pageDoc(html: string) {
+  const cs = getComputedStyle(document.documentElement);
+  const vars = THEME_VARS.map((v) => `${v}: ${cs.getPropertyValue(v).trim()};`).join(" ");
+  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}"><link rel="stylesheet" href="${FONTS}">`
+    + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
+    + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(document.body.scrollHeight) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`;
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + head);
+  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${head}</head>`);
+  return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
+}
+
+// A page Claude wrote, sandboxed: its scripts run, but it has no access to Claudia, its cookies or its API.
+function PageFrame({ html, height }: { html: string; height?: number }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [fit, setFit] = useState(240);
+  const doc = useMemo(() => pageDoc(html), [html]);
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      if (e.source !== frame.current?.contentWindow) return;
+      const h = Number(e.data?.claudiaPageHeight);
+      if (h > 0) setFit(Math.min(1600, Math.max(60, h)));
+    };
+    window.addEventListener("message", on);
+    return () => window.removeEventListener("message", on);
+  }, []);
+  return <iframe ref={frame} className="page-frame" sandbox="allow-scripts" srcDoc={doc} style={{ height: height ?? fit }} title="Page" />;
+}
+
 function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }) {
   const html = useMemo(() => {
     if (card.kind === "code") return highlight(card.code ?? card.text ?? "", card.lang);
@@ -382,6 +416,7 @@ function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }
       {card.kind === "list" && (
         <ul>{(card.items ?? []).map((it, i) => <li key={i} dangerouslySetInnerHTML={{ __html: md(it) }} />)}</ul>
       )}
+      {card.kind === "page" && <PageFrame html={card.html ?? ""} height={card.height} />}
       {card.kind === "table" && (
         <div className="table-wrap">
           <table>
@@ -406,7 +441,7 @@ export function PictureView({ scene, changed, seq }: { scene: Scene; changed: st
   return (
     <div className="picture">
       {scene.title && <h2 className="picture-title">{scene.title}</h2>}
-      <Diagram scene={scene} changed={changed} seq={seq} />
+      {scene.nodes.length > 0 && <Diagram scene={scene} changed={changed} seq={seq} />}
       {scene.cards.length > 0 && (
         <div className="cards">
           {scene.cards.map((c) => <Card key={hot.has(c.id) ? `${c.id}:${seq}` : c.id} card={c} hot={hot.has(c.id)} seq={seq} />)}

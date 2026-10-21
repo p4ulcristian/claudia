@@ -4,7 +4,7 @@
 export const COLORS = ["green", "red", "amber", "blue", "grey", "violet"] as const;
 export const SHAPES = ["circle", "box", "pill", "diamond"] as const;
 export const STATES = ["todo", "active", "done", "blocked"] as const;
-export const CARD_KINDS = ["text", "list", "table", "code"] as const;
+export const CARD_KINDS = ["text", "list", "table", "code", "page"] as const;
 
 export type Color = (typeof COLORS)[number];
 
@@ -39,6 +39,9 @@ export type SceneCard = {
   rows?: string[][];
   code?: string;
   lang?: string;
+  // page cards: an HTML page shown in a sandboxed frame; height in px, or fitted to the page.
+  html?: string;
+  height?: number;
 };
 
 export type Scene = {
