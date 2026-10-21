@@ -3,10 +3,10 @@ import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
 import { AskPanel, PermitPanel } from "./panels";
-import { TasksPanel } from "./tasks";
 import { TimelineView } from "./timeline";
 import { RightBar } from "./rightbar";
-import { ChangesPanel, clip, tilde } from "./changes";
+import { clip, tilde } from "./changes";
+import { ActivityPill } from "./activity";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { GithubPrompt } from "./github-prompt";
@@ -322,6 +322,20 @@ function App() {
   const shownChanges = changesTurn ? live.changes.filter((c) => c.turn === changesTurn) : [];
   const lastUser = [...live.items].reverse().find((i) => i.k === "user") as Extract<Item, { k: "user" }> | undefined;
   const changesLabel = viewing ? "Earlier turn" : changesTurn === lastUser?.uuid ? "This turn" : "Last turn with changes";
+  // Background agents and this turn's changes, as a pill: over the picture, or in the timeline's header.
+  const activity = (floating: boolean) => (
+    <ActivityPill
+      chat={current}
+      tasks={live.tasks}
+      subs={live.subs}
+      changes={shownChanges}
+      changesLabel={changesLabel}
+      folder={live.settings.folder}
+      onStop={(task) => send({ t: "stop_task", chat: current, task })}
+      onTimeline={() => setRightView("timeline")}
+      floating={floating}
+    />
+  );
 
   // Step through the pictures Claude made in this chat; the newest one is "live".
   const picIndex = viewing ? live.pictures.findIndex((p) => p.turn === viewing) : live.pictures.length - 1;
@@ -504,6 +518,7 @@ function App() {
           </section>
         ) : (
         <section className="right">
+          {rightView === "picture" && activity(true)}
           {rightView === "timeline" ? (
           <div className="right-tl">
             {!readOnly && live.permits.length > 0 && (
@@ -511,14 +526,12 @@ function App() {
                 {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
               </div>
             )}
-            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} />
+            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} extra={activity(false)} />
           </div>
           ) : (
           <div className="right-scroll">
-          {(live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
+          {!readOnly && live.permits.length > 0 && (
             <div className="interface">
-              {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} onTimeline={() => setRightView("timeline")} />}
-              {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} />}
               {!readOnly && live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
             </div>
           )}

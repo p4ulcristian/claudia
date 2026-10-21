@@ -164,9 +164,11 @@ function DiffView({ chat, change, split }: { chat: string; change: ChangeMeta; s
   );
 }
 
-export function ChangesPanel({ chat, changes, folder, label }: { chat: string; changes: ChangeMeta[]; folder: string | null; label: string }) {
+// alwaysOpen: shown in the activity pill's dropdown, where opening it is the click on the pill.
+export function ChangesPanel({ chat, changes, folder, label, alwaysOpen }: { chat: string; changes: ChangeMeta[]; folder: string | null; label: string; alwaysOpen?: boolean }) {
   // Folded until opened; a new chat or a new turn's changes fold it again.
-  const [open, setOpen] = useState(false);
+  const [folded, setOpen] = useState(false);
+  const open = alwaysOpen || folded;
   const newest = changes.at(-1)?.id;
   useEffect(() => setOpen(false), [chat, newest]);
   const [split, setSplit] = useState(() => store.get("diff-split") === "1");
@@ -176,8 +178,8 @@ export function ChangesPanel({ chat, changes, folder, label }: { chat: string; c
   return (
     <section className="panel changes">
       <div className="changes-head">
-        <button className="tasks-head" onClick={() => setOpen(!open)}>
-          <span className={`chev ${open ? "open" : ""}`}>›</span>
+        <button className="tasks-head" onClick={() => setOpen(!open)} disabled={alwaysOpen}>
+          {!alwaysOpen && <span className={`chev ${open ? "open" : ""}`}>›</span>}
           <b>Changes</b>
           <span className="muted small">{label} · {changes.length} {changes.length === 1 ? "file" : "files"} · <span className="plus">+{added}</span> <span className="minus">−{removed}</span></span>
         </button>

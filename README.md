@@ -46,4 +46,4 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/db.ts`: pictures, changes and chat settings
 - `src/timeline.ts`: lanes and steps from the session files, read only from where the last read stopped
 - `deploy/`: a shared server: `install.sh`, the page unit, the per-profile runner unit, and `update.sh` + its timer (follows GitHub main every 5 min; runners not restarted)
-- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right, `rightbar.tsx` the bar under it
+- `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right, `rightbar.tsx` the bar under it, `activity.tsx` the pill at its top right (background agents + changes)

@@ -35,7 +35,8 @@ function category(name: string) {
   return "other";
 }
 
-export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
+// extra: shown at the right end of the header (the activity pill).
+export function TimelineView({ chat, live, extra }: { chat: string; live: boolean; extra?: React.ReactNode }) {
   const [data, setData] = useState<Timeline | null>(null);
   const [missing, setMissing] = useState(false);
   const [open, setOpen] = useState<string | null>(null); // lane:id of the step shown in full
@@ -130,8 +131,13 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
     return () => window.removeEventListener("keydown", key, true);
   }, [open]);
 
-  if (missing) return <div className="tl"><p className="muted tl-empty">Nothing yet: the timeline fills in once Claude starts working in this chat.</p></div>;
-  if (!data) return <div className="tl"><p className="muted tl-empty">Loading…</p></div>;
+  if (missing || !data)
+    return (
+      <div className="tl">
+        <div className="tl-head"><b>Timeline</b>{extra}</div>
+        <p className="muted tl-empty">{missing ? "Nothing yet: the timeline fills in once Claude starts working in this chat." : "Loading…"}</p>
+      </div>
+    );
 
   const agents = data.lanes.filter((l) => l.kind !== "main");
   const running = agents.filter((l) => l.running).length;
@@ -191,6 +197,7 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
           </select>
         )}
         {onlyLane && <button className="link" onClick={() => setOnly(null)}>show everything</button>}
+        {extra}
       </div>
       <div
         className="tl-scroll"
