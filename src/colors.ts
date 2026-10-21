@@ -1,6 +1,6 @@
 // The colours a chat can wear; null = none. The page maps each name to a theme colour (--c-<name>).
 export const CHAT_COLORS = [
-  "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan",
+  "burgundy", "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan",
   "sky", "blue", "indigo", "violet", "purple", "magenta", "pink", "brown",
 ] as const;
 

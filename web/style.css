@@ -10,7 +10,7 @@
   --accent: #f2e3a0;
   --wood: #7a5a3b; --wood2: #5d4329; --wood-hi: #94704b;
   /* Chat colours (see src/colors.ts), and the text colour that sits on them. */
-  --c-red: #f0785f; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
+  --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
   --c-sky: #6fb3f0; --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
   --c-purple: #d08cf0; --c-magenta: #f06ad8; --c-pink: #f080b8; --c-brown: #c49a72;
@@ -19,11 +19,9 @@
   color-scheme: dark;
 }
 
-/* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
-   so switching chats repaints the window. Diff and picture colours keep their meaning. */
+/* A chat's colour tints panels, lines and text, so switching chats repaints the window; the
+   backgrounds stay plain. Diff and picture colours keep their meaning. */
 :root[data-chat] {
-  --bg: color-mix(in oklch, var(--hue) 18%, #2c3732); --bg2: color-mix(in oklch, var(--hue) 14%, #232c28);
-  --board: color-mix(in oklch, var(--hue) 15%, #2a3531);
   --panel: color-mix(in oklch, var(--hue) 20%, #33403a); --panel2: color-mix(in oklch, var(--hue) 24%, #3a4842);
   --line: color-mix(in oklch, var(--hue) 32%, #47564f);
   --fg: color-mix(in oklch, var(--hue) 8%, #eef0e8); --muted: color-mix(in oklch, var(--hue) 25%, #a0ada5);
@@ -376,7 +374,7 @@ code, pre { font-family: var(--mono); }
 .color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
 .color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
 .color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
-.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(4, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
