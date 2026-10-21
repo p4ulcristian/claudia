@@ -17,7 +17,8 @@ How to draw well:
 - Use state to show progress: todo, active (what you're on now), done, blocked.
 - Colours carry meaning: green = good / chosen / done, red = problem / risk, amber = caution / trade-off, blue = neutral focus, grey = background, violet = the user.
 - Groups put related things in one frame (a server, a file, a phase).
-- Cards are for things the user should read: a short text, a list, a table (e.g. pros and cons), a bit of code. Keep each card small.
+- Cards are for things the user should read: a short text, a list, a table (e.g. pros and cons, data), code. Keep text and list cards small. Code and table cards take the picture's full width.
+- This is a programmer's tool: when code is the point (the change you made, the function at fault, a config, a command to run), show the real snippet in a code card: set lang, title it with the file and line (src/chat.ts:412), and keep it to the lines that matter (up to about 40).
 - Keep it to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.

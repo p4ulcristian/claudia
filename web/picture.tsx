@@ -370,10 +370,15 @@ function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }
     return "";
   }, [card]);
   return (
-    <section className={`card c-${card.color ?? "grey"} ${hot ? "hot" : ""}`}>
+    <section className={`card c-${card.color ?? "grey"} k-${card.kind ?? "text"} ${hot ? "hot" : ""}`}>
       {card.title && <h3>{card.title}</h3>}
       {card.kind === "text" && <div className="md" dangerouslySetInnerHTML={{ __html: html }} />}
-      {card.kind === "code" && <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>}
+      {card.kind === "code" && (
+        <div className="code">
+          <button className="copy" type="button" title="Copy">Copy</button>
+          <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre>
+        </div>
+      )}
       {card.kind === "list" && (
         <ul>{(card.items ?? []).map((it, i) => <li key={i} dangerouslySetInnerHTML={{ __html: md(it) }} />)}</ul>
       )}

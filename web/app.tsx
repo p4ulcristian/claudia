@@ -96,11 +96,25 @@ function ago(t: number) {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// Events held while a chat opened can repeat items its history already had: those are skipped.
+const itemKey = (it: Item) => (it.k === "user" ? `u:${it.uuid}` : `${it.k}:${it.id}`);
+const fresher = (have: Item[], add: Item[]) => {
+  const seen = new Set(have.map(itemKey));
+  return add.filter((it) => !seen.has(itemKey(it)));
+};
+
 function apply(l: Live, ev: ChatEvent): Live {
   switch (ev.t) {
-    case "user": return { ...l, items: [...l.items, ev.item], error: undefined, lastTurn: undefined };
+    case "user": return { ...l, items: [...l.items, ...fresher(l.items, [ev.item])], error: undefined, lastTurn: undefined };
+    // A queued message joins the chat where Claude took it in: at the end, as things stand now.
+    case "queue": {
+      const it = l.items.find((i): i is Extract<Item, { k: "user" }> => i.k === "user" && i.uuid === ev.uuid);
+      if (!it?.queued) return l;
+      const rest = l.items.filter((i) => i !== it);
+      return { ...l, items: ev.state === "started" ? [...rest, { ...it, queued: undefined }] : rest };
+    }
     case "delta": return { ...l, partial: l.partial + ev.text };
-    case "items": return { ...l, partial: "", items: [...l.items, ...ev.items] };
+    case "items": return { ...l, partial: "", items: [...l.items, ...fresher(l.items, ev.items)] };
     case "tool_result":
       return { ...l, items: l.items.map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text } } : it)) };
     case "scene": {

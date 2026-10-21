@@ -101,7 +101,9 @@ export function Messages(props: {
   const { items, partial, running } = props;
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-  const bs = blocks(items);
+  // Messages sent while Claude works wait below everything until Claude takes them in.
+  const queued = items.filter((it): it is Extract<Item, { k: "user" }> => it.k === "user" && !!it.queued);
+  const bs = blocks(queued.length ? items.filter((it) => !(it.k === "user" && it.queued)) : items);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -151,6 +153,15 @@ export function Messages(props: {
           <span className="pulse" /> {props.note ?? "Working"} · <Elapsed since={props.runningSince} />
         </div>
       )}
+      {queued.map((it) => (
+        <div key={it.uuid} className="msg user queued" title="Claude reads this at its next step">
+          <div className="bubble">
+            {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
+            <Markdown text={it.text} />
+          </div>
+          <span className="queued-tag">queued</span>
+        </div>
+      ))}
       {props.stopped && !running && <div className="muted small">Stopped.</div>}
       {props.error && <div className="error-line">{props.error}</div>}
     </div>

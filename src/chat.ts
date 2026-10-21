@@ -18,7 +18,8 @@ const DRAW_TOOL = "mcp__picture__draw";
 const FOLDER_TOOL = "mcp__workspace__set_folder";
 
 export type Item =
-  | { k: "user"; uuid: string; text: string; images: number }
+  // queued: sent while Claude was working and not taken in yet; it waits below the chat until then.
+  | { k: "user"; uuid: string; text: string; images: number; queued?: boolean }
   | { k: "text"; id: string; text: string }
   | { k: "tool"; id: string; name: string; title: string; detail: string; result?: { error: boolean; text: string } }
   | { k: "note"; id: string; text: string };
@@ -57,6 +58,8 @@ export type Permit = { id: string; tool: string; title: string; description: str
 
 export type ChatEvent =
   | { t: "user"; item: Item }
+  // A queued message was taken in (it joins the chat where Claude read it) or dropped.
+  | { t: "queue"; uuid: string; state: "started" | "cancelled" }
   | { t: "delta"; text: string }
   | { t: "items"; items: Item[] }
   | { t: "tool_result"; id: string; error: boolean; text: string }
@@ -390,8 +393,9 @@ export class Chat {
     this.turn = uuid;
     this.drew = false;
     if (this.settings.folder) this.snapshot(this.settings.folder);
+    const queued = this.running;
     this.setRunning(true);
-    const item: Item = { k: "user", uuid, text, images: images.length };
+    const item: Item = { k: "user", uuid, text, images: images.length, ...(queued ? { queued } : {}) };
     this.unsaved.set(uuid, item);
     this.emit({ t: "user", item });
     this.inbox!.push({ type: "user", uuid: uuid as any, session_id: this.id, parent_tool_use_id: null, message: { role: "user", content } });
@@ -422,6 +426,19 @@ export class Chat {
     this.permits.delete(id);
     w.resolve(allow ? { behavior: "allow", updatedInput: w.input } : { behavior: "deny", message: "The user said no." });
     this.emit({ t: "permit_done", id });
+  }
+
+  // Claude Code reports each sent message as queued, then started (taken in) or cancelled.
+  private lifecycle(m: { command_uuid?: string; state?: string }) {
+    const it = m.command_uuid ? this.unsaved.get(m.command_uuid) : undefined;
+    if (!it || it.k !== "user" || !it.queued) return;
+    if (m.state === "started") {
+      delete it.queued;
+      this.emit({ t: "queue", uuid: it.uuid, state: "started" });
+    } else if (m.state === "cancelled") {
+      this.unsaved.delete(it.uuid);
+      this.emit({ t: "queue", uuid: it.uuid, state: "cancelled" });
+    }
   }
 
   // The loaded history plus what was sent but isn't in the session file yet.
@@ -685,6 +702,9 @@ export class Chat {
         return;
       case "system":
         return this.system(m as any);
+      default:
+        if ((m as any).type === "command_lifecycle") this.lifecycle(m as any);
+        return;
     }
   }
 }

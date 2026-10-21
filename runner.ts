@@ -64,33 +64,37 @@ async function listChats(all: boolean, archivedView: boolean) {
     }));
 }
 
+// Listen first and take the live state now; only the transcript is read afterwards. Events that
+// come while it loads are held and sent after it (the page drops items it already has), so none is lost.
 async function openChat(ws: Sock, id: string) {
   ws.data.off?.();
   ws.data.chat = id;
   const c = chat(id);
+  const held: ChatEvent[] = [];
+  let ready = false;
+  const forward = (ev: ChatEvent) => ws.send(JSON.stringify({ t: "event", chat: id, ev }));
+  ws.data.off = c.on((ev: ChatEvent) => (ready ? forward(ev) : held.push(ev)));
+  const now = {
+    pictures: store.pictures(id),
+    scene: c.scene,
+    running: c.running,
+    since: c.since,
+    partial: c.partial,
+    asks: [...c.asks.values()].map((w) => w.value),
+    permits: [...c.permits.values()].map((w) => w.value),
+    tasks: [...c.tasks.values()],
+    // (copies: these lists grow in place, and their new entries come again as held events)
+    subs: Object.fromEntries([...c.subs].map(([k, v]) => [k, [...v]])),
+    context: c.context,
+    settings: c.settings,
+    model: c.model,
+    changes: store.changes(id),
+  };
   const items = await loadHistory(id).catch(() => []);
   if (ws.data.chat !== id) return;
-  ws.send(
-    JSON.stringify({
-      t: "history",
-      chat: id,
-      items: c.withUnsaved(items),
-      pictures: store.pictures(id),
-      scene: c.scene,
-      running: c.running,
-      since: c.since,
-      partial: c.partial,
-      asks: [...c.asks.values()].map((w) => w.value),
-      permits: [...c.permits.values()].map((w) => w.value),
-      tasks: [...c.tasks.values()],
-      subs: Object.fromEntries(c.subs),
-      context: c.context,
-      settings: c.settings,
-      model: c.model,
-      changes: store.changes(id),
-    }),
-  );
-  ws.data.off = c.on((ev: ChatEvent) => ws.send(JSON.stringify({ t: "event", chat: id, ev })));
+  ws.send(JSON.stringify({ t: "history", chat: id, items: c.withUnsaved(items), ...now }));
+  ready = true;
+  for (const ev of held.splice(0)) forward(ev);
 }
 
 const json = (v: unknown, status = 200) => Response.json(v, { status });
