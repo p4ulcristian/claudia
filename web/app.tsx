@@ -161,6 +161,11 @@ function App() {
   const [foldedAt, setFoldedAt] = useState(() => (store.get("folded") === "1" ? Date.now() : 0));
   const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
   const [editing, setEditing] = useState(false);
+  // A question fills the window; peeking hides it to look at the picture, and a new question shows again.
+  const [peek, setPeek] = useState(false);
+  const peekAsk = useCallback(() => setPeek(true), []);
+  const askId = live.asks[0]?.id;
+  useEffect(() => setPeek(false), [askId]);
   const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", accountLabel: null, defaultModel: "", at: 0 });
   // This Claudia's name, and who is signed in with which profile.
   const [me, setMe] = useState<Me | null>(null);
@@ -341,6 +346,14 @@ function App() {
       {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
+      {!readOnly && live.asks.length > 0 && (
+        <>
+          <div className="ask-modal" hidden={peek} role="dialog" aria-modal="true" aria-label="Claude asks">
+            {live.asks.map((a) => <AskPanel key={a.id} ask={a} active={!peek} onPeek={peekAsk} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
+          </div>
+          {peek && <button className="ask-return" onClick={() => setPeek(false)}>Claude asks · answer</button>}
+        </>
+      )}
       <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
       <div className="sidebar-slot">
         {!showSidebar && (
@@ -469,12 +482,11 @@ function App() {
         ) : (
         <section className="right">
           <div className="right-scroll">
-          {(live.asks.length > 0 || live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
+          {(live.permits.length > 0 || live.tasks.length > 0 || shownChanges.length > 0) && (
             <div className="interface">
               {live.tasks.length > 0 && <TasksPanel chat={current} tasks={live.tasks} subs={live.subs} onStop={(task) => send({ t: "stop_task", chat: current, task })} />}
               {shownChanges.length > 0 && <ChangesPanel chat={current} changes={shownChanges} folder={live.settings.folder} label={changesLabel} />}
               {!readOnly && live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
-              {!readOnly && live.asks.map((a) => <AskPanel key={a.id} ask={a} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
             </div>
           )}
           <div className={`stage ${viewing ? "past" : ""}`}>

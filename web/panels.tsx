@@ -1,9 +1,9 @@
-// The right half as an interface: Claude's questions and permission asks.
+// Claude's questions (a fullscreen modal) and permission asks (the right half).
 import React, { useEffect, useRef, useState } from "react";
 import { md } from "./md";
 import type { Ask, Permit } from "./types";
 
-export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Record<string, string>) => void }) {
+export function AskPanel({ ask, active, onPeek, onAnswer }: { ask: Ask; active: boolean; onPeek: () => void; onAnswer: (answers: Record<string, string>) => void }) {
   const [picked, setPicked] = useState<Record<number, string[]>>({});
   const [other, setOther] = useState<Record<number, string>>({});
   const [focus, setFocus] = useState<Record<number, string>>({});
@@ -26,10 +26,23 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
     });
 
   // Keyboard: Enter answers (unless there's typed text in the chat box, which answers by itself);
-  // 1–9 pick an option of the first question still without one.
+  // 1–9 pick an option of the first question still without one; Esc peeks at the picture
+  // (caught before the window's Esc, which would stop the chat). Nothing while peeking.
   const keys = useRef({ submit, toggleOption, picked, other });
   keys.current = { submit, toggleOption, picked, other };
   useEffect(() => {
+    if (!active) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onPeek();
+    };
+    window.addEventListener("keydown", onEsc, true);
+    return () => window.removeEventListener("keydown", onEsc, true);
+  }, [active, onPeek]);
+  useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       const typing = t.closest?.("textarea, input:not([type=checkbox]):not([type=radio]), [contenteditable]");
@@ -51,7 +64,7 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ask]);
+  }, [ask, active]);
 
   return (
     <section className="panel ask">
@@ -106,7 +119,8 @@ export function AskPanel({ ask, onAnswer }: { ask: Ask; onAnswer: (answers: Reco
         );
       })}
       <div className="actions">
-        <span className="muted small key-hint">1–{Math.min(9, Math.max(...ask.questions.map((q) => q.options.length)))} to pick · Enter to answer</span>
+        <span className="muted small key-hint">1–{Math.min(9, Math.max(...ask.questions.map((q) => q.options.length)))} to pick · Enter to answer · Esc to see the picture</span>
+        <button onClick={onPeek}>See picture</button>
         <button className="primary" disabled={!ready} onClick={submit}>Answer</button>
       </div>
     </section>
