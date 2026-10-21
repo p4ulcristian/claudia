@@ -28,7 +28,8 @@ export type LiveSession = {
   pending: Rpc[]; // rpcs nobody answered yet
 };
 
-export type CallMethod = "interrupt" | "setModel" | "applyFlagSettings" | "stopTask" | "getContextUsage";
+// setMcp: replace a live session's tools (args: Record<name, McpDef>), e.g. after the runner changed them.
+export type CallMethod = "interrupt" | "setModel" | "applyFlagSettings" | "stopTask" | "getContextUsage" | "setMcp";
 
 export type ToHost =
   | { op: "hello" }

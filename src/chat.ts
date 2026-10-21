@@ -202,6 +202,9 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
   return items;
 }
 
+const TOOLS = { picture: PICTURE_MCP, workspace: WORKSPACE_MCP };
+const TOOLS_VERSION = Bun.hash(JSON.stringify(TOOLS)).toString(36);
+
 // The session host the chats' Claude Code processes live in (set by the runner at start).
 let host: HostClient | null = null;
 export function useHost(h: HostClient) { host = h; }
@@ -505,10 +508,11 @@ export class Chat implements SessionHandler {
         ...(this.settings.model ? { model: this.settings.model } : {}),
         ...(this.settings.effort ? { effort: this.settings.effort } : {}),
       },
-      mcp: { picture: PICTURE_MCP, workspace: WORKSPACE_MCP },
+      mcp: TOOLS,
       hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: EDIT_TOOLS }] },
     }, this);
     this.q.kv("account", acct.name);
+    this.q.kv("tools", TOOLS_VERSION);
   }
 
   // The host asks: a tool call, a hook, or whether a tool may run.
@@ -559,6 +563,9 @@ export class Chat implements SessionHandler {
     }
     this.running = false;
     this.setRunning(live.busy);
+    // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
+    if (kv.tools !== TOOLS_VERSION)
+      session.setMcp(TOOLS).then(() => session.kv("tools", TOOLS_VERSION), (err) => console.error(`[${this.id.slice(0, 8)}] tools not updated: ${err?.message ?? err}`));
     if (live.busy) this.since = Number(kv.since ?? Date.now());
     else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
     return this;

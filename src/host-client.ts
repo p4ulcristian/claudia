@@ -3,7 +3,7 @@
 // back every live session (with this turn's messages and what the runner kept there), so chats go on.
 import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Socket } from "bun";
-import { HOST_SOCKET, type CallMethod, type FromHost, type LiveSession, type Rpc, type RpcKind, type StartSpec, type ToHost } from "./host-protocol";
+import { HOST_SOCKET, type CallMethod, type FromHost, type LiveSession, type McpDef, type Rpc, type RpcKind, type StartSpec, type ToHost } from "./host-protocol";
 
 export interface SessionHandler {
   onMessage(m: SDKMessage): void;
@@ -23,6 +23,7 @@ export class RemoteSession {
   applyFlagSettings(s: Record<string, unknown>) { return this.host.call(this.id, "applyFlagSettings", [s]); }
   stopTask(taskId: string) { return this.host.call(this.id, "stopTask", [taskId]); }
   getContextUsage(o: Record<string, unknown>): Promise<any> { return this.host.call(this.id, "getContextUsage", [o]); }
+  setMcp(defs: Record<string, McpDef>) { return this.host.call(this.id, "setMcp", [defs]); }
 }
 
 type Conn = { buf: string; dec: TextDecoder; out: Buffer[] };

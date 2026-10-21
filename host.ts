@@ -6,7 +6,7 @@ import { createSdkMcpServer, query, tool, type Options, type Query, type SDKMess
 import { z } from "zod";
 import { unlink, chmod } from "node:fs/promises";
 import type { Socket } from "bun";
-import { HOST_SOCKET, type FromHost, type LiveSession, type Rpc, type RpcKind, type StartSpec, type ToHost } from "./src/host-protocol";
+import { HOST_SOCKET, type FromHost, type LiveSession, type McpDef, type Rpc, type RpcKind, type StartSpec, type ToHost } from "./src/host-protocol";
 
 // Buffered between results: what a restarted runner needs to pick a turn up again.
 const MAX_BUFFER = 4000;
@@ -87,12 +87,11 @@ function prune(buffer: SDKMessage[]): SDKMessage[] {
     m.type === "system" && KEEP_SYSTEM.has(m.subtype) && (m.subtype !== "task_progress" || lastProgress.get(m.task_id) === i));
 }
 
-function start(id: string, spec: StartSpec) {
-  sessions.get(id) && close(id);
-  const inbox = new Inbox();
-  const mcpServers: Record<string, any> = {};
-  for (const [name, def] of Object.entries(spec.mcp)) {
-    mcpServers[name] = createSdkMcpServer({
+// The runner's tools as in-process MCP servers whose every call is asked of the runner.
+function mcpServers(id: string, defs: Record<string, McpDef>) {
+  const out: Record<string, any> = {};
+  for (const [name, def] of Object.entries(defs)) {
+    out[name] = createSdkMcpServer({
       name,
       version: def.version,
       alwaysLoad: def.alwaysLoad,
@@ -100,12 +99,18 @@ function start(id: string, spec: StartSpec) {
         tool(t.name, t.description, (z.fromJSONSchema(t.schema as any) as any).shape, (args) => rpc(id, "mcp", { server: name, tool: t.name, args }))),
     });
   }
+  return out;
+}
+
+function start(id: string, spec: StartSpec) {
+  sessions.get(id) && close(id);
+  const inbox = new Inbox();
   const hooks: Record<string, any[]> = {};
   for (const [event, matchers] of Object.entries(spec.hooks))
     hooks[event] = matchers.map((m, index) => ({ ...m, hooks: [async (input: unknown) => rpc(id, "hook", { event, index, input })] }));
   const options: Options = {
     ...(spec.options as Options),
-    mcpServers,
+    mcpServers: mcpServers(id, spec.mcp),
     hooks,
     canUseTool: (name, input, opts) =>
       rpc(id, "canUseTool", { name, input, toolUseID: opts.toolUseID, title: opts.title, description: opts.description }, opts.signal),
@@ -164,6 +169,12 @@ async function call(s: Session, method: string, args: any[]) {
     case "applyFlagSettings": return s.q.applyFlagSettings(args[0]);
     case "stopTask": return s.q.stopTask(args[0]);
     case "getContextUsage": return s.q.getContextUsage(args[0]);
+    case "setMcp": {
+      // A server under the same name is kept as it was: take them all off, then put the new ones on.
+      const off = await s.q.setMcpServers({});
+      const on = await s.q.setMcpServers(mcpServers(s.id, args[0]));
+      return { off, on };
+    }
   }
   throw new Error(`unknown call ${method}`);
 }
