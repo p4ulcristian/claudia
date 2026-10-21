@@ -1,0 +1,13 @@
+[Unit]
+Description=Claudia session host: the chats' Claude Code processes, kept across runner restarts
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+WorkingDirectory=%h/Work/tools/claudia
+Environment=NODE_ENV=production
+ExecStart=%h/.local/bin/bun %h/Work/tools/claudia/host.ts
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

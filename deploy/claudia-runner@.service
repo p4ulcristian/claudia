@@ -2,15 +2,17 @@
 # its socket: the runtime folder is the profile's, with an ACL for the page's user.
 [Unit]
 Description=Claudia runner for profile %i
-After=network-online.target
-Wants=network-online.target
+After=network-online.target claudia-host@%i.service
+Wants=network-online.target claudia-host@%i.service
+# The same /tmp as the host, where Claude Code writes background tasks' output.
+JoinsNamespaceOf=claudia-host@%i.service
 
 [Service]
 User=claudia-%i
 Group=claudia-%i
 SupplementaryGroups=claudia-run
 EnvironmentFile=/etc/claudia/env
-Environment=NODE_ENV=production RUNNER_SOCKET=/run/claudia-%i/runner.sock
+Environment=NODE_ENV=production RUNNER_SOCKET=/run/claudia-%i/runner.sock CLAUDIA_HOST_SOCKET=/run/claudia-host-%i/host.sock
 WorkingDirectory=/srv/claudia
 RuntimeDirectory=claudia-%i
 RuntimeDirectoryMode=0710
@@ -18,13 +20,12 @@ ExecStartPre=+/usr/bin/setfacl -m u:claudia:x,m::x -m d:u:claudia:rw /run/claudi
 ExecStart=/usr/local/bin/bun /srv/claudia/runner.ts
 Restart=always
 RestartSec=3
-# Restarting the runner stops this profile's chats, nothing else.
+# Chats live in claudia-host@%i: restarting the runner leaves them running.
 KillMode=control-group
 NoNewPrivileges=yes
 ProtectSystem=full
 PrivateTmp=yes
-MemoryMax=16G
-CPUQuota=800%
+MemoryMax=4G
 
 [Install]
 WantedBy=multi-user.target

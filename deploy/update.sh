@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Keep a shared server on GitHub's main (run as root by claudia-update.timer): when main's commit is
 # not the one in /srv/claudia, export main with git archive (which writes src/commit.txt) and run
-# that copy's install.sh. Runners are not restarted, so chats keep going; runner code changes wait
-# for `install.sh <checkout> --restart-runners` or the next runner restart.
+# that copy's install.sh. Runners restart (chats keep going in the session hosts); host.ts changes
+# wait for `install.sh <checkout> --restart-hosts` or the next host restart.
 set -euo pipefail
 repo=https://github.com/p4ulcristian/claudia
 mirror=/var/lib/claudia-update/claudia.git

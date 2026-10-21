@@ -2,7 +2,8 @@
 // (server.ts) serves the page and passes everything else here, so restarting it keeps chats running.
 import { listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
-import { Chat, WORK, loadHistory, type ChatEvent } from "./src/chat";
+import { Chat, WORK, loadHistory, useHost, type ChatEvent } from "./src/chat";
+import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, pickColor } from "./src/colors";
 import { store } from "./src/db";
 import { watch } from "node:fs";
@@ -99,6 +100,14 @@ async function openChat(ws: Sock, id: string) {
 }
 
 const json = (v: unknown, status = 200) => Response.json(v, { status });
+
+// The chats' Claude Code processes live in the session host (host.ts), so restarting this runner
+// leaves them running: the host hands back every live session, and its chat picks it up. Chats are
+// served only once that happened, so none is started twice.
+const host = new HostClient((live, session) => chat(live.id).adopt(live, session));
+useHost(host);
+await host.connected;
+console.log("session host connected");
 
 if (SOCKET) await unlink(SOCKET).catch(() => {});
 

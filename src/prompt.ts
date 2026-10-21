@@ -1,7 +1,7 @@
 // What Claude is told about the two halves of the screen, and the draw tool.
-import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { CARD_KINDS, COLORS, SHAPES, STATES, type DrawInput } from "./scene";
+import type { McpDef } from "./host-protocol";
+import { CARD_KINDS, COLORS, SHAPES, STATES } from "./scene";
 
 export const SYSTEM_APPEND = `
 # Claudia
@@ -82,35 +82,27 @@ const drawShape = {
 };
 
 // The working-folder tool, one per chat like the picture.
-export function workspaceServer(onSet: (path: string) => Promise<string>) {
-  return createSdkMcpServer({
-    name: "workspace",
-    version: "1.0.0",
-    alwaysLoad: true,
-    tools: [
-      tool(
-        "set_folder",
-        "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects.",
-        { path: z.string().describe("The project's root folder") },
-        async (args) => ({ content: [{ type: "text", text: await onSet(args.path) }] }),
-      ),
-    ],
-  });
-}
+// The tools Claudia gives Claude. The session host serves them and asks the runner to run each call.
+export const WORKSPACE_MCP: McpDef = {
+  version: "1.0.0",
+  alwaysLoad: true,
+  tools: [
+    {
+      name: "set_folder",
+      description: "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects.",
+      schema: z.toJSONSchema(z.object({ path: z.string().describe("The project's root folder") })) as Record<string, unknown>,
+    },
+  ],
+};
 
-// One server per chat, so each draw call lands in the chat that made it.
-export function pictureServer(onDraw: (input: DrawInput) => string) {
-  return createSdkMcpServer({
-    name: "picture",
-    version: "1.0.0",
-    alwaysLoad: true,
-    tools: [
-      tool(
-        "draw",
-        "Change the picture on the right half of the user's screen. Nodes, arrows, groups and cards are upserted by id, so send only what changed.",
-        drawShape,
-        async (args) => ({ content: [{ type: "text", text: onDraw(args as DrawInput) }] }),
-      ),
-    ],
-  });
-}
+export const PICTURE_MCP: McpDef = {
+  version: "1.0.0",
+  alwaysLoad: true,
+  tools: [
+    {
+      name: "draw",
+      description: "Change the picture on the right half of the user's screen. Nodes, arrows, groups and cards are upserted by id, so send only what changed.",
+      schema: z.toJSONSchema(z.object(drawShape)) as Record<string, unknown>,
+    },
+  ],
+};

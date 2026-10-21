@@ -3,9 +3,10 @@
 Chat with Claude on the left; Claude explains on the right, in a picture it draws as it works. Chat stays short, like two friends talking; the explaining lives in the picture. When Claude asks you something, the right side shows it as buttons.
 
 - Open: `omarchy-launch-webapp http://claudia.localhost:4510/`
-- Two services (user units, symlinked into ~/.config/systemd/user), so the page can restart without stopping chats:
+- Three services (user units, symlinked into ~/.config/systemd/user), so the page and the runner can restart without stopping chats:
   - `claudia.service` (`server.ts`, :4510): the page, and a pass-through of `/api` and `/ws` to the runner. After edits to `web/`, `server.ts`, `src/proxy.ts`, `src/tunnel.ts`: `systemctl --user restart claudia`. Chats keep running; the page reconnects.
-  - `claudia-runner.service` (`runner.ts`, 127.0.0.1:4511): the Claude sessions, the chat socket, the API. After edits to `runner.ts` or the rest of `src/`: `systemctl --user restart claudia-runner`. This stops every running chat.
+  - `claudia-runner.service` (`runner.ts`, 127.0.0.1:4511): the chats, the chat socket, the API. After edits to `runner.ts` or the rest of `src/`: `systemctl --user restart claudia-runner`. Chats keep running: their Claude Code lives in the host, which hands every live session back.
+  - `claudia-host.service` (`host.ts`, `$XDG_RUNTIME_DIR/claudia-host.sock`): the session host, which owns every chat's Claude Code process. Restarting it stops every running chat (the next message resumes it), so it is kept small and rarely changes; after edits to `host.ts` or `src/host-protocol.ts`: `systemctl --user restart claudia-host`.
 - Dev with hot reload: stop `claudia`, run `bun --hot server.ts` (the runner keeps serving chats)
 
 ## Decisions (2026-10-16)
@@ -27,11 +28,14 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 12. A timeline (2026-10-21) in place of the picture (Picture | Timeline at the bottom right, Alt+T): every step of the chat and its subagents as one feed, top to bottom in time order, with a thin rail per agent on the left showing who ran at the same time (rails are reused by later agents); quiet stretches get a divider with their length; a filter shows one agent and the agents it started. Edit and Write steps show their +/− lines and open as a diff, from the patch Claude Code saves with each result (shell edits have none; the Changes panel covers them). Built from the session files themselves (`<session>.jsonl` and `<session>/subagents/agent-*.jsonl` + `.meta.json`), so it survives runner restarts; a step opens in full from its place in the file.
 
+13. A session host (2026-10-22): each chat's Agent SDK query runs in `host.ts`, not the runner. The host knows nothing about Claudia: it streams messages to the runner and passes every callback (the picture and folder tools, the edit hooks, permission asks) to it as an rpc, waiting while the runner restarts. On reconnect it hands back each live session: whether a turn is running, the current turn's messages (plus background tasks' state), what the runner stored there (turn, before-copies of files, unsent messages), and unanswered rpcs, so questions show again.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files
 
 - `server.ts`: the page; picks the profile and passes `/api` and `/ws` to its runner; the gate's listener
+- `host.ts`: the session host; `src/host-protocol.ts` what it and the runner say; `src/host-client.ts` the runner's end
 - `runner.ts`: chats, WebSocket, chat list, rename, archive
 - `src/proxy.ts`: request and socket pass-through (page → runner, by port or unix socket)
 - `src/profiles.ts`: which profile a request is, where its runner listens; the Claude token file
@@ -45,5 +49,5 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
 - `src/timeline.ts`: lanes and steps from the session files, read only from where the last read stopped
-- `deploy/`: a shared server: `install.sh`, the page unit, the per-profile runner unit, and `update.sh` + its timer (follows GitHub main every 5 min; runners not restarted)
+- `deploy/`: a shared server: `install.sh`, the page unit, the per-profile host and runner units, and `update.sh` + its timer (follows GitHub main every 5 min; runners restart, hosts only with `--restart-hosts`)
 - `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right, `rightbar.tsx` the bar under it, `activity.tsx` the pill at its top right (background agents + changes)

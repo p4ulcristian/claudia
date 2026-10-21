@@ -1,7 +1,9 @@
 [Unit]
 Description=Claudia runner: the Claude sessions behind Claudia's page
 PartOf=graphical-session.target
-After=graphical-session.target
+After=graphical-session.target claudia-host.service
+# The chats' Claude Code processes live in the host, so restarting the runner leaves them running.
+Wants=claudia-host.service
 
 [Service]
 WorkingDirectory=%h/Work/tools/claudia

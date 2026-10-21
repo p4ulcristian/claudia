@@ -1,0 +1,29 @@
+# One profile's Claude Code processes (its chats), as that profile's Linux user. Only the profile's
+# runner talks to it, over a socket in the host's own runtime folder. Restarting it stops the
+# profile's chats; restarting the runner does not.
+[Unit]
+Description=Claudia session host for profile %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=claudia-%i
+Group=claudia-%i
+SupplementaryGroups=claudia-run
+EnvironmentFile=/etc/claudia/env
+Environment=NODE_ENV=production CLAUDIA_HOST_SOCKET=/run/claudia-host-%i/host.sock
+WorkingDirectory=/srv/claudia
+RuntimeDirectory=claudia-host-%i
+RuntimeDirectoryMode=0700
+ExecStart=/usr/local/bin/bun /srv/claudia/host.ts
+Restart=always
+RestartSec=3
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+MemoryMax=16G
+CPUQuota=800%
+
+[Install]
+WantedBy=multi-user.target

@@ -1,12 +1,14 @@
 // One chat = one Claude Code session, driven through the Agent SDK.
-import { query, getSessionMessages, getSessionInfo, type Query, type SDKMessage, type SDKUserMessage, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionMessages, getSessionInfo, type SDKMessage, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
 import { account, type Account } from "./account";
-import { pictureServer, workspaceServer, SYSTEM_APPEND } from "./prompt";
+import { PICTURE_MCP, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
+import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
+import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
 import { applyDraw, emptyScene, type DrawInput, type Scene } from "./scene";
@@ -200,35 +202,23 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
   return items;
 }
 
-// A queue the SDK reads user messages from, for as long as the chat is open.
-class Inbox implements AsyncIterable<SDKUserMessage> {
-  private buf: SDKUserMessage[] = [];
-  private wake: (() => void) | null = null;
-  private done = false;
-  push(m: SDKUserMessage) { this.buf.push(m); this.wake?.(); }
-  end() { this.done = true; this.wake?.(); }
-  async *[Symbol.asyncIterator]() {
-    while (true) {
-      if (this.buf.length) { yield this.buf.shift()!; continue; }
-      if (this.done) return;
-      await new Promise<void>((r) => (this.wake = r));
-      this.wake = null;
-    }
-  }
-}
+// The session host the chats' Claude Code processes live in (set by the runner at start).
+let host: HostClient | null = null;
+export function useHost(h: HostClient) { host = h; }
 
 type Waiting<T> = { value: T; resolve: (r: PermissionResult) => void; input: Record<string, unknown> };
 
-export class Chat {
-  private q: Query | null = null;
+export class Chat implements SessionHandler {
+  private q: RemoteSession | null = null;
   // The account (token) name this chat's Claude Code process was started on.
   private account = "";
-  private inbox: Inbox | null = null;
   private idle: Timer | null = null;
   private listeners = new Set<(e: ChatEvent) => void>();
   private turn = "";
   private drew = false;
   private stopping = false;
+  // Rebuilding state from the host's buffer after a runner restart: no side effects.
+  private replaying = false;
   // Files touched since the last turn ended: their content before the first touch.
   private before = new Map<string, FileState>();
   // Git repos snapshotted at the start of the turn (or when the folder was set): repo root → tree.
@@ -299,13 +289,19 @@ export class Chat {
   private async snapshot(folder: string) {
     const root = await repoRoot(folder);
     if (!root || this.trees.has(root)) return;
-    this.trees.set(root, snapshotTree(root, this.indexFile(root)).catch(() => null));
+    const tree = snapshotTree(root, this.indexFile(root)).catch(() => null);
+    this.trees.set(root, tree);
+    tree.then((t) => this.trees.get(root) === tree && this.q?.kv(`tree:${root}`, t));
   }
 
   // Before Claude first touches a file in this turn, keep what it looked like.
   private async beforeEdit(input: any) {
     const path = editedPath(input);
-    if (path && !this.before.has(path)) this.before.set(path, await readState(path));
+    if (path && !this.before.has(path)) {
+      const state = await readState(path);
+      this.before.set(path, state);
+      this.q?.kv(`before:${path}`, state);
+    }
     return { continue: true };
   }
 
@@ -319,6 +315,7 @@ export class Chat {
   private async finishChanges(turn: string) {
     const trees = [...this.trees];
     this.trees = new Map();
+    for (const [root] of trees) this.q?.kv(`tree:${root}`);
     // Shell edits inside snapshotted repos: compare the folder with its start-of-turn tree.
     for (const [root, start] of trees) {
       const a = await start;
@@ -331,6 +328,7 @@ export class Chat {
     if (!this.before.size) return;
     const touched = [...this.before];
     this.before = new Map();
+    for (const [path] of touched) this.q?.kv(`before:${path}`);
     const made: ChangeMeta[] = [];
     for (const [path, before] of touched) {
       const after = await readState(path);
@@ -392,13 +390,16 @@ export class Chat {
     if (!this.q) await this.start(acct);
     this.turn = uuid;
     this.drew = false;
+    this.q!.kv("turn", uuid);
+    this.q!.kv("drew", false);
     if (this.settings.folder) this.snapshot(this.settings.folder);
     const queued = this.running;
     this.setRunning(true);
     const item: Item = { k: "user", uuid, text, images: images.length, ...(queued ? { queued } : {}) };
     this.unsaved.set(uuid, item);
+    this.q!.kv(`unsaved:${uuid}`, item);
     this.emit({ t: "user", item });
-    this.inbox!.push({ type: "user", uuid: uuid as any, session_id: this.id, parent_tool_use_id: null, message: { role: "user", content } });
+    this.q!.push({ type: "user", uuid: uuid as any, session_id: this.id, parent_tool_use_id: null, message: { role: "user", content } });
   }
 
   async stop() {
@@ -437,6 +438,7 @@ export class Chat {
       this.emit({ t: "queue", uuid: it.uuid, state: "started" });
     } else if (m.state === "cancelled") {
       this.unsaved.delete(it.uuid);
+      this.q?.kv(`unsaved:${it.uuid}`);
       this.emit({ t: "queue", uuid: it.uuid, state: "cancelled" });
     }
   }
@@ -444,21 +446,30 @@ export class Chat {
   // The loaded history plus what was sent but isn't in the session file yet.
   withUnsaved(items: Item[]): Item[] {
     const saved = new Set(items.flatMap((it) => (it.k === "user" ? [it.uuid] : [])));
-    for (const id of this.unsaved.keys()) if (saved.has(id)) this.unsaved.delete(id);
+    for (const id of this.unsaved.keys())
+      if (saved.has(id)) {
+        this.unsaved.delete(id);
+        this.q?.kv(`unsaved:${id}`);
+      }
     return [...items, ...this.unsaved.values()];
   }
 
   close() {
-    this.inbox?.end();
     this.q?.close();
     this.q = null;
-    this.inbox = null;
   }
 
   private setRunning(r: boolean) {
     if (this.running === r) return;
+    if (this.replaying) {
+      this.running = r;
+      return;
+    }
     this.running = r;
-    if (r) this.since = Date.now();
+    if (r) {
+      this.since = Date.now();
+      this.q?.kv("since", this.since);
+    }
     this.emit({ t: "status", running: r });
     this.onChange();
     if (this.idle) clearTimeout(this.idle);
@@ -469,40 +480,88 @@ export class Chat {
     const { scene, changed } = applyDraw(this.scene, input);
     this.scene = scene;
     this.drew = true;
+    this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
     return `Picture updated: ${scene.nodes.length} nodes, ${scene.edges.length} arrows, ${scene.cards.length} cards.`;
   }
 
   private async start(acct: Account) {
+    if (!host) throw new Error("No session host.");
     const exists = !!(await getSessionInfo(this.id, { dir: WORK }).catch(() => undefined));
     if (!exists) store.addChat(this.id);
-    this.inbox = new Inbox();
     this.account = acct.name;
-    this.q = query({
-      prompt: this.inbox,
+    this.q = host.start(this.id, {
       options: {
         cwd: WORK,
         env: acct.env,
         ...(exists ? { resume: this.id } : { sessionId: this.id }),
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
-        mcpServers: { picture: pictureServer((i) => this.draw(i)), workspace: workspaceServer((p) => this.folderTool(p)) },
         allowedTools: [DRAW_TOOL, FOLDER_TOOL],
-        hooks: {
-          PreToolUse: [{ matcher: EDIT_TOOLS, hooks: [async (input: any) => this.beforeEdit(input.tool_input)] }],
-          PostToolUse: [{ matcher: EDIT_TOOLS, hooks: [async (input: any) => this.afterEdit(input.tool_input)] }],
-        },
         // Same as the user's terminal Claude (defaultMode bypassPermissions).
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         includePartialMessages: true,
         ...(this.settings.model ? { model: this.settings.model } : {}),
-        ...(this.settings.effort ? { effort: this.settings.effort as any } : {}),
-        canUseTool: (name, input, opts) => this.ask(name, input, opts),
-        stderr: (s) => console.error(`[${this.id.slice(0, 8)}] ${s.trimEnd()}`),
+        ...(this.settings.effort ? { effort: this.settings.effort } : {}),
       },
-    });
-    this.pump(this.q);
+      mcp: { picture: PICTURE_MCP, workspace: WORKSPACE_MCP },
+      hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: EDIT_TOOLS }] },
+    }, this);
+    this.q.kv("account", acct.name);
+  }
+
+  // The host asks: a tool call, a hook, or whether a tool may run.
+  async onRpc(kind: RpcKind, args: any, signal: AbortSignal): Promise<any> {
+    if (kind === "mcp") {
+      if (args.server === "picture" && args.tool === "draw") return { content: [{ type: "text", text: this.draw(args.args as DrawInput) }] };
+      if (args.server === "workspace" && args.tool === "set_folder") return { content: [{ type: "text", text: await this.folderTool(String(args.args?.path ?? "")) }] };
+      throw new Error(`No tool ${args.server}/${args.tool}`);
+    }
+    if (kind === "hook") {
+      if (args.event === "PreToolUse") return this.beforeEdit(args.input?.tool_input);
+      if (args.event === "PostToolUse") return this.afterEdit(args.input?.tool_input);
+      return { continue: true };
+    }
+    return this.ask(args.name, args.input ?? {}, { signal, toolUseID: args.toolUseID, title: args.title, description: args.description });
+  }
+
+  onMessage(m: SDKMessage) {
+    this.handle(m);
+  }
+
+  // The session ended by itself (Claude Code exited, failed, or the host restarted).
+  onEnd(error?: string) {
+    if (error) this.emit({ t: "error", text: error });
+    this.q = null;
+    this.partial = "";
+    this.setRunning(false);
+  }
+
+  // After a runner restart: the host still runs this chat's Claude Code. Take back what was kept
+  // there, replay this turn's messages, and carry on.
+  adopt(live: LiveSession, session: RemoteSession) {
+    this.q = session;
+    const kv = live.kv;
+    this.account = String(kv.account ?? "");
+    this.turn = String(kv.turn ?? "");
+    this.drew = !!kv.drew;
+    for (const [k, v] of Object.entries(kv)) {
+      if (k.startsWith("before:")) this.before.set(k.slice(7), v as FileState);
+      else if (k.startsWith("tree:")) this.trees.set(k.slice(5), Promise.resolve(v as string | null));
+      else if (k.startsWith("unsaved:")) this.unsaved.set(k.slice(8), v as Item);
+    }
+    this.replaying = true;
+    try {
+      for (const m of live.buffer) this.handle(m);
+    } finally {
+      this.replaying = false;
+    }
+    this.running = false;
+    this.setRunning(live.busy);
+    if (live.busy) this.since = Number(kv.since ?? Date.now());
+    else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
+    return this;
   }
 
   private ask(name: string, input: Record<string, unknown>, opts: { signal: AbortSignal; toolUseID: string; title?: string; description?: string }): Promise<PermissionResult> {
@@ -529,18 +588,6 @@ export class Chat {
         this.emit({ t: "permit", permit });
       }
     });
-  }
-
-  private async pump(q: Query) {
-    try {
-      for await (const m of q) this.handle(m);
-    } catch (err) {
-      this.emit({ t: "error", text: String((err as Error)?.message ?? err) });
-    } finally {
-      if (this.q === q) { this.q = null; this.inbox = null; }
-      this.partial = "";
-      this.setRunning(false);
-    }
   }
 
   private sub(parent: string, items: Item[]) {
@@ -572,7 +619,7 @@ export class Chat {
       case "init":
         this.model = m.model;
         this.emit({ t: "settings", settings: this.settings, model: this.model });
-        this.readContext();
+        if (!this.replaying) this.readContext();
         return;
       case "api_retry":
         return this.emit({ t: "status", running: true, note: "Retrying…" });
@@ -581,7 +628,8 @@ export class Chat {
         return;
       case "compact_boundary":
         this.emit({ t: "items", items: [{ k: "note", id: m.uuid, text: `Context compacted (${Math.round((m.compact_metadata?.pre_tokens ?? 0) / 1000)}k tokens before).` }] });
-        return void this.readContext();
+        if (!this.replaying) void this.readContext();
+        return;
       case "local_command_output":
         return this.emit({ t: "items", items: [{ k: "note", id: m.uuid, text: m.content }] });
       case "informational":
@@ -691,12 +739,14 @@ export class Chat {
         this.stopping = false;
         this.emit({ t: "turn_end", turn: this.turn, drew: this.drew, error: stopped ? undefined : error, stopped });
         this.setRunning(false);
+        if (this.replaying) return;
         this.readContext();
         refreshSoon(WORK);
         this.finishChanges(this.turn);
         return;
       }
       case "rate_limit_event":
+        if (this.replaying) return;
         noteLimits(this.account, m.rate_limit_info);
         refreshSoon(WORK, 4000);
         return;
