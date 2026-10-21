@@ -5,6 +5,7 @@ import { PictureView } from "./picture";
 import { AskPanel, PermitPanel } from "./panels";
 import { TasksPanel } from "./tasks";
 import { TimelineView } from "./timeline";
+import { RightBar } from "./rightbar";
 import { ChangesPanel, clip, tilde } from "./changes";
 import { Meters, Pickers } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
@@ -526,35 +527,19 @@ function App() {
           </div>
           </div>
           )}
-          <footer className="timeline">
-            <div className="view-switch" role="tablist">
-              <button className={rightView === "picture" ? "on" : ""} onClick={() => setRightView("picture")} title={pictureBehind ? "New picture · show (Alt+T)" : "Claude's picture (Alt+T)"}>Picture{pictureBehind && <span className="fold-dot" />}</button>
-              <button className={rightView === "timeline" ? "on" : ""} onClick={() => setRightView("timeline")} title="What the chat and its agents did, on a time axis (Alt+T)">Timeline</button>
-            </div>
-            {rightView === "picture" && <>
-            {live.pictures.length > 1 && (
-              <div className="pager">
-                <button className="chev-btn" disabled={picIndex <= 0} onClick={() => showPicture(picIndex - 1)} title="Previous picture (←)">‹</button>
-                <span className="muted small">{picIndex + 1} / {live.pictures.length}</span>
-                <button className="chev-btn" disabled={picIndex >= live.pictures.length - 1} onClick={() => showPicture(picIndex + 1)} title="Next picture (→)">›</button>
-              </div>
-            )}
-            {live.pictures.length > 0 && (
-              <div className="dots">
-                {live.pictures.map((p, i) => {
-                  const on = viewing ? p.turn === viewing : i === live.pictures.length - 1;
-                  return <button key={p.turn} className={`tdot ${on ? "on" : ""}`} title={`Picture ${i + 1}`} onClick={() => setViewing(i === live.pictures.length - 1 ? null : p.turn)} />;
-                })}
-              </div>
-            )}
-            <span className="muted small">
-              {viewing ? <button className="link" onClick={() => setViewing(null)}>Earlier picture · back to live</button>
-                : live.lastTurn && !live.lastTurn.drew && live.pictures.length ? "Picture not changed this turn"
-                : live.pictures.length ? "Live" : ""}
-            </span>
-            </>}
-            <button className="chev-btn fold-btn" onClick={toggleFold} disabled={live.asks.length > 0 || live.permits.length > 0} title="Hide picture (Alt+P)">›</button>
-          </footer>
+          <RightBar
+            view={rightView}
+            onView={setRightView}
+            pictureBehind={pictureBehind}
+            pictures={live.pictures}
+            index={picIndex}
+            viewing={!!viewing}
+            unchanged={!!live.lastTurn && !live.lastTurn.drew}
+            onPick={showPicture}
+            onLive={() => setViewing(null)}
+            onFold={toggleFold}
+            foldDisabled={live.asks.length > 0 || live.permits.length > 0}
+          />
         </section>
         )}
       </main>
