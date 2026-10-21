@@ -29,8 +29,12 @@ type Line = { kind: " " | "-" | "+"; text: string; old?: number; new?: number };
 type Hunk = { lines: Line[]; header: string };
 
 function hunksOf(before: string, after: string, whole: boolean): Hunk[] {
-  const patch = structuredPatch("a", "b", before, after, "", "", { context: whole ? Number.MAX_SAFE_INTEGER : 3 });
-  return patch.hunks.map((h) => {
+  return toHunks(structuredPatch("a", "b", before, after, "", "", { context: whole ? Number.MAX_SAFE_INTEGER : 3 }).hunks);
+}
+
+// Unified-diff hunks (lines starting with " ", "-" or "+") into numbered lines.
+function toHunks(raw: { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] }[]): Hunk[] {
+  return raw.map((h) => {
     let o = h.oldStart, n = h.newStart;
     const lines: Line[] = [];
     for (const raw of h.lines) {
@@ -133,6 +137,12 @@ function Split({ hunks }: { hunks: Hunk[] }) {
       </tbody>
     </table>
   );
+}
+
+// A patch as Claude Code saved it with an edit (the timeline's steps).
+export function PatchDiff({ hunks }: { hunks: { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] }[] }) {
+  const h = useMemo(() => toHunks(hunks), [hunks]);
+  return <Unified hunks={h} />;
 }
 
 function DiffView({ chat, change, split }: { chat: string; change: ChangeMeta; split: boolean }) {

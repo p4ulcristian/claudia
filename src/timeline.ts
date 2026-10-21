@@ -11,7 +11,8 @@ import { WORK, resultText, stripReminders, toolLabel, toolTitle } from "./chat";
 type Loc = [number, number];
 
 export type TimelineEvent =
-  | { k: "tool"; id: string; name: string; title: string; start: number; end?: number; error?: boolean; agent?: string }
+  // diff: lines added and removed, for file edits whose result carries a patch.
+  | { k: "tool"; id: string; name: string; title: string; start: number; end?: number; error?: boolean; agent?: string; diff?: { added: number; removed: number } }
   | { k: "text"; id: string; at: number; text: string }
   | { k: "user"; id: string; at: number; text: string }
   | { k: "note"; id: string; at: number; text: string };
@@ -31,8 +32,45 @@ export type Lane = {
 export type Timeline = { v: string; now: number; lanes: Lane[] };
 
 export type Detail =
-  | { k: "tool"; name: string; input: string; output: string | null; error: boolean; truncated: boolean }
+  | { k: "tool"; name: string; input: string; output: string | null; error: boolean; truncated: boolean; patch: Patch | null }
   | { k: "text"; text: string; truncated: boolean };
+
+// A file edit as Claude Code saved it with the result: hunks with line numbers and context; a new
+// file comes as one hunk of added lines.
+export type Hunk = { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] };
+export type Patch = { file: string; created: boolean; hunks: Hunk[]; cut: boolean };
+
+const PATCH_LINES = 5000;
+
+function patchOf(r: any): Patch | null {
+  if (!r || typeof r !== "object" || typeof r.filePath !== "string") return null;
+  if (r.type === "create" && typeof r.content === "string") {
+    const all = r.content.replace(/\n$/, "").split("\n");
+    const lines = all.slice(0, PATCH_LINES).map((l: string) => "+" + l);
+    return { file: r.filePath, created: true, hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: all.length, lines }], cut: all.length > PATCH_LINES };
+  }
+  if (!Array.isArray(r.structuredPatch)) return null;
+  let left = PATCH_LINES;
+  const hunks: Hunk[] = [];
+  for (const h of r.structuredPatch as Hunk[]) {
+    if (left <= 0) break;
+    hunks.push({ ...h, lines: h.lines.slice(0, left) });
+    left -= h.lines.length;
+  }
+  return { file: r.filePath, created: false, hunks, cut: left < 0 };
+}
+
+function counts(r: any): { added: number; removed: number } | undefined {
+  if (!r || typeof r !== "object" || typeof r.filePath !== "string") return undefined;
+  if (r.type === "create" && typeof r.content === "string") return { added: r.content.replace(/\n$/, "").split("\n").length, removed: 0 };
+  if (!Array.isArray(r.structuredPatch)) return undefined;
+  let added = 0, removed = 0;
+  for (const h of r.structuredPatch) for (const l of h.lines ?? []) {
+    if (l[0] === "+") added++;
+    else if (l[0] === "-") removed++;
+  }
+  return { added, removed };
+}
 
 const PREVIEW = 300;
 // Larger inputs and outputs are cut here; nothing a person reads is near it.
@@ -95,12 +133,14 @@ function take(p: Parsed, line: string, loc: Loc) {
 
   // A user line: tool results, or something a person (or Claude Code) said.
   if (Array.isArray(content) && content.some((b: any) => b.type === "tool_result")) {
-    for (const b of content) {
-      if (b.type !== "tool_result") continue;
+    const results = content.filter((b: any) => b.type === "tool_result");
+    for (const b of results) {
       const ev = p.tools.get(b.tool_use_id);
       if (!ev) continue;
       ev.end = at;
       ev.error = !!b.is_error;
+      // The saved result (with a file edit's patch) belongs to the line's only tool result.
+      if (results.length === 1 && !b.is_error) ev.diff = counts(d.toolUseResult);
       p.locs.get(b.tool_use_id)!.result = loc;
     }
     return;
@@ -293,14 +333,16 @@ export async function timelineDetail(sessionId: string, lane: string, id: string
     const input = JSON.stringify(use?.input ?? {}, null, 2);
     let output: string | null = null;
     let error = false;
+    let patch: Patch | null = null;
     if (loc.result) {
       const r = await readLoc(path, loc.result);
       const b = (r.message?.content as any[]).find((x) => x.type === "tool_result" && x.tool_use_id === id);
       output = resultText(b?.content);
       error = !!b?.is_error;
+      if (tool.diff) patch = patchOf(r.toolUseResult);
     }
     const truncated = input.length > FULL || (output?.length ?? 0) > FULL;
-    return { k: "tool", name: tool.name, input: cut(input, FULL), output: output === null ? null : cut(output, FULL), error, truncated };
+    return { k: "tool", name: tool.name, input: cut(input, FULL), output: output === null ? null : cut(output, FULL), error, truncated, patch };
   }
 
   let text: string;

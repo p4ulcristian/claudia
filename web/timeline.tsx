@@ -3,6 +3,7 @@
 // stretches get a divider with their length. Clicking a step opens it in full under it.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { md } from "./md";
+import { PatchDiff, tilde } from "./changes";
 import type { Timeline, TimelineDetail, TimelineEvent, TimelineLane } from "./types";
 
 const RAIL = 14; // px per rail
@@ -235,6 +236,12 @@ function Step({ r, now, rails, color, isOpen, onOpen, onLane, chat, lanes }: {
     );
     right = (
       <span className="tl-dur">
+        {e.diff && (
+          <span className="tl-diff" title={`${e.diff.added} lines added, ${e.diff.removed} removed`}>
+            {e.diff.added > 0 && <span className="plus">+{e.diff.added}</span>}
+            {e.diff.removed > 0 && <span className="minus">−{e.diff.removed}</span>}
+          </span>
+        )}
         {e.error && <span className="tl-failed">failed</span>}
         {end === undefined ? "no result" : `${dur(end - e.start)}${e.end === undefined ? " so far" : ""}`}
       </span>
@@ -281,6 +288,20 @@ function Detail({ chat, lane, e }: { chat: string; lane: TimelineLane; e: Timeli
       {failed ? <p className="muted small">Couldn't read this from the session file.</p>
         : !d ? <p className="muted small">Loading…</p>
         : d.k === "text" ? <div className="md small" dangerouslySetInnerHTML={{ __html: md(d.text) }} />
+        : d.patch ? (
+          <>
+            <h4>{d.patch.created ? "New file" : "Diff"} <span className="tl-file">{tilde(d.patch.file)}</span></h4>
+            {d.patch.hunks.length ? <PatchDiff hunks={d.patch.hunks} /> : <p className="muted small">No lines changed.</p>}
+            {d.patch.cut && <p className="muted small">Cut at 5000 lines.</p>}
+            <details className="tl-raw">
+              <summary>Input and output</summary>
+              <h4>Input</h4>
+              <pre>{d.input}</pre>
+              <h4>Output</h4>
+              <pre>{d.output || "(no output)"}</pre>
+            </details>
+          </>
+        )
         : (
           <>
             <h4>Input</h4>
