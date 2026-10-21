@@ -51,7 +51,11 @@ while read -r name email _; do
   systemctl enable --quiet "claudia-host@$name.service" "claudia-runner@$name.service"
   if systemctl is-active --quiet "claudia-host@$name.service"; then
     [ "$restart_hosts" = "--restart-hosts" ] && systemctl restart "claudia-host@$name.service"
-    systemctl restart "claudia-runner@$name.service"
+    # A runner a drop-in points at another checkout (someone's own branch) is theirs: its code didn't
+    # change here, and it may still own its chats.
+    if systemctl show -p ExecStart --value "claudia-runner@$name.service" | grep -q "/srv/claudia/runner.ts"; then
+      systemctl restart "claudia-runner@$name.service"
+    else echo "claudia-runner@$name runs another checkout: not restarted"; fi
   else
     systemctl start "claudia-host@$name.service"
     # A runner from before the hosts still owns its chats' Claude Code: restarting it would stop
