@@ -1,22 +1,16 @@
-// The timeline on the right: the chat and every subagent as lanes on one time axis. Each tool call is
-// a bar as long as it ran; messages are dots. Quiet stretches are folded into a narrow gap with their
-// length on it. Clicking a bar or dot opens it in full below.
+// The timeline on the right: every step of the chat and its subagents as one feed, top to bottom in
+// time order. A thin rail per agent on the left shows who was running at the same time; quiet
+// stretches get a divider with their length. Clicking a step opens it in full under it.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { md } from "./md";
 import type { Timeline, TimelineDetail, TimelineEvent, TimelineLane } from "./types";
 
-const LABEL = 240; // lane names column (.tl-label width)
-const ROW = 30;
-const PAD = 16;
-const GAP_PX = 38; // a folded quiet stretch
-const IDLE = 60_000; // longer than this with nothing happening gets folded
-const MIN_SCALE = 0.02; // px per second
-const MAX_SCALE = 400;
-const AUTO_MIN = 0.8; // the starting zoom never goes below this; longer chats scroll
-const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400];
+const RAIL = 14; // px per rail
+const IDLE = 60_000; // a longer quiet stretch gets a divider
+const PAGE = 400; // rows shown at first; earlier ones on request
+const PALETTE = ["sky", "violet", "teal", "pink", "amber", "lime", "orange", "indigo", "cyan", "magenta", "green", "red", "yellow", "purple", "blue", "brown"];
 
-type Seg = { start: number; end: number; x: number };
-type Sel = { lane: string; id: string };
+type Row = { lane: TimelineLane; e: TimelineEvent; at: number };
 
 function dur(ms: number) {
   const s = Math.round(ms / 1000);
@@ -28,69 +22,8 @@ function dur(ms: number) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-const clock = (t: number, secs: boolean) =>
-  new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", ...(secs ? { second: "2-digit" } : {}), hour12: false });
-
-// Where a tool call ends: its result, now if its lane still runs, or nowhere (it never got one).
-const endOf = (e: Extract<TimelineEvent, { k: "tool" }>, lane: TimelineLane, now: number) => e.end ?? (lane.running ? now : undefined);
-
-// Stretches with something going on: every step, and an agent's whole run (it thinks between steps).
-function segments(t: Timeline): Omit<Seg, "x">[] {
-  const iv: [number, number][] = [];
-  for (const l of t.lanes) {
-    if (l.kind !== "main") iv.push([l.start, l.end]);
-    for (const e of l.events) {
-      if (e.k === "tool") iv.push([e.start, endOf(e, l, t.now) ?? e.start]);
-      else iv.push([e.at, e.at]);
-    }
-    if (l.running) iv.push([t.now, t.now]);
-  }
-  iv.sort((a, b) => a[0] - b[0]);
-  const out: Omit<Seg, "x">[] = [];
-  for (const [s, e] of iv) {
-    const last = out[out.length - 1];
-    if (last && s - last.end <= IDLE) last.end = Math.max(last.end, e);
-    else out.push({ start: s, end: e });
-  }
-  return out;
-}
-
-function layout(raw: Omit<Seg, "x">[], scale: number) {
-  let x = PAD;
-  const segs: Seg[] = raw.map((s, i) => {
-    if (i) x += GAP_PX;
-    const seg = { ...s, x };
-    x += ((s.end - s.start) / 1000) * scale;
-    return seg;
-  });
-  const width = x + PAD;
-  const xAt = (t: number) => {
-    if (!segs.length) return PAD;
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      if (t > s.end) continue;
-      if (t >= s.start || !i) return s.x + (Math.max(0, t - s.start) / 1000) * scale;
-      const p = segs[i - 1];
-      const prevEnd = p.x + ((p.end - p.start) / 1000) * scale;
-      return prevEnd + (GAP_PX * (t - p.end)) / (s.start - p.end);
-    }
-    const l = segs[segs.length - 1];
-    return l.x + ((l.end - l.start) / 1000) * scale;
-  };
-  const tAt = (x: number) => {
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      const sEnd = s.x + ((s.end - s.start) / 1000) * scale;
-      if (x <= sEnd) {
-        if (x >= s.x || !i) return s.start + (Math.max(0, x - s.x) / scale) * 1000;
-        const p = segs[i - 1];
-        return p.end + ((s.start - p.end) * (x - (s.x - GAP_PX))) / GAP_PX;
-      }
-    }
-    return segs.length ? segs[segs.length - 1].end : 0;
-  };
-  return { segs, width, xAt, tAt };
-}
+const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+const day = (t: number) => new Date(t).toLocaleDateString([], { month: "short", day: "numeric", weekday: "short" });
 
 function category(name: string) {
   if (/^(Read|Grep|Glob|LS|ToolSearch|NotebookRead)$/.test(name)) return "read";
@@ -101,25 +34,22 @@ function category(name: string) {
   return "other";
 }
 
-const LEGEND = [["read", "read"], ["edit", "edit"], ["shell", "shell"], ["web", "web"], ["agent", "agent"], ["other", "other"]] as const;
-
 export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
   const [data, setData] = useState<Timeline | null>(null);
   const [missing, setMissing] = useState(false);
-  const [zoom, setZoom] = useState<number | null>(null); // null: the starting zoom, which follows the width
-  const [sel, setSel] = useState<Sel | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
-  const [viewW, setViewW] = useState(800);
+  const [open, setOpen] = useState<string | null>(null); // lane:id of the step shown in full
+  const [only, setOnly] = useState<string | null>(null); // one lane, with the agents it started
+  const [shown, setShown] = useState(PAGE);
   const scroller = useRef<HTMLDivElement>(null);
   const v = useRef("");
   const atEnd = useRef(true);
-  const anchor = useRef<{ t: number; px: number } | null>(null);
 
   useEffect(() => {
     setData(null);
     setMissing(false);
-    setSel(null);
-    setZoom(null);
+    setOpen(null);
+    setOnly(null);
+    setShown(PAGE);
     v.current = "";
     atEnd.current = true;
   }, [chat]);
@@ -144,83 +74,106 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
     return () => clearInterval(t);
   }, [load, live]);
 
+  // Each lane's colour, and which lanes the filter keeps (the chosen one and everything under it).
+  const colors = useMemo(() => new Map(data?.lanes.filter((l) => l.kind !== "main").map((l, i) => [l.id, PALETTE[i % PALETTE.length]]) ?? []), [data]);
+  const kept = useMemo(() => {
+    if (!data || !only) return null;
+    const set = new Set([only]);
+    if (only === "main") return set; // the chat's own steps only
+    for (const l of data.lanes) if (l.parent && set.has(l.parent)) set.add(l.id); // lanes come parent first
+    return set;
+  }, [data, only]);
+
+  const all = useMemo(() => {
+    if (!data) return [] as Row[];
+    const rows: Row[] = [];
+    for (const lane of data.lanes) {
+      if (kept && !kept.has(lane.id)) continue;
+      for (const e of lane.events) rows.push({ lane, e, at: e.k === "tool" ? e.start : e.at });
+    }
+    return rows.sort((a, b) => a.at - b.at);
+  }, [data, kept]);
+  const rows = all.length > shown ? all.slice(all.length - shown) : all;
+
+  // Rails: each lane holds one from its first row to its last (to the bottom while it runs); a free
+  // rail is reused by a later lane, so agents one after another share it.
+  const rails = useMemo(() => {
+    const first = new Map<string, number>();
+    const last = new Map<string, number>();
+    rows.forEach((r, i) => {
+      if (!first.has(r.lane.id)) first.set(r.lane.id, i);
+      last.set(r.lane.id, r.lane.running ? rows.length : i);
+    });
+    const col = new Map<string, number>();
+    const freeAt: number[] = []; // per rail: the last row it is taken until
+    const order = [...first.keys()].sort((a, b) => first.get(a)! - first.get(b)!);
+    // The chat keeps the first rail when it is shown.
+    const low = first.has("main") ? 1 : 0;
+    for (const id of order) {
+      let c = id === "main" ? 0 : freeAt.findIndex((end, i) => i >= low && end < first.get(id)!);
+      if (c === -1) c = Math.max(low, freeAt.length);
+      col.set(id, c);
+      freeAt[c] = last.get(id)!;
+    }
+    return { first, last, col, count: Math.max(1, freeAt.length) };
+  }, [rows]);
+
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setViewW(el.clientWidth));
-    ro.observe(el);
-    setViewW(el.clientWidth);
-    return () => ro.disconnect();
-  }, [data === null]);
-
-  const raw = useMemo(() => (data ? segments(data) : []), [data]);
-  const active = raw.reduce((n, s) => n + (s.end - s.start) / 1000, 0);
-  const fit = Math.max(MIN_SCALE, Math.min(MAX_SCALE, (viewW - LABEL - 2 * PAD - Math.max(0, raw.length - 1) * GAP_PX) / Math.max(active, 1)));
-  const scale = zoom ?? Math.max(fit, AUTO_MIN);
-  const L = useMemo(() => layout(raw, scale), [raw, scale]);
-
-  // Keep the newest part in view while following; keep the point under the mouse still when zooming.
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    if (anchor.current) {
-      el.scrollLeft = LABEL + L.xAt(anchor.current.t) - anchor.current.px;
-      anchor.current = null;
-    } else if (atEnd.current) el.scrollLeft = el.scrollWidth;
-  }, [L]);
-
-  const zoomTo = (next: number, px?: number) => {
-    const el = scroller.current;
-    if (!el) return;
-    const at = px ?? el.clientWidth / 2;
-    anchor.current = { t: L.tAt(el.scrollLeft + at - LABEL), px: at };
-    setZoom(Math.max(MIN_SCALE, Math.min(MAX_SCALE, next)));
-  };
+    if (el && atEnd.current) el.scrollTop = el.scrollHeight;
+  }, [rows.length, data]);
 
   useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const wheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      zoomTo(scale * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - el.getBoundingClientRect().left);
-    };
-    el.addEventListener("wheel", wheel, { passive: false });
-    return () => el.removeEventListener("wheel", wheel);
-  });
-
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && sel && (e.stopPropagation(), setSel(null));
+    const key = (e: KeyboardEvent) => e.key === "Escape" && open && (e.stopPropagation(), setOpen(null));
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
-  }, [sel]);
-
-  const depth = useMemo(() => {
-    const byId = new Map(data?.lanes.map((l) => [l.id, l]) ?? []);
-    const d = (l: TimelineLane): number => (l.parent && byId.has(l.parent) ? 1 + d(byId.get(l.parent)!) : 0);
-    return new Map(data?.lanes.map((l) => [l.id, d(l)]) ?? []);
-  }, [data]);
-
-  const showLane = (id: string) => {
-    const i = data?.lanes.findIndex((l) => l.id === id) ?? -1;
-    const el = scroller.current;
-    if (i < 0 || !el) return;
-    const lane = data!.lanes[i];
-    el.scrollTo({ top: Math.max(0, i * ROW - el.clientHeight / 3), left: LABEL + L.xAt(lane.start) - el.clientWidth / 3, behavior: "smooth" });
-    atEnd.current = false;
-    setFlash(id);
-    setTimeout(() => setFlash((f) => (f === id ? null : f)), 1600);
-  };
+  }, [open]);
 
   if (missing) return <div className="tl"><p className="muted tl-empty">Nothing yet: the timeline fills in once Claude starts working in this chat.</p></div>;
   if (!data) return <div className="tl"><p className="muted tl-empty">Loading…</p></div>;
 
   const agents = data.lanes.filter((l) => l.kind !== "main");
   const running = agents.filter((l) => l.running).length;
-  const step = (STEPS.find((s) => s * scale >= 90) ?? 86400) * 1000;
-  const secs = step < 60_000;
-  const selLane = sel && data.lanes.find((l) => l.id === sel.lane);
-  const selEv = selLane?.events.find((e) => e.id === sel!.id);
+  const onlyLane = only ? data.lanes.find((l) => l.id === only) : null;
+
+  // The rails beside one row: a line for every lane alive here, a dot for the row's own.
+  const railCell = (i: number, own: string | null) => (
+    <span className="tl-rails" style={{ width: rails.count * RAIL }}>
+      {[...rails.col].map(([id, c]) => {
+        const f = rails.first.get(id)!;
+        const l = rails.last.get(id)!;
+        if (i < f || i > l) return null;
+        const color = colors.get(id);
+        const style = { left: c * RAIL + RAIL / 2 - 1, ...(color ? { "--rail": `var(--c-${color})` } : {}) } as React.CSSProperties;
+        return <span key={id} className={`tl-line ${i === f ? "from" : ""} ${i === l ? "to" : ""}`} style={style} />;
+      })}
+      {own !== null && (
+        <span className="tl-node" style={{ left: rails.col.get(own)! * RAIL + RAIL / 2 - 4, ...(colors.get(own) ? { "--rail": `var(--c-${colors.get(own)})` } : {}) } as React.CSSProperties} />
+      )}
+    </span>
+  );
+
+  const out: React.ReactNode[] = [];
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    if (prev && day(prev.at) !== day(r.at)) out.push(<li key={`d${i}`} className="tl-sep day">{railCell(i - 0.5, null)}<span>{day(r.at)}</span></li>);
+    else if (prev && r.at - prev.at > IDLE) out.push(<li key={`g${i}`} className="tl-sep">{railCell(i - 0.5, null)}<span>{dur(r.at - prev.at)} quiet</span></li>);
+    const key = `${r.lane.id}:${r.e.id}`;
+    out.push(
+      <Step
+        key={key}
+        r={r}
+        now={data.now}
+        rails={railCell(i, r.lane.id)}
+        color={colors.get(r.lane.id)}
+        isOpen={open === key}
+        onOpen={() => setOpen(open === key ? null : key)}
+        onLane={(id) => setOnly(id)}
+        chat={chat}
+        lanes={data.lanes}
+      />,
+    );
+  });
 
   return (
     <div className="tl">
@@ -229,90 +182,87 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
         <span className="muted small">
           {agents.length ? `${agents.length} ${agents.length === 1 ? "agent" : "agents"}${running ? ` · ${running} running` : ""}` : "no agents yet"}
         </span>
-        <span className="tl-legend">
-          {LEGEND.map(([c, label]) => <span key={c} className={`tl-key ${c}`}>{label}</span>)}
-        </span>
-        <span className="tl-zoom">
-          <button className="chev-btn" onClick={() => zoomTo(scale * 0.66)} title="Zoom out (Ctrl+wheel)">−</button>
-          <button className={`tl-fit ${zoom === null ? "on" : ""}`} onClick={() => { atEnd.current = true; setZoom(null); }} title="Back to the starting zoom, following the newest">Fit</button>
-          <button className="chev-btn" onClick={() => zoomTo(scale * 1.5)} title="Zoom in (Ctrl+wheel)">+</button>
-        </span>
+        {agents.length > 0 && (
+          <select className="tl-filter" value={only ?? ""} onChange={(e) => setOnly(e.target.value || null)} title="Show one agent (and the agents it started)">
+            <option value="">Everything</option>
+            <option value="main">Chat only</option>
+            {agents.map((l) => <option key={l.id} value={l.id}>{l.title}{l.running ? " (running)" : ""}</option>)}
+          </select>
+        )}
+        {onlyLane && <button className="link" onClick={() => setOnly(null)}>show everything</button>}
       </div>
       <div
         className="tl-scroll"
         ref={scroller}
         onScroll={(e) => {
           const el = e.currentTarget;
-          atEnd.current = el.scrollLeft + el.clientWidth >= el.scrollWidth - 24;
+          atEnd.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
         }}
       >
-        <div className="tl-canvas" style={{ width: LABEL + L.width }}>
-          <div className="tl-ruler" style={{ height: ROW }}>
-            <div className="tl-label tl-corner" />
-            <div className="tl-track">
-              {L.segs.map((s, i) => (
-                <React.Fragment key={s.start}>
-                  {i > 0 && (
-                    <span className="tl-gap-label" style={{ left: s.x - GAP_PX, width: GAP_PX }} title={`${dur(s.start - L.segs[i - 1].end)} with nothing going on`}>
-                      {dur(s.start - L.segs[i - 1].end)}
-                    </span>
-                  )}
-                  <span className="tl-tick start" style={{ left: s.x }}>{clock(s.start, secs)}</span>
-                  {ticks(s, step).map((t) => {
-                    const x = L.xAt(t);
-                    return x - s.x < 70 ? null : <span key={t} className="tl-tick" style={{ left: x }}>{clock(t, secs)}</span>;
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-          {L.segs.slice(1).map((s) => (
-            <div key={s.start} className="tl-gap" style={{ left: LABEL + s.x - GAP_PX, width: GAP_PX }} />
-          ))}
-          {data.lanes.map((lane) => (
-            <div key={lane.id} className={`tl-row ${lane.running ? "running" : ""} ${flash === lane.id ? "flash" : ""}`} style={{ height: ROW }}>
-              <div className="tl-label" style={{ paddingLeft: 10 + 14 * (depth.get(lane.id) ?? 0) }} title={`${lane.title}\n${lane.kind} · ${dur(lane.end - lane.start)}\nClick: go to its start`} onClick={() => showLane(lane.id)}>
-                <span className="tl-dot" />
-                <span className="tl-name">{lane.title}</span>
-                {lane.kind !== "main" && <span className="tl-kind">{lane.kind}</span>}
-              </div>
-              <div className="tl-track">
-                {lane.kind !== "main" && <span className="tl-span" style={{ left: L.xAt(lane.start), width: Math.max(1, L.xAt(lane.end) - L.xAt(lane.start)) }} />}
-                {lane.events.map((e) => <Mark key={e.id} e={e} lane={lane} now={data.now} xAt={L.xAt} on={sel?.lane === lane.id && sel.id === e.id} onClick={() => setSel({ lane: lane.id, id: e.id })} />)}
-              </div>
-            </div>
-          ))}
-        </div>
+        {all.length > rows.length && (
+          <button className="tl-more link" onClick={() => { atEnd.current = false; setShown((n) => n + PAGE); }}>
+            {all.length - rows.length} earlier steps · show {Math.min(PAGE, all.length - rows.length)} more
+          </button>
+        )}
+        <ul className="tl-feed">{out}</ul>
       </div>
-      {selLane && selEv && <DetailPane chat={chat} lane={selLane} e={selEv} now={data.now} onClose={() => setSel(null)} onLane={showLane} />}
     </div>
   );
 }
 
-function ticks(s: Seg, step: number) {
-  const out: number[] = [];
-  for (let t = Math.ceil(s.start / step) * step; t <= s.end && out.length < 500; t += step) out.push(t);
-  return out;
-}
-
-function Mark({ e, lane, now, xAt, on, onClick }: { e: TimelineEvent; lane: TimelineLane; now: number; xAt: (t: number) => number; on: boolean; onClick: () => void }) {
-  if (e.k !== "tool") {
-    const tip = `${e.k === "user" ? "Message" : e.k === "note" ? "Note" : "Claude"} · ${clock(e.at, true)}\n${e.text}`;
-    return <button className={`tl-point ${e.k} ${on ? "on" : ""}`} style={{ left: xAt(e.at) }} title={tip} onClick={onClick} />;
-  }
-  const end = endOf(e, lane, now);
-  const left = xAt(e.start);
-  const width = end === undefined ? 6 : Math.max(3, xAt(end) - left);
-  const state = e.error ? "err" : e.end === undefined ? (lane.running ? "open" : "lost") : "";
-  const tip = `${e.name} ${e.title}\n${clock(e.start, true)} · ${end === undefined ? "no result" : dur(end - e.start)}${e.end === undefined && lane.running ? " so far" : ""}${e.error ? " · failed" : ""}`;
-  return (
-    <button className={`tl-bar ${category(e.name)} ${state} ${on ? "on" : ""}`} style={{ left, width }} title={tip} onClick={onClick}>
-      {width > 44 && <span>{e.name}{width > 110 && e.title ? ` ${e.title}` : ""}</span>}
+function Step({ r, now, rails, color, isOpen, onOpen, onLane, chat, lanes }: {
+  r: Row; now: number; rails: React.ReactNode; color?: string; isOpen: boolean; onOpen: () => void; onLane: (id: string) => void; chat: string; lanes: TimelineLane[];
+}) {
+  const { lane, e } = r;
+  const tag = lane.kind !== "main" && (
+    <button className="tl-tag" style={{ "--rail": `var(--c-${color})` } as React.CSSProperties} title={`${lane.title} (${lane.kind}) · show only this agent`} onClick={(ev) => { ev.stopPropagation(); onLane(lane.id); }}>
+      {lane.title}
     </button>
+  );
+  let body: React.ReactNode;
+  let right: React.ReactNode = null;
+  let cls = "";
+  if (e.k === "tool") {
+    const end = e.end ?? (lane.running ? now : undefined);
+    cls = e.error ? "err" : e.end === undefined ? (lane.running ? "busy" : "lost") : "";
+    const started = e.agent ? lanes.find((l) => l.id === e.agent) : undefined;
+    body = (
+      <>
+        <span className={`tl-tool ${category(e.name)}`}>{e.name}</span>
+        <span className="tl-title">{e.title}</span>
+        {started && <button className="link" onClick={(ev) => { ev.stopPropagation(); onLane(started.id); }}>its steps</button>}
+      </>
+    );
+    right = (
+      <span className="tl-dur">
+        {e.error && <span className="tl-failed">failed</span>}
+        {end === undefined ? "no result" : `${dur(end - e.start)}${e.end === undefined ? " so far" : ""}`}
+      </span>
+    );
+  } else {
+    const who = e.k === "user" ? (lane.kind === "main" ? "You" : "Task") : e.k === "note" ? "Note" : "Claude";
+    cls = e.k;
+    body = (
+      <>
+        <span className={`tl-who ${e.k}`}>{who}</span>
+        <span className="tl-text">{e.text}</span>
+      </>
+    );
+  }
+  return (
+    <li className={`tl-step ${cls} ${isOpen ? "open" : ""}`}>
+      <button className="tl-step-row" onClick={onOpen}>
+        <span className="tl-time">{clock(r.at)}</span>
+        {rails}
+        <span className="tl-body">{tag}{body}</span>
+        {right}
+      </button>
+      {isOpen && <Detail chat={chat} lane={lane} e={e} />}
+    </li>
   );
 }
 
-function DetailPane({ chat, lane, e, now, onClose, onLane }: { chat: string; lane: TimelineLane; e: TimelineEvent; now: number; onClose: () => void; onLane: (id: string) => void }) {
+function Detail({ chat, lane, e }: { chat: string; lane: TimelineLane; e: TimelineEvent }) {
   const [d, setD] = useState<TimelineDetail | null>(null);
   const [failed, setFailed] = useState(false);
   const done = e.k === "tool" ? e.end : 0;
@@ -326,39 +276,21 @@ function DetailPane({ chat, lane, e, now, onClose, onLane }: { chat: string; lan
     return () => { dead = true; };
   }, [chat, lane.id, e.id, done]);
 
-  const end = e.k === "tool" ? endOf(e, lane, now) : undefined;
-  const when = e.k === "tool" ? e.start : e.at;
-  const head =
-    e.k === "tool" ? <><b>{e.name}</b> <span className="tl-d-title">{e.title}</span></>
-      : <b>{e.k === "user" ? (lane.kind === "main" ? "Message" : "Its task") : e.k === "note" ? "Note" : "Claude"}</b>;
   return (
     <div className="tl-detail">
-      <div className="tl-d-head">
-        <span className="tl-d-lane muted small">{lane.title} ›</span>
-        {head}
-        <span className="muted small">
-          {clock(when, true)}
-          {e.k === "tool" && (end === undefined ? " · no result" : ` · ${dur(end - e.start)}${e.end === undefined ? " so far" : ""}`)}
-        </span>
-        {e.k === "tool" && e.error && <span className="chip red">failed</span>}
-        {e.k === "tool" && e.agent && <button className="link" onClick={() => onLane(e.agent!)}>show its lane</button>}
-        <button className="tl-close" onClick={onClose} title="Close (Esc)">×</button>
-      </div>
-      <div className="tl-d-body">
-        {failed ? <p className="muted small">Couldn't read this from the session file.</p>
-          : !d ? <p className="muted small">Loading…</p>
-          : d.k === "text" ? <div className="md small" dangerouslySetInnerHTML={{ __html: md(d.text) }} />
-          : (
-            <>
-              <h4>Input</h4>
-              <pre>{d.input}</pre>
-              <h4>Output</h4>
-              {d.output === null ? <p className="muted small">{lane.running ? "Still running." : "It got no result (stopped or cut off)."}</p>
-                : <pre className={d.error ? "err" : ""}>{d.output || "(no output)"}</pre>}
-            </>
-          )}
-        {d?.truncated && <p className="muted small">Cut at 1 MB.</p>}
-      </div>
+      {failed ? <p className="muted small">Couldn't read this from the session file.</p>
+        : !d ? <p className="muted small">Loading…</p>
+        : d.k === "text" ? <div className="md small" dangerouslySetInnerHTML={{ __html: md(d.text) }} />
+        : (
+          <>
+            <h4>Input</h4>
+            <pre>{d.input}</pre>
+            <h4>Output</h4>
+            {d.output === null ? <p className="muted small">{lane.running ? "Still running." : "It got no result (stopped or cut off)."}</p>
+              : <pre className={d.error ? "err" : ""}>{d.output || "(no output)"}</pre>}
+          </>
+        )}
+      {d?.truncated && <p className="muted small">Cut at 1 MB.</p>}
     </div>
   );
 }
