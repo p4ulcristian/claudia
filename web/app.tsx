@@ -449,6 +449,8 @@ function App() {
   const tags = useMemo(() => projectTags(chats.map((c) => c.project)), [chats]);
   // The rail: passive chats last, in their own order.
   const railList = [...list.filter((c) => c.color !== PASSIVE), ...list.filter((c) => c.color === PASSIVE)];
+  const railBox = useRef<HTMLDivElement>(null);
+  useSlide(railBox, `${showSidebar ? "" : "rail:"}${railList.map((c) => c.id).join(",")}`);
 
   if (me && !me.profile) return <NoProfile me={me} />;
 
@@ -484,11 +486,12 @@ function App() {
       <div className="sidebar-slot">
         {!showSidebar && (
           <nav className="rail" aria-label="Chats">
-            <div className="rail-dots">
+            <div className="rail-dots" ref={railBox}>
               {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
               {railList.map((c, i) => (
                 <button
                   key={c.id}
+                  data-slide={c.id}
                   className={`rail-dot ${c.id === current ? "on" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c.id, e)}
@@ -708,6 +711,29 @@ function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
 }
 
 // Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
+// Circles slide to their new place when the order changes (a chat made passive sinks, a woken one
+// rises) instead of jumping; a new one grows in. Each [data-slide] child is measured after every
+// change and animated from where it was.
+function useSlide(box: React.RefObject<HTMLElement | null>, order: string) {
+  const last = useRef<Map<string, number> | null>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) { last.current = null; return; }
+    const top = el.getBoundingClientRect().top - el.scrollTop;
+    const now = new Map<string, number>();
+    for (const d of el.querySelectorAll<HTMLElement>("[data-slide]")) now.set(d.dataset.slide!, d.getBoundingClientRect().top - top);
+    const before = last.current;
+    last.current = now;
+    if (!before || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const d of el.querySelectorAll<HTMLElement>("[data-slide]")) {
+      const was = before.get(d.dataset.slide!);
+      const is = now.get(d.dataset.slide!)!;
+      if (was === undefined) d.animate([{ opacity: 0, transform: "scale(0.4)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: "cubic-bezier(.2,.8,.3,1.2)" });
+      else if (Math.abs(was - is) > 1) d.animate([{ transform: `translateY(${was - is}px)` }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.3,.7,.2,1)" });
+    }
+  }, [order]);
+}
+
 // Short tags for projects, unique among the ones in the list: initials of a dashed name
 // (eye-on-rainbow → eor), else the first letters, three when two projects would share two.
 function projectTags(names: (string | null)[]): Map<string, string> {
