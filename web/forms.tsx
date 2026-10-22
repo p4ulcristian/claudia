@@ -10,10 +10,24 @@ const colorOf = (c?: string) => (c ? `var(--${c})` : undefined);
 
 const STATUS_MARK: Record<string, string> = { done: "✓", running: "…", failed: "✗", skipped: "–", todo: "" };
 
+// Stages side by side while each gets at least STAGE_MIN px; narrower, they stack top to bottom.
+const STAGE_MIN = 120;
+
 function Pipeline({ data }: { data: Data }) {
   const stages = list(data.stages);
+  const box = useRef<HTMLDivElement>(null);
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => setDown(el.clientWidth < stages.length * STAGE_MIN);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stages.length]);
   return (
-    <div className="f-pipeline">
+    <div className={`f-pipeline ${down ? "down" : ""}`} ref={box}>
       {stages.map((s, i) => (
         <React.Fragment key={s.id}>
           {i > 0 && <span className={`f-arrow ${stages[i - 1].status === "done" ? "lit" : ""}`} aria-hidden="true" />}

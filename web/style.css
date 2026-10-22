@@ -825,8 +825,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .st-skipped { --box: var(--grey); --st: var(--muted); opacity: 0.6; }
 .st-todo { --st: var(--muted); }
 
-.f-pipeline { display: flex; align-items: center; overflow-x: auto; padding: 4px 2px; }
-.f-stage { flex: 1 1 0; min-width: 78px; display: grid; justify-items: center; gap: 2px; padding: 10px 8px; text-align: center; }
+.f-pipeline { display: flex; align-items: center; padding: 4px 2px; }
+.f-stage { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; padding: 10px 8px; text-align: center; }
+.f-stage > * { max-width: 100%; overflow-wrap: anywhere; }
 .f-stage-mark { font: 700 18px/1 var(--hand); color: var(--st); min-height: 18px; }
 .f-stage.st-running .f-stage-mark { animation: breathe 1.4s ease-in-out infinite; }
 .f-stage-label { font: 700 16px var(--hand); }
@@ -834,6 +835,14 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--line); border-right: 0; }
 .f-arrow.lit { background: var(--green); }
 .f-arrow.lit::after { border-left-color: var(--green); }
+/* Too narrow for side by side: one stage per row, mark left, arrows pointing down. */
+.f-pipeline.down { flex-direction: column; align-items: stretch; }
+.f-pipeline.down .f-stage { flex: none; grid-template-columns: 22px minmax(0, 1fr); justify-items: start; align-items: baseline; column-gap: 8px; padding: 8px 12px; text-align: left; }
+.f-pipeline.down .f-stage-mark { justify-self: center; }
+.f-pipeline.down .f-note { grid-column: 2; }
+.f-pipeline.down .f-arrow { flex: 0 0 14px; width: 2px; height: auto; margin: 2px 0 6px 22px; }
+.f-pipeline.down .f-arrow::after { right: auto; top: auto; left: -4px; bottom: -6px; border: 5px solid transparent; border-top: 7px solid var(--line); border-bottom: 0; }
+.f-pipeline.down .f-arrow.lit::after { border-top-color: var(--green); }
 
 .f-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; position: relative; }
 .f-timeline::before { content: ""; position: absolute; left: 86px; top: 6px; bottom: 6px; width: 2px; background: var(--line); filter: url(#chalk-line); }
