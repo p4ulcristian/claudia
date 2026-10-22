@@ -48,9 +48,9 @@ function usedColors(except?: string): string[] {
   return [...store.colors()].filter(([id]) => id !== except && !archived.has(id) && (ours.has(id) || chats.has(id))).map(([, c]) => c);
 }
 
-// Writing to a passive (ash) chat makes it active again: it gets a colour of its own back.
+// Writing to a passive (ash) chat makes it active again: the colour it had before, else a fresh one.
 async function wake(c: Chat) {
-  if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(usedColors(c.id)) });
+  if (c.settings.color === PASSIVE) await c.setSettings({ color: c.settings.prevColor ?? pickColor(usedColors(c.id)), prevColor: null });
 }
 
 function projectFields(folder: string | null) {

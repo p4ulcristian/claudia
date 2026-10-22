@@ -52,7 +52,8 @@ export type Context = { used: number; max: number; percent: number; model: strin
 // forms: the chat's choices in the row over the picture (left out = Claude decides).
 export type FormChoice = "use" | "off";
 // cols: the picture's columns (0 = Claude's layout, 1–3 = that many equal columns).
-export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice>; cols: number };
+// prevColor: the colour before the chat was made passive.
+export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice>; cols: number; prevColor: string | null };
 
 export type Question = {
   question: string;
@@ -247,9 +248,10 @@ const PROMPT_VERSION = Bun.hash(SYSTEM_APPEND).toString(36);
 function formsNote(forms: Record<string, FormChoice>): string {
   const use = Object.keys(forms).filter((f) => forms[f] === "use");
   const off = Object.keys(forms).filter((f) => forms[f] === "off");
-  const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : f === "questions" ? "questions (AskUserQuestion buttons: decide yourself instead)" : `the ${f} form`);
+  const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : f === "graph" ? "graphs (circles, boxes, arrows)" : f === "questions" ? "questions (AskUserQuestion buttons: decide yourself instead)" : `the ${f} form`);
+  const kinds = use.filter((f) => f !== "questions");
   const parts = [
-    use.length && `The user switched ON in Claudia's form row: ${use.map(name).join(", ")}. From now on draw with ${use.length > 1 ? "these" : "this"} wherever it fits (redraw the current picture with ${use.length > 1 ? "them" : "it"} if it fits there)${use.includes("freeform") ? "; freeform on means: be creative, build an interactive page where it helps" : ""}.`,
+    kinds.length && `The user made ONLY these green in Claudia's form row: ${kinds.map(name).join(", ")}. Draw with these and nothing else: other forms, graphs and freeform are refused by draw. Redraw the current picture with them now${kinds.includes("freeform") ? "; freeform green means: be creative, build an interactive page where it helps" : ""}.`,
     off.length && `Switched OFF: ${off.map(name).join(", ")}; don't use ${off.length > 1 ? "them" : "it"} (draw refuses).`,
     !use.length && !off.length && "The user reset Claudia's form row: choose forms yourself again.",
   ].filter(Boolean);
@@ -328,6 +330,8 @@ export class Chat implements SessionHandler {
 
   async setSettings(next: Partial<Settings>) {
     const prev = this.settings;
+    // Made passive: the colour it had is kept, for when it wakes.
+    if (next.color === "ash" && prev.color && prev.color !== "ash") next = { ...next, prevColor: prev.color };
     this.settings = { ...prev, ...next };
     store.saveSettings(this.id, this.settings);
     if (this.q) {
@@ -608,12 +612,34 @@ export class Chat implements SessionHandler {
       b.name ??= t.name;
     }
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
-    // Forms the user deleted aren't drawn, even by a session that still has the old tool list.
-    const hidden = new Set([...store.prefs().hiddenForms, ...Object.keys(this.settings.forms ?? {}).filter((f) => this.settings.forms[f] === "off")]);
-    const freeformOff = hidden.has("freeform");
-    const isFreeform = (b: NonNullable<DrawInput["blocks"]>[number]) => freeformOff && !b.form && (b.html !== undefined || !!b.template);
-    const refused = (input.blocks ?? []).filter((b) => (b.form && hidden.has(b.form)) || isFreeform(b)).map((b) => b.form ?? "freeform");
-    if (refused.length) input = { ...input, blocks: input.blocks!.filter((b) => !((b.form && hidden.has(b.form)) || isFreeform(b))) };
+    // The form row decides what may be drawn. Off (or deleted in the Forms window): refused. Green
+    // ("use"): only the green ones; graphs and freeform count as kinds too.
+    const choice = this.settings.forms ?? {};
+    const hidden = new Set([...store.prefs().hiddenForms, ...Object.keys(choice).filter((f) => choice[f] === "off")]);
+    const only = new Set(Object.keys(choice).filter((f) => choice[f] === "use" && f !== "questions"));
+    const allowed = (kind: string) => !hidden.has(kind) && (!only.size || only.has(kind));
+    const kindOf = (b: NonNullable<DrawInput["blocks"]>[number]) => {
+      if (b.form) return b.form;
+      if (b.html !== undefined || b.template) return "freeform";
+      const known = this.scene.blocks?.find((x) => x.id === b.id);
+      if (known) return known.kind === "form" ? known.form : known.kind === "html" ? "freeform" : "graph";
+      return b.kind === "html" ? "freeform" : "graph";
+    };
+    const refused: string[] = [];
+    if (input.blocks?.length) {
+      const keep = input.blocks.filter((b) => {
+        // A block only moved, renamed or resized is no new drawing.
+        const touches = b.form || b.data || b.html !== undefined || b.template || b.parts || b.kind;
+        if (!touches || allowed(kindOf(b))) return true;
+        refused.push(kindOf(b));
+        return false;
+      });
+      input = { ...input, blocks: keep };
+    }
+    if ((input.nodes?.length || input.edges?.length || input.groups?.length) && !allowed("graph")) {
+      refused.push("graph");
+      input = { ...input, nodes: undefined, edges: undefined, groups: undefined };
+    }
     // A code block given a file and no code shows the whole file, read here (as it is now).
     const unread: string[] = [];
     for (const b of input.blocks ?? []) {
@@ -642,7 +668,7 @@ export class Chat implements SessionHandler {
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
     const news = this.seeForms();
-    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user turned off the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
+    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: ${only.size ? `the user allows only ${[...only].join(", ")} in this chat (green in the form row); redraw it with ${only.size > 1 ? "those" : "that"}` : "switched off by the user; use another kind"}` : ""}`;
   }
 
   // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.

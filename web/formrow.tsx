@@ -9,11 +9,11 @@ type Choice = "use" | "off";
 const NEXT: Record<string, Choice | undefined> = { auto: "use", use: "off", off: undefined };
 // Questions only go on and off: auto (Claude may ask with buttons) → off (it decides itself).
 const NEXT_Q: Record<string, Choice | undefined> = { auto: "off", off: undefined };
-const SAY: Record<string, string> = { auto: "Claude decides", use: "use it: Claude reaches for it", off: "off: Claude won't draw it" };
+const SAY: Record<string, string> = { auto: "Claude decides", use: "green: only the green ones may be drawn", off: "off: Claude can't draw it" };
 const SAY_Q: Record<string, string> = { auto: "on: Claude may ask you", off: "off: Claude decides itself" };
 const say = (f: string, state: string) => (f === "questions" ? SAY_Q : SAY)[state];
 // The non-form circles (freeform, questions): label, text and glyph.
-const extra = (f: string) => (f === "freeform" ? FREEFORM : f === "questions" ? QUESTIONS : null);
+const extra = (f: string) => (f === "freeform" ? FREEFORM : f === "questions" ? QUESTIONS : f === "graph" ? GRAPH : null);
 
 // A small chalk drawing per form.
 const GLYPH: Record<FormName, React.ReactNode> = {
@@ -26,6 +26,11 @@ const GLYPH: Record<FormName, React.ReactNode> = {
   files: <path d="M3 5.5h5l1.5 1.5H17v8.5H3zM6 10h8M6 13h5" />,
 };
 // Freeform has no form entry: its own circle at the end of the row.
+const GRAPH = {
+  label: "Graph",
+  when: "Circles, boxes and arrows: how things connect. Green with others: only those kinds may be drawn.",
+  glyph: <path d="M5 6.5a2 2 0 1 0 0 .01M15 6.5a2 2 0 1 0 0 .01M10 15a2 2 0 1 0 0 .01M7 6.5h6M6 8.3l3 5M14 8.3l-3 5" />,
+};
 const QUESTIONS = {
   label: "Questions",
   when: "Claude asking you with buttons (the full-window choices). Off: it decides itself and says in a line what it chose.",
@@ -45,7 +50,7 @@ export function FormRow({ forms, hidden, onChange, cols, onCols }: {
   onCols: (cols: number) => void;
 }) {
   const [peek, setPeek] = useState<string | null>(null);
-  const shown = [...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform", "questions"];
+  const shown = ["graph", ...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform", "questions"];
   const cycle = (f: string) => {
     const now = forms[f] ?? "auto";
     const next = { ...forms };
@@ -87,7 +92,7 @@ export function FormRow({ forms, hidden, onChange, cols, onCols }: {
           </div>
           <p>{extra(peek)?.when ?? FORMS[peek as FormName].when}</p>
           {!extra(peek) && <div className="form-peek-sample"><FormView form={peek as FormName} data={FORMS[peek as FormName].sample} /></div>}
-          <p className="form-peek-hint">{peek === "questions" ? "click: on ↔ off" : "click: auto → use → off"} · this chat only</p>
+          <p className="form-peek-hint">{peek === "questions" ? "click: on ↔ off" : "click: auto → green (only these) → off"} · this chat only</p>
         </div>
       )}
     </div>

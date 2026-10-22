@@ -50,7 +50,7 @@ type Live = {
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {}, cols: 0 }, model: "", changes: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {}, cols: 0, prevColor: null }, model: "", changes: [],
 });
 
 const CHAT_WIDTH = 400; // the chat column until dragged (px)
