@@ -325,6 +325,10 @@ Bun.serve({
             await chat(m.chat).setSettings(next);
             return "color" in m ? broadcastChats() : undefined;
           }
+          case "wake": {
+            await wake(chat(m.chat));
+            return broadcastChats();
+          }
           case "stop_task": return await chats.get(m.chat)?.stopTask(String(m.task));
         }
       } catch (err) {

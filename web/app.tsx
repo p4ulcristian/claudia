@@ -9,6 +9,7 @@ import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
+import { ChatMenu, type MenuChat } from "./chatmenu";
 import { PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
@@ -341,13 +342,22 @@ function App() {
     if (!t.trim() || t === title) return;
     await fetch(`/api/chats/${current}`, { method: "PATCH", body: JSON.stringify({ title: t.trim() }) });
   };
-  // Archive hides the chat and moves on to the next one; in the archived view it brings it back.
-  const setArchived = async (archived: boolean) => {
-    await fetch(`/api/chats/${current}`, { method: "PATCH", body: JSON.stringify({ archived }) });
-    if (!archived) return;
+  // Archive hides the chat (the open one moves on to the next); in the archived view it brings it back.
+  const archiveChat = async (id: string, archived: boolean) => {
+    await fetch(`/api/chats/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+    if (!archived || id !== current) return;
     const next = chats.find((c) => c.id !== current);
     if (next) open(next.id);
     else newChat();
+  };
+  const setArchived = (archived: boolean) => archiveChat(current, archived);
+  // The right-click menu on a chat (rail circle or list row).
+  const [menu, setMenu] = useState<{ chat: MenuChat; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const menuFor = (c: { id: string; title: string; color: string | null }) => (e: React.MouseEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    setMenu({ chat: { id: c.id, title: c.title, color: c.color, archived: archivedView }, x: e.clientX, y: e.clientY });
   };
 
   // Which picture to show: live, or the one that was current at an older message.
@@ -447,6 +457,16 @@ function App() {
       {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {formsOpen && <FormsGallery close={closeForms} />}
+      {menu && (
+        <ChatMenu
+          {...menu}
+          close={closeMenu}
+          onColor={(color) => send({ t: "settings", chat: menu.chat.id, color })}
+          onWake={() => send({ t: "wake", chat: menu.chat.id })}
+          onRename={(title) => void fetch(`/api/chats/${menu.chat.id}`, { method: "PATCH", body: JSON.stringify({ title }) })}
+          onArchive={(archived) => void archiveChat(menu.chat.id, archived)}
+        />
+      )}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
@@ -471,6 +491,7 @@ function App() {
                   className={`rail-dot ${c.id === current ? "on" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c.id, e)}
+                  onContextMenu={menuFor(c)}
                   {...tipProps(c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
@@ -498,6 +519,7 @@ function App() {
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                 onClick={(e) => pick(c.id, e)}
+                onContextMenu={menuFor(c)}
                 {...tipProps(c.title, chatColorVar(c.color), true)}
               >
                 {c.running && <span className="run-dot" title="Working" />}

@@ -370,6 +370,14 @@ code, pre { font-family: var(--mono); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
 
+/* Right click on a chat: colour, passive, rename, archive. */
+.chat-menu { position: fixed; z-index: 60; width: 236px; display: grid; gap: 2px; padding: 10px 8px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 40%); }
+.cm-title { padding: 0 6px 6px; font: 700 15px var(--hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-swatches { display: grid; grid-template-columns: repeat(6, 26px); justify-content: space-between; gap: 8px 0; padding: 2px 6px 10px; border-bottom: 1px dashed var(--line); margin-bottom: 4px; }
+.cm-item { text-align: left; padding: 5px 8px; border-radius: 7px; font: 700 15px var(--hand); color: var(--fg); }
+.cm-item:hover { background: var(--panel2); }
+.cm-rename { margin: 2px 4px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 7px; background: var(--bg2); color: var(--fg); outline: none; }
+
 /* Sidebar closed: one coloured circle per chat, like chat heads. */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: 46px 0 10px; background: var(--bg2); border-right: 1px solid var(--line); min-height: 0; }
 .rail-dots { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 10px; }
