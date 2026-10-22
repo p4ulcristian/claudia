@@ -52,7 +52,7 @@ const fresh = (id: string): Live => ({
   tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null }, model: "", changes: [],
 });
 
-const CHAT_WIDTH = 350; // the chat column until dragged (px)
+const CHAT_WIDTH = 400; // the chat column until dragged (px)
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
 
 // /new?text=… (e.g. Eye on Rainbow's "Open in Claudia"): a new chat of your own with the text in
