@@ -420,16 +420,16 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
   const [big, setBig] = useState<string | null>(null); // an image shown over the window
-  // The file Claude opened scrolls to its first highlighted line or note, inside the tree only.
+  // The file Claude opened: the picture scrolls to its first highlighted line or note.
   const treeRef = useRef<HTMLDivElement>(null);
   const linesKey = JSON.stringify([data.lines, list(data.notes).map((n) => n.line)]);
   useEffect(() => {
     if (!opened0 || file?.path !== opened0 || file.text === undefined) return;
     const raf = requestAnimationFrame(() => {
-      const tree = treeRef.current;
-      const hit = tree?.querySelector<HTMLElement>(".f-ln.hot, .f-pin");
-      if (!tree || !hit) return;
-      tree.scrollTop += hit.getBoundingClientRect().top - tree.getBoundingClientRect().top - 48;
+      const hit = treeRef.current?.querySelector<HTMLElement>(".f-ln.hot, .f-pin");
+      const pane = hit?.closest<HTMLElement>(".right-scroll");
+      if (!hit || !pane) return;
+      pane.scrollTop += hit.getBoundingClientRect().top - pane.getBoundingClientRect().top - pane.clientHeight / 3;
     });
     return () => cancelAnimationFrame(raf);
   }, [file?.path, file?.text, linesKey]);

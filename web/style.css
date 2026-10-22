@@ -961,7 +961,8 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 .f-files { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 6px; }
 .f-files::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
-.f-tree { overflow: auto; padding: 4px 0; font: 13px/1.5 var(--mono); }
+/* As tall as it is: the tree never scrolls inside (the picture scrolls). */
+.f-tree { overflow-x: auto; overflow-y: visible; padding: 4px 0; font: 13px/1.5 var(--mono); }
 /* Sized (resized or starting short): the files form fills its box and the tree scrolls inside. */
 .rs.sized .form-files, .rs.sized .f-files { height: 100%; }
 .rs.sized .f-files { display: flex; flex-direction: column; }
