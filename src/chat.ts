@@ -540,6 +540,17 @@ export class Chat implements SessionHandler {
       if (typeof text === "string") b.data = { ...d, code: text, line: 1, diff: false, error: null };
       else { b.data = { ...d, code: "", error: text.error }; unread.push(text.error); }
     }
+    // A files block reads its folder live (src/files.ts): the root is made absolute here, which is
+    // also what lets the page read inside it.
+    for (const b of input.blocks ?? []) {
+      const isFiles = b.form === "files" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "files"));
+      if (!isFiles) continue;
+      const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
+      const given = typeof b.data?.root === "string" ? b.data.root : undefined;
+      if (given === undefined && known) continue;
+      const base = this.settings.folder ?? WORK;
+      b.data = { ...b.data, root: resolve(base, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
+    }
     const { scene, changed } = applyDraw(this.scene, input);
     this.scene = scene;
     this.drew = true;

@@ -958,6 +958,23 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-pin::before { content: ""; position: absolute; left: calc(5.6ch + 30px); top: -3px; border: 6px solid transparent; border-bottom: 8px solid var(--box); border-top: 0; filter: url(#tip-chalk); }
 .f-pin > span { display: inline-block; max-width: 100%; padding: 4px 12px; font: 700 15px/1.35 var(--hand); color: var(--fg); }
 
+.f-files { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 6px; }
+.f-files::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
+.f-tree { max-height: 560px; overflow: auto; padding: 4px 0; font: 13px/1.5 var(--mono); }
+.f-tree-row { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 1px 12px 1px calc(12px + var(--depth) * 16px); text-align: left; color: var(--fg); white-space: nowrap; }
+.f-tree-row:hover { background: color-mix(in srgb, var(--line) 30%, transparent); }
+.f-tree-row .tw { width: 1ch; flex: none; color: var(--muted); }
+.f-tree-row.dir .nm { color: var(--blue); }
+.f-tree-row.file.open { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.f-tree-row .nm { overflow: hidden; text-overflow: ellipsis; }
+.f-tree-row .st { flex: none; font: 700 11px var(--sans); }
+.st-M { color: var(--amber); } .st-A, .st-U { color: var(--green); } .st-D { color: var(--red); }
+.f-tree-row.marked .nm { color: var(--mark); font-weight: 700; }
+.f-tree-row .mk { margin-left: 6px; font: 700 14px var(--hand); color: var(--mark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-tree-row.muted { color: var(--muted); }
+.f-tree-row.err { color: var(--red); font-family: var(--sans); font-size: 12.5px; }
+.f-tree-file { padding: 4px 12px 8px calc(12px + var(--depth) * 16px); }
+
 /* The forms gallery: a page over the app. */
 .forms-link { display: flex; align-items: center; gap: 8px; padding: 4px 6px; color: var(--muted); font: 700 15px var(--hand); }
 .forms-link:hover { color: var(--fg); }

@@ -13,8 +13,7 @@ You are running inside Claudia. The screen has two halves:
 
 The picture is a canvas of blocks, top to bottom (two "half" blocks sit side by side). There are three kinds, and each block wears a badge with its kind and its name:
 - Graph blocks: circles, boxes, arrows and groups. The draw call's nodes, edges, groups and remove go to the graph block named by "graph" ("graph" if left out).
-- Forms: predefined shapes for common things, drawn in the board's chalk style. Pick a form when one fits; it is faster to read and cheaper to update than your own HTML. Send only the items that changed (by id); removeItems drops some.
-${formsHelp()}
+- Forms: predefined shapes for common things, drawn in the board's chalk style. Pick a form when one fits; it is faster to read and cheaper to update than your own HTML. Send only the items that changed (by id); removeItems drops some. The forms and their data are listed in the draw tool's description (always the current list).
 - Freeform: your own small HTML page, for what no graph or form can show.
 
 Give every block a short, telling name (blocks[].name, e.g. "Deploy steps", "Latency by hour"): the user sees it on the badge and uses it to ask for changes ("make the latency chart weekly").
@@ -81,7 +80,7 @@ const drawShape = {
         name: z.string().optional().describe("Short telling name shown on the block's badge, e.g. \"Deploy steps\""),
         kind: z.enum(["graph", "html"]).optional().describe("Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"),
         form: z.enum(FORM_NAMES as [string, ...string[]]).optional().describe("Makes this a form block of that kind"),
-        data: z.record(z.string(), z.any()).optional().describe("A form's data (see the forms in the system prompt): item lists are upserted by item id, other fields replaced"),
+        data: z.record(z.string(), z.any()).optional().describe("A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"),
         removeItems: z.array(z.string()).optional().describe("Ids of form items to remove"),
         template: z.string().optional().describe("Draw a saved template (by name) in this freeform block; fill it through parts"),
         width: z.enum(WIDTHS).optional().describe("full (default) or half: two half blocks in a row sit side by side"),
@@ -121,7 +120,10 @@ export const PICTURE_MCP: McpDef = {
   tools: [
     {
       name: "draw",
-      description: `Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form (${FORM_NAMES.join(", ")}) or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.`,
+      description: `Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.
+
+Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:
+${formsHelp()}`,
       schema: z.toJSONSchema(z.object(drawShape)) as Record<string, unknown>,
     },
     {

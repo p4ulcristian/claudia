@@ -494,7 +494,7 @@ function SaveTemplate({ chat, block }: { chat: string; block: Block }) {
   );
 }
 
-function BlockView({ block, changed, seq, chat }: { block: Block; changed: Set<string>; seq: number; chat?: string }) {
+function BlockView({ block, changed, seq, chat, browse }: { block: Block; changed: Set<string>; seq: number; chat?: string; browse?: string }) {
   const hot = changed.has(block.id) || [...changed].some((c) => c.startsWith(`${block.id}:`));
   return (
     <section className={`block w-${block.width ?? "full"} k-${block.kind}`}>
@@ -505,14 +505,15 @@ function BlockView({ block, changed, seq, chat }: { block: Block; changed: Set<s
         {chat && block.kind === "html" && <SaveTemplate chat={chat} block={block} />}
       </div>
       {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
-        : block.kind === "form" ? <FormView form={block.form} data={block.data} />
+        : block.kind === "form" ? <FormView form={block.form} data={block.data} chat={browse} />
         : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
     </section>
   );
 }
 
 // chat: where the shown picture is live (it can save templates); left out for older pictures.
-export function PictureView({ scene, changed, seq, chat }: { scene: Scene; changed: string[]; seq: number; chat?: string }) {
+// browse: the chat the picture belongs to, always (forms read its files through it, old pictures too).
+export function PictureView({ scene, changed, seq, chat, browse }: { scene: Scene; changed: string[]; seq: number; chat?: string; browse?: string }) {
   const hot = new Set(changed);
   const blocks = scene.blocks;
   if (blocks ? !blocks.length : !scene.nodes.length && !scene.cards.length)
@@ -526,7 +527,7 @@ export function PictureView({ scene, changed, seq, chat }: { scene: Scene; chang
   if (blocks)
     return (
       <div className="picture blocks">
-        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} chat={chat} />)}
+        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} chat={chat} browse={browse} />)}
       </div>
     );
   // A picture from before blocks: its graph and cards as they were drawn.

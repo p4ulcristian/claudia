@@ -10,6 +10,7 @@ import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
 import { search, sessionsDir, warm } from "./src/search";
 import { explain, type ExplainInput } from "./src/explain";
+import { listDir, readText } from "./src/files";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -241,6 +242,23 @@ Bun.serve({
         } catch (err) {
           return json({ error: String((err as Error)?.message ?? err) }, 500);
         }
+      },
+    },
+    // The files form: a folder's entries or a file's text, inside a root this chat drew a files block for.
+    "/api/chats/:id/files": {
+      GET: (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const p = new URL(req.url).searchParams;
+        const root = p.get("root") ?? "";
+        const roots = new Set<string>();
+        const scenes = [chats.get(id)?.scene, ...store.pictures(id).map((x) => x.scene)];
+        for (const sc of scenes) for (const b of sc?.blocks ?? []) if (b.kind === "form" && b.form === "files" && typeof b.data.root === "string") roots.add(b.data.root);
+        if (!roots.has(root)) return json({ error: "not a folder of this chat's pictures" }, 403);
+        const path = p.get("path") ?? "";
+        if (p.get("read") === "1") return json(readText(root, path));
+        const entries = listDir(root, path);
+        return entries ? json({ entries }) : json({ error: "no such folder" }, 404);
       },
     },
     "/api/delegate": {

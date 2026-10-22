@@ -752,7 +752,7 @@ function App() {
           ) : (
           <div className="right-scroll">
           <div className={`stage ${viewing ? "past" : ""}`}>
-            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} />
+            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} />
           </div>
           </div>
           )}

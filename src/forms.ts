@@ -98,6 +98,22 @@ export const FORMS = {
       notes: [{ id: "qty", line: 13, text: "quantity was ignored: 3 coats billed as 1", color: "amber" }],
     },
   },
+  files: {
+    label: "Files",
+    when: "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out.",
+    fields: "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), open?: [folders relative to root to show unfolded], marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out (their folders unfold)",
+    sample: {
+      demo: [
+        { path: "src", dir: true },
+        { path: "src/orders", dir: true },
+        { path: "src/orders/total.ts", status: "M" },
+        { path: "src/orders/total.test.ts", status: "U" },
+        { path: "src/shops.ts" },
+        { path: "README.md" },
+      ],
+      marks: [{ id: "t", path: "src/orders/total.ts", note: "the fix", color: "amber" }],
+    },
+  },
 } satisfies Record<string, FormSpec>;
 
 export type FormName = keyof typeof FORMS;
@@ -126,7 +142,8 @@ export function mergeForm(prev: Record<string, unknown>, data: Record<string, un
   return out;
 }
 
-// The forms part of Claude's draw tool description.
+// The forms part of Claude's draw tool description (in the tool, not the system prompt, so a running
+// chat gets new forms when the tools are swapped in).
 export function formsHelp(): string {
   return FORM_NAMES.map((n) => `- ${n}: ${FORMS[n].when} Data: ${FORMS[n].fields}.`).join("\n");
 }
