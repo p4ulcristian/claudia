@@ -56,6 +56,10 @@ function serve(hostname: string, gate: boolean) {
       "/": index,
       "/c/:id": index,
       "/new": index,
+      // Home Screen app (iPhone: Share → Add to Home Screen): the icons its manifest names
+      // (index.html's own links are bundled by Bun).
+      "/app-icon/icon-192.png": new Response(Bun.file(new URL("./web/app-icon/icon-192.png", import.meta.url))),
+      "/app-icon/icon-512.png": new Response(Bun.file(new URL("./web/app-icon/icon-512.png", import.meta.url))),
       "/api/me": { GET: me },
       "/api/claude-token": { PUT: putToken },
       "/api/claude-token/use": { POST: useSaved },

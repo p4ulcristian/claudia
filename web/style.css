@@ -760,3 +760,22 @@ svg.logo { flex: none; color: var(--fg); }
   .right.sheet .rbar-fold { rotate: 90deg; }
 }
 @keyframes fade-in { from { opacity: 0; } }
+
+/* Touch screens: no double-tap zoom, no grey tap flash, no rubber-band scroll of the whole page,
+   and the notch / home bar keep their room (viewport-fit=cover puts the page under them). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+.app { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+.menu-toggle { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); }
+.app.no-sidebar .menu-toggle { left: calc(16px + env(safe-area-inset-left)); }
+.sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+.composer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+@media (max-width: 679px) {
+  /* iOS zooms into any field with text under 16px when it gets focus. */
+  input, textarea, select { font-size: 16px !important; }
+  .composer { padding-bottom: 8px; }
+  .sheet-tab { height: calc(34px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+  .right.sheet { height: calc(86dvh - env(safe-area-inset-top)); }
+  .right.sheet .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .app.narrow .sidebar-slot { padding-top: env(safe-area-inset-top); }
+}

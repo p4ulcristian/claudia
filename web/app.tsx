@@ -525,11 +525,6 @@ function App() {
             {row && !readOnly && (
               <div className="head-actions">
                 <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
-                {row.archived ? (
-                  <button className="icon" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
-                ) : (
-                  <button className="icon" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
-                )}
               </div>
             )}
             {!up && <span className="offline">reconnecting…</span>}
@@ -557,6 +552,11 @@ function App() {
             focusKey={current}
             initialText={startText}
             commands={meta.commands}
+            actions={row && !readOnly && (
+              row.archived
+                ? <button className="icon archive" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
+                : <button className="icon archive" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
+            )}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />}
         </section>
@@ -615,6 +615,10 @@ function App() {
     </div>
   );
 }
+
+// iOS Safari ignores user-scalable=no: block pinch zoom of the page itself (two-finger gestures).
+addEventListener("gesturestart", (e) => e.preventDefault());
+addEventListener("touchmove", (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
 createRoot(document.getElementById("root")!).render(<App />);
 

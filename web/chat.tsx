@@ -170,7 +170,7 @@ export function Messages(props: {
 
 type Img = { media_type: string; data: string; url: string };
 
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode }) {
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode; actions?: React.ReactNode }) {
   const [text, setText] = useState(props.initialText ?? "");
   const [images, setImages] = useState<Img[]>([]);
   const [pick, setPick] = useState(0);
@@ -265,6 +265,7 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
         />
         <div className="toolbar">
           <div className="tools">{props.tools}</div>
+          {props.actions}
           {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
           <button className="send primary" onClick={send} disabled={!text.trim() && !images.length} title="Send (Enter)">Send</button>
         </div>
