@@ -10,6 +10,7 @@ import { ActivityPill } from "./activity";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, type MenuChat } from "./chatmenu";
+import { play } from "./sounds";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
@@ -234,13 +235,26 @@ function App() {
   }), []);
   useEffect(() => changeDone((d) => d.delete(current)), [current]);
 
+  const [sounds, setSounds] = useState(() => store.get("sounds") === "on");
+  const soundsRef = useRef(sounds);
+  soundsRef.current = sounds;
+  const wasWaiting = useRef(new Map<string, boolean>());
   const loadChats = useCallback(async () => {
     const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
     if (!r.ok) return;
     const rows: ChatRow[] = await r.json();
     for (const c of rows) known.current.set(c.id, c);
     const ended = rows.filter((c) => wasRunning.current.get(c.id) && !c.running && c.id !== currentRef.current);
-    for (const c of rows) wasRunning.current.set(c.id, c.running);
+    // Sounds: a chat that finished or started waiting on you, in its colour's note; the open one only
+    // when the window isn't in front.
+    if (soundsRef.current) {
+      const heard = (c: ChatRow) => c.id !== currentRef.current || !document.hasFocus();
+      for (const c of rows) {
+        if (c.waiting && !wasWaiting.current.get(c.id) && heard(c)) play("waiting", c.color);
+        else if (wasRunning.current.get(c.id) && !c.running && !c.waiting && heard(c)) play("done", c.color);
+      }
+    }
+    for (const c of rows) { wasRunning.current.set(c.id, c.running); wasWaiting.current.set(c.id, c.waiting); }
     if (ended.length) changeDone((d) => ended.forEach((c) => d.add(c.id)));
     setChats(rows);
   }, [all, archivedView]);
@@ -613,6 +627,18 @@ function App() {
             <button className={`archived-toggle ${archivedView ? "on" : ""}`} onClick={() => setArchivedView((v) => !v)}>
               <ArchiveIcon /> {archivedView ? "Back to chats" : "Archived"}
             </button>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={sounds}
+                onChange={(e) => {
+                  setSounds(e.target.checked);
+                  store.set("sounds", e.target.checked ? "on" : "off");
+                  if (e.target.checked) play("done", live.settings.color);
+                }}
+              />
+              Sounds
+            </label>
             <label className="toggle">
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
