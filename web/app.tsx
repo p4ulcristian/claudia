@@ -48,6 +48,17 @@ const fresh = (id: string): Live => ({
 
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
 
+// /new?text=… (e.g. Eye on Rainbow's "Open in Claudia"): a new chat of your own with the text in
+// the message box, not sent. Your own chats, so another profile's read-only view is left first;
+// the address goes back to / so a reload doesn't fill the box again.
+const startText = (() => {
+  if (location.pathname !== "/new") return "";
+  const text = new URLSearchParams(location.search).get("text") ?? "";
+  document.cookie = "claudia_view=; path=/; max-age=0; samesite=lax";
+  history.replaceState(null, "", "/");
+  return text;
+})();
+
 const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
@@ -494,6 +505,7 @@ function App() {
             onSend={onSend}
             onStop={onStop}
             focusKey={current}
+            initialText={startText}
             commands={meta.commands}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />}

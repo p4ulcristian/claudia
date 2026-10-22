@@ -32,6 +32,8 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 14. Page cards (2026-10-22): a card can be Claude's own small HTML page (`kind: "page"`, `html`) for what boxes and arrows can't show: charts, sliders, clickable mockups, visual picks. It runs in a sandboxed iframe (`allow-scripts` only: no access to Claudia, its cookies or API), with a CSP that allows only inline code plus scripts/styles from cdn.jsdelivr.net, Claudia's theme as CSS variables, its fonts, and a height fitted to the page. Measured cost: ~1.5k tokens for a page vs ~0.45k for a drawing.
 
+15. Start a chat from a link (2026-10-22): `/new?text=…` opens a new chat of your own (leaving another profile's read-only view) with the text in the message box, not sent; you press Enter. Eye on Rainbow's "Open in Claudia" uses it. A link that sent the text by itself would let any link drive someone's Claude.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files

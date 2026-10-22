@@ -55,6 +55,7 @@ function serve(hostname: string, gate: boolean) {
     routes: {
       "/": index,
       "/c/:id": index,
+      "/new": index,
       "/api/me": { GET: me },
       "/api/claude-token": { PUT: putToken },
       "/api/claude-token/use": { POST: useSaved },

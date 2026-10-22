@@ -170,8 +170,8 @@ export function Messages(props: {
 
 type Img = { media_type: string; data: string; url: string };
 
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; commands: Command[]; tools?: React.ReactNode }) {
-  const [text, setText] = useState("");
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode }) {
+  const [text, setText] = useState(props.initialText ?? "");
   const [images, setImages] = useState<Img[]>([]);
   const [pick, setPick] = useState(0);
   const [menuOff, setMenuOff] = useState(false);
