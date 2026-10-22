@@ -32,14 +32,21 @@ function chat(id: string) {
   if (!c) {
     chats.set(id, (c = new Chat(id, broadcastChats)));
     // Every chat gets a colour of its own from the start, unless the preference says no.
-    if (!c.settings.color && store.prefs().chatColors === "each") void c.setSettings({ color: pickColor(store.colors().values()) });
+    if (!c.settings.color && store.prefs().chatColors === "each") void c.setSettings({ color: pickColor(usedColors(id)) });
   }
   return c;
 }
 
+// The colours the chat list wears now (not archived chats', not this one's): a new pick avoids them.
+function usedColors(except?: string): string[] {
+  const archived = store.archived();
+  const ours = store.ourChats();
+  return [...store.colors()].filter(([id]) => id !== except && !archived.has(id) && (ours.has(id) || chats.has(id))).map(([, c]) => c);
+}
+
 // Writing to a passive (ash) chat makes it active again: it gets a colour of its own back.
 async function wake(c: Chat) {
-  if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(store.colors().values()) });
+  if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(usedColors(c.id)) });
 }
 
 async function listChats(all: boolean, archivedView: boolean) {
@@ -51,9 +58,11 @@ async function listChats(all: boolean, archivedView: boolean) {
     archivedView ? archived.has(s.sessionId) : !archived.has(s.sessionId) && (all || ours.has(s.sessionId) || chats.has(s.sessionId)),
   );
   // Chats from before colours, or never opened here, get one the first time they're listed.
+  const used = usedColors();
   for (const s of store.prefs().chatColors === "each" ? shown : []) {
     if (colors.has(s.sessionId)) continue;
-    const color = pickColor(colors.values());
+    const color = pickColor(used);
+    used.push(color);
     colors.set(s.sessionId, color);
     const open = chats.get(s.sessionId);
     if (open) void open.setSettings({ color });
