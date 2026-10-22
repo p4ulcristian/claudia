@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
+import { ResizeBox } from "./resize";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -277,12 +278,42 @@ function Code({ data }: { data: Data }) {
   );
 }
 
+// A chalk folder, open or shut.
+function FolderIcon({ open }: { open: boolean }) {
+  return (
+    <svg className={`fo ${open ? "open" : ""}`} viewBox="0 0 22 16" aria-hidden="true">
+      {open
+        ? <path d="M2 4.2c0-.8.6-1.4 1.4-1.4h4.4l1.6 1.8h7c.8 0 1.4.6 1.4 1.4v1.2H6.2L3.4 13.6H3.2c-.7 0-1.2-.5-1.2-1.2z M6.2 7.2h13.6l-2.6 6.4H3.4z" />
+        : <path d="M2 4.2c0-.8.6-1.4 1.4-1.4h4.4l1.6 1.8h8.4c.8 0 1.4.6 1.4 1.4v7.2c0 .8-.6 1.4-1.4 1.4H3.4c-.8 0-1.4-.6-1.4-1.4z" />}
+    </svg>
+  );
+}
+
+// A file as a chalk tag with its extension, coloured by kind.
+const EXT_COLOR: Record<string, string> = {
+  ts: "blue", tsx: "blue", mts: "blue", js: "yellow", jsx: "yellow", mjs: "yellow", cjs: "yellow",
+  clj: "green", cljs: "green", cljc: "green", edn: "teal", bb: "green",
+  md: "grey", txt: "grey", json: "amber", yaml: "amber", yml: "amber", toml: "amber", lock: "grey",
+  css: "violet", scss: "violet", html: "orange", svg: "orange", sql: "cyan", sh: "lime", py: "sky",
+  rs: "orange", go: "cyan", swift: "orange", service: "pink", png: "magenta", jpg: "magenta", webp: "magenta",
+};
+function ExtTag({ name }: { name: string }) {
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  const c = EXT_COLOR[ext];
+  return (
+    <span className="ft" style={{ "--ft": c ? (c === "grey" ? "var(--muted)" : `var(--c-${c}, var(--${c}))`) : "var(--muted)" } as React.CSSProperties}>
+      {ext ? ext.slice(0, 5) : "·"}
+    </span>
+  );
+}
+
 // Files: a folder as a tree, read live through the runner (src/files.ts); folders open on click, a
 // file opens in place as a code block. Marks point files out; git status shows as a letter.
 type Entry = { name: string; dir: boolean; status?: string; changed?: number };
 const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, not in git yet", D: "deleted" };
 
-function Files({ data, chat }: { data: Data; chat?: string }) {
+function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
   const root: string = typeof data.root === "string" ? data.root : "";
   const demo: { path: string; dir?: boolean; status?: string }[] | null = Array.isArray(data.demo) ? data.demo : null;
   const marks = new Map<string, any>(list(data.marks).map((m) => [String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""), m]));
@@ -336,8 +367,8 @@ function Files({ data, chat }: { data: Data; chat?: string }) {
           data-item={m?.id}
           onClick={() => (e.dir ? toggle(path) : openFile(path))}
         >
-          <span className="tw">{e.dir ? (isOpen ? "▾" : "▸") : ""}</span>
-          <span className="nm">{e.name}{e.dir ? "/" : ""}</span>
+          {e.dir ? <FolderIcon open={isOpen} /> : <ExtTag name={e.name} />}
+          <span className="nm">{e.name}</span>
           {e.status && <span className={`st st-${e.status}`} title={STATUS_TIP[e.status]}>{e.status}</span>}
           {e.dir && e.changed ? <span className="st st-M" title={`${e.changed} changed inside`}>•</span> : null}
           {m?.note && <span className="mk">{m.note}</span>}
@@ -347,7 +378,9 @@ function Files({ data, chat }: { data: Data; chat?: string }) {
       if (!e.dir && isOpen && file)
         rows.push(
           <div key={`f${path}`} className="f-tree-file" style={{ "--depth": depth + 1 } as React.CSSProperties}>
-            {file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : <Code data={{ file: path, code: file.text }} />}
+            {file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : (
+              <ResizeBox id={`${chat ?? "demo"}:${block ?? "files"}:file`} initial={300}><Code data={{ file: path, code: file.text }} /></ResizeBox>
+            )}
           </div>,
         );
     }
@@ -359,6 +392,7 @@ function Files({ data, chat }: { data: Data; chat?: string }) {
     <div className="f-files">
       <div className="f-code-head">
         <span className="f-file" title={root}><span className="dir">{demo ? "~/Work/apps/" : home.slice(0, home.lastIndexOf("/") + 1)}</span><b>{demo ? "shop" : home.slice(home.lastIndexOf("/") + 1)}</b></span>
+        {open.size > 1 && <button type="button" className="f-copy" onClick={() => { setOpen(new Set([""])); setFile(null); }}>collapse all</button>}
         {!demo && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
       </div>
       <div className="f-tree">{!demo && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
@@ -366,7 +400,7 @@ function Files({ data, chat }: { data: Data; chat?: string }) {
   );
 }
 
-const RENDER: Record<FormName, (p: { data: Data; chat?: string }) => React.ReactNode> = {
+const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }) => React.ReactNode> = {
   pipeline: Pipeline,
   timeline: Timeline,
   compare: Compare,
@@ -377,7 +411,7 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string }) => React.React
 };
 
 // chat: the chat whose picture this is, for forms that read through the runner (files).
-export function FormView({ form, data, chat }: { form: FormName; data: Data; chat?: string }) {
+export function FormView({ form, data, chat, block }: { form: FormName; data: Data; chat?: string; block?: string }) {
   const R = RENDER[form];
-  return <div className={`form-view form-${form}`}>{R ? <R data={data} chat={chat} /> : <p className="f-note">Unknown form "{form}".</p>}</div>;
+  return <div className={`form-view form-${form}`}>{R ? <R data={data} chat={chat} block={block} /> : <p className="f-note">Unknown form "{form}".</p>}</div>;
 }

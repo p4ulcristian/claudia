@@ -4,6 +4,10 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
 import { FormView } from "./forms";
+import { ResizeBox } from "./resize";
+
+// Forms that start shorter than their content (the rest start as tall as they are; all can be resized).
+const FORM_START_HEIGHT: Partial<Record<string, number>> = { files: 340 };
 import { FORMS } from "../src/forms";
 import type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types";
 
@@ -505,7 +509,11 @@ function BlockView({ block, changed, seq, chat, browse }: { block: Block; change
         {chat && block.kind === "html" && <SaveTemplate chat={chat} block={block} />}
       </div>
       {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
-        : block.kind === "form" ? <FormView form={block.form} data={block.data} chat={browse} />
+        : block.kind === "form" ? (
+          <ResizeBox id={`${browse ?? "gallery"}:${block.id}`} initial={FORM_START_HEIGHT[block.form]}>
+            <FormView form={block.form} data={block.data} chat={browse} block={block.id} />
+          </ResizeBox>
+        )
         : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
     </section>
   );
