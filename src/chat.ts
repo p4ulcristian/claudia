@@ -341,8 +341,39 @@ export class Chat implements SessionHandler {
     this.emit({ t: "settings", settings: this.settings, model: this.model });
     if ("forms" in next) {
       this.swapTools();
-      this.formsNote = formsNote(this.settings.forms);
+      const added = this.instantForms(prev.forms ?? {}, this.settings.forms ?? {});
+      this.formsNote = [formsNote(this.settings.forms), added].filter(Boolean).join(" ");
     }
+  }
+
+  // Forms that need no thinking show the moment they turn green: files (the working folder), git (its
+  // repo), code (the file this chat changed last). Turned off again, Claudia's block goes. Returns a
+  // line for Claude about what it added.
+  private instantForms(before: Record<string, FormChoice>, now: Record<string, FormChoice>): string | null {
+    const folder = this.settings.folder ?? WORK;
+    const lastFile = store.changes(this.id).at(-1)?.path;
+    const fill: Record<string, Record<string, unknown> | null> = {
+      files: { root: folder },
+      git: { repo: folder },
+      code: lastFile ? { file: lastFile } : null,
+    };
+    const names: Record<string, string> = { files: "Project files", git: "History", code: "Last change" };
+    const add: NonNullable<DrawInput["blocks"]> = [];
+    const remove: string[] = [];
+    for (const f of Object.keys(fill)) {
+      if (!(FORM_NAMES as readonly string[]).includes(f)) continue;
+      const on = now[f] === "use", was = before[f] === "use";
+      const id = `auto-${f}`;
+      if (on && !was && fill[f] && !this.scene.blocks?.some((b) => b.id === id)) add.push({ id, form: f as any, name: names[f], data: fill[f]! });
+      if (!on && was && this.scene.blocks?.some((b) => b.id === id)) remove.push(id);
+    }
+    if (!add.length && !remove.length) return null;
+    // Drawn for the user, not by Claude: its forms news stays for Claude's own next draw.
+    const seen = this.formsSeen;
+    this.draw({ blocks: add, ...(remove.length ? { removeBlocks: remove } : {}) });
+    this.formsSeen = seen;
+    if (seen) this.q?.kv("formsSeen", seen);
+    return add.length ? `Claudia already put ${add.map((b) => `a ${b.form} block (id ${b.id}: ${b.name})`).join(", ")} on the picture; update or keep ${add.length > 1 ? "them" : "it"}, don't draw ${add.length > 1 ? "them" : "it"} again.` : null;
   }
 
   // The project Claude works in. The session stays in ~/Work; this is what Claudia shows and diffs follow.
