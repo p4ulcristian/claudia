@@ -81,6 +81,23 @@ export const FORMS = {
       ],
     },
   },
+  code: {
+    label: "Code",
+    when: "Code when the code is the point: the change you made, the function at fault, a snippet to talk about. Up to about 40 lines. Mark the lines that matter; pin a short note to a line instead of explaining it in the chat.",
+    fields: "file? (its path), line? (number of the first line, default 1), lang? (else taken from the file name), code (the lines as one string; with diff: true each line starts with '+', '-' or ' '), diff?: boolean, mark?: [line numbers or \"a-b\" ranges], notes?: [{ id, line, text, color? }] pinned under that line",
+    sample: {
+      file: "src/orders/total.ts",
+      line: 12,
+      diff: true,
+      code: [
+        " export function orderTotal(items: Item[]) {",
+        "-  return items.reduce((sum, i) => sum + i.price, 0);",
+        "+  return items.reduce((sum, i) => sum + i.price * i.qty, 0);",
+        " }",
+      ].join("\n"),
+      notes: [{ id: "qty", line: 13, text: "quantity was ignored: 3 coats billed as 1", color: "amber" }],
+    },
+  },
 } satisfies Record<string, FormSpec>;
 
 export type FormName = keyof typeof FORMS;

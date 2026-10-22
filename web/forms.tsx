@@ -1,7 +1,8 @@
 // The predefined forms (src/forms.ts), drawn in the board's chalk style. Each gets its block's
 // data as it stands after the draw calls (items merged by id).
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { FormName } from "../src/forms";
+import { highlightLines } from "./md";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -130,12 +131,89 @@ function Chart({ data }: { data: Data }) {
   return <div className="f-chart" ref={box} />;
 }
 
+// Code: real line numbers from data.line, highlighted per line; diff: true reads a leading +/-/space
+// per line (removed lines get no number); mark and notes point at those numbers.
+type CodeRow = { n: number | null; sign: "+" | "-" | ""; text: string };
+
+function codeRows(data: Data): CodeRow[] {
+  const first = Number.isFinite(data.line) ? Number(data.line) : 1;
+  const raw = String(data.code ?? "").replace(/\n+$/, "").split("\n");
+  let n = first;
+  return raw.map((l) => {
+    const sign = data.diff && (l[0] === "+" || l[0] === "-") ? (l[0] as "+" | "-") : "";
+    const text = data.diff && (sign || l[0] === " ") ? l.slice(1) : l;
+    return { n: sign === "-" ? null : n++, sign, text };
+  });
+}
+
+function markedLines(mark: unknown): Set<number> {
+  const out = new Set<number>();
+  for (const m of list(mark)) {
+    const [a, b] = String(m).split("-").map((x) => parseInt(x, 10));
+    if (Number.isNaN(a)) continue;
+    for (let i = a; i <= (Number.isNaN(b ?? NaN) ? a : b); i++) out.add(i);
+  }
+  return out;
+}
+
+function Code({ data }: { data: Data }) {
+  const rows = useMemo(() => codeRows(data), [data.code, data.line, data.diff]);
+  const file = typeof data.file === "string" ? data.file : "";
+  const ext = file.includes(".") ? file.split(".").pop() : undefined;
+  const lang = data.lang ?? ext;
+  const html = useMemo(() => highlightLines(rows.map((r) => r.text).join("\n"), lang), [rows, lang]);
+  const marked = markedLines(data.mark);
+  const notes = new Map<number, any[]>();
+  for (const nt of list(data.notes)) notes.set(Number(nt.line), [...(notes.get(Number(nt.line)) ?? []), nt]);
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(rows.filter((r) => r.sign !== "-").map((r) => r.text).join("\n")).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  const cut = file.lastIndexOf("/") + 1;
+  const firstNo = rows.find((r) => r.n != null)?.n;
+  const lastNo = [...rows].reverse().find((r) => r.n != null)?.n;
+  return (
+    <div className={`f-code ${data.diff ? "is-diff" : ""}`}>
+      <div className="f-code-head">
+        {file ? (
+          <span className="f-file" title={file}>
+            <span className="dir">{file.slice(0, cut)}</span><b>{file.slice(cut)}</b>
+            {firstNo != null && <span className="at">:{firstNo}{lastNo != null && lastNo !== firstNo ? `–${lastNo}` : ""}</span>}
+          </span>
+        ) : <span className="f-file" />}
+        {lang && <span className="f-lang">{lang}</span>}
+        <button type="button" className="f-copy" onClick={copy}>{copied ? "copied" : "copy"}</button>
+      </div>
+      <div className="f-lines">
+        {rows.map((r, i) => (
+          <React.Fragment key={i}>
+            <div className={`f-ln ${r.sign === "+" ? "add" : r.sign === "-" ? "del" : ""} ${r.n != null && marked.has(r.n) ? "hot" : ""} ${r.n != null && notes.has(r.n) ? "noted" : ""}`}>
+              <span className="num">{r.n ?? ""}</span>
+              <span className="sign">{r.sign === "-" ? "−" : r.sign}</span>
+              <code className="hljs" dangerouslySetInnerHTML={{ __html: html[i] || " " }} />
+            </div>
+            {r.n != null && notes.get(r.n)?.map((nt) => (
+              <div key={nt.id} className="f-pin" data-item={nt.id} style={{ "--pin": colorOf(nt.color) } as React.CSSProperties}>
+                <span className="chalk-box">{nt.text}</span>
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const RENDER: Record<FormName, (p: { data: Data }) => React.ReactNode> = {
   pipeline: Pipeline,
   timeline: Timeline,
   compare: Compare,
   chart: Chart,
   stats: Stats,
+  code: Code,
 };
 
 export function FormView({ form, data }: { form: FormName; data: Data }) {

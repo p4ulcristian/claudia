@@ -1,6 +1,12 @@
 import { Marked } from "marked";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
+import clojure from "highlight.js/lib/languages/clojure";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+
+hljs.registerLanguage("clojure", clojure);
+hljs.registerAliases(["cljs", "cljc", "bb"], { languageName: "clojure" });
+hljs.registerLanguage("dockerfile", dockerfile);
 
 const marked = new Marked({
   gfm: true,
@@ -22,6 +28,26 @@ export const md = (src: string) => DOMPurify.sanitize(marked.parse(src, { async:
 export function highlight(code: string, lang?: string) {
   const language = lang && hljs.getLanguage(lang) ? lang : undefined;
   return language ? hljs.highlight(code, { language }).value : hljs.highlightAuto(code).value;
+}
+
+// Highlighted code split into lines, each line's markup whole: a span open across a line break
+// is closed at its end and opened again on the next line.
+export function highlightLines(code: string, lang?: string): string[] {
+  const lines: string[] = [];
+  const open: string[] = [];
+  let cur = "";
+  for (const [tok] of highlight(code, lang).matchAll(/<span[^>]*>|<\/span>|\n|[^<\n]+/g)) {
+    if (tok === "\n") {
+      lines.push(cur + "</span>".repeat(open.length));
+      cur = open.join("");
+    } else {
+      cur += tok;
+      if (tok.startsWith("<span")) open.push(tok);
+      else if (tok === "</span>") open.pop();
+    }
+  }
+  lines.push(cur);
+  return lines;
 }
 
 // One listener for every code block's copy button.

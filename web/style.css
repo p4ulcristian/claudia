@@ -867,6 +867,34 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-chart .vega-embed { width: 100%; }
 .f-chart svg .mark-rect path, .f-chart svg .mark-line path, .f-chart svg .mark-area path { filter: url(#tip-chalk); }
 
+.f-code { --box: var(--line); position: relative; isolation: isolate; border-radius: 12px; padding: 0 0 8px; }
+.f-code::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
+.f-code-head { display: flex; align-items: baseline; gap: 12px; padding: 8px 14px 7px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.f-file { flex: 1; min-width: 0; display: flex; align-items: baseline; white-space: nowrap; font: 12.5px var(--mono); color: var(--muted); }
+.f-file .dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.f-file b, .f-file .at { flex: none; }
+.f-file b { color: var(--fg); font-weight: 600; }
+.f-file .at { color: var(--accent); }
+.f-lang { font: 700 13px var(--hand); color: var(--muted); }
+.f-copy { font: 700 13px var(--hand); color: var(--muted); }
+.f-copy:hover { color: var(--fg); text-decoration: underline; }
+.f-lines { padding-top: 6px; font: 12.5px/1.6 var(--mono); }
+.f-ln { display: grid; grid-template-columns: minmax(3.2ch, auto) 1.6ch 1fr; position: relative; }
+.f-ln .num { padding: 0 8px 0 12px; text-align: right; color: color-mix(in srgb, var(--muted) 60%, transparent); user-select: none; }
+.f-ln .sign { text-align: center; user-select: none; font-weight: 700; }
+.f-ln code.hljs { display: block; padding: 0 14px 0 calc(4px + 2ch); text-indent: -2ch; background: none; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.f-ln.add { background: color-mix(in srgb, var(--green) 14%, transparent); }
+.f-ln.add .sign, .f-ln.add .num { color: var(--green); }
+.f-ln.del { background: color-mix(in srgb, var(--red) 14%, transparent); }
+.f-ln.del .sign { color: var(--red); }
+.f-ln.del code.hljs { opacity: 0.7; }
+.f-ln.hot { background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.f-ln.hot .num { color: var(--amber); font-weight: 700; }
+.f-ln.hot::before { content: ""; position: absolute; left: 3px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--amber); filter: url(#chalk-line); }
+.f-pin { --box: var(--pin, var(--blue)); padding: 4px 14px 8px calc(5.6ch + 20px); position: relative; }
+.f-pin::before { content: ""; position: absolute; left: calc(5.6ch + 30px); top: -3px; border: 6px solid transparent; border-bottom: 8px solid var(--box); border-top: 0; filter: url(#tip-chalk); }
+.f-pin > span { display: inline-block; max-width: 100%; padding: 4px 12px; font: 700 15px/1.35 var(--hand); color: var(--fg); }
+
 /* The forms gallery: a page over the app. */
 .forms-link { display: flex; align-items: center; gap: 8px; padding: 4px 6px; color: var(--muted); font: 700 15px var(--hand); }
 .forms-link:hover { color: var(--fg); }
