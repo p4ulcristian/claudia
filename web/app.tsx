@@ -9,6 +9,7 @@ import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
+import { PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
 import { savePicture } from "./snapshot";
@@ -435,6 +436,8 @@ function App() {
 
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
+  // The rail: passive chats last, in their own order.
+  const railList = [...list.filter((c) => c.color !== PASSIVE), ...list.filter((c) => c.color === PASSIVE)];
 
   if (me && !me.profile) return <NoProfile me={me} />;
 
@@ -462,10 +465,10 @@ function App() {
           <nav className="rail" aria-label="Chats">
             <div className="rail-dots">
               {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
-              {list.map((c) => (
+              {railList.map((c, i) => (
                 <button
                   key={c.id}
-                  className={`rail-dot ${c.id === current ? "on" : ""}`}
+                  className={`rail-dot ${c.id === current ? "on" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""}` : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c.id, e)}
                   {...tipProps(c.title, chatColorVar(c.color))}

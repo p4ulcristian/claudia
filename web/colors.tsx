@@ -1,6 +1,6 @@
 // A chat's colour: a dot in the header opens the palette; the list and the chat's accent wear it.
 import React, { useEffect, useRef, useState } from "react";
-import { CHAT_COLORS } from "../src/colors";
+import { CHAT_COLORS, PASSIVE } from "../src/colors";
 
 export const chatColorVar = (color: string | null | undefined) =>
   color && (CHAT_COLORS as readonly string[]).includes(color) ? `var(--c-${color})` : undefined;
@@ -33,7 +33,7 @@ export function ColorPicker({ color, onPick }: { color: string | null; onPick: (
       {open && (
         <div className="palette" role="menu">
           {CHAT_COLORS.map((c) => (
-            <button key={c} className={`swatch ${c === color ? "on" : ""}`} style={{ background: `var(--c-${c})` }} onClick={() => pick(c)} title={c} aria-label={c} />
+            <button key={c} className={`swatch ${c === color ? "on" : ""} ${c === PASSIVE ? "passive" : ""}`} style={{ background: `var(--c-${c})` }} onClick={() => pick(c)} title={c === PASSIVE ? "Passive: sinks to the bottom of the rail" : c} aria-label={c} />
           ))}
           <button className={`swatch none ${color ? "" : "on"}`} onClick={() => pick(null)} title="No colour" aria-label="No colour" />
         </div>
