@@ -38,8 +38,9 @@ export function FormsGallery({ close }: { close: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const remove = async (name: string) => {
-    if (!confirm(`Delete the template "${name}"?`)) return;
+    setDeleting(null);
     await fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
     load();
   };
@@ -74,13 +75,37 @@ export function FormsGallery({ close }: { close: () => void }) {
                   <div className="block-head">
                     <span className="g-num">#{FORM_NAMES.length + 3 + i}</span>
                     <BlockBadge block={{ id: t.name, kind: "html", html: t.html, parts: t.parts, template: t.name }} />
-                    <button className="tpl-save" onClick={() => remove(t.name)}>delete</button>
+                    <button className="tpl-delete" onClick={() => setDeleting(t.name)}>delete</button>
                   </div>
                   {t.description && <p className="g-when">{t.description}</p>}
                   <div className="g-sample"><PageFrame html={t.html} parts={t.parts} /></div>
                 </section>
               ))}
             </div>}
+      </div>
+      {deleting && <ConfirmDelete name={deleting} onYes={() => remove(deleting)} onNo={() => setDeleting(null)} />}
+    </div>
+  );
+}
+
+// Asked before a template goes: a chalk card over the window; Escape or a click outside keeps it.
+function ConfirmDelete({ name, onYes, onNo }: { name: string; onYes: () => void; onNo: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopImmediatePropagation(); onNo(); }
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [onYes, onNo]);
+  return (
+    <div className="confirm-backdrop" onClick={(e) => { e.stopPropagation(); onNo(); }}>
+      <div className="confirm-card" role="alertdialog" aria-modal="true" aria-label="Delete template" onClick={(e) => e.stopPropagation()}>
+        <h3>Delete this template?</h3>
+        <p><b>{name}</b> goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy.</p>
+        <div className="confirm-actions">
+          <button className="confirm-no" onClick={onNo} autoFocus>Keep it</button>
+          <button className="confirm-yes" onClick={onYes}>Delete</button>
+        </div>
       </div>
     </div>
   );
