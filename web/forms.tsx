@@ -387,6 +387,19 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
   const [big, setBig] = useState<string | null>(null); // an image shown over the window
+  // The file Claude opened scrolls to its first highlighted line or note, inside the tree only.
+  const treeRef = useRef<HTMLDivElement>(null);
+  const linesKey = JSON.stringify([data.lines, list(data.notes).map((n) => n.line)]);
+  useEffect(() => {
+    if (!opened0 || file?.path !== opened0 || file.text === undefined) return;
+    const raf = requestAnimationFrame(() => {
+      const tree = treeRef.current;
+      const hit = tree?.querySelector<HTMLElement>(".f-ln.hot, .f-pin");
+      if (!tree || !hit) return;
+      tree.scrollTop += hit.getBoundingClientRect().top - tree.getBoundingClientRect().top - 48;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [file?.path, file?.text, linesKey]);
   const openFile = (path: string) => {
     if (file?.path === path) return setFile(null);
     if (live && IMAGE_EXT.test(path)) return setFile({ path, image: url(path) + "&image=1" });
@@ -445,7 +458,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
                 <img src={file.image} alt={path} />
               </div>
             ) : file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : (
-              <Code data={{ file: path, code: file.text, whole: true }} />
+              <Code data={{ file: path, code: file.text, whole: true, ...(path === opened0 ? { mark: data.lines, notes: data.notes } : {}) }} />
             )}
           </div>,
         );
@@ -468,7 +481,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
         {open.size > 1 && <button type="button" className="f-copy" onClick={() => { setOpen(new Set([""])); setFile(null); }}>collapse all</button>}
         {live && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
       </div>
-      <div className="f-tree">{live && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
+      <div className="f-tree" ref={treeRef}>{live && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
       {big && <ImageBig src={big} close={() => setBig(null)} />}
     </div>
   );
