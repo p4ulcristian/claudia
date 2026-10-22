@@ -127,7 +127,7 @@ export function Messages(props: {
           const files = props.changeTurns.get(it.uuid) ?? 0;
           const has = props.pictureTurns.has(it.uuid) || files > 0;
           return (
-            <div key={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
+            <div key={it.uuid} data-at={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
                 {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
                 <Markdown text={it.text} />
@@ -145,7 +145,7 @@ export function Messages(props: {
           return <pre key={`note-${it.id}-${i}`} className="note-line">{it.text}</pre>;
         }
         const it = b.item as Extract<Item, { k: "text" }>;
-        return <div key={it.id} className="msg claude"><Markdown text={it.text} /></div>;
+        return <div key={it.id} data-at={it.id.split(":")[0]} className="msg claude"><Markdown text={it.text} /></div>;
       })}
       {partial && <div className="msg claude streaming"><Markdown text={partial} /></div>}
       {running && (

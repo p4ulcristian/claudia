@@ -370,6 +370,17 @@ code, pre { font-family: var(--mono); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
 
+/* Search results: each chat with its best hits under it; a hit opens the chat at that message. */
+.found { display: grid; margin-bottom: 6px; }
+.found mark, .chat-row mark { background: color-mix(in srgb, var(--amber) 32%, transparent); color: var(--fg); border-radius: 3px; padding: 0 1px; }
+.found-hit { display: grid; grid-template-columns: 42px 1fr; gap: 6px; align-items: baseline; padding: 3px 8px 3px 14px; border-radius: 6px; text-align: left; font-size: 12.5px; color: var(--muted); }
+.found-hit:hover { background: var(--panel2); color: var(--fg); }
+.found-hit .who { font: 700 12px var(--hand); color: var(--chat, var(--muted)); }
+.found-hit.user .who { color: var(--violet); }
+.found-hit .snip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.found-flash { animation: found-flash 1.8s ease-out; border-radius: 10px; }
+@keyframes found-flash { 0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 70%, transparent); background: color-mix(in srgb, var(--amber) 12%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
 /* Right click on a chat: colour, passive, rename, archive. */
 .chat-menu { position: fixed; z-index: 60; width: 236px; display: grid; gap: 2px; padding: 10px 8px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 40%); }
 .cm-title { padding: 0 6px 6px; font: 700 15px var(--hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

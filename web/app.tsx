@@ -16,7 +16,7 @@ import { TipBubble, tipProps } from "./tip";
 import { savePicture } from "./snapshot";
 import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
-import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
+import type { Ask, ChangeMeta, ChatEvent, ChatRow, SearchFound, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
 const empty: Scene = { title: "", nodes: [], edges: [], groups: [], cards: [] };
@@ -244,6 +244,44 @@ function App() {
     if (ended.length) changeDone((d) => ended.forEach((c) => d.add(c.id)));
     setChats(rows);
   }, [all, archivedView]);
+  // Search: two letters or more search what was said in the chats (the runner's index), not only titles.
+  const [found, setFound] = useState<SearchFound[] | null>(null);
+  useEffect(() => {
+    const text = search.trim();
+    if (text.length < 2) { setFound(null); return; }
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(text)}&all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`, { signal: ctl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((f) => f && setFound(f))
+        .catch(() => {});
+    }, 180);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [search, all, archivedView]);
+  // A hit opens its chat and scrolls to the message once it's on the page.
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!jumpTo) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      const el = document.querySelector<HTMLElement>(`[data-at="${CSS.escape(jumpTo)}"]`);
+      if (el || ++tries > 40) {
+        clearInterval(iv);
+        setJumpTo(null);
+        if (!el) return;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.remove("found-flash");
+        void el.offsetWidth;
+        el.classList.add("found-flash");
+      }
+    }, 120);
+    return () => clearInterval(iv);
+  }, [jumpTo]);
+  const openHit = (id: string, uuid: string | null) => {
+    if (id !== current) open(id);
+    if (uuid) setJumpTo(uuid);
+  };
+
   // Someone else's chats are read only: no new chat there, so open their latest one (the last) instead.
   const readOnly = me?.readOnly ?? false;
   const landed = useRef(false);
@@ -518,7 +556,30 @@ function App() {
           {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
           <label className="search-box"><input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
           <nav>
-            {list.map((c) => (
+            {found && (
+              <>
+                {found.map((f) => {
+                  const c = known.current.get(f.id);
+                  if (!c) return null;
+                  return (
+                    <div key={f.id} className="found" style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}>
+                      <button className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`} onClick={() => openHit(c.id, null)} onContextMenu={menuFor(c)}>
+                        <span className="t">{f.title ? <Marked text={c.title} words={search} /> : c.title}</span>
+                        <span className="when">{f.count > 0 ? `${f.count} hit${f.count === 1 ? "" : "s"}` : ago(c.at)}</span>
+                      </button>
+                      {f.hits.map((h) => (
+                        <button key={h.uuid} className={`found-hit ${h.role}`} onClick={() => openHit(c.id, h.uuid)}>
+                          <span className="who">{h.role === "user" ? "you" : "claude"}</span>
+                          <span className="snip">{h.snippet.split(/(\u0001[^\u0002]*\u0002)/).map((part, i) => part.startsWith("\u0001") ? <mark key={i}>{part.slice(1, -1)}</mark> : part)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+                {!found.length && <p className="muted small">Nothing said matches.</p>}
+              </>
+            )}
+            {!found && list.map((c) => (
               <button
                 key={c.id}
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
@@ -532,8 +593,8 @@ function App() {
                 <span className="when">{ago(c.at)}</span>
               </button>
             ))}
-            {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
-            {!list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
+            {!found && !row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
+            {!found && !list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
           </nav>
           <button className="forms-link" onClick={() => setFormsOpen(true)} title="Everything Claude can draw, and your saved templates">
             <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
@@ -711,6 +772,14 @@ function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
 }
 
 // Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
+// The words of a search marked in a title.
+function Marked({ text, words }: { text: string; words: string }) {
+  const ws = words.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+  if (!ws.length) return <>{text}</>;
+  const re = new RegExp(`(${ws.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return <>{text.split(re).map((p, i) => (i % 2 ? <mark key={i}>{p}</mark> : p))}</>;
+}
+
 // Circles slide to their new place when the order changes (a chat made passive sinks, a woken one
 // rises) instead of jumping; a new one grows in. Each [data-slide] child is measured after every
 // change and animated from where it was.

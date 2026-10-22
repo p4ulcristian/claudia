@@ -119,13 +119,13 @@ function answerText(questions: Question[], answers: Record<string, string>) {
 
 // Slash commands are stored as tagged user text; show the command and its output plainly.
 // Claude Code stores "background task finished" notices as user messages; show them as a note.
-function taskNotice(text: string): string | null {
+export function taskNotice(text: string): string | null {
   if (!text.startsWith("<task-notification>")) return null;
   const summary = text.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim();
   return summary ?? "A background task finished.";
 }
 
-function commandParts(text: string): { command?: string; output?: string } | null {
+export function commandParts(text: string): { command?: string; output?: string } | null {
   const name = text.match(/<command-name>([\s\S]*?)<\/command-name>/)?.[1]?.trim();
   const args = text.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim();
   const out = text.match(/<local-command-std(?:out|err)>([\s\S]*?)<\/local-command-std(?:out|err)>/)?.[1]?.trim();

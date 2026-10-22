@@ -8,6 +8,7 @@ import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store } from "./src/db";
 import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
+import { search, sessionsDir, warm } from "./src/search";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -161,6 +162,16 @@ Bun.serve({
       GET: async (req) => {
         const p = new URL(req.url).searchParams;
         return json(await listChats(p.get("all") === "1", p.get("archived") === "1"));
+      },
+    },
+    // Full-text search over the chats in view (the same ones /api/chats lists): chats with their best hits.
+    "/api/search": {
+      GET: async (req) => {
+        const p = new URL(req.url).searchParams;
+        const text = (p.get("q") ?? "").slice(0, 200);
+        const rows = await listChats(p.get("all") === "1", p.get("archived") === "1");
+        const found = await search(SESSIONS, text, new Map(rows.map((r) => [r.id, r.title])));
+        return json(found);
       },
     },
     // The last part of a background task's output file (only files the task reported).
@@ -355,6 +366,11 @@ Bun.serve({
 // Models, commands and plan usage: read now, then every 5 minutes, and soon after each turn (see Chat).
 onMeta((meta) => { for (const s of socks) s.send(JSON.stringify({ t: "meta", meta })); });
 probe(WORK);
+// The search index catches up with every session in the background, newest first.
+const SESSIONS = sessionsDir(WORK);
+void listSessions({ dir: WORK, includeWorktrees: false })
+  .then((all) => warm(SESSIONS, all.sort((a, b) => b.lastModified - a.lastModified).map((s) => s.sessionId)))
+  .catch(() => {});
 setInterval(() => socks.size && probe(WORK), 5 * 60_000);
 // Someone replaced the token in Settings: show the new plan's limits now.
 watch(dirname(TOKEN_FILE), (_, file) => file === basename(TOKEN_FILE) && probe(WORK));
