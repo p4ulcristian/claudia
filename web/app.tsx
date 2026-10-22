@@ -563,7 +563,8 @@ function App() {
                   {...tipProps(c.project ? `${c.title} · ${c.project}` : c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
-                  <DotFace letter={(c.title.trim()[0] ?? "?").toUpperCase()} project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} />
+                  <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} />
+                  <span className="rail-word">{c.word}</span>
                   <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
                   <AgentMoons n={c.agents} />
                 </button>
@@ -878,25 +879,14 @@ function projectTags(names: (string | null)[]): Map<string, string> {
 // same colour wherever that project shows.
 // A rail circle's face: the project's logo big with the chat's letter in a small circle; without a
 // logo, the letter big and the project's short name as a tinted tag.
-function DotFace({ letter, project, tag, logo }: { letter: string; project: string | null; tag: string; logo: boolean }) {
+// Inside a rail circle: the project's logo, else its short name; a chat without a project, a dot.
+// (The chat's own one-word name sits under the circle.)
+function DotFace({ project, tag, logo }: { project: string | null; tag: string; logo: boolean }) {
   const [broken, setBroken] = useState(false);
   if (project && logo && !broken)
-    return (
-      <>
-        <img className="rail-logo" src={`/api/projects/${encodeURIComponent(project)}/logo`} alt="" onError={() => setBroken(true)} />
-        <span className="letter-tag">{letter}</span>
-      </>
-    );
-  if (!project) return <>{letter}</>;
-  let h = 0;
-  for (const ch of project) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const tints = CHAT_COLORS.filter((c) => c !== PASSIVE);
-  return (
-    <>
-      {letter}
-      <span className="project-tag" style={{ "--tag": `var(--c-${tints[h % tints.length]})` } as React.CSSProperties}>{tag}</span>
-    </>
-  );
+    return <img className="rail-logo" src={`/api/projects/${encodeURIComponent(project)}/logo`} alt="" onError={() => setBroken(true)} />;
+  if (!project) return <span className="rail-blank" aria-hidden="true" />;
+  return <span className="rail-tag">{tag}</span>;
 }
 
 function AgentMoons({ n }: { n: number }) {

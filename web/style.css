@@ -407,7 +407,7 @@ code, pre { font-family: var(--mono); }
 
 /* Sidebar closed: one coloured circle per chat, like chat heads. */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: 46px 0 10px; background: var(--bg2); border-right: 1px solid var(--line); min-height: 0; }
-.rail-dots { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 10px; }
+.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 6px 0 22px; }
 /* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
 .rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ring { position: relative; width: 28px; height: 28px; display: grid; place-items: center; }
@@ -432,7 +432,7 @@ code, pre { font-family: var(--mono); }
 .rail-dot.passive { opacity: 0.55; }
 .rail-dot.passive:hover, .rail-dot.passive.on { opacity: 1; }
 .rail-dot.passive.first { margin-top: auto; }
-.rail-dot.passive.last::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: -12px; border-top: 1.5px dashed var(--line); }
+.rail-dot.passive.last::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: -28px; border-top: 1.5px dashed var(--line); }
 .rail-dot.on { color: var(--on-hue); }
 .rail-dot.on::before { background: color-mix(in srgb, var(--chat, var(--grey)) 88%, transparent); }
 /* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
@@ -1104,3 +1104,13 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .img-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6);
   background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
 .f-tree-row .f-lines-n { flex: none; font: 11px var(--mono); color: color-mix(in srgb, var(--muted) 70%, transparent); }
+
+/* Rail: the chat's one-word name under its circle, plain and readable; the circle holds the project. */
+.rail-word { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 10.5px/1.2 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
+.rail-dot.on .rail-word, .rail-dot:hover .rail-word { color: var(--fg); }
+.rail-dot:hover .rail-word { transform: translateX(-50%) scale(0.91); }
+.rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
+.rail-dot.on .rail-tag { color: var(--on-hue); }
+.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
+.rail-dot.on .rail-blank { background: var(--on-hue); }
