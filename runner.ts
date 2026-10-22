@@ -6,10 +6,11 @@ import { Chat, WORK, loadHistory, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store } from "./src/db";
-import { existsSync, watch } from "node:fs";
+import { watch } from "node:fs";
+import { projectOf, projectLogo } from "./src/projects";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname } from "node:path";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
@@ -49,18 +50,9 @@ async function wake(c: Chat) {
   if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(usedColors(c.id)) });
 }
 
-// A chat's project: the git repo its working folder is in (its folder name), else the folder's own name.
-const projects = new Map<string, string>();
-function projectName(folder: string | null): string | null {
-  if (!folder) return null;
-  let name = projects.get(folder);
-  if (name === undefined) {
-    let dir = folder;
-    while (dir !== "/" && !existsSync(join(dir, ".git"))) dir = dirname(dir);
-    name = basename(dir === "/" ? folder : dir);
-    projects.set(folder, name);
-  }
-  return name;
+function projectFields(folder: string | null) {
+  const p = projectOf(folder);
+  return { project: p?.name ?? null, logo: !!p?.logo };
 }
 
 async function listChats(all: boolean, archivedView: boolean) {
@@ -95,7 +87,7 @@ async function listChats(all: boolean, archivedView: boolean) {
       agents: chats.get(s.sessionId)?.agents ?? 0,
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
-      project: projectName(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
+      ...projectFields(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
     }));
 }
 
@@ -220,6 +212,13 @@ Bun.serve({
     // Another program on this machine asks this profile's Claude for something (Eye on Rainbow's Gus,
     // for the person who asked him): a new chat with the text sent, like a message typed here. Only
     // what can reach this runner can call it: the page, and on the box the users its socket allows.
+    // A project's logo, for its tag on the rail (found in the repo by src/projects.ts).
+    "/api/projects/:name/logo": {
+      GET: (req) => {
+        const path = projectLogo(decodeURIComponent(req.params.name));
+        return path ? new Response(Bun.file(path), { headers: { "Cache-Control": "max-age=600" } }) : new Response("no logo", { status: 404 });
+      },
+    },
     "/api/delegate": {
       POST: async (req) => {
         const body = (await req.json().catch(() => ({}))) as { text?: unknown };

@@ -10,7 +10,7 @@ import { ActivityPill } from "./activity";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, type MenuChat } from "./chatmenu";
-import { PASSIVE } from "../src/colors";
+import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
 import { savePicture } from "./snapshot";
@@ -499,7 +499,7 @@ function App() {
                   {(c.title.trim()[0] ?? "?").toUpperCase()}
                   <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
                   <AgentMoons n={c.agents} />
-                  {c.project && <span className="project-tag">{tags.get(c.project)}</span>}
+                  {c.project && <ProjectTag name={c.project} tag={tags.get(c.project) ?? ""} logo={c.logo} />}
                 </button>
               ))}
             </div>
@@ -722,6 +722,22 @@ function projectTags(names: (string | null)[]): Map<string, string> {
     out.set(n, tag(n, clash ? 3 : 2));
   }
   return out;
+}
+
+// The project on a chat's circle: its logo when the repo has one, else its short name, tinted the
+// same colour wherever that project shows.
+function ProjectTag({ name, tag, logo }: { name: string; tag: string; logo: boolean }) {
+  const [broken, setBroken] = useState(false);
+  if (logo && !broken)
+    return (
+      <span className="project-tag logo">
+        <img src={`/api/projects/${encodeURIComponent(name)}/logo`} alt="" onError={() => setBroken(true)} />
+      </span>
+    );
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const tints = CHAT_COLORS.filter((c) => c !== PASSIVE);
+  return <span className="project-tag" style={{ "--tag": `var(--c-${tints[h % tints.length]})` } as React.CSSProperties}>{tag}</span>;
 }
 
 function AgentMoons({ n }: { n: number }) {
