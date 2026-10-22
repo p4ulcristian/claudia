@@ -371,8 +371,11 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     return p === null ? [] : [[p, m] as [string, any]];
   }));
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
-  const opened0 = typeof data.file === "string" ? rebase(data.file.replace(/^\.?\//, "")) : null; // a file Claude opened for the user
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors), ...(opened0 ? ancestors(opened0) : [])]));
+  // The selected file: the one Claude named, else the first marked file. Only the folders down to it
+  // open; the rest stay shut until clicked.
+  const firstMarkedFile = [...marks.keys()].find((p) => /\.[^/]+$/.test(p)) ?? null;
+  const opened0 = typeof data.file === "string" ? rebase(data.file.replace(/^\.?\//, "")) : firstMarkedFile;
+  const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...(opened0 ? ancestors(opened0) : [])]));
   const [dirs, setDirs] = useState<Map<string, Entry[] | { error: string }>>(new Map());
   const [file, setFile] = useState<{ path: string; text?: string; error?: string; image?: string } | null>(null);
   const [tick, setTick] = useState(0);
