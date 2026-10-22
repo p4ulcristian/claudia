@@ -10,7 +10,7 @@ import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
 import { search, sessionsDir, warm } from "./src/search";
 import { explain, type ExplainInput } from "./src/explain";
-import { listDir, readText } from "./src/files";
+import { imageFile, listDir, readText } from "./src/files";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -284,6 +284,10 @@ Bun.serve({
         if (!roots.has(root)) return json({ error: "not a folder of this chat's pictures" }, 403);
         const path = p.get("path") ?? "";
         if (p.get("read") === "1") return json(readText(root, path));
+        if (p.get("image") === "1") {
+          const img = imageFile(root, path);
+          return img ? new Response(Bun.file(img), { headers: { "Cache-Control": "max-age=60" } }) : json({ error: "not an image" }, 404);
+        }
         const entries = listDir(root, path);
         return entries ? json({ entries }) : json({ error: "no such folder" }, 404);
       },

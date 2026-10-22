@@ -86,3 +86,16 @@ export function readText(root: string, rel: string): { text: string } | { error:
     return { error: "can't read it" };
   }
 }
+
+// Images shown by the files form: the file itself, for an <img>.
+export const IMAGE = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)$/i;
+export function imageFile(root: string, rel: string): string | null {
+  const abs = inside(root, rel);
+  if (!abs || !IMAGE.test(abs)) return null;
+  try {
+    const st = statSync(abs);
+    return st.isFile() && st.size <= 25_000_000 ? abs : null;
+  } catch {
+    return null;
+  }
+}

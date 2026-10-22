@@ -1096,3 +1096,10 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-kind.made::before { border-style: dashed; }
 .f-planned { flex: none; font: 700 11.5px var(--hand); color: var(--amber); border: 1.2px dashed var(--amber); border-radius: 6px; padding: 0 5px; line-height: 15px; }
 .f-tree-row:has(.f-planned) .nm { font-style: italic; }
+/* Images in the files form: a fixed-height preview on a checkerboard; double-click shows it big. */
+.f-image { height: 220px; display: grid; place-items: center; border-radius: 10px; cursor: zoom-in; border: 1.5px solid var(--line);
+  background: repeating-conic-gradient(color-mix(in srgb, var(--fg) 7%, transparent) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.f-image img { max-width: 100%; max-height: 210px; object-fit: contain; }
+.img-big { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 3vh 3vw; background: rgb(0 0 0 / 0.82); cursor: zoom-out; animation: confirm-in 0.12s ease-out; }
+.img-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6);
+  background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }

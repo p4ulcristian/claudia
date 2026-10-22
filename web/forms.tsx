@@ -1,6 +1,7 @@
 // The predefined forms (src/forms.ts), drawn in the board's chalk style. Each gets its block's
 // data as it stands after the draw calls (items merged by id).
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
 import { ResizeBox } from "./resize";
@@ -308,6 +309,23 @@ function ExtTag({ name }: { name: string }) {
   );
 }
 
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)$/i;
+
+// An image over the whole window; a click or Escape closes it.
+function ImageBig({ src, close }: { src: string; close: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [close]);
+  return createPortal(
+    <div className="img-big" onClick={close} role="dialog" aria-label="Image">
+      <img src={src} alt="" />
+    </div>,
+    document.body,
+  );
+}
+
 // Files: a folder as a tree, read live through the runner (src/files.ts); folders open on click, a
 // file opens in place as a code block. Marks point files out; git status shows as a letter.
 type Entry = { name: string; dir: boolean; status?: string; changed?: number; planned?: boolean };
@@ -326,7 +344,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
   const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors)]));
   const [dirs, setDirs] = useState<Map<string, Entry[] | { error: string }>>(new Map());
-  const [file, setFile] = useState<{ path: string; text?: string; error?: string } | null>(null);
+  const [file, setFile] = useState<{ path: string; text?: string; error?: string; image?: string } | null>(null);
   const [tick, setTick] = useState(0);
 
   const url = (path: string, read = false) => `/api/chats/${chat}/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}${read ? "&read=1" : ""}`;
@@ -367,8 +385,10 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     }
     return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
+  const [big, setBig] = useState<string | null>(null); // an image shown over the window
   const openFile = (path: string) => {
     if (file?.path === path) return setFile(null);
+    if (live && IMAGE_EXT.test(path)) return setFile({ path, image: url(path) + "&image=1" });
     setFile({ path });
     // A planned (sketched) file shows the code Claude gave; a file on disk is read.
     const m = made.find((e) => e.path.replace(/\/$/, "") === path);
@@ -411,7 +431,11 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       if (!e.dir && isOpen && file)
         rows.push(
           <div key={`f${path}`} className="f-tree-file" style={{ "--depth": depth + 1 } as React.CSSProperties}>
-            {file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : (
+            {file.image ? (
+              <div className="f-image" onDoubleClick={() => setBig(file.image!)} title="Double-click to see it big">
+                <img src={file.image} alt={path} />
+              </div>
+            ) : file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : (
               <ResizeBox id={`${chat ?? "demo"}:${block ?? "files"}:file`} initial={300}><Code data={{ file: path, code: file.text }} /></ResizeBox>
             )}
           </div>,
@@ -436,6 +460,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
         {live && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
       </div>
       <div className="f-tree">{live && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
+      {big && <ImageBig src={big} close={() => setBig(null)} />}
     </div>
   );
 }
