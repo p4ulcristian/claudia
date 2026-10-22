@@ -3,6 +3,8 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
+import { FormView } from "./forms";
+import { FORMS } from "../src/forms";
 import type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types";
 
 // What a graph is drawn from: a graph block, or an older picture's own nodes.
@@ -230,7 +232,7 @@ const fit = (l: Laid, a: { w: number; h: number }) => Math.min(a.w / (l.w + PAD 
 
 const VARIANTS: Variant[] = ["RIGHT", "DOWN", "DOWN-STACKED"];
 
-function Diagram({ scene, changed, seq }: { scene: Graph; changed: string[]; seq: number }) {
+export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string[]; seq: number }) {
   // Each graph has its own chalk filter and arrowheads: the filter's region is sized to its graph.
   const uid = useId().replace(/:/g, "");
   const [laid, setLaid] = useState<Laid | null>(null);
@@ -367,7 +369,10 @@ function Diagram({ scene, changed, seq }: { scene: Graph; changed: string[]; seq
 const THEME_VARS = ["--bg", "--bg2", "--panel", "--panel2", "--fg", "--muted", "--line", "--accent", "--green", "--red", "--amber", "--blue", "--grey", "--violet",
   "--green-bg", "--red-bg", "--amber-bg", "--blue-bg", "--grey-bg", "--violet-bg", "--sans", "--mono", "--hand"];
 const FONTS = "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap";
-const PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:";
+// connect-src: only what the snapshot script fetches to embed the fonts in its image.
+const PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:; connect-src https://fonts.googleapis.com https://fonts.gstatic.com";
+// The same html-to-image the page bundles, for frames to draw themselves when the picture is saved.
+const SNAP_LIB = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js";
 
 function pageDoc(html: string) {
   const cs = getComputedStyle(document.documentElement);
@@ -376,14 +381,16 @@ function pageDoc(html: string) {
     + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
     + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(document.body.scrollHeight) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`
     // Parts: Claudia sends new markup for the elements marked data-part="<name>"; the page stays loaded.
-    + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`;
+    + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`
+    // Snapshot: on Claudia's ask, draw this page into a PNG and hand it back (see web/snapshot.ts).
+    + `<script>(() => { let lib; const load = () => lib || (lib = new Promise((ok, no) => { const s = document.createElement("script"); s.src = "${SNAP_LIB}"; s.onload = () => ok(window.htmlToImage); s.onerror = no; document.head.appendChild(s); })); addEventListener("message", async (e) => { if (e.source !== parent || !e.data || !e.data.claudiaSnap) return; let png = null; try { png = await (await load()).toPng(document.documentElement, { pixelRatio: e.data.ratio || 2, width: document.documentElement.clientWidth, height: Math.max(document.documentElement.scrollHeight, innerHeight) }); } catch {} parent.postMessage({ claudiaSnapId: e.data.claudiaSnap, png }, "*"); }); })();</script>`;
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + head);
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${head}</head>`);
   return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
 }
 
 // A page Claude wrote, sandboxed: its scripts run, but it has no access to Claudia, its cookies or its API.
-function PageFrame({ html, height, parts }: { html: string; height?: number; parts?: Record<string, string> }) {
+export function PageFrame({ html, height, parts }: { html: string; height?: number; parts?: Record<string, string> }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [fit, setFit] = useState(240);
   const doc = useMemo(() => pageDoc(html), [html]);
@@ -437,20 +444,75 @@ function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }
   );
 }
 
-function BlockView({ block, changed, seq }: { block: Block; changed: Set<string>; seq: number }) {
+// The badge over a block: its kind (graph, a form's name, freeform or template) and its name.
+export function BlockBadge({ block }: { block: Block }) {
+  const kind = block.kind === "graph" ? "graph" : block.kind === "form" ? block.form : block.template ? "template" : "freeform";
+  const label = block.kind === "form" ? (FORMS[block.form]?.label ?? block.form).toLowerCase() : kind;
+  const name = block.name ?? (block.kind === "html" ? block.template : undefined);
+  return (
+    <span className={`block-badge b-${kind}`} title={block.kind === "form" ? FORMS[block.form]?.when : undefined}>
+      <b>{label}</b>
+      {name && <span className="block-name">{name}</span>}
+    </span>
+  );
+}
+
+// Keep a freeform block as a named template (Claude can draw it again and change it by name).
+function SaveTemplate({ chat, block }: { chat: string; block: Block }) {
+  const [name, setName] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), 3500);
+    return () => clearTimeout(t);
+  }, [note]);
+  const save = async () => {
+    const n = (name ?? "").trim();
+    if (!n) return setName(null);
+    const r = await fetch(`/api/chats/${chat}/blocks/${encodeURIComponent(block.id)}/template`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: n }),
+    }).then((x) => x.json()).catch(() => ({ text: "Couldn't save the template." }));
+    setName(null);
+    setNote(r.text);
+  };
+  if (note) return <span className="tpl-note">{note}</span>;
+  if (name === null)
+    return <button className="tpl-save" onClick={() => setName(block.name ?? (block.kind === "html" ? block.template : undefined) ?? block.id)} title="Save as a template Claude can reuse and change by name">save as template</button>;
+  return (
+    <span className="tpl-form">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setName(null); }}
+        placeholder="Template name"
+      />
+      <button onClick={save}>save</button>
+    </span>
+  );
+}
+
+function BlockView({ block, changed, seq, chat }: { block: Block; changed: Set<string>; seq: number; chat?: string }) {
   const hot = changed.has(block.id) || [...changed].some((c) => c.startsWith(`${block.id}:`));
   return (
     <section className={`block w-${block.width ?? "full"} k-${block.kind}`}>
       {/* A new glow per change; the block itself stays mounted (an HTML block keeps its page loaded). */}
       {hot && <span key={seq} className="block-glow" />}
-      {block.kind === "graph"
-        ? <Diagram scene={block} changed={[...changed]} seq={seq} />
+      <div className="block-head">
+        <BlockBadge block={block} />
+        {chat && block.kind === "html" && <SaveTemplate chat={chat} block={block} />}
+      </div>
+      {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
+        : block.kind === "form" ? <FormView form={block.form} data={block.data} />
         : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
     </section>
   );
 }
 
-export function PictureView({ scene, changed, seq }: { scene: Scene; changed: string[]; seq: number }) {
+// chat: where the shown picture is live (it can save templates); left out for older pictures.
+export function PictureView({ scene, changed, seq, chat }: { scene: Scene; changed: string[]; seq: number; chat?: string }) {
   const hot = new Set(changed);
   const blocks = scene.blocks;
   if (blocks ? !blocks.length : !scene.nodes.length && !scene.cards.length)
@@ -464,7 +526,7 @@ export function PictureView({ scene, changed, seq }: { scene: Scene; changed: st
   if (blocks)
     return (
       <div className="picture blocks">
-        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} />)}
+        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} chat={chat} />)}
       </div>
     );
   // A picture from before blocks: its graph and cards as they were drawn.

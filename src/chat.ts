@@ -202,6 +202,14 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
   return items;
 }
 
+// The saved templates, for Claude: name, description, and the parts each one has.
+function templateList(): string {
+  const all = store.templates();
+  if (!all.length) return "No templates saved yet.";
+  return all.map((t) => `- "${t.name}": ${t.description || "(no description)"}${Object.keys(t.parts).length ? ` Parts: ${Object.keys(t.parts).join(", ")}.` : ""}`).join("\n")
+    + '\nDraw one with blocks: [{ id, template: "<name>", parts? }]; change one with save_template.';
+}
+
 const TOOLS = { picture: PICTURE_MCP, workspace: WORKSPACE_MCP };
 const TOOLS_VERSION = Bun.hash(JSON.stringify(TOOLS)).toString(36);
 
@@ -509,13 +517,43 @@ export class Chat implements SessionHandler {
   }
 
   private draw(input: DrawInput): string {
+    // Blocks drawn from a saved template get its page and parts (the template's own parts first).
+    const missing: string[] = [];
+    for (const b of input.blocks ?? []) {
+      if (!b.template || b.html !== undefined) continue;
+      const t = store.template(b.template);
+      if (!t) { missing.push(b.template); continue; }
+      b.template = t.name;
+      b.html = t.html;
+      b.parts = { ...t.parts, ...(b.parts ?? {}) };
+      b.name ??= t.name;
+    }
+    if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
     const { scene, changed } = applyDraw(this.scene, input);
     this.scene = scene;
     this.drew = true;
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${describe(scene)}`;
+    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}`;
+  }
+
+  // Save a block of the picture as a template (from Claude's save_template tool or the Save button).
+  saveTemplate(name: string, from: { block?: string; html?: string; parts?: Record<string, string>; description?: string }): string {
+    name = name.trim().slice(0, 80);
+    if (!name) return "A template needs a name.";
+    const old = store.template(name);
+    let html = from.html, parts = from.parts;
+    if (from.block) {
+      const b = this.scene.blocks?.find((x) => x.id === from.block);
+      if (b?.kind !== "html") return `No freeform block "${from.block}" in the picture.`;
+      html ??= b.html;
+      parts = { ...b.parts, ...(parts ?? {}) };
+    }
+    html ??= old?.html;
+    if (!html) return `No template "${name}" yet: give its html or a block to take it from.`;
+    store.saveTemplate({ name: old?.name ?? name, html, parts: parts ?? old?.parts ?? {}, description: from.description ?? old?.description ?? "" });
+    return `${old ? "Updated" : "Saved"} template "${old?.name ?? name}".`;
   }
 
   private async start(acct: Account) {
@@ -529,7 +567,7 @@ export class Chat implements SessionHandler {
         env: acct.env,
         ...(exists ? { resume: this.id } : { sessionId: this.id }),
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
-        allowedTools: [DRAW_TOOL, FOLDER_TOOL],
+        allowedTools: [DRAW_TOOL, "mcp__picture__templates", "mcp__picture__save_template", FOLDER_TOOL],
         // Same as the user's terminal Claude (defaultMode bypassPermissions).
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
@@ -548,6 +586,11 @@ export class Chat implements SessionHandler {
   async onRpc(kind: RpcKind, args: any, signal: AbortSignal): Promise<any> {
     if (kind === "mcp") {
       if (args.server === "picture" && args.tool === "draw") return { content: [{ type: "text", text: this.draw(args.args as DrawInput) }] };
+      if (args.server === "picture" && args.tool === "templates") return { content: [{ type: "text", text: templateList() }] };
+      if (args.server === "picture" && args.tool === "save_template") {
+        const a = (args.args ?? {}) as { name?: string; block?: string; html?: string; parts?: Record<string, string>; description?: string };
+        return { content: [{ type: "text", text: this.saveTemplate(String(a.name ?? ""), a) }] };
+      }
       if (args.server === "workspace" && args.tool === "set_folder") return { content: [{ type: "text", text: await this.folderTool(String(args.args?.path ?? "")) }] };
       throw new Error(`No tool ${args.server}/${args.tool}`);
     }

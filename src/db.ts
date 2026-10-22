@@ -59,6 +59,14 @@ db.exec(`
     created_at INTEGER NOT NULL,
     PRIMARY KEY (session_id, turn_uuid)
   );
+  -- Freeform blocks saved under a name, for Claude to draw again (and change when asked).
+  CREATE TABLE IF NOT EXISTS templates (
+    name TEXT PRIMARY KEY,
+    html TEXT NOT NULL,
+    parts TEXT NOT NULL,
+    description TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 // Added after the first release: the chat's working folder.
@@ -69,6 +77,8 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
   db.exec("ALTER TABLE chat_settings ADD COLUMN color TEXT");
 
 // chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
+export type Template = { name: string; html: string; parts: Record<string, string>; description: string; updatedAt: number };
+
 export type Prefs = { chatColors: "each" | "none" };
 const PREF_DEFAULTS: Prefs = { chatColors: "each" };
 
@@ -104,6 +114,12 @@ const q = {
   change: db.query<{ path: string; before: string | null; after: string | null; skipped: string | null }, [number, string]>(
     "SELECT path, before, after, skipped FROM changes WHERE id = ? AND session_id = ?",
   ),
+  templates: db.query<{ name: string; html: string; parts: string; description: string; updated_at: number }, []>("SELECT * FROM templates ORDER BY name COLLATE NOCASE"),
+  template: db.query<{ name: string; html: string; parts: string; description: string; updated_at: number }, [string]>("SELECT * FROM templates WHERE name = ? COLLATE NOCASE"),
+  saveTemplate: db.query(
+    "INSERT INTO templates (name, html, parts, description, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO UPDATE SET html = excluded.html, parts = excluded.parts, description = excluded.description, updated_at = excluded.updated_at",
+  ),
+  deleteTemplate: db.query("DELETE FROM templates WHERE name = ? COLLATE NOCASE"),
   pictures: db.query<{ turn_uuid: string; scene: string; changed: string; created_at: number }, [string]>(
     "SELECT turn_uuid, scene, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
   ),
@@ -138,6 +154,13 @@ export const store = {
   change: (id: string, changeId: number) => q.change.get(changeId, id),
   savePicture: (id: string, turn: string, scene: Scene, changed: string[]) =>
     q.savePicture.run(id, turn, JSON.stringify(scene), JSON.stringify(changed), Date.now()),
+  templates: (): Template[] => q.templates.all().map(asTemplate),
+  template: (name: string): Template | null => {
+    const r = q.template.get(name);
+    return r ? asTemplate(r) : null;
+  },
+  saveTemplate: (t: Omit<Template, "updatedAt">) => q.saveTemplate.run(t.name, t.html, JSON.stringify(t.parts), t.description, Date.now()),
+  deleteTemplate: (name: string) => q.deleteTemplate.run(name),
   pictures: (id: string) =>
     q.pictures.all(id).map((r) => ({
       turn: r.turn_uuid,
@@ -146,3 +169,7 @@ export const store = {
       at: r.created_at,
     })),
 };
+
+function asTemplate(r: { name: string; html: string; parts: string; description: string; updated_at: number }): Template {
+  return { name: r.name, html: r.html, parts: JSON.parse(r.parts), description: r.description, updatedAt: r.updated_at };
+}

@@ -11,6 +11,8 @@ import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
+import { savePicture } from "./snapshot";
+import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
@@ -210,6 +212,8 @@ function App() {
   // This Claudia's name, and who is signed in with which profile.
   const [me, setMe] = useState<Me | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [formsOpen, setFormsOpen] = useState(false);
+  const closeForms = useCallback(() => setFormsOpen(false), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   useEffect(() => {
     fetch("/api/me").then((r) => r.json()).then(setMe, () => setMe(null));
@@ -238,13 +242,13 @@ function App() {
     if (ended.length) changeDone((d) => ended.forEach((c) => d.add(c.id)));
     setChats(rows);
   }, [all, archivedView]);
-  // Someone else's chats are read only: no new chat there, so open their latest one instead.
+  // Someone else's chats are read only: no new chat there, so open their latest one (the last) instead.
   const readOnly = me?.readOnly ?? false;
   const landed = useRef(false);
   useEffect(() => {
     if (!readOnly || landed.current || idFromPath() || !chats.length) return;
     landed.current = true;
-    open(chats[0].id);
+    open(chats.at(-1)!.id);
   }, [readOnly, chats]);
   useEffect(() => { loadChats(); store.set("all", all ? "1" : "0"); }, [loadChats]);
 
@@ -276,13 +280,16 @@ function App() {
   }, [send]);
 
   const newChat = useCallback(() => open(crypto.randomUUID()), [open]);
-  // A chat picked from the list: the open one isn't loaded again, its row or circle shakes ("already here").
+  // A chat picked from the list nods "yes" and opens; the open one shakes "no, already here" and
+  // isn't loaded again. (Web Animations, so React re-rendering the class doesn't cut them short.)
   const pick = (id: string, e: React.MouseEvent<HTMLElement>) => {
-    if (id !== current) return open(id);
     const el = e.currentTarget;
-    el.classList.remove("shake");
-    void el.offsetWidth;
-    el.classList.add("shake");
+    if (id === current) {
+      el.animate([{ translate: "0 0" }, { translate: "-4px 0" }, { translate: "4px 0" }, { translate: "-3px 0" }, { translate: "2px 0" }, { translate: "0 0" }], { duration: 360, easing: "ease-in-out" });
+      return;
+    }
+    el.animate([{ translate: "0 0" }, { translate: "0 4px" }, { translate: "0 -3px" }, { translate: "0 3px" }, { translate: "0 0" }], { duration: 420, easing: "ease-in-out" });
+    open(id);
   };
 
   useEffect(() => {
@@ -352,6 +359,17 @@ function App() {
     const pic = live.pictures.filter((p) => (pos.get(p.turn) ?? Infinity) <= upTo).at(-1);
     return pic ? { scene: pic.scene, changed: pic.changed, seq: live.seq + 1000 + upTo } : { scene: empty, changed: [], seq: 0 };
   }, [viewing, live.scene, live.changed, live.seq, live.pictures, live.items]);
+  // The open chat stays in view in the list and the rail (a new chat sits at the end).
+  // (Only the list's own scroll moves: scrollIntoView would also shift the hidden sidebar's frame.)
+  useEffect(() => {
+    for (const el of document.querySelectorAll<HTMLElement>(".sidebar nav .chat-row.active, .rail-dots .rail-dot.on")) {
+      const list = el.parentElement!;
+      const r = el.getBoundingClientRect(), l = list.getBoundingClientRect();
+      if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom + 8;
+      else if (r.top < l.top) list.scrollTop -= l.top - r.top + 8;
+    }
+  }, [current, chats.length, live.items.length > 0]);
+  const hasPicture = shown.scene.blocks ? shown.scene.blocks.length > 0 : shown.scene.nodes.length + shown.scene.cards.length > 0;
 
   // Changes of the turn being looked at: an earlier turn when stepping back, else the latest turn with changes.
   const changeTurns = useMemo(() => {
@@ -425,6 +443,7 @@ function App() {
       <TipBubble />
       {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
+      {formsOpen && <FormsGallery close={closeForms} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
       {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
@@ -449,7 +468,6 @@ function App() {
                   className={`rail-dot ${c.id === current ? "on" : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c.id, e)}
-                  onAnimationEnd={(e) => e.currentTarget.classList.remove("shake")}
                   {...tipProps(c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
@@ -459,6 +477,9 @@ function App() {
                 </button>
               ))}
             </div>
+            <button className="rail-forms" onClick={() => setFormsOpen(true)} {...tipProps("Forms: everything Claude can draw, and your templates")} aria-label="Forms">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
+            </button>
             <RailMeters meta={meta} context={live.context} onCompact={readOnly || live.running ? undefined : () => onSend("/compact", [])} />
           </nav>
         )}
@@ -468,14 +489,12 @@ function App() {
           {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
           <label className="search-box"><input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
           <nav>
-            {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
             {list.map((c) => (
               <button
                 key={c.id}
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                 onClick={(e) => pick(c.id, e)}
-                onAnimationEnd={(e) => e.currentTarget.classList.remove("shake")}
                 {...tipProps(c.title, chatColorVar(c.color), true)}
               >
                 {c.running && <span className="run-dot" title="Working" />}
@@ -483,8 +502,13 @@ function App() {
                 <span className="when">{ago(c.at)}</span>
               </button>
             ))}
+            {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
             {!list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
           </nav>
+          <button className="forms-link" onClick={() => setFormsOpen(true)} title="Everything Claude can draw, and your saved templates">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
+            Forms
+          </button>
           <Meters
             meta={meta}
             context={live.context}
@@ -528,15 +552,18 @@ function App() {
                 onKeyDown={(e) => { if (e.key === "Enter") rename(e.currentTarget.value); if (e.key === "Escape") setEditing(false); }}
               />
             ) : (
-              <h1 onDoubleClick={() => row && !readOnly && setEditing(true)} title={row ? "Double-click to rename" : ""}>{title}</h1>
+              // The title renames itself: click it (a pencil shows on hover).
+              <h1
+                className={row && !readOnly ? "renamable" : ""}
+                onClick={() => row && !readOnly && setEditing(true)}
+                title={row && !readOnly ? "Click to rename" : ""}
+              >
+                <span className="t">{title}</span>
+                {row && !readOnly && <span className="pencil" aria-hidden="true">✎</span>}
+              </h1>
             )}
             {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
             {activity}
-            {row && !readOnly && (
-              <div className="head-actions">
-                <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
-              </div>
-            )}
             {!up && <span className="offline">reconnecting…</span>}
           </header>
           <Messages
@@ -562,11 +589,14 @@ function App() {
             focusKey={current}
             initialText={startText}
             commands={meta.commands}
-            actions={row && !readOnly && (
-              row.archived
-                ? <button className="icon archive" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
-                : <button className="icon archive" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
-            )}
+            actions={<>
+              <SaveButton title={shown.scene.title || title} disabled={fold.shown || !hasPicture} />
+              {row && !readOnly && (
+                row.archived
+                  ? <button className="icon archive" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
+                  : <button className="icon archive" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
+              )}
+            </>}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />}
         </section>
@@ -599,7 +629,7 @@ function App() {
           ) : (
           <div className="right-scroll">
           <div className={`stage ${viewing ? "past" : ""}`}>
-            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} />
+            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} />
           </div>
           </div>
           )}
@@ -749,6 +779,40 @@ function useFoldMotion(folded: boolean, split: number, narrow: boolean) {
   const cols = width === null ? null : "minmax(0, 1fr) 6px var(--fold-w)";
   const cls = dir ? `moving to-${dir} ${go ? "go" : ""}` : "";
   return { ref, shown, cols, width, rightWidth, cls };
+}
+
+// Save the picture shown on the right as a PNG.
+function SaveButton({ title, disabled }: { title: string; disabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  // A short note after saving: where it went (the browser saves to its downloads folder silently).
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), 4000);
+    return () => clearTimeout(t);
+  }, [note]);
+  const save = async () => {
+    const el = document.querySelector<HTMLElement>(".right .stage .picture");
+    if (!el || busy) return;
+    setBusy(true);
+    try {
+      const { file, copied } = await savePicture(el, title);
+      setNote(`Saved to Downloads: ${file}${copied ? " · also copied, paste it anywhere" : ""}`);
+    } catch (e) {
+      console.error("save picture", e);
+      setNote("Couldn't save the picture");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+    {note && <span className="save-note" role="status">{note}</span>}
+    <button className={`icon save-pic ${busy ? "busy" : ""}`} onClick={save} disabled={disabled || busy} title={busy ? "Saving the picture…" : "Save the picture as an image"} aria-label="Save the picture as an image">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6.5h3l1.5-2h4l1.5 2h3v9h-13z" /><circle cx="10" cy="10.8" r="2.8" /></svg>
+    </button>
+    </>
+  );
 }
 
 function ArchiveIcon({ out }: { out?: boolean }) {

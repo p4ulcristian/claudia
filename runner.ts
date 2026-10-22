@@ -54,9 +54,9 @@ async function listChats(all: boolean, archivedView: boolean) {
     if (open) void open.setSettings({ color });
     else store.setColor(s.sessionId, color);
   }
-  // Newest chat first by when it started, so a chat getting a new message doesn't move.
+  // In the order they were started, a new chat last, so a chat getting a new message doesn't move.
   return shown
-    .sort((a, b) => (b.createdAt ?? b.lastModified) - (a.createdAt ?? a.lastModified))
+    .sort((a, b) => (a.createdAt ?? a.lastModified) - (b.createdAt ?? b.lastModified))
     .map((s) => ({
       id: s.sessionId,
       title: s.customTitle || s.summary || s.firstPrompt || "New chat",
@@ -219,6 +219,26 @@ Bun.serve({
           asks: c ? [...c.asks.values()].map((w) => w.value) : [],
           last,
         });
+      },
+    },
+    // Saved templates (freeform blocks kept by name): the forms gallery lists them.
+    "/api/templates": {
+      GET: () => json(store.templates()),
+    },
+    "/api/templates/:name": {
+      DELETE: (req) => {
+        store.deleteTemplate(decodeURIComponent(req.params.name));
+        return json({ ok: true });
+      },
+    },
+    // The Save button on a freeform block: { name, description? }
+    "/api/chats/:id/blocks/:block/template": {
+      POST: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const body = (await req.json()) as { name?: string; description?: string };
+        const text = chat(id).saveTemplate(String(body.name ?? ""), { block: decodeURIComponent(req.params.block), description: body.description });
+        return json({ ok: /^(Saved|Updated)/.test(text), text });
       },
     },
     "/api/chats/:id": {

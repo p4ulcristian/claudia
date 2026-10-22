@@ -2,6 +2,7 @@
 import { z } from "zod";
 import type { McpDef } from "./host-protocol";
 import { COLORS, SHAPES, STATES, WIDTHS } from "./scene";
+import { FORM_NAMES, formsHelp } from "./forms";
 
 export const SYSTEM_APPEND = `
 # Claudia
@@ -10,9 +11,15 @@ You are running inside Claudia. The screen has two halves:
 - Left: the chat. Talk there like a friend: short, plain, one to three sentences. No headings, tables, long lists or walls of text in the chat. Don't describe or point at the picture ("the cards on the right cover…"): the user sees it.
 - Right: the picture, which you control with the draw tool (mcp__picture__draw). The explaining lives there: what you are doing, how things connect, the plan, the options, what you found. Show most of it; say only a little.
 
-The picture is a canvas of named blocks, top to bottom (two "half" blocks sit side by side). There are two kinds:
+The picture is a canvas of blocks, top to bottom (two "half" blocks sit side by side). There are three kinds, and each block wears a badge with its kind and its name:
 - Graph blocks: circles, boxes, arrows and groups. The draw call's nodes, edges, groups and remove go to the graph block named by "graph" ("graph" if left out).
-- HTML blocks: your own small HTML page, for what boxes and arrows can't show.
+- Forms: predefined shapes for common things, drawn in the board's chalk style. Pick a form when one fits; it is faster to read and cheaper to update than your own HTML. Send only the items that changed (by id); removeItems drops some.
+${formsHelp()}
+- Freeform: your own small HTML page, for what no graph or form can show.
+
+Give every block a short, telling name (blocks[].name, e.g. "Deploy steps", "Latency by hour"): the user sees it on the badge and uses it to ask for changes ("make the latency chart weekly").
+
+Templates: the user can save a freeform block as a named template (or ask you to: save_template). The templates tool lists them; draw one with blocks: [{ id, template: "<name>", parts }] and fill its parts. When the user asks to change a template, change it with save_template (same name), then draw it again.
 
 When to draw: whenever a turn changes something worth seeing (a new idea, a step done, a choice made, a file touched, a result found). Small talk leaves the picture as it is. Change only what changed and keep ids (blocks, nodes, parts) stable across turns, so the picture grows instead of jumping. Start a new picture (clear: true) when the topic changes.
 
@@ -23,8 +30,8 @@ How to draw well:
 - Groups put related things in one frame (a server, a file, a phase).
 - Keep a graph to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note. Use more graph blocks for separate views (the flow, the data), not one crowded graph.
 
-HTML blocks: a real chart of numbers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place, a table of data, or code when the code is the point (the change you made, the function at fault: a <pre> titled with file and line, src/chat.ts:412, up to about 40 lines). There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep the graph as the default; reach for HTML when the user would want to see the numbers, try something, or compare how things look. Keep each block small (a few KB) and self-contained.
-To change an HTML block, don't resend it: mark what will change with data-part="name" (a number, a row, a status line) and send only parts: { name: "<new markup>" }. Send html again only when the layout itself changes.
+Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place, a table of data, or code when the code is the point (the change you made, the function at fault: a <pre> titled with file and line, src/chat.ts:412, up to about 40 lines). There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained.
+To change a freeform block, don't resend it: mark what will change with data-part="name" (a number, a row, a status line) and send only parts: { name: "<new markup>" }. Send html again only when the layout itself changes.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
 
@@ -71,7 +78,12 @@ const drawShape = {
     .array(
       z.object({
         id: z.string().describe("Stable block id, reused across turns"),
-        kind: z.enum(["graph", "html"]).optional().describe("Only needed for a new graph block placed before its nodes come; html is assumed when html is given"),
+        name: z.string().optional().describe("Short telling name shown on the block's badge, e.g. \"Deploy steps\""),
+        kind: z.enum(["graph", "html"]).optional().describe("Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"),
+        form: z.enum(FORM_NAMES as [string, ...string[]]).optional().describe("Makes this a form block of that kind"),
+        data: z.record(z.string(), z.any()).optional().describe("A form's data (see the forms in the system prompt): item lists are upserted by item id, other fields replaced"),
+        removeItems: z.array(z.string()).optional().describe("Ids of form items to remove"),
+        template: z.string().optional().describe("Draw a saved template (by name) in this freeform block; fill it through parts"),
         width: z.enum(WIDTHS).optional().describe("full (default) or half: two half blocks in a row sit side by side"),
         before: z.string().optional().describe("Move or put this block before the block with this id; new blocks go last"),
         html: z
@@ -104,13 +116,31 @@ export const WORKSPACE_MCP: McpDef = {
 };
 
 export const PICTURE_MCP: McpDef = {
-  version: "2.0.0",
+  version: "3.0.0",
   alwaysLoad: true,
   tools: [
     {
       name: "draw",
-      description: "Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups) or your own HTML. Everything is upserted by id, so send only what changed: a few nodes, one block, or one part of an HTML block.",
+      description: "Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form (pipeline, timeline, compare, chart, stats) or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.",
       schema: z.toJSONSchema(z.object(drawShape)) as Record<string, unknown>,
+    },
+    {
+      name: "templates",
+      description: "List the saved templates (freeform blocks kept by name): name, description, parts.",
+      schema: z.toJSONSchema(z.object({})) as Record<string, unknown>,
+    },
+    {
+      name: "save_template",
+      description: "Save or change a template: from a freeform block of the picture (block) and/or new html. Same name = change it.",
+      schema: z.toJSONSchema(
+        z.object({
+          name: z.string().describe("Short telling name, e.g. \"Plan usage tiles\""),
+          block: z.string().optional().describe("Id of a freeform block in the picture to take the page and parts from"),
+          html: z.string().optional().describe("The page, as for a freeform block (replaces the old one)"),
+          parts: z.record(z.string(), z.string()).optional().describe("Default markup for its data-part elements"),
+          description: z.string().optional().describe("One line: what it shows and when to use it"),
+        }),
+      ) as Record<string, unknown>,
     },
   ],
 };
