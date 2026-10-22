@@ -556,10 +556,9 @@ function App() {
                   {...tipProps(c.project ? `${c.title} · ${c.project}` : c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
-                  {(c.title.trim()[0] ?? "?").toUpperCase()}
+                  <DotFace letter={(c.title.trim()[0] ?? "?").toUpperCase()} project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} />
                   <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
                   <AgentMoons n={c.agents} />
-                  {c.project && <ProjectTag name={c.project} tag={tags.get(c.project) ?? ""} logo={c.logo} />}
                 </button>
               ))}
             </div>
@@ -861,18 +860,27 @@ function projectTags(names: (string | null)[]): Map<string, string> {
 
 // The project on a chat's circle: its logo when the repo has one, else its short name, tinted the
 // same colour wherever that project shows.
-function ProjectTag({ name, tag, logo }: { name: string; tag: string; logo: boolean }) {
+// A rail circle's face: the project's logo big with the chat's letter in a small circle; without a
+// logo, the letter big and the project's short name as a tinted tag.
+function DotFace({ letter, project, tag, logo }: { letter: string; project: string | null; tag: string; logo: boolean }) {
   const [broken, setBroken] = useState(false);
-  if (logo && !broken)
+  if (project && logo && !broken)
     return (
-      <span className="project-tag logo">
-        <img src={`/api/projects/${encodeURIComponent(name)}/logo`} alt="" onError={() => setBroken(true)} />
-      </span>
+      <>
+        <img className="rail-logo" src={`/api/projects/${encodeURIComponent(project)}/logo`} alt="" onError={() => setBroken(true)} />
+        <span className="letter-tag">{letter}</span>
+      </>
     );
+  if (!project) return <>{letter}</>;
   let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of project) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const tints = CHAT_COLORS.filter((c) => c !== PASSIVE);
-  return <span className="project-tag" style={{ "--tag": `var(--c-${tints[h % tints.length]})` } as React.CSSProperties}>{tag}</span>;
+  return (
+    <>
+      {letter}
+      <span className="project-tag" style={{ "--tag": `var(--c-${tints[h % tints.length]})` } as React.CSSProperties}>{tag}</span>
+    </>
+  );
 }
 
 function AgentMoons({ n }: { n: number }) {

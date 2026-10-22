@@ -720,9 +720,10 @@ svg.logo { flex: none; color: var(--fg); }
 /* The chat's project: a small chalk tag at the circle's bottom right. */
 .project-tag { position: absolute; right: -12px; bottom: -7px; padding: 0 4px; font: 700 10.5px/15px var(--sans); color: var(--tag, var(--muted)); letter-spacing: 0.02em; isolation: isolate; pointer-events: none; }
 .project-tag::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 8px; border: 1.5px solid color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); background: var(--bg2); filter: url(#tip-chalk); }
-.project-tag.logo { right: -9px; bottom: -7px; width: 20px; height: 20px; padding: 0; display: grid; place-items: center; }
-.project-tag.logo::before { border-radius: 6px; border-color: var(--line); }
-.project-tag.logo img { width: 14px; height: 14px; object-fit: contain; border-radius: 3px; }
+/* With a logo: the logo fills the circle, the chat's letter sits in a small chalk circle at its bottom right. */
+.rail-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; pointer-events: none; }
+.letter-tag { position: absolute; right: -8px; bottom: -6px; width: 18px; height: 18px; display: grid; place-items: center; font: 700 11px/1 var(--hand); color: var(--chat, var(--grey)); isolation: isolate; pointer-events: none; }
+.letter-tag::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 1.5px solid var(--chat, var(--grey)); background: var(--bg2); filter: url(#tip-chalk); }
 
 /* Agents still working: small chalk moons around the chat's circle. */
 .moons { position: absolute; inset: 0; pointer-events: none; }
