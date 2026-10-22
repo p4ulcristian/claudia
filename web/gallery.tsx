@@ -19,10 +19,14 @@ const SAMPLE_GRAPH = {
 const SAMPLE_FREEFORM = `<div style="display:flex;gap:10px;align-items:center"><span style="font:700 20px var(--hand)">Anything else</span><input type="range" min="0" max="10" value="6"><span style="color:var(--muted)">sliders, mockups, a table, code…</span></div>`;
 
 // n: the entry's number in the window, so it can be named in a chat ("#7 and #12 look the same").
-function Entry({ n, block, when, children }: { n: number; block: Block; when: string; children: React.ReactNode }) {
+function Entry({ n, block, when, children, onDelete, onRestore }: { n: number; block: Block; when: string; children: React.ReactNode; onDelete?: () => void; onRestore?: () => void }) {
   return (
-    <section className="g-entry">
-      <div className="block-head"><span className="g-num">#{n}</span><BlockBadge block={block} /></div>
+    <section className={`g-entry ${onRestore ? "deleted" : ""}`}>
+      <div className="block-head">
+        <span className="g-num">#{n}</span><BlockBadge block={block} />
+        {onDelete && <button className="tpl-delete" onClick={onDelete}>delete</button>}
+        {onRestore && <button className="tpl-delete restore" onClick={onRestore}>restore</button>}
+      </div>
       <p className="g-when">{when}</p>
       <div className="g-sample">{children}</div>
     </section>
@@ -38,7 +42,14 @@ export function FormsGallery({ close }: { close: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  // Built-in forms the user deleted (prefs.hiddenForms): Claude doesn't get them; restorable here.
+  const [hidden, setHidden] = useState<string[]>([]);
+  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHidden(p.hiddenForms ?? []), () => {}); }, []);
+  const setForms = (next: string[]) => {
+    setHidden(next);
+    fetch("/api/prefs", { method: "PATCH", body: JSON.stringify({ hiddenForms: next }) });
+  };
+  const [deleting, setDeleting] = useState<{ kind: "form" | "template"; name: string } | null>(null);
   const remove = async (name: string) => {
     setDeleting(null);
     await fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
@@ -58,7 +69,7 @@ export function FormsGallery({ close }: { close: () => void }) {
             <Diagram scene={SAMPLE_GRAPH} changed={[]} seq={0} />
           </Entry>
           {FORM_NAMES.map((f, i) => (
-            <Entry key={f} n={i + 2} block={{ id: f, kind: "form", form: f, data: {} }} when={FORMS[f].when}>
+            <Entry key={f} n={i + 2} onDelete={hidden.includes(f) ? undefined : () => setDeleting({ kind: "form", name: f })} onRestore={hidden.includes(f) ? () => setForms(hidden.filter((x) => x !== f)) : undefined} block={{ id: f, kind: "form", form: f, data: {} }} when={FORMS[f].when}>
               <FormView form={f} data={FORMS[f].sample} />
             </Entry>
           ))}
@@ -75,7 +86,7 @@ export function FormsGallery({ close }: { close: () => void }) {
                   <div className="block-head">
                     <span className="g-num">#{FORM_NAMES.length + 3 + i}</span>
                     <BlockBadge block={{ id: t.name, kind: "html", html: t.html, parts: t.parts, template: t.name }} />
-                    <button className="tpl-delete" onClick={() => setDeleting(t.name)}>delete</button>
+                    <button className="tpl-delete" onClick={() => setDeleting({ kind: "template", name: t.name })}>delete</button>
                   </div>
                   {t.description && <p className="g-when">{t.description}</p>}
                   <div className="g-sample"><PageFrame html={t.html} parts={t.parts} /></div>
@@ -83,13 +94,22 @@ export function FormsGallery({ close }: { close: () => void }) {
               ))}
             </div>}
       </div>
-      {deleting && <ConfirmDelete name={deleting} onYes={() => remove(deleting)} onNo={() => setDeleting(null)} />}
+      {deleting && (
+        <ConfirmDelete
+          {...deleting}
+          onYes={() => {
+            if (deleting.kind === "template") void remove(deleting.name);
+            else { setForms([...hidden, deleting.name]); setDeleting(null); }
+          }}
+          onNo={() => setDeleting(null)}
+        />
+      )}
     </div>
   );
 }
 
 // Asked before a template goes: a chalk card over the window; Escape or a click outside keeps it.
-function ConfirmDelete({ name, onYes, onNo }: { name: string; onYes: () => void; onNo: () => void }) {
+function ConfirmDelete({ kind, name, onYes, onNo }: { kind: "form" | "template"; name: string; onYes: () => void; onNo: () => void }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.stopImmediatePropagation(); onNo(); }
@@ -99,9 +119,11 @@ function ConfirmDelete({ name, onYes, onNo }: { name: string; onYes: () => void;
   }, [onYes, onNo]);
   return (
     <div className="confirm-backdrop" onClick={(e) => { e.stopPropagation(); onNo(); }}>
-      <div className="confirm-card" role="alertdialog" aria-modal="true" aria-label="Delete template" onClick={(e) => e.stopPropagation()}>
-        <h3>Delete this template?</h3>
-        <p><b>{name}</b> goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy.</p>
+      <div className="confirm-card" role="alertdialog" aria-modal="true" aria-label={`Delete ${kind}`} onClick={(e) => e.stopPropagation()}>
+        <h3>Delete this {kind}?</h3>
+        {kind === "template"
+          ? <p><b>{name}</b> goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy.</p>
+          : <p>Claude stops getting the <b>{name}</b> form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time.</p>}
         <div className="confirm-actions">
           <button className="confirm-no" onClick={onNo} autoFocus>Keep it</button>
           <button className="confirm-yes" onClick={onYes}>Delete</button>

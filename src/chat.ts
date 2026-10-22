@@ -7,7 +7,7 @@ import { readFileSync, statSync } from "node:fs";
 import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
 import { account, type Account } from "./account";
-import { PICTURE_MCP, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
+import { pictureMcp, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
 import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
@@ -211,8 +211,9 @@ function templateList(): string {
     + '\nDraw one with blocks: [{ id, template: "<name>", parts? }]; change one with save_template.';
 }
 
-const TOOLS = { picture: PICTURE_MCP, workspace: WORKSPACE_MCP };
-const TOOLS_VERSION = Bun.hash(JSON.stringify(TOOLS)).toString(36);
+// The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
+const tools = () => ({ picture: pictureMcp(store.prefs().hiddenForms), workspace: WORKSPACE_MCP });
+const toolsVersion = (t = tools()) => Bun.hash(JSON.stringify(t)).toString(36);
 
 // The session host the chats' Claude Code processes live in (set by the runner at start).
 let host: HostClient | null = null;
@@ -530,6 +531,10 @@ export class Chat implements SessionHandler {
       b.name ??= t.name;
     }
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
+    // Forms the user deleted aren't drawn, even by a session that still has the old tool list.
+    const hidden = new Set(store.prefs().hiddenForms);
+    const refused = (input.blocks ?? []).filter((b) => b.form && hidden.has(b.form)).map((b) => b.form!);
+    if (refused.length) input = { ...input, blocks: input.blocks!.filter((b) => !(b.form && hidden.has(b.form))) };
     // A code block given a file and no code shows the whole file, read here (as it is now).
     const unread: string[] = [];
     for (const b of input.blocks ?? []) {
@@ -557,7 +562,7 @@ export class Chat implements SessionHandler {
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}`;
+    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user deleted the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
   }
 
   // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.
@@ -612,11 +617,11 @@ export class Chat implements SessionHandler {
         ...(this.settings.model ? { model: this.settings.model } : {}),
         ...(this.settings.effort ? { effort: this.settings.effort } : {}),
       },
-      mcp: TOOLS,
+      mcp: tools(),
       hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: EDIT_TOOLS }] },
     }, this);
     this.q.kv("account", acct.name);
-    this.q.kv("tools", TOOLS_VERSION);
+    this.q.kv("tools", toolsVersion());
   }
 
   // The host asks: a tool call, a hook, or whether a tool may run.
@@ -673,18 +678,24 @@ export class Chat implements SessionHandler {
     this.running = false;
     this.setRunning(live.busy);
     // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
-    if (kv.tools !== TOOLS_VERSION)
-      session.setMcp(TOOLS).then(
-        () => session.kv("tools", TOOLS_VERSION),
-        (err) => {
-          console.error(`[${this.id.slice(0, 8)}] tools not swapped (${err?.message ?? err}); restarting after this turn`);
-          this.staleTools = true;
-          this.restartIfStale();
-        },
-      );
+    if (kv.tools !== toolsVersion()) this.swapTools(session);
     if (live.busy) this.since = Number(kv.since ?? Date.now());
     else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
     return this;
+  }
+
+  // Hands a session the tools as they stand now; a session that refuses them restarts after its turn.
+  swapTools(session = this.q) {
+    if (!session) return;
+    const t = tools();
+    session.setMcp(t).then(
+      () => session.kv("tools", toolsVersion(t)),
+      (err) => {
+        console.error(`[${this.id.slice(0, 8)}] tools not swapped (${err?.message ?? err}); restarting after this turn`);
+        this.staleTools = true;
+        this.restartIfStale();
+      },
+    );
   }
 
   private ask(name: string, input: Record<string, unknown>, opts: { signal: AbortSignal; toolUseID: string; title?: string; description?: string }): Promise<PermissionResult> {

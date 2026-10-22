@@ -79,8 +79,9 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 // chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
 export type Template = { name: string; html: string; parts: Record<string, string>; description: string; updatedAt: number };
 
-export type Prefs = { chatColors: "each" | "none" };
-const PREF_DEFAULTS: Prefs = { chatColors: "each" };
+// hiddenForms: built-in forms the user deleted in the Forms window (Claude no longer gets them).
+export type Prefs = { chatColors: "each" | "none"; hiddenForms: string[] };
+const PREF_DEFAULTS: Prefs = { chatColors: "each", hiddenForms: [] };
 
 const q = {
   prefs: db.query<{ key: string; value: string }, []>("SELECT key, value FROM prefs"),
@@ -128,11 +129,15 @@ const q = {
 export const store = {
   prefs(): Prefs {
     const out: Prefs = { ...PREF_DEFAULTS };
-    for (const r of q.prefs.all()) if (r.key === "chatColors" && (r.value === "each" || r.value === "none")) out.chatColors = r.value;
+    for (const r of q.prefs.all()) {
+      if (r.key === "chatColors" && (r.value === "each" || r.value === "none")) out.chatColors = r.value;
+      if (r.key === "hiddenForms") try { out.hiddenForms = (JSON.parse(r.value) as unknown[]).filter((x): x is string => typeof x === "string"); } catch {}
+    }
     return out;
   },
   setPrefs(next: Partial<Prefs>) {
     if (next.chatColors === "each" || next.chatColors === "none") q.setPref.run("chatColors", next.chatColors);
+    if (Array.isArray(next.hiddenForms)) q.setPref.run("hiddenForms", JSON.stringify(next.hiddenForms.filter((x) => typeof x === "string")));
     return store.prefs();
   },
   addChat: (id: string) => q.addChat.run(id, Date.now()),

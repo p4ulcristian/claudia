@@ -144,6 +144,6 @@ export function mergeForm(prev: Record<string, unknown>, data: Record<string, un
 
 // The forms part of Claude's draw tool description (in the tool, not the system prompt, so a running
 // chat gets new forms when the tools are swapped in).
-export function formsHelp(): string {
-  return FORM_NAMES.map((n) => `- ${n}: ${FORMS[n].when} Data: ${FORMS[n].fields}.`).join("\n");
+export function formsHelp(names: readonly string[] = FORM_NAMES): string {
+  return (names as FormName[]).map((n) => `- ${n}: ${FORMS[n].when} Data: ${FORMS[n].fields}.`).join("\n");
 }

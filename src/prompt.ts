@@ -42,7 +42,8 @@ The chat runs in ~/Work. When you start working in a project, call mcp__workspac
 
 const colour = z.enum(COLORS).optional();
 
-const drawShape = {
+// The draw tool's input; forms: the ones on offer (the user can delete forms in the Forms window).
+const drawShape = (forms: string[]) => ({
   title: z.string().optional().describe("Picture title, a few words"),
   clear: z.boolean().optional().describe("Start a fresh picture before applying the rest (new topic)"),
   nodes: z
@@ -79,7 +80,7 @@ const drawShape = {
         id: z.string().describe("Stable block id, reused across turns"),
         name: z.string().optional().describe("Short telling name shown on the block's badge, e.g. \"Deploy steps\""),
         kind: z.enum(["graph", "html"]).optional().describe("Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"),
-        form: z.enum(FORM_NAMES as [string, ...string[]]).optional().describe("Makes this a form block of that kind"),
+        form: z.enum(forms as [string, ...string[]]).optional().describe("Makes this a form block of that kind"),
         data: z.record(z.string(), z.any()).optional().describe("A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"),
         removeItems: z.array(z.string()).optional().describe("Ids of form items to remove"),
         template: z.string().optional().describe("Draw a saved template (by name) in this freeform block; fill it through parts"),
@@ -99,7 +100,7 @@ const drawShape = {
     .describe("Add or change blocks by id: HTML blocks, and the width/position of any block"),
   removeBlocks: z.array(z.string()).optional().describe("Ids of whole blocks to remove"),
   remove: z.array(z.string()).optional().describe('Ids to remove from the graph block: nodes, groups, or arrows as "from->to"'),
-};
+});
 
 // The tools Claudia gives Claude. The session host serves them and asks the runner to run each call.
 export const WORKSPACE_MCP: McpDef = {
@@ -114,7 +115,10 @@ export const WORKSPACE_MCP: McpDef = {
   ],
 };
 
-export const PICTURE_MCP: McpDef = {
+// hidden: forms the user deleted; they leave the tool's description and its list of forms.
+export const pictureMcp = (hidden: string[] = []): McpDef => {
+  const forms = FORM_NAMES.filter((f) => !hidden.includes(f));
+  return {
   version: "3.0.0",
   alwaysLoad: true,
   tools: [
@@ -123,8 +127,8 @@ export const PICTURE_MCP: McpDef = {
       description: `Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.
 
 Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:
-${formsHelp()}`,
-      schema: z.toJSONSchema(z.object(drawShape)) as Record<string, unknown>,
+${formsHelp(forms)}`,
+      schema: z.toJSONSchema(z.object(drawShape(forms.length ? forms : ["none"]))) as Record<string, unknown>,
     },
     {
       name: "templates",
@@ -145,4 +149,5 @@ ${formsHelp()}`,
       ) as Record<string, unknown>,
     },
   ],
+};
 };

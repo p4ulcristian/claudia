@@ -147,7 +147,13 @@ Bun.serve({
     // This profile's preferences (each runner has its own store).
     "/api/prefs": {
       GET: () => json(store.prefs()),
-      PATCH: async (req) => json(store.setPrefs((await req.json()) as Record<string, unknown> as any)),
+      PATCH: async (req) => {
+        const next = (await req.json()) as Record<string, unknown>;
+        const out = store.setPrefs(next as any);
+        // A form deleted or restored: every open chat gets the new draw tool now.
+        if ("hiddenForms" in next) for (const c of chats.values()) c.swapTools();
+        return json(out);
+      },
     },
     // This profile's GitHub login (the token itself never comes back).
     "/api/github": {
