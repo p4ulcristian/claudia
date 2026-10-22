@@ -26,7 +26,13 @@ const FREEFORM = {
   glyph: <path d="M4 15c2-6 4-9 6-9s1 5 3 5 2-3 3-5M5 17h10" />,
 };
 
-export function FormRow({ forms, hidden, onChange }: { forms: Record<string, Choice>; hidden: string[]; onChange: (next: Record<string, Choice>) => void }) {
+export function FormRow({ forms, hidden, onChange, cols, onCols }: {
+  forms: Record<string, Choice>;
+  hidden: string[];
+  onChange: (next: Record<string, Choice>) => void;
+  cols: number;
+  onCols: (cols: number) => void;
+}) {
   const [peek, setPeek] = useState<string | null>(null);
   const shown = [...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform"];
   const cycle = (f: string) => {
@@ -54,6 +60,14 @@ export function FormRow({ forms, hidden, onChange }: { forms: Record<string, Cho
           </button>
         );
       })}
+      {/* Columns for this chat's picture; only the counts that fit the pane show (CSS container queries). */}
+      <div className="col-pick" role="radiogroup" aria-label="Columns">
+        {[0, 1, 2, 3].map((n) => (
+          <button key={n} className={`col-btn c${n} ${cols === n ? "on" : ""}`} role="radio" aria-checked={cols === n} onClick={() => onCols(n)} title={n ? `${n} column${n > 1 ? "s" : ""}` : "Claude's layout"}>
+            {n ? <ColGlyph n={n} /> : "auto"}
+          </button>
+        ))}
+      </div>
       {peek && (
         <div className="form-peek">
           <div className="form-peek-head">
@@ -66,5 +80,14 @@ export function FormRow({ forms, hidden, onChange }: { forms: Record<string, Cho
         </div>
       )}
     </div>
+  );
+}
+
+function ColGlyph({ n }: { n: number }) {
+  const w = (16 - (n - 1) * 2) / n;
+  return (
+    <svg viewBox="0 0 20 14" aria-hidden="true">
+      {Array.from({ length: n }, (_, i) => <rect key={i} x={2 + i * (w + 2)} y={2} width={w} height={10} rx={1.5} />)}
+    </svg>
   );
 }

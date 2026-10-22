@@ -50,7 +50,7 @@ type Live = {
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {} }, model: "", changes: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {}, cols: 0 }, model: "", changes: [],
 });
 
 const CHAT_WIDTH = 400; // the chat column until dragged (px)
@@ -755,9 +755,17 @@ function App() {
           </div>
           ) : (
           <div className="right-scroll">
-          {!readOnly && <FormRow forms={live.settings.forms ?? {}} hidden={hiddenForms} onChange={(forms) => send({ t: "settings", chat: current, forms })} />}
+          {!readOnly && (
+            <FormRow
+              forms={live.settings.forms ?? {}}
+              hidden={hiddenForms}
+              onChange={(forms) => send({ t: "settings", chat: current, forms })}
+              cols={live.settings.cols ?? 0}
+              onCols={(cols) => send({ t: "settings", chat: current, cols })}
+            />
+          )}
           <div className={`stage ${viewing ? "past" : ""}`}>
-            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} />
+            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} cols={live.settings.cols ?? 0} />
           </div>
           </div>
           )}

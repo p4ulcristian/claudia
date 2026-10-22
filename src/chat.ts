@@ -51,7 +51,8 @@ export type Task = {
 export type Context = { used: number; max: number; percent: number; model: string };
 // forms: the chat's choices in the row over the picture (left out = Claude decides).
 export type FormChoice = "use" | "off";
-export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice> };
+// cols: the picture's columns (0 = Claude's layout, 1–3 = that many equal columns).
+export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice>; cols: number };
 
 export type Question = {
   question: string;

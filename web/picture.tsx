@@ -521,7 +521,8 @@ function BlockView({ block, changed, seq, chat, browse }: { block: Block; change
 
 // chat: where the shown picture is live (it can save templates); left out for older pictures.
 // browse: the chat the picture belongs to, always (forms read its files through it, old pictures too).
-export function PictureView({ scene, changed, seq, chat, browse }: { scene: Scene; changed: string[]; seq: number; chat?: string; browse?: string }) {
+// cols: 0 = Claude's layout (full and half blocks), 1–3 = every block one cell in that many columns.
+export function PictureView({ scene, changed, seq, chat, browse, cols = 0 }: { scene: Scene; changed: string[]; seq: number; chat?: string; browse?: string; cols?: number }) {
   const hot = new Set(changed);
   const blocks = scene.blocks;
   if (blocks ? !blocks.length : !scene.nodes.length && !scene.cards.length)
@@ -534,7 +535,7 @@ export function PictureView({ scene, changed, seq, chat, browse }: { scene: Scen
   // No title on the board: the title names the picture only in the scrubber under it.
   if (blocks)
     return (
-      <div className="picture blocks">
+      <div className={`picture blocks ${cols ? `cols-${cols}` : ""}`}>
         {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} chat={chat} browse={browse} />)}
       </div>
     );

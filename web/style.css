@@ -1072,3 +1072,19 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .form-peek-sample { max-height: 240px; overflow: hidden; }
 .form-peek-hint { margin: 8px 0 0 !important; font: 700 12px var(--hand) !important; }
 .f-sketch { margin-left: 10px; font: 700 12px var(--hand); color: var(--amber); }
+
+/* Columns per chat (form row, right end). Every block is one cell; fewer columns when the pane is narrow. */
+.picture.blocks.cols-1 { grid-template-columns: minmax(0, 1fr); }
+.picture.blocks.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.picture.blocks.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.picture.blocks[class*="cols-"] > .block { grid-column: auto; }
+.picture.blocks.cols-1 > .block { grid-column: 1 / -1; }
+@container (max-width: 899px) { .picture.blocks.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .col-btn.c3 { display: none; } }
+@container (max-width: 559px) { .picture.blocks.cols-2, .picture.blocks.cols-3 { grid-template-columns: minmax(0, 1fr); } .col-pick { display: none; } }
+.col-pick { margin-left: auto; display: flex; gap: 4px; flex: none; }
+.col-btn { height: 26px; min-width: 30px; padding: 0 6px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); font: 700 13px var(--hand); position: relative; isolation: isolate; }
+.col-btn::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 7px; border: 1.5px solid var(--line); filter: url(#tip-chalk); }
+.col-btn:hover { color: var(--fg); }
+.col-btn.on { color: var(--fg); }
+.col-btn.on::before { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.col-btn svg { width: 20px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
