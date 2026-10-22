@@ -8,6 +8,7 @@ import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
 import { account, type Account } from "./account";
 import { pictureMcp, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
+import { FORMS, FORM_NAMES } from "./forms";
 import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
@@ -214,6 +215,33 @@ function templateList(): string {
 }
 
 // The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
+// The forms a chat can draw now, each with a fingerprint of how it's used: compared with what the chat
+// last saw, so a change is told inside its conversation (draw results, the next message), which Claude
+// trusts more than the instructions it started with.
+type FormsSeen = Record<string, string>;
+function formsNow(forms: Record<string, FormChoice>): FormsSeen {
+  const off = new Set([...store.prefs().hiddenForms, ...Object.keys(forms).filter((f) => forms[f] === "off")]);
+  return Object.fromEntries(FORM_NAMES.filter((f) => !off.has(f)).map((f) => [f, Bun.hash(FORMS[f].when + FORMS[f].fields).toString(36)]));
+}
+// seen null: a chat from before this was kept, so it hears the whole list once.
+function formsNews(seen: FormsSeen | null, now: FormsSeen): string | null {
+  const line = (f: string) => `${f} (${FORMS[f as keyof typeof FORMS].when.split(/(?<=\.)\s/)[0]})`;
+  if (!seen) return `Claudia's forms (blocks[].form) you can draw now: ${Object.keys(now).map(line).join("; ")}. Each one's data is in the draw tool's description; use them rather than hand-made HTML when they fit.`;
+  const added = Object.keys(now).filter((f) => !(f in seen));
+  const changed = Object.keys(now).filter((f) => f in seen && seen[f] !== now[f]);
+  const gone = Object.keys(seen).filter((f) => !(f in now));
+  if (!added.length && !changed.length && !gone.length) return null;
+  return [
+    "Claudia's forms changed since you last drew.",
+    added.length && `New: ${added.map(line).join("; ")}.`,
+    changed.length && `Changed (read their data again in the draw tool's description): ${changed.join(", ")}.`,
+    gone.length && `Gone (draw refuses them): ${gone.join(", ")}.`,
+  ].filter(Boolean).join(" ");
+}
+
+// The instructions a chat's Claude Code started with; a change restarts it once (after its turn).
+const PROMPT_VERSION = Bun.hash(SYSTEM_APPEND).toString(36);
+
 // What the form row now asks, in words for Claude.
 function formsNote(forms: Record<string, FormChoice>): string {
   const use = Object.keys(forms).filter((f) => forms[f] === "use");
@@ -275,6 +303,15 @@ export class Chat implements SessionHandler {
   firstSent: { text: string; at: number } | null = null;
   // The form row changed since the last message: said once, with the next message (hidden from the chat).
   private formsNote: string | null = null;
+  // The forms this chat's Claude last heard of (null: not known, from before this was kept).
+  private formsSeen: FormsSeen | null = null;
+  private seeForms() {
+    const now = formsNow(this.settings.forms);
+    const news = formsNews(this.formsSeen, now);
+    this.formsSeen = now;
+    this.q?.kv("formsSeen", now);
+    return news;
+  }
   // Subagent transcripts, by the tool_use id of the Agent call that started them.
   subs = new Map<string, Item[]>();
   context: Context | null = null;
@@ -452,7 +489,8 @@ export class Chat implements SessionHandler {
     }
     const content: any[] = images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } }));
     // A changed form row goes with this message, as a reminder the chat doesn't show.
-    const note = this.formsNote;
+    const news = this.q ? this.seeForms() : null;
+    const note = [news, this.formsNote].filter(Boolean).join(" ") || null;
     this.formsNote = null;
     if (text || note) content.push({ type: "text", text: note ? `${text}\n\n<system-reminder>${note}</system-reminder>` : text });
     const acct = await account().catch((err) => {
@@ -602,7 +640,8 @@ export class Chat implements SessionHandler {
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user turned off the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
+    const news = this.seeForms();
+    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user turned off the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
   }
 
   // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.
@@ -662,6 +701,9 @@ export class Chat implements SessionHandler {
     }, this);
     this.q.kv("account", acct.name);
     this.q.kv("tools", toolsVersion(tools(this.settings.forms)));
+    this.q.kv("prompt", PROMPT_VERSION);
+    this.formsSeen = formsNow(this.settings.forms);
+    this.q.kv("formsSeen", this.formsSeen);
   }
 
   // The host asks: a tool call, a hook, or whether a tool may run.
@@ -718,7 +760,13 @@ export class Chat implements SessionHandler {
     this.running = false;
     this.setRunning(live.busy);
     // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
+    this.formsSeen = (kv.formsSeen as FormsSeen | undefined) ?? null;
     if (kv.tools !== toolsVersion(tools(this.settings.forms))) this.swapTools(session);
+    // Started with other instructions: resume it fresh once its turn is over (same conversation).
+    if (kv.prompt !== PROMPT_VERSION) {
+      this.staleTools = true;
+      this.restartIfStale();
+    }
     if (live.busy) this.since = Number(kv.since ?? Date.now());
     else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
     return this;
