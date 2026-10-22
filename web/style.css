@@ -882,15 +882,18 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-ln { display: grid; grid-template-columns: minmax(3.2ch, auto) 1.6ch 1fr; position: relative; }
 .f-ln .num { padding: 0 8px 0 12px; text-align: right; color: color-mix(in srgb, var(--muted) 60%, transparent); user-select: none; }
 .f-ln .sign { text-align: center; user-select: none; font-weight: 700; }
-.f-ln code.hljs { display: block; padding: 0 14px 0 calc(4px + 2ch); text-indent: -2ch; background: none; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.f-ln code { display: block; padding: 0 14px 0 calc(4px + 2ch); text-indent: -2ch; white-space: pre-wrap; overflow-wrap: anywhere; color: #d4d4d4; font-size: inherit; }
 .f-ln.add { background: color-mix(in srgb, var(--green) 14%, transparent); }
 .f-ln.add .sign, .f-ln.add .num { color: var(--green); }
 .f-ln.del { background: color-mix(in srgb, var(--red) 14%, transparent); }
 .f-ln.del .sign { color: var(--red); }
-.f-ln.del code.hljs { opacity: 0.7; }
+.f-ln.del code { opacity: 0.7; }
 .f-ln.hot { background: color-mix(in srgb, var(--amber) 16%, transparent); }
 .f-ln.hot .num { color: var(--amber); font-weight: 700; }
 .f-ln.hot::before { content: ""; position: absolute; left: 3px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--amber); filter: url(#chalk-line); }
+.f-fold { display: block; width: 100%; margin: 2px 0; padding: 1px 0 1px calc(5.6ch + 20px); text-align: left; font: 700 13.5px var(--hand); color: var(--muted); background: color-mix(in srgb, var(--line) 22%, transparent); }
+.f-fold:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 40%, transparent); }
+.f-code-err { margin: 6px 14px 0; color: var(--red); }
 .f-pin { --box: var(--pin, var(--blue)); padding: 4px 14px 8px calc(5.6ch + 20px); position: relative; }
 .f-pin::before { content: ""; position: absolute; left: calc(5.6ch + 30px); top: -3px; border: 6px solid transparent; border-bottom: 8px solid var(--box); border-top: 0; filter: url(#tip-chalk); }
 .f-pin > span { display: inline-block; max-width: 100%; padding: 4px 12px; font: 700 15px/1.35 var(--hand); color: var(--fg); }

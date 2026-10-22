@@ -30,26 +30,6 @@ export function highlight(code: string, lang?: string) {
   return language ? hljs.highlight(code, { language }).value : hljs.highlightAuto(code).value;
 }
 
-// Highlighted code split into lines, each line's markup whole: a span open across a line break
-// is closed at its end and opened again on the next line.
-export function highlightLines(code: string, lang?: string): string[] {
-  const lines: string[] = [];
-  const open: string[] = [];
-  let cur = "";
-  for (const [tok] of highlight(code, lang).matchAll(/<span[^>]*>|<\/span>|\n|[^<\n]+/g)) {
-    if (tok === "\n") {
-      lines.push(cur + "</span>".repeat(open.length));
-      cur = open.join("");
-    } else {
-      cur += tok;
-      if (tok.startsWith("<span")) open.push(tok);
-      else if (tok === "</span>") open.pop();
-    }
-  }
-  lines.push(cur);
-  return lines;
-}
-
 // One listener for every code block's copy button.
 document.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest?.(".code .copy");

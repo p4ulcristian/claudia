@@ -3,6 +3,7 @@ import { getSessionMessages, getSessionInfo, type SDKMessage, type PermissionRes
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
+import { readFileSync, statSync } from "node:fs";
 import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
 import { account, type Account } from "./account";
@@ -529,13 +530,38 @@ export class Chat implements SessionHandler {
       b.name ??= t.name;
     }
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
+    // A code block given a file and no code shows the whole file, read here (as it is now).
+    const unread: string[] = [];
+    for (const b of input.blocks ?? []) {
+      const d = b.data;
+      const isCode = b.form === "code" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "code"));
+      if (!isCode || !d || typeof d.file !== "string" || d.code !== undefined) continue;
+      const text = this.readForPicture(d.file);
+      if (typeof text === "string") b.data = { ...d, code: text, line: 1, diff: false, error: null };
+      else { b.data = { ...d, code: "", error: text.error }; unread.push(text.error); }
+    }
     const { scene, changed } = applyDraw(this.scene, input);
     this.scene = scene;
     this.drew = true;
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}`;
+    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}`;
+  }
+
+  // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.
+  private readForPicture(path: string): string | { error: string } {
+    const abs = resolve(this.settings.folder ?? WORK, path.replace(/^~(?=\/|$)/, homedir()));
+    try {
+      const st = statSync(abs);
+      if (!st.isFile()) return { error: `Not a file: ${path}` };
+      if (st.size > 2_000_000) return { error: `Too big to show whole: ${path} (${Math.round(st.size / 1000)} KB); send the lines as code instead` };
+      const text = readFileSync(abs, "utf8");
+      if (text.includes("\0")) return { error: `Not a text file: ${path}` };
+      return text;
+    } catch {
+      return { error: `Can't read ${path}` };
+    }
   }
 
   // Save a block of the picture as a template (from Claude's save_template tool or the Save button).

@@ -83,8 +83,8 @@ export const FORMS = {
   },
   code: {
     label: "Code",
-    when: "Code when the code is the point: the change you made, the function at fault, a snippet to talk about. Up to about 40 lines. Mark the lines that matter; pin a short note to a line instead of explaining it in the chat.",
-    fields: "file? (its path), line? (number of the first line, default 1), lang? (else taken from the file name), code (the lines as one string; with diff: true each line starts with '+', '-' or ' '), diff?: boolean, mark?: [line numbers or \"a-b\" ranges], notes?: [{ id, line, text, color? }] pinned under that line",
+    when: "Code when the code is the point: the change you made, the function at fault, a snippet to talk about, or a whole file with the parts that matter marked. Coloured like VS Code. Mark the lines that matter; pin a short note to a line instead of explaining it in the chat. To show a whole file, send file and no code: Claudia reads it itself (no need to send its text) and folds it down to the marked and noted lines, which the user can unfold.",
+    fields: "file? (its path, relative to the working folder; without code the whole file is read), line? (number of the first line of code, default 1), lang? (else taken from the file name), code? (the lines as one string; with diff: true each line starts with '+', '-' or ' '), diff?: boolean, mark?: [line numbers or \"a-b\" ranges], notes?: [{ id, line, text, color? }] pinned under that line. Later calls send only what changed (a new note, other marks); sending file again without code reads it again",
     sample: {
       file: "src/orders/total.ts",
       line: 12,

@@ -2,7 +2,7 @@
 // data as it stands after the draw calls (items merged by id).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { FormName } from "../src/forms";
-import { highlightLines } from "./md";
+import { codeTokens, type Token } from "./shiki";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -131,9 +131,14 @@ function Chart({ data }: { data: Data }) {
   return <div className="f-chart" ref={box} />;
 }
 
-// Code: real line numbers from data.line, highlighted per line; diff: true reads a leading +/-/space
-// per line (removed lines get no number); mark and notes point at those numbers.
+// Code: real line numbers from data.line, coloured by Shiki (VS Code's grammars); diff: true reads a
+// leading +/-/space per line (removed lines get no number); mark and notes point at those numbers.
+// A long file folds down to the marked and noted lines with a few lines around each.
 type CodeRow = { n: number | null; sign: "+" | "-" | ""; text: string };
+
+const FOLD_OVER = 60; // longer code folds
+const AROUND = 4; // lines kept open around each marked or noted line
+const HEAD = 40; // lines shown when nothing is marked
 
 function codeRows(data: Data): CodeRow[] {
   const first = Number.isFinite(data.line) ? Number(data.line) : 1;
@@ -156,15 +161,38 @@ function markedLines(mark: unknown): Set<number> {
   return out;
 }
 
+// Which rows show: all of short code; of long code, the rows near marked or noted lines (or the head).
+function shownRows(rows: CodeRow[], focus: Set<number>): boolean[] {
+  if (rows.length <= FOLD_OVER) return rows.map(() => true);
+  const idx = rows.flatMap((r, i) => (r.n != null && focus.has(r.n) ? [i] : []));
+  if (!idx.length) return rows.map((_, i) => i < HEAD);
+  const show = rows.map(() => false);
+  for (const i of idx) for (let j = Math.max(0, i - AROUND); j <= Math.min(rows.length - 1, i + AROUND); j++) show[j] = true;
+  return show;
+}
+
+const FONT_STYLE = (f?: number): React.CSSProperties | undefined =>
+  f ? { fontStyle: f & 1 ? "italic" : undefined, fontWeight: f & 2 ? 700 : undefined, textDecoration: f & 4 ? "underline" : undefined } : undefined;
+
 function Code({ data }: { data: Data }) {
   const rows = useMemo(() => codeRows(data), [data.code, data.line, data.diff]);
   const file = typeof data.file === "string" ? data.file : "";
   const ext = file.includes(".") ? file.split(".").pop() : undefined;
-  const lang = data.lang ?? ext;
-  const html = useMemo(() => highlightLines(rows.map((r) => r.text).join("\n"), lang), [rows, lang]);
+  const lang: string | undefined = data.lang ?? ext;
+  const text = useMemo(() => rows.map((r) => r.text).join("\n"), [rows]);
+  const [tokens, setTokens] = useState<Token[][] | null>(null);
+  useEffect(() => {
+    let gone = false;
+    setTokens(null);
+    codeTokens(text, lang).then((t) => { if (!gone) setTokens(t); }).catch(() => {});
+    return () => { gone = true; };
+  }, [text, lang]);
   const marked = markedLines(data.mark);
   const notes = new Map<number, any[]>();
   for (const nt of list(data.notes)) notes.set(Number(nt.line), [...(notes.get(Number(nt.line)) ?? []), nt]);
+  const shown = shownRows(rows, new Set([...marked, ...notes.keys()]));
+  const [opened, setOpened] = useState<Set<number>>(new Set()); // first row of each unfolded stretch
+  const folded = shown.some((v) => !v);
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(rows.filter((r) => r.sign !== "-").map((r) => r.text).join("\n")).then(() => {
@@ -175,6 +203,43 @@ function Code({ data }: { data: Data }) {
   const cut = file.lastIndexOf("/") + 1;
   const firstNo = rows.find((r) => r.n != null)?.n;
   const lastNo = [...rows].reverse().find((r) => r.n != null)?.n;
+
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < rows.length; ) {
+    if (!shown[i]) {
+      let j = i;
+      while (j < rows.length && !shown[j]) j++;
+      if (!opened.has(i)) {
+        const start = i;
+        out.push(
+          <button key={`fold${i}`} type="button" className="f-fold" onClick={() => setOpened((o) => new Set(o).add(start))}>
+            ⋯ {j - i} line{j - i === 1 ? "" : "s"}
+          </button>,
+        );
+        i = j;
+        continue;
+      }
+    }
+    const r = rows[i];
+    out.push(
+      <div key={i} className={`f-ln ${r.sign === "+" ? "add" : r.sign === "-" ? "del" : ""} ${r.n != null && marked.has(r.n) ? "hot" : ""}`}>
+        <span className="num">{r.n ?? ""}</span>
+        <span className="sign">{r.sign === "-" ? "−" : r.sign}</span>
+        <code>
+          {tokens?.[i]?.length ? tokens[i].map((t, k) => <span key={k} style={{ color: t.color, ...FONT_STYLE(t.fontStyle) }}>{t.content}</span>) : r.text || " "}
+        </code>
+      </div>,
+    );
+    if (r.n != null)
+      for (const nt of notes.get(r.n) ?? [])
+        out.push(
+          <div key={`n${nt.id}`} className="f-pin" data-item={nt.id} style={{ "--pin": colorOf(nt.color) } as React.CSSProperties}>
+            <span className="chalk-box">{nt.text}</span>
+          </div>,
+        );
+    i++;
+  }
+
   return (
     <div className={`f-code ${data.diff ? "is-diff" : ""}`}>
       <div className="f-code-head">
@@ -185,24 +250,15 @@ function Code({ data }: { data: Data }) {
           </span>
         ) : <span className="f-file" />}
         {lang && <span className="f-lang">{lang}</span>}
+        {folded && (
+          <button type="button" className="f-copy" onClick={() => setOpened((o) => (o.size ? new Set() : new Set(rows.map((_, i) => i))))}>
+            {opened.size ? "fold" : "unfold"}
+          </button>
+        )}
         <button type="button" className="f-copy" onClick={copy}>{copied ? "copied" : "copy"}</button>
       </div>
-      <div className="f-lines">
-        {rows.map((r, i) => (
-          <React.Fragment key={i}>
-            <div className={`f-ln ${r.sign === "+" ? "add" : r.sign === "-" ? "del" : ""} ${r.n != null && marked.has(r.n) ? "hot" : ""} ${r.n != null && notes.has(r.n) ? "noted" : ""}`}>
-              <span className="num">{r.n ?? ""}</span>
-              <span className="sign">{r.sign === "-" ? "−" : r.sign}</span>
-              <code className="hljs" dangerouslySetInnerHTML={{ __html: html[i] || " " }} />
-            </div>
-            {r.n != null && notes.get(r.n)?.map((nt) => (
-              <div key={nt.id} className="f-pin" data-item={nt.id} style={{ "--pin": colorOf(nt.color) } as React.CSSProperties}>
-                <span className="chalk-box">{nt.text}</span>
-              </div>
-            ))}
-          </React.Fragment>
-        ))}
-      </div>
+      {data.error && <p className="f-note f-code-err">{data.error}</p>}
+      <div className="f-lines">{out}</div>
     </div>
   );
 }
