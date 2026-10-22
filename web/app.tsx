@@ -52,6 +52,7 @@ const fresh = (id: string): Live => ({
   tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null }, model: "", changes: [],
 });
 
+const CHAT_WIDTH = 350; // the chat column until dragged (px)
 const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
 
 // /new?text=… (e.g. Eye on Rainbow's "Open in Claudia"): a new chat of your own with the text in
@@ -194,7 +195,9 @@ function App() {
   const [current, setCurrent] = useState<string>(() => idFromPath() ?? crypto.randomUUID());
   const [live, setLive] = useState<Live>(() => fresh(current));
   const [viewing, setViewing] = useState<string | null>(null);
-  const [split, setSplit] = useState(() => Number(store.get("split")) || 0.42);
+  // The chat column's width in px, not a share of the window: maximizing gives the room to the
+  // picture. CHAT_WIDTH until dragged; a drag (wider too) is kept.
+  const [chatW, setChatW] = useState(() => Number(store.get("chatW")) || CHAT_WIDTH);
   // Folding the picture pane gives the chat the full width; foldedAt marks which pictures are unseen.
   const [foldedAt, setFoldedAt] = useState(() => (store.get("folded") === "1" ? Date.now() : 0));
   const toggleFold = useCallback(() => setFoldedAt((f) => { store.set("folded", f ? "0" : "1"); return f ? 0 : Date.now(); }), []);
@@ -472,11 +475,11 @@ function App() {
 
   const dragSplit = (e: React.PointerEvent) => {
     const main = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
-    const move = (m: PointerEvent) => setSplit(Math.min(0.7, Math.max(0.25, (m.clientX - main.left) / main.width)));
+    const move = (m: PointerEvent) => setChatW(Math.round(Math.min(main.width - 6 - 280, Math.max(300, m.clientX - main.left))));
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      setSplit((s) => { store.set("split", String(s)); return s; });
+      setChatW((w) => { store.set("chatW", String(w)); return w; });
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -497,7 +500,7 @@ function App() {
   // A question opens the right half while it's pending, so peeking shows the picture.
   const folded = foldedAt > 0 && !live.asks.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
-  const fold = useFoldMotion(folded && !phone, split, phone);
+  const fold = useFoldMotion(folded && !phone, chatW, phone);
   const sheetUnseen = phone && !sheet && (live.pictures.at(-1)?.at ?? 0) > sheetAt;
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
@@ -656,7 +659,7 @@ function App() {
         ref={fold.ref}
         className={`split ${fold.shown ? "folded" : ""} ${fold.cls}`}
         style={{
-          gridTemplateColumns: fold.cols ?? (fold.shown ? `minmax(300px, 1fr) 6px ${EDGE}px` : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)`),
+          gridTemplateColumns: fold.cols ?? (fold.shown ? `minmax(300px, 1fr) 6px ${EDGE}px` : `max(300px, min(${chatW}px, calc(100% - 286px))) 6px minmax(280px, 1fr)`),
           ...(fold.width !== null ? { "--fold-w": `${fold.width}px` } : {}),
         } as React.CSSProperties}
       >
@@ -932,7 +935,7 @@ function SheetGrab({ onClose }: { onClose: () => void }) {
 const FOLD_MS = 320;
 // The folded right half: a thin chalk edge (px).
 const EDGE = 16;
-function useFoldMotion(folded: boolean, split: number, narrow: boolean) {
+function useFoldMotion(folded: boolean, chatW: number, narrow: boolean) {
   const ref = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(folded);
   const [width, setWidth] = useState<number | null>(null);
@@ -954,7 +957,7 @@ function useFoldMotion(folded: boolean, split: number, narrow: boolean) {
     const total = main.clientWidth;
     const open = folded
       ? total - 6 - (main.firstElementChild as HTMLElement).getBoundingClientRect().width
-      : total - 6 - Math.min(total - 6 - 280, Math.max(300, (total - 6) * split));
+      : total - 6 - Math.min(total - 6 - 280, Math.max(300, chatW));
     setRightWidth(open);
     setDir(folded ? "fold" : "unfold");
     setGo(false);
