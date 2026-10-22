@@ -1088,3 +1088,11 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .col-btn.on { color: var(--fg); }
 .col-btn.on::before { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .col-btn svg { width: 20px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+/* Files: real or made up, said in the header and on each planned file. */
+.f-kind { flex: none; font: 700 12px var(--hand); padding: 0 8px; border-radius: 8px; position: relative; isolation: isolate; }
+.f-kind::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 8px; border: 1.5px solid currentColor; filter: url(#tip-chalk); opacity: 0.8; }
+.f-kind.real { color: var(--green); }
+.f-kind.made { color: var(--amber); }
+.f-kind.made::before { border-style: dashed; }
+.f-planned { flex: none; font: 700 11.5px var(--hand); color: var(--amber); border: 1.2px dashed var(--amber); border-radius: 6px; padding: 0 5px; line-height: 15px; }
+.f-tree-row:has(.f-planned) .nm { font-style: italic; }

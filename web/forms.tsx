@@ -310,14 +310,18 @@ function ExtTag({ name }: { name: string }) {
 
 // Files: a folder as a tree, read live through the runner (src/files.ts); folders open on click, a
 // file opens in place as a code block. Marks point files out; git status shows as a letter.
-type Entry = { name: string; dir: boolean; status?: string; changed?: number };
+type Entry = { name: string; dir: boolean; status?: string; changed?: number; planned?: boolean };
 const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, not in git yet", D: "deleted" };
 
 function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
   const root: string = typeof data.root === "string" ? data.root : "";
   // sketch: files that don't exist (yet), given by Claude with their code; demo: the gallery's sample.
-  const sketch: { path: string; dir?: boolean; status?: string; code?: string }[] | null = Array.isArray(data.sketch) ? data.sketch : null;
-  const demo: { path: string; dir?: boolean; status?: string; code?: string }[] | null = sketch ?? (Array.isArray(data.demo) ? data.demo : null);
+  // With root too, the sketch's files are planned additions to the real tree, each tagged "planned".
+  type Made = { path: string; dir?: boolean; status?: string; code?: string };
+  const sketch: Made[] | null = Array.isArray(data.sketch) ? data.sketch : null;
+  const demo: Made[] | null = Array.isArray(data.demo) ? data.demo : null;
+  const live = !!root && !demo;
+  const made: Made[] = sketch ?? demo ?? [];
   const marks = new Map<string, any>(list(data.marks).map((m) => [String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""), m]));
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
   const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors)]));
@@ -328,7 +332,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const url = (path: string, read = false) => `/api/chats/${chat}/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}${read ? "&read=1" : ""}`;
   // Every open folder is read (again after "refresh").
   useEffect(() => {
-    if (demo || !chat || !root) return;
+    if (!live || !chat) return;
     let gone = false;
     for (const d of open)
       fetch(url(d)).then((r) => r.json()).then((j) => {
@@ -338,11 +342,17 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   }, [[...open].join("|"), root, chat, tick]);
 
   const entriesOf = (d: string): Entry[] | { error: string } | undefined => {
-    if (!demo) return dirs.get(d);
     // Folders come from the paths too ("src/a/b.clj" makes src and src/a), not only from dir entries.
     const pre = d ? `${d}/` : "";
-    const out = new Map<string, Entry>();
-    for (const e of demo) {
+    let real = live ? dirs.get(d) : [];
+    if (real === undefined) return undefined;
+    // A folder that is only planned isn't on disk: its planned files alone.
+    if ("error" in real) {
+      if (!made.some((e) => e.path.startsWith(pre))) return real;
+      real = [];
+    }
+    const out = new Map<string, Entry>(real.map((e) => [e.name, e]));
+    for (const e of made) {
       const p = e.path.replace(/\/$/, "");
       if (!p.startsWith(pre)) continue;
       const rest = p.slice(pre.length);
@@ -350,14 +360,23 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       const name = slash < 0 ? rest : rest.slice(0, slash);
       if (!name) continue;
       const isDir = slash >= 0 || !!e.dir;
-      out.set(name, { ...(out.get(name) ?? {}), name, dir: isDir, ...(slash < 0 && e.status ? { status: e.status } : {}) });
+      const onDisk = out.get(name);
+      // Only what isn't on disk is planned (a sketch file over a real one keeps the real one).
+      if (onDisk && live) continue;
+      out.set(name, { ...(onDisk ?? {}), name, dir: isDir, planned: !!sketch, ...(slash < 0 && e.status ? { status: e.status } : {}) });
     }
     return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
   const openFile = (path: string) => {
     if (file?.path === path) return setFile(null);
     setFile({ path });
-    if (demo) return setFile({ path, text: demo.find((e) => e.path === path)?.code ?? (sketch ? "(no code given for this file)" : "// a file opens here, coloured like VS Code") });
+    // A planned (sketched) file shows the code Claude gave; a file on disk is read.
+    const m = made.find((e) => e.path.replace(/\/$/, "") === path);
+    const cut = path.lastIndexOf("/");
+    const listed = dirs.get(cut < 0 ? "" : path.slice(0, cut));
+    const onDisk = live && Array.isArray(listed) && listed.some((x) => x.name === path.slice(cut + 1));
+    if (m && !onDisk) return setFile({ path, text: m.code ?? (demo ? "// a file opens here, coloured like VS Code" : "(no code given for this file)") });
+    if (!live) return setFile({ path, error: "not given" });
     fetch(url(path, true)).then((r) => r.json()).then((j) => setFile({ path, ...j })).catch(() => setFile({ path, error: "can't read it" }));
   };
   const toggle = (d: string) => setOpen((o) => { const n = new Set(o); n.has(d) ? n.delete(d) : n.add(d); return n; });
@@ -382,6 +401,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
         >
           {e.dir ? <FolderIcon open={isOpen} /> : <ExtTag name={e.name} />}
           <span className="nm">{e.name}</span>
+          {e.planned && <span className="f-planned" title="Not on disk: planned, as Claude sketched it">planned</span>}
           {e.status && <span className={`st st-${e.status}`} title={STATUS_TIP[e.status]}>{e.status}</span>}
           {e.dir && e.changed ? <span className="st st-M" title={`${e.changed} changed inside`}>•</span> : null}
           {m?.note && <span className="mk">{m.note}</span>}
@@ -405,13 +425,17 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     <div className="f-files">
       <div className="f-code-head">
         <span className="f-file" title={root}>
-          {sketch ? <><b>{typeof data.title === "string" ? data.title : "planned files"}</b><span className="f-sketch">sketch · not on disk</span></>
+          {!live && sketch ? <b>{typeof data.title === "string" ? data.title : "planned files"}</b>
             : <><span className="dir">{demo ? "~/Work/apps/" : home.slice(0, home.lastIndexOf("/") + 1)}</span><b>{demo ? "shop" : home.slice(home.lastIndexOf("/") + 1)}</b></>}
         </span>
+        {/* Real or made up, said up front. */}
+        {live && <span className="f-kind real" title="Read live from disk">on disk</span>}
+        {sketch && <span className="f-kind made" title="Files Claude sketched; they are not on disk">{live ? `+ ${sketch.length} planned` : "sketch · not on disk"}</span>}
+        {demo && <span className="f-kind made">example</span>}
         {open.size > 1 && <button type="button" className="f-copy" onClick={() => { setOpen(new Set([""])); setFile(null); }}>collapse all</button>}
-        {!demo && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
+        {live && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
       </div>
-      <div className="f-tree">{!demo && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
+      <div className="f-tree">{live && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
     </div>
   );
 }
