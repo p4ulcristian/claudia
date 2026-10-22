@@ -1012,3 +1012,4 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .tl-explain .explain-note { margin-left: 0; }
 .rail-sound { color: var(--muted); opacity: 0.7; }
 .rail-sound.on { color: var(--accent); opacity: 1; }
+.g-num { order: -2; font: 700 15px var(--hand); color: var(--accent); margin-right: 8px; }

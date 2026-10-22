@@ -18,10 +18,11 @@ const SAMPLE_GRAPH = {
 };
 const SAMPLE_FREEFORM = `<div style="display:flex;gap:10px;align-items:center"><span style="font:700 20px var(--hand)">Anything else</span><input type="range" min="0" max="10" value="6"><span style="color:var(--muted)">sliders, mockups, a table, code…</span></div>`;
 
-function Entry({ block, when, children }: { block: Block; when: string; children: React.ReactNode }) {
+// n: the entry's number in the window, so it can be named in a chat ("#7 and #12 look the same").
+function Entry({ n, block, when, children }: { n: number; block: Block; when: string; children: React.ReactNode }) {
   return (
     <section className="g-entry">
-      <div className="block-head"><BlockBadge block={block} /></div>
+      <div className="block-head"><span className="g-num">#{n}</span><BlockBadge block={block} /></div>
       <p className="g-when">{when}</p>
       <div className="g-sample">{children}</div>
     </section>
@@ -52,15 +53,15 @@ export function FormsGallery({ close }: { close: () => void }) {
           <button className="icon" onClick={close} title="Close (Esc)">×</button>
         </header>
         <div className="g-list">
-          <Entry block={{ id: "graph", kind: "graph", name: "", nodes: [], edges: [], groups: [] }} when="Things and how they connect: circles, boxes, arrows, groups. The default.">
+          <Entry n={1} block={{ id: "graph", kind: "graph", name: "", nodes: [], edges: [], groups: [] }} when="Things and how they connect: circles, boxes, arrows, groups. The default.">
             <Diagram scene={SAMPLE_GRAPH} changed={[]} seq={0} />
           </Entry>
-          {FORM_NAMES.map((f) => (
-            <Entry key={f} block={{ id: f, kind: "form", form: f, data: {} }} when={FORMS[f].when}>
+          {FORM_NAMES.map((f, i) => (
+            <Entry key={f} n={i + 2} block={{ id: f, kind: "form", form: f, data: {} }} when={FORMS[f].when}>
               <FormView form={f} data={FORMS[f].sample} />
             </Entry>
           ))}
-          <Entry block={{ id: "freeform", kind: "html", html: "", parts: {} }} when="Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge.">
+          <Entry n={FORM_NAMES.length + 2} block={{ id: "freeform", kind: "html", html: "", parts: {} }} when="Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge.">
             <PageFrame html={SAMPLE_FREEFORM} />
           </Entry>
         </div>
@@ -68,9 +69,10 @@ export function FormsGallery({ close }: { close: () => void }) {
         {templates === null ? <p className="muted">Loading…</p>
           : !templates.length ? <p className="muted">None yet. Use "save as template" on a freeform block, or ask Claude to save one.</p>
           : <div className="g-list">
-              {templates.map((t) => (
+              {templates.map((t, i) => (
                 <section key={t.name} className="g-entry">
                   <div className="block-head">
+                    <span className="g-num">#{FORM_NAMES.length + 3 + i}</span>
                     <BlockBadge block={{ id: t.name, kind: "html", html: t.html, parts: t.parts, template: t.name }} />
                     <button className="tpl-save" onClick={() => remove(t.name)}>delete</button>
                   </div>
