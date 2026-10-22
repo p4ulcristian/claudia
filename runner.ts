@@ -12,7 +12,7 @@ import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
-import { timeline, timelineDetail } from "./src/timeline";
+import { mergedSends, timeline, timelineDetail } from "./src/timeline";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
 // On the box: a unix socket only the page can reach (the unit's runtime folder grants it).
@@ -54,13 +54,17 @@ async function listChats(all: boolean, archivedView: boolean) {
     if (open) void open.setSettings({ color });
     else store.setColor(s.sessionId, color);
   }
+  // Newest chat first by when it started, so a chat getting a new message doesn't move.
   return shown
+    .sort((a, b) => (b.createdAt ?? b.lastModified) - (a.createdAt ?? a.lastModified))
     .map((s) => ({
       id: s.sessionId,
       title: s.customTitle || s.summary || s.firstPrompt || "New chat",
       at: s.lastModified,
       ours: ours.has(s.sessionId),
       running: chats.get(s.sessionId)?.running ?? false,
+      waiting: chats.get(s.sessionId)?.waiting ?? false,
+      agents: chats.get(s.sessionId)?.agents ?? 0,
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
     }));
@@ -92,9 +96,9 @@ async function openChat(ws: Sock, id: string) {
     model: c.model,
     changes: store.changes(id),
   };
-  const items = await loadHistory(id).catch(() => []);
+  const [items, merged] = await Promise.all([loadHistory(id).catch(() => []), mergedSends(id).catch(() => new Set<string>())]);
   if (ws.data.chat !== id) return;
-  ws.send(JSON.stringify({ t: "history", chat: id, items: c.withUnsaved(items), ...now }));
+  ws.send(JSON.stringify({ t: "history", chat: id, items: c.withUnsaved(items, merged), ...now }));
   ready = true;
   for (const ev of held.splice(0)) forward(ev);
 }

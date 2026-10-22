@@ -303,7 +303,6 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   const changedSet = new Set(changed);
   const pad = PAD;
   const onDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(".zoom-ctl")) return;
     const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
     const move = (m: PointerEvent) => setView((v) => ({ ...v, x: start.vx + m.clientX - start.x, y: start.vy + m.clientY - start.y }));
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
@@ -311,12 +310,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
     window.addEventListener("pointerup", up);
   };
   return (
-    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={(e) => !(e.target as HTMLElement).closest(".zoom-ctl") && setView({ k: 1, x: 0, y: 0 })}>
-      <div className="zoom-ctl">
-        <button onClick={() => { const r = box.current!.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1 / 1.25); }} title="Zoom out (Ctrl+wheel)">−</button>
-        <button onClick={() => setView({ k: 1, x: 0, y: 0 })} title="Fit (double-click)">{Math.round(view.k * 100)}%</button>
-        <button onClick={() => { const r = box.current!.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1.25); }} title="Zoom in (Ctrl+wheel)">+</button>
-      </div>
+    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })}>
       <div className="zoom-layer" ref={layer} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
@@ -438,9 +432,9 @@ export function PictureView({ scene, changed, seq }: { scene: Scene; changed: st
         <p>Claude draws here as it works.</p>
       </div>
     );
+  // No title on the board: the title names the picture only in the scrubber under it.
   return (
     <div className="picture">
-      {scene.title && <h2 className="picture-title">{scene.title}</h2>}
       {scene.nodes.length > 0 && <Diagram scene={scene} changed={changed} seq={seq} />}
       {scene.cards.length > 0 && (
         <div className="cards">

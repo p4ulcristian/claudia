@@ -387,6 +387,20 @@ export class Chat implements SessionHandler {
 
   private emit(e: ChatEvent) {
     for (const fn of this.listeners) fn(e);
+    // The chat list shows which chats wait on the user.
+    if (e.t === "ask" || e.t === "permit" || e.t === "ask_done" || e.t === "permit_done") this.onChange();
+  }
+
+  // Subagents still working (shells left out: a dev server would count forever).
+  get agents() {
+    let n = 0;
+    for (const t of this.tasks.values()) if (t.status === "running" && !t.ambient && !/shell|bash|local/i.test(t.kind)) n++;
+    return n;
+  }
+
+  // A question or a permission ask is open: the turn waits on the user.
+  get waiting() {
+    return this.asks.size + this.permits.size > 0;
   }
 
   async send(text: string, images: { media_type: string; data: string }[] = []) {
@@ -448,6 +462,7 @@ export class Chat implements SessionHandler {
     if (!it || it.k !== "user" || !it.queued) return;
     if (m.state === "started") {
       delete it.queued;
+      this.q?.kv(`unsaved:${it.uuid}`, it);
       this.emit({ t: "queue", uuid: it.uuid, state: "started" });
     } else if (m.state === "cancelled") {
       this.unsaved.delete(it.uuid);
@@ -457,8 +472,9 @@ export class Chat implements SessionHandler {
   }
 
   // The loaded history plus what was sent but isn't in the session file yet.
-  withUnsaved(items: Item[]): Item[] {
-    const saved = new Set(items.flatMap((it) => (it.k === "user" ? [it.uuid] : [])));
+  // merged = sent uuids Claude Code saved inside another entry (mergedSends).
+  withUnsaved(items: Item[], merged = new Set<string>()): Item[] {
+    const saved = new Set([...merged, ...items.flatMap((it) => (it.k === "user" ? [it.uuid] : []))]);
     for (const id of this.unsaved.keys())
       if (saved.has(id)) {
         this.unsaved.delete(id);
@@ -484,6 +500,9 @@ export class Chat implements SessionHandler {
       this.q?.kv("since", this.since);
     }
     this.emit({ t: "status", running: r });
+    // A turn that ended took in everything sent during it (a send not taken in starts the next turn),
+    // even sends Claude Code merged and never reported as started.
+    if (!r) for (const it of this.unsaved.values()) if (it.k === "user" && it.queued) this.lifecycle({ command_uuid: it.uuid, state: "started" });
     this.onChange();
     if (this.idle) clearTimeout(this.idle);
     if (!r) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);

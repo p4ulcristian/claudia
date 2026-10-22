@@ -1,6 +1,6 @@
 @import "highlight.js/styles/github-dark.css";
 
-/* Chalkboard (DESIGN.md): slate board, chalk colours, a wooden ledge. Dark only. */
+/* Chalkboard (DESIGN.md): slate board, chalk colours, chalk lines between the parts. Dark only. */
 :root {
   --bg: #383838; --bg2: #2e2e2e; --panel: #404040; --panel2: #484848; --fg: #ededed; --muted: #acacac; --line: #565656;
   --board: #353535;
@@ -8,7 +8,6 @@
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
-  --wood: #7a5a3b; --wood2: #5d4329; --wood-hi: #94704b;
   /* Chat colours (see src/colors.ts), and the text colour that sits on them. */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
@@ -46,7 +45,7 @@ code, pre { font-family: var(--mono); }
 
 /* Layout */
 .app { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; transition: grid-template-columns 0.22s ease; }
-.app.no-sidebar { grid-template-columns: 52px 1fr; }
+.app.no-sidebar { grid-template-columns: 64px 1fr; }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
 /* One menu button, always in the same top-left spot. */
@@ -58,8 +57,8 @@ code, pre { font-family: var(--mono); }
 .right-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .right-scroll > * { flex-shrink: 0; }
 .right { background: var(--bg2); }
-.divider { cursor: col-resize; background: var(--line); width: 1px; margin: 0 2.5px; }
-.divider:hover { background: var(--accent); width: 3px; margin: 0 1.5px; }
+.divider { cursor: col-resize; background: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 10px 2px; filter: url(#chalk-line); }
+.divider:hover { background: var(--accent); width: 3px; margin: 10px 1.5px; }
 
 /* Sidebar */
 .sidebar { border-right: 1px solid var(--line); background: var(--bg2); display: flex; flex-direction: column; gap: 10px; padding: 14px 10px; min-height: 0; }
@@ -192,7 +191,6 @@ code, pre { font-family: var(--mono); }
 .stage > * { flex: 1 0 auto; }
 .stage.past { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--violet) 40%, transparent); }
 .picture { display: grid; gap: 16px; align-content: start; }
-.picture-title { margin: 0; font-size: 19px; letter-spacing: -0.01em; animation: rise 0.3s ease-out; }
 .picture-empty { display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
 .picture-empty .dots { display: flex; gap: 10px; align-items: center; }
 .picture-empty .dots span { width: 22px; height: 22px; border-radius: 50%; border: 1.5px dashed var(--line); }
@@ -201,10 +199,6 @@ code, pre { font-family: var(--mono); }
 
 .diagram { cursor: grab; touch-action: none; display: flex; justify-content: safe center; overflow: hidden; min-height: 120px; position: relative; }
 .zoom-layer { transform-origin: 0 0; flex: none; max-width: 100%; }
-.zoom-ctl { position: absolute; top: 0; right: 0; z-index: 2; display: flex; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; opacity: 0; transition: opacity 0.15s; cursor: default; }
-.diagram:hover .zoom-ctl, .zoom-ctl:focus-within { opacity: 1; }
-.zoom-ctl button { min-width: 26px; height: 24px; border-radius: 5px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding: 0 4px; }
-.zoom-ctl button:hover { background: var(--panel2); color: var(--fg); }
 .diagram:active { cursor: grabbing; }
 .diagram svg { flex: none; display: block; overflow: visible; user-select: none; max-width: 100%; height: auto; }
 .diagram g { transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1); }
@@ -254,14 +248,6 @@ code, pre { font-family: var(--mono); }
 .card td p { margin: 0; }
 
 /* Folded picture pane: a thin strip that opens it again */
-.fold-strip .unfold { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; color: var(--muted); }
-.fold-strip .unfold:hover { color: var(--fg); background: var(--panel); }
-.fold-strip .chev { font-size: 18px; line-height: 1; }
-.fold-strip .fold-label { writing-mode: vertical-rl; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.fold-strip .fold-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
-.fold-strip .unfold.unseen { color: var(--fg); }
-.split.folded .divider { cursor: default; }
-.split.folded .divider:hover { background: var(--line); width: 1px; margin: 0 2.5px; }
 
 @keyframes breathe { 50% { opacity: 0.35; } }
 @keyframes blink { 50% { opacity: 0; } }
@@ -274,17 +260,14 @@ code, pre { font-family: var(--mono); }
 .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
 .app.narrow, .app.narrow.no-sidebar { grid-template-columns: 1fr; }
 .app.narrow .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; transition: width 0.22s ease; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
-.app.narrow.no-sidebar .sidebar-slot { width: 58px; box-shadow: none; }
-.app.narrow.no-sidebar main { margin-left: 58px; }
+.app.narrow.no-sidebar .sidebar-slot { width: 64px; box-shadow: none; }
+.app.narrow.no-sidebar main { margin-left: 64px; }
 .app.narrow.no-sidebar .chat-head { padding-left: 16px; }
 
 @media (max-width: 679px) {
   .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .divider { display: none; }
   .split.folded { grid-template-rows: minmax(0, 1fr) auto; }
-  .fold-strip .unfold { flex-direction: row; justify-content: center; padding: 8px 0; }
-  .fold-strip .chev { rotate: 90deg; }
-  .fold-strip .fold-label { writing-mode: horizontal-tb; }
 }
 
 /* Strip above the input: model, effort, context, plan limits */
@@ -294,16 +277,21 @@ code, pre { font-family: var(--mono); }
 .pick select { font: 500 11.5px var(--sans); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 2px 2px 5px; width: 100%; cursor: pointer; text-overflow: ellipsis; }
 .pick select:hover, .pick select:focus { border-color: var(--line); color: var(--fg); background: var(--bg2); outline: none; }
 .pick select option { background: var(--panel); color: var(--fg); }
-.meters { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; padding: 0 16px 8px; font-size: 11.5px; color: var(--muted); margin-top: -6px; }
-.meter { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.m-bar { width: 38px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+/* Usage at the foot of the sidebar: one row per meter (label, chalk bar, %), each limit's reset under it. */
+.meters { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; padding: 10px 6px 2px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); }
+.meter { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; row-gap: 1px; }
+.m-label { white-space: nowrap; }
+.m-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; filter: url(#tip-chalk); }
 .m-bar > span { display: block; height: 100%; background: var(--green); border-radius: 3px; }
 .meter.amber .m-bar > span { background: var(--amber); }
 .meter.red .m-bar > span { background: var(--red); }
 .meter.amber .m-num { color: var(--amber); }
 .meter.red .m-num { color: var(--red); }
-.m-num { font-variant-numeric: tabular-nums; color: var(--fg); }
-.m-account { white-space: nowrap; color: var(--fg); }
+.m-num { font-variant-numeric: tabular-nums; color: var(--fg); text-align: right; }
+.m-reset { grid-column: 1 / -1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-reset b { font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.m-account { grid-column: 1 / -1; margin-top: 4px; white-space: nowrap; color: var(--fg); font: 700 15px var(--hand); }
+.m-account select { font: inherit; color: var(--fg); padding-left: 0; }
 
 /* Slash-command menu */
 .composer { position: relative; }
@@ -384,19 +372,50 @@ code, pre { font-family: var(--mono); }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
 
 /* Sidebar closed: one coloured circle per chat, like chat heads. */
-.rail { width: 52px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 52px 0 14px; overflow-y: auto; background: var(--bg2); border-right: 1px solid var(--line); }
-.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 14px var(--sans); color: var(--on-hue); background: var(--chat, var(--grey)); transition: transform 0.12s ease; position: relative; }
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: 46px 0 10px; background: var(--bg2); border-right: 1px solid var(--line); min-height: 0; }
+.rail-dots { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 10px; }
+/* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
+.rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.ring { position: relative; width: 28px; height: 28px; display: grid; place-items: center; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: url(#tip-chalk); }
+.ring circle { fill: none; stroke-width: 3; }
+.r-track { stroke: var(--line); }
+.r-fill { stroke: var(--green); stroke-linecap: round; }
+.ring.amber .r-fill { stroke: var(--amber); }
+.ring.red .r-fill { stroke: var(--red); }
+.r-num { font: 700 10px var(--sans); color: var(--fg); font-variant-numeric: tabular-nums; }
+.ring.action { cursor: pointer; }
+.r-icon { opacity: 0; fill: none; stroke: var(--fg); stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; transition: opacity 0.1s; }
+.ring.action:hover .r-icon { opacity: 1; }
+.ring.action:hover .r-num { opacity: 0; }
+.ring.action:hover .r-track { stroke: color-mix(in srgb, var(--fg) 35%, var(--line)); fill: color-mix(in srgb, var(--fg) 10%, transparent); }
+.r-label { position: absolute; right: -9px; bottom: -4px; font: 700 10px/1 var(--hand); color: var(--muted); }
+/* Each circle is chalked on: a wobbly ring in the chat's colour with a faint fill; the open chat is filled in. */
+.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); background: none; transition: transform 0.12s ease; position: relative; isolation: isolate; }
+.rail-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 2.2px solid var(--chat, var(--grey)); background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); filter: url(#tip-chalk); }
 .rail-dot:hover { transform: scale(1.1); }
-.rail-dot.on { box-shadow: 0 0 0 2px var(--bg2), 0 0 0 4px var(--fg); }
-.rail-dot.running::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--chat, var(--grey)); animation: breathe 1.4s ease-in-out infinite; }
-.rail-dot.add { background: none; border: 1.5px dashed var(--muted); color: var(--muted); font-size: 18px; font-weight: 400; }
+.rail-dot.on { color: var(--on-hue); }
+.rail-dot.on::before { background: color-mix(in srgb, var(--chat, var(--grey)) 88%, transparent); }
+/* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
+.state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate; }
+.state-badge::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 9px; border: 2px solid var(--b); background: color-mix(in oklch, var(--bg2) 80%, var(--b)); filter: url(#tip-chalk); }
+.state-badge.waiting { --b: var(--amber); animation: breathe 1.4s ease-in-out infinite; }
+.state-badge.thinking { --b: var(--blue); }
+.state-badge.done { --b: var(--green); }
+.state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out infinite; }
+.state-badge i:nth-child(2) { animation-delay: 0.2s; }
+.state-badge i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes chalk-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+.rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; }
+.rail-dot.add::before { border: 1.8px dashed var(--muted); background: none; }
+.chalk-defs { position: absolute; width: 0; height: 0; }
 
 /* ---------- Chalkboard ---------- */
 /* Handwriting for what is written on the board: brand, titles, your lines, diagram labels. */
 .brand { font: 700 19px var(--hand); letter-spacing: 0; gap: 6px; padding-right: 0; }
-.sidebar { border-right: 6px solid var(--wood); }
-.rail { border-right: 6px solid var(--wood); width: 58px; }
-.app.no-sidebar { grid-template-columns: 58px 1fr; }
+/* Parts are split by chalk lines, not borders. */
+.sidebar, .rail { border-right: 0; position: relative; }
+.sidebar::after, .rail::after { content: ""; position: absolute; top: 10px; bottom: 10px; right: 0; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--accent) 45%, var(--line)); filter: url(#chalk-line); pointer-events: none; }
 .chat-row.colored, .chat-row.colored:hover { box-shadow: none; background: none; }
 .chat-row.colored:hover { background: rgb(255 255 255 / 5%); }
 .chat-row.colored.active, .chat-row.active { box-shadow: none; background: rgb(255 255 255 / 8%); }
@@ -414,15 +433,14 @@ code, pre { font-family: var(--mono); }
 .msg.user.viewing .bubble { outline: 0; text-decoration: underline 2px; text-underline-offset: 4px; }
 .messages { font-size: 15px; line-height: 1.6; }
 
-/* The ledge: the composer sits on a wooden chalk tray. */
-.composer { background: linear-gradient(var(--wood), var(--wood2)); box-shadow: inset 0 3px 0 var(--wood-hi); padding: 12px 14px; }
+/* The composer sits under a chalk line. */
+.composer { background: none; padding: 12px 14px; }
+.composer::before { content: ""; position: absolute; top: 0; left: 14px; right: 14px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--accent) 45%, var(--line)); filter: url(#chalk-line); pointer-events: none; }
 .input-row { background: var(--bg2); border: 0; border-radius: 6px; }
 .input-row:focus-within { box-shadow: 0 0 0 2px var(--accent); }
-.meters { padding-top: 8px; margin-top: 0; }
 
 /* The board itself */
 .right { background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
-.picture-title { font: 700 26px/1.2 var(--hand); letter-spacing: 0; }
 .node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke-width: 2.3; filter: url(#chalk); }
 .node.s-done .body { fill: color-mix(in srgb, var(--c) 18%, transparent); }
 .node .label { font: 700 15px var(--hand); }
@@ -439,7 +457,6 @@ code, pre { font-family: var(--mono); }
 .card h3 { font: 700 18px var(--hand); text-transform: none; letter-spacing: 0; }
 .card th { font: 700 12px var(--sans); text-transform: none; letter-spacing: 0; }
 .chip { font: 700 13px var(--hand); text-transform: none; letter-spacing: 0; }
-.fold-strip .fold-label { font: 700 14px var(--hand); text-transform: none; letter-spacing: 0; }
 
 
 
@@ -589,7 +606,10 @@ svg.logo { flex: none; color: var(--fg); }
 .tl-detail pre.err { border-color: var(--red); }
 
 /* The bar under the right half: one line at any width, any number of pictures */
-.rbar { container-type: inline-size; display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 10px 0 14px; border-top: 1px solid var(--line); flex: none; min-width: 0; }
+/* The bar floats over the bottom of the picture and shows only while the mouse is near it. */
+.rbar-zone { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 5; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; }
+.rbar-zone.show, .rbar-zone.pinned, .rbar-zone:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+.rbar { container-type: inline-size; display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 10px 0 10px; border-radius: 12px; min-width: 0; backdrop-filter: blur(6px); }
 .view-switch { display: flex; flex: none; padding: 2px; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
 .view-switch button { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 7px; font: 500 12.5px var(--sans); color: var(--muted); transition: background 0.12s, color 0.12s; }
 .view-switch button.on { background: var(--panel2); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); }
@@ -634,7 +654,6 @@ svg.logo { flex: none; color: var(--fg); }
 /* The activity pill: background agents and changes, top right of the right half */
 .right { position: relative; container-type: inline-size; }
 .act { position: relative; flex: none; margin-left: auto; z-index: 6; }
-.act.floating { position: absolute; top: 10px; right: 12px; margin: 0; }
 .act-pill { display: flex; align-items: center; height: 28px; padding: 0 3px; border-radius: 99px; background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--line); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgb(0 0 0 / 0.18); font: 600 11.5px var(--sans); color: var(--muted); }
 .act-part { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; color: inherit; font: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s, color 0.12s; }
 .act-part:hover, .act-part.on { background: var(--panel2); color: var(--fg); }
@@ -649,3 +668,78 @@ svg.logo { flex: none; color: var(--fg); }
 .act-pop > .panel { animation: none; }
 .tasks-head:disabled { cursor: default; color: inherit; opacity: 1; }
 .page-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; transition: height 0.15s ease-out; }
+
+/* Hover bubble: a chat's full title, chalked on the board beside the row or circle. */
+.tip-bubble { position: fixed; z-index: 60; transform: translateY(-50%); max-width: 340px; padding: 10px 14px; pointer-events: none; font: 700 15px/1.3 var(--hand); text-box: trim-both cap alphabetic; color: var(--fg); overflow-wrap: anywhere; animation: tip-in 0.08s ease-out; }
+.tip-bubble svg { position: absolute; overflow: visible; filter: url(#tip-chalk); }
+.tip-chalk { inset: 0; width: 100%; height: 100%; z-index: -1; }
+.tip-chalk rect { fill: color-mix(in oklch, var(--board) 92%, #000); stroke: var(--chat, var(--accent)); stroke-width: 2; filter: drop-shadow(0 3px 8px rgb(0 0 0 / 0.35)); }
+.tip-tail { left: -10px; top: calc(50% - 8px); width: 12px; height: 16px; }
+.tip-tail path { fill: color-mix(in oklch, var(--board) 92%, #000); stroke: var(--chat, var(--accent)); stroke-width: 2; stroke-linejoin: round; }
+@keyframes tip-in { from { opacity: 0; translate: -4px 0; } }
+
+/* Agents still working: small chalk moons around the chat's circle. */
+.moons { position: absolute; inset: 0; pointer-events: none; }
+.moons i { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 1.5px var(--bg2); filter: url(#tip-chalk); animation: breathe 1.4s ease-in-out infinite; }
+
+/* ---------- Chalk outlines ----------
+   Boxes and buttons are drawn in chalk: the outline (and fill) sit on a ::before with the chalk
+   filter, behind the content, so the text stays crisp. --chalk-c = outline, --chalk-bg = fill. */
+:root { --chalk: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip, .act-pill { position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: none !important; }
+.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before, .view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+  border: 2px solid var(--chalk-c, var(--chalk)); background: var(--chalk-bg, transparent); filter: url(#tip-chalk); transition: border-color 0.12s;
+}
+.input-row { --chalk-bg: var(--bg2); border-radius: 10px; }
+.input-row:focus-within { --chalk-c: var(--accent); }
+.new { --chalk-bg: var(--panel); }
+.new:hover { --chalk-c: var(--accent); }
+.search-box { display: grid; border-radius: 8px; --chalk-bg: var(--bg); }
+.search-box .search { border: 0; background: none; }
+.search-box:focus-within { --chalk-c: var(--accent); }
+.primary { --chalk-c: var(--accent); --chalk-bg: var(--accent); }
+.stop { --chalk-c: var(--red); }
+.prompt-actions button.primary { --chalk-c: var(--accent); }
+.view-switch { --chalk-bg: var(--bg); }
+.view-switch button.on { --chalk-bg: var(--panel2); }
+.rbar-chip.live { --chalk-c: color-mix(in srgb, var(--green) 55%, transparent); --chalk-bg: var(--green-bg); }
+.rbar-chip.live.still { --chalk-c: var(--line); --chalk-bg: var(--grey-bg); }
+.rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
+.act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); }
+
+/* The menu button: three chalk strokes, centred over the closed rail; a chalk ring on hover. */
+.menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); }
+.menu-toggle:hover { background: none; }
+.app.no-sidebar .menu-toggle { left: 16px; }
+.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; filter: url(#chalk-soft); }
+
+/* Folding the right half: its column slides (--fold-w), the pane fades out or in at its full width. */
+@property --fold-w { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.split.moving { overflow: hidden; }
+.split.moving > .right { justify-self: start; }
+.split.moving.go { transition: --fold-w 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.split.moving.go > .right { transition: opacity 0.24s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.split.to-fold.go > .right, .split.to-unfold:not(.go) > .right { opacity: 0; transform: translateX(28px); }
+.rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
+
+/* The folded right half: a thin chalk edge; it glows in the chat colour when a new picture came. */
+.fold-edge { display: flex; }
+.fold-edge .unfold { flex: 1; display: grid; place-items: center; cursor: pointer; }
+.edge-line { width: 2px; height: calc(100% - 20px); border-radius: 1px; background: var(--chalk); filter: url(#chalk-line); transition: background 0.15s, width 0.15s; }
+.fold-edge .unfold:hover .edge-line { background: var(--accent); width: 3px; }
+.fold-edge .unfold.unseen .edge-line { background: var(--accent); width: 3px; box-shadow: 0 0 12px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
+.split.folded .divider { visibility: hidden; }
+@media (max-width: 679px) {
+  .fold-edge .unfold { height: 16px; }
+  .edge-line { width: calc(100% - 20px); height: 2px; }
+  .fold-edge .unfold:hover .edge-line, .fold-edge .unfold.unseen .edge-line { width: calc(100% - 20px); height: 3px; }
+}
+
+/* Chat header with the activity pill: the title keeps at least 40% of the row, the folder chip gives way first. */
+.left { container-type: inline-size; }
+.chat-head h1 { flex: 1 1 auto; min-width: min(40%, 200px); }
+.chat-head .folder-chip { flex: 0 4 auto; min-width: 0; }
+.chat-head .act { margin-left: 0; }
+@container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
+.ask-modal .panel.permit { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }

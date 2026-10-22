@@ -227,6 +227,22 @@ async function sessionDir(sessionId: string): Promise<string | null> {
   return null;
 }
 
+// Sends Claude Code took in together: it saves them as one user entry with a new uuid and lists the
+// sent uuids in mergedSendUuids, so those never appear in the history under their own uuid.
+export async function mergedSends(sessionId: string): Promise<Set<string>> {
+  const merged = new Set<string>();
+  const dir = await sessionDir(sessionId);
+  if (!dir) return merged;
+  const text = await readFile(join(dir, `${sessionId}.jsonl`), "utf8").catch(() => "");
+  for (const line of text.split("\n")) {
+    if (!line.includes('"mergedSendUuids"')) continue;
+    try {
+      for (const id of JSON.parse(line).mergedSendUuids ?? []) merged.add(id);
+    } catch {}
+  }
+  return merged;
+}
+
 type AgentMeta = { agentType?: string; description?: string; toolUseId?: string; parentAgentId?: string };
 
 async function agentFiles(dir: string, sessionId: string) {

@@ -35,8 +35,7 @@ function category(name: string) {
   return "other";
 }
 
-// extra: shown at the right end of the header (the activity pill).
-export function TimelineView({ chat, live, extra }: { chat: string; live: boolean; extra?: React.ReactNode }) {
+export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
   const [data, setData] = useState<Timeline | null>(null);
   const [missing, setMissing] = useState(false);
   const [open, setOpen] = useState<string | null>(null); // lane:id of the step shown in full
@@ -134,7 +133,7 @@ export function TimelineView({ chat, live, extra }: { chat: string; live: boolea
   if (missing || !data)
     return (
       <div className="tl">
-        <div className="tl-head"><b>Timeline</b>{extra}</div>
+        <div className="tl-head"><b>Timeline</b></div>
         <p className="muted tl-empty">{missing ? "Nothing yet: the timeline fills in once Claude starts working in this chat." : "Loading…"}</p>
       </div>
     );
@@ -197,7 +196,6 @@ export function TimelineView({ chat, live, extra }: { chat: string; live: boolea
           </select>
         )}
         {onlyLane && <button className="link" onClick={() => setOnly(null)}>show everything</button>}
-        {extra}
       </div>
       <div
         className="tl-scroll"

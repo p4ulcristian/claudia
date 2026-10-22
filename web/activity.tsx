@@ -1,4 +1,4 @@
-// The pill at the top right of the right half: background agents and file changes as counts, each
+// The pill in the chat header: background agents and file changes as counts, each
 // opening its panel in a dropdown under the pill.
 import React, { useEffect, useRef, useState } from "react";
 import { TasksPanel } from "./tasks";
@@ -16,7 +16,6 @@ export function ActivityPill(props: {
   folder: string | null;
   onStop: (id: string) => void;
   onTimeline: () => void;
-  floating: boolean; // over the picture; otherwise in a header row
 }) {
   const [open, setOpen] = useState<Which | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -53,7 +52,7 @@ export function ActivityPill(props: {
   const agentTitle = [running && `${running} running`, failed && `${failed} failed`, done && `${done} finished`].filter(Boolean).join(" · ");
 
   return (
-    <div className={`act ${props.floating ? "floating" : ""}`} ref={box}>
+    <div className="act" ref={box}>
       <div className="act-pill">
         {top.length > 0 && (
           <button className={`act-part ${open === "tasks" ? "on" : ""}`} onClick={() => toggle("tasks")} title={`Background: ${agentTitle}`}>

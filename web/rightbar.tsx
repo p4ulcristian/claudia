@@ -1,4 +1,4 @@
-// The bar under the right half: Picture | Timeline, and for pictures a scrubber over every picture of
+// The bar over the bottom of the right half (shown on hover): Picture | Timeline, for pictures a scrubber over every picture of
 // the chat, one line at any width and any number of pictures.
 import React, { useLayoutEffect, useRef, useState } from "react";
 import type { Picture } from "./types";

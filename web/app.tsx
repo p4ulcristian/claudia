@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
@@ -7,9 +7,10 @@ import { TimelineView } from "./timeline";
 import { RightBar } from "./rightbar";
 import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
-import { Meters, Pickers } from "./usage";
+import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { GithubPrompt } from "./github-prompt";
+import { TipBubble, tipProps } from "./tip";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
@@ -193,6 +194,8 @@ function App() {
   const [timelineAt, setTimelineAt] = useState(() => Date.now());
   const setRightView = useCallback((v: "picture" | "timeline") => { store.set("right", v); setRightViewState(v); setTimelineAt(Date.now()); }, []);
   const [editing, setEditing] = useState(false);
+  // The mouse is near the bottom of the right half: the bar there shows.
+  const [nearBar, setNearBar] = useState(false);
   // A question fills the window; peeking hides it to look at the picture, and a new question shows again.
   const [peek, setPeek] = useState(false);
   const peekAsk = useCallback(() => setPeek(true), []);
@@ -209,11 +212,25 @@ function App() {
   const currentRef = useRef(current);
   currentRef.current = current;
 
+  // Chats whose turn ended while another chat was open: a "done" badge until opened (kept across reloads).
+  const [done, setDone] = useState<Set<string>>(() => new Set(JSON.parse(store.get("done") || "[]")));
+  const wasRunning = useRef(new Map<string, boolean>());
+  const changeDone = useCallback((f: (d: Set<string>) => void) => setDone((old) => {
+    const d = new Set(old);
+    f(d);
+    store.set("done", JSON.stringify([...d]));
+    return d;
+  }), []);
+  useEffect(() => changeDone((d) => d.delete(current)), [current]);
+
   const loadChats = useCallback(async () => {
     const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
     if (!r.ok) return;
     const rows: ChatRow[] = await r.json();
     for (const c of rows) known.current.set(c.id, c);
+    const ended = rows.filter((c) => wasRunning.current.get(c.id) && !c.running && c.id !== currentRef.current);
+    for (const c of rows) wasRunning.current.set(c.id, c.running);
+    if (ended.length) changeDone((d) => ended.forEach((c) => d.add(c.id)));
     setChats(rows);
   }, [all, archivedView]);
   // Someone else's chats are read only: no new chat there, so open their latest one instead.
@@ -334,7 +351,7 @@ function App() {
   const lastUser = [...live.items].reverse().find((i) => i.k === "user") as Extract<Item, { k: "user" }> | undefined;
   const changesLabel = viewing ? "Earlier turn" : changesTurn === lastUser?.uuid ? "This turn" : "Last turn with changes";
   // Background agents and this turn's changes, as a pill: over the picture, or in the timeline's header.
-  const activity = (floating: boolean) => (
+  const activity = (
     <ActivityPill
       chat={current}
       tasks={live.tasks}
@@ -344,7 +361,6 @@ function App() {
       folder={live.settings.folder}
       onStop={(task) => send({ t: "stop_task", chat: current, task })}
       onTimeline={() => setRightView("timeline")}
-      floating={floating}
     />
   );
 
@@ -367,7 +383,6 @@ function App() {
     window.addEventListener("pointerup", up);
   };
 
-  // A question or permission request waits in the pane, so it opens the pane while it's pending.
   // The chat's colour themes the whole window (style.css, ":root[data-chat]").
   useEffect(() => {
     const root = document.documentElement;
@@ -380,8 +395,10 @@ function App() {
     }
   }, [live.settings.color]);
 
-  const folded = foldedAt > 0 && !live.asks.length && !live.permits.length;
+  // A question opens the right half while it's pending, so peeking shows the picture.
+  const folded = foldedAt > 0 && !live.asks.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
+  const fold = useFoldMotion(folded, split, narrow);
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
   const q = search.trim().toLowerCase();
@@ -391,41 +408,50 @@ function App() {
 
   return (
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""} ${readOnly ? "read-only" : ""}`}>
+      <TipBubble />
       {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
       {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
       {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
-      {!readOnly && live.asks.length > 0 && (
+      {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
           <div className="ask-modal" hidden={peek} role="dialog" aria-modal="true" aria-label="Claude asks">
+            {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
             {live.asks.map((a) => <AskPanel key={a.id} ask={a} active={!peek} onPeek={peekAsk} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
           </div>
           {peek && <button className="ask-return" onClick={() => setPeek(false)}>Claude asks · answer</button>}
         </>
       )}
-      <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>☰</button>
+      <button className="icon menu-toggle" onClick={toggleSidebar} title={showSidebar ? "Hide chats (Ctrl+B)" : "Show chats (Ctrl+B)"} aria-expanded={showSidebar}>
+        <svg className="burger" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.6h12M3.4 9h11.3M3 13.4h12" /></svg>
+      </button>
       <div className="sidebar-slot">
         {!showSidebar && (
           <nav className="rail" aria-label="Chats">
-            {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
-            {list.map((c) => (
-              <button
-                key={c.id}
-                className={`rail-dot ${c.id === current ? "on" : ""} ${c.running ? "running" : ""}`}
-                style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                onClick={() => open(c.id)}
-                title={c.title}
-                aria-label={c.title}
-              >
-                {(c.title.trim()[0] ?? "?").toUpperCase()}
-              </button>
-            ))}
+            <div className="rail-dots">
+              {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
+              {list.map((c) => (
+                <button
+                  key={c.id}
+                  className={`rail-dot ${c.id === current ? "on" : ""}`}
+                  style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
+                  onClick={() => open(c.id)}
+                  {...tipProps(c.title, chatColorVar(c.color))}
+                  aria-label={c.title}
+                >
+                  {(c.title.trim()[0] ?? "?").toUpperCase()}
+                  <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
+                  <AgentMoons n={c.agents} />
+                </button>
+              ))}
+            </div>
+            <RailMeters meta={meta} context={live.context} onCompact={readOnly || live.running ? undefined : () => onSend("/compact", [])} />
           </nav>
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
           <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />
           {me && <ProfileTabs me={me} />}
           {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
-          <input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <label className="search-box"><input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
           <nav>
             {!row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
             {list.map((c) => (
@@ -434,6 +460,7 @@ function App() {
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                 onClick={() => open(c.id)}
+                {...tipProps(c.title, chatColorVar(c.color), true)}
               >
                 {c.running && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
@@ -442,6 +469,15 @@ function App() {
             ))}
             {!list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
           </nav>
+          <Meters
+            meta={meta}
+            context={live.context}
+            saved={me?.claudeTokens.map((t) => t.name) ?? []}
+            onSwitch={async (name) => {
+              const next = await useClaudeToken(name);
+              if (next) setMe((m) => m && { ...m, ...next });
+            }}
+          />
           <div className="side-foot">
             <button className={`archived-toggle ${archivedView ? "on" : ""}`} onClick={() => setArchivedView((v) => !v)}>
               <ArchiveIcon /> {archivedView ? "Back to chats" : "Archived"}
@@ -456,7 +492,14 @@ function App() {
           </div>
         </aside>
       </div>
-      <main className={`split ${folded ? "folded" : ""}`} style={{ gridTemplateColumns: folded ? "minmax(300px, 1fr) 6px 38px" : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)` }}>
+      <main
+        ref={fold.ref}
+        className={`split ${fold.shown ? "folded" : ""} ${fold.cls}`}
+        style={{
+          gridTemplateColumns: fold.cols ?? (fold.shown ? `minmax(300px, 1fr) 6px ${EDGE}px` : `minmax(300px, ${Math.round(split * 1000)}fr) 6px minmax(280px, ${Math.round((1 - split) * 1000)}fr)`),
+          ...(fold.width !== null ? { "--fold-w": `${fold.width}px` } : {}),
+        } as React.CSSProperties}
+      >
         <section className="left">
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
             {!readOnly && <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />}
@@ -472,6 +515,7 @@ function App() {
               <h1 onDoubleClick={() => row && !readOnly && setEditing(true)} title={row ? "Double-click to rename" : ""}>{title}</h1>
             )}
             {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
+            {activity}
             {row && !readOnly && (
               <div className="head-actions">
                 <button className="icon" onClick={() => setEditing(true)} title="Rename">✎</button>
@@ -509,49 +553,34 @@ function App() {
             commands={meta.commands}
             tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
           />}
-          <Meters
-            meta={meta}
-            context={live.context}
-            saved={me?.claudeTokens.map((t) => t.name) ?? []}
-            onSwitch={async (name) => {
-              const next = await useClaudeToken(name);
-              if (next) setMe((m) => m && { ...m, ...next });
-            }}
-          />
         </section>
-        <div className="divider" onPointerDown={folded ? undefined : dragSplit} />
-        {folded ? (
-          <section className="right fold-strip">
-            <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"}>
-              <span className="chev">‹</span>
-              <span className="fold-label">Picture</span>
-              {unseen && <span className="fold-dot" />}
+        <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
+        {fold.shown ? (
+          <section className="right fold-edge">
+            <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"} aria-label="Show picture">
+              <span className="edge-line" />
             </button>
           </section>
         ) : (
-        <section className="right">
-          {rightView === "picture" && activity(true)}
+        <section
+          className="right"
+          style={fold.rightWidth ? { width: fold.rightWidth } : undefined}
+          onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96)}
+          onMouseLeave={() => setNearBar(false)}
+        >
           {rightView === "timeline" ? (
           <div className="right-tl">
-            {!readOnly && live.permits.length > 0 && (
-              <div className="interface">
-                {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
-              </div>
-            )}
-            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} extra={activity(false)} />
+            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} />
           </div>
           ) : (
           <div className="right-scroll">
-          {!readOnly && live.permits.length > 0 && (
-            <div className="interface">
-              {!readOnly && live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
-            </div>
-          )}
           <div className={`stage ${viewing ? "past" : ""}`}>
             <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} />
           </div>
           </div>
           )}
+          {/* The bar shows only while the mouse is near the bottom (or an earlier picture is shown). */}
+          <div className={`rbar-zone ${nearBar ? "show" : ""} ${viewing ? "pinned" : ""}`}>
           <RightBar
             view={rightView}
             onView={setRightView}
@@ -563,8 +592,9 @@ function App() {
             onPick={showPicture}
             onLive={() => setViewing(null)}
             onFold={toggleFold}
-            foldDisabled={live.asks.length > 0 || live.permits.length > 0}
+            foldDisabled={live.asks.length > 0}
           />
+          </div>
         </section>
         )}
       </main>
@@ -575,6 +605,95 @@ function App() {
 createRoot(document.getElementById("root")!).render(<App />);
 
 // A box with a lid; the arrow points out of it for Unarchive.
+// A chalked badge on a chat's circle: waiting on your answer, working, or finished since you looked.
+const BADGES = {
+  waiting: { mark: "?", label: "Waiting for you" },
+  thinking: { mark: "", label: "Working" },
+  done: { mark: "✓", label: "Done" },
+};
+
+function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
+  if (!state) return null;
+  const b = BADGES[state];
+  return (
+    <span className={`state-badge ${state}`} title={b.label}>
+      {state === "thinking" ? <><i /><i /><i /></> : b.mark}
+    </span>
+  );
+}
+
+// Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
+function AgentMoons({ n }: { n: number }) {
+  if (!n) return null;
+  const shown = Math.min(n, 5);
+  return (
+    <span className="moons" title={`${n} agent${n > 1 ? "s" : ""} working`}>
+      {Array.from({ length: shown }, (_, i) => {
+        const a = ((160 + i * 32) * Math.PI) / 180;
+        return <i key={i} style={{ left: `calc(50% + ${Math.cos(a) * 21}px)`, top: `calc(50% - ${Math.sin(a) * 21}px)`, animationDelay: `${i * 0.25}s` }} />;
+      })}
+    </span>
+  );
+}
+
+// Folding the right half slides it shut instead of jumping: its column width moves in px from where
+// it is to where it'll be (through --fold-w, a registered length, so it transitions), the pane keeps
+// its width meanwhile (so the picture doesn't re-lay out every frame) and fades; only then the edge
+// replaces it (or, unfolding, the edge goes first).
+const FOLD_MS = 320;
+// The folded right half: a thin chalk edge (px).
+const EDGE = 16;
+function useFoldMotion(folded: boolean, split: number, narrow: boolean) {
+  const ref = useRef<HTMLElement>(null);
+  const [shown, setShown] = useState(folded);
+  const [width, setWidth] = useState<number | null>(null);
+  const [rightWidth, setRightWidth] = useState<number | null>(null);
+  // dir: which way it moves (set with the start width); go: the transition is on (a frame later).
+  const [dir, setDir] = useState<"fold" | "unfold" | null>(null);
+  const [go, setGo] = useState(false);
+  useLayoutEffect(() => {
+    if (folded === shown) {
+      // Toggled back before the motion ended: settle where it is.
+      setWidth(null);
+      setRightWidth(null);
+      setDir(null);
+      setGo(false);
+      return;
+    }
+    const main = ref.current;
+    if (!main || narrow || matchMedia("(prefers-reduced-motion: reduce)").matches) return setShown(folded);
+    const total = main.clientWidth;
+    const open = folded
+      ? total - 6 - (main.firstElementChild as HTMLElement).getBoundingClientRect().width
+      : total - 6 - Math.min(total - 6 - 280, Math.max(300, (total - 6) * split));
+    setRightWidth(open);
+    setDir(folded ? "fold" : "unfold");
+    setGo(false);
+    setWidth(folded ? open : EDGE);
+    if (!folded) setShown(false);
+    // Two frames: the start width is laid out before the transition and the end width are set
+    // (with the transition on from the start, --fold-w would run from its initial 0px).
+    let raf = requestAnimationFrame(() => (raf = requestAnimationFrame(() => {
+      setGo(true);
+      setWidth(folded ? EDGE : open);
+    })));
+    const done = setTimeout(() => {
+      setShown(folded);
+      setWidth(null);
+      setRightWidth(null);
+      setDir(null);
+      setGo(false);
+    }, FOLD_MS);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(done);
+    };
+  }, [folded]);
+  const cols = width === null ? null : "minmax(0, 1fr) 6px var(--fold-w)";
+  const cls = dir ? `moving to-${dir} ${go ? "go" : ""}` : "";
+  return { ref, shown, cols, width, rightWidth, cls };
+}
+
 function ArchiveIcon({ out }: { out?: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
