@@ -4,7 +4,7 @@ import { listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
 import { Chat, WORK, loadHistory, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
-import { CHAT_COLORS, pickColor } from "./src/colors";
+import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store } from "./src/db";
 import { watch } from "node:fs";
 import { getMeta, onMeta, probe } from "./src/meta";
@@ -35,6 +35,11 @@ function chat(id: string) {
     if (!c.settings.color && store.prefs().chatColors === "each") void c.setSettings({ color: pickColor(store.colors().values()) });
   }
   return c;
+}
+
+// Writing to a passive (ash) chat makes it active again: it gets a colour of its own back.
+async function wake(c: Chat) {
+  if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(store.colors().values()) });
 }
 
 async function listChats(all: boolean, archivedView: boolean) {
@@ -213,6 +218,7 @@ Bun.serve({
         if (!text || text.length > 20_000) return json({ error: "text: 1 to 20000 characters" }, 400);
         if (!chats.has(id) && (await loadHistory(id).catch(() => [])).length === 0) return json({ error: "no such chat" }, 404);
         store.unarchive(id);
+        await wake(chat(id));
         await chat(id).send(text);
         broadcastChats();
         return json({ ok: true });
@@ -295,6 +301,7 @@ Bun.serve({
             const c = chat(m.chat);
             store.unarchive(m.chat); // writing to an archived chat brings it back
             if (ws.data.chat !== m.chat) await openChat(ws, m.chat);
+            await wake(c);
             await c.send(String(m.text ?? ""), m.images ?? []);
             return broadcastChats();
           }
