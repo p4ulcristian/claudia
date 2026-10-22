@@ -4,7 +4,29 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
-export type Entry = { name: string; dir: boolean; status?: string; changed?: number };
+export type Entry = { name: string; dir: boolean; status?: string; changed?: number; lines?: number };
+
+// A text file's line count (kept until the file changes); none for binary or big files.
+const counted = new Map<string, { mtime: number; lines: number | undefined }>();
+function linesOf(abs: string): number | undefined {
+  try {
+    const st = statSync(abs);
+    if (!st.isFile() || st.size > MAX_BYTES) return undefined;
+    const hit = counted.get(abs);
+    if (hit && hit.mtime === st.mtimeMs) return hit.lines;
+    const buf = readFileSync(abs);
+    let lines: number | undefined;
+    if (!buf.subarray(0, 8000).includes(0)) {
+      lines = 0;
+      for (const b of buf) if (b === 10) lines++;
+      if (buf.length && buf[buf.length - 1] !== 10) lines++;
+    }
+    counted.set(abs, { mtime: st.mtimeMs, lines });
+    return lines;
+  } catch {
+    return undefined;
+  }
+}
 
 const SKIP = new Set([".git", "node_modules", ".shadow-cljs", "target", ".next", ".cache", "dist", "out"]);
 const MAX_BYTES = 2_000_000;
@@ -70,6 +92,7 @@ export function listDir(root: string, rel: string): Entry[] | null {
       return null;
     }
   }
+  for (const e of out.values()) if (!e.dir) e.lines = linesOf(join(abs, e.name));
   return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 }
 

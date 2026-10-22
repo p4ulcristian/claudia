@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
-import { ResizeBox } from "./resize";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -206,7 +205,7 @@ function Code({ data }: { data: Data }) {
   const marked = markedLines(data.mark);
   const notes = new Map<number, any[]>();
   for (const nt of list(data.notes)) notes.set(Number(nt.line), [...(notes.get(Number(nt.line)) ?? []), nt]);
-  const shown = shownRows(rows, new Set([...marked, ...notes.keys()]));
+  const shown = data.whole ? rows.map(() => true) : shownRows(rows, new Set([...marked, ...notes.keys()]));
   const [opened, setOpened] = useState<Set<number>>(new Set()); // first row of each unfolded stretch
   const folded = shown.some((v) => !v);
   const [copied, setCopied] = useState(false);
@@ -328,7 +327,7 @@ function ImageBig({ src, close }: { src: string; close: () => void }) {
 
 // Files: a folder as a tree, read live through the runner (src/files.ts); folders open on click, a
 // file opens in place as a code block. Marks point files out; git status shows as a letter.
-type Entry = { name: string; dir: boolean; status?: string; changed?: number; planned?: boolean };
+type Entry = { name: string; dir: boolean; status?: string; changed?: number; planned?: boolean; lines?: number };
 const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, not in git yet", D: "deleted" };
 
 function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
@@ -381,7 +380,8 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       const onDisk = out.get(name);
       // Only what isn't on disk is planned (a sketch file over a real one keeps the real one).
       if (onDisk && live) continue;
-      out.set(name, { ...(onDisk ?? {}), name, dir: isDir, planned: !!sketch, ...(slash < 0 && e.status ? { status: e.status } : {}) });
+      const lines = slash < 0 && typeof e.code === "string" ? e.code.replace(/\n$/, "").split("\n").length : undefined;
+      out.set(name, { ...(onDisk ?? {}), name, dir: isDir, planned: !!sketch, ...(lines ? { lines } : {}), ...(slash < 0 && e.status ? { status: e.status } : {}) });
     }
     return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
@@ -421,6 +421,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
         >
           {e.dir ? <FolderIcon open={isOpen} /> : <ExtTag name={e.name} />}
           <span className="nm">{e.name}</span>
+          {!e.dir && e.lines !== undefined && <span className="f-lines-n">{e.lines}</span>}
           {e.planned && <span className="f-planned" title="Not on disk: planned, as Claude sketched it">planned</span>}
           {e.status && <span className={`st st-${e.status}`} title={STATUS_TIP[e.status]}>{e.status}</span>}
           {e.dir && e.changed ? <span className="st st-M" title={`${e.changed} changed inside`}>•</span> : null}
@@ -436,7 +437,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
                 <img src={file.image} alt={path} />
               </div>
             ) : file.error ? <p className="f-note">{file.error}</p> : file.text === undefined ? <p className="f-note">…</p> : (
-              <ResizeBox id={`${chat ?? "demo"}:${block ?? "files"}:file`} initial={300}><Code data={{ file: path, code: file.text }} /></ResizeBox>
+              <Code data={{ file: path, code: file.text, whole: true }} />
             )}
           </div>,
         );
