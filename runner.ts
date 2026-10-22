@@ -202,6 +202,22 @@ Bun.serve({
         return json({ id });
       },
     },
+    // A follow-up into a chat started from outside (Gus passing on what the person said next), sent
+    // like a typed message; it waits in the queue if a turn is running.
+    "/api/chats/:id/send": {
+      POST: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const body = (await req.json().catch(() => ({}))) as { text?: unknown };
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (!text || text.length > 20_000) return json({ error: "text: 1 to 20000 characters" }, 400);
+        if (!chats.has(id) && (await loadHistory(id).catch(() => [])).length === 0) return json({ error: "no such chat" }, 404);
+        store.unarchive(id);
+        await chat(id).send(text);
+        broadcastChats();
+        return json({ ok: true });
+      },
+    },
     // How a chat stands, for whoever started it from outside: working, waiting on a question, and its
     // last answer (the text after the last message sent).
     "/api/chats/:id/state": {
