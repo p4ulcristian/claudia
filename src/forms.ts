@@ -100,8 +100,8 @@ export const FORMS = {
   },
   files: {
     label: "Files",
-    when: "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out.",
-    fields: "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), open?: [folders relative to root to show unfolded], marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out (their folders unfold)",
+    when: "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out. For files that don't exist yet (a planned layout, a sketch of a library), send sketch instead of root: the same tree, with the code you give per file.",
+    fields: "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), open?: [folders relative to root to show unfolded], marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out (their folders unfold). Or, for planned files: sketch: [{ path, code?, status? }] (folders come from the paths), title? (what the sketch is), with open and marks as above",
     sample: {
       demo: [
         { path: "src", dir: true },

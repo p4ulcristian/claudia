@@ -1052,3 +1052,23 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .rs-grip { height: 12px; margin-top: 2px; cursor: ns-resize; display: grid; place-items: center; opacity: 0; transition: opacity 0.15s; touch-action: none; }
 .rs-grip::before { content: ""; width: 46px; height: 0; border-top: 2px solid var(--muted); border-bottom: 2px solid var(--muted); padding-top: 2px; border-radius: 2px; filter: url(#chalk-line); }
 .rs:hover > .rs-grip, .rs-grip:active { opacity: 0.8; }
+/* The forms row over the picture: auto (outline), use (green, filled), off (faded, struck). */
+.form-row { position: sticky; top: 0; z-index: 6; display: flex; gap: 10px; align-items: center; padding: 8px 14px; margin: 0 0 6px; background: color-mix(in oklch, var(--bg2) 92%, transparent); backdrop-filter: blur(4px); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+.form-dot { position: relative; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); isolation: isolate; transition: transform 0.12s; }
+.form-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 1.8px solid currentColor; filter: url(#tip-chalk); }
+.form-dot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; filter: url(#chalk-soft); }
+.form-dot:hover { transform: scale(1.1); color: var(--fg); }
+.form-dot.use { color: var(--green); }
+.form-dot.use::before { background: color-mix(in srgb, var(--green) 22%, transparent); border-width: 2.2px; }
+.form-dot.off { opacity: 0.4; }
+.form-dot.off::after { content: ""; position: absolute; left: 3px; right: 3px; top: 50%; border-top: 2px solid var(--red); transform: rotate(-40deg); }
+.form-peek { position: absolute; top: 46px; left: 10px; width: min(460px, calc(100% - 20px)); padding: 12px 14px; border-radius: 12px; background: var(--board); box-shadow: 0 12px 40px rgb(0 0 0 / 0.45); border: 1px solid var(--line); pointer-events: none; }
+.form-peek-head { display: flex; align-items: baseline; gap: 10px; }
+.form-peek-head b { font: 700 19px var(--hand); }
+.form-peek-state { font: 700 13px var(--hand); color: var(--muted); }
+.form-peek-state.use { color: var(--green); }
+.form-peek-state.off { color: var(--red); }
+.form-peek p { margin: 4px 0 8px; color: var(--muted); font-size: 12.5px; }
+.form-peek-sample { max-height: 240px; overflow: hidden; }
+.form-peek-hint { margin: 8px 0 0 !important; font: 700 12px var(--hand) !important; }
+.f-sketch { margin-left: 10px; font: 700 12px var(--hand); color: var(--amber); }

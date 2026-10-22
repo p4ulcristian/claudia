@@ -11,6 +11,7 @@ import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, type MenuChat } from "./chatmenu";
 import { play } from "./sounds";
+import { FormRow } from "./formrow";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
@@ -49,7 +50,7 @@ type Live = {
 const fresh = (id: string): Live => ({
   id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
-  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null }, model: "", changes: [],
+  tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {} }, model: "", changes: [],
 });
 
 const CHAT_WIDTH = 400; // the chat column until dragged (px)
@@ -238,6 +239,9 @@ function App() {
   }), []);
   useEffect(() => changeDone((d) => d.delete(current)), [current]);
 
+  // Forms deleted in the Forms window: not offered in the row over the picture either.
+  const [hiddenForms, setHiddenForms] = useState<string[]>([]);
+  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHiddenForms(p.hiddenForms ?? []), () => {}); }, [formsOpen]);
   const [sounds, setSounds] = useState(() => store.get("sounds") === "on");
   const soundsRef = useRef(sounds);
   soundsRef.current = sounds;
@@ -751,6 +755,7 @@ function App() {
           </div>
           ) : (
           <div className="right-scroll">
+          {!readOnly && <FormRow forms={live.settings.forms ?? {}} hidden={hiddenForms} onChange={(forms) => send({ t: "settings", chat: current, forms })} />}
           <div className={`stage ${viewing ? "past" : ""}`}>
             <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} />
           </div>

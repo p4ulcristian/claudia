@@ -48,7 +48,9 @@ export type Task = {
   ambient?: boolean;
 };
 export type Context = { used: number; max: number; percent: number; model: string };
-export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null };
+// forms: the chat's choices in the row over the picture (left out = Claude decides).
+export type FormChoice = "use" | "off";
+export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice> };
 
 export type Question = {
   question: string;
@@ -212,8 +214,13 @@ function templateList(): string {
 }
 
 // The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
-const tools = () => ({ picture: pictureMcp(store.prefs().hiddenForms), workspace: WORKSPACE_MCP });
-const toolsVersion = (t = tools()) => Bun.hash(JSON.stringify(t)).toString(36);
+// A chat's own choices (forms on "off" leave its tool too, "use" ones are asked for) come with it.
+const tools = (forms: Record<string, FormChoice> = {}) => {
+  const off = Object.keys(forms).filter((f) => forms[f] === "off");
+  const use = Object.keys(forms).filter((f) => forms[f] === "use");
+  return { picture: pictureMcp([...store.prefs().hiddenForms, ...off], use), workspace: WORKSPACE_MCP };
+};
+const toolsVersion = (t: ReturnType<typeof tools>) => Bun.hash(JSON.stringify(t)).toString(36);
 
 // The session host the chats' Claude Code processes live in (set by the runner at start).
 let host: HostClient | null = null;
@@ -273,6 +280,7 @@ export class Chat implements SessionHandler {
       if ("effort" in next) await this.q.applyFlagSettings({ effortLevel: (next.effort ?? null) as any }).catch(() => {});
     }
     this.emit({ t: "settings", settings: this.settings, model: this.model });
+    if ("forms" in next) this.swapTools();
   }
 
   // The project Claude works in. The session stays in ~/Work; this is what Claudia shows and diffs follow.
@@ -539,7 +547,7 @@ export class Chat implements SessionHandler {
     }
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
     // Forms the user deleted aren't drawn, even by a session that still has the old tool list.
-    const hidden = new Set(store.prefs().hiddenForms);
+    const hidden = new Set([...store.prefs().hiddenForms, ...Object.keys(this.settings.forms ?? {}).filter((f) => this.settings.forms[f] === "off")]);
     const refused = (input.blocks ?? []).filter((b) => b.form && hidden.has(b.form)).map((b) => b.form!);
     if (refused.length) input = { ...input, blocks: input.blocks!.filter((b) => !(b.form && hidden.has(b.form))) };
     // A code block given a file and no code shows the whole file, read here (as it is now).
@@ -559,7 +567,7 @@ export class Chat implements SessionHandler {
       if (!isFiles) continue;
       const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
       const given = typeof b.data?.root === "string" ? b.data.root : undefined;
-      if (given === undefined && known) continue;
+      if (given === undefined && (known || Array.isArray(b.data?.sketch))) continue;
       const base = this.settings.folder ?? WORK;
       b.data = { ...b.data, root: resolve(base, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
     }
@@ -569,7 +577,7 @@ export class Chat implements SessionHandler {
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user deleted the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
+    return `Picture updated: ${describe(scene)}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: the user turned off the ${[...new Set(refused)].join(", ")} form; use another form or freeform` : ""}`;
   }
 
   // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.
@@ -624,11 +632,11 @@ export class Chat implements SessionHandler {
         ...(this.settings.model ? { model: this.settings.model } : {}),
         ...(this.settings.effort ? { effort: this.settings.effort } : {}),
       },
-      mcp: tools(),
+      mcp: tools(this.settings.forms),
       hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: EDIT_TOOLS }] },
     }, this);
     this.q.kv("account", acct.name);
-    this.q.kv("tools", toolsVersion());
+    this.q.kv("tools", toolsVersion(tools(this.settings.forms)));
   }
 
   // The host asks: a tool call, a hook, or whether a tool may run.
@@ -685,7 +693,7 @@ export class Chat implements SessionHandler {
     this.running = false;
     this.setRunning(live.busy);
     // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
-    if (kv.tools !== toolsVersion()) this.swapTools(session);
+    if (kv.tools !== toolsVersion(tools(this.settings.forms))) this.swapTools(session);
     if (live.busy) this.since = Number(kv.since ?? Date.now());
     else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
     return this;
@@ -694,7 +702,7 @@ export class Chat implements SessionHandler {
   // Hands a session the tools as they stand now; a session that refuses them restarts after its turn.
   swapTools(session = this.q) {
     if (!session) return;
-    const t = tools();
+    const t = tools(this.settings.forms);
     session.setMcp(t).then(
       () => session.kv("tools", toolsVersion(t)),
       (err) => {

@@ -431,6 +431,8 @@ Bun.serve({
             if ("model" in m) next.model = m.model || null;
             if ("effort" in m) next.effort = m.effort || null;
             if ("color" in m) next.color = (CHAT_COLORS as readonly string[]).includes(m.color) ? m.color : null;
+            if ("forms" in m && m.forms && typeof m.forms === "object")
+              (next as any).forms = Object.fromEntries(Object.entries(m.forms).filter(([, v]) => v === "use" || v === "off"));
             await chat(m.chat).setSettings(next);
             return "color" in m ? broadcastChats() : undefined;
           }

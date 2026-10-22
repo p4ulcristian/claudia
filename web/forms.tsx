@@ -315,7 +315,9 @@ const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, 
 
 function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
   const root: string = typeof data.root === "string" ? data.root : "";
-  const demo: { path: string; dir?: boolean; status?: string }[] | null = Array.isArray(data.demo) ? data.demo : null;
+  // sketch: files that don't exist (yet), given by Claude with their code; demo: the gallery's sample.
+  const sketch: { path: string; dir?: boolean; status?: string; code?: string }[] | null = Array.isArray(data.sketch) ? data.sketch : null;
+  const demo: { path: string; dir?: boolean; status?: string; code?: string }[] | null = sketch ?? (Array.isArray(data.demo) ? data.demo : null);
   const marks = new Map<string, any>(list(data.marks).map((m) => [String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""), m]));
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
   const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors)]));
@@ -337,14 +339,25 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
 
   const entriesOf = (d: string): Entry[] | { error: string } | undefined => {
     if (!demo) return dirs.get(d);
+    // Folders come from the paths too ("src/a/b.clj" makes src and src/a), not only from dir entries.
     const pre = d ? `${d}/` : "";
-    return demo.filter((e) => e.path.startsWith(pre) && !e.path.slice(pre.length).includes("/"))
-      .map((e) => ({ name: e.path.slice(pre.length), dir: !!e.dir, status: e.status }));
+    const out = new Map<string, Entry>();
+    for (const e of demo) {
+      const p = e.path.replace(/\/$/, "");
+      if (!p.startsWith(pre)) continue;
+      const rest = p.slice(pre.length);
+      const slash = rest.indexOf("/");
+      const name = slash < 0 ? rest : rest.slice(0, slash);
+      if (!name) continue;
+      const isDir = slash >= 0 || !!e.dir;
+      out.set(name, { ...(out.get(name) ?? {}), name, dir: isDir, ...(slash < 0 && e.status ? { status: e.status } : {}) });
+    }
+    return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
   const openFile = (path: string) => {
     if (file?.path === path) return setFile(null);
     setFile({ path });
-    if (demo) return setFile({ path, text: "// a file opens here, coloured like VS Code" });
+    if (demo) return setFile({ path, text: demo.find((e) => e.path === path)?.code ?? (sketch ? "(no code given for this file)" : "// a file opens here, coloured like VS Code") });
     fetch(url(path, true)).then((r) => r.json()).then((j) => setFile({ path, ...j })).catch(() => setFile({ path, error: "can't read it" }));
   };
   const toggle = (d: string) => setOpen((o) => { const n = new Set(o); n.has(d) ? n.delete(d) : n.add(d); return n; });
@@ -391,7 +404,10 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   return (
     <div className="f-files">
       <div className="f-code-head">
-        <span className="f-file" title={root}><span className="dir">{demo ? "~/Work/apps/" : home.slice(0, home.lastIndexOf("/") + 1)}</span><b>{demo ? "shop" : home.slice(home.lastIndexOf("/") + 1)}</b></span>
+        <span className="f-file" title={root}>
+          {sketch ? <><b>{typeof data.title === "string" ? data.title : "planned files"}</b><span className="f-sketch">sketch · not on disk</span></>
+            : <><span className="dir">{demo ? "~/Work/apps/" : home.slice(0, home.lastIndexOf("/") + 1)}</span><b>{demo ? "shop" : home.slice(home.lastIndexOf("/") + 1)}</b></>}
+        </span>
         {open.size > 1 && <button type="button" className="f-copy" onClick={() => { setOpen(new Set([""])); setFile(null); }}>collapse all</button>}
         {!demo && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
       </div>

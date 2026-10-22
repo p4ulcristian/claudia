@@ -75,6 +75,9 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 // And its colour from the palette, to tell chats apart at a glance.
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "color"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN color TEXT");
+// The chat's form choices from the row over the picture: JSON { <form>: "use" | "off" }.
+if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "forms"))
+  db.exec("ALTER TABLE chat_settings ADD COLUMN forms TEXT");
 
 // chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
 export type Template = { name: string; html: string; parts: Record<string, string>; description: string; updatedAt: number };
@@ -95,10 +98,10 @@ const q = {
     `INSERT INTO pictures (session_id, turn_uuid, scene, changed, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (session_id, turn_uuid) DO UPDATE SET scene = excluded.scene, changed = excluded.changed`,
   ),
-  settings: db.query<Settings, [string]>("SELECT model, effort, folder, color FROM chat_settings WHERE session_id = ?"),
+  settings: db.query<Omit<Settings, "forms"> & { forms: string | null }, [string]>("SELECT model, effort, folder, color, forms FROM chat_settings WHERE session_id = ?"),
   saveSettings: db.query(
-    `INSERT INTO chat_settings (session_id, model, effort, folder, color) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort, folder = excluded.folder, color = excluded.color`,
+    `INSERT INTO chat_settings (session_id, model, effort, folder, color, forms) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (session_id) DO UPDATE SET model = excluded.model, effort = excluded.effort, folder = excluded.folder, color = excluded.color, forms = excluded.forms`,
   ),
   colors: db.query<{ session_id: string; color: string }, []>("SELECT session_id, color FROM chat_settings WHERE color IS NOT NULL"),
   setColor: db.query(
@@ -145,8 +148,14 @@ export const store = {
   archive: (id: string) => q.archive.run(id, Date.now()),
   unarchive: (id: string) => q.unarchive.run(id),
   archived: () => new Set(q.archived.all().map((r) => r.session_id)),
-  settings: (id: string): Settings => q.settings.get(id) ?? { model: null, effort: null, folder: null, color: null },
-  saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color),
+  settings: (id: string): Settings => {
+    const r = q.settings.get(id);
+    if (!r) return { model: null, effort: null, folder: null, color: null, forms: {} };
+    let forms: Settings["forms"] = {};
+    try { forms = r.forms ? JSON.parse(r.forms) : {}; } catch {}
+    return { ...r, forms };
+  },
+  saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color, JSON.stringify(s.forms ?? {})),
   colors: () => new Map(q.colors.all().map((r) => [r.session_id, r.color])),
   setColor: (id: string, color: string) => q.setColor.run(id, color),
   addChange(id: string, turn: string, path: string, before: FileState, after: FileState, counts: { added: number; removed: number }): ChangeMeta {
