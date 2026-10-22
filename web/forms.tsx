@@ -341,7 +341,8 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const made: Made[] = sketch ?? demo ?? [];
   const marks = new Map<string, any>(list(data.marks).map((m) => [String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""), m]));
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors)]));
+  const opened0 = typeof data.file === "string" ? data.file.replace(/^\.?\//, "") : null; // a file Claude opened for the user
+  const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors), ...(opened0 ? ancestors(opened0) : [])]));
   const [dirs, setDirs] = useState<Map<string, Entry[] | { error: string }>>(new Map());
   const [file, setFile] = useState<{ path: string; text?: string; error?: string; image?: string } | null>(null);
   const [tick, setTick] = useState(0);
@@ -399,6 +400,13 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     if (!live) return setFile({ path, error: "not given" });
     fetch(url(path, true)).then((r) => r.json()).then((j) => setFile({ path, ...j })).catch(() => setFile({ path, error: "can't read it" }));
   };
+  // Claude names a file (data.file): it opens, now and whenever it names another.
+  useEffect(() => {
+    if (!opened0) return;
+    setOpen((o) => new Set([...o, ...ancestors(opened0)]));
+    setFile(null);
+    openFile(opened0);
+  }, [opened0, root]);
   const toggle = (d: string) => setOpen((o) => { const n = new Set(o); n.has(d) ? n.delete(d) : n.add(d); return n; });
 
   const rows: React.ReactNode[] = [];
