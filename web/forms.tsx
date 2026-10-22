@@ -308,6 +308,24 @@ function ExtTag({ name }: { name: string }) {
   );
 }
 
+// The shown folder's path, each part a way there (not above the home folder).
+function Crumbs({ root, go }: { root: string; go: (path: string) => void }) {
+  const home = root.match(/^\/home\/[^/]+/)?.[0] ?? "";
+  const rest = home ? root.slice(home.length).split("/").filter(Boolean) : root.split("/").filter(Boolean);
+  const parts = home ? [{ label: "~", path: home }] : [];
+  rest.forEach((p, i) => parts.push({ label: p, path: (home || "") + "/" + rest.slice(0, i + 1).join("/") }));
+  return (
+    <span className="f-crumbs">
+      {parts.map((p, i) => (
+        <React.Fragment key={p.path}>
+          {i > 0 && <span className="sep">/</span>}
+          {i === parts.length - 1 ? <b>{p.label}</b> : <button type="button" className="crumb" onClick={() => go(p.path)}>{p.label}</button>}
+        </React.Fragment>
+      ))}
+    </span>
+  );
+}
+
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)$/i;
 
 // An image over the whole window; a click or Escape closes it.
@@ -331,17 +349,29 @@ type Entry = { name: string; dir: boolean; status?: string; changed?: number; pl
 const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, not in git yet", D: "deleted" };
 
 function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
-  const root: string = typeof data.root === "string" ? data.root : "";
+  const drawn: string = typeof data.root === "string" ? data.root : "";
+  // The folder shown: the one Claude drew, or another the user went to (header path, double-click).
+  const [root, setRoot] = useState(drawn);
+  useEffect(() => setRoot(drawn), [drawn]);
+  // Paths Claude gave are relative to the drawn root: seen from another folder they move or drop out.
+  const rebase = (p: string): string | null => {
+    if (root === drawn) return p;
+    const abs = `${drawn}/${p}`.replace(/\/$/, "");
+    return abs.startsWith(root + "/") ? abs.slice(root.length + 1) : null;
+  };
   // sketch: files that don't exist (yet), given by Claude with their code; demo: the gallery's sample.
   // With root too, the sketch's files are planned additions to the real tree, each tagged "planned".
   type Made = { path: string; dir?: boolean; status?: string; code?: string };
   const sketch: Made[] | null = Array.isArray(data.sketch) ? data.sketch : null;
   const demo: Made[] | null = Array.isArray(data.demo) ? data.demo : null;
   const live = !!root && !demo;
-  const made: Made[] = sketch ?? demo ?? [];
-  const marks = new Map<string, any>(list(data.marks).map((m) => [String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""), m]));
+  const made: Made[] = (sketch ?? demo ?? []).flatMap((e) => { const p = rebase(e.path); return p === null ? [] : [{ ...e, path: p }]; });
+  const marks = new Map<string, any>(list(data.marks).flatMap((m) => {
+    const p = rebase(String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""));
+    return p === null ? [] : [[p, m] as [string, any]];
+  }));
   const ancestors = (p: string) => p.split("/").slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join("/"));
-  const opened0 = typeof data.file === "string" ? data.file.replace(/^\.?\//, "") : null; // a file Claude opened for the user
+  const opened0 = typeof data.file === "string" ? rebase(data.file.replace(/^\.?\//, "")) : null; // a file Claude opened for the user
   const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...list(data.open).map(String), ...[...marks.keys()].flatMap(ancestors), ...(opened0 ? ancestors(opened0) : [])]));
   const [dirs, setDirs] = useState<Map<string, Entry[] | { error: string }>>(new Map());
   const [file, setFile] = useState<{ path: string; text?: string; error?: string; image?: string } | null>(null);
@@ -413,6 +443,15 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     if (!live) return setFile({ path, error: "not given" });
     fetch(url(path, true)).then((r) => r.json()).then((j) => setFile({ path, ...j })).catch(() => setFile({ path, error: "can't read it" }));
   };
+  // Another folder: start from its top.
+  const firstRoot = useRef(root);
+  useEffect(() => {
+    if (firstRoot.current === root) return;
+    firstRoot.current = root;
+    setDirs(new Map());
+    setFile(null);
+    setOpen(new Set([""]));
+  }, [root]);
   // Claude names a file (data.file): it opens, now and whenever it names another.
   useEffect(() => {
     if (!opened0) return;
@@ -439,6 +478,8 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
           style={{ "--depth": depth, "--mark": colorOf(m?.color) ?? "var(--amber)" } as React.CSSProperties}
           data-item={m?.id}
           onClick={() => (e.dir ? toggle(path) : openFile(path))}
+          onDoubleClick={() => { if (e.dir && live && !e.planned) setRoot(`${root}/${path}`); }}
+          title={e.dir && live && !e.planned ? "Double-click to go into this folder" : undefined}
         >
           {e.dir ? <FolderIcon open={isOpen} /> : <ExtTag name={e.name} />}
           <span className="nm">{e.name}</span>
@@ -472,8 +513,10 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       <div className="f-code-head">
         <span className="f-file" title={root}>
           {!live && sketch ? <b>{typeof data.title === "string" ? data.title : "planned files"}</b>
-            : <><span className="dir">{demo ? "~/Work/apps/" : home.slice(0, home.lastIndexOf("/") + 1)}</span><b>{demo ? "shop" : home.slice(home.lastIndexOf("/") + 1)}</b></>}
+            : demo ? <><span className="dir">~/Work/apps/</span><b>shop</b></>
+            : <Crumbs root={root} go={setRoot} />}
         </span>
+        {live && root !== drawn && <button type="button" className="f-copy" onClick={() => setRoot(drawn)} title={`Back to ${drawn.replace(/^\/home\/[^/]+/, "~")}`}>↺ back</button>}
         {/* Real or made up, said up front. */}
         {live && <span className="f-kind real" title="Read live from disk">on disk</span>}
         {sketch && <span className="f-kind made" title="Files Claude sketched; they are not on disk">{live ? `+ ${sketch.length} planned` : "sketch · not on disk"}</span>}

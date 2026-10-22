@@ -15,6 +15,7 @@ import { imageFile, listDir, readText } from "./src/files";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
+import { homedir } from "node:os";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
@@ -284,7 +285,11 @@ Bun.serve({
         const roots = new Set<string>();
         const scenes = [chats.get(id)?.scene, ...store.pictures(id).map((x) => x.scene)];
         for (const sc of scenes) for (const b of sc?.blocks ?? []) if (b.kind === "form" && b.form === "files" && typeof b.data.root === "string") roots.add(b.data.root);
-        if (!roots.has(root)) return json({ error: "not a folder of this chat's pictures" }, 403);
+        // A drawn root, a folder inside one, or one above it up to the home folder (the path in the
+        // form's header can be clicked to go up).
+        const home = homedir();
+        const ok = [...roots].some((r) => r === root || root.startsWith(r + "/") || (r.startsWith(root + "/") && (root === home || root.startsWith(home + "/"))));
+        if (!ok) return json({ error: "not a folder of this chat's pictures" }, 403);
         const path = p.get("path") ?? "";
         if (p.get("read") === "1") return json(readText(root, path));
         if (p.get("image") === "1") {

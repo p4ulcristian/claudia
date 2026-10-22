@@ -1114,3 +1114,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .rail-dot.on .rail-tag { color: var(--on-hue); }
 .rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
 .rail-dot.on .rail-blank { background: var(--on-hue); }
+/* Files header: the folder's path, each part clickable. */
+.f-crumbs { display: inline-flex; align-items: baseline; min-width: 0; overflow: hidden; }
+.f-crumbs .crumb { color: var(--muted); font: inherit; padding: 0 1px; border-radius: 4px; }
+.f-crumbs .crumb:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 45%, transparent); text-decoration: underline; }
+.f-crumbs .sep { color: color-mix(in srgb, var(--muted) 60%, transparent); padding: 0 2px; }
+.f-crumbs b { color: var(--fg); font-weight: 600; }
