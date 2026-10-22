@@ -4,10 +4,8 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
 import { FormView } from "./forms";
-import { ResizeBox } from "./resize";
 
-// Forms that are always as tall as their content, with no resize grip.
-const FULL_HEIGHT = new Set(["files"]);
+
 import { FORMS } from "../src/forms";
 import type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types";
 
@@ -382,8 +380,8 @@ function pageDoc(html: string) {
   const cs = getComputedStyle(document.documentElement);
   const vars = THEME_VARS.map((v) => `${v}: ${cs.getPropertyValue(v).trim()};`).join(" ");
   const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}"><link rel="stylesheet" href="${FONTS}">`
-    + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
-    + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(document.body.scrollHeight) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`
+    + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } html { overflow: hidden; } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
+    + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`
     // Parts: Claudia sends new markup for the elements marked data-part="<name>"; the page stays loaded.
     + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`
     // Snapshot: on Claudia's ask, draw this page into a PNG and hand it back (see web/snapshot.ts).
@@ -406,14 +404,16 @@ export function PageFrame({ html, height, parts }: { html: string; height?: numb
       if (e.source !== frame.current?.contentWindow) return;
       if (e.data?.claudiaReady) send();
       const h = Number(e.data?.claudiaPageHeight);
-      if (h > 0) setFit(Math.min(2400, Math.max(60, h)));
+      if (h > 0) setFit(Math.min(20000, Math.max(60, h)));
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
   }, []);
   // A part changed: swap it in place (a fresh page gets them when it says it's ready).
   useEffect(() => { send(); }, [parts]);
-  return <iframe ref={frame} className="page-frame" sandbox="allow-scripts" srcDoc={doc} style={{ height: height ?? fit }} title="Page" />;
+  // Always as tall as its page (a height Claude gave is not used): the picture scrolls, never the page.
+  void height;
+  return <iframe ref={frame} className="page-frame" sandbox="allow-scripts" srcDoc={doc} style={{ height: fit }} scrolling="no" title="Page" />;
 }
 
 function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }) {
@@ -509,13 +509,8 @@ function BlockView({ block, changed, seq, chat, browse }: { block: Block; change
         {chat && block.kind === "html" && <SaveTemplate chat={chat} block={block} />}
       </div>
       {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
-        : block.kind === "form" ? (
-          FULL_HEIGHT.has(block.form) ? <FormView form={block.form} data={block.data} chat={browse} block={block.id} /> : (
-            <ResizeBox id={`${browse ?? "gallery"}:${block.id}`}>
-              <FormView form={block.form} data={block.data} chat={browse} block={block.id} />
-            </ResizeBox>
-          )
-        )
+        // Every block is as tall as it is: no inner scrolling, the picture scrolls.
+        : block.kind === "form" ? <FormView form={block.form} data={block.data} chat={browse} block={block.id} />
         : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
     </section>
   );

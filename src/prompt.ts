@@ -29,7 +29,7 @@ How to draw well:
 - Groups put related things in one frame (a server, a file, a phase).
 - Keep a graph to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note. Use more graph blocks for separate views (the flow, the data), not one crowded graph.
 
-Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the code form, never in freeform HTML. There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained.
+Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the code form, never in freeform HTML. There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
 To change a freeform block, don't resend it: mark what will change with data-part="name" (a number, a row, a status line) and send only parts: { name: "<new markup>" }. Send html again only when the layout itself changes.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
@@ -93,7 +93,7 @@ const drawShape = (forms: string[]) => ({
             "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.",
           ),
         parts: z.record(z.string(), z.string()).optional().describe('New inner markup for the elements marked data-part="<name>" (markup only: scripts in it do not run). The page is not reloaded'),
-        height: z.number().optional().describe("Height in px; left out, the block fits its page"),
+        height: z.number().optional().describe("Not used: a page is always shown at its full height"),
       }),
     )
     .optional()
