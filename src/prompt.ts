@@ -119,7 +119,7 @@ export const WORKSPACE_MCP: McpDef = {
 // use: forms the user asked for in this chat (the row over the picture).
 export const pictureMcp = (hidden: string[] = [], use: string[] = []): McpDef => {
   const forms = FORM_NAMES.filter((f) => !hidden.includes(f));
-  const asked = use.filter((f) => forms.includes(f as never));
+  const asked = use.filter((f) => (forms as string[]).includes(f));
   return {
   version: "3.0.0",
   alwaysLoad: true,
@@ -129,7 +129,7 @@ export const pictureMcp = (hidden: string[] = [], use: string[] = []): McpDef =>
       description: `Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.
 
 Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:
-${formsHelp(forms)}${asked.length ? `\n\nThe user switched on ${asked.join(", ")} for this chat: use ${asked.length > 1 ? "these forms" : "this form"} whenever it fits what you show, rather than a graph or freeform.` : ""}`,
+${formsHelp(forms)}${asked.length ? `\n\nThe user switched on ${asked.join(", ")} for this chat: use ${asked.length > 1 ? "these forms" : "this form"} whenever it fits what you show, rather than a graph or freeform.` : ""}${use.includes("freeform") ? "\n\nThe user switched freeform on for this chat: be creative, build interactive pages where they help." : ""}${hidden.includes("freeform") ? "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms." : ""}`,
       schema: z.toJSONSchema(z.object(drawShape(forms.length ? forms : ["none"]))) as Record<string, unknown>,
     },
     {

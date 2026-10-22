@@ -19,11 +19,17 @@ const GLYPH: Record<FormName, React.ReactNode> = {
   code: <path d="M7 6l-4 4 4 4M13 6l4 4-4 4M11 4l-2 12" />,
   files: <path d="M3 5.5h5l1.5 1.5H17v8.5H3zM6 10h8M6 13h5" />,
 };
+// Freeform has no form entry: its own circle at the end of the row.
+const FREEFORM = {
+  label: "Freeform",
+  when: "Claude's own page: interactive, playful, made for this one thing. On: Claude gets creative where it helps. Off: only graphs and forms.",
+  glyph: <path d="M4 15c2-6 4-9 6-9s1 5 3 5 2-3 3-5M5 17h10" />,
+};
 
 export function FormRow({ forms, hidden, onChange }: { forms: Record<string, Choice>; hidden: string[]; onChange: (next: Record<string, Choice>) => void }) {
-  const [peek, setPeek] = useState<FormName | null>(null);
-  const shown = FORM_NAMES.filter((f) => !hidden.includes(f));
-  const cycle = (f: FormName) => {
+  const [peek, setPeek] = useState<string | null>(null);
+  const shown = [...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform"];
+  const cycle = (f: string) => {
     const now = forms[f] ?? "auto";
     const next = { ...forms };
     const to = NEXT[now];
@@ -42,20 +48,20 @@ export function FormRow({ forms, hidden, onChange }: { forms: Record<string, Cho
             onClick={() => cycle(f)}
             onMouseEnter={() => setPeek(f)}
             onFocus={() => setPeek(f)}
-            aria-label={`${FORMS[f].label}: ${SAY[state]}`}
+            aria-label={`${f === "freeform" ? FREEFORM.label : FORMS[f as FormName].label}: ${SAY[state]}`}
           >
-            <svg viewBox="0 0 20 20" aria-hidden="true">{GLYPH[f]}</svg>
+            <svg viewBox="0 0 20 20" aria-hidden="true">{f === "freeform" ? FREEFORM.glyph : GLYPH[f as FormName]}</svg>
           </button>
         );
       })}
       {peek && (
         <div className="form-peek">
           <div className="form-peek-head">
-            <b>{FORMS[peek].label}</b>
+            <b>{peek === "freeform" ? FREEFORM.label : FORMS[peek as FormName].label}</b>
             <span className={`form-peek-state ${forms[peek] ?? "auto"}`}>{SAY[forms[peek] ?? "auto"]}</span>
           </div>
-          <p>{FORMS[peek].when}</p>
-          <div className="form-peek-sample"><FormView form={peek} data={FORMS[peek].sample} /></div>
+          <p>{peek === "freeform" ? FREEFORM.when : FORMS[peek as FormName].when}</p>
+          {peek !== "freeform" && <div className="form-peek-sample"><FormView form={peek as FormName} data={FORMS[peek as FormName].sample} /></div>}
           <p className="form-peek-hint">click: auto → use → off · this chat only</p>
         </div>
       )}

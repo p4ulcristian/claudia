@@ -214,6 +214,19 @@ function templateList(): string {
 }
 
 // The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
+// What the form row now asks, in words for Claude.
+function formsNote(forms: Record<string, FormChoice>): string {
+  const use = Object.keys(forms).filter((f) => forms[f] === "use");
+  const off = Object.keys(forms).filter((f) => forms[f] === "off");
+  const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : `the ${f} form`);
+  const parts = [
+    use.length && `The user switched ON in Claudia's form row: ${use.map(name).join(", ")}. From now on draw with ${use.length > 1 ? "these" : "this"} wherever it fits (redraw the current picture with ${use.length > 1 ? "them" : "it"} if it fits there)${use.includes("freeform") ? "; freeform on means: be creative, build an interactive page where it helps" : ""}.`,
+    off.length && `Switched OFF: ${off.map(name).join(", ")}; don't use ${off.length > 1 ? "them" : "it"} (draw refuses).`,
+    !use.length && !off.length && "The user reset Claudia's form row: choose forms yourself again.",
+  ].filter(Boolean);
+  return parts.join(" ");
+}
+
 // A chat's own choices (forms on "off" leave its tool too, "use" ones are asked for) come with it.
 const tools = (forms: Record<string, FormChoice> = {}) => {
   const off = Object.keys(forms).filter((f) => forms[f] === "off");
@@ -260,6 +273,8 @@ export class Chat implements SessionHandler {
   // The first message sent here, until Claude Code has written the session file: the chat list shows
   // the chat from that moment on, titled by it.
   firstSent: { text: string; at: number } | null = null;
+  // The form row changed since the last message: said once, with the next message (hidden from the chat).
+  private formsNote: string | null = null;
   // Subagent transcripts, by the tool_use id of the Agent call that started them.
   subs = new Map<string, Item[]>();
   context: Context | null = null;
@@ -269,6 +284,8 @@ export class Chat implements SessionHandler {
   constructor(readonly id: string, private onChange: () => void) {
     this.scene = store.pictures(id).at(-1)?.scene ?? emptyScene();
     this.settings = store.settings(id);
+    // Choices made in the form row are said again with the first message after a runner start.
+    if (Object.keys(this.settings.forms ?? {}).length) this.formsNote = formsNote(this.settings.forms);
   }
 
   async setSettings(next: Partial<Settings>) {
@@ -280,7 +297,10 @@ export class Chat implements SessionHandler {
       if ("effort" in next) await this.q.applyFlagSettings({ effortLevel: (next.effort ?? null) as any }).catch(() => {});
     }
     this.emit({ t: "settings", settings: this.settings, model: this.model });
-    if ("forms" in next) this.swapTools();
+    if ("forms" in next) {
+      this.swapTools();
+      this.formsNote = formsNote(this.settings.forms);
+    }
   }
 
   // The project Claude works in. The session stays in ~/Work; this is what Claudia shows and diffs follow.
@@ -431,7 +451,10 @@ export class Chat implements SessionHandler {
       this.onChange();
     }
     const content: any[] = images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } }));
-    if (text) content.push({ type: "text", text });
+    // A changed form row goes with this message, as a reminder the chat doesn't show.
+    const note = this.formsNote;
+    this.formsNote = null;
+    if (text || note) content.push({ type: "text", text: note ? `${text}\n\n<system-reminder>${note}</system-reminder>` : text });
     const acct = await account().catch((err) => {
       this.emit({ t: "error", text: String(err?.message ?? err) });
       return null;
@@ -548,8 +571,10 @@ export class Chat implements SessionHandler {
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
     // Forms the user deleted aren't drawn, even by a session that still has the old tool list.
     const hidden = new Set([...store.prefs().hiddenForms, ...Object.keys(this.settings.forms ?? {}).filter((f) => this.settings.forms[f] === "off")]);
-    const refused = (input.blocks ?? []).filter((b) => b.form && hidden.has(b.form)).map((b) => b.form!);
-    if (refused.length) input = { ...input, blocks: input.blocks!.filter((b) => !(b.form && hidden.has(b.form))) };
+    const freeformOff = hidden.has("freeform");
+    const isFreeform = (b: NonNullable<DrawInput["blocks"]>[number]) => freeformOff && !b.form && (b.html !== undefined || !!b.template);
+    const refused = (input.blocks ?? []).filter((b) => (b.form && hidden.has(b.form)) || isFreeform(b)).map((b) => b.form ?? "freeform");
+    if (refused.length) input = { ...input, blocks: input.blocks!.filter((b) => !((b.form && hidden.has(b.form)) || isFreeform(b))) };
     // A code block given a file and no code shows the whole file, read here (as it is now).
     const unread: string[] = [];
     for (const b of input.blocks ?? []) {
