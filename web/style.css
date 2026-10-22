@@ -127,6 +127,22 @@ code, pre { font-family: var(--mono); }
 .chev { display: inline-block; transition: transform 0.15s; width: 8px; }
 .chev.open { transform: rotate(90deg); }
 .err-count { color: var(--red); white-space: nowrap; }
+/* Explain: a small hand-written button on each step (on hover; always on the running one) and the
+   answer under it as a chalk note. */
+.step-line, .steps-head-line { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.step-line .step-row, .steps-head-line .steps-head { flex: 1; min-width: 0; width: auto; }
+.explain-btn { flex: none; font: 700 12.5px var(--hand); color: var(--muted); padding: 0 6px; border-radius: 6px; opacity: 0; transition: opacity 0.12s; }
+.step:hover .explain-btn, .explain-btn:focus-visible, .explain-btn.live, .step.busy .explain-btn { opacity: 1; }
+.explain-btn:hover { color: var(--fg); background: var(--panel2); }
+.explain-btn.live { color: var(--blue); }
+.explain-under { flex-basis: 100%; }
+.explain-note { position: relative; isolation: isolate; display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 6px 14px; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--fg); }
+.explain-note::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 9px; border: 1.5px solid color-mix(in srgb, var(--blue) 55%, transparent); background: color-mix(in srgb, var(--blue) 8%, transparent); filter: url(#tip-chalk); }
+.explain-note.busy { color: var(--muted); font: 700 13px var(--hand); }
+.explain-note.err::before { border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+.explain-note span { flex: 1; }
+.explain-x { flex: none; color: var(--muted); font-size: 15px; line-height: 1; }
+.explain-x:hover { color: var(--fg); }
 .steps ul { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .step-row { display: flex; gap: 8px; align-items: center; font-size: 12.5px; width: 100%; text-align: left; padding: 2px 0; }
 .step-row b { font-weight: 600; }
@@ -974,3 +990,5 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: url(#chalk-soft); }
 .chat-head h1 { text-decoration: none; }
 .chat-head h1 .t { text-decoration: underline 3px var(--accent); text-underline-offset: 6px; padding-bottom: 6px; }
+.tl-explain { margin: 0 0 8px; }
+.tl-explain .explain-note { margin-left: 0; }

@@ -9,6 +9,7 @@ import { store } from "./src/db";
 import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
 import { search, sessionsDir, warm } from "./src/search";
+import { explain, type ExplainInput } from "./src/explain";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -228,6 +229,18 @@ Bun.serve({
       GET: (req) => {
         const path = projectLogo(decodeURIComponent(req.params.name));
         return path ? new Response(Bun.file(path), { headers: { "Cache-Control": "max-age=600" } }) : new Response("no logo", { status: 404 });
+      },
+    },
+    // Explain one step in plain words (src/explain.ts): Haiku on the side, not the chat's Claude.
+    "/api/explain": {
+      POST: async (req) => {
+        const body = (await req.json().catch(() => null)) as ExplainInput | null;
+        if (!body || typeof body.name !== "string" || typeof body.detail !== "string") return json({ error: "a step: name, title, detail" }, 400);
+        try {
+          return json({ text: await explain(body) });
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
       },
     },
     "/api/delegate": {

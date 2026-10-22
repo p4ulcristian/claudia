@@ -18,16 +18,65 @@ function blocks(items: Item[]): Block[] {
   return out;
 }
 
-function Step({ t }: { t: Tool }) {
+// What a step works on, for "explain": the user's message and what Claude said just before.
+export type StepCtx = { asked?: string; before?: string };
+
+// When each running step was first seen here, for "running for 40 s" in an explanation.
+const started = new Map<string, number>();
+const explained = new Map<string, string>(); // finished step id → its explanation
+
+// since: when the step started, if known better than "first seen here".
+export function useExplain(t: Tool, ctx: StepCtx, since?: number) {
+  const [note, setNote] = useState<{ text: string; busy?: boolean; error?: boolean } | null>(() => (explained.has(t.id) ? { text: explained.get(t.id)! } : null));
+  const run = async () => {
+    if (note?.busy) return;
+    if (t.result && explained.has(t.id)) { setNote({ text: explained.get(t.id)! }); return; }
+    setNote({ text: "explaining…", busy: true });
+    const running = !t.result;
+    try {
+      const r = await fetch("/api/explain", {
+        method: "POST",
+        body: JSON.stringify({
+          name: t.name, title: t.title, detail: t.detail, result: t.result?.text ?? null, error: !!t.result?.error, running,
+          seconds: running && (since ?? started.get(t.id)) ? (Date.now() - (since ?? started.get(t.id)!)) / 1000 : undefined, ...ctx,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      if (!running) explained.set(t.id, j.text);
+      setNote({ text: j.text });
+    } catch (err) {
+      setNote({ text: `Couldn't explain: ${(err as Error).message}`, error: true });
+    }
+  };
+  return { note, run, close: () => setNote(null) };
+}
+
+export function ExplainNote({ note, close }: { note: { text: string; busy?: boolean; error?: boolean }; close: () => void }) {
+  return (
+    <div className={`explain-note ${note.busy ? "busy" : ""} ${note.error ? "err" : ""}`}>
+      <span>{note.text}</span>
+      {!note.busy && <button className="explain-x" onClick={close} aria-label="Close">×</button>}
+    </div>
+  );
+}
+
+function Step({ t, ctx }: { t: Tool; ctx: StepCtx }) {
   const [open, setOpen] = useState(false);
   const state = !t.result ? "busy" : t.result.error ? "err" : "ok";
+  if (!t.result && !started.has(t.id)) started.set(t.id, Date.now());
+  const ex = useExplain(t, ctx);
   return (
     <li className={`step ${state}`}>
-      <button className="step-row" onClick={() => setOpen(!open)}>
-        <span className="step-dot" />
-        <b>{t.name}</b>
-        <span className="step-title">{t.title}</span>
-      </button>
+      <div className="step-line">
+        <button className="step-row" onClick={() => setOpen(!open)}>
+          <span className="step-dot" />
+          <b>{t.name}</b>
+          <span className="step-title">{t.title}</span>
+        </button>
+        <button className="explain-btn" onClick={ex.run} title="Explain this step in plain words (Haiku, on the side)">{ex.note?.busy ? "…" : "explain"}</button>
+      </div>
+      {ex.note && <ExplainNote note={ex.note} close={ex.close} />}
       {open && (
         <div className="step-detail">
           <pre>{t.detail}</pre>
@@ -38,21 +87,36 @@ function Step({ t }: { t: Tool }) {
   );
 }
 
-function Steps({ tools, live }: { tools: Tool[]; live: boolean }) {
+// The running step of a folded group, explained from its head.
+function CurrentExplain({ t, ctx }: { t: Tool; ctx: StepCtx }) {
+  const ex = useExplain(t, ctx);
+  return (
+    <>
+      <button className="explain-btn live" onClick={ex.run} title="Explain what this step is doing (Haiku, on the side)">{ex.note?.busy ? "…" : "explain"}</button>
+      {ex.note && <div className="explain-under"><ExplainNote note={ex.note} close={ex.close} /></div>}
+    </>
+  );
+}
+
+function Steps({ tools, live, ctx = {} }: { tools: Tool[]; live: boolean; ctx?: StepCtx }) {
   const [open, setOpen] = useState(false);
   const busy = tools.some((t) => !t.result);
   const errors = tools.filter((t) => t.result?.error).length;
   const names = [...new Set(tools.map((t) => t.name))].slice(0, 4).join(", ");
   const current = busy ? tools.find((t) => !t.result) : null;
+  if (current && !started.has(current.id)) started.set(current.id, Date.now());
   return (
     <div className={`steps ${busy && live ? "busy" : ""}`}>
-      <button className="steps-head" onClick={() => setOpen(!open)}>
-        <span className={`chev ${open ? "open" : ""}`}>›</span>
-        <span>{tools.length} {tools.length === 1 ? "step" : "steps"}</span>
-        <span className="muted">{current && live ? `${current.name} ${current.title}` : names}</span>
-        {errors > 0 && <span className="err-count">{errors} failed</span>}
-      </button>
-      {open && <ul>{tools.map((t) => <Step key={t.id} t={t} />)}</ul>}
+      <div className="steps-head-line">
+        <button className="steps-head" onClick={() => setOpen(!open)}>
+          <span className={`chev ${open ? "open" : ""}`}>›</span>
+          <span>{tools.length} {tools.length === 1 ? "step" : "steps"}</span>
+          <span className="muted">{current && live ? `${current.name} ${current.title}` : names}</span>
+          {errors > 0 && <span className="err-count">{errors} failed</span>}
+        </button>
+        {current && live && !open && <CurrentExplain key={current.id} t={current} ctx={ctx} />}
+      </div>
+      {open && <ul>{tools.map((t) => <Step key={t.id} t={t} ctx={ctx} />)}</ul>}
     </div>
   );
 }
@@ -121,7 +185,12 @@ export function Messages(props: {
     >
       {!items.length && !running && <div className="hello"><h2>What are we working on?</h2><p className="muted">Claude answers short here and explains on the right.</p></div>}
       {bs.map((b, i) => {
-        if (b.k === "steps") return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} />;
+        if (b.k === "steps") {
+          const asked = (bs.slice(0, i).reverse().find((x) => x.k === "user") as { item: Extract<Item, { k: "user" }> } | undefined)?.item.text;
+          const prev = bs[i - 1];
+          const before = prev?.k === "text" ? (prev.item as Extract<Item, { k: "text" }>).text : undefined;
+          return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} ctx={{ asked, before }} />;
+        }
         if (b.k === "user") {
           const it = b.item as Extract<Item, { k: "user" }>;
           const files = props.changeTurns.get(it.uuid) ?? 0;

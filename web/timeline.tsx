@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { md } from "./md";
 import { PatchDiff, tilde } from "./changes";
+import { ExplainNote, useExplain } from "./chat";
 import type { Timeline, TimelineDetail, TimelineEvent, TimelineLane } from "./types";
 
 const RAIL = 14; // px per rail
@@ -274,6 +275,25 @@ function Step({ r, now, rails, color, isOpen, onOpen, onLane, chat, lanes }: {
   );
 }
 
+// Explain on an opened tool step: the same Haiku explanation as in the chat, with the request and
+// Claude's words before it taken from the step's own lane.
+function TimelineExplain({ lane, e, d }: { lane: TimelineLane; e: Extract<TimelineEvent, { k: "tool" }>; d: Extract<TimelineDetail, { k: "tool" }> }) {
+  const i = lane.events.findIndex((x) => x.id === e.id);
+  const earlier = lane.events.slice(0, Math.max(0, i)).reverse();
+  const asked = (earlier.find((x) => x.k === "user") as { text: string } | undefined)?.text;
+  const prev = lane.events[i - 1];
+  const before = prev?.k === "text" ? prev.text : undefined;
+  const running = e.end === undefined && lane.running;
+  const t = { k: "tool" as const, id: e.id, name: e.name, title: e.title, detail: d.input, result: running || d.output === null ? undefined : { error: d.error, text: d.output } };
+  const ex = useExplain(t, { asked, before }, e.start);
+  return (
+    <div className="tl-explain">
+      <button className="explain-btn live" onClick={ex.run}>{ex.note?.busy ? "…" : "explain this step"}</button>
+      {ex.note && <ExplainNote note={ex.note} close={ex.close} />}
+    </div>
+  );
+}
+
 function Detail({ chat, lane, e }: { chat: string; lane: TimelineLane; e: TimelineEvent }) {
   const [d, setD] = useState<TimelineDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -290,6 +310,7 @@ function Detail({ chat, lane, e }: { chat: string; lane: TimelineLane; e: Timeli
 
   return (
     <div className="tl-detail">
+      {e.k === "tool" && d?.k === "tool" && <TimelineExplain lane={lane} e={e} d={d} />}
       {failed ? <p className="muted small">Couldn't read this from the session file.</p>
         : !d ? <p className="muted small">Loading…</p>
         : d.k === "text" ? <div className="md small" dangerouslySetInnerHTML={{ __html: md(d.text) }} />
