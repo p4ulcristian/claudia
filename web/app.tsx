@@ -239,6 +239,11 @@ function App() {
   const soundsRef = useRef(sounds);
   soundsRef.current = sounds;
   const wasWaiting = useRef(new Map<string, boolean>());
+  const toggleSounds = (on: boolean) => {
+    setSounds(on);
+    store.set("sounds", on ? "on" : "off");
+    if (on) play("done", live.settings.color);
+  };
   const loadChats = useCallback(async () => {
     const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
     if (!r.ok) return;
@@ -558,6 +563,9 @@ function App() {
                 </button>
               ))}
             </div>
+            <button className={`rail-forms rail-sound ${sounds ? "on" : ""}`} onClick={() => toggleSounds(!sounds)} {...tipProps(sounds ? "Sounds on: click to mute" : "Sounds off: click to hear when a chat finishes or waits")} aria-label="Sounds" aria-pressed={sounds}>
+              <SpeakerIcon on={sounds} />
+            </button>
             <button className="rail-forms" onClick={() => setFormsOpen(true)} {...tipProps("Forms: everything Claude can draw, and your templates")} aria-label="Forms">
               <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
             </button>
@@ -631,11 +639,7 @@ function App() {
               <input
                 type="checkbox"
                 checked={sounds}
-                onChange={(e) => {
-                  setSounds(e.target.checked);
-                  store.set("sounds", e.target.checked ? "on" : "off");
-                  if (e.target.checked) play("done", live.settings.color);
-                }}
+                onChange={(e) => toggleSounds(e.target.checked)}
               />
               Sounds
             </label>
@@ -798,6 +802,16 @@ function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
 }
 
 // Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
+// A chalk speaker; waves when sounds are on, a cross when off.
+function SpeakerIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M3 8h3l4-3.5v11L6 12H3z" />
+      {on ? <path d="M13 7.5c1 1.4 1 3.6 0 5M15.4 5.5c2 2.5 2 6.5 0 9" /> : <path d="M13.5 8l4 4M17.5 8l-4 4" />}
+    </svg>
+  );
+}
+
 // The words of a search marked in a title.
 function Marked({ text, words }: { text: string; words: string }) {
   const ws = words.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
