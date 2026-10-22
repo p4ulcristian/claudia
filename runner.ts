@@ -268,12 +268,22 @@ Bun.serve({
         const items = await loadHistory(id).catch(() => []);
         const lastUser = items.map((i) => i.k).lastIndexOf("user");
         const last = items.slice(lastUser + 1).filter((i) => i.k === "text").map((i) => (i as { text: string }).text).join("\n\n");
+        // What it is doing now, for a watcher's progress line: the newest step of this turn (a tool's
+        // one-line title, or the start of what it said) and how many tools it has run in it.
+        const turn = items.slice(lastUser + 1);
+        const tools = turn.filter((i) => i.k === "tool") as { name: string; title: string }[];
+        const newest = turn.at(-1);
+        const step = !newest ? "" : newest.k === "tool" ? `${(newest as { name: string }).name}: ${(newest as { title: string }).title}`.slice(0, 160) : newest.k === "text" ? (newest as { text: string }).text.split("\n")[0].slice(0, 160) : "";
         return json({
           known: !!c || items.length > 0,
           running: c?.running ?? false,
           waiting: c?.waiting ?? false,
           asks: c ? [...c.asks.values()].map((w) => w.value) : [],
           last,
+          step,
+          steps: tools.length,
+          since: c?.running && c.since ? new Date(c.since).toISOString() : null,
+          agents: c?.agents ?? 0,
         });
       },
     },
