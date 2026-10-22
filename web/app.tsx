@@ -446,6 +446,7 @@ function App() {
 
   const q = search.trim().toLowerCase();
   const list = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
+  const tags = useMemo(() => projectTags(chats.map((c) => c.project)), [chats]);
   // The rail: passive chats last, in their own order.
   const railList = [...list.filter((c) => c.color !== PASSIVE), ...list.filter((c) => c.color === PASSIVE)];
 
@@ -492,12 +493,13 @@ function App() {
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c.id, e)}
                   onContextMenu={menuFor(c)}
-                  {...tipProps(c.title, chatColorVar(c.color))}
+                  {...tipProps(c.project ? `${c.title} · ${c.project}` : c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
                   {(c.title.trim()[0] ?? "?").toUpperCase()}
                   <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
                   <AgentMoons n={c.agents} />
+                  {c.project && <span className="project-tag">{tags.get(c.project)}</span>}
                 </button>
               ))}
             </div>
@@ -706,6 +708,22 @@ function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
 }
 
 // Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
+// Short tags for projects, unique among the ones in the list: initials of a dashed name
+// (eye-on-rainbow → eor), else the first letters, three when two projects would share two.
+function projectTags(names: (string | null)[]): Map<string, string> {
+  const all = [...new Set(names.filter((n): n is string => !!n))];
+  const tag = (n: string, len: number) => {
+    const parts = n.split(/[-_. ]+/).filter(Boolean);
+    return (parts.length > 1 ? parts.map((p) => p[0]).join("").slice(0, 3) : n.slice(0, len)).toLowerCase();
+  };
+  const out = new Map<string, string>();
+  for (const n of all) {
+    const clash = all.some((m) => m !== n && tag(m, 2) === tag(n, 2));
+    out.set(n, tag(n, clash ? 3 : 2));
+  }
+  return out;
+}
+
 function AgentMoons({ n }: { n: number }) {
   if (!n) return null;
   const shown = Math.min(n, 5);

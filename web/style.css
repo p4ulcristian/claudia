@@ -690,6 +690,10 @@ svg.logo { flex: none; color: var(--fg); }
 .tip-tail path { fill: color-mix(in oklch, var(--board) 92%, #000); stroke: var(--chat, var(--accent)); stroke-width: 2; stroke-linejoin: round; }
 @keyframes tip-in { from { opacity: 0; translate: -4px 0; } }
 
+/* The chat's project: a small chalk tag at the circle's bottom right. */
+.project-tag { position: absolute; right: -11px; bottom: -6px; padding: 0 4px; font: 700 10px/14px var(--sans); color: var(--muted); letter-spacing: 0.02em; isolation: isolate; pointer-events: none; }
+.project-tag::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 7px; border: 1.5px solid var(--line); background: var(--bg2); filter: url(#tip-chalk); }
+
 /* Agents still working: small chalk moons around the chat's circle. */
 .moons { position: absolute; inset: 0; pointer-events: none; }
 .moons i { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 1.5px var(--bg2); filter: url(#tip-chalk); animation: breathe 1.4s ease-in-out infinite; }

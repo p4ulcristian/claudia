@@ -6,10 +6,10 @@ import { Chat, WORK, loadHistory, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store } from "./src/db";
-import { watch } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
@@ -49,6 +49,20 @@ async function wake(c: Chat) {
   if (c.settings.color === PASSIVE) await c.setSettings({ color: pickColor(usedColors(c.id)) });
 }
 
+// A chat's project: the git repo its working folder is in (its folder name), else the folder's own name.
+const projects = new Map<string, string>();
+function projectName(folder: string | null): string | null {
+  if (!folder) return null;
+  let name = projects.get(folder);
+  if (name === undefined) {
+    let dir = folder;
+    while (dir !== "/" && !existsSync(join(dir, ".git"))) dir = dirname(dir);
+    name = basename(dir === "/" ? folder : dir);
+    projects.set(folder, name);
+  }
+  return name;
+}
+
 async function listChats(all: boolean, archivedView: boolean) {
   const ours = store.ourChats();
   const archived = store.archived();
@@ -81,6 +95,7 @@ async function listChats(all: boolean, archivedView: boolean) {
       agents: chats.get(s.sessionId)?.agents ?? 0,
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
+      project: projectName(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
     }));
 }
 
