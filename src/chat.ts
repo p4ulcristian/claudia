@@ -367,6 +367,14 @@ export class Chat implements SessionHandler {
       if (on && !was && fill[f] && !this.scene.blocks?.some((b) => b.id === id)) add.push({ id, form: f as any, name: names[f], data: fill[f]! });
       if (!on && was && this.scene.blocks?.some((b) => b.id === id)) remove.push(id);
     }
+    // Switched off: every block of that kind leaves the current picture (graphs and freeform too).
+    for (const f of Object.keys(now)) {
+      if (now[f] !== "off" || before[f] === "off") continue;
+      for (const b of this.scene.blocks ?? []) {
+        const kind = b.kind === "form" ? b.form : b.kind === "html" ? "freeform" : "graph";
+        if (kind === f && !remove.includes(b.id)) remove.push(b.id);
+      }
+    }
     if (!add.length && !remove.length) return null;
     // Drawn for the user, not by Claude: its forms news stays for Claude's own next draw.
     const seen = this.formsSeen;
