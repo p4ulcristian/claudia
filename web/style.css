@@ -393,11 +393,11 @@ code, pre { font-family: var(--mono); }
 .rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); background: none; transition: transform 0.12s ease; position: relative; isolation: isolate; }
 .rail-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 2.2px solid var(--chat, var(--grey)); background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); filter: url(#tip-chalk); }
 .rail-dot:hover { transform: scale(1.1); }
-/* Passive chats: at the bottom of the rail, below a chalk line, faded until hovered or open. */
+/* Passive chats: at the bottom of the rail, above a chalk line, faded until hovered or open. */
 .rail-dot.passive { opacity: 0.55; }
 .rail-dot.passive:hover, .rail-dot.passive.on { opacity: 1; }
 .rail-dot.passive.first { margin-top: auto; }
-.rail-dot.passive.first::after { content: ""; position: absolute; left: 4px; right: 4px; top: -11px; border-top: 1.5px dashed var(--line); }
+.rail-dot.passive.last::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: -12px; border-top: 1.5px dashed var(--line); }
 .rail-dot.on { color: var(--on-hue); }
 .rail-dot.on::before { background: color-mix(in srgb, var(--chat, var(--grey)) 88%, transparent); }
 /* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
