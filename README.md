@@ -36,7 +36,7 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 16. Asked from outside (2026-10-22): a program that can reach a profile's runner (on the box: the page, and the users its socket's ACL adds, e.g. Eye on Rainbow for its character Gus) starts a chat with `POST /api/delegate {text}` and follows it with `GET /api/chats/:id/state` (running, waiting on a question, last answer, and its newest step, tool count, start and running agents for a progress line); `POST /api/chats/:id/send {text}` adds a follow-up to that chat (2026-10-22). `POST /api/chats/:id/answer {text}` answers its open question(s) in words. The chat is the profile's own, in its sidebar like any other, so the person can open it and steer.
 
-Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
+Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass. The few calls bypass still sends to the permission callback (its own safety checks) are allowed and logged by the runner, so no permission ask shows; only questions and plan approval reach the user.
 
 ## Files
 

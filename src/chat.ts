@@ -865,6 +865,13 @@ export class Chat implements SessionHandler {
         resolve({ behavior: "deny", message: "The user switched questions off in Claudia for this chat. Don't ask with buttons: decide with your best judgment and say in one line what you chose and why." });
         return;
       }
+      // Every tool may run (user, 2026-10-22: "give claude all permission"). Bypass mode
+      // still sends a few calls here (its own safety checks); allow them, log what they were.
+      if (name !== "AskUserQuestion" && name !== "ExitPlanMode") {
+        console.log(`[${this.id.slice(0, 8)}] auto-allowed ${name}: ${short(JSON.stringify(input), 300)}`);
+        resolve({ behavior: "allow", updatedInput: input });
+        return;
+      }
       if (name === "AskUserQuestion") {
         const ask = { id, questions: (input.questions as Question[]) ?? [] };
         this.asks.set(id, { value: ask, resolve, input });
