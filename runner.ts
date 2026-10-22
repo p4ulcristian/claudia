@@ -271,6 +271,22 @@ Bun.serve({
         return json({ ok: true });
       },
     },
+    // Answer the chat's open question(s) in words (Gus passing on what the person said in his thread):
+    // the text is the answer to every question asked, as if typed into "Other".
+    "/api/chats/:id/answer": {
+      POST: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const body = (await req.json().catch(() => ({}))) as { text?: unknown };
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (!text || text.length > 20_000) return json({ error: "text: 1 to 20000 characters" }, 400);
+        const c = chats.get(id);
+        const open = c ? [...c.asks.values()].map((w) => w.value) : [];
+        if (!c || open.length === 0) return json({ error: "no open question in this chat" }, 409);
+        for (const a of open) c.answer(a.id, Object.fromEntries(a.questions.map((q) => [q.question, text])));
+        return json({ ok: true, answered: open.length });
+      },
+    },
     // How a chat stands, for whoever started it from outside: working, waiting on a question, and its
     // last answer (the text after the last message sent).
     "/api/chats/:id/state": {
