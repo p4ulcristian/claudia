@@ -7,7 +7,13 @@ import { FormView } from "./forms";
 
 type Choice = "use" | "off";
 const NEXT: Record<string, Choice | undefined> = { auto: "use", use: "off", off: undefined };
+// Questions only go on and off: auto (Claude may ask with buttons) → off (it decides itself).
+const NEXT_Q: Record<string, Choice | undefined> = { auto: "off", off: undefined };
 const SAY: Record<string, string> = { auto: "Claude decides", use: "use it: Claude reaches for it", off: "off: Claude won't draw it" };
+const SAY_Q: Record<string, string> = { auto: "on: Claude may ask you", off: "off: Claude decides itself" };
+const say = (f: string, state: string) => (f === "questions" ? SAY_Q : SAY)[state];
+// The non-form circles (freeform, questions): label, text and glyph.
+const extra = (f: string) => (f === "freeform" ? FREEFORM : f === "questions" ? QUESTIONS : null);
 
 // A small chalk drawing per form.
 const GLYPH: Record<FormName, React.ReactNode> = {
@@ -20,6 +26,11 @@ const GLYPH: Record<FormName, React.ReactNode> = {
   files: <path d="M3 5.5h5l1.5 1.5H17v8.5H3zM6 10h8M6 13h5" />,
 };
 // Freeform has no form entry: its own circle at the end of the row.
+const QUESTIONS = {
+  label: "Questions",
+  when: "Claude asking you with buttons (the full-window choices). Off: it decides itself and says in a line what it chose.",
+  glyph: <path d="M7.5 7.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.7v.6M10 15v.2" />,
+};
 const FREEFORM = {
   label: "Freeform",
   when: "Claude's own page: interactive, playful, made for this one thing. On: Claude gets creative where it helps. Off: only graphs and forms.",
@@ -34,11 +45,11 @@ export function FormRow({ forms, hidden, onChange, cols, onCols }: {
   onCols: (cols: number) => void;
 }) {
   const [peek, setPeek] = useState<string | null>(null);
-  const shown = [...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform"];
+  const shown = [...FORM_NAMES.filter((f) => !hidden.includes(f)), "freeform", "questions"];
   const cycle = (f: string) => {
     const now = forms[f] ?? "auto";
     const next = { ...forms };
-    const to = NEXT[now];
+    const to = (f === "questions" ? NEXT_Q : NEXT)[now];
     if (to) next[f] = to;
     else delete next[f];
     onChange(next);
@@ -54,9 +65,9 @@ export function FormRow({ forms, hidden, onChange, cols, onCols }: {
             onClick={() => cycle(f)}
             onMouseEnter={() => setPeek(f)}
             onFocus={() => setPeek(f)}
-            aria-label={`${f === "freeform" ? FREEFORM.label : FORMS[f as FormName].label}: ${SAY[state]}`}
+            aria-label={`${extra(f)?.label ?? FORMS[f as FormName].label}: ${say(f, state)}`}
           >
-            <svg viewBox="0 0 20 20" aria-hidden="true">{f === "freeform" ? FREEFORM.glyph : GLYPH[f as FormName]}</svg>
+            <svg viewBox="0 0 20 20" aria-hidden="true">{extra(f)?.glyph ?? GLYPH[f as FormName]}</svg>
           </button>
         );
       })}
@@ -71,12 +82,12 @@ export function FormRow({ forms, hidden, onChange, cols, onCols }: {
       {peek && (
         <div className="form-peek">
           <div className="form-peek-head">
-            <b>{peek === "freeform" ? FREEFORM.label : FORMS[peek as FormName].label}</b>
-            <span className={`form-peek-state ${forms[peek] ?? "auto"}`}>{SAY[forms[peek] ?? "auto"]}</span>
+            <b>{extra(peek)?.label ?? FORMS[peek as FormName].label}</b>
+            <span className={`form-peek-state ${forms[peek] ?? "auto"}`}>{say(peek, forms[peek] ?? "auto")}</span>
           </div>
-          <p>{peek === "freeform" ? FREEFORM.when : FORMS[peek as FormName].when}</p>
-          {peek !== "freeform" && <div className="form-peek-sample"><FormView form={peek as FormName} data={FORMS[peek as FormName].sample} /></div>}
-          <p className="form-peek-hint">click: auto → use → off · this chat only</p>
+          <p>{extra(peek)?.when ?? FORMS[peek as FormName].when}</p>
+          {!extra(peek) && <div className="form-peek-sample"><FormView form={peek as FormName} data={FORMS[peek as FormName].sample} /></div>}
+          <p className="form-peek-hint">{peek === "questions" ? "click: on ↔ off" : "click: auto → use → off"} · this chat only</p>
         </div>
       )}
     </div>

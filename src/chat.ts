@@ -247,7 +247,7 @@ const PROMPT_VERSION = Bun.hash(SYSTEM_APPEND).toString(36);
 function formsNote(forms: Record<string, FormChoice>): string {
   const use = Object.keys(forms).filter((f) => forms[f] === "use");
   const off = Object.keys(forms).filter((f) => forms[f] === "off");
-  const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : `the ${f} form`);
+  const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : f === "questions" ? "questions (AskUserQuestion buttons: decide yourself instead)" : `the ${f} form`);
   const parts = [
     use.length && `The user switched ON in Claudia's form row: ${use.map(name).join(", ")}. From now on draw with ${use.length > 1 ? "these" : "this"} wherever it fits (redraw the current picture with ${use.length > 1 ? "them" : "it"} if it fits there)${use.includes("freeform") ? "; freeform on means: be creative, build an interactive page where it helps" : ""}.`,
     off.length && `Switched OFF: ${off.map(name).join(", ")}; don't use ${off.length > 1 ? "them" : "it"} (draw refuses).`,
@@ -795,6 +795,11 @@ export class Chat implements SessionHandler {
         if (this.permits.delete(id)) this.emit({ t: "permit_done", id });
       };
       opts.signal.addEventListener("abort", cancel, { once: true });
+      // Questions switched off in the form row: Claude decides instead of asking.
+      if (name === "AskUserQuestion" && this.settings.forms?.questions === "off") {
+        resolve({ behavior: "deny", message: "The user switched questions off in Claudia for this chat. Don't ask with buttons: decide with your best judgment and say in one line what you chose and why." });
+        return;
+      }
       if (name === "AskUserQuestion") {
         const ask = { id, questions: (input.questions as Question[]) ?? [] };
         this.asks.set(id, { value: ask, resolve, input });
