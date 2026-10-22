@@ -276,6 +276,14 @@ function App() {
   }, [send]);
 
   const newChat = useCallback(() => open(crypto.randomUUID()), [open]);
+  // A chat picked from the list: the open one isn't loaded again, its row or circle shakes ("already here").
+  const pick = (id: string, e: React.MouseEvent<HTMLElement>) => {
+    if (id !== current) return open(id);
+    const el = e.currentTarget;
+    el.classList.remove("shake");
+    void el.offsetWidth;
+    el.classList.add("shake");
+  };
 
   useEffect(() => {
     const pop = () => open(idFromPath() ?? crypto.randomUUID(), false);
@@ -440,7 +448,8 @@ function App() {
                   key={c.id}
                   className={`rail-dot ${c.id === current ? "on" : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                  onClick={() => open(c.id)}
+                  onClick={(e) => pick(c.id, e)}
+                  onAnimationEnd={(e) => e.currentTarget.classList.remove("shake")}
                   {...tipProps(c.title, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
@@ -465,7 +474,8 @@ function App() {
                 key={c.id}
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                onClick={() => open(c.id)}
+                onClick={(e) => pick(c.id, e)}
+                onAnimationEnd={(e) => e.currentTarget.classList.remove("shake")}
                 {...tipProps(c.title, chatColorVar(c.color), true)}
               >
                 {c.running && <span className="run-dot" title="Working" />}

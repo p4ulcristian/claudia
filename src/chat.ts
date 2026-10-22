@@ -11,7 +11,7 @@ import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
-import { applyDraw, emptyScene, type DrawInput, type Scene } from "./scene";
+import { applyDraw, describe, emptyScene, type DrawInput, type Scene } from "./scene";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
@@ -515,7 +515,7 @@ export class Chat implements SessionHandler {
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
-    return `Picture updated: ${scene.nodes.length} nodes, ${scene.edges.length} arrows, ${scene.cards.length} cards.`;
+    return `Picture updated: ${describe(scene)}`;
   }
 
   private async start(acct: Account) {

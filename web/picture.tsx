@@ -1,8 +1,12 @@
-// The right half: Claude's picture, laid out by ELK and animated between turns.
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// The right half: Claude's picture, a canvas of blocks: graphs laid out by ELK and animated
+// between turns, and Claude's own HTML pages.
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
-import type { Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types";
+import type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "./types";
+
+// What a graph is drawn from: a graph block, or an older picture's own nodes.
+type Graph = { nodes: SceneNode[]; edges: SceneEdge[]; groups: SceneGroup[] };
 
 const elk = new ELK();
 const COLORS = ["green", "red", "amber", "blue", "grey", "violet"];
@@ -72,7 +76,7 @@ type Variant = "RIGHT" | "DOWN" | "DOWN-STACKED";
 
 // Hidden arrows between a group's unconnected members, so top-to-bottom layouts
 // stack them in a column instead of one wide row.
-function stackEdges(scene: Scene) {
+function stackEdges(scene: Graph) {
   const linked = new Set(scene.edges.flatMap((e) => [`${e.from}|${e.to}`, `${e.to}|${e.from}`]));
   const out: { id: string; sources: string[]; targets: string[] }[] = [];
   for (const g of scene.groups) {
@@ -87,7 +91,7 @@ function stackEdges(scene: Scene) {
 
 const minSize = (w: number, h: number, direction: string) => (direction === "DOWN" ? `(${h}, ${w})` : `(${w}, ${h})`);
 
-async function layout(scene: Scene, variant: Variant): Promise<Laid> {
+async function layout(scene: Graph, variant: Variant): Promise<Laid> {
   const direction = variant === "RIGHT" ? "RIGHT" : "DOWN";
   const sizes = new Map(scene.nodes.map((n) => [n.id, size(n)]));
   const groupIds = new Set(scene.groups.map((g) => g.id));
@@ -218,7 +222,7 @@ function NodeShape({ n, pulse, fresh }: { n: LaidNode; pulse: number; fresh: boo
 const PAD = 14;
 function availSize(el: HTMLElement | null) {
   const stage = el?.closest(".right-scroll") as HTMLElement | null;
-  const w = (stage?.clientWidth ?? 800) - 36;
+  const w = (el?.clientWidth || (stage?.clientWidth ?? 800) - 36);
   return { w, h: Math.max(320, (stage?.clientHeight ?? 700) * 0.8) };
 }
 // Fit the width; the right side scrolls, so the picture may be up to twice the visible height.
@@ -226,7 +230,9 @@ const fit = (l: Laid, a: { w: number; h: number }) => Math.min(a.w / (l.w + PAD 
 
 const VARIANTS: Variant[] = ["RIGHT", "DOWN", "DOWN-STACKED"];
 
-function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq: number }) {
+function Diagram({ scene, changed, seq }: { scene: Graph; changed: string[]; seq: number }) {
+  // Each graph has its own chalk filter and arrowheads: the filter's region is sized to its graph.
+  const uid = useId().replace(/:/g, "");
   const [laid, setLaid] = useState<Laid | null>(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -263,9 +269,9 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
   const dir = useRef<Variant | null>(null);
   const [width, setWidth] = useState(0);
 
-  // Lay out again when the pane changes width noticeably (window resize, divider drag).
+  // Lay out again when the block changes width noticeably (window resize, divider drag).
   useEffect(() => {
-    const stage = box.current?.closest(".right-scroll");
+    const stage = box.current;
     if (!stage) return;
     let t: Timer | undefined;
     const ro = new ResizeObserver(([e]) => {
@@ -310,17 +316,17 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
     window.addEventListener("pointerup", up);
   };
   return (
-    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })}>
+    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })} style={{ "--chalk-url": `url(#chalk-${uid})` } as React.CSSProperties}>
       <div className="zoom-layer" ref={layer} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
           {/* Chalk: lines wobble a little, like they were drawn by hand. One region covers the whole picture. */}
-          <filter id="chalk" filterUnits="userSpaceOnUse" x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80}>
+          <filter id={`chalk-${uid}`} filterUnits="userSpaceOnUse" x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80}>
             <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise" />
             <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
           </filter>
           {COLORS.map((c) => (
-            <marker key={c} id={`arrow-${c}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <marker key={c} id={`arrow-${uid}-${c}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" className={`arrowhead c-${c}`} />
             </marker>
           ))}
@@ -337,7 +343,7 @@ function Diagram({ scene, changed, seq }: { scene: Scene; changed: string[]; seq
             const isNew = fresh.current.has(e.id);
             return (
               <g key={e.id} className={`edge c-${c} ${isNew ? "fresh" : ""} ${changedSet.has(e.id) ? "hot" : ""}`}>
-                <path style={{ d: `path("${e.d}")` } as any} strokeDasharray={e.edge.dashed ? "5 4" : undefined} markerEnd={`url(#arrow-${c})`} />
+                <path style={{ d: `path("${e.d}")` } as any} strokeDasharray={e.edge.dashed ? "5 4" : undefined} markerEnd={`url(#arrow-${uid}-${c})`} />
                 {e.label && e.edge.label && (
                   <g className="edge-label" style={{ transform: `translate(${e.label.x}px, ${e.label.y}px)` }}>
                     <rect width={e.label.w} height={e.label.h} rx={5} />
@@ -368,26 +374,34 @@ function pageDoc(html: string) {
   const vars = THEME_VARS.map((v) => `${v}: ${cs.getPropertyValue(v).trim()};`).join(" ");
   const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}"><link rel="stylesheet" href="${FONTS}">`
     + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
-    + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(document.body.scrollHeight) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`;
+    + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(document.body.scrollHeight) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`
+    // Parts: Claudia sends new markup for the elements marked data-part="<name>"; the page stays loaded.
+    + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`;
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + head);
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${head}</head>`);
   return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
 }
 
 // A page Claude wrote, sandboxed: its scripts run, but it has no access to Claudia, its cookies or its API.
-function PageFrame({ html, height }: { html: string; height?: number }) {
+function PageFrame({ html, height, parts }: { html: string; height?: number; parts?: Record<string, string> }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [fit, setFit] = useState(240);
   const doc = useMemo(() => pageDoc(html), [html]);
+  const partsRef = useRef(parts);
+  partsRef.current = parts;
+  const send = () => partsRef.current && frame.current?.contentWindow?.postMessage({ claudiaParts: partsRef.current }, "*");
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow) return;
+      if (e.data?.claudiaReady) send();
       const h = Number(e.data?.claudiaPageHeight);
-      if (h > 0) setFit(Math.min(1600, Math.max(60, h)));
+      if (h > 0) setFit(Math.min(2400, Math.max(60, h)));
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
   }, []);
+  // A part changed: swap it in place (a fresh page gets them when it says it's ready).
+  useEffect(() => { send(); }, [parts]);
   return <iframe ref={frame} className="page-frame" sandbox="allow-scripts" srcDoc={doc} style={{ height: height ?? fit }} title="Page" />;
 }
 
@@ -423,9 +437,23 @@ function Card({ card, hot, seq }: { card: SceneCard; hot: boolean; seq: number }
   );
 }
 
+function BlockView({ block, changed, seq }: { block: Block; changed: Set<string>; seq: number }) {
+  const hot = changed.has(block.id) || [...changed].some((c) => c.startsWith(`${block.id}:`));
+  return (
+    <section className={`block w-${block.width ?? "full"} k-${block.kind}`}>
+      {/* A new glow per change; the block itself stays mounted (an HTML block keeps its page loaded). */}
+      {hot && <span key={seq} className="block-glow" />}
+      {block.kind === "graph"
+        ? <Diagram scene={block} changed={[...changed]} seq={seq} />
+        : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
+    </section>
+  );
+}
+
 export function PictureView({ scene, changed, seq }: { scene: Scene; changed: string[]; seq: number }) {
   const hot = new Set(changed);
-  if (!scene.nodes.length && !scene.cards.length)
+  const blocks = scene.blocks;
+  if (blocks ? !blocks.length : !scene.nodes.length && !scene.cards.length)
     return (
       <div className="picture-empty">
         <div className="dots"><span /><span /><span /></div>
@@ -433,6 +461,13 @@ export function PictureView({ scene, changed, seq }: { scene: Scene; changed: st
       </div>
     );
   // No title on the board: the title names the picture only in the scrubber under it.
+  if (blocks)
+    return (
+      <div className="picture blocks">
+        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} />)}
+      </div>
+    );
+  // A picture from before blocks: its graph and cards as they were drawn.
   return (
     <div className="picture">
       {scene.nodes.length > 0 && <Diagram scene={scene} changed={changed} seq={seq} />}

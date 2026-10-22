@@ -197,7 +197,7 @@ code, pre { font-family: var(--mono); }
 .picture-empty .dots span:nth-child(2) { width: 30px; height: 30px; }
 .picture-empty p { margin: 0; }
 
-.diagram { cursor: grab; touch-action: none; display: flex; justify-content: safe center; overflow: hidden; min-height: 120px; position: relative; }
+.diagram { cursor: grab; touch-action: pan-y; display: flex; justify-content: safe center; overflow: hidden; min-height: 120px; position: relative; }
 .zoom-layer { transform-origin: 0 0; flex: none; max-width: 100%; }
 .diagram:active { cursor: grabbing; }
 .diagram svg { flex: none; display: block; overflow: visible; user-select: none; max-width: 100%; height: auto; }
@@ -437,13 +437,13 @@ code, pre { font-family: var(--mono); }
 
 /* The board itself */
 .right { background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
-.node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke-width: 2.3; filter: url(#chalk); }
+.node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke-width: 2.3; filter: var(--chalk-url); }
 .node.s-done .body { fill: color-mix(in srgb, var(--c) 18%, transparent); }
 .node .label { font: 700 15px var(--hand); }
 .node .note { font: 400 12px var(--sans); }
-.group rect { fill: color-mix(in srgb, var(--c) 5%, transparent); stroke-width: 1.8; filter: url(#chalk); }
+.group rect { fill: color-mix(in srgb, var(--c) 5%, transparent); stroke-width: 1.8; filter: var(--chalk-url); }
 .group text { font: 700 14px var(--hand); letter-spacing: 0; text-transform: none; }
-.edge path { stroke-width: 2.1; filter: url(#chalk); }
+.edge path { stroke-width: 2.1; filter: var(--chalk-url); }
 .edge-label rect { fill: var(--board); stroke: none; }
 .edge-label text { font: 400 12px var(--sans); }
 .badge path { stroke: var(--on-hue); }
@@ -779,3 +779,15 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .right.sheet .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
   .app.narrow .sidebar-slot { padding-top: env(safe-area-inset-top); }
 }
+
+/* The canvas: blocks top to bottom; two half blocks in a row sit side by side (stacked when the pane is narrow). */
+.picture.blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
+.block { grid-column: 1 / -1; min-width: 0; border-radius: 10px; position: relative; }
+.block.w-half { grid-column: span 1; }
+@container (max-width: 640px) { .block.w-half { grid-column: 1 / -1; } }
+.block-glow { position: absolute; inset: -4px; border-radius: 12px; pointer-events: none; animation: block-glow 1.2s ease-out forwards; }
+@keyframes block-glow { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); } to { box-shadow: 0 0 0 2px transparent; } }
+
+/* The open chat picked again: a short shake instead of loading it again. */
+.shake { animation: shake 0.36s ease-in-out; }
+@keyframes shake { 20% { translate: -4px 0; } 40% { translate: 4px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
