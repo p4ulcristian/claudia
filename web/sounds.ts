@@ -16,15 +16,15 @@ const audio = () => (ctx ??= new AudioContext());
 // The browser lets a page play only after a click or key: wake the context on the first one.
 for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => { if (ctx?.state === "suspended") void ctx.resume(); }, { capture: true });
 
-// A soft bell: a sine with a quieter octave above, a quick start and a long fade.
-function bell(m: number, at: number, gain = 0.16, length = 1.4) {
+// A soft bell: a sine with a faint octave above, a gentle start and a fade.
+function bell(m: number, at: number, gain = 0.045, length = 0.9) {
   const a = audio();
   const out = a.createGain();
   out.gain.setValueAtTime(0, at);
-  out.gain.linearRampToValueAtTime(gain, at + 0.012);
+  out.gain.linearRampToValueAtTime(gain, at + 0.03);
   out.gain.exponentialRampToValueAtTime(0.0001, at + length);
   out.connect(a.destination);
-  for (const [mult, g] of [[1, 1], [2, 0.28], [3, 0.08]] as const) {
+  for (const [mult, g] of [[1, 1], [2, 0.12]] as const) {
     const o = a.createOscillator();
     const og = a.createGain();
     o.type = "sine";
@@ -43,11 +43,9 @@ export function play(kind: SoundKind, color: string | null) {
   if (a.state === "suspended") void a.resume();
   const m = noteOf(color);
   const t = a.currentTime + 0.02;
-  if (kind === "done") {
-    bell(m, t);
-    bell(m + 12, t + 0.09, 0.05, 0.9);
-  } else {
-    bell(m, t, 0.14, 0.7);
-    bell(m + 4, t + 0.18, 0.14, 1.2);
+  if (kind === "done") bell(m, t);
+  else {
+    bell(m, t, 0.035, 0.5);
+    bell(m + 4, t + 0.16, 0.035, 0.8);
   }
 }
