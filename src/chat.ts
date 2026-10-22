@@ -250,6 +250,9 @@ export class Chat implements SessionHandler {
   // until Claude takes it in), so a chat opened again in that time still shows them. Keyed by uuid,
   // which the session file keeps.
   private unsaved = new Map<string, Item>();
+  // The first message sent here, until Claude Code has written the session file: the chat list shows
+  // the chat from that moment on, titled by it.
+  firstSent: { text: string; at: number } | null = null;
   // Subagent transcripts, by the tool_use id of the Agent call that started them.
   subs = new Map<string, Item[]>();
   context: Context | null = null;
@@ -415,6 +418,10 @@ export class Chat implements SessionHandler {
 
   async send(text: string, images: { media_type: string; data: string }[] = []) {
     const uuid = crypto.randomUUID();
+    if (!this.firstSent) {
+      this.firstSent = { text: text.trim().split("\n")[0].slice(0, 120) || "New chat", at: Date.now() };
+      this.onChange();
+    }
     const content: any[] = images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } }));
     if (text) content.push({ type: "text", text });
     const acct = await account().catch((err) => {

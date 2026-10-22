@@ -77,7 +77,28 @@ async function listChats(all: boolean, archivedView: boolean) {
     if (open) void open.setSettings({ color });
     else store.setColor(s.sessionId, color);
   }
+  // Chats sent to but not yet written by Claude Code: listed at once, titled by their first message.
+  const have = new Set(sessions.map((s) => s.sessionId));
+  const fresh = archivedView ? [] : [...chats.values()].filter((c) => c.firstSent && !have.has(c.id) && !archived.has(c.id));
   // In the order they were started, a new chat last, so a chat getting a new message doesn't move.
+  return [
+    ...shownRows(shown, ours, archived, colors),
+    ...fresh.map((c) => ({
+      id: c.id,
+      title: c.firstSent!.text,
+      at: c.firstSent!.at,
+      ours: true,
+      running: c.running,
+      waiting: c.waiting,
+      agents: c.agents,
+      color: colors.get(c.id) ?? c.settings.color ?? null,
+      archived: false,
+      ...projectFields(c.settings.folder),
+    })),
+  ];
+}
+
+function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<string>, archived: Set<string>, colors: Map<string, string>) {
   return shown
     .sort((a, b) => (a.createdAt ?? a.lastModified) - (b.createdAt ?? b.lastModified))
     .map((s) => ({
