@@ -18,8 +18,10 @@ export function ResizeBox({ id, initial, className, children }: { id: string; in
     const start = e.clientY;
     const from = box.current?.getBoundingClientRect().height ?? h ?? 200;
     let now = from;
+    document.body.classList.add("rs-dragging");
     const move = (m: PointerEvent) => setH((now = Math.max(80, from + m.clientY - start)));
     const up = () => {
+      document.body.classList.remove("rs-dragging");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       write(id, now);

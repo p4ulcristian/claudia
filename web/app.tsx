@@ -746,7 +746,8 @@ function App() {
         <section
           className={`right ${phone ? "sheet" : ""} ${phone && sheet ? "open" : ""}`}
           style={fold.rightWidth ? { width: fold.rightWidth } : undefined}
-          onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96)}
+          // The bar stays down over a resize grip or while one is dragged, so it never covers it.
+          onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96 && !(e.target as HTMLElement).closest?.(".rs-grip") && !document.body.classList.contains("rs-dragging"))}
           onMouseLeave={() => setNearBar(false)}
         >
           {phone && <SheetGrab onClose={closeSheet} />}
