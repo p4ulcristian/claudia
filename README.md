@@ -34,6 +34,8 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 15. Start a chat from a link (2026-10-22): `/new?text=…` opens a new chat of your own (leaving another profile's read-only view) with the text in the message box, not sent; you press Enter. Eye on Rainbow's "Open in Claudia" uses it. A link that sent the text by itself would let any link drive someone's Claude.
 
+16. Asked from outside (2026-10-22): a program that can reach a profile's runner (on the box: the page, and the users its socket's ACL adds, e.g. Eye on Rainbow for its character Gus) starts a chat with `POST /api/delegate {text}` and follows it with `GET /api/chats/:id/state` (running, waiting on a question, last answer). The chat is the profile's own, in its sidebar like any other, so the person can open it and steer.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass, so permission asks don't come up.
 
 ## Files

@@ -188,6 +188,39 @@ Bun.serve({
         return row ? json(row) : json({ error: "not found" }, 404);
       },
     },
+    // Another program on this machine asks this profile's Claude for something (Eye on Rainbow's Gus,
+    // for the person who asked him): a new chat with the text sent, like a message typed here. Only
+    // what can reach this runner can call it: the page, and on the box the users its socket allows.
+    "/api/delegate": {
+      POST: async (req) => {
+        const body = (await req.json().catch(() => ({}))) as { text?: unknown };
+        const text = typeof body.text === "string" ? body.text.trim() : "";
+        if (!text || text.length > 20_000) return json({ error: "text: 1 to 20000 characters" }, 400);
+        const id = crypto.randomUUID();
+        await chat(id).send(text);
+        broadcastChats();
+        return json({ id });
+      },
+    },
+    // How a chat stands, for whoever started it from outside: working, waiting on a question, and its
+    // last answer (the text after the last message sent).
+    "/api/chats/:id/state": {
+      GET: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const c = chats.get(id);
+        const items = await loadHistory(id).catch(() => []);
+        const lastUser = items.map((i) => i.k).lastIndexOf("user");
+        const last = items.slice(lastUser + 1).filter((i) => i.k === "text").map((i) => (i as { text: string }).text).join("\n\n");
+        return json({
+          known: !!c || items.length > 0,
+          running: c?.running ?? false,
+          waiting: c?.waiting ?? false,
+          asks: c ? [...c.asks.values()].map((w) => w.value) : [],
+          last,
+        });
+      },
+    },
     "/api/chats/:id": {
       // Rename and/or archive: { title?, archived? }
       PATCH: async (req) => {
