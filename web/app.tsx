@@ -154,15 +154,15 @@ function apply(l: Live, ev: ChatEvent): Live {
 }
 
 // Below this width the chat list slides over the chat instead of taking a column.
-function useNarrow() {
-  const q = "(max-width: 1099px)";
+// Below 1100px the chat list is a drawer; below 680px (phones) the picture is a bottom sheet too.
+function useMedia(q: string) {
   const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
   useEffect(() => {
     const m = matchMedia(q);
     const on = () => setNarrow(m.matches);
     m.addEventListener("change", on);
     return () => m.removeEventListener("change", on);
-  }, []);
+  }, [q]);
   return narrow;
 }
 
@@ -174,7 +174,12 @@ function App() {
   const known = useRef(new Map<string, ChatRow>());
   const [search, setSearch] = useState("");
   const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
-  const narrow = useNarrow();
+  const narrow = useMedia("(max-width: 1099px)");
+  const phone = useMedia("(max-width: 679px)");
+  // Phone: the picture lives in a sheet that slides up from the bottom; sheetAt = when it was last closed.
+  const [sheet, setSheet] = useState(false);
+  const [sheetAt, setSheetAt] = useState(() => Date.now());
+  const closeSheet = useCallback(() => { setSheet(false); setSheetAt(Date.now()); }, []);
   const [drawer, setDrawer] = useState(false);
   const toggleSidebar = useCallback(() => {
     if (narrow) return setDrawer((d) => !d);
@@ -398,7 +403,8 @@ function App() {
   // A question opens the right half while it's pending, so peeking shows the picture.
   const folded = foldedAt > 0 && !live.asks.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
-  const fold = useFoldMotion(folded, split, narrow);
+  const fold = useFoldMotion(folded && !phone, split, phone);
+  const sheetUnseen = phone && !sheet && (live.pictures.at(-1)?.at ?? 0) > sheetAt;
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
   const q = search.trim().toLowerCase();
@@ -555,6 +561,13 @@ function App() {
           />}
         </section>
         <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
+        {phone && sheet && <div className="sheet-backdrop" onClick={closeSheet} />}
+        {phone && (
+          <button className={`sheet-tab ${sheetUnseen ? "unseen" : ""}`} onClick={() => setSheet(true)} aria-label="Show picture">
+            <span className="grab-line" />
+            Picture
+          </button>
+        )}
         {fold.shown ? (
           <section className="right fold-edge">
             <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"} aria-label="Show picture">
@@ -563,11 +576,12 @@ function App() {
           </section>
         ) : (
         <section
-          className="right"
+          className={`right ${phone ? "sheet" : ""} ${phone && sheet ? "open" : ""}`}
           style={fold.rightWidth ? { width: fold.rightWidth } : undefined}
           onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96)}
           onMouseLeave={() => setNearBar(false)}
         >
+          {phone && <SheetGrab onClose={closeSheet} />}
           {rightView === "timeline" ? (
           <div className="right-tl">
             <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} />
@@ -591,7 +605,7 @@ function App() {
             unchanged={!!live.lastTurn && !live.lastTurn.drew}
             onPick={showPicture}
             onLive={() => setViewing(null)}
-            onFold={toggleFold}
+            onFold={phone ? closeSheet : toggleFold}
             foldDisabled={live.asks.length > 0}
           />
           </div>
@@ -633,6 +647,35 @@ function AgentMoons({ n }: { n: number }) {
         return <i key={i} style={{ left: `calc(50% + ${Math.cos(a) * 21}px)`, top: `calc(50% - ${Math.sin(a) * 21}px)`, animationDelay: `${i * 0.25}s` }} />;
       })}
     </span>
+  );
+}
+
+// The top of the picture sheet on phones: tap it, or drag it down, to close the sheet.
+function SheetGrab({ onClose }: { onClose: () => void }) {
+  const drag = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const sheet = e.currentTarget.parentElement!;
+    const y0 = e.clientY;
+    let dy = 0;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      dy = Math.max(0, m.clientY - y0);
+      sheet.style.transition = "none";
+      sheet.style.transform = `translateY(${dy}px)`;
+    };
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      sheet.style.transition = "";
+      sheet.style.transform = "";
+      if (dy > 80 || dy < 6) onClose(); // a long drag down, or a tap
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  };
+  return (
+    <button className="sheet-grab" onPointerDown={drag} aria-label="Close picture">
+      <span className="grab-line" />
+    </button>
   );
 }
 

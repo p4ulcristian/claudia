@@ -264,11 +264,7 @@ code, pre { font-family: var(--mono); }
 .app.narrow.no-sidebar main { margin-left: 64px; }
 .app.narrow.no-sidebar .chat-head { padding-left: 16px; }
 
-@media (max-width: 679px) {
-  .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
-  .divider { display: none; }
-  .split.folded { grid-template-rows: minmax(0, 1fr) auto; }
-}
+
 
 /* Strip above the input: model, effort, context, plan limits */
 .pick { min-width: 0; flex: 0 1 auto; }
@@ -730,11 +726,6 @@ svg.logo { flex: none; color: var(--fg); }
 .fold-edge .unfold:hover .edge-line { background: var(--accent); width: 3px; }
 .fold-edge .unfold.unseen .edge-line { background: var(--accent); width: 3px; box-shadow: 0 0 12px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
 .split.folded .divider { visibility: hidden; }
-@media (max-width: 679px) {
-  .fold-edge .unfold { height: 16px; }
-  .edge-line { width: calc(100% - 20px); height: 2px; }
-  .fold-edge .unfold:hover .edge-line, .fold-edge .unfold.unseen .edge-line { width: calc(100% - 20px); height: 3px; }
-}
 
 /* Chat header with the activity pill: the title keeps at least 40% of the row, the folder chip gives way first. */
 .left { container-type: inline-size; }
@@ -743,3 +734,29 @@ svg.logo { flex: none; color: var(--fg); }
 .chat-head .act { margin-left: 0; }
 @container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
 .ask-modal .panel.permit { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
+
+/* ---------- Phones (under 680px) ----------
+   The chat fills the screen; the chat list is the overlay drawer (no rail); the picture is a sheet
+   that slides up from the bottom, opened from the tab under the composer. */
+.sheet-tab, .sheet-grab, .sheet-backdrop { display: none; }
+@media (max-width: 679px) {
+  .app.narrow.no-sidebar .sidebar-slot { width: 0; }
+  .app.narrow.no-sidebar main { margin-left: 0; }
+  .app.narrow.no-sidebar .chat-head { padding-left: 52px; }
+  .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) auto; }
+  .divider { display: none; }
+  .sheet-tab { display: flex; align-items: center; justify-content: center; gap: 10px; height: 34px; color: var(--muted); font: 700 15px var(--hand); position: relative; }
+  .sheet-tab .grab-line { width: 28px; }
+  .sheet-tab.unseen { color: var(--accent); }
+  .sheet-tab.unseen .grab-line { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
+  .grab-line { display: block; width: 44px; height: 3px; border-radius: 2px; background: var(--chalk); filter: url(#chalk-soft); }
+  .right.sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 86dvh; z-index: 30; border-radius: 18px 18px 0 0; transform: translateY(105%); transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -10px 40px rgb(0 0 0 / 0.45); }
+  .right.sheet.open { transform: none; }
+  .right.sheet::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border-top: 2px solid var(--chalk); filter: url(#tip-chalk); pointer-events: none; }
+  .sheet-grab { display: grid; place-items: center; height: 26px; flex: none; touch-action: none; cursor: grab; }
+  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.4); animation: fade-in 0.2s ease-out; }
+  /* No hover on a phone: the bar sits at the bottom of the sheet; its fold button closes the sheet. */
+  .right.sheet .rbar-zone { position: static; opacity: 1; transform: none; pointer-events: auto; padding: 6px 10px 10px; }
+  .right.sheet .rbar-fold { rotate: 90deg; }
+}
+@keyframes fade-in { from { opacity: 0; } }
