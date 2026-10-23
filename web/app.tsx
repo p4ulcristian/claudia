@@ -9,7 +9,7 @@ import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
-import { ChatMenu, type MenuChat } from "./chatmenu";
+import { ChatMenu, ContextMenu, type MenuChat } from "./chatmenu";
 import { play } from "./sounds";
 import { FormRow } from "./formrow";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
@@ -160,8 +160,7 @@ function apply(l: Live, ev: ChatEvent): Live {
   return l;
 }
 
-// Below this width the chat list slides over the chat instead of taking a column.
-// Below 1100px the chat list is a drawer; below 680px (phones) the picture is a bottom sheet too.
+// Below 1100px the picture folds without motion; below 680px (phones) the picture is a bottom sheet.
 function useMedia(q: string) {
   const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
   useEffect(() => {
@@ -180,19 +179,26 @@ function App() {
   // Every chat seen in any list, so the open one keeps its title while the other list shows.
   const known = useRef(new Map<string, ChatRow>());
   const [search, setSearch] = useState("");
-  const [sidebar, setSidebarState] = useState(store.get("sidebar") !== "0");
   const narrow = useMedia("(max-width: 1099px)");
   const phone = useMedia("(max-width: 679px)");
   // Phone: the picture lives in a sheet that slides up from the bottom; sheetAt = when it was last closed.
   const [sheet, setSheet] = useState(false);
   const [sheetAt, setSheetAt] = useState(() => Date.now());
   const closeSheet = useCallback(() => { setSheet(false); setSheetAt(Date.now()); }, []);
+  // The rail is always there, at every width. The full list (settings, archive, profiles) opens over
+  // it as a drawer from the menu button and closes when a chat is picked or the backdrop clicked.
   const [drawer, setDrawer] = useState(false);
+  // Search from the rail: the drawer opens with the search box focused, and folds back to the
+  // rail when a chat is picked (or on Escape).
+  const [railSearch, setRailSearch] = useState(false);
+  const searchBox = useRef<HTMLInputElement>(null);
   const toggleSidebar = useCallback(() => {
-    if (narrow) return setDrawer((d) => !d);
-    setSidebarState((s) => { store.set("sidebar", s ? "0" : "1"); return !s; });
-  }, [narrow]);
-  const showSidebar = narrow ? drawer : sidebar;
+    if (railSearch) return setRailSearch(false);
+    setDrawer((d) => !d);
+  }, [railSearch]);
+  const showSidebar = drawer || railSearch;
+  const searchFromRail = () => { setRailSearch(true); requestAnimationFrame(() => searchBox.current?.focus()); };
+  const endRailSearch = () => { if (railSearch) { setRailSearch(false); setSearch(""); } };
   const [current, setCurrent] = useState<string>(() => idFromPath() ?? crypto.randomUUID());
   const [live, setLive] = useState<Live>(() => fresh(current));
   const [viewing, setViewing] = useState<string | null>(null);
@@ -239,9 +245,9 @@ function App() {
   }), []);
   useEffect(() => changeDone((d) => d.delete(current)), [current]);
 
-  // Forms deleted in the Forms window: not offered in the row over the picture either.
+  // Forms deleted in the Forms window (and opt-in forms this instance lacks): not offered in the row over the picture either.
   const [hiddenForms, setHiddenForms] = useState<string[]>([]);
-  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHiddenForms(p.hiddenForms ?? []), () => {}); }, [formsOpen]);
+  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHiddenForms([...(p.hiddenForms ?? []), ...(p.notHere ?? [])]), () => {}); }, [formsOpen]);
   const [sounds, setSounds] = useState(() => store.get("sounds") === "on");
   const soundsRef = useRef(sounds);
   soundsRef.current = sounds;
@@ -304,6 +310,7 @@ function App() {
     return () => clearInterval(iv);
   }, [jumpTo]);
   const openHit = (id: string, uuid: string | null) => {
+    endRailSearch();
     if (id !== current) open(id);
     if (uuid) setJumpTo(uuid);
   };
@@ -424,6 +431,12 @@ function App() {
     setMenu({ chat: { id: c.id, title: c.title, color: c.color, archived: archivedView }, x: e.clientX, y: e.clientY });
   };
 
+  // The right-click menu on the context meter (ctx ring or the sidebar's Context bar): compact.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+  const onCtxMenu = (e: React.MouseEvent) => { e.preventDefault(); if (!readOnly) setCtxMenu({ x: e.clientX, y: e.clientY }); };
+  const compact = readOnly || live.running ? undefined : () => onSend("/compact", []);
+
   // Which picture to show: live, or the one that was current at an older message.
   const pictureTurns = useMemo(() => new Set(live.pictures.map((p) => p.turn)), [live.pictures]);
   const shown = useMemo(() => {
@@ -534,7 +547,10 @@ function App() {
           onArchive={(archived) => void archiveChat(menu.chat.id, archived)}
         />
       )}
-      {narrow && drawer && <div className="backdrop" onClick={() => setDrawer(false)} />}
+      {ctxMenu && live.context && (
+        <ContextMenu {...ctxMenu} close={closeCtxMenu} title={`Context ${live.context.percent}% · ${Math.round(live.context.used / 1000)}k of ${Math.round(live.context.max / 1000)}k`} onCompact={compact} />
+      )}
+      {showSidebar && <div className="backdrop" onClick={() => { setDrawer(false); endRailSearch(); }} />}
       {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
           <div className="ask-modal" hidden={peek} role="dialog" aria-modal="true" aria-label="Claude asks">
@@ -552,6 +568,9 @@ function App() {
           <nav className="rail" aria-label="Chats">
             <div className="rail-dots" ref={railBox}>
               {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
+              <button className="rail-dot add rail-search" onClick={searchFromRail} {...tipProps("Search chats")} aria-label="Search chats">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5" /><path d="M12.3 12.3L17 17" /></svg>
+              </button>
               {railList.map((c, i) => (
                 <button
                   key={c.id}
@@ -576,14 +595,14 @@ function App() {
             <button className="rail-forms" onClick={() => setFormsOpen(true)} {...tipProps("Forms: everything Claude can draw, and your templates")} aria-label="Forms">
               <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
             </button>
-            <RailMeters meta={meta} context={live.context} onCompact={readOnly || live.running ? undefined : () => onSend("/compact", [])} />
+            <RailMeters meta={meta} context={live.context} onCompact={compact} onContextMenu={onCtxMenu} />
           </nav>
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
           <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />
           {me && <ProfileTabs me={me} />}
           {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
-          <label className="search-box"><input className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+          <label className="search-box"><input ref={searchBox} className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && railSearch) { e.stopPropagation(); endRailSearch(); } }} /></label>
           <nav>
             {found && (
               <>
@@ -613,7 +632,7 @@ function App() {
                 key={c.id}
                 className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                onClick={(e) => pick(c.id, e)}
+                onClick={(e) => { endRailSearch(); pick(c.id, e); }}
                 onContextMenu={menuFor(c)}
                 {...tipProps(c.title, chatColorVar(c.color), true)}
               >
@@ -632,6 +651,7 @@ function App() {
           <Meters
             meta={meta}
             context={live.context}
+            onContextMenu={onCtxMenu}
             saved={me?.claudeTokens.map((t) => t.name) ?? []}
             onSwitch={async (name) => {
               const next = await useClaudeToken(name);

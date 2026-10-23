@@ -48,9 +48,13 @@ function repo(root: string): Repo {
   if (!top) { repos.set(root, null); return null; }
   const files = (git(root, ["ls-files", "-co", "--exclude-standard", "-z"]) ?? "").split("\0").filter(Boolean);
   const status = new Map<string, string>();
-  for (const line of (git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "."]) ?? "").split("\0")) {
+  const lines = (git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "."]) ?? "").split("\0");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line.length < 4) continue;
     const code = line.slice(0, 2);
+    // A rename or copy is followed by its old path, with no status in front: skip it.
+    if (code.includes("R") || code.includes("C")) i++;
     const path = relative(root, join(top, line.slice(3)));
     if (path.startsWith("..")) continue;
     status.set(path, code === "??" ? "U" : code.includes("D") ? "D" : code.includes("A") ? "A" : "M");
@@ -96,15 +100,17 @@ export function listDir(root: string, rel: string): Entry[] | null {
   return [...out.values()].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 }
 
-export function readText(root: string, rel: string): { text: string } | { error: string } {
+// since: the mtime the page already shows; unchanged, the answer is { same: true }.
+export function readText(root: string, rel: string, since?: number): { text: string; mtime: number } | { same: true } | { error: string } {
   const abs = inside(root, rel);
   if (!abs) return { error: "outside the folder" };
   try {
     const st = statSync(abs);
     if (!st.isFile()) return { error: "not a file" };
+    if (since !== undefined && st.mtimeMs === since) return { same: true };
     if (st.size > MAX_BYTES) return { error: `too big to show (${Math.round(st.size / 1000)} KB)` };
     const text = readFileSync(abs, "utf8");
-    return text.includes("\0") ? { error: "not a text file" } : { text };
+    return text.includes("\0") ? { error: "not a text file" } : { text, mtime: st.mtimeMs };
   } catch {
     return { error: "can't read it" };
   }

@@ -1,7 +1,7 @@
 // The forms gallery: every kind of block Claude can draw, each on sample data with its "when to
 // use" line, and the templates saved from freeform blocks. Same renderers as the picture.
 import React, { useEffect, useState } from "react";
-import { FORMS, FORM_NAMES } from "../src/forms";
+import { FORMS, FORM_NAMES, type FormSpec } from "../src/forms";
 import { FormView } from "./forms";
 import { BlockBadge, Diagram, PageFrame } from "./picture";
 import type { Block } from "./types";
@@ -44,7 +44,10 @@ export function FormsGallery({ close }: { close: () => void }) {
   }, [close]);
   // Built-in forms the user deleted (prefs.hiddenForms): Claude doesn't get them; restorable here.
   const [hidden, setHidden] = useState<string[]>([]);
-  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHidden(p.hiddenForms ?? []), () => {}); }, []);
+  // Opt-in forms this instance doesn't have (prefs.notHere) aren't shown at all.
+  const [notHere, setNotHere] = useState<string[]>(FORM_NAMES.filter((f) => (FORMS[f] as FormSpec).optIn));
+  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => { setHidden(p.hiddenForms ?? []); setNotHere(p.notHere ?? []); }, () => {}); }, []);
+  const forms = FORM_NAMES.filter((f) => !notHere.includes(f));
   const setForms = (next: string[]) => {
     setHidden(next);
     fetch("/api/prefs", { method: "PATCH", body: JSON.stringify({ hiddenForms: next }) });
@@ -68,12 +71,12 @@ export function FormsGallery({ close }: { close: () => void }) {
           <Entry n={1} block={{ id: "graph", kind: "graph", name: "", nodes: [], edges: [], groups: [] }} when="Things and how they connect: circles, boxes, arrows, groups. The default.">
             <Diagram scene={SAMPLE_GRAPH} changed={[]} seq={0} />
           </Entry>
-          {FORM_NAMES.map((f, i) => (
+          {forms.map((f, i) => (
             <Entry key={f} n={i + 2} onDelete={hidden.includes(f) ? undefined : () => setDeleting({ kind: "form", name: f })} onRestore={hidden.includes(f) ? () => setForms(hidden.filter((x) => x !== f)) : undefined} block={{ id: f, kind: "form", form: f, data: {} }} when={FORMS[f].when}>
               <FormView form={f} data={FORMS[f].sample} />
             </Entry>
           ))}
-          <Entry n={FORM_NAMES.length + 2} block={{ id: "freeform", kind: "html", html: "", parts: {} }} when="Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge.">
+          <Entry n={forms.length + 2} block={{ id: "freeform", kind: "html", html: "", parts: {} }} when="Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge.">
             <PageFrame html={SAMPLE_FREEFORM} />
           </Entry>
         </div>
@@ -84,7 +87,7 @@ export function FormsGallery({ close }: { close: () => void }) {
               {templates.map((t, i) => (
                 <section key={t.name} className="g-entry">
                   <div className="block-head">
-                    <span className="g-num">#{FORM_NAMES.length + 3 + i}</span>
+                    <span className="g-num">#{forms.length + 3 + i}</span>
                     <BlockBadge block={{ id: t.name, kind: "html", html: t.html, parts: t.parts, template: t.name }} />
                     <button className="tpl-delete" onClick={() => setDeleting({ kind: "template", name: t.name })}>delete</button>
                   </div>

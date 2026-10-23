@@ -46,9 +46,9 @@ function useNow() {
 
 const level = (p: number) => (p >= 90 ? "red" : p >= 70 ? "amber" : "ok");
 
-function Meter({ label, percent, title, children }: { label: string; percent: number; title: string; children?: React.ReactNode }) {
+function Meter({ label, percent, title, children, onContextMenu }: { label: string; percent: number; title: string; children?: React.ReactNode; onContextMenu?: (e: React.MouseEvent) => void }) {
   return (
-    <div className={`meter ${level(percent)}`} title={title}>
+    <div className={`meter ${level(percent)}`} title={title} onContextMenu={onContextMenu}>
       <span className="m-label">{label}</span>
       <span className="m-bar"><span style={{ width: `${Math.min(100, percent)}%` }} /></span>
       <span className="m-num">{percent}%</span>
@@ -83,14 +83,15 @@ export function Pickers(props: { meta: Meta; settings: Settings; model: string; 
 }
 
 // saved = the Claude tokens saved in Settings; with two or more, the plan label switches between them.
-export function Meters({ meta, context, saved, onSwitch }: { meta: Meta; context: Context | null; saved: string[]; onSwitch: (name: string) => void }) {
+// onContextMenu: right click on the Context bar (the compact menu).
+export function Meters({ meta, context, saved, onSwitch, onContextMenu }: { meta: Meta; context: Context | null; saved: string[]; onSwitch: (name: string) => void; onContextMenu?: (e: React.MouseEvent) => void }) {
   const now = useNow();
   if (!context && !meta.limits.length) return null;
   // The token in use (src/account.ts), shared by every profile of this Claudia.
   const plan = meta.accountLabel ? `${meta.accountLabel}'s plan` : "Plan";
   return (
     <div className="meters">
-      {context && <Meter label="Context" percent={context.percent} title={`This chat: ${tokens(context.used)} of ${tokens(context.max)} tokens (${prettyModel(context.model)})`} />}
+      {context && <Meter label="Context" percent={context.percent} title={`This chat: ${tokens(context.used)} of ${tokens(context.max)} tokens (${prettyModel(context.model)}) · right click to compact`} onContextMenu={onContextMenu} />}
       {meta.account && saved.length > 1 ? (
         <label className="pick m-account" title="Switch the Claude subscription for every chat here (applies on each chat's next message)">
           <select value={meta.accountLabel ?? ""} onChange={(e) => onSwitch(e.target.value)}>
@@ -119,11 +120,11 @@ export function Meters({ meta, context, saved, onSwitch }: { meta: Meta; context
 const SHORT: Record<string, string> = { five_hour: "5h", seven_day: "wk", seven_day_opus: "op", seven_day_sonnet: "so" };
 
 // With onClick the ring is a button: on hover its number turns into the action's icon.
-function Ring({ short, percent, tip, icon, onClick }: { short: string; percent: number; tip: string; icon?: React.ReactNode; onClick?: () => void }) {
+function Ring({ short, percent, tip, icon, onClick, onContextMenu }: { short: string; percent: number; tip: string; icon?: React.ReactNode; onClick?: () => void; onContextMenu?: (e: React.MouseEvent) => void }) {
   const r = 14, len = 2 * Math.PI * r;
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag className={`ring ${level(percent)} ${onClick ? "action" : ""}`} onClick={onClick} {...tipProps(tip)}>
+    <Tag className={`ring ${level(percent)} ${onClick ? "action" : ""}`} onClick={onClick} onContextMenu={onContextMenu} {...tipProps(tip)}>
       <svg viewBox="0 0 34 34" aria-hidden="true">
         <circle className="r-track" cx="17" cy="17" r={r} />
         <circle className="r-fill" cx="17" cy="17" r={r} strokeDasharray={`${(Math.min(100, percent) / 100) * len} ${len}`} transform="rotate(-90 17 17)" />
@@ -138,8 +139,9 @@ function Ring({ short, percent, tip, icon, onClick }: { short: string; percent: 
 // Two arrows pressing onto a line: compact.
 const compactIcon = <path d="M17 7.5v6m-3.2-3.2 3.2 3.2 3.2-3.2M17 26.5v-6m-3.2 3.2 3.2-3.2 3.2 3.2M10.5 17h13" />;
 
-// onCompact: runs /compact in the open chat (undefined while a turn runs or the chat is read only).
-export function RailMeters({ meta, context, onCompact }: { meta: Meta; context: Context | null; onCompact?: () => void }) {
+// onCompact: runs /compact in the open chat (undefined while a turn runs or the chat is read only);
+// onContextMenu: right click on the ctx ring (the compact menu).
+export function RailMeters({ meta, context, onCompact, onContextMenu }: { meta: Meta; context: Context | null; onCompact?: () => void; onContextMenu?: (e: React.MouseEvent) => void }) {
   const now = useNow();
   if (!context && !meta.limits.length) return null;
   return (
@@ -151,6 +153,7 @@ export function RailMeters({ meta, context, onCompact }: { meta: Meta; context: 
           tip={`Context ${context.percent}% · ${tokens(context.used)} of ${tokens(context.max)}${onCompact ? " · click to compact" : ""}`}
           icon={compactIcon}
           onClick={onCompact}
+          onContextMenu={onContextMenu}
         />
       )}
       {meta.limits.map((l) => {

@@ -498,15 +498,22 @@ function SaveTemplate({ chat, block }: { chat: string; block: Block }) {
   );
 }
 
-function BlockView({ block, changed, seq, chat, browse }: { block: Block; changed: Set<string>; seq: number; chat?: string; browse?: string }) {
+// kept: the user clicked in this block, so it stays on the picture ("gone": Claude's picture no longer has it).
+type Keep = { kept?: "here" | "gone"; onTouch?: () => void; onUnkeep?: () => void };
+function BlockView({ block, changed, seq, chat, browse, kept, onTouch, onUnkeep }: { block: Block; changed: Set<string>; seq: number; chat?: string; browse?: string } & Keep) {
   const hot = changed.has(block.id) || [...changed].some((c) => c.startsWith(`${block.id}:`));
   return (
-    <section className={`block w-${block.width ?? "full"} k-${block.kind}`}>
+    <section className={`block w-${block.width ?? "full"} k-${block.kind} ${kept === "gone" ? "kept-gone" : ""}`} onClickCapture={kept ? undefined : onTouch}>
       {/* A new glow per change; the block itself stays mounted (an HTML block keeps its page loaded). */}
       {hot && <span key={seq} className="block-glow" />}
       <div className="block-head">
         <BlockBadge block={block} />
         {chat && block.kind === "html" && <SaveTemplate chat={chat} block={block} />}
+        {kept && (
+          <button className={`kept-off ${kept}`} onClick={onUnkeep} title={kept === "gone" ? "Claude took this off the picture; it stays until you close it" : "Kept: stays even when Claude takes it off the picture. Click to stop keeping it"}>
+            {kept === "gone" ? "kept · close ✕" : "kept ✕"}
+          </button>
+        )}
       </div>
       {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
         // Every block is as tall as it is: no inner scrolling, the picture scrolls.
@@ -521,7 +528,28 @@ function BlockView({ block, changed, seq, chat, browse }: { block: Block; change
 // cols: 0 = Claude's layout (full and half blocks), 1–3 = every block one cell in that many columns.
 export function PictureView({ scene, changed, seq, chat, browse, cols = 0 }: { scene: Scene; changed: string[]; seq: number; chat?: string; browse?: string; cols?: number }) {
   const hot = new Set(changed);
-  const blocks = scene.blocks;
+  // A files block the user clicked in stays on the live picture, open files and all, when Claude's
+  // draw removes it or clears the picture, until the user closes it. Kept per chat, for this page.
+  const [kept, setKept] = useState<{ chat?: string; ids: string[] }>({ ids: [] });
+  const keptIds = kept.chat === browse ? kept.ids : [];
+  // The last copy and place of each kept block while Claude's picture had it.
+  const copies = useRef(new Map<string, { block: Block; at: number }>());
+  useEffect(() => { copies.current.clear(); }, [browse]);
+  (scene.blocks ?? []).forEach((b, at) => { if (keptIds.includes(b.id)) copies.current.set(b.id, { block: b, at }); });
+  const keep = (id: string) => setKept((k) => (k.chat === browse && k.ids.includes(id) ? k : { chat: browse, ids: [...(k.chat === browse ? k.ids : []), id] }));
+  const unkeep = (id: string) => { copies.current.delete(id); setKept((k) => ({ chat: browse, ids: k.ids.filter((x) => x !== id) })); };
+  let blocks = scene.blocks;
+  const gone = new Set<string>();
+  if (chat && blocks) {
+    const out = [...blocks];
+    for (const id of keptIds) {
+      const c = copies.current.get(id);
+      if (!c || out.some((b) => b.id === id)) continue;
+      gone.add(id);
+      out.splice(Math.min(c.at, out.length), 0, c.block);
+    }
+    blocks = out;
+  }
   if (blocks ? !blocks.length : !scene.nodes.length && !scene.cards.length)
     return (
       <div className="picture-empty">
@@ -533,7 +561,17 @@ export function PictureView({ scene, changed, seq, chat, browse, cols = 0 }: { s
   if (blocks)
     return (
       <div className={`picture blocks ${cols ? `cols-${cols}` : ""}`}>
-        {blocks.map((b) => <BlockView key={b.id} block={b} changed={hot} seq={seq} chat={chat} browse={browse} />)}
+        {blocks.map((b) => {
+          const isKept = chat ? keptIds.includes(b.id) : false;
+          return (
+            <BlockView
+              key={b.id} block={b} changed={hot} seq={seq} chat={chat} browse={browse}
+              kept={isKept ? (gone.has(b.id) ? "gone" : "here") : undefined}
+              onTouch={chat && b.kind === "form" && b.form === "files" ? () => keep(b.id) : undefined}
+              onUnkeep={() => unkeep(b.id)}
+            />
+          );
+        })}
       </div>
     );
   // A picture from before blocks: its graph and cards as they were drawn.

@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
+import { GitForm } from "./git";
+import { Flow } from "./flow";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -220,11 +222,13 @@ function Code({ data }: { data: Data }) {
   const lastNo = [...rows].reverse().find((r) => r.n != null)?.n;
 
   const out: React.ReactNode[] = [];
+  let openUntil = 0; // rows before this belong to an unfolded stretch
   for (let i = 0; i < rows.length; ) {
-    if (!shown[i]) {
+    if (!shown[i] && i >= openUntil) {
       let j = i;
       while (j < rows.length && !shown[j]) j++;
-      if (!opened.has(i)) {
+      if (opened.has(i)) openUntil = j;
+      else {
         const start = i;
         out.push(
           <button key={`fold${i}`} type="button" className="f-fold" onClick={() => setOpened((o) => new Set(o).add(start))}>
@@ -346,6 +350,8 @@ function ImageBig({ src, close }: { src: string; close: () => void }) {
 // Files: a folder as a tree, read live through the runner (src/files.ts); folders open on click, a
 // file opens in place as a code block. Marks point files out; git status shows as a letter.
 type Entry = { name: string; dir: boolean; status?: string; changed?: number; planned?: boolean; lines?: number };
+// How often open folders and files are read again from disk (only while the page is seen).
+const FILES_POLL_MS = 2500;
 const STATUS_TIP: Record<string, string> = { M: "changed", A: "added", U: "new, not in git yet", D: "deleted" };
 
 function Files({ data, chat, block }: { data: Data; chat?: string; block?: string }) {
@@ -365,7 +371,10 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const sketch: Made[] | null = Array.isArray(data.sketch) ? data.sketch : null;
   const demo: Made[] | null = Array.isArray(data.demo) ? data.demo : null;
   const live = !!root && !demo;
-  const made: Made[] = (sketch ?? demo ?? []).flatMap((e) => { const p = rebase(e.path); return p === null ? [] : [{ ...e, path: p }]; });
+  // Over a real folder the user switches between the sketch (disk + planned files) and the real tree.
+  const [real, setReal] = useState(false);
+  const planned = live && sketch && real ? [] : (sketch ?? demo ?? []);
+  const made: Made[] = planned.flatMap((e) => { const p = rebase(e.path); return p === null ? [] : [{ ...e, path: p }]; });
   const marks = new Map<string, any>(list(data.marks).flatMap((m) => {
     const p = rebase(String(m.path ?? "").replace(/^\.?\//, "").replace(/\/$/, ""));
     return p === null ? [] : [[p, m] as [string, any]];
@@ -377,20 +386,50 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const opened0 = typeof data.file === "string" ? rebase(data.file.replace(/^\.?\//, "")) : firstMarkedFile;
   const [open, setOpen] = useState<Set<string>>(() => new Set(["", ...(opened0 ? ancestors(opened0) : [])]));
   const [dirs, setDirs] = useState<Map<string, Entry[] | { error: string }>>(new Map());
-  const [file, setFile] = useState<{ path: string; text?: string; error?: string; image?: string } | null>(null);
+  // Open files, each shown under its row. The ones the user clicked stay open until the user closes
+  // them; the one Claude named (data.file) gives way when Claude names another.
+  type Opened = { path: string; text?: string; error?: string; image?: string; mtime?: number };
+  const [files, setFiles] = useState<Map<string, Opened>>(new Map());
+  const [mine, setMine] = useState<Set<string>>(new Set());
   const [tick, setTick] = useState(0);
+  // Hidden files (names starting with "."): the user hides them with a checkbox, kept for every files
+  // block. What Claude points at (marks, the opened file and the folders down to them) stays shown.
+  const [hideDot, setHideDot] = useState(() => { try { return localStorage.getItem("files.hideDot") === "1"; } catch { return false; } });
+  const toggleHideDot = (on: boolean) => { setHideDot(on); try { localStorage.setItem("files.hideDot", on ? "1" : "0"); } catch {} };
 
   const url = (path: string, read = false) => `/api/chats/${chat}/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}${read ? "&read=1" : ""}`;
-  // Every open folder is read (again after "refresh").
+  // A folder read again replaces its entries only when they changed, so nothing redraws for nothing.
+  const readDir = (d: string, gone: () => boolean) =>
+    fetch(url(d)).then((r) => r.json()).then((j) => {
+      if (gone()) return;
+      const next = j.entries ?? { error: j.error ?? "can't read" };
+      setDirs((m) => (JSON.stringify(m.get(d)) === JSON.stringify(next) ? m : new Map(m).set(d, next)));
+    }).catch(() => {});
+  // Every open folder is read when it opens (and again after "refresh").
   useEffect(() => {
     if (!live || !chat) return;
     let gone = false;
-    for (const d of open)
-      fetch(url(d)).then((r) => r.json()).then((j) => {
-        if (!gone) setDirs((m) => new Map(m).set(d, j.entries ?? { error: j.error ?? "can't read" }));
-      }).catch(() => {});
+    for (const d of open) readDir(d, () => gone);
     return () => { gone = true; };
   }, [[...open].join("|"), root, chat, tick]);
+  // Live from disk: open folders and open files are read again every FILES_POLL_MS, in place: what
+  // is open stays open. A file comes back only when its mtime moved.
+  const openRef = useRef(open);
+  openRef.current = open;
+  const filesRef = useRef<Map<string, Opened>>(new Map());
+  useEffect(() => {
+    if (!live || !chat) return;
+    let gone = false;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      for (const d of openRef.current) readDir(d, () => gone);
+      for (const f of filesRef.current.values()) {
+        if (f.mtime === undefined) continue;
+        fetch(`${url(f.path, true)}&since=${f.mtime}`).then((r) => r.json()).then((j) => { if (!gone && !j.same) fill({ path: f.path, ...j }); }).catch(() => {});
+      }
+    }, FILES_POLL_MS);
+    return () => { gone = true; clearInterval(timer); };
+  }, [live, root, chat]);
 
   const entriesOf = (d: string): Entry[] | { error: string } | undefined => {
     // Folders come from the paths too ("src/a/b.clj" makes src and src/a), not only from dir entries.
@@ -423,8 +462,9 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   // The file Claude opened: the picture scrolls to its first highlighted line or note.
   const treeRef = useRef<HTMLDivElement>(null);
   const linesKey = JSON.stringify([data.lines, list(data.notes).map((n) => n.line)]);
+  const claudes = opened0 ? files.get(opened0) : undefined;
   useEffect(() => {
-    if (!opened0 || file?.path !== opened0 || file.text === undefined) return;
+    if (claudes?.text === undefined) return;
     const raf = requestAnimationFrame(() => {
       const hit = treeRef.current?.querySelector<HTMLElement>(".f-ln.hot, .f-pin");
       const pane = hit?.closest<HTMLElement>(".right-scroll");
@@ -432,19 +472,32 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       pane.scrollTop += hit.getBoundingClientRect().top - pane.getBoundingClientRect().top - pane.clientHeight / 3;
     });
     return () => cancelAnimationFrame(raf);
-  }, [file?.path, file?.text, linesKey]);
-  const openFile = (path: string) => {
-    if (file?.path === path) return setFile(null);
-    if (live && IMAGE_EXT.test(path)) return setFile({ path, image: url(path) + "&image=1" });
-    setFile({ path });
+  }, [opened0, claudes?.text, linesKey]);
+  // A file read again keeps its old text until the new one comes; a file closed meanwhile stays closed.
+  const fill = (f: Opened) => setFiles((m) => (m.has(f.path) ? new Map(m).set(f.path, f) : m));
+  filesRef.current = files;
+  const load = (path: string) => {
+    setFiles((m) => (m.has(path) ? m : new Map(m).set(path, { path })));
+    if (live && IMAGE_EXT.test(path)) return fill({ path, image: url(path) + "&image=1" });
     // A planned (sketched) file shows the code Claude gave; a file on disk is read.
     const m = made.find((e) => e.path.replace(/\/$/, "") === path);
     const cut = path.lastIndexOf("/");
     const listed = dirs.get(cut < 0 ? "" : path.slice(0, cut));
     const onDisk = live && Array.isArray(listed) && listed.some((x) => x.name === path.slice(cut + 1));
-    if (m && !onDisk) return setFile({ path, text: m.code ?? (demo ? "// a file opens here, coloured like VS Code" : "(no code given for this file)") });
-    if (!live) return setFile({ path, error: "not given" });
-    fetch(url(path, true)).then((r) => r.json()).then((j) => setFile({ path, ...j })).catch(() => setFile({ path, error: "can't read it" }));
+    if (m && !onDisk) return fill({ path, text: m.code ?? (demo ? "// a file opens here, coloured like VS Code" : "(no code given for this file)") });
+    if (!live) return fill({ path, error: "not given" });
+    fetch(url(path, true)).then((r) => r.json()).then((j) => fill({ path, ...j })).catch(() => fill({ path, error: "can't read it" }));
+  };
+  const close = (path: string) => {
+    setFiles((m) => { const n = new Map(m); n.delete(path); return n; });
+    setMine((s) => { const n = new Set(s); n.delete(path); return n; });
+  };
+  const closeAll = () => { setFiles(new Map()); setMine(new Set()); };
+  // A click on a file row: opens it, or closes it when open.
+  const openFile = (path: string) => {
+    if (files.has(path)) return close(path);
+    setMine((s) => new Set(s).add(path));
+    load(path);
   };
   // Another folder: start from its top.
   const firstRoot = useRef(root);
@@ -452,18 +505,23 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     if (firstRoot.current === root) return;
     firstRoot.current = root;
     setDirs(new Map());
-    setFile(null);
+    closeAll();
     setOpen(new Set([""]));
   }, [root]);
-  // Claude names a file (data.file): it opens, now and whenever it names another.
+  // Claude names a file (data.file): it opens, now and whenever it names another; the one it named
+  // before closes unless the user opened it too.
+  const named = useRef<string | null>(null);
   useEffect(() => {
+    const before = named.current;
+    named.current = opened0;
+    if (before && before !== opened0 && !mine.has(before)) close(before);
     if (!opened0) return;
     setOpen((o) => new Set([...o, ...ancestors(opened0)]));
-    setFile(null);
-    openFile(opened0);
+    load(opened0);
   }, [opened0, root]);
   const toggle = (d: string) => setOpen((o) => { const n = new Set(o); n.has(d) ? n.delete(d) : n.add(d); return n; });
 
+  const pointed = new Set([...marks.keys(), ...(opened0 ? [opened0] : [])].flatMap((p) => [p, ...ancestors(p)]));
   const rows: React.ReactNode[] = [];
   const walk = (d: string, depth: number) => {
     const es = entriesOf(d);
@@ -471,8 +529,10 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     if ("error" in es) { rows.push(<div key={`e${d}`} className="f-tree-row err" style={{ "--depth": depth } as React.CSSProperties}>{es.error}</div>); return; }
     for (const e of es) {
       const path = d ? `${d}/${e.name}` : e.name;
+      if (hideDot && e.name.startsWith(".") && !pointed.has(path)) continue;
       const m = marks.get(path);
-      const isOpen = e.dir ? open.has(path) : file?.path === path;
+      const file = e.dir ? undefined : files.get(path);
+      const isOpen = e.dir ? open.has(path) : !!file;
       rows.push(
         <button
           key={path}
@@ -513,19 +573,33 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const home = root.replace(/^\/home\/[^/]+/, "~");
   return (
     <div className="f-files">
-      <div className="f-code-head">
+      <div className="f-code-head f-files-head">
         <span className="f-file" title={root}>
           {!live && sketch ? <b>{typeof data.title === "string" ? data.title : "planned files"}</b>
             : demo ? <><span className="dir">~/Work/apps/</span><b>shop</b></>
             : <Crumbs root={root} go={setRoot} />}
         </span>
-        {live && root !== drawn && <button type="button" className="f-copy" onClick={() => setRoot(drawn)} title={`Back to ${drawn.replace(/^\/home\/[^/]+/, "~")}`}>↺ back</button>}
-        {/* Real or made up, said up front. */}
-        {live && <span className="f-kind real" title="Read live from disk">on disk</span>}
-        {sketch && <span className="f-kind made" title="Files Claude sketched; they are not on disk">{live ? `+ ${sketch.length} planned` : "sketch · not on disk"}</span>}
+        {/* Real or made up, said up front, next to the path. */}
+        {live && sketch ? (
+          <span className="f-kinds" role="radiogroup" aria-label="Sketch or real">
+            <button type="button" role="radio" aria-checked={!real} className={`f-kind made ${real ? "" : "on"}`} onClick={() => setReal(false)} title="The sketch: the folder on disk plus the files Claude planned">sketch · + {sketch.length} planned</button>
+            <button type="button" role="radio" aria-checked={real} className={`f-kind real ${real ? "on" : ""}`} onClick={() => setReal(true)} title="Only what is on disk, read live">real</button>
+          </span>
+        ) : <>
+          {live && <span className="f-kind real" title="Read live from disk">on disk</span>}
+          {sketch && <span className="f-kind made" title="Files Claude sketched; they are not on disk">sketch · not on disk</span>}
+        </>}
         {demo && <span className="f-kind made">example</span>}
-        {open.size > 1 && <button type="button" className="f-copy" onClick={() => { setOpen(new Set([""])); setFile(null); }}>collapse all</button>}
-        {live && <button type="button" className="f-copy" onClick={() => { setDirs(new Map()); setTick((t) => t + 1); }}>refresh</button>}
+        <span className="f-tools">
+          <label className="f-tool f-check" title="Hide files and folders whose name starts with a dot">
+            <input type="checkbox" checked={hideDot} onChange={(e) => toggleHideDot(e.target.checked)} />
+            <span className="box" aria-hidden />hide hidden
+          </label>
+          <span className="f-tools-sep" aria-hidden />
+          {live && root !== drawn && <button type="button" className="f-tool" onClick={() => setRoot(drawn)} title={`Back to ${drawn.replace(/^\/home\/[^/]+/, "~")}`}>↺ back</button>}
+          <button type="button" className="f-tool" disabled={!(open.size > 1 || files.size > 0)} onClick={() => { setOpen(new Set([""])); closeAll(); }}>collapse all</button>
+          {live && <button type="button" className="f-tool" onClick={() => { setTick((t) => t + 1); for (const f of files.values()) if (f.mtime !== undefined) load(f.path); }}>refresh</button>}
+        </span>
       </div>
       <div className="f-tree" ref={treeRef}>{live && !chat ? <p className="f-note">Open this chat to browse its files.</p> : rows}</div>
       {big && <ImageBig src={big} close={() => setBig(null)} />}
@@ -539,12 +613,14 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }
   compare: Compare,
   chart: Chart,
   stats: Stats,
-  code: Code,
   files: Files,
+  git: GitForm,
+  flow: Flow,
 };
 
-// chat: the chat whose picture this is, for forms that read through the runner (files).
+// chat: the chat whose picture this is, for forms that read through the runner (files, git).
 export function FormView({ form, data, chat, block }: { form: FormName; data: Data; chat?: string; block?: string }) {
-  const R = RENDER[form];
+  // "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
+  const R = (form as string) === "code" ? Code : RENDER[form];
   return <div className={`form-view form-${form}`}>{R ? <R data={data} chat={chat} block={block} /> : <p className="f-note">Unknown form "{form}".</p>}</div>;
 }

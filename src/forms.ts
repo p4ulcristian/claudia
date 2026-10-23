@@ -12,6 +12,7 @@ export type FormSpec = {
   when: string; // when Claude should reach for it
   fields: string; // its data, in one line, for the tool description
   sample: Record<string, unknown>;
+  optIn?: boolean; // only on runners that name it in CLAUDIA_FORMS (src/chat.ts)
 };
 
 export const FORMS = {
@@ -81,26 +82,9 @@ export const FORMS = {
       ],
     },
   },
-  code: {
-    label: "Code",
-    when: "Code when the code is the point: the change you made, the function at fault, a snippet to talk about, or a whole file with the parts that matter marked. Coloured like VS Code. Mark the lines that matter; pin a short note to a line instead of explaining it in the chat. To show a whole file, send file and no code: Claudia reads it itself (no need to send its text) and folds it down to the marked and noted lines, which the user can unfold.",
-    fields: "file? (its path, relative to the working folder; without code the whole file is read), line? (number of the first line of code, default 1), lang? (else taken from the file name), code? (the lines as one string; with diff: true each line starts with '+', '-' or ' '), diff?: boolean, mark?: [line numbers or \"a-b\" ranges], notes?: [{ id, line, text, color? }] pinned under that line. Later calls send only what changed (a new note, other marks); sending file again without code reads it again",
-    sample: {
-      file: "src/orders/total.ts",
-      line: 12,
-      diff: true,
-      code: [
-        " export function orderTotal(items: Item[]) {",
-        "-  return items.reduce((sum, i) => sum + i.price, 0);",
-        "+  return items.reduce((sum, i) => sum + i.price * i.qty, 0);",
-        " }",
-      ].join("\n"),
-      notes: [{ id: "qty", line: 13, text: "quantity was ignored: 3 coats billed as 1", color: "amber" }],
-    },
-  },
   files: {
     label: "Files",
-    when: "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out. For files that don't exist yet (a planned layout, a sketch of a library), send sketch: alone it is a made-up tree; with root it adds planned files to the real one. Each is labelled for the user (on disk / sketch / planned), so never present made-up files as real.",
+    when: "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter, and any code to show: open the file (file) with the lines that matter highlighted (lines) and short notes pinned to lines (notes) instead of explaining in the chat; code that isn't on disk (a proposal, a snippet) goes in sketch. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out. For files that don't exist yet (a planned layout, a sketch of a library), send sketch: alone it is a made-up tree; with root it adds planned files to the real one. Each is labelled for the user (on disk / sketch / planned), so never present made-up files as real.",
     fields: "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), file? (the selected file, relative to root: shown open, whole, with only the folders down to it unfolded; without it the first marked file is selected), lines?: [line numbers or \"a-b\" ranges to highlight in that file; it scrolls to the first], notes?: [{ id, line, text, color? }] pinned under lines of that file, marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out. Planned files: sketch: [{ path (relative to root when root is given), code?, status? }] (folders come from the paths), title? (what a root-less sketch is); marks work the same",
     sample: {
       demo: [
@@ -112,6 +96,59 @@ export const FORMS = {
         { path: "README.md" },
       ],
       marks: [{ id: "t", path: "src/orders/total.ts", note: "the fix", color: "amber" }],
+    },
+  },
+  git: {
+    label: "Git",
+    optIn: true,
+    when: "A repo's history as a live commit graph, like GitGud: branches in coloured lanes (local, remote or both, ahead/behind), HEAD, tags, the uncommitted changes as a dashed node above HEAD; the user clicks a commit for its files and diff. Read live from the repo and redrawn when it changes (a commit, a checkout, an edit), so you send only the repo and what to point out. Read only: it never changes the repo.",
+    fields: "repo? (a folder in the repo: absolute, ~/…, or relative to the working folder; default the working folder), branches?: [branch names to graph; default all], limit? (commits, default 100), commit? (a hash, branch, tag or \"WORKING\" to open for the user), marks?: [{ id, commit (a hash, branch, tag, \"HEAD\" or \"WORKING\"), note?, color? }] commits to point out",
+    sample: {
+      demo: {
+        head: "c4",
+        currentBranch: "fix/tax",
+        dirty: { total: 2, staged: 0, unstaged: 1, untracked: 1, files: [{ path: "src/orders/total.ts", status: "M" }, { path: "src/orders/tax.test.ts", status: "?" }] },
+        branches: [
+          { name: "fix/tax", kind: "local", local: true, current: true },
+          { name: "main", kind: "both", local: true, tracked: true, ahead: 0, behind: 0 },
+          { name: "origin/shops", kind: "remote", local: false },
+        ],
+        commits: [
+          { hash: "c4", parents: ["c2"], author: "Paul", when: "20 minutes ago", time: 1_000_000, refs: [{ type: "head", name: "fix/tax" }], subject: "Tax on shipping too" },
+          { hash: "c3", parents: ["c1"], author: "Ananda", when: "5 hours ago", time: 983_000, refs: [{ type: "remote", name: "origin/shops" }], subject: "Shop list paging" },
+          { hash: "c2", parents: ["c1", "c0"], author: "Paul", when: "yesterday", time: 914_000, refs: [{ type: "branch", name: "main", tracked: true, ahead: 0, behind: 0 }], subject: "Merge orders: quantities" },
+          { hash: "c0", parents: ["c1"], author: "Peter", when: "2 days ago", time: 830_000, refs: [], subject: "Bill each coat's quantity" },
+          { hash: "c1", parents: [], author: "Paul", when: "3 days ago", time: 760_000, refs: [{ type: "tag", name: "v1.4" }], subject: "Orders: totals" },
+        ],
+      },
+      marks: [{ id: "m", commit: "c0", note: "the quantity fix", color: "amber" }],
+    },
+  },
+  flow: {
+    label: "Flow",
+    when: "Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline.",
+    fields: "stations: [{ id, label, note?, steps?: [{ id, label }] }] left to right, lanes?: [{ id, label }] one row per kind of thing that travels (default one), scenarios?: [{ id, label, frames }] or frames for one way through; a frame: { caption, cards?: [{ lane? (default the first), at (a station or step id), title?, body? (text, kept to a few lines), lang? (colours body), new? (a piece of body to mark as just added), color?, dim? }], on?: [station or step ids lit], leave?: [step ids, dashed: on the way out], skip?: [step ids, struck: never run] }. A lane's card slides when its at changes; a lane without a card in a frame fades out",
+    sample: {
+      stations: [
+        { id: "browser", label: "Browser", note: "the screen" },
+        { id: "api", label: "API", note: "checks", steps: [{ id: "who", label: "who?" }, { id: "may", label: "may they?" }] },
+        { id: "db", label: "Postgres", note: "the data" },
+      ],
+      lanes: [{ id: "req", label: "the request" }, { id: "work", label: "work + replies" }],
+      scenarios: [
+        { id: "ok", label: "Anna (her shop)", frames: [
+          { caption: "The screen asks to hand order 42 over.", cards: [{ lane: "req", at: "browser", title: "request", body: "POST /orders/42/hand", color: "grey" }] },
+          { caption: "The API reads the cookie: Anna is asking.", on: ["who"], cards: [{ lane: "req", at: "who", title: "request", body: "order 42\nperson: Anna", new: "person: Anna", color: "violet" }] },
+          { caption: "Is order 42 in her shop? A SELECT goes to Postgres.", on: ["may"], cards: [{ lane: "req", at: "may", title: "request (waiting)", body: "order 42\nperson: Anna", color: "violet", dim: true }, { lane: "work", at: "db", title: "SQL", body: "SELECT shop_id FROM orders\nWHERE id = 42", lang: "sql", color: "amber" }] },
+          { caption: "Shop 7: hers. The order is handed over.", on: ["may"], cards: [{ lane: "req", at: "may", title: "answer", body: "status: handed", color: "green" }] },
+          { caption: "The screen shows \"handed\".", leave: ["may", "who"], cards: [{ lane: "req", at: "browser", title: "done", body: "status: handed", color: "green" }] },
+        ] },
+        { id: "no", label: "Bob (not his)", frames: [
+          { caption: "Bob asks to hand order 42 over.", cards: [{ lane: "req", at: "browser", title: "request", body: "POST /orders/42/hand", color: "grey" }] },
+          { caption: "The cookie says Bob; order 42 is in shop 7, not his.", on: ["may"], cards: [{ lane: "req", at: "may", title: "answer", body: "status: not found", color: "red" }] },
+          { caption: "Bob sees \"not found\". Nothing changed.", leave: ["may", "who"], cards: [{ lane: "req", at: "browser", title: "done", body: "status: not found", color: "red" }] },
+        ] },
+      ],
     },
   },
 } satisfies Record<string, FormSpec>;

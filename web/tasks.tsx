@@ -3,12 +3,12 @@ import React, { useEffect, useState } from "react";
 import { Transcript } from "./chat";
 import type { Item, Task } from "./types";
 
-function since(t: Task) {
+export function since(t: Task) {
   const s = Math.max(0, Math.floor(((t.endedAt ?? Date.now()) - t.startedAt) / 1000));
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function useTick(on: boolean) {
+export function useTick(on: boolean) {
   const [, set] = useState(0);
   useEffect(() => {
     if (!on) return;

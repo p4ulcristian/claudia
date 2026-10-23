@@ -3,17 +3,16 @@ import { getSessionMessages, getSessionInfo, type SDKMessage, type PermissionRes
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
-import { readFileSync, statSync } from "node:fs";
 import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
 import { account, type Account } from "./account";
 import { pictureMcp, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
-import { FORMS, FORM_NAMES } from "./forms";
+import { FORMS, FORM_NAMES, type FormName, type FormSpec } from "./forms";
 import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
-import { applyDraw, describe, emptyScene, type DrawInput, type Scene } from "./scene";
+import { applyDraw, describe, emptyScene, type Block, type DrawInput, type Scene } from "./scene";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
@@ -50,7 +49,7 @@ export type Task = {
 };
 export type Context = { used: number; max: number; percent: number; model: string };
 // forms: the chat's choices in the row over the picture (left out = Claude decides).
-export type FormChoice = "use" | "off";
+export type FormChoice = "required" | "off";
 // cols: the picture's columns (0 = Claude's layout, 1–3 = that many equal columns).
 // prevColor: the colour before the chat was made passive.
 export type Settings = { model: string | null; effort: string | null; folder: string | null; color: string | null; forms: Record<string, FormChoice>; cols: number; prevColor: string | null };
@@ -155,13 +154,59 @@ function assistantItems(msgId: string, content: any[]): Item[] {
   return out;
 }
 
+// A compaction starts a new chain in the session file (the boundary's parentUuid is null) and the SDK
+// returns only the last chain. The chains before it are read from the file here, oldest first, so the
+// whole chat shows (and search hits from before a compaction have a message to jump to). Each
+// compaction becomes a note in place of its summary message.
+type Said = { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null; compacted?: number };
+async function withEarlierChains(sessionId: string, msgs: Said[]): Promise<Said[]> {
+  if (!msgs.length) return msgs;
+  const file = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects", WORK.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+  const text = await Bun.file(file).text().catch(() => "");
+  if (!text.includes('"compact_boundary"')) return msgs;
+  const byUuid = new Map<string, any>();
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    try { const e = JSON.parse(line); if (e.uuid) byUuid.set(e.uuid, e); } catch {}
+  }
+  const rootOf = (uuid: string) => {
+    let e = byUuid.get(uuid);
+    for (let n = 0; e?.parentUuid && n < 1e6; n++) e = byUuid.get(e.parentUuid) ?? null;
+    return e;
+  };
+  const note = (b: any): Said => ({ type: "compacted", uuid: b.uuid, message: null, parent_tool_use_id: null, compacted: b.compactMetadata?.preTokens ?? 0 });
+  const summaries = new Set([...byUuid.values()].filter((e) => e.isCompactSummary).map((e) => e.uuid));
+  const out: Said[] = msgs.flatMap((m) => (summaries.has(m.uuid) ? [] : [m]));
+  let boundary = rootOf(msgs[0]!.uuid);
+  const seen = new Set<string>();
+  while (boundary?.subtype === "compact_boundary" && boundary.logicalParentUuid && !seen.has(boundary.uuid)) {
+    seen.add(boundary.uuid);
+    out.unshift(note(boundary));
+    const chain: Said[] = [];
+    let e = byUuid.get(boundary.logicalParentUuid);
+    let root = e;
+    for (; e; e = e.parentUuid ? byUuid.get(e.parentUuid) : null) {
+      root = e;
+      if ((e.type === "user" || e.type === "assistant") && !e.isSidechain && !e.isMeta && !e.isCompactSummary && e.message)
+        chain.push({ type: e.type, uuid: e.uuid, message: e.message, parent_tool_use_id: null });
+    }
+    out.unshift(...chain.reverse());
+    boundary = root;
+  }
+  return out;
+}
+
 export async function loadHistory(sessionId: string): Promise<Item[]> {
-  const msgs = await getSessionMessages(sessionId, { dir: WORK });
+  const msgs = await withEarlierChains(sessionId, await getSessionMessages(sessionId, { dir: WORK }));
   const items: Item[] = [];
   const tools = new Map<string, Extract<Item, { k: "tool" }>>();
   const asked = new Map<string, Question[]>();
   for (const m of msgs) {
     if (m.parent_tool_use_id) continue;
+    if (m.compacted !== undefined) {
+      items.push({ k: "note", id: m.uuid, text: `Context compacted (${Math.round(m.compacted / 1000)}k tokens before).` });
+      continue;
+    }
     const msg = m.message as any;
     if (m.type === "assistant") {
       for (const b of msg?.content ?? []) if (b.type === "tool_use" && b.name === "AskUserQuestion") asked.set(b.id, b.input?.questions ?? []);
@@ -216,13 +261,21 @@ function templateList(): string {
     + '\nDraw one with blocks: [{ id, template: "<name>", parts? }]; change one with save_template.';
 }
 
+// Opt-in forms (FormSpec.optIn) exist only on runners that name them in CLAUDIA_FORMS (destiny: git).
+// Elsewhere they are left out like forms the user deleted, and the page doesn't show them (/api/prefs).
+const TURNED_ON = new Set((process.env.CLAUDIA_FORMS ?? "").split(/[\s,]+/).filter(Boolean));
+export const NOT_HERE: string[] = FORM_NAMES.filter((f) => (FORMS[f] as FormSpec).optIn && !TURNED_ON.has(f));
+const hiddenForms = () => [...store.prefs().hiddenForms, ...NOT_HERE];
+// The names of the blocks Claudia puts on the picture when files or git turns green.
+const AUTO_NAMES: Record<string, string> = { files: "Project files", git: "History" };
+
 // The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
 // The forms a chat can draw now, each with a fingerprint of how it's used: compared with what the chat
 // last saw, so a change is told inside its conversation (draw results, the next message), which Claude
 // trusts more than the instructions it started with.
 type FormsSeen = Record<string, string>;
 function formsNow(forms: Record<string, FormChoice>): FormsSeen {
-  const off = new Set([...store.prefs().hiddenForms, ...Object.keys(forms).filter((f) => forms[f] === "off")]);
+  const off = new Set([...hiddenForms(), ...Object.keys(forms).filter((f) => forms[f] === "off")]);
   return Object.fromEntries(FORM_NAMES.filter((f) => !off.has(f)).map((f) => [f, Bun.hash(FORMS[f].when + FORMS[f].fields).toString(36)]));
 }
 // seen null: a chat from before this was kept, so it hears the whole list once.
@@ -246,23 +299,24 @@ const PROMPT_VERSION = Bun.hash(SYSTEM_APPEND).toString(36);
 
 // What the form row now asks, in words for Claude.
 function formsNote(forms: Record<string, FormChoice>): string {
-  const use = Object.keys(forms).filter((f) => forms[f] === "use");
+  const required = requiredKinds(forms);
   const off = Object.keys(forms).filter((f) => forms[f] === "off");
   const name = (f: string) => (f === "freeform" ? "freeform (your own HTML page)" : f === "graph" ? "graphs (circles, boxes, arrows)" : f === "questions" ? "questions (AskUserQuestion buttons: decide yourself instead)" : `the ${f} form`);
-  const kinds = use.filter((f) => f !== "questions");
   const parts = [
-    kinds.length && `The user made ONLY these green in Claudia's form row: ${kinds.map(name).join(", ")}. Draw with these and nothing else: other forms, graphs and freeform are refused by draw. Redraw the current picture with them now${kinds.includes("freeform") ? "; freeform green means: be creative, build an interactive page where it helps" : ""}.`,
+    required.length && `The user made these REQUIRED in Claudia's form row: ${required.map(name).join(", ")}. The picture must always hold at least one block of each: add ${required.length > 1 ? "them" : "it"} now where missing; draw refuses a change that takes the last one away. Every other kind not switched off stays allowed${required.includes("freeform") ? "; freeform required means: be creative, build an interactive page where it helps" : ""}.`,
     off.length && `Switched OFF: ${off.map(name).join(", ")}; don't use ${off.length > 1 ? "them" : "it"} (draw refuses).`,
-    !use.length && !off.length && "The user reset Claudia's form row: choose forms yourself again.",
+    !required.length && !off.length && "The user reset Claudia's form row: choose forms yourself again.",
   ].filter(Boolean);
   return parts.join(" ");
 }
 
-// A chat's own choices (forms on "off" leave its tool too, "use" ones are asked for) come with it.
+// The kinds that must stay in the picture (questions can't be required: they are only on or off).
+const requiredKinds = (forms: Record<string, FormChoice>) => Object.keys(forms).filter((f) => forms[f] === "required" && f !== "questions");
+
+// A chat's own choices (forms on "off" leave its tool too, "required" ones must stay drawn) come with it.
 const tools = (forms: Record<string, FormChoice> = {}) => {
   const off = Object.keys(forms).filter((f) => forms[f] === "off");
-  const use = Object.keys(forms).filter((f) => forms[f] === "use");
-  return { picture: pictureMcp([...store.prefs().hiddenForms, ...off], use), workspace: WORKSPACE_MCP };
+  return { picture: pictureMcp([...hiddenForms(), ...off], requiredKinds(forms)), workspace: WORKSPACE_MCP };
 };
 const toolsVersion = (t: ReturnType<typeof tools>) => Bun.hash(JSON.stringify(t)).toString(36);
 
@@ -347,24 +401,20 @@ export class Chat implements SessionHandler {
   }
 
   // Forms that need no thinking show the moment they turn green: files (the working folder), git (its
-  // repo), code (the file this chat changed last). Turned off again, Claudia's block goes. Returns a
-  // line for Claude about what it added.
-  private instantForms(before: Record<string, FormChoice>, now: Record<string, FormChoice>): string | null {
+  // repo). Turned off again, Claudia's block goes. Returns a line for Claude about what it added.
+  private autoFill(): Record<string, Record<string, unknown>> {
     const folder = this.settings.folder ?? WORK;
-    const lastFile = store.changes(this.id).at(-1)?.path;
-    const fill: Record<string, Record<string, unknown> | null> = {
-      files: { root: folder },
-      git: { repo: folder },
-      code: lastFile ? { file: lastFile } : null,
-    };
-    const names: Record<string, string> = { files: "Project files", git: "History", code: "Last change" };
+    return { files: { root: folder }, git: { repo: folder } };
+  }
+  private instantForms(before: Record<string, FormChoice>, now: Record<string, FormChoice>): string | null {
+    const fill = this.autoFill();
     const add: NonNullable<DrawInput["blocks"]> = [];
     const remove: string[] = [];
     for (const f of Object.keys(fill)) {
       if (!(FORM_NAMES as readonly string[]).includes(f)) continue;
-      const on = now[f] === "use", was = before[f] === "use";
+      const on = now[f] === "required", was = before[f] === "required";
       const id = `auto-${f}`;
-      if (on && !was && fill[f] && !this.scene.blocks?.some((b) => b.id === id)) add.push({ id, form: f as any, name: names[f], data: fill[f]! });
+      if (on && !was && !this.scene.blocks?.some((b) => b.id === id)) add.push({ id, form: f as any, name: AUTO_NAMES[f], data: fill[f] });
       if (!on && was && this.scene.blocks?.some((b) => b.id === id)) remove.push(id);
     }
     // Switched off: every block of that kind leaves the current picture (graphs and freeform too).
@@ -651,12 +701,11 @@ export class Chat implements SessionHandler {
       b.name ??= t.name;
     }
     if (missing.length) input = { ...input, blocks: input.blocks!.filter((b) => !b.template || !missing.includes(b.template)) };
-    // The form row decides what may be drawn. Off (or deleted in the Forms window): refused. Green
-    // ("use"): only the green ones; graphs and freeform count as kinds too.
+    // The form row decides what may be drawn. Off (or deleted in the Forms window): refused. Required:
+    // checked after the draw (below); graphs and freeform count as kinds too.
     const choice = this.settings.forms ?? {};
-    const hidden = new Set([...store.prefs().hiddenForms, ...Object.keys(choice).filter((f) => choice[f] === "off")]);
-    const only = new Set(Object.keys(choice).filter((f) => choice[f] === "use" && f !== "questions"));
-    const allowed = (kind: string) => !hidden.has(kind) && (!only.size || only.has(kind));
+    const hidden = new Set([...hiddenForms(), ...Object.keys(choice).filter((f) => choice[f] === "off")]);
+    const allowed = (kind: string) => !hidden.has(kind);
     const kindOf = (b: NonNullable<DrawInput["blocks"]>[number]) => {
       if (b.form) return b.form;
       if (b.html !== undefined || b.template) return "freeform";
@@ -679,16 +728,6 @@ export class Chat implements SessionHandler {
       refused.push("graph");
       input = { ...input, nodes: undefined, edges: undefined, groups: undefined };
     }
-    // A code block given a file and no code shows the whole file, read here (as it is now).
-    const unread: string[] = [];
-    for (const b of input.blocks ?? []) {
-      const d = b.data;
-      const isCode = b.form === "code" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "code"));
-      if (!isCode || !d || typeof d.file !== "string" || d.code !== undefined) continue;
-      const text = this.readForPicture(d.file);
-      if (typeof text === "string") b.data = { ...d, code: text, line: 1, diff: false, error: null };
-      else { b.data = { ...d, code: "", error: text.error }; unread.push(text.error); }
-    }
     // A files block reads its folder live (src/files.ts): the root is made absolute here, which is
     // also what lets the page read inside it.
     for (const b of input.blocks ?? []) {
@@ -696,33 +735,55 @@ export class Chat implements SessionHandler {
       if (!isFiles) continue;
       const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
       const given = typeof b.data?.root === "string" ? b.data.root : undefined;
+      // Claudia's block (auto-files) is the user's live folder: Claude may lay a sketch over it, but a
+      // root left out or null keeps the folder it has, so the user can still switch to the real tree.
+      if (b.id === "auto-files" && given === undefined) {
+        const had = known?.kind === "form" && typeof known.data?.root === "string" ? known.data.root : this.autoFill().files.root;
+        b.data = { ...b.data, root: had };
+        continue;
+      }
       if (given === undefined && (known || Array.isArray(b.data?.sketch))) continue;
       const base = this.settings.folder ?? WORK;
       b.data = { ...b.data, root: resolve(base, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
     }
-    const { scene, changed } = applyDraw(this.scene, input);
+    // A git block reads its repo live (src/git.ts) the same way: repo made absolute, or the working folder.
+    for (const b of input.blocks ?? []) {
+      const isGit = b.form === "git" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "git"));
+      if (!isGit || b.data?.demo) continue;
+      const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
+      const given = typeof b.data?.repo === "string" ? b.data.repo : undefined;
+      if (given === undefined && known) continue;
+      b.data = { ...b.data, repo: resolve(this.settings.folder ?? WORK, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
+    }
+    let { scene, changed } = applyDraw(this.scene, input);
+    // Claudia's block of a green form (auto-files, auto-git) is the user's: Claude's clear or
+    // removeBlocks doesn't take it off (its last copy comes back, last); turning the form off does.
+    const fill = this.autoFill();
+    const back: Block[] = [];
+    for (const f of Object.keys(fill)) {
+      const id = `auto-${f}`;
+      if (choice[f] !== "required" || hidden.has(f) || scene.blocks?.some((b) => b.id === id)) continue;
+      back.push(this.scene.blocks?.find((b) => b.id === id) ?? { id, kind: "form", form: f as FormName, name: AUTO_NAMES[f], data: fill[f] });
+    }
+    if (back.length) {
+      scene = { ...scene, blocks: [...(scene.blocks ?? []), ...back] };
+      changed = [...changed, ...back.map((b) => b.id)];
+    }
+    // Required kinds: a draw that takes the last block of one away is refused whole; one still
+    // missing (never drawn yet) is named in the reply, so Claude adds it.
+    const required = requiredKinds(choice).filter((k) => !hidden.has(k));
+    const kindsIn = (s: Scene) => new Set((s.blocks ?? []).map((b) => (b.kind === "form" ? b.form : b.kind === "html" ? "freeform" : "graph") as string));
+    const had = kindsIn(this.scene), has = kindsIn(scene);
+    const lost = required.filter((k) => had.has(k) && !has.has(k));
+    if (lost.length) return `Not drawn: this change takes the last ${lost.join(", ")} block out of the picture, and the user made ${lost.length > 1 ? "those" : "that"} required in this chat (form row). Keep one, or put a new one in the same call.`;
+    const absent = required.filter((k) => !has.has(k));
     this.scene = scene;
     this.drew = true;
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
     const news = this.seeForms();
-    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${unread.length ? `. ${unread.join(". ")}` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: ${only.size ? `the user allows only ${[...only].join(", ")} in this chat (green in the form row); redraw it with ${only.size > 1 ? "those" : "that"}` : "switched off by the user; use another kind"}` : ""}`;
-  }
-
-  // A file for a code block: its path relative to the working folder (or ~/Work), at most 2 MB of text.
-  private readForPicture(path: string): string | { error: string } {
-    const abs = resolve(this.settings.folder ?? WORK, path.replace(/^~(?=\/|$)/, homedir()));
-    try {
-      const st = statSync(abs);
-      if (!st.isFile()) return { error: `Not a file: ${path}` };
-      if (st.size > 2_000_000) return { error: `Too big to show whole: ${path} (${Math.round(st.size / 1000)} KB); send the lines as code instead` };
-      const text = readFileSync(abs, "utf8");
-      if (text.includes("\0")) return { error: `Not a text file: ${path}` };
-      return text;
-    } catch {
-      return { error: `Can't read ${path}` };
-    }
+    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: switched off by the user; use another kind` : ""}${absent.length ? `. Still missing, required by the user in this chat: ${absent.join(", ")}; add ${absent.length > 1 ? "them" : "it"}.` : ""}`;
   }
 
   // Save a block of the picture as a template (from Claude's save_template tool or the Save button).

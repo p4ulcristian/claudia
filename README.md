@@ -36,6 +36,10 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 16. Asked from outside (2026-10-22): a program that can reach a profile's runner (on the box: the page, and the users its socket's ACL adds, e.g. Eye on Rainbow for its character Gus) starts a chat with `POST /api/delegate {text}` and follows it with `GET /api/chats/:id/state` (running, waiting on a question, last answer, and its newest step, tool count, start and running agents for a progress line); `POST /api/chats/:id/send {text}` adds a follow-up to that chat (2026-10-22). `POST /api/chats/:id/answer {text}` answers its open question(s) in words. The chat is the profile's own, in its sidebar like any other, so the person can open it and steer.
 
+17. The git form (2026-10-22): a repo's history as GitGud showed it (commit graph in lanes, branches local/remote/both with ahead/behind, the uncommitted changes as a dashed node, a commit's files and word-level diff), read live through the runner (`src/git.ts`) and redrawn when the repo's fingerprint changes. Read only: no checkout, branch or fetch buttons; git actions stay in the chat where the user sees them. It is an opt-in form: only runners started with `CLAUDIA_FORMS=git` have it (destiny's runner drop-in); elsewhere Claude doesn't get it and the page doesn't show it.
+
+18. Form row states (2026-10-23): each circle is allowed (default) → required → off. Required means the picture always holds at least one block of that kind: Claude adds it on the next message and draw refuses a change that takes the last one away; the other kinds stay allowed. Off: draw refuses it and its blocks leave the picture. Questions only go allowed ↔ off. Instead of green = "only these kinds", which blocked every other kind with one click.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass. The few calls bypass still sends to the permission callback (its own safety checks) are allowed and logged by the runner, so no permission ask shows; only questions and plan approval reach the user.
 
 ## Files
@@ -54,6 +58,7 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/account.ts`: the Claude token the chats run on
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
+- `src/forms.ts`: the predefined forms; `src/files.ts` and `src/git.ts` (+ `src/git-layout.ts`) read for the files and git forms; renderers in `web/forms.tsx`, `web/git.tsx` and `web/flow.tsx`
 - `src/timeline.ts`: lanes and steps from the session files, read only from where the last read stopped
 - `deploy/`: a shared server: `install.sh`, the page unit, the per-profile host and runner units, and `update.sh` + its timer (follows GitHub main every 5 min; runners restart, hosts only with `--restart-hosts`)
 - `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right, `rightbar.tsx` the bar under it, `activity.tsx` the pill at its top right (background agents + changes)

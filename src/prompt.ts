@@ -29,7 +29,7 @@ How to draw well:
 - Groups put related things in one frame (a server, a file, a phase).
 - Keep a graph to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note. Use more graph blocks for separate views (the flow, the data), not one crowded graph.
 
-Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the code form, never in freeform HTML. There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
+Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the files form (the file opened, lines highlighted, notes pinned), never in freeform HTML. There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
 To change a freeform block, don't resend it: mark what will change with data-part="name" (a number, a row, a status line) and send only parts: { name: "<new markup>" }. Send html again only when the layout itself changes.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
@@ -116,10 +116,9 @@ export const WORKSPACE_MCP: McpDef = {
 };
 
 // hidden: forms the user deleted; they leave the tool's description and its list of forms.
-// use: forms the user asked for in this chat (the row over the picture).
-export const pictureMcp = (hidden: string[] = [], use: string[] = []): McpDef => {
+// required: kinds the user made required in this chat (the row over the picture).
+export const pictureMcp = (hidden: string[] = [], required: string[] = []): McpDef => {
   const forms = FORM_NAMES.filter((f) => !hidden.includes(f));
-  const asked = use.filter((f) => (forms as string[]).includes(f));
   return {
   version: "3.0.0",
   alwaysLoad: true,
@@ -129,7 +128,7 @@ export const pictureMcp = (hidden: string[] = [], use: string[] = []): McpDef =>
       description: `Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.
 
 Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:
-${formsHelp(forms)}${use.filter((f) => f !== "questions").length ? `\n\nIn this chat the user allows ONLY: ${use.filter((f) => f !== "questions").join(", ")} (green in the form row). Draw with those and nothing else; other forms, graphs and freeform are refused.` : ""}${use.includes("freeform") ? " Freeform green means: be creative, build interactive pages where they help." : ""}${hidden.includes("freeform") ? "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms." : ""}`,
+${formsHelp(forms)}${required.length ? `\n\nIn this chat the user made REQUIRED: ${required.join(", ")} (green in the form row). The picture always holds at least one block of each; a change that takes the last one away is refused. Other kinds stay allowed.` : ""}${required.includes("freeform") ? " Freeform required means: be creative, build interactive pages where they help." : ""}${hidden.includes("freeform") ? "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms." : ""}`,
       schema: z.toJSONSchema(z.object(drawShape(forms.length ? forms : ["none"]))) as Record<string, unknown>,
     },
     {

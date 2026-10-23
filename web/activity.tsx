@@ -1,7 +1,7 @@
 // The pill in the chat header: background agents and file changes as counts, each
 // opening its panel in a dropdown under the pill.
 import React, { useEffect, useRef, useState } from "react";
-import { TasksPanel } from "./tasks";
+import { TasksPanel, since, useTick } from "./tasks";
 import { ChangesPanel } from "./changes";
 import type { ChangeMeta, Item, Task } from "./types";
 
@@ -27,6 +27,9 @@ export function ActivityPill(props: {
   const running = top.filter((t) => t.status === "running").length;
   const failed = top.filter((t) => t.status === "failed").length;
   const done = top.length - running - failed;
+  // How long the work has been going: the running one started first.
+  const oldest = top.filter((t) => t.status === "running").sort((a, b) => a.startedAt - b.startedAt)[0];
+  useTick(!!oldest);
   const files = props.changes.length;
   const added = props.changes.reduce((n, c) => n + c.added, 0);
   const removed = props.changes.reduce((n, c) => n + c.removed, 0);
@@ -57,7 +60,7 @@ export function ActivityPill(props: {
         {top.length > 0 && (
           <button className={`act-part ${open === "tasks" ? "on" : ""}`} onClick={() => toggle("tasks")} title={`Background: ${agentTitle}`}>
             <AgentsIcon />
-            {running > 0 && <span className="act-run"><span className="act-dot" />{running}</span>}
+            {running > 0 && <span className="act-run"><span className="act-dot" />{running}{oldest && <span className="act-time">{since(oldest)}</span>}</span>}
             {failed > 0 && <span className="act-fail">{failed}</span>}
             {!running && !failed && <span className="act-done">{done}</span>}
           </button>

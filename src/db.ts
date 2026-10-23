@@ -75,7 +75,7 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 // And its colour from the palette, to tell chats apart at a glance.
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "color"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN color TEXT");
-// The chat's form choices from the row over the picture: JSON { <form>: "use" | "off" }.
+// The chat's form choices from the row over the picture: JSON { <form>: "required" | "off" }.
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "forms"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN forms TEXT");
 // The colour a chat had before it was made passive, given back when it wakes.
@@ -159,6 +159,8 @@ export const store = {
     if (!r) return { model: null, effort: null, folder: null, color: null, forms: {}, cols: 0, prevColor: null };
     let forms: Settings["forms"] = {};
     try { forms = r.forms ? JSON.parse(r.forms) : {}; } catch {}
+    // Before "required", green was saved as "use" (then: only the green kinds).
+    for (const f of Object.keys(forms)) if ((forms[f] as string) === "use") forms[f] = "required";
     return { ...r, forms, cols: r.cols ?? 0 };
   },
   saveSettings: (id: string, s: Settings) => q.saveSettings.run(id, s.model, s.effort, s.folder, s.color, JSON.stringify(s.forms ?? {}), s.cols ?? 0, s.prevColor ?? null),

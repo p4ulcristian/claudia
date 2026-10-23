@@ -1,6 +1,7 @@
 // One word per chat for the rail, under its circle: Haiku picks it from the chat's title, once per
 // title, and it is kept; until then (or if Haiku fails) a word from the title stands in.
 import { Database } from "bun:sqlite";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { account } from "./account";
@@ -36,7 +37,9 @@ async function ask(title: string): Promise<string | null> {
   const acct = await account();
   const it = query({
     prompt: `Chat title: "${title}"\n\nGive one word (at most ${MAX} letters) that names this chat on a tiny label under its icon, so its owner recognises it at a glance among other chats. Prefer the project or the thing being worked on over generic words. Answer with the word only.`,
-    options: { model: "haiku", tools: [], settingSources: [], maxTurns: 1, persistSession: false, env: acct.env },
+    // cwd: a neutral folder. The SDK tells the model its working directory, and from the runner's
+    // (claudia) Haiku named every chat "Claudia".
+    options: { model: "haiku", tools: [], settingSources: [], maxTurns: 1, persistSession: false, env: acct.env, cwd: tmpdir() },
   });
   let text = "";
   try {
