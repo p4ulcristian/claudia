@@ -40,6 +40,8 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 18. Form row states (2026-10-23): each circle is allowed (default) → required → off. Required means the picture always holds at least one block of that kind: Claude adds it on the next message and draw refuses a change that takes the last one away; the other kinds stay allowed. Off: draw refuses it and its blocks leave the picture. Questions only go allowed ↔ off. Instead of green = "only these kinds", which blocked every other kind with one click.
 
+19. The clojure form (2026-10-23): a Clojure project's namespaces as bubbles in layers from entry points to leaves (an arrow going back closes a circle, drawn red), across or down: by default the direction whose map is closest in shape to its space (the half screen is narrow and scrolls down, full screen is wide), so a deep, thin map runs down; a button flips it, from clj-kondo's analysis run with `--cache false`, so nothing is written into the project (`src/clojure.ts`). A prefix with namespaces under it is one bubble that opens on click, so a 2000-namespace project starts at its top prefixes; a folder of projects (Groundwork) reads each one's `:paths`. A namespace lists its vars (arglists, docs), a var opens its source, an arrow lists the functions that cross it. Re-analysed when a source file changes, one clj-kondo run per project at a time (the last map answers meanwhile); the first read of a big project takes a while (Iron Rainbow: about 25 s). Opt-in like git (`CLAUDIA_FORMS=clojure`), since it needs clj-kondo on the runner.
+
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass. The few calls bypass still sends to the permission callback (its own safety checks) are allowed and logged by the runner, so no permission ask shows; only questions and plan approval reach the user.
 
 ## Files
@@ -58,7 +60,7 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/account.ts`: the Claude token the chats run on
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
-- `src/forms.ts`: the predefined forms; `src/files.ts` and `src/git.ts` (+ `src/git-layout.ts`) read for the files and git forms; renderers in `web/forms.tsx`, `web/git.tsx` and `web/flow.tsx`
+- `src/forms.ts`: the predefined forms; `src/files.ts`, `src/git.ts` (+ `src/git-layout.ts`) and `src/clojure.ts` read for the files, git and clojure forms; renderers in `web/forms.tsx`, `web/git.tsx`, `web/clojure.tsx` and `web/flow.tsx`
 - `src/timeline.ts`: lanes and steps from the session files, read only from where the last read stopped
 - `deploy/`: a shared server: `install.sh`, the page unit, the per-profile host and runner units, and `update.sh` + its timer (follows GitHub main every 5 min; runners restart, hosts only with `--restart-hosts`)
 - `web/`: the page (React): `settings.tsx` Settings and the logo, `chat.tsx` left, `picture.tsx` + `panels.tsx` + `timeline.tsx` right, `rightbar.tsx` the bar under it, `activity.tsx` the pill at its top right (background agents + changes)

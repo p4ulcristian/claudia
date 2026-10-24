@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
 import { GitForm } from "./git";
+import { ClojureForm } from "./clojure";
 import { Flow } from "./flow";
 
 type Data = Record<string, any>;
@@ -615,10 +616,11 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }
   stats: Stats,
   files: Files,
   git: GitForm,
+  clojure: ClojureForm,
   flow: Flow,
 };
 
-// chat: the chat whose picture this is, for forms that read through the runner (files, git).
+// chat: the chat whose picture this is, for forms that read through the runner (files, git, clojure).
 export function FormView({ form, data, chat, block }: { form: FormName; data: Data; chat?: string; block?: string }) {
   // "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
   const R = (form as string) === "code" ? Code : RENDER[form];

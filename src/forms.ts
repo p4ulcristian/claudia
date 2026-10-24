@@ -124,6 +124,48 @@ export const FORMS = {
       marks: [{ id: "m", commit: "c0", note: "the quantity fix", color: "amber" }],
     },
   },
+  clojure: {
+    label: "Clojure",
+    optIn: true,
+    when: "A Clojure project's namespaces as a map the user clicks through: bubbles for namespaces (or for prefixes, which open into their namespaces), arrows for :require, laid out in layers from entry points to leaves, across or down by the map's shape (an arrow going back is a circle, drawn red); a click on a namespace lists its vars with their arglists and docs, a click on a var shows its source, a click on an arrow lists the functions it uses. Read live with clj-kondo, so you send only the project and what to open or point out.",
+    fields: "root? (the project folder: absolute, ~/…, or relative to the working folder; default the working folder), at? (a namespace prefix to open the map in, like \"features.orders\"), open? (a namespace, ns/var, or \"a -> b\" for the arrow between two bubbles of the map, to pick for the user), direction?: across|down (default: picked by the map's shape, deep maps run down), marks?: [{ id, ns, var?, note?, color? }] namespaces or vars to point out",
+    sample: {
+      demo: {
+        namespaces: [
+          { name: "ir.server", vars: 2, requires: ["ir.routes", "ir.db"] },
+          { name: "ir.routes", vars: 2, requires: ["ir.orders.api", "ir.shops"] },
+          { name: "ir.orders.api", vars: 3, requires: ["ir.orders.total", "ir.db"] },
+          { name: "ir.orders.total", vars: 3, requires: ["ir.orders.tax", "ir.money"] },
+          { name: "ir.orders.tax", vars: 2, requires: ["ir.money"] },
+          { name: "ir.shops", vars: 2, requires: ["ir.db"] },
+          { name: "ir.db", vars: 2, requires: [] },
+          { name: "ir.money", vars: 2, requires: [] },
+        ],
+        uses: {
+          "ir.server": { "ir.routes": ["app"], "ir.db": ["pool"] },
+          "ir.routes": { "ir.orders.api": ["checkout", "hand-over"], "ir.shops": ["shop", "list-shops"] },
+          "ir.orders.api": { "ir.orders.total": ["total"], "ir.db": ["q", "tx"] },
+          "ir.orders.total": { "ir.orders.tax": ["rate"], "ir.money": ["round"] },
+          "ir.orders.tax": { "ir.money": ["cents"] },
+          "ir.shops": { "ir.db": ["q"] },
+        },
+        vars: {
+          "ir.orders.total": {
+            doc: "An order's total: every coat, shipping and tax.",
+            external: ["clojure.string"],
+            vars: [
+              { name: "line-price", args: ["[line]"], private: true, kind: "fn", row: 3, code: "(defn- line-price [line]\n  (* (:qty line) (:unit-cents line)))" },
+              { name: "shipping", args: ["[order]"], kind: "fn", row: 6, code: "(defn shipping [order]\n  (if (:pickup? order) 0 1500))" },
+              { name: "total", args: ["[order]", "[order opts]"], doc: "Sum of every coat, shipping and tax.", kind: "fn", row: 9, code: "(defn total\n  \"Sum of every coat, shipping and tax.\"\n  ([order] (total order {}))\n  ([order {:keys [state]}]\n   (let [net (+ (reduce + (map line-price (:lines order)))\n                (shipping order))]\n     (+ net (money/round (* net (tax/rate state)))))))" },
+            ],
+          },
+        },
+      },
+      at: "ir",
+      open: "ir.orders.total/total",
+      marks: [{ id: "t", ns: "ir.orders.tax", note: "shipping taxed too", color: "amber" }],
+    },
+  },
   flow: {
     label: "Flow",
     when: "Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline.",

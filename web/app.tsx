@@ -776,7 +776,7 @@ function App() {
           </div>
           ) : (
           <div className="right-scroll">
-          {!readOnly && (
+          {!readOnly && phone && (
             <FormRow
               forms={live.settings.forms ?? {}}
               hidden={hiddenForms}
@@ -809,6 +809,21 @@ function App() {
         </section>
         )}
       </main>
+      {/* The right rail, mirroring the chats rail: this chat's forms. On phones they stay a row in the sheet. */}
+      {!phone && (
+        <nav className="rail right-rail" aria-label="Forms">
+          {!readOnly && (
+            <FormRow
+              rail
+              forms={live.settings.forms ?? {}}
+              hidden={hiddenForms}
+              onChange={(forms) => send({ t: "settings", chat: current, forms })}
+              cols={live.settings.cols ?? 0}
+              onCols={(cols) => send({ t: "settings", chat: current, cols })}
+            />
+          )}
+        </nav>
+      )}
     </div>
   );
 }

@@ -46,8 +46,10 @@ code, pre { font-family: var(--mono); }
 
 /* Layout */
 /* The rail's column is always 64px; the full list opens over the page as a drawer. */
-.app { display: grid; grid-template-columns: 64px 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; }
+.app { display: grid; grid-template-columns: 64px 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .app > main { grid-column: 2; }
+.app > .right-rail { grid-column: 3; }
+@media (max-width: 679px) { .app { grid-template-columns: 64px 1fr; } }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
@@ -1161,6 +1163,21 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 /* The forms row over the picture: auto (outline), use (green, filled), off (faded, struck). */
 /* Narrow pane: the dots keep their size and wrap to a second line. */
+.form-row .form-dots { display: contents; }
+/* The right rail: the forms in a column (like the chats rail), the column picker at its foot. */
+.right-rail { padding-bottom: 14px; }
+.right-rail::after { right: auto; left: 0; }
+.form-rail { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.form-rail .form-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 6px 0 16px; }
+/* The user's tools (files, git, clojure): blue, their own group above the column picker; lit while in the picture. */
+.form-row .form-tools { display: contents; }
+.form-rail .form-tools { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--line); }
+.form-dot.tool { color: var(--blue); }
+.form-dot.tool::before { background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.form-dot.tool.required { color: var(--blue); }
+.form-dot.tool.required::before { background: color-mix(in srgb, var(--blue) 26%, transparent); box-shadow: 0 0 12px 1px color-mix(in srgb, var(--blue) 55%, transparent); }
+.form-rail .col-pick { margin: 0; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.form-rail .form-peek { top: 0; left: auto; right: calc(100% + 10px); z-index: 20; width: 460px; max-width: calc(100vw - 100px); }
 .form-row { position: sticky; top: 0; z-index: 6; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 14px; margin: 0 0 6px; background: color-mix(in oklch, var(--bg2) 92%, transparent); backdrop-filter: blur(4px); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 70%, transparent); }
 .form-dot { position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--muted); isolation: isolate; transition: transform 0.12s; }
 .form-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 1.8px solid currentColor; filter: url(#tip-chalk); }
@@ -1235,3 +1252,76 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .block:hover .kept-off, .kept-off:focus-visible, .kept-off.gone { opacity: 1; }
 .kept-off:hover { color: var(--fg); text-decoration: underline; }
 .block.kept-gone { outline: 1.5px dashed var(--line); outline-offset: 6px; border-radius: 10px; }
+
+/* The clojure form (web/clojure.tsx): namespace bubbles in layers, a namespace's vars or an arrow's functions below. */
+.cl-form { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 8px; }
+.cl-form::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
+.cl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; padding: 8px 14px 6px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.cl-crumb { font: 700 17px var(--hand); color: var(--fg); padding: 0 2px; border-radius: 4px; }
+.cl-crumb:hover { background: color-mix(in srgb, var(--line) 30%, transparent); }
+.cl-dot { color: var(--muted); font: 700 17px var(--hand); }
+.cl-count { margin-left: auto; font: 12px var(--sans); color: var(--muted); }
+.cl-full { margin-left: 10px; font: 700 14px var(--hand); color: var(--muted); padding: 0 6px; border-radius: 6px; border: 1.5px solid color-mix(in srgb, var(--line) 80%, transparent); }
+.cl-full:hover { color: var(--fg); border-color: var(--fg); }
+.cl-full:disabled { opacity: 0.4; pointer-events: none; }
+.cl-zoom { display: inline-flex; gap: 4px; margin-left: 10px; }
+.cl-zoom .cl-full { margin-left: 0; min-width: 24px; }
+.cl-map.zoomed { cursor: grab; touch-action: none; }
+.cl-map.zoomed:active { cursor: grabbing; }
+.cl-map.moving .body { filter: none; }
+.cl-map.moving .cl-edge, .cl-map.moving .cl-node, .cl-map.moving .line { transition: none; }
+/* Full screen: map left, panel right, each scrolling on its own. */
+.cl-form.full { display: grid; grid-template: "head head" auto "map panel" 1fr / 1fr minmax(380px, 30%); height: 100vh; padding: 0; border-radius: 0; background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
+.cl-form.full::before { display: none; }
+.cl-form.full .cl-head { grid-area: head; padding: 10px 18px 8px; }
+.cl-form.full .cl-mapbox { grid-area: map; display: flex; flex-direction: column; min-height: 0; padding: 8px; }
+.cl-form.full .cl-map { flex: 1; min-height: 0; height: 100%; }
+.cl-form.full .cl-panel { grid-area: panel; overflow: auto; margin: 0; padding: 12px 16px; border-top: 0; border-left: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.cl-map { display: block; width: 100%; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+.cl-edge { cursor: pointer; transition: opacity 0.15s; }
+.cl-edge .hit { stroke: transparent; stroke-width: 12; fill: none; }
+.cl-edge .line { fill: none; }
+.cl-edge .line.muted { stroke: var(--muted); }
+/* Faint until hovered, or lit by a hovered or picked bubble or arrow. */
+.cl-edge .line { opacity: 0.25; transition: opacity 0.15s; }
+.cl-edge:hover .line, .cl-edge .line.blue, .cl-edge .line.green, .cl-edge .line.violet { opacity: 1; }
+.cl-edge .line.blue { stroke: var(--blue); } .cl-edge .line.green { stroke: var(--green); } .cl-edge .line.violet { stroke: var(--violet); } .cl-edge .line.red { stroke: var(--red); }
+.cl-edge:hover .line { stroke-width: 3.5; }
+.cl-edge.dim, .cl-node.dim { opacity: 0.18; }
+.cl-node { cursor: pointer; transition: opacity 0.15s; }
+.cl-node .body { stroke-width: 2.4; filter: url(#chalk-soft); }
+.cl-node .ring { fill: none; stroke-width: 1.4; stroke-dasharray: 3 3; opacity: 0.8; }
+.cl-node.on .body { stroke-width: 4.5; }
+.cl-node:hover .body { stroke-width: 3.5; }
+.cl-node .num { text-anchor: middle; font: 11px var(--mono); fill: var(--muted); pointer-events: none; }
+.cl-node .lbl { text-anchor: middle; font: 12.5px var(--mono); fill: var(--fg); pointer-events: none; }
+.cl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 14px 4px; font: 11.5px var(--sans); color: var(--muted); }
+.cl-legend b { font-weight: 400; } .cl-legend .blue { color: var(--blue); } .cl-legend .green { color: var(--green); } .cl-legend .red { color: var(--red); }
+.cl-panel { margin: 4px 10px 0; padding: 8px 4px 0; border-top: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.cl-title { margin: 0 0 4px; font: 700 18px var(--hand); color: var(--fg); word-break: break-all; }
+.cl-arrow { color: var(--violet); }
+.cl-doc { margin: 0 0 6px; font: 12.5px/1.45 var(--sans); color: var(--muted); white-space: pre-wrap; }
+.cl-reqs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin: 0 0 5px; }
+.cl-reqs .k { font: 700 13px var(--hand); color: var(--muted); margin-right: 4px; }
+.cl-chip { font: 11.5px var(--mono); color: var(--fg); padding: 0 7px; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--line) 80%, transparent); }
+button.cl-chip:hover { border-color: var(--blue); }
+.cl-chip.ext { color: var(--muted); border-style: dashed; }
+.cl-var { border-radius: 8px; padding: 3px 6px; margin: 1px 0; }
+.cl-var.open { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.cl-var.priv .cl-fn { color: var(--muted); }
+.cl-var-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; text-align: left; width: 100%; color: var(--fg); }
+.cl-var-head:hover .cl-fn { text-decoration: underline; }
+.cl-fn { font: 13.5px var(--mono); color: var(--fg); }
+button.cl-fn:hover { text-decoration: underline; }
+.cl-kind { font: 700 12px var(--hand); color: var(--amber); }
+.cl-args { font: 11.5px var(--mono); color: var(--muted); border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); border-radius: 4px; padding: 0 4px; }
+.cl-vdoc { font: 12px/1.4 var(--sans); color: var(--muted); white-space: pre-wrap; margin: 1px 0 2px; }
+.cl-mark { font: 700 14px var(--hand); margin: 2px 0; }
+.cl-src { margin: 6px 0 4px; padding: 8px 10px; border-radius: 8px; background: color-mix(in oklch, var(--board) 55%, #000); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.cl-no { display: inline-block; width: 3.2em; color: color-mix(in srgb, var(--muted) 70%, transparent); user-select: none; }
+.cl-group { margin: 4px 0 8px; }
+.cl-ns { font: 700 14px var(--hand); color: var(--muted); }
+.cl-use { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 1px 0 1px 10px; }
+.cl-times { font: 11px var(--mono); color: var(--violet); }
+.cl-from { font: 11.5px var(--sans); color: var(--muted); }
+.cl-err { color: var(--red); padding: 8px 12px; }

@@ -267,7 +267,7 @@ const TURNED_ON = new Set((process.env.CLAUDIA_FORMS ?? "").split(/[\s,]+/).filt
 export const NOT_HERE: string[] = FORM_NAMES.filter((f) => (FORMS[f] as FormSpec).optIn && !TURNED_ON.has(f));
 const hiddenForms = () => [...store.prefs().hiddenForms, ...NOT_HERE];
 // The names of the blocks Claudia puts on the picture when files or git turns green.
-const AUTO_NAMES: Record<string, string> = { files: "Project files", git: "History" };
+const AUTO_NAMES: Record<string, string> = { files: "Project files", git: "History", clojure: "Namespaces" };
 
 // The tools as they stand now (forms the user deleted left out), and a version to tell a session's apart.
 // The forms a chat can draw now, each with a fingerprint of how it's used: compared with what the chat
@@ -401,10 +401,10 @@ export class Chat implements SessionHandler {
   }
 
   // Forms that need no thinking show the moment they turn green: files (the working folder), git (its
-  // repo). Turned off again, Claudia's block goes. Returns a line for Claude about what it added.
+  // repo), clojure (its namespaces). Turned off again, Claudia's block goes. Returns a line for Claude about what it added.
   private autoFill(): Record<string, Record<string, unknown>> {
     const folder = this.settings.folder ?? WORK;
-    return { files: { root: folder }, git: { repo: folder } };
+    return { files: { root: folder }, git: { repo: folder }, clojure: { root: folder } };
   }
   private instantForms(before: Record<string, FormChoice>, now: Record<string, FormChoice>): string | null {
     const fill = this.autoFill();
@@ -754,6 +754,15 @@ export class Chat implements SessionHandler {
       const given = typeof b.data?.repo === "string" ? b.data.repo : undefined;
       if (given === undefined && known) continue;
       b.data = { ...b.data, repo: resolve(this.settings.folder ?? WORK, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
+    }
+    // A clojure block reads its project live (src/clojure.ts) the same way: root made absolute.
+    for (const b of input.blocks ?? []) {
+      const isClj = b.form === "clojure" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "clojure"));
+      if (!isClj || b.data?.demo) continue;
+      const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
+      const given = typeof b.data?.root === "string" ? b.data.root : undefined;
+      if (given === undefined && known) continue;
+      b.data = { ...b.data, root: resolve(this.settings.folder ?? WORK, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
     }
     let { scene, changed } = applyDraw(this.scene, input);
     // Claudia's block of a green form (auto-files, auto-git) is the user's: Claude's clear or

@@ -13,6 +13,7 @@ import { explain, type ExplainInput } from "./src/explain";
 import { guess, onWords, wordFor } from "./src/words";
 import { imageFile, listDir, readText } from "./src/files";
 import { REV, commitDetail, filePatch, fingerprint, smartlog } from "./src/git";
+import { edgeUses as cljEdge, namespaces as cljNamespaces, nsDetail as cljNs, varSource as cljVar } from "./src/clojure";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -329,6 +330,33 @@ Bun.serve({
           const branches = p.get("branches");
           const limit = Math.min(2000, Math.max(1, Number(p.get("limit")) || 100));
           return json({ fp, ...(await smartlog(repo, { limit, branches: branches ? branches.split(",") : null })) });
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
+      },
+    },
+    // The clojure form: a project's namespaces (only when a source file changed since the page's
+    // fingerprint), one namespace's vars, one var's source, or the vars one arrow uses, inside a root
+    // this chat drew. Read only.
+    "/api/chats/:id/clojure": {
+      GET: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        if (NOT_HERE.includes("clojure")) return json({ error: "no clojure form here" }, 404);
+        const p = new URL(req.url).searchParams;
+        const root = p.get("root") ?? "";
+        const roots = new Set<string>();
+        const scenes = [chats.get(id)?.scene, ...store.pictures(id).map((x) => x.scene)];
+        for (const sc of scenes) for (const b of sc?.blocks ?? []) if (b.kind === "form" && b.form === "clojure" && typeof b.data.root === "string") roots.add(b.data.root);
+        if (!roots.has(root)) return json({ error: "not a project of this chat's pictures" }, 403);
+        try {
+          const from = p.get("from"), to = p.get("to");
+          if (from !== null && to !== null) return json(await cljEdge(root, from, p.get("fx") === "1", to, p.get("tx") === "1"));
+          const ns = p.get("ns");
+          const v = p.get("var");
+          if (ns !== null && v !== null) return json(await cljVar(root, ns, v));
+          if (ns !== null) return json(await cljNs(root, ns));
+          return json(await cljNamespaces(root, p.get("fp") ?? undefined));
         } catch (err) {
           return json({ error: String((err as Error)?.message ?? err) }, 500);
         }
