@@ -6,6 +6,7 @@ import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
 import { GitForm } from "./git";
 import { ClojureForm } from "./clojure";
+import { CallsForm } from "./calls";
 import { Flow } from "./flow";
 
 type Data = Record<string, any>;
@@ -617,10 +618,11 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }
   files: Files,
   git: GitForm,
   clojure: ClojureForm,
+  calls: CallsForm,
   flow: Flow,
 };
 
-// chat: the chat whose picture this is, for forms that read through the runner (files, git, clojure).
+// chat: the chat whose picture this is, for forms that read through the runner (files, git, clojure, calls).
 export function FormView({ form, data, chat, block }: { form: FormName; data: Data; chat?: string; block?: string }) {
   // "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
   const R = (form as string) === "code" ? Code : RENDER[form];

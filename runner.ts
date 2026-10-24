@@ -14,6 +14,7 @@ import { guess, onWords, wordFor } from "./src/words";
 import { imageFile, listDir, readText } from "./src/files";
 import { REV, commitDetail, filePatch, fingerprint, smartlog } from "./src/git";
 import { edgeUses as cljEdge, namespaces as cljNamespaces, nsDetail as cljNs, varSource as cljVar } from "./src/clojure";
+import { callsFp, callsMap, callsVar } from "./src/calls";
 import { getMeta, onMeta, probe } from "./src/meta";
 import { open as openFile, chmod, unlink } from "node:fs/promises";
 import { basename, dirname } from "node:path";
@@ -357,6 +358,30 @@ Bun.serve({
           if (ns !== null && v !== null) return json(await cljVar(root, ns, v));
           if (ns !== null) return json(await cljNs(root, ns));
           return json(await cljNamespaces(root, p.get("fp") ?? undefined));
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
+      },
+    },
+    // The calls form: one var's code, callees and callers, or the map of calls around it, inside a
+    // project this chat drew with the calls form; without var, the project's fingerprint
+    // ({ same } while the page has it). Read only.
+    "/api/chats/:id/calls": {
+      GET: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        if (NOT_HERE.includes("calls")) return json({ error: "no calls form here" }, 404);
+        const p = new URL(req.url).searchParams;
+        const root = p.get("root") ?? "";
+        const roots = new Set<string>();
+        const scenes = [chats.get(id)?.scene, ...store.pictures(id).map((x) => x.scene)];
+        for (const sc of scenes) for (const b of sc?.blocks ?? []) if (b.kind === "form" && b.form === "calls" && typeof b.data.root === "string") roots.add(b.data.root);
+        if (!roots.has(root)) return json({ error: "not a project of this chat's pictures" }, 403);
+        try {
+          const v = p.get("var");
+          if (v === null) return json(await callsFp(root, p.get("fp") ?? undefined));
+          if (p.get("map") === "1") return json(await callsMap(root, v, Number(p.get("up") ?? 2) || 0, Number(p.get("down") ?? 3) || 0));
+          return json(await callsVar(root, v));
         } catch (err) {
           return json({ error: String((err as Error)?.message ?? err) }, 500);
         }

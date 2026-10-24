@@ -755,9 +755,10 @@ export class Chat implements SessionHandler {
       if (given === undefined && known) continue;
       b.data = { ...b.data, repo: resolve(this.settings.folder ?? WORK, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
     }
-    // A clojure block reads its project live (src/clojure.ts) the same way: root made absolute.
+    // A clojure or calls block reads its project live (src/clojure.ts, src/calls.ts) the same way: root made absolute.
     for (const b of input.blocks ?? []) {
-      const isClj = b.form === "clojure" || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && x.form === "clojure"));
+      const cljForm = (f?: string) => f === "clojure" || f === "calls";
+      const isClj = cljForm(b.form) || (!b.form && this.scene.blocks?.some((x) => x.id === b.id && x.kind === "form" && cljForm(x.form)));
       if (!isClj || b.data?.demo) continue;
       const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
       const given = typeof b.data?.root === "string" ? b.data.root : undefined;

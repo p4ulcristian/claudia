@@ -6,8 +6,12 @@ import { join, resolve } from "node:path";
 
 export type Ns = { name: string; file: string; vars: number; requires: string[] };
 export type Var = { name: string; args: string[]; doc?: string; private?: boolean; kind: string; row: number; endRow: number };
-// uses: from namespace → to namespace → var name → times used.
-type Index = { fp: string; namespaces: Ns[]; docs: Map<string, string | undefined>; uses: Map<string, Map<string, Map<string, number>>>; vars: Map<string, Var[]>; external: Map<string, string[]>; files: Map<string, string> };
+// One use of a project var inside another one ("ns/name" both, same namespace too), where the
+// used name stands: row, and its first and past-last column (1-based, as clj-kondo gives them).
+export type Call = { from: string; to: string; row: number; col: number; endCol: number };
+// uses: from namespace → to namespace → var name → times used. calls: every use of a project var
+// inside a var (for the calls form, src/calls.ts); varFiles: "ns/name" → the file defining it.
+export type Index = { fp: string; namespaces: Ns[]; docs: Map<string, string | undefined>; uses: Map<string, Map<string, Map<string, number>>>; vars: Map<string, Var[]>; external: Map<string, string[]>; files: Map<string, string>; calls: Call[]; varFiles: Map<string, string> };
 
 const SOURCE = /\.(clj|cljs|cljc|bb)$/;
 const SKIP = new Set(["node_modules", "target", ".git", ".cpcache", ".shadow-cljs", "out", ".clj-kondo"]);
@@ -91,12 +95,26 @@ async function analyse(root: string, fp: string): Promise<Index> {
     by.set(u.to, names);
     names.set(u.name, (names.get(u.name) ?? 0) + 1);
   }
+  // .cljc uses come once per language: one call per place.
+  const calls: Call[] = [];
+  const seen = new Set<string>();
+  for (const u of a["var-usages"] ?? []) {
+    if (!u["from-var"] || !files.has(u.from) || !files.has(u.to)) continue;
+    const row = u["name-row"] ?? u.row, col = u["name-col"] ?? u.col;
+    const c: Call = { from: `${u.from}/${u["from-var"]}`, to: `${u.to}/${u.name}`, row, col, endCol: u["name-end-col"] ?? col + String(u.name).length };
+    const k = `${c.from} ${c.to} ${row} ${col}`;
+    if (c.from === c.to || seen.has(k)) continue;
+    seen.add(k);
+    calls.push(c);
+  }
   const vars = new Map<string, Var[]>();
+  const varFiles = new Map<string, string>();
   for (const v of a["var-definitions"] ?? []) {
     if (!files.has(v.ns)) continue;
     const list = vars.get(v.ns) ?? [];
     if (!vars.has(v.ns)) vars.set(v.ns, list);
     if (list.some((x) => x.name === v.name)) continue;
+    varFiles.set(`${v.ns}/${v.name}`, resolve(root, v.filename));
     const by = String(v["defined-by->lint-as"] ?? v["defined-by"] ?? "").split("/").pop() ?? "";
     list.push({ name: v.name, args: v["arglist-strs"] ?? [], doc: v.doc, private: v.private || by === "defn-" || undefined, kind: KIND[by] ?? by ?? "def", row: v.row, endRow: v["end-row"] ?? v.row });
   }
@@ -104,14 +122,15 @@ async function analyse(root: string, fp: string): Promise<Index> {
   const namespaces: Ns[] = [...files.keys()].sort().map((name) => ({
     name, file: files.get(name)!.slice(root.length + 1), vars: vars.get(name)?.length ?? 0, requires: [...(req.get(name) ?? [])].sort(),
   }));
-  return { fp, namespaces, docs, uses, vars, external: new Map([...ext].map(([k, s]) => [k, [...s].sort()])), files };
+  return { fp, namespaces, docs, uses, vars, external: new Map([...ext].map(([k, s]) => [k, [...s].sort()])), files, calls, varFiles };
 }
 
 // One clj-kondo run per root at a time (a big project takes half a minute on every core): while one
 // runs, the last finished index answers; a change that lands meanwhile is read by the next run, which
 // the next ask after this one finishes starts.
+// Shared with the calls form (src/calls.ts), so a project is analysed once for both.
 const roots = new Map<string, { done?: Index; running?: Promise<Index> }>();
-async function index(root: string): Promise<Index> {
+export async function index(root: string): Promise<Index> {
   const r = roots.get(root) ?? {};
   roots.set(root, r);
   if (r.running) return r.done ?? r.running;

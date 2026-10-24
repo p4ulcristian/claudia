@@ -166,6 +166,54 @@ export const FORMS = {
       marks: [{ id: "t", ns: "ir.orders.tax", note: "shipping taxed too", color: "amber" }],
     },
   },
+  calls: {
+    label: "Calls",
+    optIn: true,
+    when: "A Clojure project's function calls around one var: what calls what, and what that code is. Three tabs: Unfold (the var's source; each call to a project var is a link that opens that var's code nested under the calling line), Neighbours (the var in the middle, its callers on the left with the calling line, its callees on the right with their doc line; click to move), Map (columns by steps away, up to callers and down to callees, boxes coloured by folder, arrows for calls). Calls to .sql files named by a keyword (Iron Rainbow's sql/q) link to the file. Read live with clj-kondo, so you send only the project and the var. Pick it to show how code flows through functions; clojure for how namespaces depend on each other; files for one file's lines.",
+    fields: "root? (the project folder: absolute, ~/…, or relative to the working folder; default the working folder), open (the start var, \"ns/var\", required; the end of a namespace is enough when only one matches, like \"state-gate/check\"), view?: unfold|neighbours|map (the tab shown, default unfold), up?, down? (the map's steps of callers and callees, default 2 and 3), marks?: [{ id, var (\"ns/var\"), line? (a row of its file), note?, color? }] vars or lines to point out (shown on the code and in the map)",
+    sample: {
+      demo: {
+        "features.common.payments.charge.backend.state-gate/check": {
+          file: "features/common/payments/charge/backend/state_gate.clj", row: 75,
+          code: "(defn check\n  \"refusal for a charge to `workspace-ids` from a customer in `customer-state`,\n   read from the database and today's date.\"\n  [pool workspace-ids customer-state]\n  (refusal {:shops          (shop-states pool workspace-ids)\n            :customer-state customer-state\n            :today          (today-iso)}))",
+          calls: ["features.common.payments.charge.backend.state-gate/refusal", "features.common.payments.charge.backend.state-gate/shop-states", "features.common.payments.charge.backend.state-gate/today-iso"],
+        },
+        "features.common.payments.charge.backend.state-gate/refusal": {
+          file: "features/common/payments/charge/backend/state_gate.clj", row: 35,
+          code: "(defn refusal\n  \"Why this charge may not happen, or nil when it may. Pure.\"\n  [{:keys [shops customer-state today]}]\n  (let [code     (some-> customer-state str/trim not-empty us-states/resolve-code)\n        customer (when (rules/blocked? code today) code)\n        shop     (some (fn [{:keys [state override?]}]\n                         (when (and (not override?) (rules/blocked? state today))\n                           (us-states/resolve-code state)))\n                       shops)]\n    (cond\n      customer {:error-code \"state-not-available\" :side :customer :state customer}\n      shop     {:error-code \"state-not-available\" :side :shop :state shop})))",
+          calls: ["utils.us-states/resolve-code", "features.common.payments.state-rules/blocked?"],
+        },
+        "features.common.payments.charge.backend.state-gate/shop-states": {
+          file: "features/common/payments/charge/backend/state_gate.clj", row: 23,
+          code: "(defn shop-states\n  \"[{:workspace-id :state :override?}] for the given workspace ids.\"\n  [pool workspace-ids]\n  (mapv (fn [row]\n          {:workspace-id (str (:workspace/id row))\n           :state        (:business-info/facility-state-code row)\n           :override?    (true? (:partnership/state-payments-override row))})\n        (sql/q pool :payment-states {:workspace-ids workspace-ids})))",
+          calls: ["file:features/common/payments/charge/backend/payment_states.sql"],
+        },
+        "features.common.payments.charge.backend.state-gate/today-iso": {
+          file: "features/common/payments/charge/backend/state_gate.clj", row: 15,
+          code: "(defn today-iso\n  \"Today in US Eastern time, as yyyy-mm-dd: the date a state's law takes effect.\"\n  []\n  (str (LocalDate/now (ZoneId/of \"America/New_York\"))))",
+        },
+        "file:features/common/payments/charge/backend/payment_states.sql": {
+          file: "features/common/payments/charge/backend/payment_states.sql", row: 1,
+          code: "-- Each shop's facility state and its Labs state-payments override (#384).\nSELECT w.:workspace/id,\n       pf.shop_profile__facility_state_code AS business_info__facility_state_code\nFROM workspaces w\nLEFT JOIN shop_profiles pf ON pf.:shop-profile/workspace-id = w.:workspace/id\nWHERE w.:workspace/id = ANY(:workspace-ids::uuid[])",
+        },
+        "features.common.payments.charge.backend.intent/priced-payment-intent": {
+          file: "features/common/payments/charge/backend/intent.clj", row: 159,
+          code: "(defn priced-payment-intent\n  \"The PaymentIntent for a cart, priced on the server.\"\n  [pool {:keys [workspace-id address] :as params}]\n  (if-let [blocked (state-gate/check pool [workspace-id] (:state address))]\n    {:status 400 :body blocked}\n    (create-intent pool params)))",
+          calls: ["features.common.payments.charge.backend.state-gate/check"],
+        },
+        "utils.us-states/resolve-code": {
+          file: "utils/us_states.cljc", row: 92,
+          code: "(defn resolve-code\n  \"The 2-letter code for a state given as its code or its full name, or nil.\"\n  [state]\n  (when (string? state)\n    (or (normalize-code state)\n        (get lower-name->code (-> state str/trim str/lower-case)))))",
+        },
+        "features.common.payments.state-rules/blocked?": {
+          file: "features/common/payments/state_rules.cljc", row: 32,
+          code: "(defn blocked?\n  \"True when card payments are off for `state` on `today`.\"\n  [state today]\n  (let [s (code state)]\n    (boolean\n     (when s\n       (or (contains? always-blocked s)\n           (when-let [until (get blocked-until s)]\n             (neg? (compare (str today) until))))))))",
+        },
+      },
+      open: "features.common.payments.charge.backend.state-gate/check",
+      marks: [{ id: "m", var: "features.common.payments.charge.backend.state-gate/shop-states", line: 30, note: "one query for every shop", color: "amber" }],
+    },
+  },
   flow: {
     label: "Flow",
     when: "Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline.",
