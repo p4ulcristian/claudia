@@ -517,7 +517,7 @@ function BlockView({ block, changed, seq, chat, browse, kept, onTouch, onUnkeep 
       </div>
       {block.kind === "graph" ? <Diagram scene={block} changed={[...changed]} seq={seq} />
         // Every block is as tall as it is: no inner scrolling, the picture scrolls.
-        : block.kind === "form" ? <FormView form={block.form} data={block.data} chat={browse} block={block.id} />
+        : block.kind === "form" ? <FormView form={block.form} data={block.data} chat={browse} block={block.id} live={!!chat} />
         : <PageFrame html={block.html} height={block.height} parts={block.parts} />}
     </section>
   );

@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { statSync } from "node:fs";
 import { DATA_DIR } from "./db";
-import { commandParts, stripReminders, taskNotice } from "./chat";
+import { commandParts, sentMidTurn, stripReminders, taskNotice } from "./chat";
 
 const PROJECTS = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
 
@@ -15,6 +15,13 @@ const db = new Database(join(DATA_DIR, "search.db"));
 db.exec("PRAGMA journal_mode = WAL");
 db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS msgs USING fts5(text, session UNINDEXED, uuid UNINDEXED, role UNINDEXED, tokenize = "unicode61 remove_diacritics 2")`);
 db.exec("CREATE TABLE IF NOT EXISTS files (session TEXT PRIMARY KEY, offset INTEGER NOT NULL)");
+// Raised when said() reads more of the session files: an older index is emptied and built again.
+// 2: messages sent mid-turn (queued_command attachments).
+const INDEX_VERSION = 2;
+if (db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version < INDEX_VERSION) {
+  db.exec("DELETE FROM msgs; DELETE FROM files");
+  db.exec(`PRAGMA user_version = ${INDEX_VERSION}`);
+}
 const q = {
   offset: db.query<{ offset: number }, [string]>("SELECT offset FROM files WHERE session = ?"),
   setOffset: db.query("INSERT INTO files (session, offset) VALUES (?, ?) ON CONFLICT (session) DO UPDATE SET offset = excluded.offset"),
@@ -31,10 +38,13 @@ const fileOf = (dir: string, session: string) => join(dir, `${session}.jsonl`);
 // The text a session line adds to the chat as the user or Claude sees it, or null (as loadHistory in
 // chat.ts reads it: task notices and command output are notes, not something said, and stay out).
 function said(line: string): { uuid: string; role: "user" | "claude"; text: string } | null {
-  if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"')) return null;
+  if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"')) return null;
   let e: any;
   try { e = JSON.parse(line); } catch { return null; }
   if (e.isMeta || e.isSidechain || !e.uuid) return null;
+  const midTurn = sentMidTurn(e);
+  if (midTurn) e = { type: "user", uuid: midTurn, message: { content: e.attachment.prompt } };
+  else if (e.type !== "user" && e.type !== "assistant") return null;
   const content = e.message?.content;
   const blocks: any[] = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : [];
   let text = blocks.filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => stripReminders(b.text)).filter(Boolean).join("\n");

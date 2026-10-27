@@ -522,6 +522,20 @@ Bun.serve({
             await c.send(String(m.text ?? ""), m.images ?? []);
             return broadcastChats();
           }
+          // The user typing in an editor block (saved as they type) and its Send.
+          case "code_edit": {
+            if (typeof m.block !== "string" || typeof m.file !== "string" || typeof m.text !== "string" || m.text.length > 1_000_000) return;
+            return chat(m.chat).editCode(m.block, m.file, m.text, Number(m.base) || 0);
+          }
+          case "code_send": {
+            if (typeof m.block !== "string") return;
+            const c = chat(m.chat);
+            store.unarchive(m.chat);
+            if (ws.data.chat !== m.chat) await openChat(ws, m.chat);
+            await wake(c);
+            await c.sendCode(m.block, String(m.note ?? "").slice(0, 20_000));
+            return broadcastChats();
+          }
           case "stop": return await chats.get(m.chat)?.stop();
           case "answer": return chats.get(m.chat)?.answer(m.id, m.answers ?? {});
           case "permit": return chats.get(m.chat)?.permit(m.id, !!m.allow);

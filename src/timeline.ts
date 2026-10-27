@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { open, readdir, readFile, stat } from "node:fs/promises";
-import { WORK, resultText, stripReminders, toolLabel, toolTitle } from "./chat";
+import { WORK, resultText, sentMidTurn, stripReminders, toolLabel, toolTitle } from "./chat";
 
 // Where a line sits in its file: byte offset and length.
 type Loc = [number, number];
@@ -227,17 +227,22 @@ async function sessionDir(sessionId: string): Promise<string | null> {
   return null;
 }
 
-// Sends Claude Code took in together: it saves them as one user entry with a new uuid and lists the
-// sent uuids in mergedSendUuids, so those never appear in the history under their own uuid.
+// Sent uuids the session file records under another entry, so the history may not show them under
+// their own uuid: sends Claude Code took in together (one user entry listing them in
+// mergedSendUuids) and sends taken in mid-turn (a queued_command attachment, see sentMidTurn).
 export async function mergedSends(sessionId: string): Promise<Set<string>> {
   const merged = new Set<string>();
   const dir = await sessionDir(sessionId);
   if (!dir) return merged;
   const text = await readFile(join(dir, `${sessionId}.jsonl`), "utf8").catch(() => "");
   for (const line of text.split("\n")) {
-    if (!line.includes('"mergedSendUuids"')) continue;
+    const together = line.includes('"mergedSendUuids"');
+    if (!together && !line.includes('"queued_command"')) continue;
     try {
-      for (const id of JSON.parse(line).mergedSendUuids ?? []) merged.add(id);
+      const e = JSON.parse(line);
+      if (together) for (const id of e.mergedSendUuids ?? []) merged.add(id);
+      const sent = sentMidTurn(e);
+      if (sent) merged.add(sent);
     } catch {}
   }
   return merged;

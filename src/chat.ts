@@ -13,6 +13,7 @@ import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
 import { applyDraw, describe, emptyScene, type Block, type DrawInput, type Scene } from "./scene";
+import { guardDraw, sendCode, userEdit } from "./editor";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
@@ -159,6 +160,15 @@ function assistantItems(msgId: string, content: any[]): Item[] {
 // whole chat shows (and search hits from before a compaction have a message to jump to). Each
 // compaction becomes a note in place of its summary message.
 type Said = { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null; compacted?: number };
+// A message sent while a turn ran isn't saved as a user entry: Claude Code saves a queued_command
+// attachment holding the sent uuid as source_uuid. The SDK turns these back into user messages only
+// in the last chain; the earlier chains read here need the same. Returns the sent uuid, or null.
+export function sentMidTurn(e: any): string | null {
+  const a = e?.type === "attachment" ? e.attachment : null;
+  if (a?.type !== "queued_command" || a.isMeta || a.forwardedIntent) return null;
+  if (typeof a.prompt !== "string" && !Array.isArray(a.prompt)) return null;
+  return typeof a.source_uuid === "string" && a.source_uuid ? a.source_uuid : e.uuid;
+}
 async function withEarlierChains(sessionId: string, msgs: Said[]): Promise<Said[]> {
   if (!msgs.length) return msgs;
   const file = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects", WORK.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
@@ -189,6 +199,7 @@ async function withEarlierChains(sessionId: string, msgs: Said[]): Promise<Said[
       root = e;
       if ((e.type === "user" || e.type === "assistant") && !e.isSidechain && !e.isMeta && !e.isCompactSummary && e.message)
         chain.push({ type: e.type, uuid: e.uuid, message: e.message, parent_tool_use_id: null });
+      else if (!e.isSidechain && sentMidTurn(e)) chain.push({ type: "user", uuid: sentMidTurn(e)!, message: { role: "user", content: e.attachment.prompt }, parent_tool_use_id: null });
     }
     out.unshift(...chain.reverse());
     boundary = root;
@@ -348,6 +359,8 @@ export class Chat implements SessionHandler {
   since = 0;
   partial = "";
   scene: Scene;
+  // The turn whose picture is the current scene (its row in the store), where the user's edits go.
+  private sceneTurn: string;
   asks = new Map<string, Waiting<Ask>>();
   permits = new Map<string, Waiting<Permit>>();
   tasks = new Map<string, Task>();
@@ -376,7 +389,9 @@ export class Chat implements SessionHandler {
   model = "";
 
   constructor(readonly id: string, private onChange: () => void) {
-    this.scene = store.pictures(id).at(-1)?.scene ?? emptyScene();
+    const last = store.pictures(id).at(-1);
+    this.scene = last?.scene ?? emptyScene();
+    this.sceneTurn = last?.turn ?? "";
     this.settings = store.settings(id);
     // Choices made in the form row are said again with the first message after a runner start.
     if (Object.keys(this.settings.forms ?? {}).length) this.formsNote = formsNote(this.settings.forms);
@@ -765,6 +780,16 @@ export class Chat implements SessionHandler {
       if (given === undefined && known) continue;
       b.data = { ...b.data, root: resolve(this.settings.folder ?? WORK, (given ?? ".").replace(/^~(?=\/|$)/, homedir())) };
     }
+    // An editor block: Claude's code doesn't replace what the user typed and hasn't sent (src/editor.ts).
+    const kept: string[] = [];
+    for (const b of input.blocks ?? []) {
+      const known = this.scene.blocks?.find((x) => x.id === b.id && x.kind === "form");
+      const isEditor = b.form === "editor" || (!b.form && known?.kind === "form" && known.form === "editor");
+      if (!isEditor || !b.data) continue;
+      const g = guardDraw(known?.kind === "form" && known.form === "editor" ? known.data : undefined, b.data);
+      b.data = g.data;
+      kept.push(...g.refused.map((r) => `Editor block "${b.id}", ${r}`));
+    }
     let { scene, changed } = applyDraw(this.scene, input);
     // Claudia's block of a green form (auto-files, auto-git) is the user's: Claude's clear or
     // removeBlocks doesn't take it off (its last copy comes back, last); turning the form off does.
@@ -788,12 +813,42 @@ export class Chat implements SessionHandler {
     if (lost.length) return `Not drawn: this change takes the last ${lost.join(", ")} block out of the picture, and the user made ${lost.length > 1 ? "those" : "that"} required in this chat (form row). Keep one, or put a new one in the same call.`;
     const absent = required.filter((k) => !has.has(k));
     this.scene = scene;
+    this.sceneTurn = this.turn;
     this.drew = true;
     this.q?.kv("drew", true);
     store.savePicture(this.id, this.turn, scene, changed);
     this.emit({ t: "scene", scene, changed, turn: this.turn });
     const news = this.seeForms();
-    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: switched off by the user; use another kind` : ""}${absent.length ? `. Still missing, required by the user in this chat: ${absent.join(", ")}; add ${absent.length > 1 ? "them" : "it"}.` : ""}`;
+    return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: switched off by the user; use another kind` : ""}${absent.length ? `. Still missing, required by the user in this chat: ${absent.join(", ")}; add ${absent.length > 1 ? "them" : "it"}.` : ""}${kept.length ? `\n\nNot drawn, kept for the user:\n${kept.join("\n\n")}` : ""}`;
+  }
+
+  // An editor block of the live picture, changed by the user (not Claude): saved in place, in the
+  // picture of the turn that drew it, and shown on every open page.
+  private userBlock(block: string, change: (data: Record<string, unknown>) => Record<string, unknown> | null): boolean {
+    const b = this.scene.blocks?.find((x) => x.id === block);
+    if (b?.kind !== "form" || b.form !== "editor") return false;
+    const data = change(b.data);
+    if (!data) return false;
+    this.scene = { ...this.scene, blocks: this.scene.blocks!.map((x) => (x.id === block ? { ...b, data } : x)) };
+    store.savePicture(this.id, this.sceneTurn, this.scene, []);
+    this.emit({ t: "scene", scene: this.scene, changed: [], turn: this.sceneTurn });
+    return true;
+  }
+
+  // The user typed in an editor block: base = the version of Claude's code their text starts from.
+  editCode(block: string, file: string, text: string, base: number) {
+    this.userBlock(block, (data) => userEdit(data, file, text, base));
+  }
+
+  // The user's Send on an editor block: their edits (with the diff against Claude's code) as a message.
+  async sendCode(block: string, note: string) {
+    let text = "";
+    this.userBlock(block, (data) => {
+      const r = sendCode(block, data, note);
+      if (r) text = r.text;
+      return r?.data ?? null;
+    });
+    if (text) await this.send(text);
   }
 
   // Save a block of the picture as a template (from Claude's save_template tool or the Save button).

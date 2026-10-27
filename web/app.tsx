@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
 import { PictureView } from "./picture";
+import { PictureSend } from "./editor";
 import { AskPanel, PermitPanel } from "./panels";
 import { TimelineView } from "./timeline";
 import { RightBar } from "./rightbar";
@@ -11,6 +12,7 @@ import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, ContextMenu, type MenuChat } from "./chatmenu";
 import { play } from "./sounds";
+import { allowPopups, popup, popupsAllowed } from "./popups";
 import { FormRow } from "./formrow";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
@@ -257,19 +259,31 @@ function App() {
     store.set("sounds", on ? "on" : "off");
     if (on) play("done", live.settings.color);
   };
+  const [popups, setPopups] = useState(() => store.get("popups") === "on" && popupsAllowed());
+  const popupsRef = useRef(popups);
+  popupsRef.current = popups;
+  const openRef = useRef<(id: string) => void>(() => {});
+  const togglePopups = async (on: boolean) => {
+    const allowed = on && (await allowPopups());
+    setPopups(allowed);
+    store.set("popups", allowed ? "on" : "off");
+  };
   const loadChats = useCallback(async () => {
     const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
     if (!r.ok) return;
     const rows: ChatRow[] = await r.json();
     for (const c of rows) known.current.set(c.id, c);
     const ended = rows.filter((c) => wasRunning.current.get(c.id) && !c.running && c.id !== currentRef.current);
-    // Sounds: a chat that finished or started waiting on you, in its colour's note; the open one only
-    // when the window isn't in front.
-    if (soundsRef.current) {
+    // Sounds and desktop popups: a chat that finished or started waiting on you (a sound in its
+    // colour's note); the open one only when the window isn't in front.
+    if (soundsRef.current || popupsRef.current) {
       const heard = (c: ChatRow) => c.id !== currentRef.current || !document.hasFocus();
       for (const c of rows) {
-        if (c.waiting && !wasWaiting.current.get(c.id) && heard(c)) play("waiting", c.color);
-        else if (wasRunning.current.get(c.id) && !c.running && !c.waiting && heard(c)) play("done", c.color);
+        const kind = c.waiting && !wasWaiting.current.get(c.id) ? "waiting"
+          : wasRunning.current.get(c.id) && !c.running && !c.waiting ? "done" : null;
+        if (!kind || !heard(c)) continue;
+        if (soundsRef.current) play(kind, c.color);
+        if (popupsRef.current) popup(kind, c, () => openRef.current(c.id));
       }
     }
     for (const c of rows) { wasRunning.current.set(c.id, c.running); wasWaiting.current.set(c.id, c.waiting); }
@@ -351,6 +365,7 @@ function App() {
     if (push) history.pushState(null, "", `/c/${id}`);
     send({ t: "open", chat: id });
   }, [send]);
+  openRef.current = open;
 
   const newChat = useCallback(() => open(crypto.randomUUID()), [open]);
   // A chat picked from the list nods "yes" and opens; the open one shakes "no, already here" and
@@ -671,6 +686,14 @@ function App() {
               Sounds
             </label>
             <label className="toggle">
+              <input
+                type="checkbox"
+                checked={popups}
+                onChange={(e) => void togglePopups(e.target.checked)}
+              />
+              Desktop popups
+            </label>
+            <label className="toggle">
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
             </label>
@@ -786,7 +809,9 @@ function App() {
             />
           )}
           <div className={`stage ${viewing ? "past" : ""}`}>
-            <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} cols={live.settings.cols ?? 0} />
+            <PictureSend.Provider value={readOnly ? null : send}>
+              <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} cols={live.settings.cols ?? 0} />
+            </PictureSend.Provider>
           </div>
           </div>
           )}

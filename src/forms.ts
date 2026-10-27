@@ -214,6 +214,18 @@ export const FORMS = {
       marks: [{ id: "m", var: "features.common.payments.charge.backend.state-gate/shop-states", line: 30, note: "one query for every shop", color: "amber" }],
     },
   },
+  editor: {
+    label: "Editor",
+    when: "Code you and the user both edit: an example for them to change, an exercise, a draft to finish, a snippet to try. One tab per file, a real editor; the user types in it and presses Send, which hands you a <claudia-code> message with their diff against your version and their full code. While the user has unsent edits in a file, draw refuses new code for that file and gives you their code: merge your change into it and draw again with seen set to the revision it names. Pick it when the user should write or change code; files for code on disk to read.",
+    fields: "files: [{ id, name (a file name: its extension picks the language), lang? (when the name has none), code, seen? (the user's edit revision your code merges, after a refusal) }] tabs in order, open? (the file id shown), note? (one line over the editor: what to try)",
+    sample: {
+      note: "Make total() skip cancelled lines.",
+      files: [
+        { id: "total", name: "total.ts", code: "type Line = { qty: number; unitCents: number; cancelled?: boolean };\n\nexport function total(lines: Line[]): number {\n  return lines.reduce((sum, l) => sum + l.qty * l.unitCents, 0);\n}\n" },
+        { id: "test", name: "total.test.ts", code: "import { expect, test } from \"bun:test\";\nimport { total } from \"./total\";\n\ntest(\"two coats\", () => {\n  expect(total([{ qty: 2, unitCents: 1500 }])).toBe(3000);\n});\n" },
+      ],
+    },
+  },
   flow: {
     label: "Flow",
     when: "Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline.",

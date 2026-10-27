@@ -8,6 +8,7 @@ import { GitForm } from "./git";
 import { ClojureForm } from "./clojure";
 import { CallsForm } from "./calls";
 import { Flow } from "./flow";
+import { EditorForm } from "./editor";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -609,7 +610,8 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   );
 }
 
-const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }) => React.ReactNode> = {
+// live: the picture shown is the chat's current one (forms that write, the editor, write only there).
+const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string; live?: boolean }) => React.ReactNode> = {
   pipeline: Pipeline,
   timeline: Timeline,
   compare: Compare,
@@ -620,11 +622,12 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string }
   clojure: ClojureForm,
   calls: CallsForm,
   flow: Flow,
+  editor: EditorForm,
 };
 
 // chat: the chat whose picture this is, for forms that read through the runner (files, git, clojure, calls).
-export function FormView({ form, data, chat, block }: { form: FormName; data: Data; chat?: string; block?: string }) {
+export function FormView({ form, data, chat, block, live }: { form: FormName; data: Data; chat?: string; block?: string; live?: boolean }) {
   // "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
   const R = (form as string) === "code" ? Code : RENDER[form];
-  return <div className={`form-view form-${form}`}>{R ? <R data={data} chat={chat} block={block} /> : <p className="f-note">Unknown form "{form}".</p>}</div>;
+  return <div className={`form-view form-${form}`}>{R ? <R data={data} chat={chat} block={block} live={live} /> : <p className="f-note">Unknown form "{form}".</p>}</div>;
 }

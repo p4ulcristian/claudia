@@ -1,7 +1,8 @@
 // The left half: the conversation, kept short, with tool steps folded away.
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { md } from "./md";
 import type { Command, Item } from "./types";
+import { CodeChip, codeSends } from "./editor";
 
 type Tool = Extract<Item, { k: "tool" }>;
 type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
@@ -199,7 +200,7 @@ export function Messages(props: {
             <div key={it.uuid} data-at={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
                 {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
-                <Markdown text={it.text} />
+                <UserText text={it.text} />
               </div>
               {has && (
                 <button className="pic-link" title="Show the picture from this turn" onClick={() => props.onView(props.viewing === it.uuid ? null : it.uuid)}>
@@ -226,7 +227,7 @@ export function Messages(props: {
         <div key={it.uuid} className="msg user queued" title="Claude reads this at its next step">
           <div className="bubble">
             {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
-            <Markdown text={it.text} />
+            <UserText text={it.text} />
           </div>
           <span className="queued-tag">queued</span>
         </div>
@@ -234,6 +235,18 @@ export function Messages(props: {
       {props.stopped && !running && <div className="muted small">Stopped.</div>}
       {props.error && <div className="error-line">{props.error}</div>}
     </div>
+  );
+}
+
+// The user's message: code sent from an editor block shows as a chip per file (its diff on click), the rest as text.
+function UserText({ text }: { text: string }) {
+  const sent = useMemo(() => codeSends(text), [text]);
+  if (!sent) return <Markdown text={text} />;
+  return (
+    <>
+      {sent.note && <Markdown text={sent.note} />}
+      {sent.sends.map((s, i) => <CodeChip key={i} send={s} />)}
+    </>
   );
 }
 
