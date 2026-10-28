@@ -3,6 +3,7 @@
 // sidebar's scrolling and clipping don't cut it.
 import React, { useEffect, useState } from "react";
 import { layer } from "./viewport";
+import { GRAIN_SIZE, grainUrl } from "./chalk";
 
 type Tip = { text: string; color?: string; x: number; y: number };
 
@@ -42,28 +43,25 @@ export function TipBubble() {
   }, []);
   return (
     <>
-      {/* The chalk edge for page parts outside the picture (this bubble, the rail's circles, the chalk lines). */}
+      {/* The chalk grain for SVG drawn outside the picture (the git and clojure maps, charts): SVG
+          shapes take a mask, by id. The rest of the page's chalk is CSS (web/chalk.ts). */}
       <svg className="chalk-defs" aria-hidden="true">
-        <filter id="tip-chalk" x="-20%" y="-20%" width="140%" height="140%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        {/* Softer, for small strokes (the menu icon) that the full wobble would break up. */}
-        <filter id="chalk-soft" x="-20%" y="-20%" width="140%" height="140%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.3" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        {/* For lines a few px thin: the filter region has to reach well past them for the wobble. */}
-        <filter id="chalk-line" x="-500%" y="-500%" width="1100%" height="1100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="5" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
+        {(["edge", "soft"] as const).map((kind) => {
+          const id = kind === "edge" ? "chalk-grain" : "chalk-grain-soft";
+          return (
+            <React.Fragment key={kind}>
+              <pattern id={`${id}-tile`} patternUnits="userSpaceOnUse" width={GRAIN_SIZE} height={GRAIN_SIZE}>
+                <image href={grainUrl(kind)} width={GRAIN_SIZE} height={GRAIN_SIZE} />
+              </pattern>
+              <mask id={id} maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000" style={{ maskType: "alpha" }}>
+                <rect x="-100000" y="-100000" width="200000" height="200000" fill={`url(#${id}-tile)`} />
+              </mask>
+            </React.Fragment>
+          );
+        })}
       </svg>
       {tip && (
         <div className="tip-bubble" role="tooltip" style={{ left: tip.x, top: tip.y, "--chat": tip.color } as React.CSSProperties}>
-          <svg className="tip-chalk" aria-hidden="true">
-            <rect x="2" y="2" rx="10" style={{ width: "calc(100% - 4px)", height: "calc(100% - 4px)" }} />
-          </svg>
           <svg className="tip-tail" viewBox="0 0 12 16" aria-hidden="true">
             <path d="M12 1 L1 8 L12 15" />
           </svg>

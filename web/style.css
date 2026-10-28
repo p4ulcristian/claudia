@@ -68,8 +68,8 @@ code, pre { font-family: var(--mono); }
 .right-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .right-scroll > * { flex-shrink: 0; }
 .right { background: var(--bg2); }
-.divider { cursor: col-resize; background: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 10px 2px; filter: url(#chalk-line); }
-.divider:hover { background: var(--accent); width: 3px; margin: 10px 1.5px; }
+.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 10px 2px; }
+.divider:hover { --ink: var(--accent); width: 3px; margin: 10px 1.5px; }
 
 /* Sidebar */
 .sidebar { border-right: 1px solid var(--line); background: var(--bg2); display: flex; flex-direction: column; gap: 10px; padding: 14px 10px; min-height: 0; }
@@ -87,7 +87,7 @@ code, pre { font-family: var(--mono); }
 .chat-row.colored.active { background: color-mix(in srgb, var(--chat) 22%, var(--panel2)); box-shadow: inset 3px 0 0 var(--chat); }
 .chat-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
 .chat-row .when { color: var(--muted); font-size: 11.5px; }
-.run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 1.4s ease-in-out infinite; flex: none; }
+.run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 1.4s ease-in-out 3; flex: none; }
 .toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; padding: 0 6px; }
 .side-foot { display: grid; gap: 6px; }
 
@@ -149,10 +149,10 @@ code, pre { font-family: var(--mono); }
 .explain-btn:hover { color: var(--fg); background: var(--panel2); }
 .explain-btn.live { color: var(--blue); }
 .explain-under { flex-basis: 100%; }
-.explain-note { position: relative; isolation: isolate; display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 6px 14px; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--fg); }
-.explain-note::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 9px; border: 1.5px solid color-mix(in srgb, var(--blue) 55%, transparent); background: color-mix(in srgb, var(--blue) 8%, transparent); filter: url(#tip-chalk); }
+.explain-note { position: relative; isolation: isolate; display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 6px 14px; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--fg);
+  border-radius: 9px; background: color-mix(in srgb, var(--blue) 8%, transparent); --ring: var(--chalk-r9-15); --ink: color-mix(in srgb, var(--blue) 55%, transparent); }
 .explain-note.busy { color: var(--muted); font: 700 13px var(--hand); }
-.explain-note.err::before { border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+.explain-note.err { --ink: color-mix(in srgb, var(--red) 55%, transparent); }
 .explain-note span { flex: 1; }
 .explain-x { flex: none; color: var(--muted); font-size: 15px; line-height: 1; }
 .explain-x:hover { color: var(--fg); }
@@ -303,7 +303,7 @@ code, pre { font-family: var(--mono); }
 .meters { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; padding: 10px 6px 2px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); }
 .meter { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; row-gap: 1px; }
 .m-label { white-space: nowrap; }
-.m-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; filter: url(#tip-chalk); }
+.m-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; -webkit-mask-box-image: var(--chalk-bar3); -webkit-mask-box-image-outset: 2px; }
 .m-bar > span { display: block; height: 100%; background: var(--green); border-radius: 3px; }
 .meter.amber .m-bar > span { background: var(--amber); }
 .meter.red .m-bar > span { background: var(--red); }
@@ -426,7 +426,7 @@ code, pre { font-family: var(--mono); }
 /* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
 .rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ring { position: relative; width: 28px; height: 28px; display: grid; place-items: center; }
-.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: url(#tip-chalk); }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; -webkit-mask: var(--chalk-grain) 0 0 / var(--chalk-grain-size); mask: var(--chalk-grain) 0 0 / var(--chalk-grain-size); }
 .ring circle { fill: none; stroke-width: 3; }
 .r-track { stroke: var(--line); }
 .r-fill { stroke: var(--green); stroke-linecap: round; }
@@ -440,30 +440,35 @@ code, pre { font-family: var(--mono); }
 .ring.action:hover .r-track { stroke: color-mix(in srgb, var(--fg) 35%, var(--line)); fill: color-mix(in srgb, var(--fg) 10%, transparent); }
 .r-label { position: absolute; right: -9px; bottom: -4px; font: 700 10px/1 var(--hand); color: var(--muted); }
 /* Each circle is chalked on: a wobbly ring in the chat's colour with a faint fill. */
-.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); background: none; position: relative; isolation: isolate; }
-.rail-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 2.2px solid var(--chat, var(--grey)); background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); filter: url(#tip-chalk); }
+.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); position: relative; isolation: isolate;
+  background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); --ring: var(--chalk-c34-22); --ink: var(--chat, var(--grey)); transition: background-color 0.15s, box-shadow 0.15s; }
 /* Passive chats: at the bottom of the rail, above a chalk line, faded until hovered or open. */
 .rail-chat.passive { opacity: 0.55; }
 .rail-chat.passive:hover, .rail-chat.passive.on { opacity: 1; }
 .rail-chat.passive.first { margin-top: auto; }
 .rail-chat.passive.last::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -11px; border-top: 1.5px dashed var(--line); }
 /* Spotlight: the open chat glows; the others fade (their state badges stay bright) until hovered. */
-.rail-chat.on .rail-dot::before { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
+.rail-chat.on .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
 .rail-dot::before, .rail-dot > .rail-logo, .rail-dot > .rail-tag, .rail-dot > .rail-blank, .rail-chat > .rail-name, .rail-chat > .rail-server { transition: opacity 0.15s, filter 0.15s; }
 .rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) :is(.rail-logo, .rail-tag, .rail-blank, .rail-name, .rail-server) { opacity: 0.35; filter: saturate(0.4); }
 .rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) .rail-dot::before { opacity: 0.35; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 5%, transparent); }
 /* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
-.state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate; }
-.state-badge::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 9px; border: 2px solid var(--b); background: color-mix(in oklch, var(--bg2) 80%, var(--b)); filter: url(#tip-chalk); }
-.state-badge.waiting { --b: var(--amber); animation: breathe 1.4s ease-in-out infinite; }
+.state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate;
+  border-radius: 9px; background: color-mix(in oklch, var(--bg2) 80%, var(--b)); --ring: var(--chalk-r9-2); --ink: var(--b); }
+.state-badge.waiting { --b: var(--amber); animation: breathe 1.4s ease-in-out 4; }
 .state-badge.thinking { --b: var(--blue); }
 .state-badge.done { --b: var(--green); }
-.state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out infinite; }
+.state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out 3; }
 .state-badge i:nth-child(2) { animation-delay: 0.2s; }
 .state-badge i:nth-child(3) { animation-delay: 0.4s; }
 @keyframes chalk-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+/* Idle dots: the badges, moons and run dots move on for good only on the open chat; on the other
+   chats they run a few times when they appear, then rest (an endless animation repaints the page
+   every frame: Safari's idle CPU went from ~55% to under 10%). */
+.rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i), .chat-row.active .run-dot { animation-iteration-count: infinite; }
 .rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; }
-.rail-dot.add::before { border: 1.8px dashed var(--muted); background: none; }
+.rail-dot.add { --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
 .rail-search { margin-top: -10px; } /* 8px under the +, not the rail's 18px gap */
 .rail-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .chalk-defs { position: absolute; width: 0; height: 0; }
@@ -473,7 +478,7 @@ code, pre { font-family: var(--mono); }
 .brand { font: 700 19px var(--hand); letter-spacing: 0; gap: 6px; padding-right: 0; }
 /* Parts are split by chalk lines, not borders. */
 .sidebar, .rail { border-right: 0; position: relative; }
-.sidebar::after, .rail::after { content: ""; position: absolute; top: 10px; bottom: 10px; right: 0; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--accent) 45%, var(--line)); filter: url(#chalk-line); pointer-events: none; }
+.sidebar::after, .rail::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .chat-row.colored, .chat-row.colored:hover { box-shadow: none; background: none; }
 .chat-row.colored:hover { background: rgb(255 255 255 / 5%); }
 .chat-row.colored.active, .chat-row.active { box-shadow: none; background: rgb(255 255 255 / 8%); }
@@ -493,19 +498,27 @@ code, pre { font-family: var(--mono); }
 
 /* The composer sits under a chalk line. */
 .composer { background: none; padding: 12px 14px; }
-.composer::before { content: ""; position: absolute; top: 0; left: 14px; right: 14px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--accent) 45%, var(--line)); filter: url(#chalk-line); pointer-events: none; }
+.composer::before { content: ""; position: absolute; top: -2px; left: 12px; right: 12px; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .input-row { background: var(--bg2); border: 0; border-radius: 6px; }
 .input-row:focus-within { box-shadow: 0 0 0 2px var(--accent); }
 
 /* The board itself */
 .right { background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
-.node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke-width: 2.3; filter: var(--chalk-url); }
+.node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke-width: 2.3; }
 .node.s-done .body { fill: color-mix(in srgb, var(--c) 18%, transparent); }
 .node .label { font: 700 15px var(--hand); }
 .node .note { font: 400 12px var(--sans); }
-.group rect { fill: color-mix(in srgb, var(--c) 5%, transparent); stroke-width: 1.8; filter: var(--chalk-url); }
+.group rect { fill: color-mix(in srgb, var(--c) 5%, transparent); stroke-width: 1.8; }
 .group text { font: 700 14px var(--hand); letter-spacing: 0; text-transform: none; }
-.edge path { stroke-width: 2.1; filter: var(--chalk-url); }
+.edge path { stroke-width: 2.1; }
+/* Chalk: under each shape and line, a copy 1.6 wider through the fray grain (picture.tsx), its rough edge. */
+.node .fray, .group .fray, .edge .fray { fill: none; mask: var(--chalk-mask); }
+.node .fray { stroke: var(--c); stroke-width: 3.9; }
+.node.s-todo .fray { stroke-dasharray: 4 3; }
+.node.s-blocked .fray { stroke: var(--red); stroke-dasharray: 5 3; }
+.group .fray { stroke-width: 3.4; }
+.edge .fray { stroke-width: 3.7; }
+.edge.hot .fray { stroke: var(--c); stroke-width: 3.9; }
 .edge-label rect { fill: var(--board); stroke: none; }
 .edge-label text { font: 400 12px var(--sans); }
 .badge path { stroke: var(--on-hue); }
@@ -694,6 +707,8 @@ svg.logo { flex: none; color: var(--fg); }
 .rbar-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 .rbar-chip.live { color: var(--green); background: var(--green-bg); }
 .rbar-chip.live .rbar-chip-dot { animation: breathe 2s ease-in-out infinite; }
+/* The bar is hidden until the mouse comes near (not on phones): its dots rest meanwhile. */
+.right:not(.sheet) .rbar-zone:not(.show, .pinned, :focus-within) :is(.rbar-chip-dot, .fold-dot) { animation: none; }
 .rbar-chip.live.still { color: var(--muted); background: var(--grey-bg); }
 .rbar-chip.live.still .rbar-chip-dot { animation: none; }
 .rbar-chip.past { color: var(--violet); background: var(--violet-bg); }
@@ -729,17 +744,16 @@ svg.logo { flex: none; color: var(--fg); }
 .page-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; transition: height 0.15s ease-out; }
 
 /* Hover bubble: a chat's full title, chalked on the board beside the row or circle. */
-.tip-bubble { position: fixed; z-index: 60; transform: translateY(-50%); max-width: 340px; padding: 10px 14px; pointer-events: none; font: 700 15px/1.3 var(--hand); text-box: trim-both cap alphabetic; color: var(--fg); overflow-wrap: anywhere; animation: tip-in 0.08s ease-out; }
-.tip-bubble svg { position: absolute; overflow: visible; filter: url(#tip-chalk); }
-.tip-chalk { inset: 0; width: 100%; height: 100%; z-index: -1; }
-.tip-chalk rect { fill: color-mix(in oklch, var(--board) 92%, #000); stroke: var(--chat, var(--accent)); stroke-width: 2; filter: drop-shadow(0 3px 8px rgb(0 0 0 / 0.35)); }
-.tip-tail { left: -10px; top: calc(50% - 8px); width: 12px; height: 16px; }
+.tip-bubble { position: fixed; z-index: 60; transform: translateY(-50%); max-width: 340px; padding: 9px 13px; pointer-events: none; font: 700 15px/1.3 var(--hand); text-box: trim-both cap alphabetic; color: var(--fg); overflow-wrap: anywhere; animation: tip-in 0.08s ease-out;
+  isolation: isolate; border: 1px solid transparent; border-radius: 11px; background: color-mix(in oklch, var(--board) 92%, #000) padding-box; box-shadow: 0 3px 8px rgb(0 0 0 / 0.35); --ring: var(--chalk-r10-2); --ink: var(--chat, var(--accent)); }
+.tip-bubble svg { position: absolute; overflow: visible; }
+.tip-tail { left: -11px; top: calc(50% - 8px); width: 12px; height: 16px; -webkit-mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 .tip-tail path { fill: color-mix(in oklch, var(--board) 92%, #000); stroke: var(--chat, var(--accent)); stroke-width: 2; stroke-linejoin: round; }
 @keyframes tip-in { from { opacity: 0; translate: -4px 0; } }
 
 /* The chat's project: a small chalk tag at the circle's bottom right. */
 .project-tag { position: absolute; right: -12px; bottom: -7px; padding: 0 4px; font: 700 10.5px/15px var(--sans); color: var(--tag, var(--muted)); letter-spacing: 0.02em; isolation: isolate; pointer-events: none; }
-.project-tag::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 8px; border: 1.5px solid color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); background: var(--bg2); filter: url(#tip-chalk); }
+.project-tag { border-radius: 8px; background: var(--bg2); --ring: var(--chalk-r8-15); --ink: color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); }
 /* With a logo: the logo fills the circle, the chat's letter sits in a small circle at its bottom right. */
 .rail-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; pointer-events: none; }
 /* The letter is plain and solid (no chalk) so it stays readable at this size. */
@@ -747,18 +761,38 @@ svg.logo { flex: none; color: var(--fg); }
 
 /* Agents still working: small chalk moons around the chat's circle. */
 .moons { position: absolute; inset: 0; pointer-events: none; }
-.moons i { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 1.5px var(--bg2); filter: url(#tip-chalk); animation: breathe 1.4s ease-in-out infinite; }
+/* A chalk dot with a ring of the rail's colour round it, 2px of room for its rough edge. */
+.moons i { position: absolute; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; background: radial-gradient(circle, var(--chat, var(--grey)) 0 4px, var(--bg2) 4px 5.5px, transparent 5.5px); -webkit-mask-box-image: var(--chalk-dot11); animation: breathe 1.4s ease-in-out 3; }
 
-/* ---------- Chalk outlines ----------
-   Boxes and buttons are drawn in chalk: the outline (and fill) sit on a ::before with the chalk
-   filter, behind the content, so the text stays crisp. --chalk-c = outline, --chalk-bg = fill. */
+/* ---------- Chalk ----------
+   Everything drawn in chalk (outlines, circles, lines) is its colour (--ink) painted through a
+   baked chalk mask (--ring: one of the --chalk-* images web/chalk.ts draws once at load, see
+   DESIGN.md) on a ::before 2px bigger than its box on every side: room for the rough edge.
+   An outlined box keeps its fill on itself (--chalk-bg on buttons), under the outline, so the
+   text stays crisp. --chalk-c = a button's outline colour. */
 :root { --chalk: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip, .act-pill { position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: none !important; }
-.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before, .view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
-  border: 2px solid var(--chalk-c, var(--chalk)); background: var(--chalk-bg, transparent); filter: url(#tip-chalk); transition: border-color 0.12s;
+.explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .save-note::before, .chalk-box::before,
+.f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
+.form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .server-filter button::before, .new-on button::before,
+.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
+.view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
+  content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
+  border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
-.input-row { --chalk-bg: var(--bg2); border-radius: 10px; }
+/* Chalk lines: each places its own ::before (or ::after) 2px past the line on every side. */
+.divider::before, .sidebar::after, .rail::after, .composer::before, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before, .grab-line::before {
+  content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
+}
+.divider::before, .edge-line::before, .f-arrow::before, .grab-line::before { inset: -2px; }
+/* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
+@supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
+/* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip, .act-pill {
+  position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
+  --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
+}
+.rbar { --ring: var(--chalk-r12-2); }
+.input-row { --chalk-bg: var(--bg2); border-radius: 10px; --ring: var(--chalk-r10-2); }
 .input-row:focus-within { --chalk-c: var(--accent); }
 .new { --chalk-bg: var(--panel); }
 .new:hover { --chalk-c: var(--accent); }
@@ -767,19 +801,24 @@ svg.logo { flex: none; color: var(--fg); }
 .search-box:focus-within { --chalk-c: var(--accent); }
 .primary { --chalk-c: var(--accent); --chalk-bg: var(--accent); }
 .stop { --chalk-c: var(--red); }
+.toolbar .primary, .toolbar .stop { --ring: var(--chalk-r7-2); }
 .prompt-actions button.primary { --chalk-c: var(--accent); }
-.view-switch { --chalk-bg: var(--bg); }
-.view-switch button.on { --chalk-bg: var(--panel2); }
+.view-switch { --chalk-bg: var(--bg); --ring: var(--chalk-r9-2); }
+.view-switch button.on { --chalk-bg: var(--panel2); --ring: var(--chalk-r7-2); }
+.rbar-fold { --ring: var(--chalk-r7-2); }
+.rbar-chip { --ring: var(--chalk-r12-2); }
 .rbar-chip.live { --chalk-c: color-mix(in srgb, var(--green) 55%, transparent); --chalk-bg: var(--green-bg); }
 .rbar-chip.live.still { --chalk-c: var(--line); --chalk-bg: var(--grey-bg); }
 .rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
-.act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); }
+.act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
 
 /* The menu button: three chalk strokes, centred over the closed rail; a chalk ring on hover. */
-.menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); }
+.menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); --ring: var(--chalk-c32-2); --ink: var(--chalk-c, var(--chalk)); }
 .menu-toggle:hover { background: none; }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
-.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; filter: url(#chalk-soft); }
+/* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
+.burger, .rail-forms svg, .form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 
 /* Folding the right half: its column slides (--fold-w), the pane fades out or in at its full width. */
 @property --fold-w { syntax: "<length>"; inherits: false; initial-value: 0px; }
@@ -793,9 +832,9 @@ svg.logo { flex: none; color: var(--fg); }
 /* The folded right half: a thin chalk edge; it glows in the chat colour when a new picture came. */
 .fold-edge { display: flex; }
 .fold-edge .unfold { flex: 1; display: grid; place-items: center; cursor: pointer; }
-.edge-line { width: 2px; height: calc(100% - 20px); border-radius: 1px; background: var(--chalk); filter: url(#chalk-line); transition: background 0.15s, width 0.15s; }
-.fold-edge .unfold:hover .edge-line { background: var(--accent); width: 3px; }
-.fold-edge .unfold.unseen .edge-line { background: var(--accent); width: 3px; box-shadow: 0 0 12px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
+.edge-line { position: relative; width: 2px; height: calc(100% - 20px); border-radius: 1px; --ink: var(--chalk); transition: width 0.15s; }
+.fold-edge .unfold:hover .edge-line { --ink: var(--accent); width: 3px; }
+.fold-edge .unfold.unseen .edge-line { --ink: var(--accent); width: 3px; box-shadow: 0 0 12px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
 .split.folded .divider { visibility: hidden; }
 
 /* Chat header with the activity pill: the title keeps at least 40% of the row, the folder chip gives way first. */
@@ -816,11 +855,13 @@ svg.logo { flex: none; color: var(--fg); }
   .sheet-tab { display: flex; align-items: center; justify-content: center; gap: 10px; height: 34px; color: var(--muted); font: 700 15px var(--hand); position: relative; }
   .sheet-tab .grab-line { width: 28px; }
   .sheet-tab.unseen { color: var(--accent); }
-  .sheet-tab.unseen .grab-line { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
-  .grab-line { display: block; width: 44px; height: 3px; border-radius: 2px; background: var(--chalk); filter: url(#chalk-soft); }
+  .sheet-tab.unseen .grab-line { --ink: var(--accent); box-shadow: 0 0 10px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
+  .grab-line { display: block; position: relative; width: 44px; height: 3px; border-radius: 2px; --ink: var(--chalk); }
+  .grab-line::before { -webkit-mask-box-image: var(--chalk-line3-soft); }
   .right.sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 86%; z-index: 30; border-radius: 18px 18px 0 0; transform: translateY(105%); transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -10px 40px rgb(0 0 0 / 0.45); }
   .right.sheet.open { transform: none; }
-  .right.sheet::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border-top: 2px solid var(--chalk); filter: url(#tip-chalk); pointer-events: none; }
+  /* Its top edge in chalk: the top of an r18 outline (corners and top only). */
+  .right.sheet::before { content: ""; position: absolute; top: -2px; left: -2px; right: -2px; height: 20px; z-index: -1; pointer-events: none; background: var(--chalk-fill, var(--chalk)); -webkit-mask-box-image: var(--chalk-r18-2); -webkit-mask-box-image-width: 20px 20px 0 20px; }
   .sheet-grab { display: grid; place-items: center; height: 26px; flex: none; touch-action: none; cursor: grab; }
   .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.4); animation: fade-in 0.2s ease-out; }
   /* No hover on a phone: the bar sits at the bottom of the sheet; its fold button closes the sheet. */
@@ -861,8 +902,8 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .save-pic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
 .save-pic:disabled { opacity: 0.35; cursor: default; }
 .save-pic.busy svg { animation: breathe 0.9s ease-in-out infinite; }
-.save-note { position: absolute; right: 14px; bottom: calc(100% + 10px); z-index: 8; max-width: min(460px, calc(100% - 28px)); padding: 7px 13px; font: 700 14px/1.3 var(--hand); color: var(--fg); isolation: isolate; animation: rise 0.18s ease-out; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.save-note::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 10px; border: 2px solid var(--green); background: color-mix(in oklch, var(--bg2) 92%, var(--green)); filter: url(#tip-chalk); }
+.save-note { position: absolute; right: 14px; bottom: calc(100% + 10px); z-index: 8; max-width: min(460px, calc(100% - 28px)); padding: 7px 13px; font: 700 14px/1.3 var(--hand); color: var(--fg); isolation: isolate; animation: rise 0.18s ease-out; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border-radius: 10px; background: color-mix(in oklch, var(--bg2) 92%, var(--green)); --ring: var(--chalk-r10-2); --ink: var(--green); }
 
 /* ---------- Blocks: badge, forms, templates ---------- */
 /* The badge: quiet, top right of the block: its kind in the kind's chalk colour, then its name. */
@@ -884,8 +925,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .tpl-note { order: -1; font: 700 12px var(--hand); color: var(--green); }
 
 /* A chalk-outlined box for form parts; --box = its colour. */
-.chalk-box { position: relative; isolation: isolate; }
-.chalk-box::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--box, var(--line)); background: color-mix(in srgb, var(--box, var(--line)) 10%, transparent); filter: url(#tip-chalk); }
+.chalk-box { position: relative; isolation: isolate; border-radius: 12px; background: color-mix(in srgb, var(--box, var(--line)) 10%, transparent); --ring: var(--chalk-r12-2); --ink: var(--box, var(--line)); }
 .form-view { font-size: 13.5px; }
 .f-note { color: var(--muted); font-size: 12.5px; }
 .f-tag { margin-left: 8px; font: 700 12px var(--hand); color: var(--muted); font-style: normal; }
@@ -901,25 +941,25 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-stage-mark { font: 700 18px/1 var(--hand); color: var(--st); min-height: 18px; }
 .f-stage.st-running .f-stage-mark { animation: breathe 1.4s ease-in-out infinite; }
 .f-stage-label { font: 700 16px var(--hand); }
-.f-arrow { flex: 0 0 26px; height: 2px; margin: 0 4px; background: var(--line); position: relative; filter: url(#chalk-line); }
-.f-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--line); border-right: 0; }
-.f-arrow.lit { background: var(--green); }
-.f-arrow.lit::after { border-left-color: var(--green); }
+.f-arrow { flex: 0 0 26px; height: 2px; margin: 0 4px; position: relative; --ink: var(--line); }
+.f-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--ink); border-right: 0; mask: var(--chalk-grain) 0 0 / var(--chalk-grain-size); }
+.f-arrow.lit { --ink: var(--green); }
 /* Too narrow for side by side: one stage per row, mark left, arrows pointing down. */
 .f-pipeline.down { flex-direction: column; align-items: stretch; }
 .f-pipeline.down .f-stage { flex: none; grid-template-columns: 22px minmax(0, 1fr); justify-items: start; align-items: baseline; column-gap: 8px; padding: 8px 12px; text-align: left; }
 .f-pipeline.down .f-stage-mark { justify-self: center; }
 .f-pipeline.down .f-note { grid-column: 2; }
 .f-pipeline.down .f-arrow { flex: 0 0 14px; width: 2px; height: auto; margin: 2px 0 6px 22px; }
-.f-pipeline.down .f-arrow::after { right: auto; top: auto; left: -4px; bottom: -6px; border: 5px solid transparent; border-top: 7px solid var(--line); border-bottom: 0; }
-.f-pipeline.down .f-arrow.lit::after { border-top-color: var(--green); }
+.f-pipeline.down .f-arrow::after { right: auto; top: auto; left: -4px; bottom: -6px; border: 5px solid transparent; border-top: 7px solid var(--ink); border-bottom: 0; }
 
 .f-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; position: relative; }
-.f-timeline::before { content: ""; position: absolute; left: 86px; top: 6px; bottom: 6px; width: 2px; background: var(--line); filter: url(#chalk-line); }
+.f-timeline::before { left: 84px; top: 4px; bottom: 4px; width: 6px; --ink: var(--line); }
 .f-timeline li { display: grid; grid-template-columns: 74px 26px 1fr; align-items: start; }
 .f-at { text-align: right; font: 700 14px var(--hand); color: var(--muted); padding-right: 4px; }
-.f-dot { justify-self: center; margin-top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--dot, var(--st, var(--blue))); box-shadow: 0 0 0 3px var(--board); filter: url(#tip-chalk); position: relative; }
-.f-timeline li.st-todo .f-dot { background: none; border: 2px solid var(--muted); }
+/* The dot with a ring of the board round it, drawn on a ::before 2px past both. */
+.f-dot { justify-self: center; margin-top: 5px; width: 12px; height: 12px; position: relative; }
+.f-dot::before { content: ""; position: absolute; inset: -5px; background: radial-gradient(circle, var(--dot, var(--st, var(--blue))) 0 6px, var(--board) 6px 9px, transparent 9px); -webkit-mask-box-image: var(--chalk-dot18); }
+.f-timeline li.st-todo .f-dot::before { background: radial-gradient(circle, transparent 0 4px, var(--muted) 4px 6px, var(--board) 6px 9px, transparent 9px); }
 .f-event { display: grid; gap: 1px; }
 .f-event b { font: 700 16px var(--hand); }
 
@@ -939,15 +979,16 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-tile { --box: var(--tile, var(--line)); display: grid; gap: 4px; padding: 12px 14px; }
 .f-label { color: var(--muted); font-size: 12.5px; }
 .f-value { font: 700 28px/1.1 var(--hand); color: var(--tile, var(--accent)); }
-.f-bar { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; filter: url(#tip-chalk); }
+.f-bar { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; -webkit-mask-box-image: var(--chalk-bar35); -webkit-mask-box-image-outset: 2px; }
 .f-bar i { display: block; height: 100%; background: var(--tile, var(--green)); }
 
 .f-chart { width: 100%; min-height: 60px; }
 .f-chart .vega-embed { width: 100%; }
-.f-chart svg .mark-rect path, .f-chart svg .mark-line path, .f-chart svg .mark-area path { filter: url(#tip-chalk); }
+.f-chart svg .mark-rect path, .f-chart svg .mark-line path, .f-chart svg .mark-area path { mask: url(#chalk-grain); }
 
+/* The big form frames: a dark board inside a chalk outline. */
+.f-code, .f-files, .g-git, .cl-form, .ca-form { background: color-mix(in oklch, var(--board) 70%, #000); --ring: var(--chalk-r12-2); --ink: var(--line); }
 .f-code { --box: var(--line); position: relative; isolation: isolate; border-radius: 12px; padding: 0 0 8px; }
-.f-code::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
 .f-code-head { display: flex; align-items: baseline; gap: 12px; padding: 8px 14px 7px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
 .f-file { flex: 1; min-width: 0; display: flex; align-items: baseline; white-space: nowrap; font: 12.5px var(--mono); color: var(--muted); }
 .f-file .dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -982,25 +1023,24 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-ln.del code { opacity: 0.7; }
 .f-ln.hot { background: color-mix(in srgb, var(--amber) 16%, transparent); }
 .f-ln.hot .num { color: var(--amber); font-weight: 700; }
-.f-ln.hot::before { content: ""; position: absolute; left: 3px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--amber); filter: url(#chalk-line); }
+.f-ln.hot::before { left: 1px; top: 1px; bottom: 1px; width: 7px; --ink: var(--amber); -webkit-mask-box-image: var(--chalk-line3); }
 .f-fold { display: block; width: 100%; margin: 2px 0; padding: 1px 0 1px calc(5.6ch + 20px); text-align: left; font: 700 13.5px var(--hand); color: var(--muted); background: color-mix(in srgb, var(--line) 22%, transparent); }
 .f-fold:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 40%, transparent); }
 .f-code-err { margin: 6px 14px 0; color: var(--red); }
 .f-pin { --box: var(--pin, var(--blue)); padding: 4px 14px 8px calc(5.6ch + 20px); position: relative; }
-.f-pin::before { content: ""; position: absolute; left: calc(5.6ch + 30px); top: -3px; border: 6px solid transparent; border-bottom: 8px solid var(--box); border-top: 0; filter: url(#tip-chalk); }
+.f-pin::before { content: ""; position: absolute; left: calc(5.6ch + 30px); top: -3px; border: 6px solid transparent; border-bottom: 8px solid var(--box); border-top: 0; mask: var(--chalk-grain) 0 0 / var(--chalk-grain-size); }
 .f-pin > span { display: inline-block; max-width: 100%; padding: 4px 12px; font: 700 15px/1.35 var(--hand); color: var(--fg); }
 
 .f-files { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 6px; }
-.f-files::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
 /* As tall as it is: the tree never scrolls inside (the picture scrolls). */
 .f-tree { overflow-x: auto; overflow-y: visible; padding: 4px 0; font: 13px/1.5 var(--mono); }
 .f-tree-row { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 1px 12px 1px calc(12px + var(--depth) * 16px); text-align: left; color: var(--fg); white-space: nowrap; }
 .f-tree-row:hover { background: color-mix(in srgb, var(--line) 30%, transparent); }
 .f-tree-row { align-items: center; gap: 8px; }
-.f-tree-row .fo { flex: none; width: 22px; height: 16px; fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.4; stroke-linejoin: round; filter: url(#chalk-soft); }
+.f-tree-row .fo { flex: none; width: 22px; height: 16px; fill: color-mix(in srgb, var(--amber) 22%, transparent); stroke: var(--amber); stroke-width: 1.4; stroke-linejoin: round; }
 .f-tree-row .fo.open { fill: color-mix(in srgb, var(--amber) 35%, transparent); }
 .f-tree-row .ft { flex: none; position: relative; isolation: isolate; min-width: 30px; padding: 0 4px; text-align: center; font: 700 10px/16px var(--sans); color: var(--ft); letter-spacing: 0.02em; }
-.f-tree-row .ft::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 5px; border: 1.5px solid color-mix(in srgb, var(--ft) 75%, transparent); background: color-mix(in srgb, var(--ft) 12%, transparent); filter: url(#tip-chalk); }
+.f-tree-row .ft { border-radius: 5px; background: color-mix(in srgb, var(--ft) 12%, transparent); --ring: var(--chalk-r5-15); --ink: color-mix(in srgb, var(--ft) 75%, transparent); }
 .f-tree-row.dir .nm { color: var(--fg); font-weight: 600; }
 .f-tree-row.file.open { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .f-tree-row .nm { overflow: hidden; text-overflow: ellipsis; }
@@ -1014,7 +1054,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 /* The git form (web/git.tsx): branch bar, chalk lanes beside the commit rows, a commit's diff below. */
 .g-git { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 6px; }
-.g-git::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
 .g-on { font: 700 14px var(--hand); color: var(--green); white-space: nowrap; }
 .g-fetched { font: 12px var(--sans); color: var(--muted); white-space: nowrap; }
 .g-branches { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 8px 12px 6px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
@@ -1023,7 +1062,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .g-branch.current { border-color: var(--green); }
 .g-branch.off { opacity: 0.45; }
 .g-branch .k { color: var(--muted); font-family: var(--sans); }
-.g-branch i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid; filter: url(#chalk-soft); }
+.g-branch i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid; -webkit-mask-box-image: var(--chalk-dot9-soft); -webkit-mask-box-image-outset: 2px; }
 .g-sep { width: 1.5px; height: 16px; margin: 0 4px; background: var(--line); }
 .g-sync { margin-left: 4px; font: 700 11px var(--sans); }
 .g-sync.ok { color: var(--green); } .g-sync.drift { color: var(--amber); } .g-sync.gone { color: var(--red); } .g-sync.only { color: var(--muted); font-weight: 400; }
@@ -1033,9 +1072,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .rs.sized .g-git .g-scroll { flex: 1; min-height: 0; max-height: none; }
 .g-graph { position: relative; min-width: 100%; }
 .g-lanes { position: absolute; top: 0; overflow: visible; pointer-events: none; }
-.g-paths { filter: url(#chalk-soft); }
+.g-paths { mask: url(#chalk-grain-soft); }
 .g-lanes path { fill: none; stroke-width: 2.4; }
-.g-lanes .node { fill: color-mix(in oklch, var(--board) 70%, #000); stroke-width: 2.4; filter: url(#chalk-soft); }
+.g-lanes .node { fill: color-mix(in oklch, var(--board) 70%, #000); stroke-width: 2.4; mask: url(#chalk-grain-soft); }
 .g-lanes .node.head { fill: var(--fg); stroke-width: 3; }
 .g-lanes .node.working { stroke-dasharray: 2 2; }
 .g-gap { position: absolute; left: 0; width: 30px; text-align: right; font: 700 12px var(--hand); color: var(--muted); }
@@ -1089,18 +1128,18 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* The flow form (web/flow.tsx): stations in a row, lanes of sliding cards, a caption per frame. */
 .f-flow { outline: none; }
 .f-flow-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
-.f-flow-btn { font: 700 14px var(--hand); color: var(--muted); padding: 1px 12px; border-radius: 999px; position: relative; isolation: isolate; }
-.f-flow-btn::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 999px; border: 1.5px solid var(--line); filter: url(#tip-chalk); }
+.f-flow-btn { font: 700 14px var(--hand); color: var(--muted); padding: 1px 12px; border-radius: 999px; position: relative; isolation: isolate; --ring: var(--chalk-r12-15); --ink: var(--line); }
 .f-flow-btn:hover:not(:disabled) { color: var(--fg); }
 .f-flow-btn:disabled { opacity: 0.4; }
 .f-flow-btn.on { color: var(--fg); }
-.f-flow-btn.on::before { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.f-flow-btn.on { --ink: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .f-flow-ways { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 10px; }
 .f-flow-n { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
 .f-flow-stations { display: grid; gap: 8px; }
 .f-flow-st { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 8px 6px; text-align: center; }
-.f-flow-st::before { border-style: dashed; background: transparent; transition: border-color 0.3s; }
-.f-flow-st.on::before { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.f-flow-st { --ring: var(--chalk-r12-2-dash); background: transparent; }
+.f-flow-st::before { transition: background-color 0.3s; }
+.f-flow-st.on { --ring: var(--chalk-r12-2); --ink: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .f-flow-st b { font: 700 16px var(--hand); overflow-wrap: anywhere; }
 .f-flow-st small { font-size: 11px; color: var(--muted); }
 .f-flow-steps { display: flex; gap: 4px; width: 100%; margin-top: 4px; }
@@ -1148,7 +1187,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* Forms, on the rail too (sidebar closed). */
 .rail-forms { display: grid; place-items: center; width: 34px; height: 30px; margin: 0 auto 6px; color: var(--muted); }
 .rail-forms:hover { color: var(--fg); }
-.rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: url(#chalk-soft); }
+.rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
 .chat-head h1 { text-decoration: none; }
 .chat-head h1 .t { text-decoration: underline 3px var(--accent); text-underline-offset: 6px; padding-bottom: 6px; }
 .tl-explain { margin: 0 0 8px; }
@@ -1160,8 +1199,8 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .tpl-delete { order: -1; margin-left: auto; font: 700 13px var(--hand); color: var(--muted); padding: 0 8px; border-radius: 6px; }
 .tpl-delete:hover { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
 .confirm-backdrop { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); animation: confirm-in 0.12s ease-out; }
-.confirm-card { position: relative; isolation: isolate; width: min(420px, 92vw); padding: 20px 22px 16px; display: grid; gap: 10px; animation: confirm-pop 0.16s cubic-bezier(.2,.8,.3,1.2); }
-.confirm-card::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 14px; border: 2px solid color-mix(in srgb, var(--red) 70%, var(--line)); background: var(--board); box-shadow: 0 18px 50px rgb(0 0 0 / 0.5); filter: url(#tip-chalk); }
+.confirm-card { position: relative; isolation: isolate; width: min(420px, 92vw); padding: 20px 22px 16px; display: grid; gap: 10px; animation: confirm-pop 0.16s cubic-bezier(.2,.8,.3,1.2);
+  border-radius: 14px; background: var(--board); box-shadow: 0 18px 50px rgb(0 0 0 / 0.5); --ring: var(--chalk-r14-2); --ink: color-mix(in srgb, var(--red) 70%, var(--line)); }
 .confirm-card h3 { margin: 0; font: 700 22px var(--hand); }
 .confirm-card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
 .confirm-card p b { color: var(--fg); }
@@ -1189,18 +1228,15 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .form-row .form-tools { display: contents; }
 .form-rail .form-tools { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--line); }
 .form-dot.tool { color: var(--blue); }
-.form-dot.tool::before { background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.form-dot.tool.required { color: var(--blue); }
-.form-dot.tool.required::before { background: color-mix(in srgb, var(--blue) 26%, transparent); box-shadow: 0 0 12px 1px color-mix(in srgb, var(--blue) 55%, transparent); }
+.form-dot.tool { background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.form-dot.tool.required { color: var(--blue); background: color-mix(in srgb, var(--blue) 26%, transparent); box-shadow: 0 0 12px 1px color-mix(in srgb, var(--blue) 55%, transparent); }
 .form-rail .col-pick { margin: 0; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .form-rail .form-peek { top: 0; left: auto; right: calc(100% + 10px); z-index: 20; width: 460px; max-width: calc(100vw - 100px); }
 .form-row { position: sticky; top: 0; z-index: 6; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 14px; margin: 0 0 6px; background: color-mix(in oklch, var(--bg2) 92%, transparent); backdrop-filter: blur(4px); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 70%, transparent); }
-.form-dot { position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--muted); isolation: isolate; transition: transform 0.12s; }
-.form-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 1.8px solid currentColor; filter: url(#tip-chalk); }
-.form-dot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; filter: url(#chalk-soft); }
+.form-dot { position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--muted); isolation: isolate; transition: transform 0.12s; --ring: var(--chalk-c30-18); --ink: currentColor; }
+.form-dot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .form-dot:hover { transform: scale(1.1); color: var(--fg); }
-.form-dot.required { color: var(--green); }
-.form-dot.required::before { background: color-mix(in srgb, var(--green) 22%, transparent); border-width: 2.2px; }
+.form-dot.required { color: var(--green); background: color-mix(in srgb, var(--green) 22%, transparent); --ring: var(--chalk-c30-22); }
 .form-dot.off { opacity: 0.4; }
 .form-dot.off::after { content: ""; position: absolute; left: 3px; right: 3px; top: 50%; border-top: 2px solid var(--red); transform: rotate(-40deg); }
 .form-peek { position: absolute; top: 46px; left: 10px; width: min(460px, calc(100% - 20px)); padding: 12px 14px; border-radius: 12px; background: var(--board); box-shadow: 0 12px 40px rgb(0 0 0 / 0.45); border: 1px solid var(--line); pointer-events: none; }
@@ -1223,23 +1259,20 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 @container (max-width: 899px) { .picture.blocks.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .col-btn.c3 { display: none; } }
 @container (max-width: 559px) { .picture.blocks.cols-2, .picture.blocks.cols-3 { grid-template-columns: minmax(0, 1fr); } .col-pick { display: none; } }
 .col-pick { margin-left: auto; display: flex; gap: 4px; flex: none; }
-.col-btn { height: 26px; min-width: 30px; padding: 0 6px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); font: 700 13px var(--hand); position: relative; isolation: isolate; }
-.col-btn::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 7px; border: 1.5px solid var(--line); filter: url(#tip-chalk); }
+.col-btn { height: 26px; min-width: 30px; padding: 0 6px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); font: 700 13px var(--hand); position: relative; isolation: isolate; --ring: var(--chalk-r7-15); --ink: var(--line); }
 .col-btn:hover { color: var(--fg); }
-.col-btn.on { color: var(--fg); }
-.col-btn.on::before { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.col-btn.on { color: var(--fg); --ink: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .col-btn svg { width: 20px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
 /* Files: real or made up, said in the header and on each planned file. */
-.f-kind { flex: none; font: 700 12px var(--hand); padding: 0 8px; border-radius: 8px; position: relative; isolation: isolate; }
-.f-kind::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 8px; border: 1.5px solid currentColor; filter: url(#tip-chalk); opacity: 0.8; }
+.f-kind { flex: none; font: 700 12px var(--hand); padding: 0 8px; border-radius: 8px; position: relative; isolation: isolate; --ring: var(--chalk-r8-15); --ink: currentColor; }
+.f-kind::before { opacity: 0.8; }
 .f-kind.real { color: var(--green); }
-.f-kind.made { color: var(--amber); }
-.f-kind.made::before { border-style: dashed; }
+.f-kind.made { color: var(--amber); --ring: var(--chalk-r8-15-dash); }
 .f-kinds { flex: none; display: inline-flex; gap: 4px; }
 .f-kinds .f-kind { opacity: 0.45; }
 .f-kinds .f-kind:hover { opacity: 0.8; }
 .f-kinds .f-kind.on { opacity: 1; }
-.f-kinds .f-kind.on::before { background: color-mix(in srgb, currentColor 14%, transparent); }
+.f-kinds .f-kind.on { background: color-mix(in srgb, currentColor 14%, transparent); }
 .f-planned { flex: none; font: 700 11.5px var(--hand); color: var(--amber); border: 1.2px dashed var(--amber); border-radius: 6px; padding: 0 5px; line-height: 15px; }
 .f-tree-row:has(.f-planned) .nm { font-style: italic; }
 /* Images in the files form: a fixed-height preview on a checkerboard; double-click shows it big. */
@@ -1257,8 +1290,8 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   font: 600 10.5px/1.25 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
 .rail-chat.on .rail-name, .rail-chat:hover .rail-name { color: var(--fg); }
 /* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
-.rail-server { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px 1px; border-radius: 6px; font: 700 11.5px/1.1 var(--hand); color: var(--muted); position: relative; isolation: isolate; pointer-events: none; }
-.rail-server::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid var(--chalk); background: var(--bg2); filter: url(#tip-chalk); }
+.rail-server { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px 1px; border-radius: 6px; font: 700 11.5px/1.1 var(--hand); color: var(--muted); position: relative; isolation: isolate; pointer-events: none;
+  background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
 .rail-chat.on .rail-server, .rail-chat:hover .rail-server { color: var(--fg); }
 .rail-chat.off .rail-server { text-decoration: line-through; }
 .rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
@@ -1277,7 +1310,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 /* The clojure form (web/clojure.tsx): namespace bubbles in layers, a namespace's vars or an arrow's functions below. */
 .cl-form { position: relative; isolation: isolate; border-radius: 12px; padding-bottom: 8px; }
-.cl-form::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
 .cl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; padding: 8px 14px 6px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
 .cl-crumb { font: 700 17px var(--hand); color: var(--fg); padding: 0 2px; border-radius: 4px; }
 .cl-crumb:hover { background: color-mix(in srgb, var(--line) 30%, transparent); }
@@ -1290,7 +1322,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .cl-zoom .cl-full { margin-left: 0; min-width: 24px; }
 .cl-map.zoomed { cursor: grab; touch-action: none; }
 .cl-map.zoomed:active { cursor: grabbing; }
-.cl-map.moving .body { filter: none; }
+.cl-map.moving .body { mask: none; }
 .cl-map.moving .cl-edge, .cl-map.moving .cl-node, .cl-map.moving .line { transition: none; }
 /* Full screen: map left, panel right, each scrolling on its own. */
 .cl-form.full { display: grid; grid-template: "head head" auto "map panel" 1fr / 1fr minmax(380px, 30%); height: 100vh; padding: 0; border-radius: 0; background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
@@ -1311,7 +1343,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .cl-edge:hover .line { stroke-width: 3.5; }
 .cl-edge.dim, .cl-node.dim { opacity: 0.18; }
 .cl-node { cursor: pointer; transition: opacity 0.15s; }
-.cl-node .body { stroke-width: 2.4; filter: url(#chalk-soft); }
+.cl-node .body { stroke-width: 2.4; mask: url(#chalk-grain-soft); }
 .cl-node .ring { fill: none; stroke-width: 1.4; stroke-dasharray: 3 3; opacity: 0.8; }
 .cl-node.on .body { stroke-width: 4.5; }
 .cl-node:hover .body { stroke-width: 3.5; }
@@ -1350,7 +1382,6 @@ button.cl-fn:hover { text-decoration: underline; }
 
 /* The calls form (web/calls.tsx): tabs, code cards with call links, neighbours, the map of calls. */
 .ca-form { position: relative; isolation: isolate; border-radius: 12px; padding: 0 0 10px; }
-.ca-form::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 12px; border: 2px solid var(--line); background: color-mix(in oklch, var(--board) 70%, #000); filter: url(#tip-chalk); }
 .ca-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px 6px; border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
 .ca-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .ca-tabs button { font: 700 16px var(--hand); color: var(--muted); padding: 1px 11px; border-radius: 8px; border: 1.5px solid color-mix(in srgb, var(--line) 80%, transparent); }
@@ -1455,8 +1486,8 @@ button.cl-fn:hover { text-decoration: underline; }
 
 /* ---------- The hub: one list over several servers ----------
    A server's mark is a small chalk chip (its label's first letter); a server that is off greys its chats. */
-.server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none; }
-.server-mark::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid var(--chalk); background: var(--bg2); filter: url(#tip-chalk); }
+.server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none;
+  background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
 .server-mark.off { opacity: 0.6; text-decoration: line-through; }
 .rail-chat.off { opacity: 0.4; filter: grayscale(0.8); }
 .rail-chat.off:hover, .rail-chat.off.on { opacity: 0.75; }
@@ -1468,10 +1499,10 @@ button.cl-fn:hover { text-decoration: underline; }
 .server-filter { display: flex; flex-wrap: wrap; gap: 4px; }
 .server-filter button, .new-on button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border-radius: 999px; font-size: 12px; color: var(--muted); position: relative; isolation: isolate; }
 .server-filter button:first-child { padding-left: 8px; }
-.server-filter button::before, .new-on button::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid transparent; filter: url(#tip-chalk); }
+.server-filter button, .new-on button { --ring: var(--chalk-r12-15); --ink: transparent; }
 .server-filter button:hover, .new-on button:hover { color: var(--fg); }
 .server-filter button.on, .new-on button.on { color: var(--fg); font-weight: 600; }
-.server-filter button.on::before, .new-on button.on::before { border-color: var(--accent); background: var(--panel2); }
+.server-filter button.on, .new-on button.on { --ink: var(--accent); background: var(--panel2); }
 .server-filter button:disabled, .new-on button:disabled { opacity: 0.5; cursor: default; }
 .server-filter button.off .sf-label { text-decoration: line-through; }
 .server-filter .server-mark, .new-on .server-mark { min-width: 15px; height: 15px; font-size: 10.5px; }

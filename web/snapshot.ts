@@ -29,7 +29,7 @@ function fonts() {
   return fontCss;
 }
 
-const PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "stroke-opacity", "opacity", "filter", "marker-end", "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline", "visibility", "display"];
+const PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "stroke-opacity", "opacity", "filter", "mask-image", "marker-end", "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline", "visibility", "display"];
 
 async function svgImage(svg: SVGSVGElement): Promise<HTMLImageElement> {
   const copy = svg.cloneNode(true) as SVGSVGElement;

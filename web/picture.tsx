@@ -4,6 +4,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useApi } from "./api";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
+import { GRAIN_SIZE, grainUrl } from "./chalk";
 import { FormView } from "./forms";
 
 
@@ -185,10 +186,12 @@ function NodeShape({ n, pulse, fresh }: { n: LaidNode; pulse: number; fresh: boo
   const cx = n.w / 2;
   const cy = isCircle ? n.d / 2 : n.h / 2;
   const textTop = cy - ((n.lines.length - 1) * 16) / 2 - (!isCircle ? (n.notes.length * NOTE_LINE) / 2 : 0);
-  let outline: React.ReactNode;
-  if (isCircle) outline = <circle className="body" cx={cx} cy={cy} r={n.d / 2} />;
-  else if (shape === "diamond") outline = <polygon className="body" points={`${cx},1 ${n.w - 1},${cy} ${cx},${n.h - 1} 1,${cy}`} />;
-  else outline = <rect className="body" x={0.75} y={0.75} width={n.w - 1.5} height={n.h - 1.5} rx={shape === "pill" ? n.h / 2 : 9} />;
+  // The shape, and under it its chalk fray: the same outline wider, through the fray grain.
+  const draw = (className: string) =>
+    isCircle ? <circle className={className} cx={cx} cy={cy} r={n.d / 2} />
+    : shape === "diamond" ? <polygon className={className} points={`${cx},1 ${n.w - 1},${cy} ${cx},${n.h - 1} 1,${cy}`} />
+    : <rect className={className} x={0.75} y={0.75} width={n.w - 1.5} height={n.h - 1.5} rx={shape === "pill" ? n.h / 2 : 9} />;
+  const outline = <>{draw("fray")}{draw("body")}</>;
   const ring = isCircle ? (
     <circle key={pulse} className="ring" cx={cx} cy={cy} r={n.d / 2 + 5} />
   ) : (
@@ -321,15 +324,18 @@ export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string
     window.addEventListener("pointerup", up);
   };
   return (
-    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })} style={{ "--chalk-url": `url(#chalk-${uid})` } as React.CSSProperties}>
+    <div className="diagram" ref={box} onPointerDown={onDown} onDoubleClick={() => setView({ k: 1, x: 0, y: 0 })} style={{ "--chalk-mask": `url(#chalk-${uid})` } as React.CSSProperties}>
       <div className="zoom-layer" ref={layer} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
-          {/* Chalk: lines wobble a little, like they were drawn by hand. One region covers the whole picture. */}
-          <filter id={`chalk-${uid}`} filterUnits="userSpaceOnUse" x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80}>
-            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
+          {/* Chalk: shapes and lines drawn through the baked chalk grain (web/chalk.ts), one region over
+              the whole picture. In the SVG itself, so a saved picture keeps it. */}
+          <pattern id={`grain-${uid}`} patternUnits="userSpaceOnUse" width={GRAIN_SIZE} height={GRAIN_SIZE}>
+            <image href={grainUrl("fray")} width={GRAIN_SIZE} height={GRAIN_SIZE} />
+          </pattern>
+          <mask id={`chalk-${uid}`} maskUnits="userSpaceOnUse" x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80} style={{ maskType: "alpha" }}>
+            <rect x={-pad - 40} y={-pad - 40} width={laid.w + pad * 2 + 80} height={laid.h + pad * 2 + 80} fill={`url(#grain-${uid})`} />
+          </mask>
           {COLORS.map((c) => (
             <marker key={c} id={`arrow-${uid}-${c}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" className={`arrowhead c-${c}`} />
@@ -339,6 +345,7 @@ export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string
         <g>
           {laid.groups.map((g) => (
             <g key={g.id} className={`group c-${g.group.color ?? "grey"}`} style={{ transform: `translate(${g.x}px, ${g.y}px)` }}>
+              <rect className="fray" width={g.w} height={g.h} rx={13} />
               <rect width={g.w} height={g.h} rx={13} />
               <text x={16} y={22}>{g.group.label}</text>
             </g>
@@ -348,6 +355,7 @@ export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string
             const isNew = fresh.current.has(e.id);
             return (
               <g key={e.id} className={`edge c-${c} ${isNew ? "fresh" : ""} ${changedSet.has(e.id) ? "hot" : ""}`}>
+                <path className="fray" style={{ d: `path("${e.d}")` } as any} strokeDasharray={e.edge.dashed ? "5 4" : undefined} />
                 <path style={{ d: `path("${e.d}")` } as any} strokeDasharray={e.edge.dashed ? "5 4" : undefined} markerEnd={`url(#arrow-${uid}-${c})`} />
                 {e.label && e.edge.label && (
                   <g className="edge-label" style={{ transform: `translate(${e.label.x}px, ${e.label.y}px)` }}>
