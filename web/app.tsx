@@ -17,6 +17,7 @@ import { FormRow } from "./formrow";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
+import { bakeChalk } from "./chalk";
 import { savePicture } from "./snapshot";
 import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
@@ -1209,6 +1210,8 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
 addEventListener("gesturestart", (e) => e.preventDefault());
 addEventListener("touchmove", (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
+// The chalk masks are drawn before the first paint, so nothing shows without its chalk.
+bakeChalk();
 createRoot(document.getElementById("root")!).render(<Root />);
 
 // A box with a lid; the arrow points out of it for Unarchive.
