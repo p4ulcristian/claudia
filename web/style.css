@@ -45,11 +45,12 @@ code, pre { font-family: var(--mono); }
 .primary:disabled { opacity: 0.4; cursor: default; }
 
 /* Layout */
-/* The rail's column is always 64px; the full list opens over the page as a drawer. */
-.app { display: grid; grid-template-columns: 64px 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
+/* The chats rail's column is always --rail-w (wide enough for a chat's name and server under its
+   circle); the full list opens over the page as a drawer. The forms rail on the right stays 64px. */
+.app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .app > main { grid-column: 2; }
 .app > .right-rail { grid-column: 3; }
-@media (max-width: 679px) { .app { grid-template-columns: 64px 1fr; } }
+@media (max-width: 679px) { .app { grid-template-columns: var(--rail-w) 1fr; } }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
@@ -412,7 +413,10 @@ code, pre { font-family: var(--mono); }
 
 /* Sidebar closed: one coloured circle per chat, like chat heads. */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: 46px 0 10px; background: var(--bg2); border-right: 1px solid var(--line); min-height: 0; }
-.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 6px 0 22px; }
+.sidebar-slot > .rail { width: var(--rail-w); }
+.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 22px; }
+/* A chat on the rail: its circle, its title under it (two lines at most), then its server's name. */
+.rail-chat { align-self: stretch; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; position: relative; }
 /* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
 .rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ring { position: relative; width: 28px; height: 28px; display: grid; place-items: center; }
@@ -433,15 +437,15 @@ code, pre { font-family: var(--mono); }
 .rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); background: none; position: relative; isolation: isolate; }
 .rail-dot::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; border: 2.2px solid var(--chat, var(--grey)); background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); filter: url(#tip-chalk); }
 /* Passive chats: at the bottom of the rail, above a chalk line, faded until hovered or open. */
-.rail-dot.passive { opacity: 0.55; }
-.rail-dot.passive:hover, .rail-dot.passive.on { opacity: 1; }
-.rail-dot.passive.first { margin-top: auto; }
-.rail-dot.passive.last::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: -28px; border-top: 1.5px dashed var(--line); }
+.rail-chat.passive { opacity: 0.55; }
+.rail-chat.passive:hover, .rail-chat.passive.on { opacity: 1; }
+.rail-chat.passive.first { margin-top: auto; }
+.rail-chat.passive.last::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -11px; border-top: 1.5px dashed var(--line); }
 /* Spotlight: the open chat glows; the others fade (their state badges stay bright) until hovered. */
-.rail-dot.on::before { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
-.rail-dot::before, .rail-dot > .rail-logo, .rail-dot > .rail-tag, .rail-dot > .rail-blank, .rail-dot > .rail-word { transition: opacity 0.15s, filter 0.15s; }
-.rail-dots:has(.rail-dot.on) .rail-dot:not(.on, .add, :hover) :is(.rail-logo, .rail-tag, .rail-blank, .rail-word) { opacity: 0.35; filter: saturate(0.4); }
-.rail-dots:has(.rail-dot.on) .rail-dot:not(.on, .add, :hover)::before { opacity: 0.35; }
+.rail-chat.on .rail-dot::before { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
+.rail-dot::before, .rail-dot > .rail-logo, .rail-dot > .rail-tag, .rail-dot > .rail-blank, .rail-chat > .rail-name, .rail-chat > .rail-server { transition: opacity 0.15s, filter 0.15s; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) :is(.rail-logo, .rail-tag, .rail-blank, .rail-name, .rail-server) { opacity: 0.35; filter: saturate(0.4); }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) .rail-dot::before { opacity: 0.35; }
 /* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
 .state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate; }
 .state-badge::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 9px; border: 2px solid var(--b); background: color-mix(in oklch, var(--bg2) 80%, var(--b)); filter: url(#tip-chalk); }
@@ -454,7 +458,7 @@ code, pre { font-family: var(--mono); }
 @keyframes chalk-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
 .rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; }
 .rail-dot.add::before { border: 1.8px dashed var(--muted); background: none; }
-.rail-search { margin-top: -22px; } /* 8px under the +, not the rail's 30px gap */
+.rail-search { margin-top: -10px; } /* 8px under the +, not the rail's 18px gap */
 .rail-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .chalk-defs { position: absolute; width: 0; height: 0; }
 
@@ -768,7 +772,7 @@ svg.logo { flex: none; color: var(--fg); }
 /* The menu button: three chalk strokes, centred over the closed rail; a chalk ring on hover. */
 .menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); }
 .menu-toggle:hover { background: none; }
-.app.no-sidebar .menu-toggle { left: 16px; }
+.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
 .burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; filter: url(#chalk-soft); }
 
 /* Folding the right half: its column slides (--fold-w), the pane fades out or in at its full width. */
@@ -825,7 +829,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: man
 body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .app { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
 .menu-toggle { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); }
-.app.no-sidebar .menu-toggle { left: calc(16px + env(safe-area-inset-left)); }
+.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 .composer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 @media (max-width: 679px) {
@@ -1239,10 +1243,16 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
 .f-tree-row .f-lines-n { flex: none; font: 11px var(--mono); color: color-mix(in srgb, var(--muted) 70%, transparent); }
 
-/* Rail: the chat's one-word name under its circle, plain and readable; the circle holds the project. */
-.rail-word { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 600 10.5px/1.2 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
-.rail-dot.on .rail-word, .rail-dot:hover .rail-word { color: var(--fg); }
+/* Rail: the chat's title under its circle, plain and readable, cut after two lines (the hover
+   bubble has it whole); the circle holds the project. */
+.rail-name { max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; text-align: center;
+  font: 600 10.5px/1.25 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
+.rail-chat.on .rail-name, .rail-chat:hover .rail-name { color: var(--fg); }
+/* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
+.rail-server { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px 1px; border-radius: 6px; font: 700 11.5px/1.1 var(--hand); color: var(--muted); position: relative; isolation: isolate; pointer-events: none; }
+.rail-server::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid var(--chalk); background: var(--bg2); filter: url(#tip-chalk); }
+.rail-chat.on .rail-server, .rail-chat:hover .rail-server { color: var(--fg); }
+.rail-chat.off .rail-server { text-decoration: line-through; }
 .rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
 .rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
 /* Files header: the folder's path, each part clickable. */
@@ -1440,9 +1450,8 @@ button.cl-fn:hover { text-decoration: underline; }
 .server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none; }
 .server-mark::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid var(--chalk); background: var(--bg2); filter: url(#tip-chalk); }
 .server-mark.off { opacity: 0.6; text-decoration: line-through; }
-.rail-dot > .server-mark { position: absolute; top: -6px; left: -8px; min-width: 15px; height: 15px; font-size: 10.5px; padding: 0 3px; }
-.rail-dot.off { opacity: 0.4; filter: grayscale(0.8); }
-.rail-dot.off:hover, .rail-dot.off.on { opacity: 0.75; }
+.rail-chat.off { opacity: 0.4; filter: grayscale(0.8); }
+.rail-chat.off:hover, .rail-chat.off.on { opacity: 0.75; }
 .chat-row.off { opacity: 0.5; filter: grayscale(0.8); }
 .chat-row.off:hover, .chat-row.off.active { opacity: 0.8; }
 .server-off-note { margin: 2px 8px 6px; font-size: 12px; color: var(--amber); }

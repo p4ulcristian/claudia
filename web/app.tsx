@@ -739,7 +739,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // The open chat stays in view in the list and the rail (a new chat sits at the end).
   // (Only the list's own scroll moves: scrollIntoView would also shift the hidden sidebar's frame.)
   useEffect(() => {
-    for (const el of document.querySelectorAll<HTMLElement>(".sidebar nav .chat-row.active, .rail-dots .rail-dot.on")) {
+    for (const el of document.querySelectorAll<HTMLElement>(".sidebar nav .chat-row.active, .rail-dots .rail-chat.on")) {
       const list = el.parentElement!;
       const r = el.getBoundingClientRect(), l = list.getBoundingClientRect();
       if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom + 8;
@@ -905,18 +905,20 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
                 <button
                   key={c.key}
                   data-slide={c.key}
-                  className={`rail-dot ${c.key === curKey ? "on" : ""} ${c.off ? "off" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
+                  className={`rail-chat ${c.key === curKey ? "on" : ""} ${c.off ? "off" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
                   onClick={(e) => pick(c, e)}
                   onContextMenu={menuFor(c)}
-                  {...tipProps(`${c.project ? `${c.title} · ${c.project}` : c.title}${showMarks ? ` · ${labelOf(c.server)}${c.off ? " is off" : ""}` : ""}`, chatColorVar(c.color))}
+                  {...tipProps(`${c.project ? `${c.title} · ${c.project}` : c.title}${hubMode ? ` · ${labelOf(c.server)}${c.off ? " is off" : ""}` : ""}`, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
-                  <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
-                  <span className="rail-word">{c.word}</span>
-                  <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.key) ? "done" : null} />
-                  <AgentMoons n={c.agents} />
-                  {markOf(c)}
+                  <span className="rail-dot">
+                    <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
+                    <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.key) ? "done" : null} />
+                    <AgentMoons n={c.agents} />
+                  </span>
+                  <span className="rail-name">{c.title}</span>
+                  {hubMode && <span className="rail-server">{labelOf(c.server)}</span>}
                 </button>
               ))}
             </div>
@@ -1290,7 +1292,7 @@ function projectTags(names: (string | null)[]): Map<string, string> {
 // A rail circle's face: the project's logo big with the chat's letter in a small circle; without a
 // logo, the letter big and the project's short name as a tinted tag.
 // Inside a rail circle: the project's logo, else its short name; a chat without a project, a dot.
-// (The chat's own one-word name sits under the circle.)
+// (The chat's title and, on the hub, its server's name sit under the circle.)
 // api: the chat's server.
 function DotFace({ project, tag, logo, api }: { project: string | null; tag: string; logo: boolean; api: Api }) {
   const [broken, setBroken] = useState(false);
