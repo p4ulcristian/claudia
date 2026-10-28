@@ -329,7 +329,7 @@ export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string
       <svg viewBox={`${-pad} ${-pad} ${laid.w + pad * 2} ${laid.h + pad * 2}`} width={(laid.w + pad * 2) * scale} height={(laid.h + pad * 2) * scale}>
         <defs>
           {/* Chalk: shapes and lines drawn through the baked chalk grain (web/chalk.ts), one region over
-              the whole picture. In the SVG itself, so a saved picture keeps it. */}
+              the whole picture. */}
           <pattern id={`grain-${uid}`} patternUnits="userSpaceOnUse" width={GRAIN_SIZE} height={GRAIN_SIZE}>
             <image href={grainUrl("fray")} width={GRAIN_SIZE} height={GRAIN_SIZE} />
           </pattern>
@@ -380,10 +380,7 @@ export function Diagram({ scene, changed, seq }: { scene: Graph; changed: string
 const THEME_VARS = ["--bg", "--bg2", "--panel", "--panel2", "--fg", "--muted", "--line", "--accent", "--green", "--red", "--amber", "--blue", "--grey", "--violet",
   "--green-bg", "--red-bg", "--amber-bg", "--blue-bg", "--grey-bg", "--violet-bg", "--sans", "--mono", "--hand"];
 const FONTS = "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap";
-// connect-src: only what the snapshot script fetches to embed the fonts in its image.
-const PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:; connect-src https://fonts.googleapis.com https://fonts.gstatic.com";
-// The same html-to-image the page bundles, for frames to draw themselves when the picture is saved.
-const SNAP_LIB = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js";
+const PAGE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:";
 
 function pageDoc(html: string) {
   const cs = getComputedStyle(document.documentElement);
@@ -392,9 +389,7 @@ function pageDoc(html: string) {
     + `<style>:root { ${vars} color-scheme: dark; } html, body { margin: 0; background: transparent; color: var(--fg); font: 14px/1.5 var(--sans); } html { overflow: hidden; } *, *::before, *::after { box-sizing: border-box; } button, input, select, textarea { font: inherit; color: inherit; }</style>`
     + `<script>(() => { const post = () => parent.postMessage({ claudiaPageHeight: Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)) }, "*"); addEventListener("load", post); addEventListener("DOMContentLoaded", () => new ResizeObserver(post).observe(document.body)); })();</script>`
     // Parts: Claudia sends new markup for the elements marked data-part="<name>"; the page stays loaded.
-    + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`
-    // Snapshot: on Claudia's ask, draw this page into a PNG and hand it back (see web/snapshot.ts).
-    + `<script>(() => { let lib; const load = () => lib || (lib = new Promise((ok, no) => { const s = document.createElement("script"); s.src = "${SNAP_LIB}"; s.onload = () => ok(window.htmlToImage); s.onerror = no; document.head.appendChild(s); })); addEventListener("message", async (e) => { if (e.source !== parent || !e.data || !e.data.claudiaSnap) return; let png = null; try { png = await (await load()).toPng(document.documentElement, { pixelRatio: e.data.ratio || 2, width: document.documentElement.clientWidth, height: Math.max(document.documentElement.scrollHeight, innerHeight) }); } catch {} parent.postMessage({ claudiaSnapId: e.data.claudiaSnap, png }, "*"); }); })();</script>`;
+    + `<script>(() => { const put = (parts) => { for (const [k, v] of Object.entries(parts || {})) for (const el of document.querySelectorAll('[data-part="' + CSS.escape(k) + '"]')) el.innerHTML = v; }; let first = null; addEventListener("message", (e) => { if (e.source !== parent || !e.data || !e.data.claudiaParts) return; if (document.readyState === "loading") first = e.data.claudiaParts; else put(e.data.claudiaParts); }); addEventListener("DOMContentLoaded", () => { put(first); parent.postMessage({ claudiaReady: true }, "*"); }); })();</script>`;
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + head);
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${head}</head>`);
   return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;

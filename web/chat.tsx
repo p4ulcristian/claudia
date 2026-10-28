@@ -4,6 +4,7 @@ import { useApi } from "./api";
 import { md } from "./md";
 import type { Command, Item } from "./types";
 import { CodeChip, codeSends } from "./editor";
+import { readMedia, type Attachment, type SentImage } from "./media";
 
 type Tool = Extract<Item, { k: "tool" }>;
 type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
@@ -270,11 +271,11 @@ function UserText({ text }: { text: string }) {
   );
 }
 
-type Img = { media_type: string; data: string; url: string };
-
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: Img[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode; actions?: React.ReactNode }) {
+export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: SentImage[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode; actions?: React.ReactNode }) {
   const [text, setText] = useState(props.initialText ?? "");
-  const [images, setImages] = useState<Img[]>([]);
+  const [attached, setAttached] = useState<Attachment[]>([]);
+  const [reading, setReading] = useState(0);
+  const picker = useRef<HTMLInputElement>(null);
   const [pick, setPick] = useState(0);
   const [menuOff, setMenuOff] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -301,24 +302,23 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
     el.style.height = Math.min(el.scrollHeight, 260) + "px";
   }, [text]);
 
+  // Photos and videos (web/media.ts): each shows as a thumbnail once it is read.
   const addFiles = (files: FileList | File[]) => {
     for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/")) continue;
-      const r = new FileReader();
-      r.onload = () => {
-        const url = String(r.result);
-        setImages((xs) => [...xs, { media_type: f.type, data: url.split(",")[1], url }]);
-      };
-      r.readAsDataURL(f);
+      if (!f.type.startsWith("image/") && !f.type.startsWith("video/")) continue;
+      setReading((n) => n + 1);
+      readMedia(f).then((a) => {
+        if (a) setAttached((xs) => [...xs, a]);
+      }).finally(() => setReading((n) => n - 1));
     }
   };
 
   const send = () => {
     const t = text.trim();
-    if (!t && !images.length) return;
-    props.onSend(t, images);
+    if ((!t && !attached.length) || reading) return;
+    props.onSend(t, attached.flatMap((a) => a.images));
     setText("");
-    setImages([]);
+    setAttached([]);
   };
 
   return (
@@ -327,14 +327,16 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
     >
-      {images.length > 0 && (
+      {(attached.length > 0 || reading > 0) && (
         <div className="thumbs">
-          {images.map((im, i) => (
+          {attached.map((a, i) => (
             <div key={i} className="thumb">
-              <img src={im.url} alt="" />
-              <button onClick={() => setImages((xs) => xs.filter((_, j) => j !== i))} title="Remove">×</button>
+              <img src={a.url} alt="" />
+              {a.video && <span className="thumb-video">▶ {Math.round(a.video.seconds)} s · {a.images.length} frames</span>}
+              <button onClick={() => setAttached((xs) => xs.filter((_, j) => j !== i))} title="Remove">×</button>
             </div>
           ))}
+          {reading > 0 && <div className="thumb reading" aria-label="Reading the file…" />}
         </div>
       )}
       {matches.length > 0 && (
@@ -367,9 +369,13 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
         />
         <div className="toolbar">
           <div className="tools">{props.tools}</div>
+          <input ref={picker} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
+          <button className="icon attach" onClick={() => picker.current?.click()} title="Add photos or videos" aria-label="Add photos or videos">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6.5h3l1.5-2h4l1.5 2h3v9h-13z" /><circle cx="10" cy="10.8" r="2.8" /></svg>
+          </button>
           {props.actions}
           {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
-          <button className="send primary" onClick={send} disabled={!text.trim() && !images.length} title="Send (Enter)">Send</button>
+          <button className="send primary" onClick={send} disabled={(!text.trim() && !attached.length) || reading > 0} title="Send (Enter)">Send</button>
         </div>
       </div>
     </div>

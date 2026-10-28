@@ -592,13 +592,17 @@ export class Chat implements SessionHandler {
     return this.asks.size + this.permits.size > 0;
   }
 
-  async send(text: string, images: { media_type: string; data: string }[] = []) {
+  async send(text: string, images: { media_type: string; data: string; note?: string }[] = []) {
     const uuid = crypto.randomUUID();
     if (!this.firstSent) {
       this.firstSent = { text: text.trim().split("\n")[0].slice(0, 120) || "New chat", at: Date.now() };
       this.onChange();
     }
-    const content: any[] = images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } }));
+    // A note goes right before its image (a video's frames start with one saying what they are).
+    const content: any[] = images.flatMap((im) => [
+      ...(typeof im.note === "string" && im.note ? [{ type: "text", text: im.note }] : []),
+      { type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } },
+    ]);
     // A changed form row goes with this message, as a reminder the chat doesn't show.
     const news = this.q ? this.seeForms() : null;
     const note = [news, this.formsNote].filter(Boolean).join(" ") || null;

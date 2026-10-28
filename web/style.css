@@ -773,7 +773,7 @@ svg.logo { flex: none; color: var(--fg); }
    An outlined box keeps its fill on itself (--chalk-bg on buttons), under the outline, so the
    text stays crisp. --chalk-c = a button's outline colour. */
 :root { --chalk: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-.explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .save-note::before, .chalk-box::before,
+.explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .server-filter button::before, .new-on button::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
@@ -901,11 +901,10 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .block-glow { position: absolute; inset: -4px; border-radius: 12px; pointer-events: none; animation: block-glow 1.2s ease-out forwards; }
 @keyframes block-glow { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); } to { box-shadow: 0 0 0 2px transparent; } }
 
-.save-pic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
-.save-pic:disabled { opacity: 0.35; cursor: default; }
-.save-pic.busy svg { animation: breathe 0.9s ease-in-out infinite; }
-.save-note { position: absolute; right: 14px; bottom: calc(100% + 10px); z-index: 8; max-width: min(460px, calc(100% - 28px)); padding: 7px 13px; font: 700 14px/1.3 var(--hand); color: var(--fg); isolation: isolate; animation: rise 0.18s ease-out; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  border-radius: 10px; background: color-mix(in oklch, var(--bg2) 92%, var(--green)); --ring: var(--chalk-r10-2); --ink: var(--green); }
+/* The composer's photo/video button and what it attached. */
+.attach svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.thumb-video { position: absolute; left: 3px; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 5px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 10px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb.reading { width: 64px; height: 64px; border-radius: 8px; border: 1px dashed var(--muted); animation: breathe 0.9s ease-in-out infinite; }
 
 /* ---------- Blocks: badge, forms, templates ---------- */
 /* The badge: quiet, top right of the block: its kind in the kind's chalk colour, then its name. */

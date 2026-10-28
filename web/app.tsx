@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
+import type { SentImage } from "./media";
 import { PictureView } from "./picture";
 import { PictureSend } from "./editor";
 import { AskPanel, PermitPanel } from "./panels";
@@ -18,7 +19,6 @@ import { CHAT_COLORS, PASSIVE } from "../src/colors";
 import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
 import { bakeChalk } from "./chalk";
-import { savePicture } from "./snapshot";
 import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import { ApiCtx, PAGE_API, apiFor, type Api } from "./api";
@@ -657,7 +657,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
   useEffect(() => { document.title = `${title} · ${brandName(hubMode ? null : me?.name)}`; }, [title, me]);
 
-  const onSend = (text: string, images: { media_type: string; data: string }[]) => {
+  const onSend = (text: string, images: SentImage[]) => {
     setViewing(null);
     // A typed message while Claude is asking answers the question.
     if (live.asks.length && text && !images.length) {
@@ -667,7 +667,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     }
     if (!fromPath()) history.replaceState(null, "", pathOf(current));
     if (hubMode) store.set("hub.server", current.server);
-    send({ t: "send", chat: current.id, text, images: images.map(({ media_type, data }) => ({ media_type, data })) });
+    send({ t: "send", chat: current.id, text, images });
   };
   const onStop = () => send({ t: "stop", chat: current.id });
 
@@ -749,7 +749,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       else if (r.top < l.top) list.scrollTop -= l.top - r.top + 8;
     }
   }, [curKey, chats.length, live.items.length > 0]);
-  const hasPicture = shown.scene.blocks ? shown.scene.blocks.length > 0 : shown.scene.nodes.length + shown.scene.cards.length > 0;
 
   // Changes of the turn being looked at: an earlier turn when stepping back, else the latest turn with changes.
   const changeTurns = useMemo(() => {
@@ -1114,7 +1113,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             initialText={startText}
             commands={meta.commands}
             actions={<>
-              <SaveButton title={shown.scene.title || title} disabled={fold.shown || !hasPicture} />
               {row && !readOnly && (
                 row.archived
                   ? <button className="icon archive" onClick={() => setArchived(false)} title="Unarchive"><ArchiveIcon out /></button>
@@ -1401,40 +1399,6 @@ function useFoldMotion(folded: boolean, chatW: number, narrow: boolean) {
   const cols = width === null ? null : "minmax(0, 1fr) 6px var(--fold-w)";
   const cls = dir ? `moving to-${dir} ${go ? "go" : ""}` : "";
   return { ref, shown, cols, width, rightWidth, cls };
-}
-
-// Save the picture shown on the right as a PNG.
-function SaveButton({ title, disabled }: { title: string; disabled: boolean }) {
-  const [busy, setBusy] = useState(false);
-  // A short note after saving: where it went (the browser saves to its downloads folder silently).
-  const [note, setNote] = useState<string | null>(null);
-  useEffect(() => {
-    if (!note) return;
-    const t = setTimeout(() => setNote(null), 4000);
-    return () => clearTimeout(t);
-  }, [note]);
-  const save = async () => {
-    const el = document.querySelector<HTMLElement>(".right .stage .picture");
-    if (!el || busy) return;
-    setBusy(true);
-    try {
-      const { file, copied } = await savePicture(el, title);
-      setNote(`Saved to Downloads: ${file}${copied ? " · also copied, paste it anywhere" : ""}`);
-    } catch (e) {
-      console.error("save picture", e);
-      setNote("Couldn't save the picture");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <>
-    {note && <span className="save-note" role="status">{note}</span>}
-    <button className={`icon save-pic ${busy ? "busy" : ""}`} onClick={save} disabled={disabled || busy} title={busy ? "Saving the picture…" : "Save the picture as an image"} aria-label="Save the picture as an image">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6.5h3l1.5-2h4l1.5 2h3v9h-13z" /><circle cx="10" cy="10.8" r="2.8" /></svg>
-    </button>
-    </>
-  );
 }
 
 function ArchiveIcon({ out }: { out?: boolean }) {
