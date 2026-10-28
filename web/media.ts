@@ -4,7 +4,8 @@
 // so a video goes as frames drawn in the browser, at most FRAMES, spread evenly (one per second for
 // short ones), with a note before them saying what they are.
 
-export type SentImage = { media_type: string; data: string; note?: string };
+// A video's first frame carries the note, the number of frames and the length (src/chat.ts wraps them).
+export type SentImage = { media_type: string; data: string; note?: string; frames?: number; seconds?: number };
 // One thing in the composer: a photo (one image) or a video (its frames); `url` is its thumbnail.
 export type Attachment = { url: string; images: SentImage[]; video?: { seconds: number } };
 
@@ -78,6 +79,8 @@ async function video(f: File): Promise<Attachment> {
       url ||= frame;
       images.push({ media_type: "image/jpeg", data: dataOf(frame) });
     }
+    images[0].frames = n;
+    images[0].seconds = Math.round(seconds * 10) / 10;
     images[0].note = `Video "${f.name}" (${at(seconds)}, ${v.videoWidth}x${v.videoHeight}): ${n} frame${n > 1 ? "s" : ""} follow in order, taken at ${times.map(at).join(", ")}. There is no sound.`;
     return { url, images, video: { seconds } };
   } finally {

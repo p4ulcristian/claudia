@@ -1074,6 +1074,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             {offNote ? <span className="offline">{offNote}</span> : !up && <span className="offline">reconnecting…</span>}
           </header>
           <Messages
+            chat={current.id}
             items={live.items}
             partial={live.partial}
             running={live.running}

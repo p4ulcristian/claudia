@@ -337,7 +337,7 @@ function Crumbs({ root, go }: { root: string; go: (path: string) => void }) {
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)$/i;
 
 // An image over the whole window; a click or Escape closes it.
-function ImageBig({ src, close }: { src: string; close: () => void }) {
+export function ImageBig({ src, close }: { src: string; close: () => void }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } };
     window.addEventListener("keydown", key, true);

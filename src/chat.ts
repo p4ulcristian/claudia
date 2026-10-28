@@ -23,7 +23,7 @@ const FOLDER_TOOL = "mcp__workspace__set_folder";
 
 export type Item =
   // queued: sent while Claude was working and not taken in yet; it waits below the chat until then.
-  | { k: "user"; uuid: string; text: string; images: number; queued?: boolean }
+  | { k: "user"; uuid: string; text: string; images: number; media?: Media[]; queued?: boolean }
   | { k: "text"; id: string; text: string }
   | { k: "tool"; id: string; name: string; title: string; detail: string; result?: { error: boolean; text: string } }
   | { k: "note"; id: string; text: string };
@@ -209,6 +209,44 @@ export async function withEarlierChains(sessionId: string, msgs: Said[]): Promis
   return out;
 }
 
+// What a message's images are, in order: photos, and videos sent as frames (web/media.ts); `first`
+// is the index of its first image among the message's images.
+export type Media = { first: number; count: number; video?: { seconds: number } };
+type SentImage = { media_type: string; data: string; note?: string; frames?: number; seconds?: number };
+
+// A video's frames start with a note, wrapped so the chat can tell it from typed text.
+const VIDEO_NOTE = /^<video-frames count="(\d+)" seconds="([\d.]+)">[\s\S]*<\/video-frames>$/;
+const videoNote = (im: SentImage) => `<video-frames count="${im.frames ?? 1}" seconds="${im.seconds ?? 0}">${im.note}</video-frames>`;
+
+// Group a message's content blocks (text and image, in order) into its media.
+function mediaOf(blocks: { type: string; text?: string }[]): Media[] {
+  const out: Media[] = [];
+  let n = 0, left = 0;
+  for (const b of blocks) {
+    const v = b.type === "text" ? VIDEO_NOTE.exec(b.text ?? "") : null;
+    if (v) { out.push({ first: n, count: 0, video: { seconds: Number(v[2]) } }); left = Number(v[1]); continue; }
+    if (b.type !== "image") continue;
+    if (left > 0) { out[out.length - 1].count++; left--; }
+    else out.push({ first: n, count: 1 });
+    n++;
+  }
+  return out;
+}
+
+// One image of a sent message, for the chat to show: from the session, or from memory for a message
+// just sent (the session may not have it written yet).
+const justSent = new Map<string, { media_type: string; data: string }[]>();
+export async function sentImage(sessionId: string, uuid: string, n: number) {
+  const mem = justSent.get(uuid);
+  if (mem) return mem[n] ?? null;
+  const msgs = await withEarlierChains(sessionId, await getSessionMessages(sessionId, { dir: WORK }));
+  const m = msgs.find((x) => x.type === "user" && x.uuid === uuid);
+  const content = (m?.message as any)?.content;
+  if (!Array.isArray(content)) return null;
+  const b = content.filter((x: any) => x.type === "image" && x.source?.type === "base64")[n];
+  return b ? { media_type: String(b.source.media_type), data: String(b.source.data) } : null;
+}
+
 export async function loadHistory(sessionId: string): Promise<Item[]> {
   const msgs = await withEarlierChains(sessionId, await getSessionMessages(sessionId, { dir: WORK }));
   const items: Item[] = [];
@@ -254,13 +292,13 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
             const text = answerText(qs, answers);
             if (text) items.push({ k: "user", uuid: `answer-${b.tool_use_id}`, text, images: 0 });
           }
-        } else if (b.type === "text") texts.push(stripReminders(b.text));
+        } else if (b.type === "text") { if (!VIDEO_NOTE.test(b.text)) texts.push(stripReminders(b.text)); }
         else if (b.type === "image") images++;
       }
       const text = texts.filter(Boolean).join("\n");
       const notice = taskNotice(text);
       if (notice) items.push({ k: "note", id: m.uuid, text: notice });
-      else if (text || images) items.push({ k: "user", uuid: m.uuid, text, images });
+      else if (text || images) items.push({ k: "user", uuid: m.uuid, text, images, ...(images ? { media: mediaOf(content) } : {}) });
     }
   }
   return items;
@@ -592,7 +630,7 @@ export class Chat implements SessionHandler {
     return this.asks.size + this.permits.size > 0;
   }
 
-  async send(text: string, images: { media_type: string; data: string; note?: string }[] = []) {
+  async send(text: string, images: SentImage[] = []) {
     const uuid = crypto.randomUUID();
     if (!this.firstSent) {
       this.firstSent = { text: text.trim().split("\n")[0].slice(0, 120) || "New chat", at: Date.now() };
@@ -600,7 +638,7 @@ export class Chat implements SessionHandler {
     }
     // A note goes right before its image (a video's frames start with one saying what they are).
     const content: any[] = images.flatMap((im) => [
-      ...(typeof im.note === "string" && im.note ? [{ type: "text", text: im.note }] : []),
+      ...(typeof im.note === "string" && im.note ? [{ type: "text", text: videoNote(im) }] : []),
       { type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } },
     ]);
     // A changed form row goes with this message, as a reminder the chat doesn't show.
@@ -623,7 +661,12 @@ export class Chat implements SessionHandler {
     if (this.settings.folder) this.snapshot(this.settings.folder);
     const queued = this.running;
     this.setRunning(true);
-    const item: Item = { k: "user", uuid, text, images: images.length, ...(queued ? { queued } : {}) };
+    const item: Item = { k: "user", uuid, text, images: images.length, ...(images.length ? { media: mediaOf(content) } : {}), ...(queued ? { queued } : {}) };
+    if (images.length) {
+      justSent.set(uuid, images.map(({ media_type, data }) => ({ media_type, data })));
+      // Only the last few: older ones are read back from the session.
+      for (const k of justSent.keys()) if (justSent.size > 8) justSent.delete(k);
+    }
     this.unsaved.set(uuid, item);
     this.q!.kv(`unsaved:${uuid}`, item);
     this.emit({ t: "user", item });

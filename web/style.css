@@ -35,11 +35,12 @@
 *::-webkit-scrollbar { display: none; }
 /* The page never scrolls (web/viewport.ts): html is the window, and body the page's one layer, in
    flow and not fixed, so iOS 26 Safari shows the page through its glass bar instead of painting the
-   bar solid. The layer is the window's size, or the visible area above a phone's keyboard while it
-   is up. Fixed menus, sheets and dialogs are placed in that layer, and nothing past its edges can
+   bar solid. The layer is the window's size (100dvh: in an iPhone Home Screen app html's 100% stops
+   a status bar's height short of the screen's bottom), or the visible area above a phone's keyboard
+   while it is up. Fixed menus, sheets and dialogs are placed in that layer, and nothing past its edges can
    widen or move the page. */
 html { height: 100%; overflow: hidden; }
-body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100%); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
+body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100dvh); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
 #root { height: 100%; }
 /* A field may shrink with its row (its own width is wide at a phone's 16px). */
 input, select, textarea { min-width: 0; }
@@ -110,7 +111,6 @@ code, pre { font-family: var(--mono); }
 .msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
 .msg.user .bubble { background: var(--violet-bg); border: 1px solid color-mix(in srgb, var(--violet) 35%, transparent); padding: 8px 12px; border-radius: 14px 14px 4px 14px; }
 .msg.user.viewing .bubble { outline: 2px solid var(--violet); }
-.att { font-size: 11.5px; color: var(--violet); display: block; }
 .pic-link { font-size: 11.5px; color: var(--muted); }
 .pic-link:hover { color: var(--blue); }
 .msg-links { display: flex; gap: 10px; }
@@ -877,6 +877,14 @@ svg.logo { flex: none; color: var(--fg); }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; }
 body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .app { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+/* A solid strip under the status bar (index.html). iOS 26 Safari gives a fixed element along the top
+   edge its own background instead of blurring the page under the clock; the bottom edge has no
+   fixed element, so the page shows through Safari's glass bar there. A real element: Safari skips
+   pseudo-elements. */
+.top-edge { display: none; }
+@media (pointer: coarse) {
+  .top-edge { display: block; position: fixed; top: 0; left: 0; right: 0; height: max(3px, env(safe-area-inset-top)); background: var(--bg); z-index: 1000; pointer-events: none; }
+}
 .menu-toggle { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
@@ -905,6 +913,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .attach svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
 .thumb-video { position: absolute; left: 3px; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 5px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 10px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .thumb.reading { width: 64px; height: 64px; border-radius: 8px; border: 1px dashed var(--muted); animation: breathe 0.9s ease-in-out infinite; }
+.sent-media { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.sent-thumb { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.sent-thumb img { display: block; max-width: min(220px, 100%); max-height: 220px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
 
 /* ---------- Blocks: badge, forms, templates ---------- */
 /* The badge: quiet, top right of the block: its kind in the kind's chalk colour, then its name. */

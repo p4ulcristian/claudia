@@ -2,9 +2,10 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./api";
 import { md } from "./md";
-import type { Command, Item } from "./types";
+import type { Command, Item, Media } from "./types";
 import { CodeChip, codeSends } from "./editor";
 import { readMedia, type Attachment, type SentImage } from "./media";
+import { ImageBig } from "./forms";
 
 type Tool = Extract<Item, { k: "tool" }>;
 type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
@@ -153,7 +154,27 @@ function Elapsed({ since }: { since: number }) {
   return <>{s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`}</>;
 }
 
+// The photos and videos of a sent message, small; a click shows one big (a video: its first frame).
+function SentMedia({ chat, it }: { chat: string; it: Extract<Item, { k: "user" }> }) {
+  const api = useApi();
+  const [big, setBig] = useState<string | null>(null);
+  const media: Media[] = it.media ?? Array.from({ length: it.images }, (_, i) => ({ first: i, count: 1 }));
+  const src = (n: number) => api.src(`/api/chats/${chat}/images/${it.uuid}/${n}`);
+  return (
+    <div className="sent-media">
+      {media.map((m) => (
+        <button key={m.first} className="sent-thumb" onClick={() => setBig(src(m.first))} title={m.video ? `Video, ${Math.round(m.video.seconds)} s, sent as ${m.count} frames` : "Photo"}>
+          <img src={src(m.first)} alt="" loading="lazy" />
+          {m.video && <span className="thumb-video">▶ {Math.round(m.video.seconds)} s</span>}
+        </button>
+      ))}
+      {big && <ImageBig src={big} close={() => setBig(null)} />}
+    </div>
+  );
+}
+
 export function Messages(props: {
+  chat: string;
   items: Item[];
   partial: string;
   running: boolean;
@@ -215,7 +236,7 @@ export function Messages(props: {
           return (
             <div key={it.uuid} data-at={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
-                {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
+                {it.images > 0 && <SentMedia chat={props.chat} it={it} />}
                 <UserText text={it.text} />
               </div>
               {(has || forkable) && (
@@ -247,7 +268,7 @@ export function Messages(props: {
       {queued.map((it) => (
         <div key={it.uuid} className="msg user queued" title="Claude reads this at its next step">
           <div className="bubble">
-            {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
+            {it.images > 0 && <SentMedia chat={props.chat} it={it} />}
             <UserText text={it.text} />
           </div>
           <span className="queued-tag">queued</span>

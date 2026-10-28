@@ -1,4 +1,4 @@
-export type { Item, Ask, Permit, Question, ChatEvent, Task, Context, Settings } from "../src/chat";
+export type { Item, Media, Ask, Permit, Question, ChatEvent, Task, Context, Settings } from "../src/chat";
 export type { Meta, ModelOption, Command, Limit } from "../src/meta";
 export type { ChangeMeta } from "../src/changes";
 export type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "../src/scene";
