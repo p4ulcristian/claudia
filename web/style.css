@@ -33,11 +33,13 @@
 
 * { box-sizing: border-box; scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
-/* The page never scrolls (web/viewport.ts): html is the window, and body a fixed layer the size of
-   the visible area (the visual viewport: above the keyboard on a phone). Fixed menus, sheets and
-   dialogs are placed in that layer, and nothing past its edges can widen or move the page. */
+/* The page never scrolls (web/viewport.ts): html is the window, and body the page's one layer, in
+   flow and not fixed, so iOS 26 Safari shows the page through its glass bar instead of painting the
+   bar solid. The layer is the window's size, or the visible area above a phone's keyboard while it
+   is up. Fixed menus, sheets and dialogs are placed in that layer, and nothing past its edges can
+   widen or move the page. */
 html { height: 100%; overflow: hidden; }
-body { position: fixed; left: 0; top: 0; width: var(--vv-w, 100%); height: var(--vv-h, 100%); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
+body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100%); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
 #root { height: 100%; }
 /* A field may shrink with its row (its own width is wide at a phone's 16px). */
 input, select, textarea { min-width: 0; }
