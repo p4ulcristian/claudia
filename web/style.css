@@ -35,9 +35,8 @@
 *::-webkit-scrollbar { display: none; }
 /* The page never scrolls (web/viewport.ts): html is the window, and body the page's one layer, in
    flow and not fixed, so iOS 26 Safari shows the page through its glass bar instead of painting the
-   bar solid. The layer is the window's size (100dvh: in an iPhone Home Screen app html's 100% stops
-   a status bar's height short of the screen's bottom), or the visible area above a phone's keyboard
-   while it is up. Fixed menus, sheets and dialogs are placed in that layer, and nothing past its edges can
+   bar solid. The layer is the window's size (100dvh; 100lvh in a Home Screen app, see below), or the
+   visible area above a phone's keyboard while it is up. Fixed menus, sheets and dialogs are placed in that layer, and nothing past its edges can
    widen or move the page. */
 html { height: 100%; overflow: hidden; }
 body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100dvh); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
@@ -876,15 +875,15 @@ svg.logo { flex: none; color: var(--fg); }
    and the notch / home bar keep their room (viewport-fit=cover puts the page under them). */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; }
 body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
-.app { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
-/* A solid strip under the status bar (index.html). iOS 26 Safari gives a fixed element along the top
-   edge its own background instead of blurring the page under the clock; the bottom edge has no
-   fixed element, so the page shows through Safari's glass bar there. A real element: Safari skips
-   pseudo-elements. */
-.top-edge { display: none; }
-@media (pointer: coarse) {
-  .top-edge { display: block; position: fixed; top: 0; left: 0; right: 0; height: max(3px, env(safe-area-inset-top)); background: var(--bg); z-index: 1000; pointer-events: none; }
-}
+/* One long page: the columns' backgrounds run up under the status bar and down to the screen's
+   bottom edge; only their content keeps clear of the notch, the status bar and the home bar. */
+.app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+.split:not(.g-main) { padding-top: env(safe-area-inset-top); box-sizing: border-box; }
+.rail { padding-top: calc(46px + env(safe-area-inset-top)); }
+.sidebar { padding-top: calc(14px + env(safe-area-inset-top)); }
+/* An iPhone Home Screen app (black-translucent status bar): 100%, 100svh and 100dvh all stop a
+   status bar's height short of the screen's bottom; only 100lvh is the whole screen. */
+@media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
 .menu-toggle { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
@@ -896,7 +895,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .sheet-tab { height: calc(34px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
   .right.sheet { height: calc(86% - env(safe-area-inset-top)); }
   .right.sheet .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-  .app:not(.no-sidebar) .sidebar-slot { padding-top: env(safe-area-inset-top); }
   /* While the keyboard is up the composer sits right on it: the Picture tab shows again when it closes. */
   :root[data-keyboard] .sheet-tab { display: none; }
 }
