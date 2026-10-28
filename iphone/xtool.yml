@@ -1,0 +1,5 @@
+version: 1
+product: Claudia
+bundleID: com.p4ulcristian.claudia
+infoPath: Info.plist
+iconPath: Icon/AppIcon.png

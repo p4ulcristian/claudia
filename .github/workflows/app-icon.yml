@@ -1,0 +1,40 @@
+# The iPhone app's icon: compiles iphone/Icon/AppIcon.png into the asset catalog (Assets.car)
+# App Store Connect requires (it refuses loose icon files: errors 90022 and 91111). Only Apple's
+# actool builds one, so this runs on a macOS runner; the result is downloaded and committed to
+# iphone/Icon/compiled/ with iphone/tools/fetch-icon.sh (Roomprint's recipe).
+name: app-icon
+
+on:
+  push:
+    paths: ["iphone/Icon/AppIcon.png", ".github/workflows/app-icon.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actool:
+    runs-on: macos-latest
+    steps:
+      # Every action is pinned to a commit SHA, not a tag: tags can be moved.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Asset catalog
+        run: |
+          xcodebuild -version
+          mkdir -p cat/Icon.xcassets/AppIcon.appiconset out
+          cp iphone/Icon/AppIcon.png cat/Icon.xcassets/AppIcon.appiconset/AppIcon.png
+          cat > cat/Icon.xcassets/Contents.json <<'J'
+          {"info": {"author": "xcode", "version": 1}}
+          J
+          cat > cat/Icon.xcassets/AppIcon.appiconset/Contents.json <<'J'
+          {"images": [{"filename": "AppIcon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
+           "info": {"author": "xcode", "version": 1}}
+          J
+          xcrun actool cat/Icon.xcassets --compile out --platform iphoneos \
+            --minimum-deployment-target 17.0 --target-device iphone --app-icon AppIcon \
+            --output-partial-info-plist out/partial.plist --output-format human-readable-text
+          ls -la out
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compiled-icon
+          path: out/
