@@ -4,6 +4,7 @@
 // var opens its source, an arrow lists the functions that cross it. Read live through the runner
 // (src/clojure.ts, clj-kondo), asked again every few seconds with the project's fingerprint.
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import { codeTokens, type Token } from "./shiki";
 
 type Data = Record<string, any>;
@@ -186,6 +187,7 @@ export function ClojureForm({ data, chat }: { data: Data; chat?: string }) {
   const demo = data.demo && typeof data.demo === "object" ? data.demo : null;
   const root: string = typeof data.root === "string" ? data.root : "";
   const live = !demo && !!root && !!chat;
+  const api = useApi();
   const base = `/api/chats/${chat}/clojure?root=${encodeURIComponent(root)}`;
   const [all, setAll] = useState<Ns[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +281,7 @@ export function ClojureForm({ data, chat }: { data: Data; chat?: string }) {
     const ask = async () => {
       if (!document.hidden) {
         try {
-          const j = await fetch(`${base}${fp ? `&fp=${fp}` : ""}`).then((r) => r.json());
+          const j = await api.fetch(`${base}${fp ? `&fp=${fp}` : ""}`).then((r) => r.json());
           if (gone) return;
           if (j.error) setError(j.error);
           else if (!j.same) { fp = j.fp; setAll(j.namespaces); setError(null); }
@@ -289,7 +291,7 @@ export function ClojureForm({ data, chat }: { data: Data; chat?: string }) {
     };
     ask();
     return () => { gone = true; clearTimeout(timer); };
-  }, [live, base, demo]);
+  }, [api, live, base, demo]);
 
   // A prefix with a single bubble opens straight into it.
   const view = useMemo(() => {
@@ -329,17 +331,17 @@ export function ClojureForm({ data, chat }: { data: Data; chat?: string }) {
     if (!pick) return;
     if (demo) { const d = demo.vars?.[pick]; setDetail({ doc: d?.doc, vars: list(d?.vars), external: list(d?.external) }); return; }
     let gone = false;
-    fetch(`${base}&ns=${encodeURIComponent(pick)}`).then((r) => r.json()).then((j) => { if (!gone) setDetail(j.error ? { vars: [], external: [], doc: j.error } : j); }).catch(() => {});
+    api.fetch(`${base}&ns=${encodeURIComponent(pick)}`).then((r) => r.json()).then((j) => { if (!gone) setDetail(j.error ? { vars: [], external: [], doc: j.error } : j); }).catch(() => {});
     return () => { gone = true; };
-  }, [pick, base]);
+  }, [api, pick, base]);
   useEffect(() => {
     setSrc(null);
     if (!pick || !varPick) return;
     if (demo) { const v = list(demo.vars?.[pick]?.vars).find((x: Var) => x.name === varPick); if (v?.code) setSrc({ code: v.code, row: v.row ?? 1, lang: "clj" }); return; }
     let gone = false;
-    fetch(`${base}&ns=${encodeURIComponent(pick)}&var=${encodeURIComponent(varPick)}`).then((r) => r.json()).then((j) => { if (!gone && !j.error) setSrc(j); }).catch(() => {});
+    api.fetch(`${base}&ns=${encodeURIComponent(pick)}&var=${encodeURIComponent(varPick)}`).then((r) => r.json()).then((j) => { if (!gone && !j.error) setSrc(j); }).catch(() => {});
     return () => { gone = true; };
-  }, [pick, varPick, base]);
+  }, [api, pick, varPick, base]);
   useEffect(() => {
     setUsed(null);
     if (!edge) return;
@@ -354,9 +356,9 @@ export function ClojureForm({ data, chat }: { data: Data; chat?: string }) {
       return;
     }
     let gone = false;
-    fetch(`${base}&from=${encodeURIComponent(from.key)}&fx=${from.exact ? 1 : 0}&to=${encodeURIComponent(to.key)}&tx=${to.exact ? 1 : 0}`).then((r) => r.json()).then((j) => { if (!gone) setUsed(list(j.used)); }).catch(() => {});
+    api.fetch(`${base}&from=${encodeURIComponent(from.key)}&fx=${from.exact ? 1 : 0}&to=${encodeURIComponent(to.key)}&tx=${to.exact ? 1 : 0}`).then((r) => r.json()).then((j) => { if (!gone) setUsed(list(j.used)); }).catch(() => {});
     return () => { gone = true; };
-  }, [edge?.from.key, edge?.to.key, edge?.from.exact, edge?.to.exact, base]);
+  }, [edge?.from.key, edge?.to.key, edge?.from.exact, edge?.to.exact, api, base]);
 
   useLayoutEffect(() => {
     const b = drawn.current?.getBBox();

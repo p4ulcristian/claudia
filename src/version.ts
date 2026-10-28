@@ -13,3 +13,6 @@ function commit() {
   return r.exitCode === 0 ? r.stdout.toString().trim() : null;
 }
 export const COMMIT = commit();
+
+// The API the page and the hub speak to this instance: src/api-version.ts (the page imports it too).
+export { API } from "./api-version";

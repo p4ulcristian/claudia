@@ -51,10 +51,14 @@ export function profileNames(): string[] {
   }
 }
 
-// Whose chats the page shows: the claudia_view cookie names a profile; anyone signed in may read
-// any profile's chats, only the profile's own person may write (readOnly otherwise).
+// Whose chats the page shows: a profile named by the X-Claudia-View header (fetches), the view query
+// parameter (the chat socket, which can't carry headers), or the claudia_view cookie (pages served
+// by this instance itself). Anyone signed in may read any profile's chats, only the profile's own
+// person may write (readOnly otherwise).
 export function viewOf(req: Request, own: Profile): { profile: Profile; readOnly: boolean } {
-  const name = req.headers.get("cookie")?.match(/(?:^|;\s*)claudia_view=([a-z][a-z0-9-]{0,30})/)?.[1];
+  const raw = req.headers.get("x-claudia-view") ?? new URL(req.url).searchParams.get("view")
+    ?? req.headers.get("cookie")?.match(/(?:^|;\s*)claudia_view=([^;]*)/)?.[1] ?? "";
+  const name = /^[a-z][a-z0-9-]{0,30}$/.test(raw) ? raw : null;
   const other = name && name !== own.name ? find((p) => p.name === name) : null;
   return other ? { profile: other, readOnly: true } : { profile: own, readOnly: false };
 }

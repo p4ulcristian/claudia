@@ -2,6 +2,7 @@
 // time order. A thin rail per agent on the left shows who was running at the same time; quiet
 // stretches get a divider with their length. Clicking a step opens it in full under it.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import { md } from "./md";
 import { PatchDiff, tilde } from "./changes";
 import { ExplainNote, useExplain } from "./chat";
@@ -37,6 +38,7 @@ function category(name: string) {
 }
 
 export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
+  const api = useApi();
   const [data, setData] = useState<Timeline | null>(null);
   const [missing, setMissing] = useState(false);
   const [open, setOpen] = useState<string | null>(null); // lane:id of the step shown in full
@@ -57,7 +59,7 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
   }, [chat]);
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/chats/${chat}/timeline?v=${encodeURIComponent(v.current)}`).catch(() => null);
+    const r = await api.fetch(`/api/chats/${chat}/timeline?v=${encodeURIComponent(v.current)}`).catch(() => null);
     if (!r) return;
     if (r.status === 404) return setMissing(true);
     if (!r.ok) return;
@@ -66,7 +68,7 @@ export function TimelineView({ chat, live }: { chat: string; live: boolean }) {
     if (j.same) return setData((d) => (d ? { ...d, now: j.now } : d));
     v.current = j.v;
     setData(j);
-  }, [chat]);
+  }, [api, chat]);
 
   // Every 2 s while anything runs; once more when it stops.
   useEffect(() => {
@@ -298,15 +300,16 @@ function Detail({ chat, lane, e }: { chat: string; lane: TimelineLane; e: Timeli
   const [d, setD] = useState<TimelineDetail | null>(null);
   const [failed, setFailed] = useState(false);
   const done = e.k === "tool" ? e.end : 0;
+  const api = useApi();
   useEffect(() => {
     let dead = false;
     setD(null);
     setFailed(false);
-    fetch(`/api/chats/${chat}/timeline/${lane.id}/${encodeURIComponent(e.id)}`)
+    api.fetch(`/api/chats/${chat}/timeline/${lane.id}/${encodeURIComponent(e.id)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => !dead && setD(j), () => !dead && setFailed(true));
     return () => { dead = true; };
-  }, [chat, lane.id, e.id, done]);
+  }, [api, chat, lane.id, e.id, done]);
 
   return (
     <div className="tl-detail">

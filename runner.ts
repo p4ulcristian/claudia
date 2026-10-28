@@ -93,6 +93,7 @@ async function listChats(all: boolean, archivedView: boolean) {
       id: c.id,
       title: c.firstSent!.text,
       at: c.firstSent!.at,
+      started: c.firstSent!.at,
       ours: true,
       running: c.running,
       waiting: c.waiting,
@@ -112,6 +113,8 @@ function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<st
       id: s.sessionId,
       title: s.customTitle || s.summary || s.firstPrompt || "New chat",
       at: s.lastModified,
+      // When it was started: the list's order, and how the hub's page merges several servers' lists.
+      started: s.createdAt ?? s.lastModified,
       ours: ours.has(s.sessionId),
       running: chats.get(s.sessionId)?.running ?? false,
       waiting: chats.get(s.sessionId)?.waiting ?? false,

@@ -1434,3 +1434,68 @@ button.cl-fn:hover { text-decoration: underline; }
 .code-chip .add { color: var(--green); }
 .code-chip .del { color: var(--red); }
 .code-sent .diff { margin-top: 6px; }
+
+/* ---------- The hub: one list over several servers ----------
+   A server's mark is a small chalk chip (its label's first letter); a server that is off greys its chats. */
+.server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none; }
+.server-mark::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid var(--chalk); background: var(--bg2); filter: url(#tip-chalk); }
+.server-mark.off { opacity: 0.6; text-decoration: line-through; }
+.rail-dot > .server-mark { position: absolute; top: -6px; left: -8px; min-width: 15px; height: 15px; font-size: 10.5px; padding: 0 3px; }
+.rail-dot.off { opacity: 0.4; filter: grayscale(0.8); }
+.rail-dot.off:hover, .rail-dot.off.on { opacity: 0.75; }
+.chat-row.off { opacity: 0.5; filter: grayscale(0.8); }
+.chat-row.off:hover, .chat-row.off.active { opacity: 0.8; }
+.server-off-note { margin: 2px 8px 6px; font-size: 12px; color: var(--amber); }
+.server-chip { font-family: var(--sans); }
+
+.server-filter { display: flex; flex-wrap: wrap; gap: 4px; }
+.server-filter button, .new-on button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border-radius: 999px; font-size: 12px; color: var(--muted); position: relative; isolation: isolate; }
+.server-filter button:first-child { padding-left: 8px; }
+.server-filter button::before, .new-on button::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; border: 1.5px solid transparent; filter: url(#tip-chalk); }
+.server-filter button:hover, .new-on button:hover { color: var(--fg); }
+.server-filter button.on, .new-on button.on { color: var(--fg); font-weight: 600; }
+.server-filter button.on::before, .new-on button.on::before { border-color: var(--accent); background: var(--panel2); }
+.server-filter button:disabled, .new-on button:disabled { opacity: 0.5; cursor: default; }
+.server-filter button.off .sf-label { text-decoration: line-through; }
+.server-filter .server-mark, .new-on .server-mark { min-width: 15px; height: 15px; font-size: 10.5px; }
+.sf-note { font-size: 10px; color: var(--amber); font-weight: 600; }
+.sf-note.warn { color: var(--red); }
+
+/* Where a new chat starts: a row of servers over the composer of an empty chat. */
+.new-on { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 16px; font-size: 12px; }
+.new-on > .muted { margin-right: 2px; }
+
+.admin-links { display: flex; gap: 4px; }
+.hub-admin-links { display: flex; justify-content: center; gap: 10px; }
+
+/* Settings: which server's, and its version. */
+.settings-servers { display: grid; gap: 6px; }
+.settings-servers .profile-tabs button:disabled { opacity: 0.5; cursor: default; }
+.needs-update { color: var(--red); font-weight: 600; }
+.mono { font-family: var(--mono); }
+
+/* The admins' Servers and Access pages. */
+.settings.hub-admin { width: min(760px, calc(100vw - 32px)); }
+.settings.hub-admin > header .profile-tabs { width: 220px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.admin-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.admin-table td { padding: 4px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); vertical-align: middle; }
+.admin-table td.mono { font-size: 12px; }
+.admin-table input:not([type="checkbox"]), .admin-form input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; background: var(--bg); outline: none; font-size: 12.5px; }
+.admin-table input.mono, .admin-form input.mono { font-family: var(--mono); font-size: 12px; }
+.admin-table input:focus, .admin-form input:focus { border-color: var(--blue); }
+.admin-table .row-actions { white-space: nowrap; text-align: right; }
+.admin-table .row-actions button, .admin-form button { border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; background: var(--panel2); font-size: 12px; margin-left: 4px; }
+.admin-form button:disabled { opacity: 0.5; cursor: default; }
+.admin-table button.danger { border-color: var(--red); color: var(--red); }
+.admin-table.grid th:not(:first-child), .admin-table.grid td.cell { text-align: center; }
+.admin-table.grid td.person { font-family: var(--mono); font-size: 12px; }
+.admin-table.grid input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.admin-grid-wrap { overflow-x: auto; }
+.admin-form { display: grid; grid-template-columns: 8em 1fr 1fr auto; gap: 6px; }
+.admin-form.pair { grid-template-columns: 2fr 1fr 1fr auto; }
+.admin-form.person { grid-template-columns: 1fr auto; }
+.pair-state { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.pair-state.fetched, .pair-state.on-WireGuard { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
+.pair-state.peer-up { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
+.pair-state.waiting-for-peer { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }

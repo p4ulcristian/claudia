@@ -1,6 +1,7 @@
 // The forms gallery: every kind of block Claude can draw, each on sample data with its "when to
 // use" line, and the templates saved from freeform blocks. Same renderers as the picture.
 import React, { useEffect, useState } from "react";
+import { useApi } from "./api";
 import { FORMS, FORM_NAMES, type FormSpec } from "../src/forms";
 import { FormView } from "./forms";
 import { BlockBadge, Diagram, PageFrame } from "./picture";
@@ -35,7 +36,8 @@ function Entry({ n, block, when, children, onDelete, onRestore }: { n: number; b
 
 export function FormsGallery({ close }: { close: () => void }) {
   const [templates, setTemplates] = useState<Template[] | null>(null);
-  const load = () => fetch("/api/templates").then((r) => r.json()).then(setTemplates, () => setTemplates([]));
+  const api = useApi();
+  const load = () => api.fetch("/api/templates").then((r) => r.json()).then(setTemplates, () => setTemplates([]));
   useEffect(() => { load(); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
@@ -46,16 +48,16 @@ export function FormsGallery({ close }: { close: () => void }) {
   const [hidden, setHidden] = useState<string[]>([]);
   // Opt-in forms this instance doesn't have (prefs.notHere) aren't shown at all.
   const [notHere, setNotHere] = useState<string[]>(FORM_NAMES.filter((f) => (FORMS[f] as FormSpec).optIn));
-  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => { setHidden(p.hiddenForms ?? []); setNotHere(p.notHere ?? []); }, () => {}); }, []);
+  useEffect(() => { api.fetch("/api/prefs").then((r) => r.json()).then((p) => { setHidden(p.hiddenForms ?? []); setNotHere(p.notHere ?? []); }, () => {}); }, []);
   const forms = FORM_NAMES.filter((f) => !notHere.includes(f));
   const setForms = (next: string[]) => {
     setHidden(next);
-    fetch("/api/prefs", { method: "PATCH", body: JSON.stringify({ hiddenForms: next }) });
+    api.fetch("/api/prefs", { method: "PATCH", body: JSON.stringify({ hiddenForms: next }) });
   };
   const [deleting, setDeleting] = useState<{ kind: "form" | "template"; name: string } | null>(null);
   const remove = async (name: string) => {
     setDeleting(null);
-    await fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
+    await api.fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
     load();
   };
 

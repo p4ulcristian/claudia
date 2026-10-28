@@ -1,5 +1,6 @@
 // The left half: the conversation, kept short, with tool steps folded away.
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import { md } from "./md";
 import type { Command, Item } from "./types";
 import { CodeChip, codeSends } from "./editor";
@@ -28,6 +29,7 @@ const explained = new Map<string, string>(); // finished step id → its explana
 
 // since: when the step started, if known better than "first seen here".
 export function useExplain(t: Tool, ctx: StepCtx, since?: number) {
+  const api = useApi();
   const [note, setNote] = useState<{ text: string; busy?: boolean; error?: boolean } | null>(() => (explained.has(t.id) ? { text: explained.get(t.id)! } : null));
   const run = async () => {
     if (note?.busy) return;
@@ -35,7 +37,7 @@ export function useExplain(t: Tool, ctx: StepCtx, since?: number) {
     setNote({ text: "explaining…", busy: true });
     const running = !t.result;
     try {
-      const r = await fetch("/api/explain", {
+      const r = await api.fetch("/api/explain", {
         method: "POST",
         body: JSON.stringify({
           name: t.name, title: t.title, detail: t.detail, result: t.result?.text ?? null, error: !!t.result?.error, running,

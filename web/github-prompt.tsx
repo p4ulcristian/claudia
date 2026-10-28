@@ -1,13 +1,16 @@
 // Asks a profile without a GitHub login to connect one, once per browser until it is set ("Later"
 // hides it here). Without it, Claude can't push or open pull requests for that person.
 import React, { useEffect, useState } from "react";
+import { useApi } from "./api";
 
 // A classic token: fine-grained ones can't reach a repo owned by another person's account, which is
 // where a collaborator's work goes. gh needs read:org; workflow lets pushes touch CI files.
 export const GITHUB_TOKEN_URL = "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Claudia";
 
+// Asks the open chat's server (in the hub each server keeps its own GitHub login per profile).
 export function GithubPrompt({ profile }: { profile: string }) {
-  const key = `claudia.github-later.${profile}`;
+  const api = useApi();
+  const key = api.server ? `claudia.github-later.${api.server}.${profile}` : `claudia.github-later.${profile}`;
   const [show, setShow] = useState(false);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -16,15 +19,16 @@ export function GithubPrompt({ profile }: { profile: string }) {
 
   useEffect(() => {
     if (localStorage.getItem(key)) return;
-    fetch("/api/github").then((r) => r.json()).then((j) => !j.user && setShow(true), () => {});
-  }, [key]);
+    setShow(false);
+    api.fetch("/api/github").then((r) => r.json()).then((j) => !j.user && setShow(true), () => {});
+  }, [api, key]);
 
   if (!show) return null;
   const later = () => { localStorage.setItem(key, "1"); setShow(false); };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const r = await fetch("/api/github", { method: "PUT", body: JSON.stringify({ token: value }) });
+    const r = await api.fetch("/api/github", { method: "PUT", body: JSON.stringify({ token: value }) });
     const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
     setBusy(false);
     if (!r.ok) return setError(String(j.error ?? `HTTP ${r.status}`));

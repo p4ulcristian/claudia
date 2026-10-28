@@ -1,5 +1,6 @@
 // The Changes panel: files Claude changed in a turn, the diff on click.
 import React, { useEffect, useMemo, useState } from "react";
+import { useApi } from "./api";
 import { structuredPatch, diffWordsWithSpace } from "diff";
 import type { ChangeMeta } from "./types";
 
@@ -148,11 +149,12 @@ export function PatchDiff({ hunks }: { hunks: { oldStart: number; oldLines: numb
 function DiffView({ chat, change, split }: { chat: string; change: ChangeMeta; split: boolean }) {
   const [data, setData] = useState<{ before: string | null; after: string | null } | null>(null);
   const [whole, setWhole] = useState(false);
+  const api = useApi();
   useEffect(() => {
     let dead = false;
-    fetch(`/api/chats/${chat}/changes/${change.id}`).then((r) => r.json()).then((j) => !dead && setData(j));
+    api.fetch(`/api/chats/${chat}/changes/${change.id}`).then((r) => r.json()).then((j) => !dead && setData(j));
     return () => { dead = true; };
-  }, [chat, change.id]);
+  }, [api, chat, change.id]);
   const hunks = useMemo(() => (data ? hunksOf(data.before ?? "", data.after ?? "", whole) : []), [data, whole]);
   if (change.skipped) return <p className="muted small">Not shown: {change.skipped}.</p>;
   if (!data) return <p className="muted small">Loading…</p>;

@@ -5,6 +5,7 @@
 // Read live through the runner (src/calls.ts, the clojure form's clj-kondo index); the project's
 // fingerprint is asked again every few seconds and what is shown is read again when it changes.
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useApi, type Api } from "./api";
 import { codeTokens, type Token } from "./shiki";
 
 type Data = Record<string, any>;
@@ -41,12 +42,12 @@ const same = (v: string, id: string) => v === id || id.endsWith(`.${v}`) || (id.
 type Source = { get: (id: string) => Promise<Got>; map: (id: string, up: number, down: number) => Promise<MapData | { error: string }> };
 const Src = createContext<Source | null>(null);
 
-function liveSource(base: string): Source {
+function liveSource(api: Api, base: string): Source {
   const cache = new Map<string, Promise<any>>();
   const ask = (q: string) => {
     let p = cache.get(q);
     if (!p) {
-      p = fetch(`${base}${q}`).then((r) => r.json()).catch((e) => { cache.delete(q); return { error: String(e?.message ?? e) }; });
+      p = api.fetch(`${base}${q}`).then((r) => r.json()).catch((e) => { cache.delete(q); return { error: String(e?.message ?? e) }; });
       cache.set(q, p);
     }
     return p;
@@ -483,6 +484,7 @@ export function CallsForm({ data, chat }: { data: Data; chat?: string }) {
   const root: string = typeof data.root === "string" ? data.root : "";
   const open: string = typeof data.open === "string" ? data.open.trim() : "";
   const live = !demo && !!root && !!chat;
+  const api = useApi();
   const base = `/api/chats/${chat}/calls?root=${encodeURIComponent(root)}`;
   // A new source (an empty cache) whenever the project's fingerprint changes.
   const [fp, setFp] = useState<string | null>(null);
@@ -494,7 +496,7 @@ export function CallsForm({ data, chat }: { data: Data; chat?: string }) {
     const ask = async () => {
       if (!document.hidden) {
         try {
-          const j = await fetch(`${base}${known ? `&fp=${known}` : ""}`).then((r) => r.json());
+          const j = await api.fetch(`${base}${known ? `&fp=${known}` : ""}`).then((r) => r.json());
           if (gone) return;
           if (j.error) setError(j.error);
           else if (!j.same) { known = j.fp; setFp(j.fp); setError(null); }
@@ -504,8 +506,8 @@ export function CallsForm({ data, chat }: { data: Data; chat?: string }) {
     };
     ask();
     return () => { gone = true; clearTimeout(timer); };
-  }, [live, base]);
-  const src = useMemo<Source | null>(() => (demo ? demoSource(demo) : live && fp ? liveSource(base) : null), [demo, live, base, fp]);
+  }, [api, live, base]);
+  const src = useMemo<Source | null>(() => (demo ? demoSource(demo) : live && fp ? liveSource(api, base) : null), [demo, live, api, base, fp]);
 
   const [view, setView] = useState<View>(viewOf(data.view));
   useEffect(() => setView(viewOf(data.view)), [data.view]);

@@ -20,6 +20,8 @@ import { TipBubble, tipProps } from "./tip";
 import { savePicture } from "./snapshot";
 import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
+import { ApiCtx, PAGE_API, apiFor, type Api } from "./api";
+import { AdminDialog, HubEmpty, NewChatServer, PeopleTabs, ServerFilter, ServerMark, SettingsServers, serverMarks, type AdminTab, type HubMe, type ServerState, type ServerView } from "./hub";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, SearchFound, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
 
@@ -56,7 +58,24 @@ const fresh = (id: string): Live => ({
 });
 
 const CHAT_WIDTH = 400; // the chat column until dragged (px)
-const idFromPath = () => location.pathname.match(/^\/c\/([0-9a-f-]{36})/)?.[1] ?? null;
+const NO_META: Meta = { models: [], commands: [], limits: [], account: "", accountLabel: null, defaultModel: "", at: 0 };
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// Where a chat lives: its server and its id. The server is "" when a server serves the page itself
+// (single-server mode); in the hub, "" only while an old link's server is still being looked for.
+type At = { server: string; id: string };
+// A chat's key in the page's maps (its id alone on a server's own page, as before the hub).
+const keyOf = (server: string, id: string) => (server ? `${server}/${id}` : id);
+// /c/<chat> (a server's own page, or a hub link from before the hub), or /c/<server>/<chat> (the hub).
+const fromPath = (): { server: string | null; id: string } | null => {
+  const m = location.pathname.match(/^\/c\/(?:([a-z][a-z0-9-]{0,30})\/)?([0-9a-f-]{36})/);
+  return m ? { server: m[1] ?? null, id: m[2]! } : null;
+};
+const pathOf = (at: At) => (at.server ? `/c/${at.server}/${at.id}` : `/c/${at.id}`);
 
 // /new?text=… (e.g. Eye on Rainbow's "Open in Claudia"): a new chat of your own with the text in
 // the message box, not sent. Your own chats, so another profile's read-only view is left first;
@@ -65,49 +84,72 @@ const startText = (() => {
   if (location.pathname !== "/new") return "";
   const text = new URLSearchParams(location.search).get("text") ?? "";
   document.cookie = "claudia_view=; path=/; max-age=0; samesite=lax";
+  store.set("hub.view", "");
   history.replaceState(null, "", "/");
   return text;
 })();
 
-const store = {
-  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
-  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
-};
-
-// A WebSocket that comes back by itself and resends what was queued.
-function useSocket(onMsg: (m: any) => void, onOpen: () => void) {
-  const ws = useRef<WebSocket | null>(null);
-  const queue = useRef<string[]>([]);
-  const [up, setUp] = useState(false);
-  const handlers = useRef({ onMsg, onOpen });
-  handlers.current = { onMsg, onOpen };
-  useEffect(() => {
-    let dead = false;
-    let retry = 300;
-    const connect = () => {
-      const s = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-      ws.current = s;
-      s.onopen = () => {
-        retry = 300;
-        setUp(true);
-        handlers.current.onOpen();
-        for (const q of queue.current.splice(0)) s.send(q);
-      };
-      s.onmessage = (e) => handlers.current.onMsg(JSON.parse(e.data));
-      s.onclose = () => {
-        setUp(false);
-        if (!dead) setTimeout(connect, (retry = Math.min(retry * 2, 5000)));
-      };
+// A chat socket that comes back by itself and resends what was queued. ready = the server behind
+// it answered (its first message), not only the socket opening: in the hub the socket opens at the
+// hub and closes again when the server is off.
+type ConnEvents = { msg: (m: any) => void; open: () => void; ready: () => void; down: () => void };
+class Conn {
+  private ws: WebSocket | null = null;
+  private queue: string[] = [];
+  private dead = false;
+  private retry = 300;
+  ready = false;
+  constructor(readonly url: string, private on: ConnEvents) {
+    this.connect();
+  }
+  private connect() {
+    const s = new WebSocket(this.url);
+    this.ws = s;
+    s.onopen = () => {
+      this.on.open();
+      for (const q of this.queue.splice(0)) s.send(q);
     };
-    connect();
-    return () => { dead = true; ws.current?.close(); };
-  }, []);
-  const send = useCallback((m: unknown) => {
+    s.onmessage = (e) => {
+      if (!this.ready) {
+        this.ready = true;
+        this.retry = 300;
+        this.on.ready();
+      }
+      this.on.msg(JSON.parse(e.data));
+    };
+    s.onclose = () => {
+      if (this.dead) return;
+      this.ready = false;
+      this.on.down();
+      setTimeout(() => !this.dead && this.connect(), (this.retry = Math.min(this.retry * 2, 5000)));
+    };
+  }
+  send(m: unknown) {
     const s = JSON.stringify(m);
-    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(s);
-    else queue.current.push(s);
-  }, []);
-  return { send, up };
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(s);
+    else this.queue.push(s);
+  }
+  close() {
+    this.dead = true;
+    this.ws?.close();
+  }
+}
+
+// A chat in the merged list: which server it is on, its key, and whether that server is off.
+type Row = ChatRow & { server: string; key: string; off: boolean };
+
+// Several servers' lists as one, in the order the chats were started; each server's own order is kept.
+function mergeByStart(lists: Row[][]): Row[] {
+  const startOf = (c: Row) => c.started ?? c.at;
+  const at = lists.map(() => 0);
+  const out: Row[] = [];
+  for (;;) {
+    let best = -1;
+    for (let i = 0; i < lists.length; i++)
+      if (at[i]! < lists[i]!.length && (best < 0 || startOf(lists[i]![at[i]!]!) < startOf(lists[best]![at[best]!]!))) best = i;
+    if (best < 0) return out;
+    out.push(lists[best]![at[best]!++]!);
+  }
 }
 
 function ago(t: number) {
@@ -174,12 +216,74 @@ function useMedia(q: string) {
   return narrow;
 }
 
-function App() {
-  const [chats, setChats] = useState<ChatRow[]>([]);
+
+type Info = { me: Me | null; state: ServerState };
+
+// Which mode the page is in: served by the hub (/hub/me answers), or by a server itself (it 404s:
+// everything as before the hub, one server at "").
+function Root() {
+  const [mode, setMode] = useState<{ hub: HubMe | null } | null>(null);
+  useEffect(() => {
+    fetch("/hub/me")
+      .then(async (r) => setMode({ hub: r.ok ? ((await r.json()) as HubMe) : null }))
+      .catch(() => setMode({ hub: null }));
+  }, []);
+  return mode ? <App hubFirst={mode.hub} /> : null;
+}
+
+function App({ hubFirst }: { hubFirst: HubMe | null }) {
+  const hubMode = hubFirst !== null;
+  const [hub, setHub] = useState(hubFirst);
+  const refreshHub = useCallback(() => {
+    fetch("/hub/me").then((r) => (r.ok ? r.json() : null)).then((h) => h && setHub(h), () => {});
+  }, []);
+  // The servers this person may use (one, "", on a server's own page).
+  const servers = useMemo(() => (hub ? hub.servers : [{ name: "", label: "" }]), [hub]);
+  const serverNames = servers.map((s) => s.name).join(",");
+  const marks = useMemo(() => serverMarks(servers), [servers]);
+  const labelOf = (s: string) => servers.find((x) => x.name === s)?.label ?? s;
+  // Marks on chats only when there is more than one server to tell apart.
+  const showMarks = hubMode && servers.length > 1;
+
+  // Each server: who you are there (its /api/me, kept for when it is off) and whether it is up.
+  const [info, setInfo] = useState<Record<string, Info>>(() =>
+    Object.fromEntries(servers.map((s) => [s.name, { me: hubMode ? (JSON.parse(store.get(`hub.me.${s.name}`) || "null") as Me | null) : null, state: "loading" as ServerState }])),
+  );
+  const patchInfo = useCallback((s: string, p: Partial<Info>) => setInfo((m) => ({ ...m, [s]: { ...(m[s] ?? { me: null, state: "loading" }), ...p } })), []);
+  const loadMe = useCallback(async (s: string) => {
+    if (!hubMode) {
+      apiFor("").fetch("/api/me").then((r) => r.json()).then((me) => patchInfo("", { me, state: "up" }), () => patchInfo("", { me: null }));
+      return;
+    }
+    const r = await apiFor(s).fetch("/api/me").catch(() => null);
+    if (r?.ok) {
+      const me = (await r.json()) as Me;
+      store.set(`hub.me.${s}`, JSON.stringify(me));
+      patchInfo(s, { me, state: "up" });
+    } else patchInfo(s, { state: r?.status === 403 ? "noProfile" : "off" });
+  }, [hubMode, patchInfo]);
+  useEffect(() => { for (const s of servers) void loadMe(s.name); }, [serverNames]);
+
+  // Whose chats (hub): null = your own everywhere; another person's are read only, from every server
+  // that has that profile, and nothing from the others. (On a server's own page: the cookie.)
+  const [person, setPerson] = useState<string | null>(() => (hubMode && store.get("hub.view")) || null);
+  const viewOn = useCallback((s: string): { view: string | null; hidden: boolean } => {
+    if (!hubMode || !person) return { view: null, hidden: false };
+    const me = info[s]?.me;
+    if (!me) return { view: null, hidden: true };
+    if (me.profile === person) return { view: null, hidden: false };
+    return me.profiles.includes(person) ? { view: person, hidden: false } : { view: null, hidden: true };
+  }, [hubMode, person, info]);
+  const apiOf = (s: string) => apiFor(s, viewOn(s).view);
+  // The servers whose chats show: a profile there, and in the view.
+  const shownServer = (s: string) => info[s]?.state !== "noProfile" && !viewOn(s).hidden;
+  const viewSig = servers.map((s) => `${s.name}:${shownServer(s.name) ? viewOn(s.name).view ?? "" : "!"}`).join(",");
+  const views: ServerView[] = servers.map((s) => ({ ...s, state: info[s.name]?.state ?? "loading", update: !!info[s.name]?.me && info[s.name]!.me!.api !== PAGE_API }));
+
   const [all, setAll] = useState(store.get("all") === "1");
   const [archivedView, setArchivedView] = useState(false);
   // Every chat seen in any list, so the open one keeps its title while the other list shows.
-  const known = useRef(new Map<string, ChatRow>());
+  const known = useRef(new Map<string, Row>());
   const [search, setSearch] = useState("");
   const narrow = useMedia("(max-width: 1099px)");
   const phone = useMedia("(max-width: 679px)");
@@ -201,8 +305,28 @@ function App() {
   const showSidebar = drawer || railSearch;
   const searchFromRail = () => { setRailSearch(true); requestAnimationFrame(() => searchBox.current?.focus()); };
   const endRailSearch = () => { if (railSearch) { setRailSearch(false); setSearch(""); } };
-  const [current, setCurrent] = useState<string>(() => idFromPath() ?? crypto.randomUUID());
-  const [live, setLive] = useState<Live>(() => fresh(current));
+
+  // The server a new chat starts on: the last one used, if it can still be used.
+  const usable = views.filter((v) => v.state !== "noProfile" && shownServer(v.name)).map((v) => v.name);
+  const defaultServer = (() => {
+    if (!hubMode) return "";
+    const last = store.get("hub.server");
+    return last && usable.includes(last) ? last : usable[0] ?? servers[0]?.name ?? "";
+  })();
+  // The open chat. An old hub link (/c/<chat>) waits until a server's list has the chat.
+  const [first] = useState(() => {
+    const p = fromPath();
+    if (!hubMode) return { at: { server: "", id: p?.id ?? crypto.randomUUID() }, old: false };
+    const may = (n: string | null) => !!n && servers.some((s) => s.name === n);
+    if (p && may(p.server)) return { at: { server: p.server!, id: p.id }, old: false };
+    if (p) return { at: { server: "", id: p.id }, old: true };
+    const last = store.get("hub.server");
+    return { at: { server: may(last) ? last! : servers[0]?.name ?? "", id: crypto.randomUUID() }, old: false };
+  });
+  const [current, setCurrent] = useState<At>(first.at);
+  const [resolving, setResolving] = useState(first.old);
+  const curKey = keyOf(current.server, current.id);
+  const [live, setLive] = useState<Live>(() => fresh(current.id));
   const [viewing, setViewing] = useState<string | null>(null);
   // The chat column's width in px, not a share of the window: maximizing gives the room to the
   // picture. CHAT_WIDTH until dragged; a drag (wider too) is kept.
@@ -223,18 +347,23 @@ function App() {
   const peekAsk = useCallback(() => setPeek(true), []);
   const askId = live.asks[0]?.id;
   useEffect(() => setPeek(false), [askId]);
-  const [meta, setMeta] = useState<Meta>({ models: [], commands: [], limits: [], account: "", accountLabel: null, defaultModel: "", at: 0 });
-  // This Claudia's name, and who is signed in with which profile.
-  const [me, setMe] = useState<Me | null>(null);
+  // Models, commands and usage: each server's own; the open chat's show.
+  const [metas, setMetas] = useState<Record<string, Meta>>({});
+  const meta = metas[current.server] ?? NO_META;
+  // Who is signed in with which profile, on the open chat's server.
+  const curInfo = info[current.server];
+  const me = curInfo?.me ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsServer, setSettingsServer] = useState("");
   const [formsOpen, setFormsOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState<AdminTab | null>(null);
   const closeForms = useCallback(() => setFormsOpen(false), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
-  useEffect(() => {
-    fetch("/api/me").then((r) => r.json()).then(setMe, () => setMe(null));
-  }, []);
+  const closeAdmin = useCallback(() => { setAdminTab(null); refreshHub(); }, [refreshHub]);
   const currentRef = useRef(current);
   currentRef.current = current;
+  // The open chat's server, for every feature (picture, files, git, timeline, changes, forms…).
+  const openApi = apiOf(current.server);
 
   // Chats whose turn ended while another chat was open: a "done" badge until opened (kept across reloads).
   const [done, setDone] = useState<Set<string>>(() => new Set(JSON.parse(store.get("done") || "[]")));
@@ -245,11 +374,11 @@ function App() {
     store.set("done", JSON.stringify([...d]));
     return d;
   }), []);
-  useEffect(() => changeDone((d) => d.delete(current)), [current]);
+  useEffect(() => changeDone((d) => d.delete(curKey)), [curKey]);
 
   // Forms deleted in the Forms window (and opt-in forms this instance lacks): not offered in the row over the picture either.
   const [hiddenForms, setHiddenForms] = useState<string[]>([]);
-  useEffect(() => { fetch("/api/prefs").then((r) => r.json()).then((p) => setHiddenForms([...(p.hiddenForms ?? []), ...(p.notHere ?? [])]), () => {}); }, [formsOpen]);
+  useEffect(() => { openApi.fetch("/api/prefs").then((r) => r.json()).then((p) => setHiddenForms([...(p.hiddenForms ?? []), ...(p.notHere ?? [])]), () => {}); }, [formsOpen, openApi]);
   const [sounds, setSounds] = useState(() => store.get("sounds") === "on");
   const soundsRef = useRef(sounds);
   soundsRef.current = sounds;
@@ -262,48 +391,88 @@ function App() {
   const [popups, setPopups] = useState(() => store.get("popups") === "on" && popupsAllowed());
   const popupsRef = useRef(popups);
   popupsRef.current = popups;
-  const openRef = useRef<(id: string) => void>(() => {});
+  const openRef = useRef<(at: At) => void>(() => {});
   const togglePopups = async (on: boolean) => {
     const allowed = on && (await allowPopups());
     setPopups(allowed);
     store.set("popups", allowed ? "on" : "off");
   };
-  const loadChats = useCallback(async () => {
-    const r = await fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`);
-    if (!r.ok) return;
+
+  // Each server's chat list, under the view and toggles it was asked with (in the hub; one slot on a
+  // server's own page, as before). The hub keeps the last list seen per server, shown while it is off.
+  const [lists, setLists] = useState<Record<string, ChatRow[]>>({});
+  const listId = (s: string) => (hubMode ? `${s}|${viewOn(s).view ?? ""}|${all ? 1 : 0}|${archivedView ? 1 : 0}` : "");
+  const listIdRef = useRef(listId);
+  listIdRef.current = listId;
+  const asked = useRef(new Map<string, number>());
+  const fetched = useRef(new Set<string>());
+  const loadChats = useCallback(async (s: string) => {
+    const id = listIdRef.current(s);
+    const n = (asked.current.get(s) ?? 0) + 1;
+    asked.current.set(s, n);
+    const r = await apiOf(s).fetch(`/api/chats?all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`).catch(() => null);
+    if (asked.current.get(s) !== n) return;
+    if (!r?.ok) {
+      if (hubMode && (!r || r.status === 502)) patchInfo(s, { state: "off" });
+      return;
+    }
     const rows: ChatRow[] = await r.json();
-    for (const c of rows) known.current.set(c.id, c);
-    const ended = rows.filter((c) => wasRunning.current.get(c.id) && !c.running && c.id !== currentRef.current);
+    if (asked.current.get(s) !== n) return;
+    fetched.current.add(id);
+    for (const c of rows) known.current.set(keyOf(s, c.id), { ...c, server: s, key: keyOf(s, c.id), off: false });
+    const cur = keyOf(currentRef.current.server, currentRef.current.id);
+    const ended = rows.filter((c) => wasRunning.current.get(keyOf(s, c.id)) && !c.running && keyOf(s, c.id) !== cur);
     // Sounds and desktop popups: a chat that finished or started waiting on you (a sound in its
     // colour's note); the open one only when the window isn't in front.
     if (soundsRef.current || popupsRef.current) {
-      const heard = (c: ChatRow) => c.id !== currentRef.current || !document.hasFocus();
+      const heard = (c: ChatRow) => keyOf(s, c.id) !== cur || !document.hasFocus();
       for (const c of rows) {
-        const kind = c.waiting && !wasWaiting.current.get(c.id) ? "waiting"
-          : wasRunning.current.get(c.id) && !c.running && !c.waiting ? "done" : null;
+        const k = keyOf(s, c.id);
+        const kind = c.waiting && !wasWaiting.current.get(k) ? "waiting"
+          : wasRunning.current.get(k) && !c.running && !c.waiting ? "done" : null;
         if (!kind || !heard(c)) continue;
         if (soundsRef.current) play(kind, c.color);
-        if (popupsRef.current) popup(kind, c, () => openRef.current(c.id));
+        if (popupsRef.current) popup(kind, c, () => openRef.current({ server: s, id: c.id }));
       }
     }
-    for (const c of rows) { wasRunning.current.set(c.id, c.running); wasWaiting.current.set(c.id, c.waiting); }
-    if (ended.length) changeDone((d) => ended.forEach((c) => d.add(c.id)));
-    setChats(rows);
-  }, [all, archivedView]);
-  // Search: two letters or more search what was said in the chats (the runner's index), not only titles.
-  const [found, setFound] = useState<SearchFound[] | null>(null);
+    for (const c of rows) { wasRunning.current.set(keyOf(s, c.id), c.running); wasWaiting.current.set(keyOf(s, c.id), c.waiting); }
+    if (ended.length) changeDone((d) => ended.forEach((c) => d.add(keyOf(s, c.id))));
+    setLists((l) => ({ ...l, [id]: rows }));
+    if (hubMode) store.set(`hub.list.${id}`, JSON.stringify(rows));
+  }, [all, archivedView, viewSig]);
+  const loadRef = useRef(loadChats);
+  loadRef.current = loadChats;
+
+  // One merged list, in the order chats were started; a server that is off shows its last list, greyed.
+  const [serverFilter, setServerFilterState] = useState<string | null>(() => (hubMode && store.get("hub.filter")) || null);
+  const setServerFilter = (s: string | null) => { setServerFilterState(s); store.set("hub.filter", s ?? ""); };
+  const filter = serverFilter && servers.some((s) => s.name === serverFilter) && shownServer(serverFilter) ? serverFilter : null;
+  const rowsAll = useMemo(
+    () => mergeByStart(servers.filter((s) => shownServer(s.name)).map((s) => (lists[listId(s.name)] ?? []).map((c) => ({ ...c, server: s.name, key: keyOf(s.name, c.id), off: hubMode && info[s.name]?.state === "off" })))),
+    [lists, info, viewSig, serverNames, all, archivedView],
+  );
+  const chats = filter ? rowsAll.filter((c) => c.server === filter) : rowsAll;
+
+  // Search: two letters or more search what was said in the chats (each server's index), not only titles.
+  const [found, setFound] = useState<(SearchFound & { server: string })[] | null>(null);
   useEffect(() => {
     const text = search.trim();
     if (text.length < 2) { setFound(null); return; }
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(text)}&all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`, { signal: ctl.signal })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((f) => f && setFound(f))
-        .catch(() => {});
+      const asking = servers.filter((s) => shownServer(s.name) && (!filter || s.name === filter));
+      Promise.all(asking.map((s) =>
+        apiOf(s.name).fetch(`/api/search?q=${encodeURIComponent(text)}&all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`, { signal: ctl.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((f: SearchFound[] | null) => f && f.map((x) => ({ ...x, server: s.name })))
+          .catch(() => null),
+      )).then((parts) => {
+        if (ctl.signal.aborted || parts.every((p) => p === null)) return;
+        setFound(parts.flatMap((p) => p ?? []));
+      });
     }, 180);
     return () => { clearTimeout(t); ctl.abort(); };
-  }, [search, all, archivedView]);
+  }, [search, all, archivedView, viewSig, filter]);
   // A hit opens its chat and scrolls to the message once it's on the page.
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   useEffect(() => {
@@ -323,27 +492,48 @@ function App() {
     }, 120);
     return () => clearInterval(iv);
   }, [jumpTo]);
-  const openHit = (id: string, uuid: string | null) => {
+  const openHit = (at: At, uuid: string | null) => {
     endRailSearch();
-    if (id !== current) open(id);
+    if (keyOf(at.server, at.id) !== curKey) open(at);
     if (uuid) setJumpTo(uuid);
   };
 
   // Someone else's chats are read only: no new chat there, so open their latest one (the last) instead.
-  const readOnly = me?.readOnly ?? false;
+  const readOnly = hubMode ? person !== null : me?.readOnly ?? false;
   const landed = useRef(false);
   useEffect(() => {
-    if (!readOnly || landed.current || idFromPath() || !chats.length) return;
+    if (!readOnly || landed.current || fromPath() || !chats.length) return;
     landed.current = true;
-    open(chats.at(-1)!.id);
+    const last = chats.at(-1)!;
+    open({ server: last.server, id: last.id });
   }, [readOnly, chats]);
-  useEffect(() => { loadChats(); store.set("all", all ? "1" : "0"); }, [loadChats]);
+  // Each server's list, again when the view or a toggle changes (the hub shows the last list seen meanwhile).
+  useEffect(() => {
+    if (hubMode)
+      setLists((l) => {
+        const next = { ...l };
+        for (const s of servers) {
+          const id = listId(s.name);
+          if (!next[id]) next[id] = JSON.parse(store.get(`hub.list.${id}`) || "null") ?? undefined;
+        }
+        return next;
+      });
+    for (const s of servers) if (shownServer(s.name)) void loadChats(s.name);
+    store.set("all", all ? "1" : "0");
+  }, [loadChats, serverNames]);
 
-  const { send, up } = useSocket(
-    (m) => {
-      if (m.t === "chats_changed") return void loadChats();
-      if (m.t === "meta") return void setMeta(m.meta);
-      if (m.chat !== currentRef.current) return;
+  // One chat socket per server (in the view: ?view=); a server's events, list changes and meta come on it.
+  const conns = useRef(new Map<string, Conn>());
+  const [ready, setReady] = useState<Record<string, boolean>>({});
+  const offTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const sendTo = useCallback((s: string, m: unknown) => conns.current.get(s)?.send(m), []);
+  const handlers = useRef<{ msg: (s: string, m: any) => void; open: (s: string) => void; ready: (s: string) => void; down: (s: string) => void }>(null!);
+  handlers.current = {
+    msg: (s, m) => {
+      if (m.t === "chats_changed") return void loadRef.current(s);
+      if (m.t === "meta") return void setMetas((x) => ({ ...x, [s]: m.meta }));
+      const cur = currentRef.current;
+      if (s !== cur.server || m.chat !== cur.id) return;
       if (m.t === "history") {
         const last = m.pictures.at(-1);
         setLive((l) => ({
@@ -353,55 +543,130 @@ function App() {
         }));
       } else if (m.t === "event") setLive((l) => apply(l, m.ev));
     },
-    () => send({ t: "open", chat: currentRef.current }),
-  );
+    open: (s) => {
+      const cur = currentRef.current;
+      if (cur.server === s) sendTo(s, { t: "open", chat: cur.id });
+    },
+    ready: (s) => {
+      setReady((r) => ({ ...r, [s]: true }));
+      if (!hubMode) return;
+      clearTimeout(offTimers.current.get(s));
+      offTimers.current.delete(s);
+      // Back (or there for the first time): who you are there, and its list.
+      void loadMe(s);
+      void loadRef.current(s);
+    },
+    down: (s) => {
+      setReady((r) => ({ ...r, [s]: false }));
+      if (!hubMode) return;
+      // A restart comes back within a moment; only a server still away 3 s after it went is "off"
+      // (counted from the first failure: each failed retry closes again).
+      if (offTimers.current.has(s)) return;
+      offTimers.current.set(s, setTimeout(() => {
+        offTimers.current.delete(s);
+        if (!conns.current.get(s)?.ready) setInfo((m) => (m[s] && m[s].state !== "noProfile" ? { ...m, [s]: { ...m[s], state: "off" } } : m));
+      }, 3000));
+    },
+  };
+  const wanted = servers.filter((s) => shownServer(s.name)).map((s) => `${s.name}\t${apiOf(s.name).ws()}`).join("\n");
+  useEffect(() => {
+    const want = new Map(wanted ? wanted.split("\n").map((l) => l.split("\t") as [string, string]) : []);
+    for (const [s, c] of conns.current)
+      if (want.get(s) !== c.url) {
+        c.close();
+        conns.current.delete(s);
+        setReady((r) => ({ ...r, [s]: false }));
+      }
+    for (const [s, url] of want)
+      if (!conns.current.has(s))
+        conns.current.set(s, new Conn(url, {
+          msg: (m) => handlers.current.msg(s, m),
+          open: () => handlers.current.open(s),
+          ready: () => handlers.current.ready(s),
+          down: () => handlers.current.down(s),
+        }));
+  }, [wanted]);
+  useEffect(() => () => {
+    for (const c of conns.current.values()) c.close();
+    conns.current.clear();
+    for (const t of offTimers.current.values()) clearTimeout(t);
+  }, []);
+  const up = ready[current.server] ?? false;
+  // Messages about the open chat go to its server.
+  const send = useCallback((m: unknown) => sendTo(currentRef.current.server, m), [sendTo]);
 
-  const open = useCallback((id: string, push = true) => {
-    setCurrent(id);
-    setLive(fresh(id));
+  const open = useCallback((at: At, push = true) => {
+    setCurrent(at);
+    setLive(fresh(at.id));
     setViewing(null);
     setEditing(false);
     setDrawer(false);
-    if (push) history.pushState(null, "", `/c/${id}`);
-    send({ t: "open", chat: id });
-  }, [send]);
+    if (push) history.pushState(null, "", pathOf(at));
+    sendTo(at.server, { t: "open", chat: at.id });
+  }, [sendTo]);
   openRef.current = open;
 
-  const newChat = useCallback(() => open(crypto.randomUUID()), [open]);
+  const newChat = useCallback(() => open({ server: defaultServer, id: crypto.randomUUID() }), [open, defaultServer]);
   // A chat picked from the list nods "yes" and opens; the open one shakes "no, already here" and
   // isn't loaded again. (Web Animations, so React re-rendering the class doesn't cut them short.)
-  const pick = (id: string, e: React.MouseEvent<HTMLElement>) => {
+  const pick = (c: Row, e: React.MouseEvent<HTMLElement>) => {
     const el = e.currentTarget;
-    if (id === current) {
+    if (c.key === curKey) {
       el.animate([{ translate: "0 0" }, { translate: "-4px 0" }, { translate: "4px 0" }, { translate: "-3px 0" }, { translate: "2px 0" }, { translate: "0 0" }], { duration: 360, easing: "ease-in-out" });
       return;
     }
     el.animate([{ translate: "0 0" }, { translate: "0 4px" }, { translate: "0 -3px" }, { translate: "0 3px" }, { translate: "0 0" }], { duration: 420, easing: "ease-in-out" });
-    open(id);
+    open({ server: c.server, id: c.id });
   };
 
+  // An address's chat: /c/<server>/<chat>, or an old /c/<chat> on the server whose list has it.
+  const serverOf = (id: string) => servers.find((s) => Object.entries(lists).some(([k, rows]) => k.startsWith(`${s.name}|`) && rows?.some((c) => c.id === id)))?.name;
   useEffect(() => {
-    const pop = () => open(idFromPath() ?? crypto.randomUUID(), false);
+    const pop = () => {
+      const p = fromPath();
+      if (!p) return open({ server: defaultServer, id: crypto.randomUUID() }, false);
+      open({ server: !hubMode ? "" : p.server ?? serverOf(p.id) ?? defaultServer, id: p.id }, false);
+    };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
-  }, [open]);
+  }, [open, lists, defaultServer]);
+  // An old link: once a server's list has the chat, open it there and give the address its server;
+  // when every server answered without it, it opens on the default server.
+  useEffect(() => {
+    if (!resolving) return;
+    const found = serverOf(current.id);
+    const settled = servers.every((s) => !shownServer(s.name) || info[s.name]?.state === "off" || fetched.current.has(listId(s.name)));
+    if (!found && !(settled && defaultServer)) return;
+    setResolving(false);
+    const at = { server: found ?? defaultServer, id: current.id };
+    history.replaceState(null, "", pathOf(at));
+    open(at, false);
+  }, [resolving, lists, info, defaultServer]);
+  // A new, unsent chat on a server that can't be used (no profile there, or nothing yet): the default one.
+  const started = !!(rowsAll.some((c) => c.key === curKey) || known.current.get(curKey) || live.items.length);
+  useEffect(() => {
+    if (!hubMode || resolving || started || !defaultServer || current.server === defaultServer) return;
+    if (current.server && usable.includes(current.server)) return;
+    open({ server: defaultServer, id: current.id }, false);
+  }, [resolving, started, defaultServer, current.server, usable.join(",")]);
 
-  const row = chats.find((c) => c.id === current) ?? known.current.get(current);
+  const row = chats.find((c) => c.key === curKey) ?? known.current.get(curKey);
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
-  useEffect(() => { document.title = `${title} · ${brandName(me?.name)}`; }, [title, me]);
+  useEffect(() => { document.title = `${title} · ${brandName(hubMode ? null : me?.name)}`; }, [title, me]);
 
   const onSend = (text: string, images: { media_type: string; data: string }[]) => {
     setViewing(null);
     // A typed message while Claude is asking answers the question.
     if (live.asks.length && text && !images.length) {
       const ask = live.asks[0];
-      send({ t: "answer", chat: current, id: ask.id, answers: Object.fromEntries(ask.questions.map((q) => [q.question, text])) });
+      send({ t: "answer", chat: current.id, id: ask.id, answers: Object.fromEntries(ask.questions.map((q) => [q.question, text])) });
       return;
     }
-    if (!idFromPath()) history.replaceState(null, "", `/c/${current}`);
-    send({ t: "send", chat: current, text, images: images.map(({ media_type, data }) => ({ media_type, data })) });
+    if (!fromPath()) history.replaceState(null, "", pathOf(current));
+    if (hubMode) store.set("hub.server", current.server);
+    send({ t: "send", chat: current.id, text, images: images.map(({ media_type, data }) => ({ media_type, data })) });
   };
-  const onStop = () => send({ t: "stop", chat: current });
+  const onStop = () => send({ t: "stop", chat: current.id });
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -426,33 +691,33 @@ function App() {
   const rename = async (t: string) => {
     setEditing(false);
     if (!t.trim() || t === title) return;
-    await fetch(`/api/chats/${current}`, { method: "PATCH", body: JSON.stringify({ title: t.trim() }) });
+    await openApi.fetch(`/api/chats/${current.id}`, { method: "PATCH", body: JSON.stringify({ title: t.trim() }) });
   };
   // Archive hides the chat (the open one moves on to the next); in the archived view it brings it back.
-  const archiveChat = async (id: string, archived: boolean) => {
-    await fetch(`/api/chats/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
-    if (!archived || id !== current) return;
-    const next = chats.find((c) => c.id !== current);
-    if (next) open(next.id);
+  const archiveChat = async (at: At, archived: boolean) => {
+    await apiOf(at.server).fetch(`/api/chats/${at.id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+    if (!archived || keyOf(at.server, at.id) !== curKey) return;
+    const next = chats.find((c) => c.key !== curKey);
+    if (next) open({ server: next.server, id: next.id });
     else newChat();
   };
   const setArchived = (archived: boolean) => archiveChat(current, archived);
-  // Fork: a new chat holding chat id up to the end of a turn (at: a user message; none = its last
-  // finished turn). Opens the fork; returns the error if there is one.
-  const forkChat = async (id: string, at?: string): Promise<string | null> => {
-    const r = await fetch(`/api/chats/${id}/fork`, { method: "POST", body: JSON.stringify(at ? { at } : {}) }).catch((err) => err as Error);
+  // Fork: a new chat holding the chat up to the end of a turn (at: a user message; none = its last
+  // finished turn), on the same server. Opens the fork; returns the error if there is one.
+  const forkChat = async (chat: At, at?: string): Promise<string | null> => {
+    const r = await apiOf(chat.server).fetch(`/api/chats/${chat.id}/fork`, { method: "POST", body: JSON.stringify(at ? { at } : {}) }).catch((err) => err as Error);
     const j = r instanceof Error ? { error: r.message } : await r.json().catch(() => ({ error: r.statusText }));
     if (j.error || !j.id) return String(j.error ?? "No fork made.");
-    open(j.id);
+    open({ server: chat.server, id: j.id });
     return null;
   };
   // The right-click menu on a chat (rail circle or list row).
-  const [menu, setMenu] = useState<{ chat: MenuChat; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ chat: MenuChat; server: string; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const menuFor = (c: { id: string; title: string; color: string | null }) => (e: React.MouseEvent) => {
+  const menuFor = (c: Row) => (e: React.MouseEvent) => {
     if (readOnly) return;
     e.preventDefault();
-    setMenu({ chat: { id: c.id, title: c.title, color: c.color, archived: archivedView }, x: e.clientX, y: e.clientY });
+    setMenu({ chat: { id: c.id, title: c.title, color: c.color, archived: archivedView }, server: c.server, x: e.clientX, y: e.clientY });
   };
 
   // The right-click menu on the context meter (ctx ring or the sidebar's Context bar): compact.
@@ -480,7 +745,7 @@ function App() {
       if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom + 8;
       else if (r.top < l.top) list.scrollTop -= l.top - r.top + 8;
     }
-  }, [current, chats.length, live.items.length > 0]);
+  }, [curKey, chats.length, live.items.length > 0]);
   const hasPicture = shown.scene.blocks ? shown.scene.blocks.length > 0 : shown.scene.nodes.length + shown.scene.cards.length > 0;
 
   // Changes of the turn being looked at: an earlier turn when stepping back, else the latest turn with changes.
@@ -496,13 +761,13 @@ function App() {
   // Background agents and this turn's changes, as a pill: over the picture, or in the timeline's header.
   const activity = (
     <ActivityPill
-      chat={current}
+      chat={current.id}
       tasks={live.tasks}
       subs={live.subs}
       changes={shownChanges}
       changesLabel={changesLabel}
       folder={live.settings.folder}
-      onStop={(task) => send({ t: "stop_task", chat: current, task })}
+      onStop={(task) => send({ t: "stop_task", chat: current.id, task })}
       onTimeline={() => setRightView("timeline")}
     />
   );
@@ -551,25 +816,65 @@ function App() {
   // The rail: passive chats last, in their own order.
   const railList = [...list.filter((c) => c.color !== PASSIVE), ...list.filter((c) => c.color === PASSIVE)];
   const railBox = useRef<HTMLDivElement>(null);
-  useSlide(railBox, `${showSidebar ? "" : "rail:"}${railList.map((c) => c.id).join(",")}`);
+  useSlide(railBox, `${showSidebar ? "" : "rail:"}${railList.map((c) => c.key).join(",")}`);
 
-  if (me && !me.profile) return <NoProfile me={me} />;
+  // Whose chats in the hub: the profile names over every server; yours are the ones you are.
+  const people = hubMode ? [...new Set(servers.flatMap((s) => (info[s.name]?.state !== "noProfile" ? info[s.name]?.me?.profiles ?? [] : [])))] : [];
+  const own = new Set(servers.map((s) => (info[s.name]?.state !== "noProfile" ? info[s.name]?.me?.profile : null)).filter((p): p is string => !!p));
+  const pickPerson = (p: string | null) => {
+    setPerson(p);
+    store.set("hub.view", p ?? "");
+    landed.current = false;
+    // As the page did on a new view: start over at /, and another person's latest chat opens once their list is in.
+    history.pushState(null, "", "/");
+    open({ server: defaultServer, id: crypto.randomUUID() }, false);
+  };
+  // Settings are each server's: the open chat's by default.
+  const upServers = views.filter((v) => v.state === "up").map((v) => v.name);
+  const openSettings = () => {
+    setSettingsServer(!hubMode ? "" : upServers.includes(current.server) ? current.server : upServers[0] ?? current.server);
+    setSettingsOpen(true);
+  };
+  const settingsMe = info[settingsServer]?.me ?? null;
+  // Whose chats are read (only).
+  const whose = hubMode ? person : me?.viewing ?? null;
+  const offNote = hubMode && curInfo?.state === "off" ? `${labelOf(current.server)} is off` : null;
+  const markOf = (c: Row) => (showMarks ? <ServerMark mark={marks.get(c.server) ?? ""} label={labelOf(c.server)} off={c.off} /> : null);
+
+  if (!hubMode && me && !me.profile) return <NoProfile me={me} />;
+  if (hub && (!servers.length || views.every((v) => v.state === "noProfile")))
+    return (
+      <>
+        <HubEmpty hub={hub} servers={views} onAdmin={setAdminTab} />
+        {adminTab && <AdminDialog tab={adminTab} close={closeAdmin} />}
+      </>
+    );
 
   return (
+    <ApiCtx.Provider value={openApi}>
     <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""} ${readOnly ? "read-only" : ""}`}>
       <TipBubble />
-      {me?.profile && !me.readOnly && !settingsOpen && <GithubPrompt profile={me.profile} />}
-      {me && settingsOpen && <SettingsDialog me={me} onMe={setMe} close={closeSettings} />}
+      {me?.profile && !readOnly && !settingsOpen && (!hubMode || curInfo?.state === "up") && <GithubPrompt key={current.server} profile={me.profile} />}
+      {settingsOpen && settingsMe && (
+        <SettingsDialog
+          api={apiFor(settingsServer)}
+          me={settingsMe}
+          onMe={(m) => patchInfo(settingsServer, { me: m })}
+          close={closeSettings}
+          top={hubMode ? <SettingsServers servers={views.map((v) => ({ ...v, me: info[v.name]?.me ?? null }))} pick={settingsServer} onPick={setSettingsServer} /> : undefined}
+        />
+      )}
+      {adminTab && <AdminDialog tab={adminTab} close={closeAdmin} />}
       {formsOpen && <FormsGallery close={closeForms} />}
       {menu && (
         <ChatMenu
           {...menu}
           close={closeMenu}
-          onColor={(color) => send({ t: "settings", chat: menu.chat.id, color })}
-          onWake={() => send({ t: "wake", chat: menu.chat.id })}
-          onRename={(title) => void fetch(`/api/chats/${menu.chat.id}`, { method: "PATCH", body: JSON.stringify({ title }) })}
-          onFork={() => forkChat(menu.chat.id)}
-          onArchive={(archived) => void archiveChat(menu.chat.id, archived)}
+          onColor={(color) => sendTo(menu.server, { t: "settings", chat: menu.chat.id, color })}
+          onWake={() => sendTo(menu.server, { t: "wake", chat: menu.chat.id })}
+          onRename={(title) => void apiOf(menu.server).fetch(`/api/chats/${menu.chat.id}`, { method: "PATCH", body: JSON.stringify({ title }) })}
+          onFork={() => forkChat({ server: menu.server, id: menu.chat.id })}
+          onArchive={(archived) => void archiveChat({ server: menu.server, id: menu.chat.id }, archived)}
         />
       )}
       {ctxMenu && live.context && (
@@ -579,8 +884,8 @@ function App() {
       {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
           <div className="ask-modal" hidden={peek} role="dialog" aria-modal="true" aria-label="Claude asks">
-            {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current, id: p.id, allow })} />)}
-            {live.asks.map((a) => <AskPanel key={a.id} ask={a} active={!peek} onPeek={peekAsk} onAnswer={(answers) => send({ t: "answer", chat: current, id: a.id, answers })} />)}
+            {live.permits.map((p) => <PermitPanel key={p.id} permit={p} onPermit={(allow) => send({ t: "permit", chat: current.id, id: p.id, allow })} />)}
+            {live.asks.map((a) => <AskPanel key={a.id} ask={a} active={!peek} onPeek={peekAsk} onAnswer={(answers) => send({ t: "answer", chat: current.id, id: a.id, answers })} />)}
           </div>
           {peek && <button className="ask-return" onClick={() => setPeek(false)}>Claude asks · answer</button>}
         </>
@@ -598,19 +903,20 @@ function App() {
               </button>
               {railList.map((c, i) => (
                 <button
-                  key={c.id}
-                  data-slide={c.id}
-                  className={`rail-dot ${c.id === current ? "on" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
+                  key={c.key}
+                  data-slide={c.key}
+                  className={`rail-dot ${c.key === curKey ? "on" : ""} ${c.off ? "off" : ""} ${c.color === PASSIVE ? `passive ${railList[i - 1]?.color !== PASSIVE ? "first" : ""} ${i === railList.length - 1 ? "last" : ""}` : ""}`}
                   style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                  onClick={(e) => pick(c.id, e)}
+                  onClick={(e) => pick(c, e)}
                   onContextMenu={menuFor(c)}
-                  {...tipProps(c.project ? `${c.title} · ${c.project}` : c.title, chatColorVar(c.color))}
+                  {...tipProps(`${c.project ? `${c.title} · ${c.project}` : c.title}${showMarks ? ` · ${labelOf(c.server)}${c.off ? " is off" : ""}` : ""}`, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
-                  <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} />
+                  <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
                   <span className="rail-word">{c.word}</span>
-                  <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.id) ? "done" : null} />
+                  <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.key) ? "done" : null} />
                   <AgentMoons n={c.agents} />
+                  {markOf(c)}
                 </button>
               ))}
             </div>
@@ -624,24 +930,31 @@ function App() {
           </nav>
         )}
         <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
-          <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />
-          {me && <ProfileTabs me={me} />}
+          {hub ? <Brand me={null} hub={hub} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} /> : <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />}
+          {hubMode ? <PeopleTabs names={people} own={own} viewing={person} onPick={pickPerson} /> : me && <ProfileTabs me={me} />}
+          {hubMode && (servers.length > 1 || views.some((v) => v.state !== "up" && v.state !== "loading") || views.some((v) => v.update)) && (
+            <ServerFilter servers={views} marks={marks} pick={filter} onPick={setServerFilter} />
+          )}
           {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
           <label className="search-box"><input ref={searchBox} className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && railSearch) { e.stopPropagation(); endRailSearch(); } }} /></label>
           <nav>
+            {hubMode && views.filter((v) => v.state === "off" && shownServer(v.name) && (!filter || filter === v.name)).map((v) => (
+              <p key={v.name} className="server-off-note">{v.label} is off · its chats as last seen</p>
+            ))}
             {found && (
               <>
                 {found.map((f) => {
-                  const c = known.current.get(f.id);
+                  const c = known.current.get(keyOf(f.server, f.id));
                   if (!c) return null;
                   return (
-                    <div key={f.id} className="found" style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}>
-                      <button className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`} onClick={() => openHit(c.id, null)} onContextMenu={menuFor(c)}>
+                    <div key={c.key} className="found" style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}>
+                      <button className={`chat-row ${c.key === curKey ? "active" : ""} ${c.color ? "colored" : ""}`} onClick={() => openHit({ server: c.server, id: c.id }, null)} onContextMenu={menuFor(c)}>
                         <span className="t">{f.title ? <Marked text={c.title} words={search} /> : c.title}</span>
+                        {markOf(c)}
                         <span className="when">{f.count > 0 ? `${f.count} hit${f.count === 1 ? "" : "s"}` : ago(c.at)}</span>
                       </button>
                       {f.hits.map((h) => (
-                        <button key={h.uuid} className={`found-hit ${h.role}`} onClick={() => openHit(c.id, h.uuid)}>
+                        <button key={h.uuid} className={`found-hit ${h.role}`} onClick={() => openHit({ server: c.server, id: c.id }, h.uuid)}>
                           <span className="who">{h.role === "user" ? "you" : "claude"}</span>
                           <span className="snip">{h.snippet.split(/(\u0001[^\u0002]*\u0002)/).map((part, i) => part.startsWith("\u0001") ? <mark key={i}>{part.slice(1, -1)}</mark> : part)}</span>
                         </button>
@@ -654,15 +967,16 @@ function App() {
             )}
             {!found && list.map((c) => (
               <button
-                key={c.id}
-                className={`chat-row ${c.id === current ? "active" : ""} ${c.color ? "colored" : ""}`}
+                key={c.key}
+                className={`chat-row ${c.key === curKey ? "active" : ""} ${c.color ? "colored" : ""} ${c.off ? "off" : ""}`}
                 style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                onClick={(e) => { endRailSearch(); pick(c.id, e); }}
+                onClick={(e) => { endRailSearch(); pick(c, e); }}
                 onContextMenu={menuFor(c)}
-                {...tipProps(c.title, chatColorVar(c.color), true)}
+                {...tipProps(c.off ? `${c.title} · ${labelOf(c.server)} is off` : c.title, chatColorVar(c.color), !c.off)}
               >
-                {c.running && <span className="run-dot" title="Working" />}
+                {c.running && !c.off && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
+                {markOf(c)}
                 <span className="when">{ago(c.at)}</span>
               </button>
             ))}
@@ -679,8 +993,9 @@ function App() {
             onContextMenu={onCtxMenu}
             saved={me?.claudeTokens.map((t) => t.name) ?? []}
             onSwitch={async (name) => {
-              const next = await useClaudeToken(name);
-              if (next) setMe((m) => m && { ...m, ...next });
+              const s = current.server;
+              const next = await useClaudeToken(apiFor(s), name);
+              if (next) setInfo((m) => (m[s]?.me ? { ...m, [s]: { ...m[s], me: { ...m[s].me!, ...next } } } : m));
             }}
           />
           <div className="side-foot">
@@ -707,9 +1022,15 @@ function App() {
               <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
               Show all ~/Work sessions
             </label>
-            {!readOnly && <button className="archived-toggle" onClick={() => setSettingsOpen(true)} title={me?.email ? `Signed in as ${me.email}` : undefined}>
+            {!readOnly && <button className="archived-toggle" onClick={openSettings} title={me?.email ? `Signed in as ${me.email}` : undefined}>
               ⚙ Settings
             </button>}
+            {hub?.admin && (
+              <span className="admin-links">
+                <button className="archived-toggle" onClick={() => setAdminTab("servers")} title="The servers this hub reaches (admins)">Servers</button>
+                <button className="archived-toggle" onClick={() => setAdminTab("access")} title="Who may use which server (admins)">Access</button>
+              </span>
+            )}
           </div>
         </aside>
       </div>
@@ -723,7 +1044,7 @@ function App() {
       >
         <section className="left">
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
-            {!readOnly && <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current, color })} />}
+            {!readOnly && <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current.id, color })} />}
             {editing ? (
               <input
                 className="title-edit"
@@ -743,9 +1064,10 @@ function App() {
                 {row && !readOnly && <span className="pencil" aria-hidden="true">✎</span>}
               </h1>
             )}
+            {showMarks && current.server && (row || live.items.length > 0) && <span className="folder-chip server-chip" title={`On ${labelOf(current.server)}`}>{labelOf(current.server)}</span>}
             {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
             {activity}
-            {!up && <span className="offline">reconnecting…</span>}
+            {offNote ? <span className="offline">{offNote}</span> : !up && <span className="offline">reconnecting…</span>}
           </header>
           <Messages
             items={live.items}
@@ -762,13 +1084,28 @@ function App() {
             onFork={readOnly ? undefined : (at) => void forkChat(current, at).then((error) => error && setLive((l) => ({ ...l, error })))}
           />
           {readOnly ? (
-            <div className="read-only-note">{me?.viewing ? `${me.viewing[0].toUpperCase()}${me.viewing.slice(1)}'s chat` : "Someone else's chat"} · read only</div>
-          ) : <Composer
+            <div className="read-only-note">{whose ? `${whose[0].toUpperCase()}${whose.slice(1)}'s chat` : "Someone else's chat"} · read only</div>
+          ) : <>
+          {showMarks && !started && !resolving && (
+            <NewChatServer
+              servers={views}
+              marks={marks}
+              pick={current.server}
+              onPick={(s) => {
+                if (s === current.server) return;
+                store.set("hub.server", s);
+                const at = { server: s, id: crypto.randomUUID() };
+                if (location.pathname !== "/") history.replaceState(null, "", pathOf(at));
+                open(at, false);
+              }}
+            />
+          )}
+          <Composer
             running={live.running}
             asking={live.asks.length > 0}
             onSend={onSend}
             onStop={onStop}
-            focusKey={current}
+            focusKey={curKey}
             initialText={startText}
             commands={meta.commands}
             actions={<>
@@ -779,8 +1116,9 @@ function App() {
                   : <button className="icon archive" onClick={() => setArchived(true)} title="Archive"><ArchiveIcon /></button>
               )}
             </>}
-            tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current, ...next })} />}
-          />}
+            tools={<Pickers meta={meta} settings={live.settings} model={live.model} onSettings={(next) => send({ t: "settings", chat: current.id, ...next })} />}
+          />
+          </>}
         </section>
         <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
         {phone && sheet && <div className="sheet-backdrop" onClick={closeSheet} />}
@@ -806,7 +1144,7 @@ function App() {
           {phone && <SheetGrab onClose={closeSheet} />}
           {rightView === "timeline" ? (
           <div className="right-tl">
-            <TimelineView chat={current} live={live.running || live.tasks.some((t) => t.status === "running")} />
+            <TimelineView chat={current.id} live={live.running || live.tasks.some((t) => t.status === "running")} />
           </div>
           ) : (
           <div className="right-scroll">
@@ -814,14 +1152,14 @@ function App() {
             <FormRow
               forms={live.settings.forms ?? {}}
               hidden={hiddenForms}
-              onChange={(forms) => send({ t: "settings", chat: current, forms })}
+              onChange={(forms) => send({ t: "settings", chat: current.id, forms })}
               cols={live.settings.cols ?? 0}
-              onCols={(cols) => send({ t: "settings", chat: current, cols })}
+              onCols={(cols) => send({ t: "settings", chat: current.id, cols })}
             />
           )}
           <div className={`stage ${viewing ? "past" : ""}`}>
             <PictureSend.Provider value={readOnly ? null : send}>
-              <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current} browse={current} cols={live.settings.cols ?? 0} />
+              <PictureView scene={shown.scene} changed={shown.changed} seq={shown.seq} chat={viewing || readOnly ? undefined : current.id} browse={current.id} cols={live.settings.cols ?? 0} />
             </PictureSend.Provider>
           </div>
           </div>
@@ -853,14 +1191,15 @@ function App() {
               rail
               forms={live.settings.forms ?? {}}
               hidden={hiddenForms}
-              onChange={(forms) => send({ t: "settings", chat: current, forms })}
+              onChange={(forms) => send({ t: "settings", chat: current.id, forms })}
               cols={live.settings.cols ?? 0}
-              onCols={(cols) => send({ t: "settings", chat: current, cols })}
+              onCols={(cols) => send({ t: "settings", chat: current.id, cols })}
             />
           )}
         </nav>
       )}
     </div>
+    </ApiCtx.Provider>
   );
 }
 
@@ -868,7 +1207,7 @@ function App() {
 addEventListener("gesturestart", (e) => e.preventDefault());
 addEventListener("touchmove", (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(<Root />);
 
 // A box with a lid; the arrow points out of it for Unarchive.
 // A chalked badge on a chat's circle: waiting on your answer, working, or finished since you looked.
@@ -952,10 +1291,11 @@ function projectTags(names: (string | null)[]): Map<string, string> {
 // logo, the letter big and the project's short name as a tinted tag.
 // Inside a rail circle: the project's logo, else its short name; a chat without a project, a dot.
 // (The chat's own one-word name sits under the circle.)
-function DotFace({ project, tag, logo }: { project: string | null; tag: string; logo: boolean }) {
+// api: the chat's server.
+function DotFace({ project, tag, logo, api }: { project: string | null; tag: string; logo: boolean; api: Api }) {
   const [broken, setBroken] = useState(false);
   if (project && logo && !broken)
-    return <img className="rail-logo" src={`/api/projects/${encodeURIComponent(project)}/logo`} alt="" onError={() => setBroken(true)} />;
+    return <img className="rail-logo" src={api.src(`/api/projects/${encodeURIComponent(project)}/logo`)} alt="" onError={() => setBroken(true)} />;
   if (!project) return <span className="rail-blank" aria-hidden="true" />;
   return <span className="rail-tag">{tag}</span>;
 }

@@ -1,6 +1,7 @@
 // The right half: Claude's picture, a canvas of blocks: graphs laid out by ELK and animated
 // between turns, and Claude's own HTML pages.
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { md, highlight } from "./md";
 import { FormView } from "./forms";
@@ -463,6 +464,7 @@ export function BlockBadge({ block }: { block: Block }) {
 
 // Keep a freeform block as a named template (Claude can draw it again and change it by name).
 function SaveTemplate({ chat, block }: { chat: string; block: Block }) {
+  const api = useApi();
   const [name, setName] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
@@ -473,7 +475,7 @@ function SaveTemplate({ chat, block }: { chat: string; block: Block }) {
   const save = async () => {
     const n = (name ?? "").trim();
     if (!n) return setName(null);
-    const r = await fetch(`/api/chats/${chat}/blocks/${encodeURIComponent(block.id)}/template`, {
+    const r = await api.fetch(`/api/chats/${chat}/blocks/${encodeURIComponent(block.id)}/template`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: n }),

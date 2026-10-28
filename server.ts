@@ -5,7 +5,7 @@ import index from "./web/index.html";
 import type { Server } from "bun";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
 import { NAME } from "./src/mode";
-import { COMMIT, VERSION } from "./src/version";
+import { API, COMMIT, VERSION } from "./src/version";
 import { LOCAL_PROFILE, profileNames, viewOf, cleanName, cleanToken, saveToken, savedTokens, tokenNote, useToken, who } from "./src/profiles";
 
 const PORT = Number(process.env.PORT ?? 4510);
@@ -18,7 +18,7 @@ function serve(hostname: string, gate: boolean) {
   const me = (req: Request) => {
     const w = who(req, gate);
     const v = w.profile ? viewOf(req, w.profile) : null;
-    return json({ name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, profiles: w.profile ? profileNames() : [], viewing: v?.profile.name ?? null, readOnly: v?.readOnly ?? false, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
+    return json({ api: API, name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, profiles: w.profile ? profileNames() : [], viewing: v?.profile.name ?? null, readOnly: v?.readOnly ?? false, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
   };
   const tokens = () => json({ ok: true, claudeToken: tokenNote(), claudeTokens: savedTokens() });
 

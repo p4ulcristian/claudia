@@ -3,6 +3,7 @@
 // when a commit, checkout, fetch or edit happens. A click on a commit opens its files and diff below
 // the graph. Read only: nothing here changes the repo.
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import { layoutGraph, type Commit, type Ref } from "../src/git-layout";
 import { codeTokens, type Token } from "./shiki";
 
@@ -51,6 +52,7 @@ export function GitForm({ data, chat }: { data: Data; chat?: string }) {
   useEffect(() => { if (Number(data.limit) > 0) setLimit(Number(data.limit)); }, [data.limit]);
   useEffect(() => { if (typeof data.commit === "string") setOpen(data.commit); }, [data.commit]);
 
+  const api = useApi();
   const base = `/api/chats/${chat}/git?repo=${encodeURIComponent(repo)}`;
   // The graph, asked again every POLL_MS (only while the page is seen); the runner answers
   // { same: true } until the repo changes. A new branch filter or limit starts over.
@@ -63,7 +65,7 @@ export function GitForm({ data, chat }: { data: Data; chat?: string }) {
     const ask = async () => {
       if (!document.hidden) {
         try {
-          const j = await fetch(`${base}&limit=${limit}${only ? `&branches=${encodeURIComponent(only.join(","))}` : ""}${fp.current ? `&fp=${fp.current}` : ""}`).then((r) => r.json());
+          const j = await api.fetch(`${base}&limit=${limit}${only ? `&branches=${encodeURIComponent(only.join(","))}` : ""}${fp.current ? `&fp=${fp.current}` : ""}`).then((r) => r.json());
           if (gone) return;
           if (j.error) setError(j.error);
           else if (!j.same) { fp.current = j.fp; setLog(j); setError(null); }
@@ -73,7 +75,7 @@ export function GitForm({ data, chat }: { data: Data; chat?: string }) {
     };
     ask();
     return () => { gone = true; clearTimeout(timer); };
-  }, [live, base, limit, only?.join(",")]);
+  }, [api, live, base, limit, only?.join(",")]);
 
   const shown: Log | null = useMemo(() => {
     if (!demo) return log;
@@ -263,14 +265,15 @@ function Graph({ log, openHash, markOf, onOpen }: { log: Log; openHash: string |
 // One commit (or the uncommitted changes), beside the graph: what it says, its files with +/−, and each file's diff.
 // The uncommitted view is read again whenever the graph's fingerprint changes.
 function CommitView({ base, rev, fp, close }: { base: string; rev: string; fp?: string; close: () => void }) {
+  const api = useApi();
   const [d, setD] = useState<Detail | { error: string } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { ref.current?.scrollTo({ top: 0 }); }, [rev]);
   useEffect(() => {
     let gone = false;
-    fetch(`${base}&commit=${encodeURIComponent(rev)}`).then((r) => r.json()).then((j) => { if (!gone) setD(j); }).catch(() => !gone && setD({ error: "can't read it" }));
+    api.fetch(`${base}&commit=${encodeURIComponent(rev)}`).then((r) => r.json()).then((j) => { if (!gone) setD(j); }).catch(() => !gone && setD({ error: "can't read it" }));
     return () => { gone = true; };
-  }, [base, rev, fp]);
+  }, [api, base, rev, fp]);
   const patches = useMemo(() => {
     const out = new Map<string, string>();
     if (!d || !("diff" in d)) return out;
@@ -319,11 +322,12 @@ function CommitView({ base, rev, fp, close }: { base: string; rev: string; fp?: 
 }
 
 function FilePatch({ base, rev, file, patch }: { base: string; rev: string; file: FileChange; patch?: string }) {
+  const api = useApi();
   const [text, setText] = useState<string | undefined>(patch);
   useEffect(() => {
     if (patch !== undefined) return setText(patch);
     if (!file.omitted) return setText("");
-    fetch(`${base}&commit=${encodeURIComponent(rev)}&file=${encodeURIComponent(file.path)}`).then((r) => r.json()).then((j) => setText(j.diff ?? "")).catch(() => setText(""));
+    api.fetch(`${base}&commit=${encodeURIComponent(rev)}&file=${encodeURIComponent(file.path)}`).then((r) => r.json()).then((j) => setText(j.diff ?? "")).catch(() => setText(""));
   }, [patch, file.path]);
   if (text === undefined) return <p className="f-note">…</p>;
   return text ? <Diff patch={text} path={file.path} /> : <p className="f-note">No text changes.</p>;

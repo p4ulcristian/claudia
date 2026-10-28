@@ -1,19 +1,23 @@
-// Passing requests and the chat socket on from the page to a profile's runner, where the chats live.
-// A target is a local port or a profile runner's unix socket.
+// Passing requests and the chat socket on from the page to a profile's runner, where the chats live,
+// and from the hub to a server. A target is a local port, a profile runner's unix socket, or a
+// server's address.
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 
 export type Target = { tcp: string } | { unix: string };
 // readOnly: only "open" messages pass (reading someone else's chats).
-export type PipeData = { target: Target; readOnly: boolean; upstream: WebSocket | null; queue: (string | Buffer)[] };
+// As: the hub's way, a request passed on under another path (the /s/<server> prefix dropped) with
+// only the headers the hub chose (who is calling), none of the browser's.
+export type As = { path: string; headers: Headers };
+export type PipeData = { target: Target; readOnly: boolean; upstream: WebSocket | null; queue: (string | Buffer)[]; as?: As };
 type Pipe = ServerWebSocket<PipeData>;
 
-export function forward(req: Request, target: Target) {
+export function forward(req: Request, target: Target, as?: As) {
   const url = new URL(req.url);
-  const headers = new Headers(req.headers);
+  const headers = as ? new Headers(as.headers) : new Headers(req.headers);
   headers.delete("accept-encoding");
   headers.delete("host");
   const base = "tcp" in target ? `http://${target.tcp}` : "http://localhost";
-  return fetch(`${base}${url.pathname}${url.search}`, {
+  return fetch(`${base}${as?.path ?? url.pathname}${url.search}`, {
     method: req.method,
     headers,
     body: req.body,
@@ -22,8 +26,8 @@ export function forward(req: Request, target: Target) {
   } as RequestInit).catch(() => new Response("Claudia's runner is not up", { status: 502 }));
 }
 
-export function upgrade(req: Request, server: Server<PipeData>, target: Target, readOnly = false) {
-  return server.upgrade(req, { data: { target, readOnly, upstream: null, queue: [] } });
+export function upgrade(req: Request, server: Server<PipeData>, target: Target, readOnly = false, as?: As) {
+  return server.upgrade(req, { data: { target, readOnly, upstream: null, queue: [], as } });
 }
 
 function opensOnly(m: string | Buffer) {
@@ -40,7 +44,10 @@ export function pipe(): WebSocketHandler<PipeData> {
     maxPayloadLength: 64 * 1024 * 1024,
     open(ws: Pipe) {
       const t = ws.data.target;
-      const up = new WebSocket("tcp" in t ? `ws://${t.tcp}/ws` : `ws+unix://${t.unix}:/ws`);
+      const path = ws.data.as?.path ?? "/ws";
+      // (Bun's WebSocket takes headers: the hub's say who is calling)
+      const opts = ws.data.as ? ({ headers: Object.fromEntries(ws.data.as.headers) } as unknown as string[]) : undefined;
+      const up = new WebSocket("tcp" in t ? `ws://${t.tcp}${path}` : `ws+unix://${t.unix}:${path}`, opts);
       ws.data.upstream = up;
       up.onopen = () => { for (const m of ws.data.queue.splice(0)) up.send(m); };
       up.onmessage = (e) => ws.send(e.data as string);

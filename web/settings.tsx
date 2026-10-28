@@ -4,11 +4,13 @@
 import React, { useEffect, useState } from "react";
 import { Logo } from "./logo";
 import { GITHUB_TOKEN_URL } from "./github-prompt";
+import type { Api } from "./api";
 
 export type TokenNote = { by: string; at: number; name?: string | null };
 export type SavedToken = { name: string; by: string; at: number };
-// profiles = every profile here; viewing = whose chats the page shows; readOnly = someone else's.
-export type Me = { name: string | null; version: string; commit: string | null; email: string | null; profile: string | null; profiles: string[]; viewing: string | null; readOnly: boolean; claudeToken: TokenNote | null; claudeTokens: SavedToken[] };
+// profiles = every profile here; viewing = whose chats the page shows; readOnly = someone else's;
+// api = the API it speaks (src/api-version.ts; missing on servers from before the hub).
+export type Me = { api?: number; name: string | null; version: string; commit: string | null; email: string | null; profile: string | null; profiles: string[]; viewing: string | null; readOnly: boolean; claudeToken: TokenNote | null; claudeTokens: SavedToken[] };
 
 type GithubUser = { login: string; name: string | null } | null;
 type Prefs = { chatColors: "each" | "none" };
@@ -44,29 +46,32 @@ function TokenForm({ placeholder, named, save }: { placeholder: string; named?: 
   );
 }
 
-async function call(method: string, url: string, body: object): Promise<{ ok: any } | { error: string }> {
-  const r = await fetch(url, { method, body: JSON.stringify(body) });
+async function call(api: Api, method: string, url: string, body: object): Promise<{ ok: any } | { error: string }> {
+  const r = await api.fetch(url, { method, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   return r.ok ? { ok: j } : { error: String(j.error ?? `HTTP ${r.status}`) };
 }
-const put = (url: string, body: object) => call("PUT", url, body);
+const put = (api: Api, url: string, body: object) => call(api, "PUT", url, body);
 
-// Switch every chat of this Claudia to a saved Claude token; returns the new token fields of Me.
-export async function useClaudeToken(name: string): Promise<Pick<Me, "claudeToken" | "claudeTokens"> | null> {
-  const r = await call("POST", "/api/claude-token/use", { name });
+// Switch every chat of this Claudia (api's server) to a saved Claude token; returns the new token fields of Me.
+export async function useClaudeToken(api: Api, name: string): Promise<Pick<Me, "claudeToken" | "claudeTokens"> | null> {
+  const r = await call(api, "POST", "/api/claude-token/use", { name });
   return "error" in r ? null : { claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens };
 }
 
 // The name of the token in use, if it is a saved one.
 export const tokenInUse = (me: Me) => (me.claudeToken?.name ? me.claudeTokens.find((t) => t.name === me.claudeToken!.name)?.name ?? null : null);
 
-export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; close: () => void }) {
+// api: the server whose settings these are; top: in the hub, the switch between servers above them.
+export function Settings({ api, me, onMe, close, top }: { api: Api; me: Me; onMe: (m: Me) => void; close: () => void; top?: React.ReactNode }) {
   const [github, setGithub] = useState<GithubUser | undefined>(undefined);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   useEffect(() => {
-    fetch("/api/prefs").then((r) => r.json()).then(setPrefs, () => {});
-    fetch("/api/github").then((r) => r.json()).then((j) => setGithub(j.user ?? null), () => setGithub(null));
-  }, []);
+    setPrefs(null);
+    setGithub(undefined);
+    api.fetch("/api/prefs").then((r) => r.json()).then(setPrefs, () => {});
+    api.fetch("/api/github").then((r) => r.json()).then((j) => setGithub(j.user ?? null), () => setGithub(null));
+  }, [api]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     window.addEventListener("keydown", onKey);
@@ -74,7 +79,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
   }, [close]);
   const inUse = tokenInUse(me);
   const savePrefs = async (next: Partial<Prefs>) => {
-    const r = await fetch("/api/prefs", { method: "PATCH", body: JSON.stringify(next) });
+    const r = await api.fetch("/api/prefs", { method: "PATCH", body: JSON.stringify(next) });
     if (r.ok) setPrefs(await r.json());
   };
 
@@ -85,6 +90,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
           <h2>Settings</h2>
           <button className="icon" onClick={close} title="Close (Esc)">×</button>
         </header>
+        {top}
         <p className="muted small">{me.email ? <>Signed in as {me.email} · </> : null}profile <b>{me.profile}</b></p>
 
         <section>
@@ -112,7 +118,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
               {me.claudeTokens.map((t) => (
                 <label key={t.name}>
                   <input type="radio" name="claudeToken" checked={t.name === inUse} onChange={async () => {
-                    const next = await useClaudeToken(t.name);
+                    const next = await useClaudeToken(api, t.name);
                     if (next) onMe({ ...me, ...next });
                   }} />
                   {t.name} <span className="muted small">saved by {t.by}, {when(t.at)}</span>
@@ -125,7 +131,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
             named
             placeholder="Claude token (sk-ant-…)"
             save={async (token, name) => {
-              const r = await put("/api/claude-token", { name, token });
+              const r = await put(api, "/api/claude-token", { name, token });
               if ("error" in r) return r.error;
               onMe({ ...me, claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens });
               return null;
@@ -142,7 +148,7 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
           <TokenForm
             placeholder={github ? "Replace with a new token" : "GitHub token (ghp_…)"}
             save={async (token) => {
-              const r = await put("/api/github", { token });
+              const r = await put(api, "/api/github", { token });
               if ("error" in r) return r.error;
               setGithub(r.ok.user);
               return null;
@@ -160,7 +166,20 @@ export function Settings({ me, onMe, close }: { me: Me; onMe: (m: Me) => void; c
 export const brandName = (name: string | null | undefined) => (name ? `Claudia ${name}` : "Claudia");
 
 // token = whose Claude subscription the chats run on right now (the saved token's name).
-export function Brand({ me, token }: { me: Me | null; token?: string | null }) {
+// hub = the page is served by the hub: its version and commit in the chip (each server's are in Settings).
+export function Brand({ me, token, hub }: { me: Me | null; token?: string | null; hub?: { version: string; commit: string | null } }) {
+  if (hub)
+    return (
+      <div className="brand">
+        <Logo />
+        <span className="wordmark">Claudia</span>
+        <span className="brand-break" />
+        <span className="instance" title={`Claudia hub ${hub.version}${hub.commit ? ` (${hub.commit})` : ""}${token ? `; the open chat runs on ${token}'s Claude subscription` : ""}`}>
+          {token && <span className="instance-token">{token}</span>}
+          <span className="instance-version">{hub.commit ?? `v${hub.version}`}</span>
+        </span>
+      </div>
+    );
   return (
     <div className="brand">
       <Logo />

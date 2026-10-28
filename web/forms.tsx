@@ -1,6 +1,7 @@
 // The predefined forms (src/forms.ts), drawn in the board's chalk style. Each gets its block's
 // data as it stands after the draw calls (items merged by id).
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useApi } from "./api";
 import { createPortal } from "react-dom";
 import type { FormName } from "../src/forms";
 import { codeTokens, type Token } from "./shiki";
@@ -400,10 +401,11 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   const [hideDot, setHideDot] = useState(() => { try { return localStorage.getItem("files.hideDot") === "1"; } catch { return false; } });
   const toggleHideDot = (on: boolean) => { setHideDot(on); try { localStorage.setItem("files.hideDot", on ? "1" : "0"); } catch {} };
 
+  const api = useApi();
   const url = (path: string, read = false) => `/api/chats/${chat}/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}${read ? "&read=1" : ""}`;
   // A folder read again replaces its entries only when they changed, so nothing redraws for nothing.
   const readDir = (d: string, gone: () => boolean) =>
-    fetch(url(d)).then((r) => r.json()).then((j) => {
+    api.fetch(url(d)).then((r) => r.json()).then((j) => {
       if (gone()) return;
       const next = j.entries ?? { error: j.error ?? "can't read" };
       setDirs((m) => (JSON.stringify(m.get(d)) === JSON.stringify(next) ? m : new Map(m).set(d, next)));
@@ -414,7 +416,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     let gone = false;
     for (const d of open) readDir(d, () => gone);
     return () => { gone = true; };
-  }, [[...open].join("|"), root, chat, tick]);
+  }, [[...open].join("|"), api, root, chat, tick]);
   // Live from disk: open folders and open files are read again every FILES_POLL_MS, in place: what
   // is open stays open. A file comes back only when its mtime moved.
   const openRef = useRef(open);
@@ -428,11 +430,11 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
       for (const d of openRef.current) readDir(d, () => gone);
       for (const f of filesRef.current.values()) {
         if (f.mtime === undefined) continue;
-        fetch(`${url(f.path, true)}&since=${f.mtime}`).then((r) => r.json()).then((j) => { if (!gone && !j.same) fill({ path: f.path, ...j }); }).catch(() => {});
+        api.fetch(`${url(f.path, true)}&since=${f.mtime}`).then((r) => r.json()).then((j) => { if (!gone && !j.same) fill({ path: f.path, ...j }); }).catch(() => {});
       }
     }, FILES_POLL_MS);
     return () => { gone = true; clearInterval(timer); };
-  }, [live, root, chat]);
+  }, [api, live, root, chat]);
 
   const entriesOf = (d: string): Entry[] | { error: string } | undefined => {
     // Folders come from the paths too ("src/a/b.clj" makes src and src/a), not only from dir entries.
@@ -481,7 +483,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
   filesRef.current = files;
   const load = (path: string) => {
     setFiles((m) => (m.has(path) ? m : new Map(m).set(path, { path })));
-    if (live && IMAGE_EXT.test(path)) return fill({ path, image: url(path) + "&image=1" });
+    if (live && IMAGE_EXT.test(path)) return fill({ path, image: api.src(url(path) + "&image=1") });
     // A planned (sketched) file shows the code Claude gave; a file on disk is read.
     const m = made.find((e) => e.path.replace(/\/$/, "") === path);
     const cut = path.lastIndexOf("/");
@@ -489,7 +491,7 @@ function Files({ data, chat, block }: { data: Data; chat?: string; block?: strin
     const onDisk = live && Array.isArray(listed) && listed.some((x) => x.name === path.slice(cut + 1));
     if (m && !onDisk) return fill({ path, text: m.code ?? (demo ? "// a file opens here, coloured like VS Code" : "(no code given for this file)") });
     if (!live) return fill({ path, error: "not given" });
-    fetch(url(path, true)).then((r) => r.json()).then((j) => fill({ path, ...j })).catch(() => fill({ path, error: "can't read it" }));
+    api.fetch(url(path, true)).then((r) => r.json()).then((j) => fill({ path, ...j })).catch(() => fill({ path, error: "can't read it" }));
   };
   const close = (path: string) => {
     setFiles((m) => { const n = new Map(m); n.delete(path); return n; });
