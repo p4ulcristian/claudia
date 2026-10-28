@@ -10,7 +10,6 @@ import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
 import { search, sessionsDir, warm } from "./src/search";
 import { explain, type ExplainInput } from "./src/explain";
-import { guess, onWords, wordFor } from "./src/words";
 import { imageFile, listDir, readText } from "./src/files";
 import { REV, commitDetail, filePatch, fingerprint, smartlog } from "./src/git";
 import { edgeUses as cljEdge, namespaces as cljNamespaces, nsDetail as cljNs, varSource as cljVar } from "./src/clojure";
@@ -100,7 +99,6 @@ async function listChats(all: boolean, archivedView: boolean) {
       agents: c.agents,
       color: colors.get(c.id) ?? c.settings.color ?? null,
       archived: false,
-      word: guess(c.firstSent!.text),
       ...projectFields(c.settings.folder),
     })),
   ];
@@ -121,7 +119,6 @@ function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<st
       agents: chats.get(s.sessionId)?.agents ?? 0,
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
-      word: wordFor(s.sessionId, s.customTitle || s.summary || s.firstPrompt || "New chat"),
       ...projectFields(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
     }));
 }
@@ -588,8 +585,6 @@ Bun.serve({
 // Models, commands and plan usage: read now, then every 5 minutes, and soon after each turn (see Chat).
 onMeta((meta) => { for (const s of socks) s.send(JSON.stringify({ t: "meta", meta })); });
 probe(WORK);
-// A chat's rail word came back from Haiku: the lists show it.
-onWords(broadcastChats);
 // The search index catches up with every session in the background, newest first.
 const SESSIONS = sessionsDir(WORK);
 void listSessions({ dir: WORK, includeWorktrees: false })

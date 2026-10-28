@@ -84,6 +84,8 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 // Columns for the chat's picture: 0 = Claude's layout, 1–3 = that many equal columns.
 if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().some((c) => c.name === "cols"))
   db.exec("ALTER TABLE chat_settings ADD COLUMN cols INTEGER");
+// The one-word rail names Haiku picked (src/words.ts) are gone: the rail shows the title.
+db.exec("DROP TABLE IF EXISTS chat_words");
 
 // chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
 export type Template = { name: string; html: string; parts: Record<string, string>; description: string; updatedAt: number };
