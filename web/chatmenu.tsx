@@ -1,15 +1,17 @@
 // Right click on a chat (a rail circle or a list row): colour, passive, rename, fork, archive.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
+import { layer } from "./viewport";
 
-// A menu at (x, y), kept inside the window; closes on a click outside, Escape or leaving the window.
+// A menu at (x, y) (client coordinates), kept inside the page's visible layer; closes on a click outside, Escape or leaving the window.
 function useMenuBox(x: number, y: number, close: () => void, relayout?: unknown) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   useLayoutEffect(() => {
     const r = box.current?.getBoundingClientRect();
     if (!r) return;
-    setPos({ left: Math.max(6, Math.min(x, innerWidth - r.width - 6)), top: Math.max(6, Math.min(y, innerHeight - r.height - 6)) });
+    const l = layer();
+    setPos({ left: Math.max(6, Math.min(x - l.left, l.width - r.width - 6)), top: Math.max(6, Math.min(y - l.top, l.height - r.height - 6)) });
   }, [x, y, relayout]);
   useEffect(() => {
     const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) close(); };

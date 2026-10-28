@@ -1,7 +1,8 @@
 // A chalk speech bubble with a chat's full title, shown at once on hover (the browser's own
-// tooltip waits about a second). One bubble for the whole page, fixed to the window so the
+// tooltip waits about a second). One bubble for the whole page, fixed to the page's layer so the
 // sidebar's scrolling and clipping don't cut it.
 import React, { useEffect, useState } from "react";
+import { layer } from "./viewport";
 
 type Tip = { text: string; color?: string; x: number; y: number };
 
@@ -16,7 +17,8 @@ export function tipProps(text: string, color?: string, onlyClipped = false) {
       const t = el.querySelector<HTMLElement>(".t");
       if (onlyClipped && t && t.scrollWidth <= t.clientWidth) return;
       const r = el.getBoundingClientRect();
-      show({ text, color, x: r.right + 12, y: r.top + r.height / 2 });
+      const l = layer();
+      show({ text, color, x: r.right + 12 - l.left, y: r.top + r.height / 2 - l.top });
     },
     onMouseLeave: () => show(null),
   };

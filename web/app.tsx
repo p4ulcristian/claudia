@@ -24,6 +24,8 @@ import { ApiCtx, PAGE_API, apiFor, type Api } from "./api";
 import { AdminDialog, HubEmpty, NewChatServer, PeopleTabs, ServerFilter, ServerMark, SettingsServers, serverMarks, type AdminTab, type HubMe, type ServerState, type ServerView } from "./hub";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, SearchFound, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
+// The page as a fixed layer the size of the visible area; only scrollers move under a finger.
+import "./viewport";
 
 const empty: Scene = { title: "", nodes: [], edges: [], groups: [], cards: [] };
 
@@ -1204,10 +1206,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     </ApiCtx.Provider>
   );
 }
-
-// iOS Safari ignores user-scalable=no: block pinch zoom of the page itself (two-finger gestures).
-addEventListener("gesturestart", (e) => e.preventDefault());
-addEventListener("touchmove", (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
 createRoot(document.getElementById("root")!).render(<Root />);
 

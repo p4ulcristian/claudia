@@ -180,6 +180,13 @@ export function Messages(props: {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [items, partial, running]);
+  // A shorter column (a phone's keyboard opening, the message box growing) keeps its end in view.
+  useLayoutEffect(() => {
+    const el = ref.current!;
+    const ro = new ResizeObserver(() => { if (stick.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <div

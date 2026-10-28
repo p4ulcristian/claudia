@@ -2,6 +2,7 @@
 // the chat, one line at any width and any number of pictures.
 import React, { useLayoutEffect, useRef, useState } from "react";
 import type { Picture } from "./types";
+import { layer } from "./viewport";
 
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -84,8 +85,10 @@ function Scrubber({ pictures, index, onPick }: { pictures: Picture[]; index: num
     const r = el.getBoundingClientRect();
     const w = tip.offsetWidth;
     const x = r.left + (r.width * at(hover)) / 100 - w / 2;
-    tip.style.left = `${Math.max(box.left + 8, Math.min(x, box.right - w - 8))}px`;
-    tip.style.top = `${r.top - tip.offsetHeight - 6}px`;
+    // (the tip is fixed: placed in the page's layer)
+    const l = layer();
+    tip.style.left = `${Math.max(box.left + 8, Math.min(x, box.right - w - 8)) - l.left}px`;
+    tip.style.top = `${r.top - tip.offsetHeight - 6 - l.top}px`;
   });
 
   // Marks as dots while they have room, as thin lines when packed, and none past that (the rail still works).

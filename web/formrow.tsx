@@ -4,6 +4,7 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { FORMS, FORM_NAMES, type FormName } from "../src/forms";
 import { FormView } from "./forms";
+import { layer } from "./viewport";
 
 // "allowed" is the default and isn't saved: a form left out of the chat's choices is allowed.
 type Choice = "required" | "off";
@@ -72,7 +73,8 @@ export function FormRow({ forms, hidden, onChange, cols, onCols, rail }: {
     const el = peekBox.current;
     if (!rail || !el || !box.current) return;
     const top = box.current.getBoundingClientRect().top;
-    el.style.top = `${Math.max(8 - top, Math.min(peekTop, innerHeight - 8 - top - el.offsetHeight))}px`;
+    const l = layer();
+    el.style.top = `${Math.max(l.top + 8 - top, Math.min(peekTop, l.bottom - 8 - top - el.offsetHeight))}px`;
   });
   const shown = ["graph", ...FORM_NAMES.filter((f) => !hidden.includes(f) && !TOOLS.includes(f)), "freeform", "questions"];
   const tools = TOOLS.filter((f) => !hidden.includes(f));
