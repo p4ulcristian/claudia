@@ -159,7 +159,7 @@ function assistantItems(msgId: string, content: any[]): Item[] {
 // returns only the last chain. The chains before it are read from the file here, oldest first, so the
 // whole chat shows (and search hits from before a compaction have a message to jump to). Each
 // compaction becomes a note in place of its summary message.
-type Said = { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null; compacted?: number };
+export type Said = { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null; compacted?: number };
 // A message sent while a turn ran isn't saved as a user entry: Claude Code saves a queued_command
 // attachment holding the sent uuid as source_uuid. The SDK turns these back into user messages only
 // in the last chain; the earlier chains read here need the same. Returns the sent uuid, or null.
@@ -169,10 +169,12 @@ export function sentMidTurn(e: any): string | null {
   if (typeof a.prompt !== "string" && !Array.isArray(a.prompt)) return null;
   return typeof a.source_uuid === "string" && a.source_uuid ? a.source_uuid : e.uuid;
 }
-async function withEarlierChains(sessionId: string, msgs: Said[]): Promise<Said[]> {
+// Where Claude Code keeps a chat's session file.
+export const sessionFile = (sessionId: string) =>
+  join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects", WORK.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
+export async function withEarlierChains(sessionId: string, msgs: Said[]): Promise<Said[]> {
   if (!msgs.length) return msgs;
-  const file = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects", WORK.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`);
-  const text = await Bun.file(file).text().catch(() => "");
+  const text = await Bun.file(sessionFile(sessionId)).text().catch(() => "");
   if (!text.includes('"compact_boundary"')) return msgs;
   const byUuid = new Map<string, any>();
   for (const line of text.split("\n")) {

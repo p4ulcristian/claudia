@@ -22,6 +22,7 @@ import { homedir } from "node:os";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
+import { forkChat } from "./src/fork";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
 // On the box: a unix socket only the page can reach (the unit's runtime folder grants it).
@@ -478,6 +479,24 @@ Bun.serve({
         const body = (await req.json()) as { name?: string; description?: string };
         const text = chat(id).saveTemplate(String(body.name ?? ""), { block: decodeURIComponent(req.params.block), description: body.description });
         return json({ ok: /^(Saved|Updated)/.test(text), text });
+      },
+    },
+    // Fork: a new chat holding this one up to the end of a turn. { at?: the uuid of a user message,
+    // whose turn is the last kept; none = up to the last finished turn }. Returns the new chat's id.
+    "/api/chats/:id/fork": {
+      POST: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const body = (await req.json().catch(() => ({}))) as { at?: unknown };
+        const at = typeof body.at === "string" && body.at ? body.at : null;
+        try {
+          const fork = await forkChat(id, at, chats.get(id)?.running ?? false);
+          chat(fork); // its own colour, like any new chat
+          broadcastChats();
+          return json({ id: fork });
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 409);
+        }
       },
     },
     "/api/chats/:id": {

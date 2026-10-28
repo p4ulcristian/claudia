@@ -121,6 +121,9 @@ const q = {
   changes: db.query<any, [string]>(
     "SELECT id, turn_uuid AS turn, path, added, removed, status, skipped FROM changes WHERE session_id = ? ORDER BY created_at, id",
   ),
+  changeRows: db.query<{ turn_uuid: string; path: string; before: string | null; after: string | null; added: number; removed: number; status: string; skipped: string | null; created_at: number }, [string]>(
+    "SELECT turn_uuid, path, before, after, added, removed, status, skipped, created_at FROM changes WHERE session_id = ? ORDER BY created_at, id",
+  ),
   change: db.query<{ path: string; before: string | null; after: string | null; skipped: string | null }, [number, string]>(
     "SELECT path, before, after, skipped FROM changes WHERE id = ? AND session_id = ?",
   ),
@@ -176,6 +179,19 @@ export const store = {
   change: (id: string, changeId: number) => q.change.get(changeId, id),
   savePicture: (id: string, turn: string, scene: Scene, changed: string[]) =>
     q.savePicture.run(id, turn, JSON.stringify(scene), JSON.stringify(changed), Date.now()),
+  // A fork takes along the pictures and file changes of the turns it keeps: turns maps each kept
+  // turn's uuid in the original chat to its uuid in the fork.
+  copyTurns: (from: string, to: string, turns: Map<string, string>) =>
+    db.transaction(() => {
+      for (const r of q.pictures.all(from)) {
+        const t = turns.get(r.turn_uuid);
+        if (t) q.savePicture.run(to, t, r.scene, r.changed, r.created_at);
+      }
+      for (const r of q.changeRows.all(from)) {
+        const t = turns.get(r.turn_uuid);
+        if (t) q.addChange.get(to, t, r.path, r.before, r.after, r.added, r.removed, r.status, r.skipped, r.created_at);
+      }
+    })(),
   templates: (): Template[] => q.templates.all().map(asTemplate),
   template: (name: string): Template | null => {
     const r = q.template.get(name);

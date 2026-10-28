@@ -437,6 +437,15 @@ function App() {
     else newChat();
   };
   const setArchived = (archived: boolean) => archiveChat(current, archived);
+  // Fork: a new chat holding chat id up to the end of a turn (at: a user message; none = its last
+  // finished turn). Opens the fork; returns the error if there is one.
+  const forkChat = async (id: string, at?: string): Promise<string | null> => {
+    const r = await fetch(`/api/chats/${id}/fork`, { method: "POST", body: JSON.stringify(at ? { at } : {}) }).catch((err) => err as Error);
+    const j = r instanceof Error ? { error: r.message } : await r.json().catch(() => ({ error: r.statusText }));
+    if (j.error || !j.id) return String(j.error ?? "No fork made.");
+    open(j.id);
+    return null;
+  };
   // The right-click menu on a chat (rail circle or list row).
   const [menu, setMenu] = useState<{ chat: MenuChat; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -559,6 +568,7 @@ function App() {
           onColor={(color) => send({ t: "settings", chat: menu.chat.id, color })}
           onWake={() => send({ t: "wake", chat: menu.chat.id })}
           onRename={(title) => void fetch(`/api/chats/${menu.chat.id}`, { method: "PATCH", body: JSON.stringify({ title }) })}
+          onFork={() => forkChat(menu.chat.id)}
           onArchive={(archived) => void archiveChat(menu.chat.id, archived)}
         />
       )}
@@ -749,6 +759,7 @@ function App() {
             changeTurns={changeTurns}
             viewing={viewing}
             onView={setViewing}
+            onFork={readOnly ? undefined : (at) => void forkChat(current, at).then((error) => error && setLive((l) => ({ ...l, error })))}
           />
           {readOnly ? (
             <div className="read-only-note">{me?.viewing ? `${me.viewing[0].toUpperCase()}${me.viewing.slice(1)}'s chat` : "Someone else's chat"} · read only</div>

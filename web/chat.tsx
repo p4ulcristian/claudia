@@ -162,6 +162,8 @@ export function Messages(props: {
   changeTurns: Map<string, number>;
   viewing: string | null;
   onView: (turn: string | null) => void;
+  // A new chat with this one up to the end of that message's turn (none when read only).
+  onFork?: (uuid: string) => void;
 }) {
   const { items, partial, running } = props;
   const ref = useRef<HTMLDivElement>(null);
@@ -169,6 +171,8 @@ export function Messages(props: {
   // Messages sent while Claude works wait below everything until Claude takes them in.
   const queued = items.filter((it): it is Extract<Item, { k: "user" }> => it.k === "user" && !!it.queued);
   const bs = blocks(queued.length ? items.filter((it) => !(it.k === "user" && it.queued)) : items);
+  // The turn running now can't be forked yet: its message gets no fork link.
+  const lastUser = running ? (items.findLast((it) => it.k === "user" && !it.queued) as Extract<Item, { k: "user" }> | undefined)?.uuid : undefined;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -196,16 +200,23 @@ export function Messages(props: {
           const it = b.item as Extract<Item, { k: "user" }>;
           const files = props.changeTurns.get(it.uuid) ?? 0;
           const has = props.pictureTurns.has(it.uuid) || files > 0;
+          // (answers to Claude's questions are tool results inside a turn, not messages of their own)
+          const forkable = !!props.onFork && !it.uuid.startsWith("answer-") && it.uuid !== lastUser;
           return (
             <div key={it.uuid} data-at={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
                 {it.images > 0 && <span className="att">{it.images} image{it.images > 1 ? "s" : ""}</span>}
                 <UserText text={it.text} />
               </div>
-              {has && (
-                <button className="pic-link" title="Show the picture from this turn" onClick={() => props.onView(props.viewing === it.uuid ? null : it.uuid)}>
-                  {props.viewing === it.uuid ? "back to live" : [props.pictureTurns.has(it.uuid) && "picture", files && `${files} ${files === 1 ? "file" : "files"}`].filter(Boolean).join(" · ")}
-                </button>
+              {(has || forkable) && (
+                <div className="msg-links">
+                  {forkable && <button className="pic-link fork-link" title="A new chat with this one up to the end of this turn, in the same folder" onClick={() => props.onFork!(it.uuid)}>fork from here</button>}
+                  {has && (
+                    <button className="pic-link" title="Show the picture from this turn" onClick={() => props.onView(props.viewing === it.uuid ? null : it.uuid)}>
+                      {props.viewing === it.uuid ? "back to live" : [props.pictureTurns.has(it.uuid) && "picture", files && `${files} ${files === 1 ? "file" : "files"}`].filter(Boolean).join(" · ")}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           );

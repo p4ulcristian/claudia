@@ -1,4 +1,4 @@
-// Right click on a chat (a rail circle or a list row): colour, passive, rename, archive.
+// Right click on a chat (a rail circle or a list row): colour, passive, rename, fork, archive.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CHAT_COLORS, PASSIVE } from "../src/colors";
 
@@ -39,7 +39,7 @@ export function ContextMenu({ x, y, close, title, onCompact }: { x: number; y: n
 
 export type MenuChat = { id: string; title: string; color: string | null; archived?: boolean };
 
-export function ChatMenu({ chat, x, y, close, onColor, onWake, onRename, onArchive }: {
+export function ChatMenu({ chat, x, y, close, onColor, onWake, onRename, onFork, onArchive }: {
   chat: MenuChat;
   x: number;
   y: number;
@@ -47,10 +47,12 @@ export function ChatMenu({ chat, x, y, close, onColor, onWake, onRename, onArchi
   onColor: (color: string | null) => void;
   onWake: () => void; // passive → a fresh colour of its own
   onRename: (title: string) => void;
+  onFork: () => Promise<string | null>; // the error, if the fork failed
   onArchive: (archived: boolean) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
-  const { box, pos } = useMenuBox(x, y, close, renaming);
+  const [forking, setForking] = useState<{ error?: string } | null>(null);
+  const { box, pos } = useMenuBox(x, y, close, `${renaming}${forking?.error ?? ""}`);
 
   const passive = chat.color === PASSIVE;
   const act = (f: () => void) => () => { f(); close(); };
@@ -81,6 +83,19 @@ export function ChatMenu({ chat, x, y, close, onColor, onWake, onRename, onArchi
       ) : (
         <button className="cm-item" role="menuitem" onClick={() => setRenaming(true)}>Rename</button>
       )}
+      <button
+        className="cm-item"
+        role="menuitem"
+        disabled={!!forking && !forking.error}
+        title="A new chat with this one up to its last finished turn, in the same folder"
+        onClick={async () => {
+          setForking({});
+          const error = await onFork();
+          if (error) setForking({ error });
+          else close();
+        }}
+      >{forking && !forking.error ? "Forking…" : "Fork chat"}</button>
+      {forking?.error && <div className="cm-error">{forking.error}</div>}
       <button className="cm-item" role="menuitem" onClick={act(() => onArchive(!chat.archived))}>{chat.archived ? "Unarchive" : "Archive"}</button>
     </div>
   );
