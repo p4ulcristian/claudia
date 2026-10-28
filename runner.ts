@@ -63,6 +63,17 @@ function projectFields(folder: string | null) {
   return { project: p?.name ?? null, logo: !!p?.logo };
 }
 
+// What a phone may be told about a chat (decision 23: the hub reads these rows as the chat's person
+// and pushes): its open questions and permission asks, and how its last turn ended. ago, not a
+// time: the hub's clock may differ from this one.
+function attentionFields(c: Chat | undefined) {
+  return {
+    asks: c ? [...c.asks.values()].map(({ value: a }) => ({ id: a.id, question: a.questions[0]?.question ?? "" })) : [],
+    permits: c ? [...c.permits.values()].map(({ value: p }) => ({ id: p.id, tool: p.tool, description: p.description })) : [],
+    lastTurn: c?.lastTurn ? { id: c.lastTurn.id, ago: Date.now() - c.lastTurn.at, stopped: c.lastTurn.stopped, failed: c.lastTurn.failed } : null,
+  };
+}
+
 async function listChats(all: boolean, archivedView: boolean) {
   const ours = store.ourChats();
   const archived = store.archived();
@@ -100,6 +111,7 @@ async function listChats(all: boolean, archivedView: boolean) {
       color: colors.get(c.id) ?? c.settings.color ?? null,
       archived: false,
       ...projectFields(c.settings.folder),
+      ...attentionFields(c),
     })),
   ];
 }
@@ -120,6 +132,7 @@ function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<st
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
       ...projectFields(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
+      ...attentionFields(chats.get(s.sessionId)),
     }));
 }
 

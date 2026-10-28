@@ -403,6 +403,9 @@ export class Chat implements SessionHandler {
   private sceneTurn: string;
   asks = new Map<string, Waiting<Ask>>();
   permits = new Map<string, Waiting<Permit>>();
+  // How the last turn seen here ended, for the hub's phone pushes (decision 23): the result
+  // message's uuid (one id per turn, which the hub remembers it told), when, and how.
+  lastTurn: { id: string; at: number; stopped: boolean; failed: boolean } | null = null;
   tasks = new Map<string, Task>();
   // Sent messages Claude Code hasn't written to the session file yet (a message sent mid-turn waits
   // until Claude takes it in), so a chat opened again in that time still shows them. Keyed by uuid,
@@ -1213,6 +1216,8 @@ export class Chat implements SessionHandler {
         const stopped = this.stopping;
         this.stopping = false;
         this.emit({ t: "turn_end", turn: this.turn, drew: this.drew, error: stopped ? undefined : error, stopped });
+        // (not from a replay after a runner restart: its time would be now, not when the turn ended)
+        if (!this.replaying) this.lastTurn = { id: m.uuid, at: Date.now(), stopped, failed: !stopped && !!error };
         this.setRunning(false);
         if (this.replaying) return;
         this.readContext();

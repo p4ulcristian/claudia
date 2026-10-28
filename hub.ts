@@ -11,6 +11,8 @@ import { join, normalize } from "node:path";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
 import { hubStore } from "./src/hub/store";
 import { NAME, applied, dropPeer, enroll, pair, parseKey, suggestName } from "./src/hub/pairing";
+import { pushOn, startPush, syncPush } from "./src/hub/push";
+import { shortToken } from "./src/hub/apns";
 import { COMMIT, VERSION } from "./src/version";
 
 const HOST = process.env.HUB_HOST ?? "127.0.0.1";
@@ -65,6 +67,16 @@ function adminState() {
     access: hubStore.access(),
   };
 }
+
+// After a change to the servers or the grid: phone pushes follow it at once (src/hub/push.ts).
+function changed() {
+  syncPush();
+  return json(adminState());
+}
+
+// An APNs device token (hex; Apple says not to count on its length) and an app's bundle id.
+const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/;
+const TOPIC = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
 function admin(req: Request): Caller | Response {
   const c = caller(req);
@@ -126,6 +138,38 @@ Bun.serve<PipeData>({
       },
     },
 
+    // The caller's own phones (the iPhone app's page registers its APNs token: web/native.ts):
+    // { token, env: development | production, topic: the app's bundle id }. Kept also while push is
+    // off here, so the phones are ready when the key is set.
+    "/hub/push/devices": {
+      POST: async (req: Request) => {
+        const c = caller(req);
+        if (!c) return json({ error: "not signed in" }, 401);
+        if (crossSite(req)) return json({ error: "cross-site" }, 403);
+        const b = await body(req);
+        const token = str(b.token).toLowerCase();
+        const env = str(b.env);
+        const topic = str(b.topic, 155);
+        if (!DEVICE_TOKEN.test(token)) return json({ error: "token: an APNs device token in hex" }, 400);
+        if (env !== "development" && env !== "production") return json({ error: "env: development or production" }, 400);
+        if (!TOPIC.test(topic)) return json({ error: "topic: the app's bundle id" }, 400);
+        hubStore.saveDevice({ token, email: c.email, env, topic });
+        console.log(`push: phone ${shortToken(token)} (${env}) registered for ${c.email}`);
+        syncPush();
+        return json({ ok: true, push: pushOn() });
+      },
+    },
+    "/hub/push/devices/:token": {
+      DELETE: (req: BunRequest<"/hub/push/devices/:token">) => {
+        const c = caller(req);
+        if (!c) return json({ error: "not signed in" }, 401);
+        if (crossSite(req)) return json({ error: "cross-site" }, 403);
+        if (!hubStore.dropDevice(req.params.token.toLowerCase(), c.email)) return json({ error: "no such phone of yours" }, 404);
+        syncPush();
+        return json({ ok: true });
+      },
+    },
+
     // The Servers and Access pages (admins).
     "/hub/admin": { GET: (req: Request) => { const a = admin(req); return a instanceof Response ? a : json(adminState()); } },
     "/hub/admin/servers/:name": {
@@ -140,14 +184,14 @@ Bun.serve<PipeData>({
         const address = str(b.address, 100) || old?.address || "";
         if (!ADDRESS.test(address)) return json({ error: "Address: host:port, e.g. 10.0.0.2:4510." }, 400);
         hubStore.saveServer({ name, label, address });
-        return json(adminState());
+        return changed();
       },
       DELETE: (req: BunRequest<"/hub/admin/servers/:name">) => {
         const a = admin(req);
         if (a instanceof Response) return a;
         dropPeer(req.params.name);
         hubStore.dropServer(req.params.name);
-        return json(adminState());
+        return changed();
       },
     },
     "/hub/admin/people": {
@@ -157,7 +201,7 @@ Bun.serve<PipeData>({
         const email = str((await body(req)).email).toLowerCase();
         if (!EMAIL.test(email)) return json({ error: "That isn't an email address." }, 400);
         hubStore.addPerson(email);
-        return json(adminState());
+        return changed();
       },
     },
     "/hub/admin/people/:email": {
@@ -165,7 +209,7 @@ Bun.serve<PipeData>({
         const a = admin(req);
         if (a instanceof Response) return a;
         hubStore.dropPerson(decodeURIComponent(req.params.email).toLowerCase());
-        return json(adminState());
+        return changed();
       },
     },
     "/hub/admin/access": {
@@ -177,7 +221,7 @@ Bun.serve<PipeData>({
         const server = str(b.server);
         if (!hubStore.people().includes(email) || !hubStore.server(server)) return json({ error: "No such person or server." }, 400);
         hubStore.setAccess(email, server, b.granted === true);
-        return json(adminState());
+        return changed();
       },
     },
     // A key printed by deploy/pair.sh on a new server: { key, name?, label? }.
@@ -194,7 +238,7 @@ Bun.serve<PipeData>({
         } catch (err) {
           return json({ error: (err as Error).message }, 409);
         }
-        return json(adminState());
+        return changed();
       },
     },
     // A joining server fetching its address with its secret (no login: Caddy lets only this path through).
@@ -214,3 +258,4 @@ Bun.serve<PipeData>({
 });
 
 console.log(`Claudia hub on http://${HOST}:${PORT}`);
+await startPush();

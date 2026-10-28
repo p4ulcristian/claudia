@@ -40,6 +40,28 @@ db.exec(`
     created_at INTEGER NOT NULL,
     fetched_at INTEGER
   );
+  -- A phone of a person (decision 23): its APNs device token, which APNs (development builds go to
+  -- the sandbox) and the app's bundle id (the push topic). Kept when the person leaves the grid:
+  -- they are only told about servers the grid still lets them use.
+  CREATE TABLE IF NOT EXISTS devices (
+    token TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    env TEXT NOT NULL CHECK (env IN ('development', 'production')),
+    topic TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    last_ok_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS devices_email ON devices (email);
+  -- What a person was already told about (a chat's question, permission ask or finished turn, by
+  -- the server's id for it), so a hub restart or reconnect never tells it again.
+  CREATE TABLE IF NOT EXISTS pushed (
+    email TEXT NOT NULL,
+    server TEXT NOT NULL,
+    chat TEXT NOT NULL,
+    event TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (email, server, chat, event)
+  );
 `);
 
 export type Server = { name: string; label: string; address: string };
@@ -71,7 +93,23 @@ const q = {
     "SELECT server, public_key, ip, created_at, fetched_at FROM pairings WHERE secret_hash = ?",
   ),
   fetched: db.query("UPDATE pairings SET fetched_at = ? WHERE server = ? AND fetched_at IS NULL"),
+  // (a token registered again by another person's sign-in moves to them)
+  saveDevice: db.query(
+    `INSERT INTO devices (token, email, env, topic, added_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (token) DO UPDATE SET email = excluded.email, env = excluded.env, topic = excluded.topic`,
+  ),
+  dropDevice: db.query("DELETE FROM devices WHERE token = ? AND email = ?"),
+  forgetDevice: db.query("DELETE FROM devices WHERE token = ?"),
+  devices: db.query<DeviceRow, [string]>("SELECT token, email, env, topic, added_at, last_ok_at FROM devices WHERE email = ? ORDER BY added_at"),
+  pushPeople: db.query<{ email: string; since: number }, []>("SELECT email, MIN(added_at) AS since FROM devices GROUP BY email"),
+  deviceOk: db.query("UPDATE devices SET last_ok_at = ? WHERE token = ?"),
+  claim: db.query("INSERT OR IGNORE INTO pushed (email, server, chat, event, at) VALUES (?, ?, ?, ?, ?)"),
+  prunePushed: db.query("DELETE FROM pushed WHERE at < ?"),
 };
+
+type DeviceRow = { token: string; email: string; env: "development" | "production"; topic: string; added_at: number; last_ok_at: number | null };
+export type Device = { token: string; email: string; env: "development" | "production"; topic: string; addedAt: number; lastOkAt: number | null };
+const asDevice = (r: DeviceRow): Device => ({ token: r.token, email: r.email, env: r.env, topic: r.topic, addedAt: r.added_at, lastOkAt: r.last_ok_at });
 
 const asPairing = (r: { server: string; public_key: string; ip: string; created_at: number; fetched_at: number | null }): Pairing =>
   ({ server: r.server, publicKey: r.public_key, ip: r.ip, createdAt: r.created_at, fetchedAt: r.fetched_at });
@@ -101,4 +139,17 @@ export const hubStore = {
     return r ? asPairing(r) : null;
   },
   markFetched: (server: string) => q.fetched.run(Date.now(), server),
+  saveDevice: (d: { token: string; email: string; env: "development" | "production"; topic: string }) =>
+    q.saveDevice.run(d.token, d.email, d.env, d.topic, Date.now()),
+  // A person removing one of their own phones: false when it isn't theirs (or not there).
+  dropDevice: (token: string, email: string) => q.dropDevice.run(token, email).changes > 0,
+  // APNs said the token is dead.
+  forgetDevice: (token: string) => q.forgetDevice.run(token),
+  devices: (email: string) => q.devices.all(email).map(asDevice),
+  // The people with a phone, and since when they have had one.
+  pushPeople: () => q.pushPeople.all(),
+  deviceOk: (token: string) => q.deviceOk.run(Date.now(), token),
+  // Takes the right to tell a person about an event: true only the first time.
+  claim: (email: string, server: string, chat: string, event: string) => q.claim.run(email, server, chat, event, Date.now()).changes > 0,
+  prunePushed: (before: number) => q.prunePushed.run(before),
 };
