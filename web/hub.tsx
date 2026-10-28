@@ -21,7 +21,8 @@ export function serverMarks(servers: HubServer[]): Map<string, string> {
     let n = 1;
     while (n < 3 && servers.some((o) => o !== s && word(o).slice(0, n).toLowerCase() === word(s).slice(0, n).toLowerCase())) n++;
     const w = word(s).slice(0, n) || s.name.slice(0, n);
-    out.set(s.name, w[0].toUpperCase() + w.slice(1).toLowerCase());
+    // Nothing to mark: the page's own server ("") when it isn't served by the hub.
+    if (w) out.set(s.name, w[0].toUpperCase() + w.slice(1).toLowerCase());
   }
   return out;
 }
