@@ -207,7 +207,8 @@ function apply(l: Live, ev: ChatEvent): Live {
   return l;
 }
 
-// Below 1100px the picture folds without motion; below 680px (phones) the picture is a bottom sheet.
+// Below 1100px the picture folds without motion; below 680px (phones) the chats are a stack of two
+// screens and the picture a drawer from the right.
 function useMedia(q: string) {
   const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
   useEffect(() => {
@@ -290,10 +291,18 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [search, setSearch] = useState("");
   const narrow = useMedia("(max-width: 1099px)");
   const phone = useMedia("(max-width: 679px)");
-  // Phone: the picture lives in a sheet that slides up from the bottom; sheetAt = when it was last closed.
-  const [sheet, setSheet] = useState(false);
-  const [sheetAt, setSheetAt] = useState(() => Date.now());
-  const closeSheet = useCallback(() => { setSheet(false); setSheetAt(Date.now()); }, []);
+  // Phone: two screens, the chat list and the open chat. Going from the list to a chat keeps the list
+  // as the history entry behind it ({screen: "list"}; the chat's entry says list: true), so back (the
+  // Chats button, Safari's swipe) returns to the list.
+  const [screen, setScreen] = useState<"list" | "chat">(() => history.state?.screen ?? (fromPath() ? "chat" : "list"));
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  // Phone: the picture is a drawer from the right, over the chat; picAt = when it was last closed.
+  const [picOpen, setPicOpen] = useState(false);
+  const [picAt, setPicAt] = useState(() => Date.now());
+  const closePicture = useCallback(() => { setPicOpen(false); setPicAt(Date.now()); }, []);
   // The rail is always there, at every width. The full list (settings, archive, profiles) opens over
   // it as a drawer from the menu button and closes when a chat is picked or the backdrop clicked.
   const [drawer, setDrawer] = useState(false);
@@ -305,7 +314,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     if (railSearch) return setRailSearch(false);
     setDrawer((d) => !d);
   }, [railSearch]);
-  const showSidebar = drawer || railSearch;
+  const showSidebar = phone ? screen === "list" : drawer || railSearch;
   const searchFromRail = () => { setRailSearch(true); requestAnimationFrame(() => searchBox.current?.focus()); };
   const endRailSearch = () => { if (railSearch) { setRailSearch(false); setSearch(""); } };
 
@@ -498,6 +507,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const openHit = (at: At, uuid: string | null) => {
     endRailSearch();
     if (keyOf(at.server, at.id) !== curKey) open(at);
+    else if (phone) showChat();
     if (uuid) setJumpTo(uuid);
   };
 
@@ -508,7 +518,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     if (!readOnly || landed.current || fromPath() || !chats.length) return;
     landed.current = true;
     const last = chats.at(-1)!;
-    open({ server: last.server, id: last.id });
+    open({ server: last.server, id: last.id }, true, false);
   }, [readOnly, chats]);
   // Each server's list, again when the view or a toggle changes (the hub shows the last list seen meanwhile).
   useEffect(() => {
@@ -598,22 +608,44 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // Messages about the open chat go to its server.
   const send = useCallback((m: unknown) => sendTo(currentRef.current.server, m), [sendTo]);
 
-  const open = useCallback((at: At, push = true) => {
+  // show: on a phone, go to the chat's screen (opening a chat in the background, e.g. another
+  // person's latest, leaves the list showing).
+  const open = useCallback((at: At, push = true, show = push) => {
     setCurrent(at);
     setLive(fresh(at.id));
     setViewing(null);
     setEditing(false);
     setDrawer(false);
-    if (push) history.pushState(null, "", pathOf(at));
+    if (show && phoneRef.current) {
+      if (screenRef.current === "list") {
+        history.replaceState({ screen: "list" }, "");
+        if (push) history.pushState({ screen: "chat", list: true }, "", pathOf(at));
+      } else if (push) history.replaceState(history.state, "", pathOf(at)); // chat to chat: the list stays right behind
+      setScreen("chat");
+    } else if (push) history.pushState(null, "", pathOf(at));
     sendTo(at.server, { t: "open", chat: at.id });
   }, [sendTo]);
   openRef.current = open;
+  // Phone: the open chat's screen, from the list.
+  const showChat = () => {
+    history.replaceState({ screen: "list" }, "");
+    history.pushState({ screen: "chat", list: true }, "");
+    setScreen("chat");
+  };
+  // Phone: back to the list (the picture drawer closes first).
+  const goList = () => {
+    closePicture();
+    if (history.state?.list) return history.back();
+    history.replaceState({ screen: "list" }, "");
+    setScreen("list");
+  };
 
   const newChat = useCallback(() => open({ server: defaultServer, id: crypto.randomUUID() }), [open, defaultServer]);
   // A chat picked from the list nods "yes" and opens; the open one shakes "no, already here" and
   // isn't loaded again. (Web Animations, so React re-rendering the class doesn't cut them short.)
   const pick = (c: Row, e: React.MouseEvent<HTMLElement>) => {
     const el = e.currentTarget;
+    if (c.key === curKey && phone) return showChat();
     if (c.key === curKey) {
       el.animate([{ translate: "0 0" }, { translate: "-4px 0" }, { translate: "4px 0" }, { translate: "-3px 0" }, { translate: "2px 0" }, { translate: "0 0" }], { duration: 360, easing: "ease-in-out" });
       return;
@@ -625,14 +657,16 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // An address's chat: /c/<server>/<chat>, or an old /c/<chat> on the server whose list has it.
   const serverOf = (id: string) => servers.find((s) => Object.entries(lists).some(([k, rows]) => k.startsWith(`${s.name}|`) && rows?.some((c) => c.id === id)))?.name;
   useEffect(() => {
-    const pop = () => {
+    const pop = (e: PopStateEvent) => {
+      if (phoneRef.current && e.state?.screen === "list") { closePicture(); setScreen("list"); return; }
+      setScreen("chat");
       const p = fromPath();
       if (!p) return open({ server: defaultServer, id: crypto.randomUUID() }, false);
       open({ server: !hubMode ? "" : p.server ?? serverOf(p.id) ?? defaultServer, id: p.id }, false);
     };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
-  }, [open, lists, defaultServer]);
+  }, [open, lists, defaultServer, closePicture]);
   // An old link: once a server's list has the chat, open it there and give the address its server;
   // when every server answered without it, it opens on the default server.
   useEffect(() => {
@@ -665,7 +699,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       send({ t: "answer", chat: current.id, id: ask.id, answers: Object.fromEntries(ask.questions.map((q) => [q.question, text])) });
       return;
     }
-    if (!fromPath()) history.replaceState(null, "", pathOf(current));
+    if (!fromPath()) history.replaceState(history.state, "", pathOf(current));
     if (hubMode) store.set("hub.server", current.server);
     send({ t: "send", chat: current.id, text, images });
   };
@@ -809,7 +843,15 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const folded = foldedAt > 0 && !live.asks.length;
   const unseen = folded && (live.pictures.at(-1)?.at ?? 0) > foldedAt;
   const fold = useFoldMotion(folded && !phone, chatW, phone);
-  const sheetUnseen = phone && !sheet && (live.pictures.at(-1)?.at ?? 0) > sheetAt;
+  const picUnseen = phone && !picOpen && (live.pictures.at(-1)?.at ?? 0) > picAt;
+  // Phone: the other chats waiting on you or done since you looked, as a count on the Chats button.
+  const others = chats.filter((c) => c.key !== curKey && !c.off);
+  const waitingElsewhere = others.filter((c) => c.waiting).length;
+  const doneElsewhere = others.filter((c) => !c.waiting && done.has(c.key)).length;
+  const leftBox = useRef<HTMLElement>(null);
+  const rightBox = useRef<HTMLElement>(null);
+  useSwipe(leftBox, phone && screen === "chat" && !picOpen, { right: goList, left: () => setPicOpen(true) });
+  useSwipe(rightBox, phone && picOpen, { right: closePicture }, true);
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
   const q = search.trim().toLowerCase();
@@ -882,7 +924,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       {ctxMenu && live.context && (
         <ContextMenu {...ctxMenu} close={closeCtxMenu} title={`Context ${live.context.percent}% · ${Math.round(live.context.used / 1000)}k of ${Math.round(live.context.max / 1000)}k`} onCompact={compact} />
       )}
-      {showSidebar && <div className="backdrop" onClick={() => { setDrawer(false); endRailSearch(); }} />}
+      {showSidebar && !phone && <div className="backdrop" onClick={() => { setDrawer(false); endRailSearch(); }} />}
       {!readOnly && (live.asks.length > 0 || live.permits.length > 0) && (
         <>
           <div className="ask-modal" hidden={peek} role="dialog" aria-modal="true" aria-label="Claude asks">
@@ -896,7 +938,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
         <svg className="burger" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.6h12M3.4 9h11.3M3 13.4h12" /></svg>
       </button>
       <div className="sidebar-slot">
-        {!showSidebar && (
+        {!showSidebar && !phone && (
           <nav className="rail" aria-label="Chats">
             <div className="rail-dots" ref={railBox}>
               {!readOnly && <button className="rail-dot add" onClick={newChat} title="New chat (Alt+N)">+</button>}
@@ -980,6 +1022,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
               >
                 {c.running && !c.off && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
+                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : done.has(c.key) ? <span className="row-mark done" title="Done">✓</span> : null)}
                 {markOf(c)}
                 <span className="when">{ago(c.at)}</span>
               </button>
@@ -1046,8 +1089,15 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           ...(fold.width !== null ? { "--fold-w": `${fold.width}px` } : {}),
         } as React.CSSProperties}
       >
-        <section className="left">
+        <section className="left" ref={leftBox}>
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
+            {phone && (
+              <button className="back-to-list" onClick={goList} aria-label="Chats">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4L6.5 10l6 6" /></svg>
+                Chats
+                {waitingElsewhere + doneElsewhere > 0 && <span className={`count ${waitingElsewhere ? "waiting" : ""}`}>{waitingElsewhere + doneElsewhere}</span>}
+              </button>
+            )}
             {!readOnly && <ColorPicker color={live.settings.color} onPick={(color) => send({ t: "settings", chat: current.id, color })} />}
             {editing ? (
               <input
@@ -1072,6 +1122,11 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             {live.settings.folder && <span className="folder-chip" title={`Working folder: ${live.settings.folder}`}>{clip(tilde(live.settings.folder), 28)}</span>}
             {activity}
             {offNote ? <span className="offline">{offNote}</span> : !up && <span className="offline">reconnecting…</span>}
+            {phone && (
+              <button className={`icon pic-open ${picUnseen ? "unseen" : ""}`} onClick={() => setPicOpen(true)} aria-label={picUnseen ? "New picture · show" : "Show picture"}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3.5" width="14" height="13" rx="2.5" /><circle cx="8" cy="9" r="2" /><path d="M11 13.5l2-2 2.5 2.5" /></svg>
+              </button>
+            )}
           </header>
           <Messages
             chat={current.id}
@@ -1125,13 +1180,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           </>}
         </section>
         <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
-        {phone && sheet && <div className="sheet-backdrop" onClick={closeSheet} />}
-        {phone && (
-          <button className={`sheet-tab ${sheetUnseen ? "unseen" : ""}`} onClick={() => setSheet(true)} aria-label="Show picture">
-            <span className="grab-line" />
-            Picture
-          </button>
-        )}
+        {phone && picOpen && <div className="pic-backdrop" onClick={closePicture} />}
         {fold.shown ? (
           <section className="right fold-edge">
             <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"} aria-label="Show picture">
@@ -1140,12 +1189,12 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           </section>
         ) : (
         <section
-          className={`right ${phone ? "sheet" : ""} ${phone && sheet ? "open" : ""}`}
+          ref={rightBox}
+          className={`right ${phone ? "pic-drawer" : ""} ${phone && picOpen ? "open" : ""}`}
           style={fold.rightWidth ? { width: fold.rightWidth } : undefined}
           onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96)}
           onMouseLeave={() => setNearBar(false)}
         >
-          {phone && <SheetGrab onClose={closeSheet} />}
           {rightView === "timeline" ? (
           <div className="right-tl">
             <TimelineView chat={current.id} live={live.running || live.tasks.some((t) => t.status === "running")} />
@@ -1180,14 +1229,14 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             unchanged={!!live.lastTurn && !live.lastTurn.drew}
             onPick={showPicture}
             onLive={() => setViewing(null)}
-            onFold={phone ? closeSheet : toggleFold}
+            onFold={phone ? closePicture : toggleFold}
             foldDisabled={live.asks.length > 0}
           />
           </div>
         </section>
         )}
       </main>
-      {/* The right rail, mirroring the chats rail: this chat's forms. On phones they stay a row in the sheet. */}
+      {/* The right rail, mirroring the chats rail: this chat's forms. On phones they are a row in the picture drawer. */}
       {!phone && (
         <nav className="rail right-rail" aria-label="Forms">
           {!readOnly && (
@@ -1315,33 +1364,67 @@ function AgentMoons({ n }: { n: number }) {
   );
 }
 
-// The top of the picture sheet on phones: tap it, or drag it down, to close the sheet.
-function SheetGrab({ onClose }: { onClose: () => void }) {
-  const drag = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const sheet = e.currentTarget.parentElement!;
-    const y0 = e.clientY;
-    let dy = 0;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => {
-      dy = Math.max(0, m.clientY - y0);
-      sheet.style.transition = "none";
-      sheet.style.transform = `translateY(${dy}px)`;
+// Phone swipes, sideways only: on the chat, right goes back to the list and left opens the picture;
+// on the picture drawer, right closes it (the drawer follows the finger). Left alone: a touch that
+// starts at the screen's edge (Safari's own back and forward), in a field, or in something that
+// scrolls sideways (code, tables), and a move that is mostly up or down.
+function useSwipe(box: React.RefObject<HTMLElement | null>, enabled: boolean, on: { right?: () => void; left?: () => void }, follow = false) {
+  const cb = useRef(on);
+  cb.current = on;
+  useEffect(() => {
+    const el = box.current;
+    if (!el || !enabled) return;
+    let x0 = 0, y0 = 0, dx = 0, axis: "x" | "y" | null = null, skip = true;
+    const reset = () => { el.style.transition = ""; el.style.transform = ""; };
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const target = e.target instanceof Element ? e.target : null;
+      skip = e.touches.length > 1 || !t || t.clientX < 24 || t.clientX > innerWidth - 24
+        || !!target?.closest("input, textarea, select, [contenteditable]") || scrollsSideways(target, el);
+      x0 = t?.clientX ?? 0;
+      y0 = t?.clientY ?? 0;
+      dx = 0;
+      axis = null;
     };
-    const up = () => {
-      removeEventListener("pointermove", move);
-      removeEventListener("pointerup", up);
-      sheet.style.transition = "";
-      sheet.style.transform = "";
-      if (dy > 80 || dy < 6) onClose(); // a long drag down, or a tap
+    const move = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (skip || !t) return;
+      dx = t.clientX - x0;
+      const dy = t.clientY - y0;
+      if (!axis && Math.hypot(dx, dy) > 10) axis = Math.abs(dx) > Math.abs(dy) * 1.5 ? "x" : "y";
+      if (follow && axis === "x") {
+        el.style.transition = "none";
+        el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+      }
     };
-    addEventListener("pointermove", move);
-    addEventListener("pointerup", up);
-  };
-  return (
-    <button className="sheet-grab" onPointerDown={drag} aria-label="Close picture">
-      <span className="grab-line" />
-    </button>
-  );
+    const end = () => {
+      if (follow) reset();
+      if (skip || axis !== "x") return;
+      if (dx > 70) cb.current.right?.();
+      else if (dx < -70) cb.current.left?.();
+    };
+    const cancel = () => { if (follow) reset(); skip = true; };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", cancel);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", cancel);
+      reset();
+    };
+  }, [enabled, follow]);
+}
+
+// Whether something from `el` up to `root` scrolls sideways (has more width than it shows).
+function scrollsSideways(el: Element | null, root: Element): boolean {
+  for (; el && el !== root; el = el.parentElement) {
+    const x = getComputedStyle(el).overflowX;
+    if ((x === "auto" || x === "scroll") && el.scrollWidth > el.clientWidth) return true;
+  }
+  return false;
 }
 
 // Folding the right half slides it shut instead of jumping: its column width moves in px from where

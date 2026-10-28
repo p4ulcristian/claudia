@@ -58,7 +58,7 @@ code, pre { font-family: var(--mono); }
 .app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .app > main { grid-column: 2; }
 .app > .right-rail { grid-column: 3; }
-@media (max-width: 679px) { .app { grid-template-columns: var(--rail-w) 1fr; } }
+@media (max-width: 679px) { .app { grid-template-columns: 1fr; } .app > main { grid-column: 1; } }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
@@ -709,7 +709,7 @@ svg.logo { flex: none; color: var(--fg); }
 .rbar-chip.live { color: var(--green); background: var(--green-bg); }
 .rbar-chip.live .rbar-chip-dot { animation: breathe 2s ease-in-out infinite; }
 /* The bar is hidden until the mouse comes near (not on phones): its dots rest meanwhile. */
-.right:not(.sheet) .rbar-zone:not(.show, .pinned, :focus-within) :is(.rbar-chip-dot, .fold-dot) { animation: none; }
+.right:not(.pic-drawer) .rbar-zone:not(.show, .pinned, :focus-within) :is(.rbar-chip-dot, .fold-dot) { animation: none; }
 .rbar-chip.live.still { color: var(--muted); background: var(--grey-bg); }
 .rbar-chip.live.still .rbar-chip-dot { animation: none; }
 .rbar-chip.past { color: var(--violet); background: var(--violet-bg); }
@@ -781,10 +781,10 @@ svg.logo { flex: none; color: var(--fg); }
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
 /* Chalk lines: each places its own ::before (or ::after) 2px past the line on every side. */
-.divider::before, .sidebar::after, .rail::after, .composer::before, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before, .grab-line::before {
+.divider::before, .sidebar::after, .rail::after, .composer::before, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before {
   content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
 }
-.divider::before, .edge-line::before, .f-arrow::before, .grab-line::before { inset: -2px; }
+.divider::before, .edge-line::before, .f-arrow::before { inset: -2px; }
 /* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
@@ -847,27 +847,42 @@ svg.logo { flex: none; color: var(--fg); }
 .ask-modal .panel.permit { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
 
 /* ---------- Phones (under 680px) ----------
-   The rail stays; the full chat list is the overlay drawer; the picture is a sheet
-   that slides up from the bottom, opened from the tab under the composer. */
-.sheet-tab, .sheet-grab, .sheet-backdrop { display: none; }
+   A stack of two screens: the chat list (the sidebar, full width) and the open chat (full width,
+   no rail), each sliding over the other. The picture is a drawer from the right over the chat,
+   opened from the button at the end of the chat's header; the chat's start stays in view beside it. */
+.back-to-list, .pic-open, .pic-backdrop, .row-mark { display: none; }
 @media (max-width: 679px) {
-  .split { grid-template-columns: 1fr !important; grid-template-rows: minmax(0, 1fr) auto; }
+  .split { grid-template-columns: 1fr !important; }
   .divider { display: none; }
-  .sheet-tab { display: flex; align-items: center; justify-content: center; gap: 10px; height: 34px; color: var(--muted); font: 700 15px var(--hand); position: relative; }
-  .sheet-tab .grab-line { width: 28px; }
-  .sheet-tab.unseen { color: var(--accent); }
-  .sheet-tab.unseen .grab-line { --ink: var(--accent); box-shadow: 0 0 10px var(--accent); animation: breathe 1.6s ease-in-out infinite; }
-  .grab-line { display: block; position: relative; width: 44px; height: 3px; border-radius: 2px; --ink: var(--chalk); }
-  .grab-line::before { -webkit-mask-box-image: var(--chalk-line3-soft); }
-  .right.sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 86%; z-index: 30; border-radius: 18px 18px 0 0; transform: translateY(105%); transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -10px 40px rgb(0 0 0 / 0.45); }
-  .right.sheet.open { transform: none; }
-  /* Its top edge in chalk: the top of an r18 outline (corners and top only). */
-  .right.sheet::before { content: ""; position: absolute; top: -2px; left: -2px; right: -2px; height: 20px; z-index: -1; pointer-events: none; background: var(--chalk-fill, var(--chalk)); -webkit-mask-box-image: var(--chalk-r18-2); -webkit-mask-box-image-width: 20px 20px 0 20px; }
-  .sheet-grab { display: grid; place-items: center; height: 26px; flex: none; touch-action: none; cursor: grab; }
-  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.4); animation: fade-in 0.2s ease-out; }
-  /* No hover on a phone: the bar sits at the bottom of the sheet; its fold button closes the sheet. */
-  .right.sheet .rbar-zone { position: static; opacity: 1; transform: none; pointer-events: auto; padding: 6px 10px 10px; }
-  .right.sheet .rbar-fold { rotate: 90deg; }
+  .menu-toggle { display: none; }
+  .app .sidebar-slot, .app:not(.no-sidebar) .sidebar-slot { position: fixed; inset: 0; z-index: 10; width: auto; box-shadow: none; transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s; }
+  .app.no-sidebar .sidebar-slot { transform: translateX(-100%); visibility: hidden; transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 0.32s; }
+  .sidebar-slot > .sidebar { width: 100%; }
+  .sidebar::after { display: none; }
+  .sidebar .brand { padding-left: 6px; }
+  .chat-row { min-height: 44px; }
+  .chat-row .t { font-size: 15px; }
+  .row-mark { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; font: 700 11px var(--sans); }
+  .row-mark.waiting { background: var(--amber); color: #000; }
+  .row-mark.done { background: var(--green-bg); color: var(--green); }
+  .back-to-list { display: flex; align-items: center; gap: 2px; flex: none; margin-left: -8px; padding: 4px 6px 4px 0; color: var(--accent); font: 700 17px var(--hand); }
+  .back-to-list svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .back-to-list .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--on-hue); font: 700 11px var(--sans); }
+  .back-to-list .count.waiting { background: var(--amber); color: #000; }
+  /* The header: Chats, colour, title and the picture button on one line; agents and changes (the
+     pill) on a second line under it when there are any. */
+  .chat-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
+  .chat-head h1 { flex: 1 1 0; min-width: 0; }
+  .chat-head .act { order: 5; flex-basis: 100%; margin-left: 0; }
+  .chat-head .act-pill { width: fit-content; }
+  .pic-open { display: grid; flex: none; width: 36px; height: 36px; margin-right: -6px; }
+  .pic-open svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .pic-open.unseen { color: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); animation: breathe 1.6s ease-in-out infinite; }
+  .right.pic-drawer { position: fixed; top: 0; bottom: 0; right: 0; width: 88%; z-index: 30; padding-top: var(--top-safe); box-sizing: border-box; transform: translateX(105%); transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: -10px 0 40px rgb(0 0 0 / 0.45); }
+  .right.pic-drawer.open { transform: none; }
+  .pic-backdrop { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.4); animation: fade-in 0.2s ease-out; }
+  /* No hover on a phone: the bar sits at the bottom of the drawer; its fold button closes the drawer. */
+  .right.pic-drawer .rbar-zone { position: static; opacity: 1; transform: none; pointer-events: auto; padding: 6px 10px 10px; }
 }
 @keyframes fade-in { from { opacity: 0; } }
 
@@ -895,12 +910,10 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 @media (max-width: 679px) {
   /* iOS zooms into any field with text under 16px when it gets focus. */
   input, textarea, select { font-size: 16px !important; }
-  .composer { padding-bottom: 8px; }
-  .sheet-tab { height: calc(34px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
-  .right.sheet { height: calc(86% - var(--top-safe)); }
-  .right.sheet .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-  /* While the keyboard is up the composer sits right on it: the Picture tab shows again when it closes. */
-  :root[data-keyboard] .sheet-tab { display: none; }
+  .composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  /* While the keyboard is up the composer sits right on it. */
+  :root[data-keyboard] .composer { padding-bottom: 8px; }
+  .right.pic-drawer .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
 }
 
 /* The canvas: blocks top to bottom; two half blocks in a row sit side by side (stacked when the pane is narrow). */
