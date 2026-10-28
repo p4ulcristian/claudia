@@ -878,13 +878,17 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* One long page: the columns' backgrounds run up under the status bar and down to the screen's
    bottom edge; only their content keeps clear of the notch, the status bar and the home bar. */
 .app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
-.split:not(.g-main) { padding-top: env(safe-area-inset-top); box-sizing: border-box; }
-.rail { padding-top: calc(46px + env(safe-area-inset-top)); }
-.sidebar { padding-top: calc(14px + env(safe-area-inset-top)); }
+:root { --top-safe: env(safe-area-inset-top); }
+/* A Home Screen app: iOS 26 lays its own blurred band over the status bar and about 16px below it
+   (a scroll edge effect no page can turn off), so content starts below the whole band. */
+@media (display-mode: standalone) { :root { --top-safe: calc(env(safe-area-inset-top) + 16px); } }
+.split:not(.g-main) { padding-top: var(--top-safe); box-sizing: border-box; }
+.rail { padding-top: calc(46px + var(--top-safe)); }
+.sidebar { padding-top: calc(14px + var(--top-safe)); }
 /* An iPhone Home Screen app (black-translucent status bar): 100%, 100svh and 100dvh all stop a
    status bar's height short of the screen's bottom; only 100lvh is the whole screen. */
 @media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
-.menu-toggle { top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); }
+.menu-toggle { top: calc(10px + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 .composer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
@@ -893,7 +897,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   input, textarea, select { font-size: 16px !important; }
   .composer { padding-bottom: 8px; }
   .sheet-tab { height: calc(34px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
-  .right.sheet { height: calc(86% - env(safe-area-inset-top)); }
+  .right.sheet { height: calc(86% - var(--top-safe)); }
   .right.sheet .rbar-zone { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
   /* While the keyboard is up the composer sits right on it: the Picture tab shows again when it closes. */
   :root[data-keyboard] .sheet-tab { display: none; }
