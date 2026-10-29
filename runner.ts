@@ -22,6 +22,7 @@ import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
 import { forkChat } from "./src/fork";
+import { agentDetail, agentGit, agentList, agentSteps, type Live } from "./src/agents";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
 // On the box: a unix socket only the page can reach (the unit's runtime folder grants it).
@@ -71,15 +72,19 @@ function projectFields(folder: string | null) {
 type Attention = { turns: Map<string, LastTurn>; seen: Map<string, number>; now: number };
 const attention = (): Attention => ({ turns: store.lastTurns(), seen: store.seen(), now: Date.now() });
 
+// Decision 25: work Claude left running after its turn (the row's agents) keeps the chat at work:
+// runningFor goes on from the turn's start, and it is unseen (done) only once that work ended and
+// settled (src/chat.ts), so the hub's "Finished" push and the badge wait for the same moment.
 function attentionFields(id: string, c: Chat | undefined, a: Attention) {
   const t = a.turns.get(id);
   const running = c?.running ?? false;
+  const working = running || (c?.agents ?? 0) > 0;
   return {
     asks: c ? [...c.asks.values()].map(({ value: q, at }) => ({ id: q.id, question: q.questions[0]?.question ?? "", ago: a.now - at })) : [],
     permits: c ? [...c.permits.values()].map(({ value: p, at }) => ({ id: p.id, tool: p.tool, description: p.description, ago: a.now - at })) : [],
     lastTurn: t ? { id: t.id, ago: a.now - t.at, stopped: t.stopped, failed: t.failed, reply: t.reply } : null,
-    runningFor: running && c!.since ? a.now - c!.since : null,
-    unseen: !!t && !t.stopped && !running && t.at > (a.seen.get(id) ?? 0),
+    runningFor: working && c!.since ? a.now - c!.since : null,
+    unseen: !!t && !t.stopped && !working && !c?.settling && t.at > (a.seen.get(id) ?? 0),
   };
 }
 
@@ -118,6 +123,7 @@ async function listChats(all: boolean, archivedView: boolean) {
       running: c.running,
       waiting: c.waiting,
       agents: c.agents,
+      settling: c.settling,
       color: colors.get(c.id) ?? c.settings.color ?? null,
       archived: false,
       ...projectFields(c.settings.folder),
@@ -139,6 +145,8 @@ function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<st
       running: chats.get(s.sessionId)?.running ?? false,
       waiting: chats.get(s.sessionId)?.waiting ?? false,
       agents: chats.get(s.sessionId)?.agents ?? 0,
+      // The last agent just ended: a turn of Claude's own may follow (src/chat.ts settle).
+      settling: chats.get(s.sessionId)?.settling ?? false,
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
       ...projectFields(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
@@ -180,6 +188,12 @@ async function openChat(ws: Sock, id: string) {
 }
 
 const json = (v: unknown, status = 200) => Response.json(v, { status });
+
+// What the runner knows live about a chat's work, for src/agents.ts.
+function liveOf(id: string): Live {
+  const c = chats.get(id);
+  return { running: c?.running ?? false, tasks: c ? [...c.tasks.values()] : [], folder: c?.settings.folder ?? store.settings(id).folder };
+}
 
 // The chats' Claude Code processes live in the session host (host.ts), so restarting this runner
 // leaves them running: the host hands back every live session, and its chat picks it up. Chats are
@@ -264,6 +278,55 @@ Bun.serve({
         const t = await timeline(id, c?.running ?? false, agents);
         if (!t) return json({ error: "not found" }, 404);
         return new URL(req.url).searchParams.get("v") === t.v ? json({ same: true, v: t.v, now: t.now }) : json(t);
+      },
+    },
+    // The work Claude started beside the chat (decision 25, src/agents.ts): every subagent and
+    // background shell with its step now, for the chips under the title and the agents list. ?v= as
+    // the timeline's.
+    "/api/chats/:id/agents": {
+      GET: async (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const list = await agentList(id, liveOf(id));
+        if (!list) return json({ v: "", now: Date.now(), agents: [] });
+        return new URL(req.url).searchParams.get("v") === list.v ? json({ same: true, v: list.v, now: list.now }) : json(list);
+      },
+    },
+    // One agent in full: its facts, prompt, report, file edits and worktree branch.
+    "/api/chats/:id/agents/:agent": {
+      GET: async (req) => {
+        if (!uuidRe.test(req.params.id)) return json({ error: "bad id" }, 400);
+        try {
+          const d = await agentDetail(req.params.id, req.params.agent, liveOf(req.params.id));
+          return d ? json(d) : json({ error: "not found" }, 404);
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
+      },
+    },
+    // An agent's steps from its own file (?from= items the page has whole, ?v= its file length).
+    "/api/chats/:id/agents/:agent/steps": {
+      GET: async (req) => {
+        if (!uuidRe.test(req.params.id)) return json({ error: "bad id" }, 400);
+        const p = new URL(req.url).searchParams;
+        const d = await agentSteps(req.params.id, req.params.agent, Number(p.get("from")) || 0, p.get("v")).catch(() => null);
+        return d ? json(d) : json({ error: "not found" }, 404);
+      },
+    },
+    // An agent's worktree branch for the commit view: ?commit= one of its commits or BRANCHED (all of
+    // it since the branch was made), &file= one file's patch. Read only; only that agent's branch.
+    "/api/chats/:id/agents/:agent/git": {
+      GET: async (req) => {
+        if (!uuidRe.test(req.params.id)) return json({ error: "bad id" }, 400);
+        const p = new URL(req.url).searchParams;
+        const rev = p.get("commit") ?? "";
+        if (rev !== "BRANCHED" && !/^[0-9a-f]{40}$/.test(rev)) return json({ error: "bad commit" }, 400);
+        try {
+          const d = await agentGit(req.params.id, req.params.agent, liveOf(req.params.id), rev, p.get("file"));
+          return d ? json(d) : json({ error: "not found" }, 404);
+        } catch (err) {
+          return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
       },
     },
     // One step of the timeline in full.
@@ -540,7 +603,8 @@ Bun.serve({
       POST: (req) => {
         const id = req.params.id;
         if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
-        const was = store.unseen(id);
+        const c = chats.get(id);
+        const was = store.unseen(id) && !c?.running && !c?.agents && !c?.settling;
         store.markSeen(id);
         if (was) broadcastChats();
         return json({ ok: true });

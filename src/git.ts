@@ -172,13 +172,15 @@ export async function commitDetail(root: string, rev: string): Promise<Detail> {
   return finish({ hash, author, email, date, when, parents: parents ? parents.split(" ").filter(Boolean) : [], subject, body: (body ?? "").trim() }, files, diff);
 }
 
-// Everything not committed: tracked changes against HEAD (staged and not) plus untracked files as additions.
-async function workingDetail(root: string): Promise<Detail> {
+// Everything not committed: tracked changes against HEAD (staged and not) plus untracked files as
+// additions. against: another commit to compare the working tree with (an agent's worktree against
+// where its branch started, src/agents.ts), named subject.
+export async function workingDetail(root: string, against = "HEAD", subject = "Uncommitted changes"): Promise<Detail> {
   const [numstat, nameStatus, untrackedRaw, head] = await Promise.all([
-    git(root, ["diff", "HEAD", "--no-color", "--numstat", "-M"], true),
-    git(root, ["diff", "HEAD", "--no-color", "--name-status", "-M"], true),
+    git(root, ["diff", against, "--no-color", "--numstat", "-M"], true),
+    git(root, ["diff", against, "--no-color", "--name-status", "-M"], true),
     git(root, ["ls-files", "--others", "--exclude-standard"], true),
-    git(root, ["rev-parse", "HEAD"], true),
+    git(root, ["rev-parse", against], true),
   ]);
   const files = mergeFiles(parseNumstat(numstat), parseNameStatus(nameStatus));
   const untracked = untrackedRaw.split("\n").filter(Boolean);
@@ -188,24 +190,79 @@ async function workingDetail(root: string): Promise<Detail> {
   }
   let diff: string | null = null;
   if (!tooBig(files)) {
-    diff = await git(root, ["diff", "HEAD", "--no-color", "--no-prefix", "--patch", "-M"], true);
+    diff = await git(root, ["diff", against, "--no-color", "--no-prefix", "--patch", "-M"], true);
     for (const f of untracked) {
       const d = await git(root, ["diff", "--no-index", "--no-color", "--no-prefix", "/dev/null", f], true); // exits 1 on any difference
       if (d) diff += (diff && !diff.endsWith("\n") ? "\n" : "") + d;
     }
   }
-  const meta = { hash: "WORKING", author: "", email: "", date: new Date().toISOString(), when: "now", parents: head.trim() ? [head.trim()] : [], subject: "Uncommitted changes", body: "" };
+  const meta = { hash: "WORKING", author: "", email: "", date: new Date().toISOString(), when: "now", parents: head.trim() ? [head.trim()] : [], subject, body: "" };
   return finish(meta, files, diff);
 }
 
 // One file's patch, for a file left out of a big commit's patch.
-export async function filePatch(root: string, rev: string, file: string): Promise<string> {
+export async function filePatch(root: string, rev: string, file: string, against = "HEAD"): Promise<string> {
   if (rev === "WORKING") {
-    const tracked = await git(root, ["diff", "HEAD", "--no-color", "--no-prefix", "--patch", "-M", "--", file], true);
+    const tracked = await git(root, ["diff", against, "--no-color", "--no-prefix", "--patch", "-M", "--", file], true);
     return tracked || git(root, ["diff", "--no-index", "--no-color", "--no-prefix", "/dev/null", file], true);
   }
   return git(root, ["show", "--format=", "--diff-merges=first-parent", "--no-color", "--no-prefix", "--patch", "-M", "--end-of-options", rev, "--", file]);
 }
+
+// ---- an agent's worktree branch (src/agents.ts) ----
+
+export type BranchCommit = { hash: string; subject: string; author: string; date: string; when: string };
+export type BranchWork = { root: string; branch: string; base: string | null; commits: BranchCommit[]; worktree: boolean };
+
+const HASH = /^[0-9a-f]{40}$/;
+
+// A branch's commits since where it was made: the oldest entry of its reflog ("Created from …"),
+// or, without one, where it meets the main checkout's HEAD. worktree: the agent's folder is still
+// there (else root is the repo the worktree belonged to, and only the branch is read).
+export async function branchWork(worktree: string, branch: string): Promise<BranchWork | null> {
+  const here = statSync(worktree, { throwIfNoEntry: false })?.isDirectory() ?? false;
+  // The repo a worktree belongs to: its common git folder's parent (Claude Code's worktrees sit in
+  // <repo>/.claude/worktrees/<name>, which is also where to look once the folder is gone).
+  const common = here ? (await git(worktree, ["rev-parse", "--path-format=absolute", "--git-common-dir"], true)).trim() : "";
+  const repo = common.endsWith("/.git") ? common.slice(0, -5) : worktree.match(/^(.*)\/\.claude\/worktrees\/[^/]+\/?$/)?.[1] ?? null;
+  const root = here ? worktree : repo;
+  if (!root || !statSync(root, { throwIfNoEntry: false })?.isDirectory()) return null;
+  const tip = (await git(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], true)).trim();
+  if (!HASH.test(tip)) return null;
+  const made = (await git(root, ["reflog", "show", "--format=%H", `refs/heads/${branch}`, "--"], true)).trim().split("\n").at(-1) ?? "";
+  let base: string | null = null;
+  if (HASH.test(made) && (await isAncestor(root, made, tip))) base = made;
+  else if (repo) {
+    const mb = (await git(repo, ["merge-base", tip, "HEAD"], true)).trim();
+    if (HASH.test(mb)) base = mb;
+  }
+  const fmt = ["%H", "%s", "%an", "%aI", "%ar"].join(F);
+  const log = base ? await git(root, ["log", `--format=${fmt}${R}`, "-n", "500", `${base}..${tip}`], true) : "";
+  const commits = log.split(R).map((s) => s.trim()).filter(Boolean).map((s) => {
+    const [hash, subject, author, date, when] = s.split(F);
+    return { hash: hash!, subject: subject ?? "", author: author ?? "", date: date ?? "", when: when ?? "" };
+  });
+  return { root, branch, base, commits, worktree: here };
+}
+
+async function isAncestor(root: string, a: string, b: string) {
+  const p = Bun.spawn(["git", "-C", root, "merge-base", "--is-ancestor", a, b], { stdout: "ignore", stderr: "ignore", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+  return (await p.exited) === 0;
+}
+
+// Two commits' difference as one Detail (a worktree that is gone: its branch against its base).
+export async function rangeDetail(root: string, from: string, to: string, subject: string): Promise<Detail> {
+  const [numstat, nameStatus] = await Promise.all([
+    git(root, ["diff", "--no-color", "--numstat", "-M", from, to]),
+    git(root, ["diff", "--no-color", "--name-status", "-M", from, to]),
+  ]);
+  const files = mergeFiles(parseNumstat(numstat), parseNameStatus(nameStatus));
+  const diff = tooBig(files) ? null : await git(root, ["diff", "--no-color", "--no-prefix", "--patch", "-M", from, to]);
+  return finish({ hash: "RANGE", author: "", email: "", date: new Date().toISOString(), when: "", parents: [from], subject, body: "" }, files, diff);
+}
+
+export const rangePatch = (root: string, from: string, to: string, file: string) =>
+  git(root, ["diff", "--no-color", "--no-prefix", "--patch", "-M", from, to, "--", file]);
 
 // Beyond MAX_LINES changed lines the patch isn't made at all (it can be hundreds of MB); beyond
 // BUDGET bytes only the first files' patches come. The rest load one file at a time.

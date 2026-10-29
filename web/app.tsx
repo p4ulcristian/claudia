@@ -9,6 +9,7 @@ import { TimelineView } from "./timeline";
 import { RightBar } from "./rightbar";
 import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
+import { AgentChips, AgentScreen, AgentsRing, useAgentView } from "./agents";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, ContextMenu, type MenuChat } from "./chatmenu";
@@ -155,6 +156,9 @@ function mergeByStart(lists: Row[][]): Row[] {
     out.push(lists[best]![at[best]!++]!);
   }
 }
+
+// Claude's turn runs, or work it left running after the turn does (decision 25): not done yet.
+const working = (c: ChatRow) => c.running || (c.agents ?? 0) > 0 || !!c.settling;
 
 function ago(t: number) {
   const s = (Date.now() - t) / 1000;
@@ -344,6 +348,8 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [resolving, setResolving] = useState(first.old);
   const curKey = keyOf(current.server, current.id);
   const [live, setLive] = useState<Live>(() => fresh(current.id));
+  // An agent's view (or the list of them, "") over the chat column (decision 25).
+  const agentView = useAgentView(curKey, phone);
   const [viewing, setViewing] = useState<string | null>(null);
   // The chat column's width in px, not a share of the window: maximizing gives the room to the
   // picture. CHAT_WIDTH until dragged; a drag (wider too) is kept.
@@ -436,13 +442,13 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       for (const c of rows) {
         const k = keyOf(s, c.id);
         const kind = c.waiting && !wasWaiting.current.get(k) ? "waiting"
-          : wasRunning.current.get(k) && !c.running && !c.waiting ? "done" : null;
+          : wasRunning.current.get(k) && !working(c) && !c.waiting ? "done" : null;
         if (!kind || !heard(c)) continue;
         if (soundsRef.current) play(kind, c.color);
         if (popupsRef.current) popup(kind, c, () => openRef.current({ server: s, id: c.id }));
       }
     }
-    for (const c of rows) { wasRunning.current.set(keyOf(s, c.id), c.running); wasWaiting.current.set(keyOf(s, c.id), c.waiting); }
+    for (const c of rows) { wasRunning.current.set(keyOf(s, c.id), working(c)); wasWaiting.current.set(keyOf(s, c.id), c.waiting); }
     setLists((l) => ({ ...l, [id]: rows }));
     if (hubMode) store.set(`hub.list.${id}`, JSON.stringify(rows));
   }, [all, archivedView, viewSig]);
@@ -652,6 +658,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const serverOf = (id: string) => servers.find((s) => Object.entries(lists).some(([k, rows]) => k.startsWith(`${s.name}|`) && rows?.some((c) => c.id === id)))?.name;
   useEffect(() => {
     const pop = (e: PopStateEvent) => {
+      if (agentView.onPop(e)) return;
       if (phoneRef.current && e.state?.screen === "list") { closePicture(); setScreen("list"); return; }
       setScreen("chat");
       const p = fromPath();
@@ -801,19 +808,9 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const shownChanges = changesTurn ? live.changes.filter((c) => c.turn === changesTurn) : [];
   const lastUser = [...live.items].reverse().find((i) => i.k === "user") as Extract<Item, { k: "user" }> | undefined;
   const changesLabel = viewing ? "Earlier turn" : changesTurn === lastUser?.uuid ? "This turn" : "Last turn with changes";
-  // Background agents and this turn's changes, as a pill: over the picture, or in the timeline's header.
-  const activity = (
-    <ActivityPill
-      chat={current.id}
-      tasks={live.tasks}
-      subs={live.subs}
-      changes={shownChanges}
-      changesLabel={changesLabel}
-      folder={live.settings.folder}
-      onStop={(task) => send({ t: "stop_task", chat: current.id, task })}
-      onTimeline={() => setRightView("timeline")}
-    />
-  );
+  // This turn's changes, as a pill in the chat's header (its agents are chips under the title).
+  const activity = <ActivityPill chat={current.id} changes={shownChanges} changesLabel={changesLabel} folder={live.settings.folder} />;
+  const stopTask = (task: string) => send({ t: "stop_task", chat: current.id, task });
 
   // Step through the pictures Claude made in this chat; the newest one is "live".
   const picIndex = viewing ? live.pictures.findIndex((p) => p.turn === viewing) : live.pictures.length - 1;
@@ -965,8 +962,8 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
                 >
                   <span className="rail-dot">
                     <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
-                    <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : doneMark(c) ? "done" : null} />
-                    <AgentMoons n={c.agents} />
+                    {!c.waiting && !c.running && (c.agents > 0 || c.settling) ? <AgentsRing n={c.agents} /> : <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : doneMark(c) ? "done" : null} />}
+                    <AgentMoons n={c.running ? c.agents : 0} />
                   </span>
                   <span className="rail-name">{c.title}</span>
                   {hubMode && <span className="rail-server">{labelOf(c.server)}</span>}
@@ -1029,7 +1026,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
               >
                 {c.running && !c.off && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
-                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : doneMark(c) ? <span className="row-mark done" title="Done">✓</span> : null)}
+                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : !c.running && c.agents > 0 ? <span className="row-mark agents" title="Agents still working">{c.agents}</span> : doneMark(c) ? <span className="row-mark done" title="Done">✓</span> : null)}
                 {markOf(c)}
                 <span className="when">{ago(c.at)}</span>
               </button>
@@ -1135,6 +1132,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
               </button>
             )}
           </header>
+          <AgentChips chat={current.id} tasks={live.tasks} phone={phone} readOnly={readOnly} onOpen={agentView.open} onStop={stopTask} />
+          {agentView.shown !== null && (
+            <AgentScreen chat={current.id} id={agentView.shown} tasks={live.tasks} readOnly={readOnly} onBack={agentView.close} onOpen={agentView.open} onStop={stopTask} onTimeline={() => setRightView("timeline")} />
+          )}
           <Messages
             chat={current.id}
             items={live.items}

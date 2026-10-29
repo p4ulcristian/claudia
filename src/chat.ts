@@ -14,10 +14,16 @@ import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, rea
 import { DATA_DIR } from "./db";
 import { applyDraw, describe, emptyScene, type Block, type DrawInput, type Scene } from "./scene";
 import { guardDraw, sendCode, userEdit } from "./editor";
+import { workingTops } from "./working";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
 const IDLE_MS = 15 * 60_000;
+// The last background task ended after Claude's turn: its notice usually starts a turn of Claude's
+// own within a moment, so the chat counts as finished only when none started meanwhile (decision 25).
+// A turn's init message extends the wait, for a first answer that is slow to come.
+const SETTLE_MS = 5_000;
+const SETTLE_INIT_MS = 30_000;
 const DRAW_TOOL = "mcp__picture__draw";
 const FOLDER_TOOL = "mcp__workspace__set_folder";
 
@@ -168,7 +174,7 @@ export function resultText(content: unknown): string {
 }
 
 // Messages API content → chat items. Thinking is left out on purpose.
-function assistantItems(msgId: string, content: any[]): Item[] {
+export function assistantItems(msgId: string, content: any[]): Item[] {
   const out: Item[] = [];
   content.forEach((b, n) => {
     if (b.type === "text" && b.text.trim()) out.push({ k: "text", id: `${msgId}:${n}`, text: b.text });
@@ -612,8 +618,63 @@ export class Chat implements SessionHandler {
 
   private emitTasks() {
     this.emit({ t: "tasks", tasks: [...this.tasks.values()] });
+    this.watchWork();
     this.onChange();
     if (!this.replaying) this.restartIfStale();
+  }
+
+  // The work left running after a turn: when the last of it ends with no turn running, the chat has
+  // finished then, once SETTLE_MS passed without a turn of Claude's own (settling meanwhile, which
+  // holds the done mark and the push back). The last turn's time moves to that moment, so whoever
+  // opened the chat while the agents worked sees it done again, and the hub's push is fresh news.
+  settling = false;
+  private settleTimer: Timer | null = null;
+  private workingWas = 0;
+  private watchWork() {
+    const n = this.agents;
+    const was = this.workingWas;
+    this.workingWas = n;
+    if (this.replaying) return;
+    if (n > 0 || this.running) return this.unsettle();
+    if (was > 0) this.settle(SETTLE_MS);
+  }
+  private settle(wait: number) {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settling = true;
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      this.settling = false;
+      if (this.running || this.agents) return;
+      const t = store.lastTurn(this.id);
+      if (t && !t.stopped) store.saveTurn(this.id, { ...t, at: Date.now() });
+      this.armIdle();
+      this.onChange();
+    }, wait);
+  }
+  private unsettle() {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.settling = false;
+  }
+
+  // Its Claude Code goes after a quiet while, never while work it started still runs (that would end
+  // the work; settling arms it again once the last of it ended).
+  private armIdle() {
+    if (this.idle) clearTimeout(this.idle);
+    this.idle = null;
+    if (this.running) return;
+    this.idle = setTimeout(() => !this.running && !this.agents && this.close(), IDLE_MS);
+  }
+
+  // The chat's Claude Code is gone, and every task it ran with it: none may stay "running".
+  private endTasks() {
+    let any = false;
+    for (const [id, t] of this.tasks)
+      if (t.status === "running") {
+        this.tasks.set(id, { ...t, status: "stopped", endedAt: Date.now() });
+        any = true;
+      }
+    if (any) this.emitTasks();
   }
 
   private patchTask(id: string, patch: Partial<Task>) {
@@ -642,11 +703,11 @@ export class Chat implements SessionHandler {
     if (e.t === "ask" || e.t === "permit" || e.t === "ask_done" || e.t === "permit_done") this.onChange();
   }
 
-  // Subagents still working (shells left out: a dev server would count forever).
+  // Work Claude started beside the chat that still runs (decision 25): its subagents and the shells
+  // it put in the background, an agent's own counting as part of it. After Claude's turn ends the
+  // chat is still at work while any runs: no done mark and no "Finished" push until the last ends.
   get agents() {
-    let n = 0;
-    for (const t of this.tasks.values()) if (t.status === "running" && !t.ambient && !/shell|bash|local/i.test(t.kind)) n++;
-    return n;
+    return workingTops(this.tasks.values()).length;
   }
 
   // A question or a permission ask is open: the turn waits on the user.
@@ -675,8 +736,9 @@ export class Chat implements SessionHandler {
       return null;
     });
     if (!acct) return;
-    // The token was replaced since this chat's Claude Code started: start it again on the new one.
-    if (this.q && !this.running && this.account !== acct.name) this.close();
+    // The token was replaced since this chat's Claude Code started: start it again on the new one
+    // (not while work it started still runs, which that would end).
+    if (this.q && !this.running && !this.agents && this.account !== acct.name) this.close();
     if (!this.q) await this.start(acct);
     this.turn = uuid;
     this.drew = false;
@@ -754,6 +816,7 @@ export class Chat implements SessionHandler {
   close() {
     this.q?.close();
     this.q = null;
+    this.endTasks();
   }
 
   private setRunning(r: boolean) {
@@ -766,14 +829,14 @@ export class Chat implements SessionHandler {
     if (r) {
       this.since = Date.now();
       this.q?.kv("since", this.since);
+      this.unsettle();
     }
     this.emit({ t: "status", running: r });
     // A turn that ended took in everything sent during it (a send not taken in starts the next turn),
     // even sends Claude Code merged and never reported as started.
     if (!r) for (const it of this.unsaved.values()) if (it.k === "user" && it.queued) this.lifecycle({ command_uuid: it.uuid, state: "started" });
     this.onChange();
-    if (this.idle) clearTimeout(this.idle);
-    if (!r) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
+    this.armIdle();
   }
 
   private draw(input: DrawInput): string {
@@ -1001,6 +1064,7 @@ export class Chat implements SessionHandler {
     this.q = null;
     this.partial = "";
     this.setRunning(false);
+    this.endTasks();
   }
 
   // After a runner restart: the host still runs this chat's Claude Code. Take back what was kept
@@ -1024,6 +1088,7 @@ export class Chat implements SessionHandler {
     }
     this.running = false;
     this.setRunning(live.busy);
+    this.workingWas = this.agents;
     // The runner's tools changed since this session started (e.g. a new card kind): hand it the new ones.
     this.formsSeen = (kv.formsSeen as FormsSeen | undefined) ?? null;
     if (kv.tools !== toolsVersion(tools(this.settings.forms))) this.swapTools(session);
@@ -1033,7 +1098,7 @@ export class Chat implements SessionHandler {
       this.restartIfStale();
     }
     if (live.busy) this.since = Number(kv.since ?? Date.now());
-    else if (!this.idle) this.idle = setTimeout(() => !this.running && this.close(), IDLE_MS);
+    else if (!this.idle) this.armIdle();
     return this;
   }
 
@@ -1116,6 +1181,8 @@ export class Chat implements SessionHandler {
   private system(m: any) {
     switch (m.subtype) {
       case "init":
+        // A turn is starting (init comes ahead of its messages): a settling chat waits for it.
+        if (this.settling && !this.replaying) this.settle(SETTLE_INIT_MS);
         this.model = m.model;
         this.emit({ t: "settings", settings: this.settings, model: this.model });
         if (!this.replaying) this.readContext();
@@ -1144,7 +1211,7 @@ export class Chat implements SessionHandler {
           background: !!m.is_backgrounded,
           startedAt: Date.now(),
           parentId: m.parent_task_id,
-          ambient: !!m.skip_transcript,
+          ambient: !!(m.ambient || m.skip_transcript),
         });
         return this.emitTasks();
       case "background_tasks_changed": {

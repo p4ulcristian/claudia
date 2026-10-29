@@ -156,6 +156,7 @@ const q = {
   deleteTemplate: db.query("DELETE FROM templates WHERE name = ? COLLATE NOCASE"),
   lastTurns: db.query<{ session_id: string; turn: string; at: number; stopped: number; failed: number; reply: string }, []>("SELECT * FROM last_turns"),
   lastTurn: db.query<{ turn: string; at: number; stopped: number }, [string]>("SELECT turn, at, stopped FROM last_turns WHERE session_id = ?"),
+  lastTurnRow: db.query<{ session_id: string; turn: string; at: number; stopped: number; failed: number; reply: string }, [string]>("SELECT * FROM last_turns WHERE session_id = ?"),
   seenAt: db.query<{ at: number }, [string]>("SELECT at FROM seen WHERE session_id = ?"),
   saveTurn: db.query(
     `INSERT INTO last_turns (session_id, turn, at, stopped, failed, reply) VALUES (?, ?, ?, ?, ?, ?)
@@ -233,6 +234,10 @@ export const store = {
   lastTurns: () =>
     new Map(q.lastTurns.all().map((r): [string, LastTurn] => [r.session_id, { id: r.turn, at: r.at, stopped: !!r.stopped, failed: !!r.failed, reply: r.reply }])),
   lastTurnId: (id: string) => q.lastTurn.get(id)?.turn ?? null,
+  lastTurn: (id: string): LastTurn | null => {
+    const r = q.lastTurnRow.get(id);
+    return r ? { id: r.turn, at: r.at, stopped: !!r.stopped, failed: !!r.failed, reply: r.reply } : null;
+  },
   saveTurn: (id: string, t: LastTurn) => q.saveTurn.run(id, t.id, t.at, t.stopped ? 1 : 0, t.failed ? 1 : 0, t.reply),
   seen: () => new Map(q.seen.all().map((r) => [r.session_id, r.at])),
   // The chat's last turn ended (not stopped) after the person last had it open.

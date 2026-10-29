@@ -264,7 +264,7 @@ function Graph({ log, openHash, markOf, onOpen }: { log: Log; openHash: string |
 
 // One commit (or the uncommitted changes), beside the graph: what it says, its files with +/−, and each file's diff.
 // The uncommitted view is read again whenever the graph's fingerprint changes.
-function CommitView({ base, rev, fp, close }: { base: string; rev: string; fp?: string; close: () => void }) {
+export function CommitView({ base, rev, fp, close }: { base: string; rev: string; fp?: string; close: () => void }) {
   const api = useApi();
   const [d, setD] = useState<Detail | { error: string } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -298,7 +298,7 @@ function CommitView({ base, rev, fp, close }: { base: string; rev: string; fp?: 
         <div>
           <b className="g-detail-subj">{meta.subject}</b>
           <div className="g-meta">
-            {meta.hash !== "WORKING" && <><span className="h">{meta.hash.slice(0, 10)}</span> · {meta.author} · {new Date(meta.date).toLocaleString()} · </>}
+            {meta.hash !== "WORKING" && meta.hash !== "RANGE" && <><span className="h">{meta.hash.slice(0, 10)}</span> · {meta.author} · {new Date(meta.date).toLocaleString()} · </>}
             {stats.files} file{stats.files === 1 ? "" : "s"} <span className="st-A">+{stats.additions}</span> <span className="st-D">−{stats.deletions}</span>
             {meta.parents.length > 1 && <> · merge (diff against its first parent)</>}
           </div>

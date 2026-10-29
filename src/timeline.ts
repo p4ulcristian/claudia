@@ -5,13 +5,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { open, readdir, readFile, stat } from "node:fs/promises";
+import { structuredPatch } from "diff";
 import { WORK, resultText, sentMidTurn, stripReminders, toolLabel, toolTitle } from "./chat";
 
 // Where a line sits in its file: byte offset and length.
-type Loc = [number, number];
+export type Loc = [number, number];
 
 export type TimelineEvent =
-  // diff: lines added and removed, for file edits whose result carries a patch.
+  // diff: lines added and removed, for file edits whose result carries a patch (a subagent's: counted
+  // from the call's input).
   | { k: "tool"; id: string; name: string; title: string; start: number; end?: number; error?: boolean; agent?: string; diff?: { added: number; removed: number } }
   | { k: "text"; id: string; at: number; text: string }
   | { k: "user"; id: string; at: number; text: string }
@@ -60,6 +62,32 @@ function patchOf(r: any): Patch | null {
   return { file: r.filePath, created: false, hunks, cut: left < 0 };
 }
 
+// An edit's patch made from its call's input, for a file that keeps none of Claude Code's (a
+// subagent's): the replaced text against the new, numbered within the text (where in the file it
+// sits isn't known); a Write is all its lines added.
+const EDIT_CALLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/;
+export function inputPatch(name: string, i: any): Patch | null {
+  const file = String(i?.file_path ?? i?.notebook_path ?? "");
+  if (!file || !EDIT_CALLS.test(name)) return null;
+  if (name === "Write") return patchOf({ type: "create", filePath: file, content: String(i.content ?? "") });
+  const pairs: [string, string][] = name === "MultiEdit" && Array.isArray(i.edits)
+    ? i.edits.map((e: any) => [String(e?.old_string ?? ""), String(e?.new_string ?? "")])
+    : name === "NotebookEdit" ? [["", String(i.new_source ?? "")]] : [[String(i.old_string ?? ""), String(i.new_string ?? "")]];
+  const hunks: Hunk[] = pairs.flatMap(([a, b]) => structuredPatch("a", "b", a.endsWith("\n") ? a : `${a}\n`, b.endsWith("\n") ? b : `${b}\n`, "", "", { context: 3 }).hunks);
+  return { file, created: false, hunks: hunks.map((h) => ({ ...h, lines: h.lines.slice(0, PATCH_LINES) })), cut: false };
+}
+
+function inputCounts(name: string, i: any): { added: number; removed: number } | undefined {
+  const p = inputPatch(name, i);
+  if (!p) return undefined;
+  let added = 0, removed = 0;
+  for (const h of p.hunks) for (const l of h.lines) {
+    if (l[0] === "+") added++;
+    else if (l[0] === "-") removed++;
+  }
+  return { added, removed };
+}
+
 function counts(r: any): { added: number; removed: number } | undefined {
   if (!r || typeof r !== "object" || typeof r.filePath !== "string") return undefined;
   if (r.type === "create" && typeof r.content === "string") return { added: r.content.replace(/\n$/, "").split("\n").length, removed: 0 };
@@ -78,7 +106,16 @@ const FULL = 1_000_000;
 const CHUNK = 4 << 20;
 
 type ToolEv = Extract<TimelineEvent, { k: "tool" }>;
-type Parsed = {
+// What src/agents.ts reads about the work Claude started from a file: an Agent call's choices, a
+// background shell's command, and how each ended (its task notification, or a foreground agent's
+// saved result).
+export type Call =
+  | { kind: "agent"; description: string; type: string; model: string | null; effort: string | null; background: boolean; isolation: string | null }
+  | { kind: "shell"; description: string; command: string };
+export type Notice = { task: string; status: string; at: number; tokens: number | null; tools: number | null; ms: number | null; loc: Loc };
+// status: "completed" (a foreground agent's end), "async_launched" (a background one's start), "failed".
+export type Outcome = { status: string; tokens: number | null; tools: number | null; ms: number | null; agent: string | null; model: string | null };
+export type Parsed = {
   offset: number;
   rest: Buffer;
   restAt: number;
@@ -88,14 +125,63 @@ type Parsed = {
   tools: Map<string, ToolEv>;
   // Where each event's line(s) are: the tool_use line, the tool_result line.
   locs: Map<string, { use?: Loc; result?: Loc }>;
+  // What each tool call works on (a file's full path, a command, a query), for an agent's step line.
+  targets: Map<string, string>;
+  calls: Map<string, Call>;
+  // By the tool_use id of the call that started the task; the newest notice wins.
+  notices: Map<string, Notice>;
+  outcomes: Map<string, Outcome>;
+  // A subagent's edits waiting for their result, counted from their input (inputCounts).
+  edits: Map<string, { added: number; removed: number }>;
+  // The newest assistant message's model and its tokens (input, cache and output: the size the SDK
+  // reports as an agent's total_tokens).
+  model: string | null;
+  tokens: number | null;
 };
+
+// The thing a tool call works on, whole (toolTitle shortens it for the chat's one-line steps).
+function targetOf(name: string, i: any): string {
+  switch (name) {
+    case "Read": case "Write": case "Edit": case "MultiEdit": case "NotebookEdit": return String(i?.file_path || i?.notebook_path || "");
+    case "Bash": return String(i?.command ?? "").split("\n")[0]!.slice(0, 300);
+    case "Grep": case "Glob": return String(i?.pattern ?? "").slice(0, 200);
+    case "WebSearch": return String(i?.query ?? "").slice(0, 200);
+    case "WebFetch": return String(i?.url ?? "").slice(0, 300);
+    default: return "";
+  }
+}
+
+const tag = (s: string, t: string) => s.match(new RegExp(`<${t}>([^<]*)</${t}>`))?.[1]?.trim() ?? null;
+const num = (s: string | null) => (s !== null && /^\d+$/.test(s) ? Number(s) : null);
+
+// Task notifications in a raw line (a user message, or the queue entry before it): JSON-escaped
+// there, which the ids, the status and the usage numbers never need.
+function takeNotices(p: Parsed, line: string, loc: Loc, at: number) {
+  for (const m of line.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
+    const body = m[1]!;
+    const use = tag(body, "tool-use-id");
+    const task = tag(body, "task-id");
+    if (!use || !task) continue;
+    const had = p.notices.get(use);
+    if (had && had.at > at) continue;
+    p.notices.set(use, {
+      task, status: tag(body, "status") ?? "completed", at,
+      tokens: num(tag(body, "subagent_tokens") ?? tag(body, "total_tokens")), tools: num(tag(body, "tool_uses")), ms: num(tag(body, "duration_ms")), loc,
+    });
+  }
+}
 
 const ms = (t: unknown) => (typeof t === "string" ? Date.parse(t) : NaN);
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
 function fresh(): Parsed {
-  return { offset: 0, rest: Buffer.alloc(0), restAt: 0, first: 0, last: 0, events: [], tools: new Map(), locs: new Map() };
+  return {
+    offset: 0, rest: Buffer.alloc(0), restAt: 0, first: 0, last: 0, events: [], tools: new Map(), locs: new Map(),
+    targets: new Map(), calls: new Map(), notices: new Map(), outcomes: new Map(), edits: new Map(), model: null, tokens: null,
+  };
 }
+
+const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 
 // One line of a session file into events.
 function take(p: Parsed, line: string, loc: Loc) {
@@ -105,6 +191,7 @@ function take(p: Parsed, line: string, loc: Loc) {
   } catch {
     return;
   }
+  if (line.includes("<task-notification>") && Number.isFinite(ms(d.timestamp))) takeNotices(p, line, loc, ms(d.timestamp));
   if (d.type !== "user" && d.type !== "assistant") return;
   if (d.isMeta || d.isCompactSummary) return;
   const at = ms(d.timestamp);
@@ -114,6 +201,10 @@ function take(p: Parsed, line: string, loc: Loc) {
   const content = d.message?.content;
 
   if (d.type === "assistant") {
+    if (typeof d.message?.model === "string" && !d.message.model.startsWith("<")) p.model = d.message.model;
+    const u = d.message?.usage;
+    if (u && typeof u.input_tokens === "number")
+      p.tokens = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.output_tokens ?? 0);
     if (!Array.isArray(content)) return;
     content.forEach((b: any, n: number) => {
       if (b.type === "text" && b.text?.trim()) {
@@ -126,6 +217,21 @@ function take(p: Parsed, line: string, loc: Loc) {
         p.tools.set(b.id, ev);
         p.events.push(ev);
         p.locs.set(b.id, { use: loc });
+        const target = targetOf(b.name, b.input);
+        if (target) p.targets.set(b.id, target);
+        // (only a subagent's lines: the chat's own results carry Claude Code's patch)
+        if (d.isSidechain && EDIT_CALLS.test(b.name)) {
+          const c = inputCounts(b.name, b.input);
+          if (c) p.edits.set(b.id, c);
+        }
+        const i = b.input ?? {};
+        if (b.name === "Agent" || b.name === "Task")
+          p.calls.set(b.id, {
+            kind: "agent", description: String(i.description ?? ""), type: String(i.subagent_type ?? "general-purpose"),
+            model: str(i.model), effort: str(i.effort), background: !!i.run_in_background, isolation: str(i.isolation),
+          });
+        else if (b.name === "Bash" && i.run_in_background)
+          p.calls.set(b.id, { kind: "shell", description: String(i.description ?? ""), command: String(i.command ?? "").slice(0, 4000) });
       }
     });
     return;
@@ -140,8 +246,21 @@ function take(p: Parsed, line: string, loc: Loc) {
       ev.end = at;
       ev.error = !!b.is_error;
       // The saved result (with a file edit's patch) belongs to the line's only tool result.
-      if (results.length === 1 && !b.is_error) ev.diff = counts(d.toolUseResult);
+      // A subagent's file keeps no patch: its counts come from the call's input.
+      if (!b.is_error) ev.diff = (results.length === 1 ? counts(d.toolUseResult) : undefined) ?? p.edits.get(b.tool_use_id);
+      p.edits.delete(b.tool_use_id);
       p.locs.get(b.tool_use_id)!.result = loc;
+      // A foreground agent's result says how it went; a background one's says it was started.
+      const r = results.length === 1 ? d.toolUseResult : null;
+      if (p.calls.get(b.tool_use_id)?.kind === "agent")
+        p.outcomes.set(b.tool_use_id, {
+          status: b.is_error ? "failed" : typeof r?.status === "string" ? r.status : "completed",
+          tokens: typeof r?.totalTokens === "number" ? r.totalTokens : null,
+          tools: typeof r?.totalToolUseCount === "number" ? r.totalToolUseCount : null,
+          ms: typeof r?.totalDurationMs === "number" ? r.totalDurationMs : null,
+          agent: typeof r?.agentId === "string" ? r.agentId : null,
+          model: typeof r?.resolvedModel === "string" ? r.resolvedModel : null,
+        });
     }
     return;
   }
@@ -163,7 +282,18 @@ function take(p: Parsed, line: string, loc: Loc) {
 const cache = new Map<string, { parsed: Parsed; used: number }>();
 const MAX_FILES = 64;
 
-async function readNew(path: string): Promise<Parsed | null> {
+const readNew = (path: string) => readLines(path, cache, fresh, take, MAX_FILES);
+
+// A session file read on from where the last read stopped, each whole line handed to take with its
+// place; what take builds is kept per path (up to max files, the least used dropped).
+export type Tail = { offset: number; rest: Buffer; restAt: number };
+export async function readLines<S extends Tail>(
+  path: string,
+  cache: Map<string, { parsed: S; used: number }>,
+  fresh: () => S,
+  take: (s: S, line: string, loc: Loc) => void,
+  max: number,
+): Promise<S | null> {
   let size: number;
   try {
     size = (await stat(path)).size;
@@ -202,8 +332,8 @@ async function readNew(path: string): Promise<Parsed | null> {
       await f.close();
     }
   }
-  if (cache.size > MAX_FILES) {
-    const old = [...cache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, cache.size - MAX_FILES);
+  if (cache.size > max) {
+    const old = [...cache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, cache.size - max);
     for (const [k] of old) cache.delete(k);
   }
   return p;
@@ -248,7 +378,8 @@ export async function mergedSends(sessionId: string): Promise<Set<string>> {
   return merged;
 }
 
-type AgentMeta = { agentType?: string; description?: string; toolUseId?: string; parentAgentId?: string };
+// worktreePath and worktreeBranch: an agent started in a git worktree of its own.
+type AgentMeta = { agentType?: string; description?: string; toolUseId?: string; parentAgentId?: string; worktreePath?: string; worktreeBranch?: string; finished?: boolean };
 
 async function agentFiles(dir: string, sessionId: string) {
   const sub = join(dir, sessionId, "subagents");
@@ -260,6 +391,19 @@ async function agentFiles(dir: string, sessionId: string) {
       return { id, path: join(sub, `agent-${id}.jsonl`), meta };
     }),
   );
+}
+
+// The chat's own file and every subagent's, read as far as they are written (src/agents.ts).
+export type AgentFile = { id: string; path: string; meta: AgentMeta; p: Parsed | null };
+export async function sessionParts(sessionId: string): Promise<{ main: Parsed; mainPath: string; lanes: AgentFile[] } | null> {
+  const dir = await sessionDir(sessionId);
+  if (!dir) return null;
+  const mainPath = join(dir, `${sessionId}.jsonl`);
+  const main = await readNew(mainPath);
+  if (!main) return null;
+  const files = await agentFiles(dir, sessionId);
+  const lanes = await Promise.all(files.map(async (f) => ({ ...f, p: await readNew(f.path) })));
+  return { main, mainPath, lanes };
 }
 
 function filePath(dir: string, sessionId: string, lane: string) {
@@ -326,7 +470,7 @@ function order(lanes: Lane[]): Lane[] {
   return out;
 }
 
-async function readLoc(path: string, [off, len]: Loc): Promise<any> {
+export async function readLoc(path: string, [off, len]: Loc): Promise<any> {
   const f = await open(path, "r");
   try {
     const buf = Buffer.alloc(len);
@@ -360,7 +504,7 @@ export async function timelineDetail(sessionId: string, lane: string, id: string
       const b = (r.message?.content as any[]).find((x) => x.type === "tool_result" && x.tool_use_id === id);
       output = resultText(b?.content);
       error = !!b?.is_error;
-      if (tool.diff) patch = patchOf(r.toolUseResult);
+      if (tool.diff) patch = patchOf(r.toolUseResult) ?? inputPatch(String(use?.name ?? ""), use?.input);
     }
     const truncated = input.length > FULL || (output?.length ?? 0) > FULL;
     return { k: "tool", name: tool.name, input: cut(input, FULL), output: output === null ? null : cut(output, FULL), error, truncated, patch };

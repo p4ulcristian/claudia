@@ -28,6 +28,8 @@ export type Row = {
   id: string;
   title?: string;
   running?: boolean;
+  // Work Claude left running after its turn (decision 25): the chat still works.
+  agents?: number;
   asks?: { id: string; question: string; ago?: number }[];
   permits?: { id: string; tool: string; description: string; ago?: number }[];
   lastTurn?: { id: string; ago: number; stopped: boolean; failed: boolean; reply?: string } | null;
@@ -60,6 +62,8 @@ const cut = (s: string, max: number) => {
   return one.length > max ? `${one.slice(0, max - 1).join("")}…` : one.join("");
 };
 const waits = (r: Row) => (r.asks?.length ?? 0) + (r.permits?.length ?? 0) > 0;
+// Claude's turn runs, or work it left running after the turn does (subagents, background shells).
+const working = (r: Row) => !!r.running || (Number(r.agents) || 0) > 0;
 
 // The events a server's list holds for its person now. since: when they got their first phone
 // (a turn that ended before that is not news to it).
@@ -76,9 +80,11 @@ export function noticesOf(server: string, rows: Row[], since: number, now = Date
     }
     const t = r.lastTurn;
     // Not a turn the person stopped, nor one followed by the next (a message sent meanwhile), nor
-    // one they have seen since it ended (unseen false; a server from before it says nothing): the
-    // chat is told once it is done. The body is the start of Claude's reply.
-    if (t && typeof t.id === "string" && !t.stopped && !r.running && r.unseen !== false && t.ago < FRESH_MS && now - t.ago >= since)
+    // one whose agents still work (told once the last ends; if its result starts a turn, that
+    // turn's end is told instead), nor one they have seen since it ended (unseen false; a server
+    // from before it says nothing): the chat is told once it is done. The body is the start of
+    // Claude's reply.
+    if (t && typeof t.id === "string" && !t.stopped && !working(r) && r.unseen !== false && t.ago < FRESH_MS && now - t.ago >= since)
       out.push({ ...base, kind: "finished", event: `turn:${t.id}`, body: t.failed ? "Ended with an error" : cut(String(t.reply ?? "") || "Finished", 200) });
   }
   return out;
@@ -287,7 +293,7 @@ export function summaryOf(email: string): Summary {
         const longest = open.reduce((m, x) => Math.max(m, Number(x.ago) || 0), 0);
         const kind: LiveItem["kind"] = r.asks?.length ? "ask" : "permission";
         out.waiting.push({ ...base, kind, since: steady(`${email}\n${server}/${r.id}\nwait:${open.map((x) => x.id).join(",")}`, longest) });
-      } else if (r.running) out.running.push({ ...base, kind: null, since: steady(`${email}\n${server}/${r.id}\nrun`, Number(r.runningFor) || 0) });
+      } else if (working(r)) out.running.push({ ...base, kind: null, since: steady(`${email}\n${server}/${r.id}\nrun`, Number(r.runningFor) || 0) });
       else if (r.unseen) out.done++;
     }
   }
@@ -366,7 +372,7 @@ function stillMatters(email: string, n: Notice) {
   if (!r) return false;
   if (n.kind === "ask") return !!r.asks?.some((a) => `ask:${a.id}` === n.event);
   if (n.kind === "permission") return !!r.permits?.some((p) => `permit:${p.id}` === n.event);
-  return !!r.lastTurn && `turn:${r.lastTurn.id}` === n.event && !r.running && r.unseen !== false;
+  return !!r.lastTurn && `turn:${r.lastTurn.id}` === n.event && !working(r) && r.unseen !== false;
 }
 
 // One alert to each of the person's phones, with the badge as it stands.

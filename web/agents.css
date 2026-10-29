@@ -1,0 +1,95 @@
+/* Agent chips, the agents list and one agent's view (web/agents.tsx, decision 25), in chalk. */
+
+/* The chips under the chat's title: a grid of the running ones, then +N more and ✓ N ✕ M. */
+.ag-row { display: grid; gap: 6px; padding: 0 16px 8px; min-width: 0; }
+.ag-chips { display: grid; gap: 6px; min-width: 0; }
+.ag-sum { display: flex; gap: 6px; flex-wrap: wrap; }
+.ag-pill { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 11.5px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums;
+  --ink: var(--chalk); --ring: var(--chalk-r12-2); background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.ag-pill::before, .ag-chip::before { content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
+  border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); }
+.ag-pill:hover { color: var(--fg); --ink: var(--accent); }
+.ag-pill .ok { color: var(--green); }
+.ag-pill .bad { color: var(--red); }
+
+.ag-chip { position: relative; isolation: isolate; display: grid; gap: 1px; min-width: 0; padding: 6px 10px 7px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: color-mix(in srgb, var(--panel) 75%, transparent); --ink: color-mix(in srgb, var(--amber) 55%, var(--line)); --ring: var(--chalk-r10-2); }
+.ag-chip:hover, .ag-chip:focus-visible { --ink: var(--amber); outline: none; }
+.ag-chip.completed { --ink: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.ag-chip.failed { --ink: color-mix(in srgb, var(--red) 55%, var(--line)); }
+.ag-chip.stopped { --ink: var(--line); }
+.ag-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+.ag-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ag-facts { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ag-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px/1.5 var(--mono); color: var(--muted); padding-left: 16px; }
+.ag-stop { position: absolute; right: 6px; bottom: 5px; font-size: 11px; color: var(--red); background: var(--bg2); border: 1px solid var(--red); border-radius: 6px; padding: 0 7px; opacity: 0; transition: opacity 0.12s; }
+.ag-chip:hover .ag-stop, .ag-chip:focus-within .ag-stop { opacity: 1; }
+@media (hover: none) { .ag-stop { display: none; } }
+
+/* Working: a small chalk spinner (amber); done and failed: a mark. */
+.ag-spin { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--amber) 30%, transparent); border-top-color: var(--amber); animation: ag-spin 0.9s linear infinite; }
+@keyframes ag-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ag-spin { animation: none; } }
+.ag-mark { flex: none; width: 10px; font: 700 12px/1 var(--hand); text-align: center; color: var(--green); }
+.ag-mark.failed { color: var(--red); }
+.ag-mark.stopped { color: var(--muted); }
+
+/* The agent view: over the chat in its column (the chat stays where it was underneath). */
+.left:has(> .ag-screen) { position: relative; }
+.ag-screen { position: absolute; inset: 0; z-index: 7; display: flex; flex-direction: column; min-height: 0; background: var(--bg); animation: rise 0.16s ease-out; }
+.ag-top { display: flex; align-items: center; gap: 10px; padding: 12px 16px 6px; }
+.ag-back { display: flex; align-items: center; gap: 2px; margin-left: -6px; color: var(--accent); font: 700 17px var(--hand); }
+.ag-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.ag-top .link { margin-left: auto; }
+.ag-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px 40px; display: flex; flex-direction: column; gap: 10px; }
+.ag-scroll > * { flex-shrink: 0; min-width: 0; }
+.ag-pad { padding: 8px 16px; }
+.ag-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; font: 700 20px/1.3 var(--hand); }
+.ag-name-line { flex-wrap: nowrap; align-items: baseline; }
+.ag-name-line > .ag-spin, .ag-name-line > .ag-mark { align-self: center; }
+.ag-title-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ag-state { display: flex; align-items: center; gap: 8px; }
+.ag-state .chip { font-size: 12px; }
+.ag-state .task-stop { margin-left: auto; }
+.ag-list { display: grid; gap: 8px; }
+.ag-head { display: grid; gap: 6px; }
+.ag-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 0; font-size: 13px; }
+.ag-dl dt { color: var(--muted); }
+.ag-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ag-now { margin: 0; font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-now code { font-size: 12px; }
+
+.ag-tabs { position: sticky; top: -4px; z-index: 2; display: flex; gap: 2px; padding: 4px 0; background: var(--bg); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.ag-tabs button { padding: 4px 12px; border-radius: 8px; font: 700 15px var(--hand); color: var(--muted); }
+.ag-tabs button:hover { color: var(--fg); }
+.ag-tabs button.on { color: var(--fg); background: var(--panel2); }
+.ag-body { min-width: 0; }
+.ag-steps .transcript { max-height: none; overflow: visible; }
+.ag-prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.55 var(--mono); background: var(--bg2); border-radius: 8px; padding: 10px 12px; }
+.ag-report { font-size: 14.5px; }
+
+.ag-files { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.ag-file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ag-diff { display: grid; gap: 4px; margin: 4px 0 10px 16px; overflow-x: auto; }
+.ag-git h3 { margin: 0 0 6px; font: 700 16px var(--hand); }
+.ag-git h3 code { font-size: 12.5px; }
+.ag-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ag-commit { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; width: 100%; min-width: 0; padding: 4px 8px; border-radius: 8px; text-align: left; font-size: 13px; }
+.ag-commit:hover, .ag-commit.on { background: var(--panel2); }
+.ag-commit:disabled { opacity: 0.5; cursor: default; }
+.ag-commit .h { color: var(--amber); font-size: 12px; flex: none; }
+.ag-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-commit-view .g-detail { max-height: none; border-left: 0; padding: 8px 0 0; }
+
+/* The rail: Claude's turn is over but agents still work: a dashed amber chalk ring and their count. */
+.ag-ring { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); pointer-events: none; overflow: visible;
+  fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 4.4 3.6; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.state-badge.agents { --b: var(--amber); font: 700 11px/1 var(--sans); }
+.row-mark.agents { border: 1.5px dashed var(--amber); color: var(--amber); }
+
+@media (max-width: 679px) {
+  .ag-row { padding: 0 12px 8px; }
+  .ag-screen { padding-top: 0; }
+  .ag-top { padding: 10px 12px 4px; }
+  .ag-scroll { padding: 4px 12px 40px; }
+}
