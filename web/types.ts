@@ -5,7 +5,16 @@ export type { Block, Scene, SceneNode, SceneEdge, SceneCard, SceneGroup } from "
 import type { Scene } from "../src/scene";
 
 // started: when the chat began (the list's order); missing from servers before the hub.
-export type ChatRow = { id: string; title: string; at: number; started?: number; ours: boolean; running: boolean; waiting: boolean; agents: number; settling?: boolean; color: string | null; archived: boolean; project: string | null; logo: boolean; unseen?: boolean };
+// asks, permits, lastTurn, runningFor (decision 24; missing from older servers): what the row's
+// second line says; times as ago (ms), as the runner sends them.
+export type ChatRow = {
+  id: string; title: string; at: number; started?: number; ours: boolean; running: boolean; waiting: boolean; agents: number; settling?: boolean;
+  color: string | null; archived: boolean; project: string | null; logo: boolean; unseen?: boolean;
+  asks?: { id: string; question: string; ago: number }[];
+  permits?: { id: string; tool: string; description?: string; ago: number }[];
+  lastTurn?: { id: string; ago: number; stopped: boolean; failed: boolean; reply: string } | null;
+  runningFor?: number | null;
+};
 export type Picture = { turn: string; scene: Scene; changed: string[]; at: number };
 export type { Timeline, Lane as TimelineLane, TimelineEvent, Detail as TimelineDetail } from "../src/timeline";
 

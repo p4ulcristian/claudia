@@ -9,7 +9,7 @@ import { TimelineView } from "./timeline";
 import { RightBar } from "./rightbar";
 import { clip, tilde } from "./changes";
 import { ActivityPill } from "./activity";
-import { AgentChips, AgentScreen, AgentsRing, useAgentView } from "./agents";
+import { AgentChips, AgentScreen, useAgentView } from "./agents";
 import { Meters, Pickers, RailMeters } from "./usage";
 import { ColorPicker, chatColorVar } from "./colors";
 import { ChatMenu, ContextMenu, type MenuChat } from "./chatmenu";
@@ -21,12 +21,17 @@ import { GithubPrompt } from "./github-prompt";
 import { TipBubble, tipProps } from "./tip";
 import { bakeChalk } from "./chalk";
 import { FormsGallery } from "./gallery";
-import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
+import { Brand, NoProfile, ServerSettings, brandName, useClaudeToken, type Me } from "./settings";
 import { ApiCtx, PAGE_API, apiFor, type Api } from "./api";
 import { startPresence } from "./presence";
-import { AdminDialog, HubEmpty, NewChatServer, PeopleTabs, ServerFilter, ServerMark, SettingsServers, serverMarks, type AdminTab, type HubMe, type ServerState, type ServerView } from "./hub";
+import { AdminDialog, HubEmpty, NewChatServer, ServerMark, SettingsServers, serverMarks, type AdminTab, type HubMe, type ServerState, type ServerView } from "./hub";
+import { ChatDot, projectTags } from "./chatdot";
+import { ArchiveIcon, ChatList, SettingsPane, serverPeople, titleMenu, useLingers, viewProfile, type ListRow } from "./sidebar";
+import { usePhoneSwipes } from "./swipe";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, SearchFound, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
+// After style.css: the chat list, Settings and the phone's screens (decision 26).
+import "./sidebar.css";
 // The page as one layer the size of the visible area; only scrollers move under a finger.
 import "./viewport";
 
@@ -141,7 +146,7 @@ class Conn {
 }
 
 // A chat in the merged list: which server it is on, its key, and whether that server is off.
-type Row = ChatRow & { server: string; key: string; off: boolean };
+type Row = ListRow;
 
 // Several servers' lists as one, in the order the chats were started; each server's own order is kept.
 function mergeByStart(lists: Row[][]): Row[] {
@@ -159,15 +164,6 @@ function mergeByStart(lists: Row[][]): Row[] {
 
 // Claude's turn runs, or work it left running after the turn does (decision 25): not done yet.
 const working = (c: ChatRow) => c.running || (c.agents ?? 0) > 0 || !!c.settling;
-
-function ago(t: number) {
-  const s = (Date.now() - t) / 1000;
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d`;
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 // Events held while a chat opened can repeat items its history already had: those are skipped.
 const itemKey = (it: Item) => (it.k === "user" ? `u:${it.uuid}` : `${it.k}:${it.id}`);
@@ -212,8 +208,8 @@ function apply(l: Live, ev: ChatEvent): Live {
   return l;
 }
 
-// Below 1100px the picture folds without motion; below 680px (phones) the chats are a stack of two
-// screens and the picture a drawer from the right.
+// Below 1100px the picture folds without motion; below 680px (phones) the chats are screens (the list,
+// Settings, the chat) and the picture a drawer from the right.
 function useMedia(q: string) {
   const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
   useEffect(() => {
@@ -300,10 +296,11 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [search, setSearch] = useState("");
   const narrow = useMedia("(max-width: 1099px)");
   const phone = useMedia("(max-width: 679px)");
-  // Phone: two screens, the chat list and the open chat. Going from the list to a chat keeps the list
-  // as the history entry behind it ({screen: "list"}; the chat's entry says list: true), so back (the
-  // Chats button, Safari's swipe) returns to the list.
-  const [screen, setScreen] = useState<"list" | "chat">(() => history.state?.screen ?? (fromPath() ? "chat" : "list"));
+  // Phone: three screens, the chat list, Settings (from the list's gear) and the open chat. Going from
+  // the list to a chat keeps the list as the history entry behind it ({screen: "list"}; the chat's
+  // entry says list: true), and Settings is an entry over the list, so back (the ‹ buttons, the
+  // swipes, the browser's back) returns to the list.
+  const [screen, setScreen] = useState<"list" | "chat" | "settings">(() => history.state?.screen ?? (fromPath() ? "chat" : "list"));
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
   const screenRef = useRef(screen);
@@ -312,7 +309,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [picOpen, setPicOpen] = useState(false);
   const [picAt, setPicAt] = useState(() => Date.now());
   const closePicture = useCallback(() => { setPicOpen(false); setPicAt(Date.now()); }, []);
-  // The rail is always there, at every width. The full list (settings, archive, profiles) opens over
+  // The rail is always there, at every width. The full list (and Settings in its place) opens over
   // it as a drawer from the menu button and closes when a chat is picked or the backdrop clicked.
   const [drawer, setDrawer] = useState(false);
   // Search from the rail: the drawer opens with the search box focused, and folds back to the
@@ -323,7 +320,11 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     if (railSearch) return setRailSearch(false);
     setDrawer((d) => !d);
   }, [railSearch]);
-  const showSidebar = phone ? screen === "list" : drawer || railSearch;
+  const showSidebar = phone ? screen !== "chat" : drawer || railSearch;
+  // Settings in the opened sidebar's place on a desktop (folds back to the list with the drawer).
+  const [deskSettings, setDeskSettings] = useState(false);
+  useEffect(() => { if (!showSidebar) setDeskSettings(false); }, [showSidebar]);
+  const settingsShown = phone ? screen === "settings" : showSidebar && deskSettings;
   const searchFromRail = () => { setRailSearch(true); requestAnimationFrame(() => searchBox.current?.focus()); };
   const endRailSearch = () => { if (railSearch) { setRailSearch(false); setSearch(""); } };
 
@@ -376,12 +377,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // Who is signed in with which profile, on the open chat's server.
   const curInfo = info[current.server];
   const me = curInfo?.me ?? null;
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsServer, setSettingsServer] = useState("");
+  const [settingsPick, setSettingsServer] = useState("");
   const [formsOpen, setFormsOpen] = useState(false);
   const [adminTab, setAdminTab] = useState<AdminTab | null>(null);
   const closeForms = useCallback(() => setFormsOpen(false), []);
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const closeAdmin = useCallback(() => { setAdminTab(null); refreshHub(); }, [refreshHub]);
   const currentRef = useRef(current);
   currentRef.current = current;
@@ -456,14 +455,16 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   loadRef.current = loadChats;
 
   // One merged list, in the order chats were started; a server that is off shows its last list, greyed.
-  const [serverFilter, setServerFilterState] = useState<string | null>(() => (hubMode && store.get("hub.filter")) || null);
-  const setServerFilter = (s: string | null) => { setServerFilterState(s); store.set("hub.filter", s ?? ""); };
-  const filter = serverFilter && servers.some((s) => s.name === serverFilter) && shownServer(serverFilter) ? serverFilter : null;
+  // Servers unticked in the title menu (hub): their chats leave the list. Never all of them: then none is.
+  const [unticked, setUntickedState] = useState<string[]>(() => (hubMode ? (store.get("hub.hidden") ?? "").split(",").filter(Boolean) : []));
+  const setUnticked = (h: string[]) => { setUntickedState(h); store.set("hub.hidden", h.join(",")); };
+  const hiddenServers = servers.some((s) => shownServer(s.name) && !unticked.includes(s.name)) ? unticked : [];
+  const listed = (s: string) => !hiddenServers.includes(s);
   const rowsAll = useMemo(
     () => mergeByStart(servers.filter((s) => shownServer(s.name)).map((s) => (lists[listId(s.name)] ?? []).map((c) => ({ ...c, server: s.name, key: keyOf(s.name, c.id), off: hubMode && info[s.name]?.state === "off" })))),
     [lists, info, viewSig, serverNames, all, archivedView],
   );
-  const chats = filter ? rowsAll.filter((c) => c.server === filter) : rowsAll;
+  const chats = hiddenServers.length ? rowsAll.filter((c) => listed(c.server)) : rowsAll;
 
   // Search: two letters or more search what was said in the chats (each server's index), not only titles.
   const [found, setFound] = useState<(SearchFound & { server: string })[] | null>(null);
@@ -472,7 +473,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     if (text.length < 2) { setFound(null); return; }
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      const asking = servers.filter((s) => shownServer(s.name) && (!filter || s.name === filter));
+      const asking = servers.filter((s) => shownServer(s.name) && listed(s.name));
       Promise.all(asking.map((s) =>
         apiOf(s.name).fetch(`/api/search?q=${encodeURIComponent(text)}&all=${all ? 1 : 0}&archived=${archivedView ? 1 : 0}`, { signal: ctl.signal })
           .then((r) => (r.ok ? r.json() : null))
@@ -484,7 +485,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       });
     }, 180);
     return () => { clearTimeout(t); ctl.abort(); };
-  }, [search, all, archivedView, viewSig, filter]);
+  }, [search, all, archivedView, viewSig, hiddenServers.join(",")]);
   // A hit opens its chat and scrolls to the message once it's on the page.
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   useEffect(() => {
@@ -617,7 +618,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     setEditing(false);
     setDrawer(false);
     if (show && phoneRef.current) {
-      if (screenRef.current === "list") {
+      if (screenRef.current !== "chat") {
         history.replaceState({ screen: "list" }, "");
         if (push) history.pushState({ screen: "chat", list: true }, "", pathOf(at));
       } else if (push) history.replaceState(history.state, "", pathOf(at)); // chat to chat: the list stays right behind
@@ -626,10 +627,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     sendTo(at.server, { t: "open", chat: at.id });
   }, [sendTo]);
   openRef.current = open;
-  // Phone: the open chat's screen, from the list.
+  // Phone: the open chat's screen, from the list (at its address once it has one, so a reload keeps it).
   const showChat = () => {
     history.replaceState({ screen: "list" }, "");
-    history.pushState({ screen: "chat", list: true }, "");
+    history.pushState({ screen: "chat", list: true }, "", row ? pathOf(current) : undefined);
     setScreen("chat");
   };
   // Phone: back to the list (the picture drawer closes first).
@@ -659,7 +660,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   useEffect(() => {
     const pop = (e: PopStateEvent) => {
       if (agentView.onPop(e)) return;
-      if (phoneRef.current && e.state?.screen === "list") { closePicture(); setScreen("list"); return; }
+      if (phoneRef.current && (e.state?.screen === "list" || e.state?.screen === "settings")) { closePicture(); setScreen(e.state.screen); return; }
       setScreen("chat");
       const p = fromPath();
       if (!p) return open({ server: defaultServer, id: crypto.randomUUID() }, false);
@@ -771,7 +772,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     setMenu({ chat: { id: c.id, title: c.title, color: c.color, archived: archivedView }, server: c.server, x: e.clientX, y: e.clientY });
   };
 
-  // The right-click menu on the context meter (ctx ring or the sidebar's Context bar): compact.
+  // The right-click menu on the context meter (ctx ring or Settings' Context bar): compact.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
   const onCtxMenu = (e: React.MouseEvent) => { e.preventDefault(); if (!readOnly) setCtxMenu({ x: e.clientX, y: e.clientY }); };
@@ -852,10 +853,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const others = chats.filter((c) => c.key !== curKey && !c.off);
   const waitingElsewhere = others.filter((c) => c.waiting).length;
   const doneElsewhere = others.filter((c) => !c.waiting && doneMark(c)).length;
-  const leftBox = useRef<HTMLElement>(null);
-  const rightBox = useRef<HTMLElement>(null);
-  useSwipe(leftBox, phone && screen === "chat" && !picOpen, { right: goList, left: () => setPicOpen(true) });
-  useSwipe(rightBox, phone && picOpen, { right: closePicture }, true);
+  usePhoneSwipes({
+    phone, screen, picOpen, agentShown: agentView.shown !== null,
+    toList: goList, closeSettings: () => closeSettingsScreen(), closeAgent: agentView.close, openPicture: () => setPicOpen(true), closePicture,
+  });
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
   const q = search.trim().toLowerCase();
@@ -881,8 +882,19 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const upServers = views.filter((v) => v.state === "up").map((v) => v.name);
   const openSettings = () => {
     setSettingsServer(!hubMode ? "" : upServers.includes(current.server) ? current.server : upServers[0] ?? current.server);
-    setSettingsOpen(true);
+    if (!phone) return setDeskSettings(true);
+    history.replaceState({ screen: "list" }, "");
+    history.pushState({ screen: "settings" }, "");
+    setScreen("settings");
   };
+  const closeSettingsScreen = () => {
+    if (!phone) return setDeskSettings(false);
+    if (history.state?.screen === "settings") return history.back();
+    setScreen("list");
+  };
+  const settingsMounted = useLingers(settingsShown);
+  // The server whose settings show: the one picked, else the open chat's (or the first one up).
+  const settingsServer = !hubMode ? "" : servers.some((s) => s.name === settingsPick) ? settingsPick : upServers.includes(current.server) ? current.server : upServers[0] ?? current.server;
   const settingsMe = info[settingsServer]?.me ?? null;
   // Whose chats are read (only).
   const whose = hubMode ? person : me?.viewing ?? null;
@@ -900,18 +912,9 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
 
   return (
     <ApiCtx.Provider value={openApi}>
-    <div className={`app ${showSidebar ? "" : "no-sidebar"} ${narrow ? "narrow" : ""} ${readOnly ? "read-only" : ""}`}>
+    <div className={`app ${showSidebar ? "" : "no-sidebar"} ${settingsShown ? "settings-shown" : ""} ${narrow ? "narrow" : ""} ${readOnly ? "read-only" : ""}`}>
       <TipBubble />
-      {me?.profile && !readOnly && !settingsOpen && (!hubMode || curInfo?.state === "up") && <GithubPrompt key={current.server} profile={me.profile} />}
-      {settingsOpen && settingsMe && (
-        <SettingsDialog
-          api={apiFor(settingsServer)}
-          me={settingsMe}
-          onMe={(m) => patchInfo(settingsServer, { me: m })}
-          close={closeSettings}
-          top={hubMode ? <SettingsServers servers={views.map((v) => ({ ...v, me: info[v.name]?.me ?? null }))} pick={settingsServer} onPick={setSettingsServer} /> : undefined}
-        />
-      )}
+      {me?.profile && !readOnly && !settingsShown && (!hubMode || curInfo?.state === "up") && <GithubPrompt key={current.server} profile={me.profile} />}
       {adminTab && <AdminDialog tab={adminTab} close={closeAdmin} />}
       {formsOpen && <FormsGallery close={closeForms} />}
       {menu && (
@@ -960,11 +963,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
                   {...tipProps(`${c.project ? `${c.title} · ${c.project}` : c.title}${hubMode ? ` · ${labelOf(c.server)}${c.off ? " is off" : ""}` : ""}`, chatColorVar(c.color))}
                   aria-label={c.title}
                 >
-                  <span className="rail-dot">
-                    <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
-                    {!c.waiting && !c.running && (c.agents > 0 || c.settling) ? <AgentsRing n={c.agents} /> : <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : doneMark(c) ? "done" : null} />}
-                    <AgentMoons n={c.running ? c.agents : 0} />
-                  </span>
+                  <ChatDot c={c} tag={c.project ? tags.get(c.project) ?? "" : ""} api={apiOf(c.server)} done={doneMark(c)} />
                   <span className="rail-name">{c.title}</span>
                   {hubMode && <span className="rail-server">{labelOf(c.server)}</span>}
                 </button>
@@ -979,110 +978,72 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             <RailMeters meta={meta} context={live.context} onCompact={compact} onContextMenu={onCtxMenu} />
           </nav>
         )}
-        <aside className="sidebar" aria-hidden={!showSidebar} inert={!showSidebar}>
-          {hub ? <Brand me={null} hub={hub} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} /> : <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />}
-          {hubMode ? <PeopleTabs names={people} own={own} viewing={person} onPick={pickPerson} /> : me && <ProfileTabs me={me} />}
-          {hubMode && (servers.length > 1 || views.some((v) => v.state !== "up" && v.state !== "loading") || views.some((v) => v.update)) && (
-            <ServerFilter servers={views} marks={marks} pick={filter} onPick={setServerFilter} />
-          )}
-          {!readOnly && <button className="new" onClick={newChat} title="New chat (Alt+N)">New chat</button>}
-          <label className="search-box"><input ref={searchBox} className="search" placeholder="Search chats" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && railSearch) { e.stopPropagation(); endRailSearch(); } }} /></label>
-          <nav>
-            {hubMode && views.filter((v) => v.state === "off" && shownServer(v.name) && (!filter || filter === v.name)).map((v) => (
-              <p key={v.name} className="server-off-note">{v.label} is off · its chats as last seen</p>
-            ))}
-            {found && (
-              <>
-                {found.map((f) => {
-                  const c = known.current.get(keyOf(f.server, f.id));
-                  if (!c) return null;
-                  return (
-                    <div key={c.key} className="found" style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}>
-                      <button className={`chat-row ${c.key === curKey ? "active" : ""} ${c.color ? "colored" : ""}`} onClick={() => openHit({ server: c.server, id: c.id }, null)} onContextMenu={menuFor(c)}>
-                        <span className="t">{f.title ? <Marked text={c.title} words={search} /> : c.title}</span>
-                        {markOf(c)}
-                        <span className="when">{f.count > 0 ? `${f.count} hit${f.count === 1 ? "" : "s"}` : ago(c.at)}</span>
-                      </button>
-                      {f.hits.map((h) => (
-                        <button key={h.uuid} className={`found-hit ${h.role}`} onClick={() => openHit({ server: c.server, id: c.id }, h.uuid)}>
-                          <span className="who">{h.role === "user" ? "you" : "claude"}</span>
-                          <span className="snip">{h.snippet.split(/(\u0001[^\u0002]*\u0002)/).map((part, i) => part.startsWith("\u0001") ? <mark key={i}>{part.slice(1, -1)}</mark> : part)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-                {!found.length && <p className="muted small">Nothing said matches.</p>}
-              </>
-            )}
-            {!found && list.map((c) => (
-              <button
-                key={c.key}
-                className={`chat-row ${c.key === curKey ? "active" : ""} ${c.color ? "colored" : ""} ${c.off ? "off" : ""}`}
-                style={{ "--chat": chatColorVar(c.color) } as React.CSSProperties}
-                onClick={(e) => { endRailSearch(); pick(c, e); }}
-                onContextMenu={menuFor(c)}
-                {...tipProps(c.off ? `${c.title} · ${labelOf(c.server)} is off` : c.title, chatColorVar(c.color), !c.off)}
-              >
-                {c.running && !c.off && <span className="run-dot" title="Working" />}
-                <span className="t">{c.title}</span>
-                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : !c.running && c.agents > 0 ? <span className="row-mark agents" title="Agents still working">{c.agents}</span> : doneMark(c) ? <span className="row-mark done" title="Done">✓</span> : null)}
-                {markOf(c)}
-                <span className="when">{ago(c.at)}</span>
-              </button>
-            ))}
-            {!found && !row && live.items.length > 0 && <div className="chat-row active"><span className="t">New chat</span></div>}
-            {!found && !list.length && <p className="muted small">{q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}</p>}
-          </nav>
-          <button className="forms-link" onClick={() => setFormsOpen(true)} title="Everything Claude can draw, and your saved templates">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5" /><circle cx="14" cy="6" r="3" /><path d="M3 15h6M11 12.5l3 3 3-3" /></svg>
-            Forms
-          </button>
-          <Meters
+        <aside className="sidebar cs-side" aria-hidden={!showSidebar} inert={!showSidebar}>
+          <ChatList
+            phone={phone}
+            readOnly={readOnly}
+            menu={titleMenu({
+              ...(hubMode ? { people, own, viewing: person, onPerson: pickPerson } : { ...serverPeople(me), onPerson: (p: string | null) => viewProfile(p ?? me?.profile ?? "") }),
+              servers: hubMode && (servers.length > 1 || views.some((v) => v.state !== "up" && v.state !== "loading") || views.some((v) => v.update)) ? views : null,
+              marks, hidden: hiddenServers, shown: shownServer, onServers: setUnticked, archived: archivedView,
+            })}
             meta={meta}
-            context={live.context}
-            onContextMenu={onCtxMenu}
-            saved={me?.claudeTokens.map((t) => t.name) ?? []}
-            onSwitch={async (name) => {
-              const s = current.server;
-              const next = await useClaudeToken(apiFor(s), name);
-              if (next) setInfo((m) => (m[s]?.me ? { ...m, [s]: { ...m[s], me: { ...m[s].me!, ...next } } } : m));
-            }}
+            onSettings={openSettings}
+            onNew={newChat}
+            archived={archivedView}
+            onLeaveArchived={() => setArchivedView(false)}
+            search={search}
+            onSearch={setSearch}
+            searchRef={searchBox}
+            onSearchKey={(e) => { if (e.key === "Escape" && railSearch) { e.stopPropagation(); endRailSearch(); } }}
+            rows={list}
+            found={found}
+            rowOf={(s, id) => known.current.get(keyOf(s, id))}
+            curKey={curKey}
+            pending={!row && live.items.length > 0}
+            empty={q ? "No match." : archivedView ? "Nothing archived." : "No chats yet."}
+            notes={hubMode ? views.filter((v) => v.state === "off" && shownServer(v.name) && listed(v.name)).map((v) => `${v.label} is off · its chats as last seen`) : []}
+            tags={tags}
+            apiOf={apiOf}
+            done={doneMark}
+            markOf={markOf}
+            tipOf={(c) => (c.off ? `${c.title} · ${labelOf(c.server)} is off` : c.title)}
+            onPick={(c, e) => { endRailSearch(); pick(c, e); }}
+            onHit={(c, uuid) => openHit({ server: c.server, id: c.id }, uuid)}
+            onMenu={menuFor}
           />
-          <div className="side-foot">
-            <button className={`archived-toggle ${archivedView ? "on" : ""}`} onClick={() => setArchivedView((v) => !v)}>
-              <ArchiveIcon /> {archivedView ? "Back to chats" : "Archived"}
-            </button>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={sounds}
-                onChange={(e) => toggleSounds(e.target.checked)}
-              />
-              Sounds
-            </label>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={popups}
-                onChange={(e) => void togglePopups(e.target.checked)}
-              />
-              Desktop popups
-            </label>
-            <label className="toggle">
-              <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
-              Show all ~/Work sessions
-            </label>
-            {!readOnly && <button className="archived-toggle" onClick={openSettings} title={me?.email ? `Signed in as ${me.email}` : undefined}>
-              ⚙ Settings
-            </button>}
-            {hub?.admin && (
-              <span className="admin-links">
-                <button className="archived-toggle" onClick={() => setAdminTab("servers")} title="The servers this hub reaches (admins)">Servers</button>
-                <button className="archived-toggle" onClick={() => setAdminTab("access")} title="Who may use which server (admins)">Access</button>
-              </span>
-            )}
-          </div>
+          {settingsMounted && (
+            <SettingsPane
+              shown={settingsShown}
+              phone={phone}
+              onBack={closeSettingsScreen}
+              brand={hub ? <Brand me={null} hub={hub} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} /> : <Brand me={me} token={meta.accountLabel ?? me?.claudeToken?.name ?? null} />}
+              meters={
+                <Meters
+                  meta={meta}
+                  context={live.context}
+                  onContextMenu={onCtxMenu}
+                  saved={me?.claudeTokens.map((t) => t.name) ?? []}
+                  onSwitch={async (name) => {
+                    const s = current.server;
+                    const next = await useClaudeToken(apiFor(s), name);
+                    if (next) setInfo((m) => (m[s]?.me ? { ...m, [s]: { ...m[s], me: { ...m[s].me!, ...next } } } : m));
+                  }}
+                />
+              }
+              onArchived={() => { setArchivedView(true); closeSettingsScreen(); }}
+              sounds={sounds}
+              onSounds={toggleSounds}
+              popups={popups}
+              onPopups={(on) => void togglePopups(on)}
+              all={all}
+              onAll={setAll}
+              onForms={() => setFormsOpen(true)}
+              onAdmin={hub?.admin ? setAdminTab : null}
+              serverPick={hubMode ? <SettingsServers servers={views.map((v) => ({ ...v, me: info[v.name]?.me ?? null }))} pick={settingsServer} onPick={setSettingsServer} /> : null}
+              server={!readOnly && settingsMe ? <ServerSettings api={apiFor(settingsServer)} me={settingsMe} onMe={(m) => patchInfo(settingsServer, { me: m })} /> : null}
+            />
+          )}
         </aside>
       </div>
       <main
@@ -1093,7 +1054,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           ...(fold.width !== null ? { "--fold-w": `${fold.width}px` } : {}),
         } as React.CSSProperties}
       >
-        <section className="left" ref={leftBox}>
+        <section className="left">
           <header className={`chat-head ${live.settings.color ? "colored" : ""}`}>
             {phone && (
               <button className="back-to-list" onClick={goList} aria-label="Chats">
@@ -1188,7 +1149,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           </>}
         </section>
         <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
-        {phone && picOpen && <div className="pic-backdrop" onClick={closePicture} />}
+        {phone && <div className={`pic-backdrop ${picOpen ? "open" : ""}`} onClick={closePicture} />}
         {fold.shown ? (
           <section className="right fold-edge">
             <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"} aria-label="Show picture">
@@ -1197,7 +1158,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           </section>
         ) : (
         <section
-          ref={rightBox}
           className={`right ${phone ? "pic-drawer" : ""} ${phone && picOpen ? "open" : ""}`}
           style={fold.rightWidth ? { width: fold.rightWidth } : undefined}
           onMouseMove={(e) => setNearBar(e.clientY > e.currentTarget.getBoundingClientRect().bottom - 96)}
@@ -1268,25 +1228,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
 bakeChalk();
 createRoot(document.getElementById("root")!).render(<Root />);
 
-// A box with a lid; the arrow points out of it for Unarchive.
-// A chalked badge on a chat's circle: waiting on your answer, working, or finished since you looked.
-const BADGES = {
-  waiting: { mark: "?", label: "Waiting for you" },
-  thinking: { mark: "", label: "Working" },
-  done: { mark: "✓", label: "Done" },
-};
-
-function StateBadge({ state }: { state: keyof typeof BADGES | null }) {
-  if (!state) return null;
-  const b = BADGES[state];
-  return (
-    <span className={`state-badge ${state}`} title={b.label}>
-      {state === "thinking" ? <><i /><i /><i /></> : b.mark}
-    </span>
-  );
-}
-
-// Subagents still working for a chat: small chalk circles around its circle's left and bottom, one each (up to 5).
 // A chalk speaker; waves when sounds are on, a cross when off.
 function SpeakerIcon({ on }: { on: boolean }) {
   return (
@@ -1295,14 +1236,6 @@ function SpeakerIcon({ on }: { on: boolean }) {
       {on ? <path d="M13 7.5c1 1.4 1 3.6 0 5M15.4 5.5c2 2.5 2 6.5 0 9" /> : <path d="M13.5 8l4 4M17.5 8l-4 4" />}
     </svg>
   );
-}
-
-// The words of a search marked in a title.
-function Marked({ text, words }: { text: string; words: string }) {
-  const ws = words.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-  if (!ws.length) return <>{text}</>;
-  const re = new RegExp(`(${ws.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
-  return <>{text.split(re).map((p, i) => (i % 2 ? <mark key={i}>{p}</mark> : p))}</>;
 }
 
 // Circles slide to their new place when the order changes (a chat made passive sinks, a woken one
@@ -1326,113 +1259,6 @@ function useSlide(box: React.RefObject<HTMLElement | null>, order: string) {
       else if (Math.abs(was - is) > 1) d.animate([{ transform: `translateY(${was - is}px)` }, { transform: "none" }], { duration: 420, easing: "cubic-bezier(.3,.7,.2,1)" });
     }
   }, [order]);
-}
-
-// Short tags for projects, unique among the ones in the list: initials of a dashed name
-// (eye-on-rainbow → eor), else the first letters, three when two projects would share two.
-function projectTags(names: (string | null)[]): Map<string, string> {
-  const all = [...new Set(names.filter((n): n is string => !!n))];
-  const tag = (n: string, len: number) => {
-    const parts = n.split(/[-_. ]+/).filter(Boolean);
-    return (parts.length > 1 ? parts.map((p) => p[0]).join("").slice(0, 3) : n.slice(0, len)).toLowerCase();
-  };
-  const out = new Map<string, string>();
-  for (const n of all) {
-    const clash = all.some((m) => m !== n && tag(m, 2) === tag(n, 2));
-    out.set(n, tag(n, clash ? 3 : 2));
-  }
-  return out;
-}
-
-// The project on a chat's circle: its logo when the repo has one, else its short name, tinted the
-// same colour wherever that project shows.
-// A rail circle's face: the project's logo big with the chat's letter in a small circle; without a
-// logo, the letter big and the project's short name as a tinted tag.
-// Inside a rail circle: the project's logo, else its short name; a chat without a project, a dot.
-// (The chat's title and, on the hub, its server's name sit under the circle.)
-// api: the chat's server.
-function DotFace({ project, tag, logo, api }: { project: string | null; tag: string; logo: boolean; api: Api }) {
-  const [broken, setBroken] = useState(false);
-  if (project && logo && !broken)
-    return <img className="rail-logo" src={api.src(`/api/projects/${encodeURIComponent(project)}/logo`)} alt="" onError={() => setBroken(true)} />;
-  if (!project) return <span className="rail-blank" aria-hidden="true" />;
-  return <span className="rail-tag">{tag}</span>;
-}
-
-function AgentMoons({ n }: { n: number }) {
-  if (!n) return null;
-  const shown = Math.min(n, 5);
-  return (
-    <span className="moons" title={`${n} agent${n > 1 ? "s" : ""} working`}>
-      {Array.from({ length: shown }, (_, i) => {
-        const a = ((160 + i * 32) * Math.PI) / 180;
-        return <i key={i} style={{ left: `calc(50% + ${Math.cos(a) * 21}px)`, top: `calc(50% - ${Math.sin(a) * 21}px)`, animationDelay: `${i * 0.25}s` }} />;
-      })}
-    </span>
-  );
-}
-
-// Phone swipes, sideways only: on the chat, right goes back to the list and left opens the picture;
-// on the picture drawer, right closes it (the drawer follows the finger). Left alone: a touch that
-// starts at the screen's edge (Safari's own back and forward), in a field, or in something that
-// scrolls sideways (code, tables), and a move that is mostly up or down.
-function useSwipe(box: React.RefObject<HTMLElement | null>, enabled: boolean, on: { right?: () => void; left?: () => void }, follow = false) {
-  const cb = useRef(on);
-  cb.current = on;
-  useEffect(() => {
-    const el = box.current;
-    if (!el || !enabled) return;
-    let x0 = 0, y0 = 0, dx = 0, axis: "x" | "y" | null = null, skip = true;
-    const reset = () => { el.style.transition = ""; el.style.transform = ""; };
-    const start = (e: TouchEvent) => {
-      const t = e.touches[0];
-      const target = e.target instanceof Element ? e.target : null;
-      skip = e.touches.length > 1 || !t || t.clientX < 24 || t.clientX > innerWidth - 24
-        || !!target?.closest("input, textarea, select, [contenteditable]") || scrollsSideways(target, el);
-      x0 = t?.clientX ?? 0;
-      y0 = t?.clientY ?? 0;
-      dx = 0;
-      axis = null;
-    };
-    const move = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (skip || !t) return;
-      dx = t.clientX - x0;
-      const dy = t.clientY - y0;
-      if (!axis && Math.hypot(dx, dy) > 10) axis = Math.abs(dx) > Math.abs(dy) * 1.5 ? "x" : "y";
-      if (follow && axis === "x") {
-        el.style.transition = "none";
-        el.style.transform = `translateX(${Math.max(0, dx)}px)`;
-      }
-    };
-    const end = () => {
-      if (follow) reset();
-      if (skip || axis !== "x") return;
-      if (dx > 70) cb.current.right?.();
-      else if (dx < -70) cb.current.left?.();
-    };
-    const cancel = () => { if (follow) reset(); skip = true; };
-    el.addEventListener("touchstart", start, { passive: true });
-    el.addEventListener("touchmove", move, { passive: true });
-    el.addEventListener("touchend", end);
-    el.addEventListener("touchcancel", cancel);
-    return () => {
-      el.removeEventListener("touchstart", start);
-      el.removeEventListener("touchmove", move);
-      el.removeEventListener("touchend", end);
-      el.removeEventListener("touchcancel", cancel);
-      reset();
-    };
-  }, [enabled, follow]);
-}
-
-// Whether something from `el` up to `root` scrolls sideways (has more width than it shows).
-function scrollsSideways(el: Element | null, root: Element): boolean {
-  for (; el && el !== root; el = el.parentElement) {
-    const x = getComputedStyle(el).overflowX;
-    if ((x === "auto" || x === "scroll") && el.scrollWidth > el.clientWidth) return true;
-  }
-  return false;
 }
 
 // Folding the right half slides it shut instead of jumping: its column width moves in px from where
@@ -1491,14 +1317,4 @@ function useFoldMotion(folded: boolean, chatW: number, narrow: boolean) {
   const cols = width === null ? null : "minmax(0, 1fr) 6px var(--fold-w)";
   const cls = dir ? `moving to-${dir} ${go ? "go" : ""}` : "";
   return { ref, shown, cols, width, rightWidth, cls };
-}
-
-function ArchiveIcon({ out }: { out?: boolean }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="1.5" y="2.5" width="13" height="3.5" rx="0.8" />
-      <path d="M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6" />
-      {out ? <path d="M8 12V8.2M6.3 9.8 8 8.1l1.7 1.7" /> : <path d="M6.3 9h3.4" />}
-    </svg>
-  );
 }

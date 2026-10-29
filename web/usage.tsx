@@ -1,4 +1,4 @@
-// Model and effort pickers (inside the input box) and the usage block at the foot of the sidebar.
+// Model and effort pickers (inside the input box), the plan bars (Settings) and the usage rings (the rail, the chat list).
 import React, { useEffect, useState } from "react";
 import { tipProps } from "./tip";
 import type { Context, Limit, Meta, Settings } from "./types";
@@ -133,6 +133,23 @@ function Ring({ short, percent, tip, icon, onClick, onContextMenu }: { short: st
       <span className="r-num">{percent}</span>
       <span className="r-label">{short}</span>
     </Tag>
+  );
+}
+
+// The chat list's header: the 5-hour and week limits as two small rings (the rail's), one button
+// that opens what they summarise (the plan bars with their reset times, in Settings).
+export function LimitRings({ meta, onOpen }: { meta: Meta; onOpen: () => void }) {
+  const now = useNow();
+  const two = ["five_hour", "seven_day"].map((k) => meta.limits.find((l) => l.key === k)).filter((l): l is Limit => !!l);
+  if (!two.length) return null;
+  const tip = two.map((l) => {
+    const at = l.resetsAt ? new Date(l.resetsAt) : null;
+    return `${l.label} ${l.percent}%${at ? ` · in ${countdown(at.getTime() - now)}` : ""}`;
+  }).join(" · ");
+  return (
+    <button className="limit-rings" onClick={onOpen} aria-label={`Usage: ${two.map((l) => `${l.label} ${l.percent}%`).join(", ")}`}>
+      {two.map((l) => <Ring key={l.key} short={SHORT[l.key] ?? l.label} percent={l.percent} tip={tip} />)}
+    </button>
   );
 }
 

@@ -85,7 +85,6 @@
 .ag-ring { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); pointer-events: none; overflow: visible;
   fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 4.4 3.6; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 .state-badge.agents { --b: var(--amber); font: 700 11px/1 var(--sans); }
-.row-mark.agents { border: 1.5px dashed var(--amber); color: var(--amber); }
 
 @media (max-width: 679px) {
   .ag-row { padding: 0 12px 8px; }

@@ -69,6 +69,7 @@ const SHAPES: Record<string, Shape> = {
   "dot9-soft": { r: 4.5, noise: "soft" },
   "dot11": { r: 5.5 },
   "dot18": { r: 9 },
+  "dot56": { r: 28 },
   "bar3": { r: 3 },
   "bar35": { r: 3.5 },
 };

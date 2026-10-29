@@ -28,7 +28,7 @@ function useMenuBox(x: number, y: number, close: () => void, relayout?: unknown)
   return { box, pos };
 }
 
-// Right click on the context meter (the ctx ring or the sidebar's Context bar): compact the open chat.
+// Right click on the context meter (the ctx ring or Settings' Context bar): compact the open chat.
 export function ContextMenu({ x, y, close, title, onCompact }: { x: number; y: number; close: () => void; title: string; onCompact?: () => void }) {
   const { box, pos } = useMenuBox(x, y, close);
   return (

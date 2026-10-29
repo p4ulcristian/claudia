@@ -80,7 +80,6 @@ code, pre { font-family: var(--mono); }
 .new:hover { border-color: var(--accent); }
 .search { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; }
 .search:focus { border-color: var(--blue); }
-.sidebar nav { flex: 1; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 1px; margin: 0 -4px; padding: 0 4px; }
 .chat-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; text-align: left; min-height: 34px; }
 .chat-row:hover { background: var(--panel); }
 .chat-row.active { background: var(--panel2); box-shadow: inset 2px 0 0 var(--accent); }
@@ -89,9 +88,6 @@ code, pre { font-family: var(--mono); }
 .chat-row.colored.active { background: color-mix(in srgb, var(--chat) 22%, var(--panel2)); box-shadow: inset 3px 0 0 var(--chat); }
 .chat-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
 .chat-row .when { color: var(--muted); font-size: 11.5px; }
-.run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 1.4s ease-in-out 3; flex: none; }
-.toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; padding: 0 6px; }
-.side-foot { display: grid; gap: 6px; }
 
 /* Chat */
 .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); min-height: 50px; }
@@ -467,7 +463,7 @@ code, pre { font-family: var(--mono); }
 /* Idle dots: the badges, moons and run dots move on for good only on the open chat; on the other
    chats they run a few times when they appear, then rest (an endless animation repaints the page
    every frame: Safari's idle CPU went from ~55% to under 10%). */
-.rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i), .chat-row.active .run-dot { animation-iteration-count: infinite; }
+.rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i) { animation-iteration-count: infinite; }
 .rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; }
 .rail-dot.add { --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
 .rail-search { margin-top: -10px; } /* 8px under the +, not the rail's 18px gap */
@@ -584,7 +580,7 @@ svg.logo { flex: none; color: var(--fg); }
 .panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel pre { max-width: 100%; overflow-x: auto; }
 
-/* Whose chats: one tab per profile (web/settings.tsx ProfileTabs). */
+/* Tabs (which server's settings, the admins' Servers and Access pages). */
 .profile-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
 .profile-tabs button { flex: 1; min-width: 0; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; justify-content: center; }
 .profile-tabs button:hover { color: var(--fg); }
@@ -774,7 +770,7 @@ svg.logo { flex: none; color: var(--fg); }
 :root { --chalk: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
-.form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .server-filter button::before, .new-on button::before,
+.form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .new-on button::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
 .view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
@@ -847,10 +843,10 @@ svg.logo { flex: none; color: var(--fg); }
 .ask-modal .panel.permit { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
 
 /* ---------- Phones (under 680px) ----------
-   A stack of two screens: the chat list (the sidebar, full width) and the open chat (full width,
-   no rail), each sliding over the other. The picture is a drawer from the right over the chat,
+   Screens: the chat list (the sidebar, full width; Settings over it) and the open chat (full width,
+   no rail) over the list (sidebar.css). The picture is a drawer from the right over the chat,
    opened from the button at the end of the chat's header; the chat's start stays in view beside it. */
-.back-to-list, .pic-open, .pic-backdrop, .row-mark { display: none; }
+.back-to-list, .pic-open, .pic-backdrop { display: none; }
 @media (max-width: 679px) {
   .split { grid-template-columns: 1fr !important; }
   .divider { display: none; }
@@ -862,9 +858,6 @@ svg.logo { flex: none; color: var(--fg); }
   .sidebar .brand { padding-left: 6px; }
   .chat-row { min-height: 44px; }
   .chat-row .t { font-size: 15px; }
-  .row-mark { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; font: 700 11px var(--sans); }
-  .row-mark.waiting { background: var(--amber); color: #000; }
-  .row-mark.done { background: var(--green-bg); color: var(--green); }
   .back-to-list { display: flex; align-items: center; gap: 2px; flex: none; margin-left: -8px; padding: 4px 6px 4px 0; color: var(--accent); font: 700 17px var(--hand); }
   .back-to-list svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .back-to-list .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--on-hue); font: 700 11px var(--sans); }
@@ -1185,9 +1178,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .f-flow-cap { margin: 12px 0 0; font: 15px/1.45 var(--sans); }
 
 /* The forms gallery: a page over the app. */
-.forms-link { display: flex; align-items: center; gap: 8px; padding: 4px 6px; color: var(--muted); font: 700 15px var(--hand); }
-.forms-link:hover { color: var(--fg); }
-.forms-link svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
 .gallery-backdrop { position: fixed; inset: 0; z-index: 45; background: rgb(0 0 0 / 0.5); display: grid; place-items: center; padding: 3vh 2vw; }
 .gallery { width: min(1100px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 26px 30px; border-radius: 16px; background: var(--board); box-shadow: 0 16px 60px rgb(0 0 0 / 0.5); position: relative; display: block; container-type: inline-size; }
 .gallery header { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin-bottom: 18px; }
@@ -1523,16 +1513,13 @@ button.cl-fn:hover { text-decoration: underline; }
 .server-off-note { margin: 2px 8px 6px; font-size: 12px; color: var(--amber); }
 .server-chip { font-family: var(--sans); }
 
-.server-filter { display: flex; flex-wrap: wrap; gap: 4px; }
-.server-filter button, .new-on button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border-radius: 999px; font-size: 12px; color: var(--muted); position: relative; isolation: isolate; }
-.server-filter button:first-child { padding-left: 8px; }
-.server-filter button, .new-on button { --ring: var(--chalk-r12-15); --ink: transparent; }
-.server-filter button:hover, .new-on button:hover { color: var(--fg); }
-.server-filter button.on, .new-on button.on { color: var(--fg); font-weight: 600; }
-.server-filter button.on, .new-on button.on { --ink: var(--accent); background: var(--panel2); }
-.server-filter button:disabled, .new-on button:disabled { opacity: 0.5; cursor: default; }
-.server-filter button.off .sf-label { text-decoration: line-through; }
-.server-filter .server-mark, .new-on .server-mark { min-width: 15px; height: 15px; font-size: 10.5px; }
+.new-on button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border-radius: 999px; font-size: 12px; color: var(--muted); position: relative; isolation: isolate; }
+.new-on button { --ring: var(--chalk-r12-15); --ink: transparent; }
+.new-on button:hover { color: var(--fg); }
+.new-on button.on { color: var(--fg); font-weight: 600; }
+.new-on button.on { --ink: var(--accent); background: var(--panel2); }
+.new-on button:disabled { opacity: 0.5; cursor: default; }
+.new-on .server-mark { min-width: 15px; height: 15px; font-size: 10.5px; }
 .sf-note { font-size: 10px; color: var(--amber); font-weight: 600; }
 .sf-note.warn { color: var(--red); }
 
@@ -1540,7 +1527,6 @@ button.cl-fn:hover { text-decoration: underline; }
 .new-on { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 16px; font-size: 12px; }
 .new-on > .muted { margin-right: 2px; }
 
-.admin-links { display: flex; gap: 4px; }
 .hub-admin-links { display: flex; justify-content: center; gap: 10px; }
 
 /* Settings: which server's, and its version. */

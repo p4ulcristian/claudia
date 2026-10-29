@@ -62,8 +62,8 @@ export async function useClaudeToken(api: Api, name: string): Promise<Pick<Me, "
 // The name of the token in use, if it is a saved one.
 export const tokenInUse = (me: Me) => (me.claudeToken?.name ? me.claudeTokens.find((t) => t.name === me.claudeToken!.name)?.name ?? null : null);
 
-// api: the server whose settings these are; top: in the hub, the switch between servers above them.
-export function Settings({ api, me, onMe, close, top }: { api: Api; me: Me; onMe: (m: Me) => void; close: () => void; top?: React.ReactNode }) {
+// A server's own settings, as sections of the Settings screen (web/sidebar.tsx): api = that server.
+export function ServerSettings({ api, me, onMe }: { api: Api; me: Me; onMe: (m: Me) => void }) {
   const [github, setGithub] = useState<GithubUser | undefined>(undefined);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   useEffect(() => {
@@ -72,11 +72,6 @@ export function Settings({ api, me, onMe, close, top }: { api: Api; me: Me; onMe
     api.fetch("/api/prefs").then((r) => r.json()).then(setPrefs, () => {});
     api.fetch("/api/github").then((r) => r.json()).then((j) => setGithub(j.user ?? null), () => setGithub(null));
   }, [api]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
   const inUse = tokenInUse(me);
   const savePrefs = async (next: Partial<Prefs>) => {
     const r = await api.fetch("/api/prefs", { method: "PATCH", body: JSON.stringify(next) });
@@ -84,79 +79,72 @@ export function Settings({ api, me, onMe, close, top }: { api: Api; me: Me; onMe
   };
 
   return (
-    <div className="settings-backdrop" onClick={close}>
-      <div className="settings" role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
-        <header>
-          <h2>Settings</h2>
-          <button className="icon" onClick={close} title="Close (Esc)">×</button>
-        </header>
-        {top}
-        <p className="muted small">{me.email ? <>Signed in as {me.email} · </> : null}profile <b>{me.profile}</b></p>
+    <>
+      <p className="muted small">{me.email ? <>Signed in as {me.email} · </> : null}profile <b>{me.profile}</b></p>
 
-        <section>
-          <h3>Chat colours</h3>
+      <section>
+        <h3>Chat colours</h3>
+        <div className="choice">
+          <label>
+            <input type="radio" name="chatColors" checked={prefs?.chatColors === "each"} onChange={() => savePrefs({ chatColors: "each" })} />
+            A colour of its own for every new chat
+          </label>
+          <label>
+            <input type="radio" name="chatColors" checked={prefs?.chatColors === "none"} onChange={() => savePrefs({ chatColors: "none" })} />
+            Default look; colour a chat by hand from its header dot
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h3>Claude subscription <span className="muted small">shared by every profile here</span></h3>
+        <p className="small">
+          {!me.claudeToken ? <>None in use yet: no chat can run.</> : !inUse ? <>In use: a token without a name, set by {me.claudeToken.by}, {when(me.claudeToken.at)}. Save it again under a name to keep it in the list.</> : <>Switched to <b>{inUse}</b> by {me.claudeToken.by}, {when(me.claudeToken.at)}.</>}{" "}
+          A switch applies to every chat on its next message.
+        </p>
+        {me.claudeTokens.length > 0 && (
           <div className="choice">
-            <label>
-              <input type="radio" name="chatColors" checked={prefs?.chatColors === "each"} onChange={() => savePrefs({ chatColors: "each" })} />
-              A colour of its own for every new chat
-            </label>
-            <label>
-              <input type="radio" name="chatColors" checked={prefs?.chatColors === "none"} onChange={() => savePrefs({ chatColors: "none" })} />
-              Default look; colour a chat by hand from its header dot
-            </label>
+            {me.claudeTokens.map((t) => (
+              <label key={t.name}>
+                <input type="radio" name="claudeToken" checked={t.name === inUse} onChange={async () => {
+                  const next = await useClaudeToken(api, t.name);
+                  if (next) onMe({ ...me, ...next });
+                }} />
+                {t.name} <span className="muted small">saved by {t.by}, {when(t.at)}</span>
+              </label>
+            ))}
           </div>
-        </section>
+        )}
+        <p className="small">Add one, or replace one by its name: make it with <code>claude setup-token</code>. Saving switches to it.</p>
+        <TokenForm
+          named
+          placeholder="Claude token (sk-ant-…)"
+          save={async (token, name) => {
+            const r = await put(api, "/api/claude-token", { name, token });
+            if ("error" in r) return r.error;
+            onMe({ ...me, claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens });
+            return null;
+          }}
+        />
+      </section>
 
-        <section>
-          <h3>Claude subscription <span className="muted small">shared by every profile here</span></h3>
-          <p className="small">
-            {!me.claudeToken ? <>None in use yet: no chat can run.</> : !inUse ? <>In use: a token without a name, set by {me.claudeToken.by}, {when(me.claudeToken.at)}. Save it again under a name to keep it in the list.</> : <>Switched to <b>{inUse}</b> by {me.claudeToken.by}, {when(me.claudeToken.at)}.</>}{" "}
-            A switch applies to every chat on its next message.
-          </p>
-          {me.claudeTokens.length > 0 && (
-            <div className="choice">
-              {me.claudeTokens.map((t) => (
-                <label key={t.name}>
-                  <input type="radio" name="claudeToken" checked={t.name === inUse} onChange={async () => {
-                    const next = await useClaudeToken(api, t.name);
-                    if (next) onMe({ ...me, ...next });
-                  }} />
-                  {t.name} <span className="muted small">saved by {t.by}, {when(t.at)}</span>
-                </label>
-              ))}
-            </div>
-          )}
-          <p className="small">Add one, or replace one by its name: make it with <code>claude setup-token</code>. Saving switches to it.</p>
-          <TokenForm
-            named
-            placeholder="Claude token (sk-ant-…)"
-            save={async (token, name) => {
-              const r = await put(api, "/api/claude-token", { name, token });
-              if ("error" in r) return r.error;
-              onMe({ ...me, claudeToken: r.ok.claudeToken, claudeTokens: r.ok.claudeTokens });
-              return null;
-            }}
-          />
-        </section>
-
-        <section>
-          <h3>GitHub <span className="muted small">yours only</span></h3>
-          <p className="small">
-            {github === undefined ? "Checking…" : github ? <>Pushes and pull requests come from <b>@{github.login}</b>.</> : <>Not connected: Claude can't push or open pull requests for you.</>}{" "}
-            <a href={GITHUB_TOKEN_URL} target="_blank" rel="noreferrer">Create a token on GitHub</a> (the boxes come ticked) and paste it here.
-          </p>
-          <TokenForm
-            placeholder={github ? "Replace with a new token" : "GitHub token (ghp_…)"}
-            save={async (token) => {
-              const r = await put(api, "/api/github", { token });
-              if ("error" in r) return r.error;
-              setGithub(r.ok.user);
-              return null;
-            }}
-          />
-        </section>
-      </div>
-    </div>
+      <section>
+        <h3>GitHub <span className="muted small">yours only</span></h3>
+        <p className="small">
+          {github === undefined ? "Checking…" : github ? <>Pushes and pull requests come from <b>@{github.login}</b>.</> : <>Not connected: Claude can't push or open pull requests for you.</>}{" "}
+          <a href={GITHUB_TOKEN_URL} target="_blank" rel="noreferrer">Create a token on GitHub</a> (the boxes come ticked) and paste it here.
+        </p>
+        <TokenForm
+          placeholder={github ? "Replace with a new token" : "GitHub token (ghp_…)"}
+          save={async (token) => {
+            const r = await put(api, "/api/github", { token });
+            if ("error" in r) return r.error;
+            setGithub(r.ok.user);
+            return null;
+          }}
+        />
+      </section>
+    </>
   );
 }
 
@@ -202,26 +190,6 @@ export function NoProfile({ me }: { me: Me }) {
     <div className="no-profile">
       <Brand me={me} />
       <p>There is no profile here for {me.email ?? "this sign-in"} yet. Ask Paul to add one.</p>
-    </div>
-  );
-}
-
-// Whose chats the sidebar lists. Everyone can read every profile's chats; only your own can be
-// written in (the page server enforces it). The choice is a cookie, so every request follows it.
-export function ProfileTabs({ me }: { me: Me }) {
-  if (me.profiles.length < 2) return null;
-  const pick = (name: string) => {
-    document.cookie = `claudia_view=${name}; path=/; max-age=31536000; samesite=lax`;
-    location.href = "/";
-  };
-  const cap = (n: string) => n[0].toUpperCase() + n.slice(1);
-  return (
-    <div className="profile-tabs" role="tablist" aria-label="Whose chats">
-      {me.profiles.map((p) => (
-        <button key={p} role="tab" aria-selected={p === me.viewing} className={p === me.viewing ? "on" : ""} onClick={() => p !== me.viewing && pick(p)} title={p === me.profile ? "Your chats" : `${cap(p)}'s chats (read only)`}>
-          {cap(p)}{p === me.profile && <span className="you">you</span>}
-        </button>
-      ))}
     </div>
   );
 }

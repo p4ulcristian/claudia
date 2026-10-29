@@ -1,6 +1,6 @@
 // The page served by the hub: one chat list across the servers a person may use. Here: what the hub
-// says (/hub/me), each server's mark and state, the server filter, the new-chat server choice, whose
-// chats (people across servers), and the admins' Servers and Access pages (/hub/admin).
+// says (/hub/me), each server's mark and state, the new-chat server choice, and the admins' Servers
+// and Access pages (/hub/admin). Whose chats and which servers' show: the list's title menu (web/sidebar.tsx).
 import React, { useEffect, useState } from "react";
 import { Brand, type Me } from "./settings";
 import { tipProps } from "./tip";
@@ -36,35 +36,6 @@ export function ServerMark({ mark, label, off }: { mark: string; label: string; 
   return <span className={`server-mark ${off ? "off" : ""}`} title={off ? `${label} is off` : label} aria-label={label}>{mark}</span>;
 }
 
-// The sidebar's filter: All, or one server. A server without a profile can't be picked.
-export function ServerFilter({ servers, marks, pick, onPick }: { servers: ServerView[]; marks: Map<string, string>; pick: string | null; onPick: (s: string | null) => void }) {
-  return (
-    <div className="server-filter" role="tablist" aria-label="Servers">
-      <button role="tab" aria-selected={pick === null} className={pick === null ? "on" : ""} onClick={() => onPick(null)}>All</button>
-      {servers.map((s) => {
-        const note = serverNote(s);
-        return (
-          <button
-            key={s.name}
-            role="tab"
-            aria-selected={pick === s.name}
-            className={`${pick === s.name ? "on" : ""} ${s.state}`}
-            disabled={s.state === "noProfile"}
-            onClick={() => onPick(pick === s.name ? null : s.name)}
-            {...tipProps(note ?? `Only ${s.label}'s chats`)}
-          >
-            <span className="server-mark" aria-hidden="true">{marks.get(s.name)}</span>
-            <span className="sf-label">{s.label}</span>
-            {s.state === "off" && <span className="sf-note">off</span>}
-            {s.state === "noProfile" && <span className="sf-note">needs a profile</span>}
-            {s.update && s.state !== "noProfile" && <span className="sf-note warn">needs an update</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // Where a new chat starts: by the composer of an empty chat. Only servers with a profile can be picked.
 export function NewChatServer({ servers, marks, pick, onPick }: { servers: ServerView[]; marks: Map<string, string>; pick: string; onPick: (s: string) => void }) {
   return (
@@ -88,23 +59,6 @@ export function NewChatServer({ servers, marks, pick, onPick }: { servers: Serve
           </button>
         );
       })}
-    </div>
-  );
-}
-
-// Whose chats: the profile names over every server. Another person's chats are read only, asked of
-// every server that has that profile (the others show nothing in that view).
-export function PeopleTabs({ names, own, viewing, onPick }: { names: string[]; own: Set<string>; viewing: string | null; onPick: (p: string | null) => void }) {
-  if (names.length < 2) return null;
-  const cap = (n: string) => n[0].toUpperCase() + n.slice(1);
-  const isOn = (p: string) => (viewing === null ? own.has(p) : p === viewing);
-  return (
-    <div className="profile-tabs" role="tablist" aria-label="Whose chats">
-      {names.map((p) => (
-        <button key={p} role="tab" aria-selected={isOn(p)} className={isOn(p) ? "on" : ""} onClick={() => !isOn(p) && onPick(own.has(p) ? null : p)} title={own.has(p) ? "Your chats" : `${cap(p)}'s chats (read only)`}>
-          {cap(p)}{own.has(p) && <span className="you">you</span>}
-        </button>
-      ))}
     </div>
   );
 }

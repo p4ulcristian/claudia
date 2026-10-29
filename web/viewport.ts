@@ -75,6 +75,11 @@ function canScroll(el: Element | null, dx: number, dy: number): boolean {
 let start: { x: number; y: number } | null = null;
 let blocked = false;
 
+// Whether the touch in progress moves nothing natively (decided on its first move). The phone's
+// swipes (web/swipe.ts) take a drag only then: otherwise a scroller already follows the finger.
+// Their listener runs after this file's, so the first move is decided by the time they ask.
+export const touchBlocked = () => blocked;
+
 addEventListener("touchstart", (e: TouchEvent) => {
   const t = e.touches[0];
   start = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
