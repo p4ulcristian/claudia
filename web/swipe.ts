@@ -1,5 +1,6 @@
 // The phone's sideways swipes (decision 26), following the finger like iOS's back swipe: on the
-// chat, right slides it off and shows the list under it, left pulls the picture in; on the picture,
+// chat, right slides it off and shows the list under it, left pulls the picture in; on the list,
+// left slides the open chat back over it (back's mirror, like closing a sidebar); on the picture,
 // right pushes it out; on the Settings and agent screens, right goes back. Released past 40% of the
 // way, or flicked, the move completes; else it springs back. The page owns the gesture (the iPhone
 // app turns off the system's edge swipe), so it starts anywhere, except in fields, on things that
@@ -175,6 +176,7 @@ type Screens = {
   picOpen: boolean;
   agentShown: boolean;
   toList: () => void;
+  toChat: () => void;
   closeSettings: () => void;
   closeAgent: () => void;
   openPicture: () => void;
@@ -189,6 +191,10 @@ export function usePhoneSwipes(s: Screens) {
     if (s.screen === "settings") {
       const g = slideBack($(".st-pane"), $(".cs-pane"), s.closeSettings, () => !has("settings-shown"));
       return { surface: $(".st-pane"), moves: g ? [g] : [] };
+    }
+    if (s.screen === "list") {
+      const g = slideOver($(".app > main"), $(".app > .sidebar-slot"), s.toChat, () => has("no-sidebar"));
+      return { surface: $(".app > .sidebar-slot"), moves: g ? [g] : [] };
     }
     if (s.screen !== "chat") return { surface: null, moves: [] };
     const pic = $(".right.pic-drawer"), shade = $(".pic-backdrop");
@@ -242,6 +248,24 @@ export function slideBack(top: HTMLElement | null, under: HTMLElement | null, ba
       setStyles(under, { transform: px((p - 1) * 0.3 * w), visibility: "visible" });
     },
     commit: back,
+    settled,
+    clear: () => unset(top, under),
+  };
+}
+
+// slideBack's mirror: the screen that slid off comes back from the right with a left move, and the
+// one under it goes back to 30% to the left.
+export function slideOver(top: HTMLElement | null, under: HTMLElement | null, forward: () => void, settled: () => boolean): Gesture | null {
+  if (!top) return null;
+  const w = under?.getBoundingClientRect().width || innerWidth;
+  return {
+    dir: -1,
+    width: w,
+    paint: (p) => {
+      setStyles(top, { transform: px((1 - p) * w), visibility: "visible" });
+      setStyles(under, { transform: px(-p * 0.3 * w) });
+    },
+    commit: forward,
     settled,
     clear: () => unset(top, under),
   };

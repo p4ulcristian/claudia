@@ -855,7 +855,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const doneElsewhere = others.filter((c) => !c.waiting && doneMark(c)).length;
   usePhoneSwipes({
     phone, screen, picOpen, agentShown: agentView.shown !== null,
-    toList: goList, closeSettings: () => closeSettingsScreen(), closeAgent: agentView.close, openPicture: () => setPicOpen(true), closePicture,
+    toList: goList, toChat: showChat, closeSettings: () => closeSettingsScreen(), closeAgent: agentView.close, openPicture: () => setPicOpen(true), closePicture,
   });
   const pictureBehind = rightView === "timeline" && (live.pictures.at(-1)?.at ?? 0) > timelineAt;
 
