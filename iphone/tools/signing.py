@@ -31,7 +31,10 @@ def bundle_id(identifier, name):
     found = call("GET", f"/v1/bundleIds?filter[identifier]={identifier}&include=profiles&limit=200")
     bundle = next((b for b in found["data"] if b["attributes"]["identifier"] == identifier), None)
     if bundle:
-        return bundle, found.get("included", [])
+        # The filter also matches longer ids (the extensions' com.p4ulcristian.claudia.*), and
+        # included holds all of their profiles: keep only this bundle's own.
+        own = {p["id"] for p in bundle["relationships"]["profiles"]["data"]}
+        return bundle, [p for p in found.get("included", []) if p["id"] in own]
     if identifier == APP_ID:
         sys.exit(f"no bundle id {identifier} in App Store Connect")
     made = call("POST", "/v1/bundleIds", {"data": {

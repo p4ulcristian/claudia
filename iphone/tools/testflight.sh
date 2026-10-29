@@ -53,6 +53,7 @@ stamp = {
     "CFBundleVersion": "$BUILD_NUMBER",
     "CFBundleSupportedPlatforms": ["iPhoneOS"],
     "UIDeviceFamily": [1],                       # iPhone only
+    "UIRequiredDeviceCapabilities": ["arm64"],   # every bundle: processing refuses 64-bit ones without it (90502)
     "DTPlatformName": "iphoneos", "DTPlatformVersion": "$SDK_VERSION", "DTPlatformBuild": "$SDK_BUILD",
     "DTSDKName": "iphoneos$SDK_VERSION", "DTSDKBuild": "$SDK_BUILD",
     "DTXcode": "$XCODE", "DTXcodeBuild": "$XCODE_BUILD", "DTCompiler": "com.apple.compilers.llvm.clang.1_0",
