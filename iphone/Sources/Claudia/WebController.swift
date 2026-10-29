@@ -47,8 +47,9 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
             webView.scrollView.topEdgeEffect.isHidden = true
             webView.scrollView.bottomEdgeEffect.isHidden = true
         }
-        // The page pushes a history entry per screen, so the edge swipe goes from a chat back to the list.
-        webView.allowsBackForwardNavigationGestures = true
+        // No iOS edge swipe: the page's own swipes follow the finger between list, chat and picture
+        // (decision 26); two gestures on one finger would fight.
+        webView.allowsBackForwardNavigationGestures = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
