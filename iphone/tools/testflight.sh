@@ -8,6 +8,10 @@
 # Needs (none of it in git): the local config folder, ~/.config/claudia-ios (or
 # $CLAUDIA_IOS_CONFIG), with `env` (see iphone/README.md); xtool, rcodesign, uv; the compiled
 # icon in iphone/Icon/compiled/ (tools/fetch-icon.sh).
+#
+# The app carries two extensions (xtool.yml `extensions`): PlugIns/Widget.appex (the summary
+# Live Activity) and PlugIns/NotificationService.appex (decrypts the notification text). Each
+# bundle is signed with its own bundle id's profile and entitlements.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CONFIG=${CLAUDIA_IOS_CONFIG:-$HOME/.config/claudia-ios}
@@ -40,36 +44,64 @@ if [ ! -f Icon/compiled/Assets.car ] && [ "${1:-}" != "--no-upload" ]; then
 fi
 [ -f Icon/compiled/Assets.car ] && cp Icon/compiled/Assets.car Icon/compiled/*.png "$APP/"
 
-python3 - "$APP/Info.plist" Icon/compiled/partial.plist <<EOF
+# The app's Info.plist, then each extension's: the same version and build (App Store Connect
+# requires it) and the same SDK stamp.
+python3 - "$APP" Icon/compiled/partial.plist <<EOF
 import os, plistlib, sys
-info_path, icon_plist = sys.argv[1], sys.argv[2]
+app, icon_plist = sys.argv[1], sys.argv[2]
+stamp = {
+    "CFBundleVersion": "$BUILD_NUMBER",
+    "CFBundleSupportedPlatforms": ["iPhoneOS"],
+    "UIDeviceFamily": [1],                       # iPhone only
+    "DTPlatformName": "iphoneos", "DTPlatformVersion": "$SDK_VERSION", "DTPlatformBuild": "$SDK_BUILD",
+    "DTSDKName": "iphoneos$SDK_VERSION", "DTSDKBuild": "$SDK_BUILD",
+    "DTXcode": "$XCODE", "DTXcodeBuild": "$XCODE_BUILD", "DTCompiler": "com.apple.compilers.llvm.clang.1_0",
+}
+info_path = f"{app}/Info.plist"
 p = plistlib.load(open(info_path, "rb"))
 if os.path.exists(icon_plist):
     p.pop("CFBundleIconFile", None)
     p.update(plistlib.load(open(icon_plist, "rb")))   # CFBundleIcons / CFBundleIconName from actool
+p.update(stamp)
 p.update({
     "CFBundleIdentifier": "$BUNDLE_ID",
-    "CFBundleVersion": "$BUILD_NUMBER",
     "ClaudiaHubURL": "$HUB_URL",                  # from the local config, never committed
     "ClaudiaLoginHosts": "$LOGIN_HOSTS".split(),
-    "UIDeviceFamily": [1],                       # iPhone only
-    "ITSAppUsesNonExemptEncryption": False,      # HTTPS only
-    "DTPlatformName": "iphoneos", "DTPlatformVersion": "$SDK_VERSION", "DTPlatformBuild": "$SDK_BUILD",
-    "DTSDKName": "iphoneos$SDK_VERSION", "DTSDKBuild": "$SDK_BUILD",
-    "DTXcode": "$XCODE", "DTXcodeBuild": "$XCODE_BUILD", "DTCompiler": "com.apple.compilers.llvm.clang.1_0",
+    "ITSAppUsesNonExemptEncryption": False,      # only the OS's standard encryption: HTTPS, CryptoKit AES-GCM
 })
 p.pop("UISupportedInterfaceOrientations~ipad", None)
 plistlib.dump(p, open(info_path, "wb"))
+for ext in sorted(os.listdir(f"{app}/PlugIns")):
+    path = f"{app}/PlugIns/{ext}/Info.plist"
+    e = plistlib.load(open(path, "rb"))
+    e.update(stamp)
+    e["CFBundleShortVersionString"] = p["CFBundleShortVersionString"]
+    plistlib.dump(e, open(path, "wb"))
 EOF
 
-# Profile and entitlements, both checked against the App ID through the App Store Connect API.
-$PY tools/signing.py profile "$BUNDLE_ID" "$DIST_CERT_ID" "$CONFIG/appstore.mobileprovision"
-cp "$CONFIG/appstore.mobileprovision" "$APP/embedded.mobileprovision"
-$PY tools/signing.py entitlements "$CONFIG/appstore.mobileprovision" "$PASSKEY_HOST" build/entitlements.plist
+# Each bundle's profile and entitlements, both checked against its App ID through the App Store
+# Connect API (an extension's bundle id is registered there the first time).
+SCOPED=()
+sign_with() {   # <path in the app> <bundle id> <name in App Store Connect> <signing.py role>
+  local path=$1 id=$2 name=$3 role=$4 profile="$CONFIG/appstore-$4.mobileprovision"
+  [ -d "$APP/$path" ] || { echo "the build has no $path" >&2; exit 1; }
+  $PY tools/signing.py profile "$id" "$name" "$DIST_CERT_ID" "$profile"
+  cp "$profile" "$APP/$path/embedded.mobileprovision"
+  if [ "$role" = app ]; then
+    $PY tools/signing.py entitlements app "$profile" "$PASSKEY_HOST" "build/$role.entitlements"
+    SCOPED+=(--entitlements-xml-file "build/$role.entitlements")
+  else
+    $PY tools/signing.py entitlements "$role" "$profile" "build/$role.entitlements"
+    SCOPED+=(--entitlements-xml-file "$path:build/$role.entitlements")
+  fi
+}
+sign_with . "$BUNDLE_ID" "Claudia" app
+sign_with PlugIns/Widget.appex "$BUNDLE_ID.Widget" "Claudia Widget" widget
+sign_with PlugIns/NotificationService.appex "$BUNDLE_ID.NotificationService" "Claudia NotificationService" notifications
 
 openssl x509 -inform der -in "$DIST_CER" -out build/dist.pem
-rcodesign sign --pem-file "$DIST_KEY" --pem-file build/dist.pem \
-  --entitlements-xml-file build/entitlements.plist "$APP"
+# One pass: the extensions (inside out), then the app, each with its own entitlements.
+rcodesign sign --pem-file "$DIST_KEY" --pem-file build/dist.pem "${SCOPED[@]}" "$APP"
 rm build/dist.pem
 (cd build && zip -qry Claudia.ipa Payload)
 echo "build/Claudia.ipa: build $BUILD_NUMBER"

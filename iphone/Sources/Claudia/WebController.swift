@@ -99,7 +99,7 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
     }
 
     /// Sets `window.claudiaNative.pushToken` and fires `claudia-push-token`; after every page load
-    /// and whenever the token arrives.
+    /// and whenever one of its fields changes (the device token, the Live Activity start token).
     private func sendPushToken() {
         guard let detail = Push.shared.detail, let url = webView.url, Config.isHub(url) else { return }
         let source = """
@@ -153,6 +153,8 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         failure.isHidden = true
         sendPushToken()
+        // A page load may follow a fresh sign-in: the cookies the native calls need.
+        if let url = webView.url, Config.isHub(url) { LiveActivities.shared.sync() }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

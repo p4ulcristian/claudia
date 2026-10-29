@@ -5,13 +5,28 @@
 	<key>CFBundleDisplayName</key>
 	<string>Claudia</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Claudia hub link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>claudia</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo or a video to send in a chat.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record sound with a video you send in a chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save pictures from a chat to your photos.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
