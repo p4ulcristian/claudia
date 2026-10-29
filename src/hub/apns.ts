@@ -1,4 +1,5 @@
-// Apple push (APNs) from the hub (decision 23): an alert to one phone, over HTTP/2, signed with the
+// Apple push (APNs) from the hub (decisions 23, 24): an alert, a badge or a Live Activity push to one
+// phone, over HTTP/2, signed with the
 // developer account's APNs key (token auth: an ES256 JWT made by jose, reused for 50 minutes; Apple
 // refuses one older than an hour and too-frequent new ones). Development builds' tokens go to the
 // sandbox, production builds' to Apple's main address.
@@ -9,11 +10,16 @@ import { SignJWT, importPKCS8 } from "jose";
 export const APPLE = { development: "https://api.sandbox.push.apple.com", production: "https://api.push.apple.com" } as const;
 export type ApnsEnv = keyof typeof APPLE;
 export type ApnsConfig = { keyFile: string; keyId: string; teamId: string };
+// token: the device token, or for a Live Activity its push-to-start or update token (topic then
+// <bundle id>.push-type.liveactivity).
 export type PushDevice = { token: string; env: ApnsEnv; topic: string };
+// alert (also badge-only) or liveactivity; priority 10 = now, 5 = when it suits the phone's power.
+export type PushKind = { type: "alert" | "liveactivity"; priority: 5 | 10 };
+const ALERT: PushKind = { type: "alert", priority: 10 };
 // ok: delivered to Apple. gone: the token is dead (drop it). retry: worth trying again later.
 // failed: Apple refused it for another reason. dry: logged, not sent.
 export type Sent = { status: "ok" | "gone" | "retry" | "failed" | "dry"; detail?: string };
-export type Apns = { send: (d: PushDevice, payload: object) => Promise<Sent> };
+export type Apns = { send: (d: PushDevice, payload: object, kind?: PushKind) => Promise<Sent> };
 
 const JWT_MS = 50 * 60_000;
 const REQUEST_MS = 15_000;
@@ -55,15 +61,15 @@ export async function createApns(config: ApnsConfig, origins: Record<ApnsEnv, st
     return s;
   }
 
-  function post(d: PushDevice, body: string, auth: string) {
+  function post(d: PushDevice, body: string, auth: string, kind: PushKind) {
     return new Promise<{ status: number; body: string }>((resolve, reject) => {
       const req = session(origins[d.env]).request({
         ":method": "POST",
         ":path": `/3/device/${d.token}`,
         authorization: `bearer ${auth}`,
         "apns-topic": d.topic,
-        "apns-push-type": "alert",
-        "apns-priority": "10",
+        "apns-push-type": kind.type,
+        "apns-priority": String(kind.priority),
         "content-type": "application/json",
       });
       let status = 0;
@@ -81,10 +87,10 @@ export async function createApns(config: ApnsConfig, origins: Record<ApnsEnv, st
   }
 
   return {
-    async send(d, payload) {
+    async send(d, payload, kind = ALERT) {
       let r: { status: number; body: string };
       try {
-        r = await post(d, JSON.stringify(payload), await bearer());
+        r = await post(d, JSON.stringify(payload), await bearer(), kind);
       } catch (err) {
         return { status: "retry", detail: (err as Error).message };
       }
@@ -106,10 +112,12 @@ export async function createApns(config: ApnsConfig, origins: Record<ApnsEnv, st
   };
 }
 
-// Pushes written to the log instead of sent (HUB_APNS_DRY_RUN=1): to see what would go out, with no key.
+// Pushes written to the log instead of sent (HUB_APNS_DRY_RUN=1): to see what would go out, with no
+// key. Chat titles in a Live Activity's state show as their length only: no chat text in logs.
 export const dryRun: Apns = {
-  async send(d, payload) {
-    console.log(`push (dry run) to ${shortToken(d.token)} (${d.env}, ${d.topic}): ${JSON.stringify(payload)}`);
+  async send(d, payload, kind = ALERT) {
+    const shown = JSON.stringify(payload, (k, v) => (k === "title" && typeof v === "string" && v !== "Claudia" ? `‹${Array.from(v).length} chars›` : v));
+    console.log(`push (dry run, ${kind.type} p${kind.priority}) to ${shortToken(d.token)} (${d.env}, ${d.topic}): ${shown}`);
     return { status: "dry" };
   },
 };

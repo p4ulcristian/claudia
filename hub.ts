@@ -11,7 +11,10 @@ import { join, normalize } from "node:path";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
 import { hubStore } from "./src/hub/store";
 import { NAME, applied, dropPeer, enroll, pair, parseKey, suggestName } from "./src/hub/pairing";
-import { pushOn, startPush, syncPush } from "./src/hub/push";
+import { pushChanged, pushOn, startPush, syncPush } from "./src/hub/push";
+import { liveEnded, liveReported } from "./src/hub/live";
+import { beat } from "./src/hub/presence";
+import { deviceKey } from "./src/hub/seal";
 import { shortToken } from "./src/hub/apns";
 import { COMMIT, VERSION } from "./src/version";
 
@@ -46,6 +49,7 @@ function caller(req: Request): Caller | null {
 
 // A change made from another site (a form or script elsewhere riding the login cookie) is refused:
 // browsers say where a request comes from (Sec-Fetch-Site), and a socket's Origin must be this host.
+// The iPhone app's own requests (URLSession, no page) send neither, and pass.
 function crossSite(req: Request) {
   const site = req.headers.get("sec-fetch-site");
   if (site && site !== "same-origin" && site !== "none") return true;
@@ -77,6 +81,11 @@ function changed() {
 // An APNs device token (hex; Apple says not to count on its length) and an app's bundle id.
 const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/;
 const TOPIC = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+// ActivityKit's tokens (push-to-start, an activity's updates: hex) and an activity's id.
+const LIVE_TOKEN = /^[0-9a-f]{32,512}$/;
+const ACTIVITY = /^[A-Za-z0-9-]{1,100}$/;
+// A page's own id for its presence beats.
+const PAGE = /^[A-Za-z0-9-]{8,64}$/;
 
 function admin(req: Request): Caller | Response {
   const c = caller(req);
@@ -139,8 +148,10 @@ Bun.serve<PipeData>({
     },
 
     // The caller's own phones (the iPhone app's page registers its APNs token: web/native.ts):
-    // { token, env: development | production, topic: the app's bundle id }. Kept also while push is
-    // off here, so the phones are ready when the key is set.
+    // { token, env: development | production, topic: the app's bundle id, key: base64 of the 32
+    // bytes alert texts are sealed with, liveStartToken?: ActivityKit's push-to-start token, which
+    // may come later in another POST of the same token }. Kept also while push is off here, so the
+    // phones are ready when the key is set.
     "/hub/push/devices": {
       POST: async (req: Request) => {
         const c = caller(req);
@@ -150,13 +161,67 @@ Bun.serve<PipeData>({
         const token = str(b.token).toLowerCase();
         const env = str(b.env);
         const topic = str(b.topic, 155);
+        const key = deviceKey(b.key);
+        const liveStart = b.liveStartToken === undefined || b.liveStartToken === null ? null : str(b.liveStartToken, 600).toLowerCase();
         if (!DEVICE_TOKEN.test(token)) return json({ error: "token: an APNs device token in hex" }, 400);
         if (env !== "development" && env !== "production") return json({ error: "env: development or production" }, 400);
         if (!TOPIC.test(topic)) return json({ error: "topic: the app's bundle id" }, 400);
-        hubStore.saveDevice({ token, email: c.email, env, topic });
-        console.log(`push: phone ${shortToken(token)} (${env}) registered for ${c.email}`);
+        if (!key) return json({ error: "key: base64 of 32 random bytes" }, 400);
+        if (liveStart !== null && !LIVE_TOKEN.test(liveStart)) return json({ error: "liveStartToken: ActivityKit's push-to-start token in hex" }, 400);
+        hubStore.saveDevice({ token, email: c.email, env, topic, key, liveStart });
+        console.log(`push: phone ${shortToken(token)} (${env}${liveStart ? ", Live Activity" : ""}) registered for ${c.email}`);
         syncPush();
+        pushChanged(c.email);
         return json({ ok: true, push: pushOn() });
+      },
+    },
+    // A Live Activity's update token, from the iPhone app itself (it may be woken with no page
+    // loaded): { device: its APNs device token, activity: ActivityKit's id, token: hex }. Only for
+    // the caller's own phone; an activity already ended stays ended.
+    "/hub/push/live": {
+      POST: async (req: Request) => {
+        const c = caller(req);
+        if (!c) return json({ error: "not signed in" }, 401);
+        if (crossSite(req)) return json({ error: "cross-site" }, 403);
+        const b = await body(req);
+        const device = str(b.device).toLowerCase();
+        const activity = str(b.activity, 100);
+        const token = str(b.token, 600).toLowerCase();
+        if (!ACTIVITY.test(activity)) return json({ error: "activity: the activity's id" }, 400);
+        if (!LIVE_TOKEN.test(token)) return json({ error: "token: the activity's update token in hex" }, 400);
+        if (!hubStore.devices(c.email).some((d) => d.token === device)) return json({ error: "no such phone of yours" }, 404);
+        hubStore.saveActivity(activity, device, token);
+        const a = hubStore.activity(activity);
+        if (!a || a.device !== device) return json({ error: "that activity is another phone's" }, 409);
+        if (a.endedAt !== null) return json({ ok: true, ended: true });
+        liveReported(c.email);
+        return json({ ok: true, ended: false });
+      },
+    },
+    // The app saw the activity end (iOS ends one after 8 hours, or the person dismissed it).
+    "/hub/push/live/:activity": {
+      DELETE: (req: BunRequest<"/hub/push/live/:activity">) => {
+        const c = caller(req);
+        if (!c) return json({ error: "not signed in" }, 401);
+        if (crossSite(req)) return json({ error: "cross-site" }, 403);
+        const a = hubStore.activity(decodeURIComponent(req.params.activity));
+        if (!a || a.email !== c.email) return json({ error: "no such activity of yours" }, 404);
+        liveEnded(c.email, a);
+        return json({ ok: true });
+      },
+    },
+    // A desktop page's word on whether its person is working at it: { page: its own id, active }
+    // (web/presence.ts). While they are, their phone alerts wait (src/hub/presence.ts).
+    "/hub/presence": {
+      POST: async (req: Request) => {
+        const c = caller(req);
+        if (!c) return json({ error: "not signed in" }, 401);
+        if (crossSite(req)) return json({ error: "cross-site" }, 403);
+        const b = await body(req);
+        const page = str(b.page, 64);
+        if (!PAGE.test(page)) return json({ error: "page: the page's id" }, 400);
+        beat(c.email, page, b.active === true);
+        return new Response(null, { status: 204 });
       },
     },
     "/hub/push/devices/:token": {

@@ -22,6 +22,7 @@ import { bakeChalk } from "./chalk";
 import { FormsGallery } from "./gallery";
 import { Brand, NoProfile, ProfileTabs, brandName, Settings as SettingsDialog, useClaudeToken, type Me } from "./settings";
 import { ApiCtx, PAGE_API, apiFor, type Api } from "./api";
+import { startPresence } from "./presence";
 import { AdminDialog, HubEmpty, NewChatServer, PeopleTabs, ServerFilter, ServerMark, SettingsServers, serverMarks, type AdminTab, type HubMe, type ServerState, type ServerView } from "./hub";
 import type { Ask, ChangeMeta, ChatEvent, ChatRow, SearchFound, Context, Item, Meta, Permit, Picture, Scene, Settings, Task } from "./types";
 import "./style.css";
@@ -229,7 +230,11 @@ function Root() {
   const [mode, setMode] = useState<{ hub: HubMe | null } | null>(null);
   useEffect(() => {
     fetch("/hub/me")
-      .then(async (r) => setMode({ hub: r.ok ? ((await r.json()) as HubMe) : null }))
+      .then(async (r) => {
+        setMode({ hub: r.ok ? ((await r.json()) as HubMe) : null });
+        // Served by the hub: it hears whether you work at this page (phone alerts wait meanwhile).
+        if (r.ok) startPresence();
+      })
       .catch(() => setMode({ hub: null }));
   }, []);
   return mode ? <App hubFirst={mode.hub} /> : null;
