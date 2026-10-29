@@ -67,6 +67,23 @@ db.exec(`
     description TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
+  -- How each chat's last turn ended (decision 24), kept so the hub's badge and pushes survive a
+  -- runner restart: the result's id, when (this runner's clock), how, and the start of Claude's
+  -- last reply as plain text (the phone's notification body).
+  CREATE TABLE IF NOT EXISTS last_turns (
+    session_id TEXT PRIMARY KEY,
+    turn TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    stopped INTEGER NOT NULL,
+    failed INTEGER NOT NULL,
+    reply TEXT NOT NULL
+  );
+  -- When this profile's person last had the chat open (decision 24): a turn that ended after it is
+  -- unseen (the rail's done mark, the phone's badge) on every device.
+  CREATE TABLE IF NOT EXISTS seen (
+    session_id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL
+  );
 `);
 
 // Added after the first release: the chat's working folder.
@@ -88,6 +105,8 @@ if (!db.query<{ name: string }, []>("PRAGMA table_info(chat_settings)").all().so
 db.exec("DROP TABLE IF EXISTS chat_words");
 
 // chatColors: "each" = every new chat gets a colour of its own; "none" = new chats keep the default look.
+export type LastTurn = { id: string; at: number; stopped: boolean; failed: boolean; reply: string };
+
 export type Template = { name: string; html: string; parts: Record<string, string>; description: string; updatedAt: number };
 
 // hiddenForms: built-in forms the user deleted in the Forms window (Claude no longer gets them).
@@ -135,6 +154,15 @@ const q = {
     "INSERT INTO templates (name, html, parts, description, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO UPDATE SET html = excluded.html, parts = excluded.parts, description = excluded.description, updated_at = excluded.updated_at",
   ),
   deleteTemplate: db.query("DELETE FROM templates WHERE name = ? COLLATE NOCASE"),
+  lastTurns: db.query<{ session_id: string; turn: string; at: number; stopped: number; failed: number; reply: string }, []>("SELECT * FROM last_turns"),
+  lastTurn: db.query<{ turn: string; at: number; stopped: number }, [string]>("SELECT turn, at, stopped FROM last_turns WHERE session_id = ?"),
+  seenAt: db.query<{ at: number }, [string]>("SELECT at FROM seen WHERE session_id = ?"),
+  saveTurn: db.query(
+    `INSERT INTO last_turns (session_id, turn, at, stopped, failed, reply) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (session_id) DO UPDATE SET turn = excluded.turn, at = excluded.at, stopped = excluded.stopped, failed = excluded.failed, reply = excluded.reply`,
+  ),
+  seen: db.query<{ session_id: string; at: number }, []>("SELECT session_id, at FROM seen"),
+  markSeen: db.query("INSERT INTO seen (session_id, at) VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET at = excluded.at"),
   pictures: db.query<{ turn_uuid: string; scene: string; changed: string; created_at: number }, [string]>(
     "SELECT turn_uuid, scene, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
   ),
@@ -201,6 +229,18 @@ export const store = {
   },
   saveTemplate: (t: Omit<Template, "updatedAt">) => q.saveTemplate.run(t.name, t.html, JSON.stringify(t.parts), t.description, Date.now()),
   deleteTemplate: (name: string) => q.deleteTemplate.run(name),
+  // Every chat's last turn, by chat.
+  lastTurns: () =>
+    new Map(q.lastTurns.all().map((r): [string, LastTurn] => [r.session_id, { id: r.turn, at: r.at, stopped: !!r.stopped, failed: !!r.failed, reply: r.reply }])),
+  lastTurnId: (id: string) => q.lastTurn.get(id)?.turn ?? null,
+  saveTurn: (id: string, t: LastTurn) => q.saveTurn.run(id, t.id, t.at, t.stopped ? 1 : 0, t.failed ? 1 : 0, t.reply),
+  seen: () => new Map(q.seen.all().map((r) => [r.session_id, r.at])),
+  // The chat's last turn ended (not stopped) after the person last had it open.
+  unseen: (id: string) => {
+    const t = q.lastTurn.get(id);
+    return !!t && !t.stopped && t.at > (q.seenAt.get(id)?.at ?? 0);
+  },
+  markSeen: (id: string, at = Date.now()) => q.markSeen.run(id, at),
   pictures: (id: string) =>
     q.pictures.all(id).map((r) => ({
       turn: r.turn_uuid,

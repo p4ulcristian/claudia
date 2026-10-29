@@ -377,16 +377,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // The open chat's server, for every feature (picture, files, git, timeline, changes, forms…).
   const openApi = apiOf(current.server);
 
-  // Chats whose turn ended while another chat was open: a "done" badge until opened (kept across reloads).
-  const [done, setDone] = useState<Set<string>>(() => new Set(JSON.parse(store.get("done") || "[]")));
   const wasRunning = useRef(new Map<string, boolean>());
-  const changeDone = useCallback((f: (d: Set<string>) => void) => setDone((old) => {
-    const d = new Set(old);
-    f(d);
-    store.set("done", JSON.stringify([...d]));
-    return d;
-  }), []);
-  useEffect(() => changeDone((d) => d.delete(curKey)), [curKey]);
 
   // Forms deleted in the Forms window (and opt-in forms this instance lacks): not offered in the row over the picture either.
   const [hiddenForms, setHiddenForms] = useState<string[]>([]);
@@ -433,7 +424,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     fetched.current.add(id);
     for (const c of rows) known.current.set(keyOf(s, c.id), { ...c, server: s, key: keyOf(s, c.id), off: false });
     const cur = keyOf(currentRef.current.server, currentRef.current.id);
-    const ended = rows.filter((c) => wasRunning.current.get(keyOf(s, c.id)) && !c.running && keyOf(s, c.id) !== cur);
     // Sounds and desktop popups: a chat that finished or started waiting on you (a sound in its
     // colour's note); the open one only when the window isn't in front.
     if (soundsRef.current || popupsRef.current) {
@@ -448,7 +438,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       }
     }
     for (const c of rows) { wasRunning.current.set(keyOf(s, c.id), c.running); wasWaiting.current.set(keyOf(s, c.id), c.waiting); }
-    if (ended.length) changeDone((d) => ended.forEach((c) => d.add(keyOf(s, c.id))));
     setLists((l) => ({ ...l, [id]: rows }));
     if (hubMode) store.set(`hub.list.${id}`, JSON.stringify(rows));
   }, [all, archivedView, viewSig]);
@@ -688,6 +677,19 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   }, [resolving, started, defaultServer, current.server, usable.join(",")]);
 
   const row = chats.find((c) => c.key === curKey) ?? known.current.get(curKey);
+  // Done since you last looked (decision 24): the server keeps when each chat was last open, so the
+  // rail's mark and the phone's badge agree on every device. The open chat, while it shows, is
+  // seen there; never from another profile's read-only view.
+  const [visible, setVisible] = useState(() => document.visibilityState === "visible");
+  useEffect(() => {
+    const on = () => setVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", on);
+    return () => document.removeEventListener("visibilitychange", on);
+  }, []);
+  const doneMark = (c: Row) => !readOnly && !!c.unseen && c.key !== curKey;
+  useEffect(() => {
+    if (row?.unseen && visible && !readOnly && (!phone || screen === "chat")) void openApi.fetch(`/api/chats/${current.id}/seen`, { method: "POST" }).catch(() => {});
+  }, [row?.unseen, curKey, visible, readOnly, phone, screen]);
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
   useEffect(() => { document.title = `${title} · ${brandName(hubMode ? null : me?.name)}`; }, [title, me]);
 
@@ -847,7 +849,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   // Phone: the other chats waiting on you or done since you looked, as a count on the Chats button.
   const others = chats.filter((c) => c.key !== curKey && !c.off);
   const waitingElsewhere = others.filter((c) => c.waiting).length;
-  const doneElsewhere = others.filter((c) => !c.waiting && done.has(c.key)).length;
+  const doneElsewhere = others.filter((c) => !c.waiting && doneMark(c)).length;
   const leftBox = useRef<HTMLElement>(null);
   const rightBox = useRef<HTMLElement>(null);
   useSwipe(leftBox, phone && screen === "chat" && !picOpen, { right: goList, left: () => setPicOpen(true) });
@@ -958,7 +960,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
                 >
                   <span className="rail-dot">
                     <DotFace project={c.project} tag={c.project ? tags.get(c.project) ?? "" : ""} logo={c.logo} api={apiOf(c.server)} />
-                    <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : done.has(c.key) ? "done" : null} />
+                    <StateBadge state={c.waiting ? "waiting" : c.running ? "thinking" : doneMark(c) ? "done" : null} />
                     <AgentMoons n={c.agents} />
                   </span>
                   <span className="rail-name">{c.title}</span>
@@ -1022,7 +1024,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
               >
                 {c.running && !c.off && <span className="run-dot" title="Working" />}
                 <span className="t">{c.title}</span>
-                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : done.has(c.key) ? <span className="row-mark done" title="Done">✓</span> : null)}
+                {phone && !c.off && (c.waiting ? <span className="row-mark waiting" title="Waiting for you">?</span> : doneMark(c) ? <span className="row-mark done" title="Done">✓</span> : null)}
                 {markOf(c)}
                 <span className="when">{ago(c.at)}</span>
               </button>

@@ -5,7 +5,7 @@ import type { ServerWebSocket } from "bun";
 import { Chat, NOT_HERE, WORK, loadHistory, sentImage, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
-import { store } from "./src/db";
+import { store, type LastTurn } from "./src/db";
 import { watch } from "node:fs";
 import { projectOf, projectLogo } from "./src/projects";
 import { search, sessionsDir, warm } from "./src/search";
@@ -63,14 +63,23 @@ function projectFields(folder: string | null) {
   return { project: p?.name ?? null, logo: !!p?.logo };
 }
 
-// What a phone may be told about a chat (decision 23: the hub reads these rows as the chat's person
-// and pushes): its open questions and permission asks, and how its last turn ended. ago, not a
+// What a phone may be told about a chat (decisions 23, 24: the hub reads these rows as the chat's
+// person, pushes, counts the badge and fills the Live Activity): its open questions and permission
+// asks, how its last turn ended with the reply's start, how long it has run, and unseen: a turn
+// ended (not stopped) after the person last had the chat open, on any device. Times as ago, not a
 // time: the hub's clock may differ from this one.
-function attentionFields(c: Chat | undefined) {
+type Attention = { turns: Map<string, LastTurn>; seen: Map<string, number>; now: number };
+const attention = (): Attention => ({ turns: store.lastTurns(), seen: store.seen(), now: Date.now() });
+
+function attentionFields(id: string, c: Chat | undefined, a: Attention) {
+  const t = a.turns.get(id);
+  const running = c?.running ?? false;
   return {
-    asks: c ? [...c.asks.values()].map(({ value: a }) => ({ id: a.id, question: a.questions[0]?.question ?? "" })) : [],
-    permits: c ? [...c.permits.values()].map(({ value: p }) => ({ id: p.id, tool: p.tool, description: p.description })) : [],
-    lastTurn: c?.lastTurn ? { id: c.lastTurn.id, ago: Date.now() - c.lastTurn.at, stopped: c.lastTurn.stopped, failed: c.lastTurn.failed } : null,
+    asks: c ? [...c.asks.values()].map(({ value: q, at }) => ({ id: q.id, question: q.questions[0]?.question ?? "", ago: a.now - at })) : [],
+    permits: c ? [...c.permits.values()].map(({ value: p, at }) => ({ id: p.id, tool: p.tool, description: p.description, ago: a.now - at })) : [],
+    lastTurn: t ? { id: t.id, ago: a.now - t.at, stopped: t.stopped, failed: t.failed, reply: t.reply } : null,
+    runningFor: running && c!.since ? a.now - c!.since : null,
+    unseen: !!t && !t.stopped && !running && t.at > (a.seen.get(id) ?? 0),
   };
 }
 
@@ -97,8 +106,9 @@ async function listChats(all: boolean, archivedView: boolean) {
   const have = new Set(sessions.map((s) => s.sessionId));
   const fresh = archivedView ? [] : [...chats.values()].filter((c) => c.firstSent && !have.has(c.id) && !archived.has(c.id));
   // In the order they were started, a new chat last, so a chat getting a new message doesn't move.
+  const att = attention();
   return [
-    ...shownRows(shown, ours, archived, colors),
+    ...shownRows(shown, ours, archived, colors, att),
     ...fresh.map((c) => ({
       id: c.id,
       title: c.firstSent!.text,
@@ -111,12 +121,12 @@ async function listChats(all: boolean, archivedView: boolean) {
       color: colors.get(c.id) ?? c.settings.color ?? null,
       archived: false,
       ...projectFields(c.settings.folder),
-      ...attentionFields(c),
+      ...attentionFields(c.id, c, att),
     })),
   ];
 }
 
-function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<string>, archived: Set<string>, colors: Map<string, string>) {
+function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<string>, archived: Set<string>, colors: Map<string, string>, att: Attention) {
   return shown
     .sort((a, b) => (a.createdAt ?? a.lastModified) - (b.createdAt ?? b.lastModified))
     .map((s) => ({
@@ -132,7 +142,7 @@ function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<st
       color: colors.get(s.sessionId) ?? null,
       archived: archived.has(s.sessionId),
       ...projectFields(chats.get(s.sessionId)?.settings.folder ?? store.settings(s.sessionId).folder),
-      ...attentionFields(chats.get(s.sessionId)),
+      ...attentionFields(s.sessionId, chats.get(s.sessionId), att),
     }));
 }
 
@@ -520,6 +530,20 @@ Bun.serve({
         } catch (err) {
           return json({ error: String((err as Error)?.message ?? err) }, 409);
         }
+      },
+    },
+    // The person has this chat open (decision 24): the page says so when it opens or shows a chat,
+    // and when a turn ends while it shows. Only this profile's own pages reach it (server.ts refuses
+    // other profiles' read-only views anything but GETs). A chat that stops being unseen is told to
+    // every page and the hub (the rail's done mark, the phone's badge).
+    "/api/chats/:id/seen": {
+      POST: (req) => {
+        const id = req.params.id;
+        if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
+        const was = store.unseen(id);
+        store.markSeen(id);
+        if (was) broadcastChats();
+        return json({ ok: true });
       },
     },
     "/api/chats/:id": {

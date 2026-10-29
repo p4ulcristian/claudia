@@ -114,6 +114,29 @@ export function toolLabel(name: string) {
   return name.startsWith("mcp__") ? name.split("__").slice(1).join(" ") : name;
 }
 
+// The start of a reply as plain text (a phone notification's body): markdown marks taken out,
+// code blocks kept as their text, links as their words, all on one line, cut at a word.
+export function plainStart(md: string, max: number): string {
+  const text = stripReminders(md)
+    .replace(/^\s*(```|~~~).*$/gm, "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)/gm, "")
+    .replace(/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")
+    .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?!\w)/g, "$1$2")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/<[^>\n]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  const cut = chars.slice(0, max - 1).join("");
+  const word = cut.replace(/\s+\S*$/, "");
+  return `${word.length > max / 2 ? word : cut}…`;
+}
+
 export const stripReminders = (s: string) => s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
 
 // An answer to AskUserQuestion, as the user's own message in the chat.
@@ -375,7 +398,8 @@ const toolsVersion = (t: ReturnType<typeof tools>) => Bun.hash(JSON.stringify(t)
 let host: HostClient | null = null;
 export function useHost(h: HostClient) { host = h; }
 
-type Waiting<T> = { value: T; resolve: (r: PermissionResult) => void; input: Record<string, unknown> };
+// at: when it was asked (the hub's Live Activity shows how long a chat has waited).
+type Waiting<T> = { value: T; resolve: (r: PermissionResult) => void; input: Record<string, unknown>; at: number };
 
 export class Chat implements SessionHandler {
   private q: RemoteSession | null = null;
@@ -403,9 +427,6 @@ export class Chat implements SessionHandler {
   private sceneTurn: string;
   asks = new Map<string, Waiting<Ask>>();
   permits = new Map<string, Waiting<Permit>>();
-  // How the last turn seen here ended, for the hub's phone pushes (decision 23): the result
-  // message's uuid (one id per turn, which the hub remembers it told), when, and how.
-  lastTurn: { id: string; at: number; stopped: boolean; failed: boolean } | null = null;
   tasks = new Map<string, Task>();
   // Sent messages Claude Code hasn't written to the session file yet (a message sent mid-turn waits
   // until Claude takes it in), so a chat opened again in that time still shows them. Keyed by uuid,
@@ -1052,7 +1073,7 @@ export class Chat implements SessionHandler {
       }
       if (name === "AskUserQuestion") {
         const ask = { id, questions: (input.questions as Question[]) ?? [] };
-        this.asks.set(id, { value: ask, resolve, input });
+        this.asks.set(id, { value: ask, resolve, input, at: Date.now() });
         this.emit({ t: "ask", ask });
       } else {
         const permit = {
@@ -1062,7 +1083,7 @@ export class Chat implements SessionHandler {
           description: opts.description ?? toolTitle(name, input),
           detail: short(JSON.stringify(input, null, 2), 2000),
         };
-        this.permits.set(id, { value: permit, resolve, input });
+        this.permits.set(id, { value: permit, resolve, input, at: Date.now() });
         this.emit({ t: "permit", permit });
       }
     });
@@ -1216,8 +1237,14 @@ export class Chat implements SessionHandler {
         const stopped = this.stopping;
         this.stopping = false;
         this.emit({ t: "turn_end", turn: this.turn, drew: this.drew, error: stopped ? undefined : error, stopped });
-        // (not from a replay after a runner restart: its time would be now, not when the turn ended)
-        if (!this.replaying) this.lastTurn = { id: m.uuid, at: Date.now(), stopped, failed: !stopped && !!error };
+        // How it ended, for the hub's phone pushes and badge (decisions 23, 24): the result's uuid (one
+        // id per turn, which the hub remembers it told), when, how, and the reply's start. A replay
+        // after a runner restart keeps what was saved; a turn that ended while the runner was down
+        // is saved now (its time a little late).
+        if (!this.replaying || store.lastTurnId(this.id) !== m.uuid) {
+          const reply = m.subtype === "success" && !m.is_error ? plainStart(String(m.result ?? ""), 200) : "";
+          store.saveTurn(this.id, { id: m.uuid, at: Date.now(), stopped, failed: !stopped && !!error, reply });
+        }
         this.setRunning(false);
         if (this.replaying) return;
         this.readContext();
