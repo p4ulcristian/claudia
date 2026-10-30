@@ -5,16 +5,20 @@ const RATE = 24000;
 
 export type Clip = { buffer: AudioBuffer; seconds: number };
 
+// How the page reaches its server: plain fetch on a server's own page, /s/<server>/… through the hub.
+export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
+
 export class Voice {
+  constructor(private ask: Fetcher) {}
   private ctx: AudioContext | null = null;
   private clips = new Map<string, Promise<Clip | null>>();
   private source: AudioBufferSourceNode | null = null;
   error = "";
 
   // is a voice set up on this server
-  static async available(): Promise<boolean> {
+  async available(): Promise<boolean> {
     try {
-      const r = await fetch("/api/narrate");
+      const r = await this.ask("/api/narrate");
       return r.ok && !!(await r.json()).voice;
     } catch {
       return false;
@@ -38,7 +42,7 @@ export class Voice {
 
   private async fetchClip(text: string, instruction?: string): Promise<Clip | null> {
     try {
-      const r = await fetch("/api/narrate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, instruction }) });
+      const r = await this.ask("/api/narrate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, instruction }) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `voice answered ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer());
       const pcm = new Int16Array(bytes.buffer, 0, Math.floor(bytes.byteLength / 2));

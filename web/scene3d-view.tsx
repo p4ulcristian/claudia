@@ -10,6 +10,7 @@ import { loadScript, type SceneScript } from "./scene3d-vm";
 import { isSolid, makeChecker, type Overlap } from "./scene3d-overlap";
 import { GAP_SECONDS, estimateSeconds, matchesAny, normalizeStory, visibleAt, type CameraSpec, type Step } from "./scene3d-story";
 import { Voice } from "./scene3d-voice";
+import { useApi } from "./api";
 
 type Data = Record<string, any>;
 type Picked = { id: string; title: string; x: number; y: number; rows: [string, string][]; note?: string; shape: string; color: string; parent?: string };
@@ -246,6 +247,7 @@ function dispose(root: THREE.Group) {
 
 export default function SceneView({ data, chat, block, live }: { data: Data; chat?: string; block?: string; live?: boolean }) {
   const send = useContext(PictureSend);
+  const server = useApi();
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void; story: { play: () => void; pause: () => void; next: () => void; prev: () => void; goto: (n: number) => void; mute: (m: boolean) => void } } | null>(null);
   const [animated, setAnimated] = useState(false);
@@ -322,8 +324,8 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const fades: { id: string; from: number; to: number; at: number; dur: number }[] = [];
     let focus = new Set<string>();
     let cam: { at: number; dur: number; p0: THREE.Vector3; t0: THREE.Vector3; p1: THREE.Vector3; t1: THREE.Vector3 } | null = null;
-    const voice = new Voice();
-    const voiceReady = Voice.available();
+    const voice = new Voice((path, init) => server.fetch(path, init));
+    const voiceReady = voice.available();
     let checker: ReturnType<typeof makeChecker> | null = null;
     let flagged = '';
     const everSeen = new Set<string>();
@@ -576,7 +578,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       // the voice: every line is asked for in order while the user looks around
       if (d.narrate !== false && steps.some((x) => x.say)) {
         void voiceReady.then(async (ok) => {
-          if (!ok) { setVoiceState("none"); return; }
+          if (!ok) { setVoiceState("no voice on this server"); return; }
           const lines = [...new Set(steps.map((x) => x.say).filter(Boolean))];
           let n = 0;
           for (const line of lines) {
