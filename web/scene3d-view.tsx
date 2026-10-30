@@ -1,14 +1,16 @@
 // The three.js side of the scene3d form (loaded on demand by scene3d.tsx). Parts and arrows come
 // from the form's data; an optional `script` (run in QuickJS, web/scene3d-vm.ts) can add more of
 // them and move parts every frame.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import { PictureSend } from "./editor";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { loadScript, type SceneScript } from "./scene3d-vm";
-import { makeChecker, type Overlap } from "./scene3d-overlap";
+import { isSolid, makeChecker, type Overlap } from "./scene3d-overlap";
 
 type Data = Record<string, any>;
+type Picked = { id: string; title: string; x: number; y: number; rows: [string, string][]; note?: string; shape: string; color: string; parent?: string };
 type V3 = [number, number, number];
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 const V = (v: unknown, d: V3 = [0, 0, 0]): V3 => (Array.isArray(v) && v.length >= 3 ? [Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0] : d);
@@ -100,6 +102,7 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       wireframe: !!p.wire,
     });
     const mesh = new THREE.Mesh(geometryOf(p), mat);
+    mesh.userData.id = p.id;
     if (p.shape === "group") mat.visible = false;
     const radius = Number(p.radius) || 0.08;
     if (p.shape === "rod") placeRod(mesh, V(p.from), V(p.to), radius);
@@ -215,9 +218,10 @@ function dispose(root: THREE.Group) {
   root.clear();
 }
 
-export default function SceneView({ data }: { data: Data }) {
+export default function SceneView({ data, chat, block, live }: { data: Data; chat?: string; block?: string; live?: boolean }) {
+  const send = useContext(PictureSend);
   const host = useRef<HTMLDivElement>(null);
-  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void } | null>(null);
+  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void } | null>(null);
   const [animated, setAnimated] = useState(false);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(2);
@@ -228,6 +232,7 @@ export default function SceneView({ data }: { data: Data }) {
   const [panel, setPanel] = useState(false);
   const [height, setHeight] = useState(() => clampHeight(Number(localStorage.getItem(HEIGHT_KEY)) || 440));
   const [scanned, setScanned] = useState(false);
+  const [picked, setPicked] = useState<Picked | null>(null);
 
   useEffect(() => {
     const el = host.current!;
@@ -281,6 +286,17 @@ export default function SceneView({ data }: { data: Data }) {
 
     const stop = () => { script?.close(); script = null; };
 
+    // red glow for overlapping parts, a blue one for the part the user clicked
+    let bad = new Set<string>();
+    let chosen: string | null = null;
+    const paint = () => {
+      for (const [id, e] of byId) {
+        const m = e.mesh.material as THREE.MeshStandardMaterial;
+        m.emissive.setHex(bad.has(id) ? 0xff2a2a : id === chosen ? 0x2f6dff : 0x000000);
+        m.emissiveIntensity = bad.has(id) ? 0.9 : 0.7;
+      }
+      want();
+    };
     // flag the solid parts that overlap now (red glow) and remember every pair seen
     const runCheck = () => {
       if (!checker) return;
@@ -288,12 +304,8 @@ export default function SceneView({ data }: { data: Data }) {
       const key = hits.map(pairKey).join("|");
       if (key === flagged) return;
       flagged = key;
-      const bad = new Set(hits.flat());
-      for (const [id, e] of byId) {
-        const m = e.mesh.material as THREE.MeshStandardMaterial;
-        m.emissive.setHex(bad.has(id) ? 0xff2a2a : 0x000000);
-        m.emissiveIntensity = 0.9;
-      }
+      bad = new Set(hits.flat());
+      paint();
       let more = false;
       for (const h of hits) if (!everSeen.has(pairKey(h))) { everSeen.add(pairKey(h)); more = true; }
       setNow(hits.map(pairKey));
@@ -396,12 +408,55 @@ export default function SceneView({ data }: { data: Data }) {
     const want = () => { if (!raf) raf = requestAnimationFrame(draw); };
     controls.addEventListener("change", want);
 
+    // a click (not a drag) on a part: the nearest solid one along the ray, else the nearest ghost
+    const ray = new THREE.Raycaster();
+    let down: { x: number; y: number } | null = null;
+    const pick = (cx: number, cy: number) => {
+      const r = labels.domElement.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+      root.updateMatrixWorld(true);
+      const meshes = [...byId.values()].filter((e) => e.spec.shape !== "group").map((e) => e.mesh);
+      const hits = ray.intersectObjects(meshes, false);
+      const solid = hits.find((h) => isSolid(byId.get(String(h.object.userData.id))!.spec));
+      const hit = solid ?? hits[0];
+      if (!hit) return select(null);
+      const id = String(hit.object.userData.id);
+      select(id);
+      const e = byId.get(id)!;
+      const w = e.mesh.getWorldPosition(new THREE.Vector3());
+      const sz = e.spec.shape === "rod" ? `length ${new THREE.Vector3(...V(e.spec.from)).distanceTo(new THREE.Vector3(...V(e.spec.to))).toFixed(2)}` : JSON.stringify(e.spec.size ?? "—");
+      const rows: [string, string][] = [
+        ["id", id],
+        ["shape", String(e.spec.shape ?? "box")],
+        ["color", String(e.spec.color ?? "blue")],
+        ["size", sz],
+        ["at", `${w.x.toFixed(2)}, ${w.y.toFixed(2)}, ${w.z.toFixed(2)}`],
+      ];
+      if (e.spec.parent) rows.push(["part of", String(e.spec.parent)]);
+      rows.push(["solid", isSolid(e.spec) ? (bad.has(id) ? "yes, overlapping now" : "yes") : "no (ghost/housing)"]);
+      const box = el.getBoundingClientRect();
+      setPicked({ id, title: String(e.spec.label ?? id), x: cx - box.left, y: cy - box.top, rows, note: e.spec.note, shape: String(e.spec.shape ?? "box"), color: String(e.spec.color ?? "blue"), parent: e.spec.parent });
+    };
+    const select = (id: string | null) => {
+      chosen = id;
+      if (!id) setPicked(null);
+      paint();
+    };
+    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    const onUp = (e: PointerEvent) => {
+      if (down && e.button === 0 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) pick(e.clientX, e.clientY);
+      down = null;
+    };
+    labels.domElement.addEventListener("pointerdown", onDown);
+    labels.domElement.addEventListener("pointerup", onUp);
+
     api.current = {
       set: (d) => void set(d),
       fit: () => { fit(); want(); },
       play: (p) => { on = p; want(); },
       speed: (s) => { rate = s; },
       scan,
+      select,
     };
 
     const size = () => {
@@ -425,6 +480,8 @@ export default function SceneView({ data }: { data: Data }) {
       cancelAnimationFrame(raf);
       ro.disconnect();
       io.disconnect();
+      labels.domElement.removeEventListener("pointerdown", onDown);
+      labels.domElement.removeEventListener("pointerup", onUp);
       controls.dispose();
       stop();
       dispose(root);
@@ -460,6 +517,36 @@ export default function SceneView({ data }: { data: Data }) {
           grip.addEventListener("pointerup", up);
         }}
       />
+      {picked && (
+        <div className="s3-pop" style={{ left: Math.min(picked.x + 12, (host.current?.clientWidth ?? 400) - 250), top: Math.max(4, Math.min(picked.y - 10, height - 250)) }} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="s3-pop-head">
+            <b>{picked.title}</b>
+            <button type="button" className="s3-x" onClick={() => { setPicked(null); api.current?.select(null); }} aria-label="Close">×</button>
+          </div>
+          {picked.note && <p className="s3-pop-note">{picked.note}</p>}
+          <dl>
+            {picked.rows.map(([k, v]) => (<React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>))}
+          </dl>
+          <button
+            type="button"
+            className="primary"
+            disabled={!(live && send && chat)}
+            title={live && send && chat ? "Ask Claude to explain this part" : "Open this chat to ask Claude"}
+            onClick={() => {
+              const what = `${picked.title}${picked.title !== picked.id ? ` (id ${picked.id})` : ""}`;
+              send!({
+                t: "send",
+                chat,
+                text: `Explain the "${what}" in the 3D view${block ? ` (block ${block})` : ""}: a ${picked.color} ${picked.shape}${picked.parent ? `, part of ${picked.parent}` : ""}${picked.note ? `, noted as "${picked.note}"` : ""}. What it is, what it does, how it works, and how it connects to the parts around it.`,
+              });
+              setPicked(null);
+              api.current?.select(null);
+            }}
+          >
+            Explain
+          </button>
+        </div>
+      )}
       {error && <p className="s3-error">script: {error}</p>}
       {panel && solids > 1 && (
         <div className="s3-panel">
