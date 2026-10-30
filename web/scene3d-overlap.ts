@@ -49,7 +49,7 @@ export function makeChecker(root: THREE.Object3D, parts: { id: string; mesh: THR
 
   return {
     count: items.length,
-    check(): Overlap[] {
+    check(isOn?: (id: string) => boolean): Overlap[] {
       root.updateMatrixWorld(true);
       const boxes = items.map((it) => {
         return new THREE.Box3().setFromObject(it.mesh);
@@ -58,6 +58,7 @@ export function makeChecker(root: THREE.Object3D, parts: { id: string; mesh: THR
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           if (skip.has(`${i},${j}`) || !boxes[i].intersectsBox(boxes[j])) continue;
+          if (isOn && (!isOn(items[i].id) || !isOn(items[j].id))) continue;
           const A = items[i], B = items[j];
           _a.copy(A.mesh.matrixWorld).invert().multiply(B.mesh.matrixWorld).multiply(B.shrink);
           let hit = A.bvh.intersectsGeometry(B.mesh.geometry, _a);
