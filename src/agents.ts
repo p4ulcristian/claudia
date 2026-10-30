@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { WORK, assistantItems, resultText, type Item, type Task } from "./chat";
 import { readLines, readLoc, sessionParts, type AgentFile, type Call, type Loc, type Parsed, type Tail } from "./timeline";
 import { isShell, topOf } from "./working";
-import { readProgress, type Progress } from "./progress";
+import { outputFileOf, readProgress, type Progress } from "./progress";
 import { branchWork, commitDetail, filePatch, rangeDetail, rangePatch, workingDetail, type BranchCommit, type Detail } from "./git";
 
 export type AgentStatus = "running" | "completed" | "failed" | "stopped";
@@ -101,7 +101,7 @@ async function entries(sessionId: string, live: Live) {
           id: t?.id ?? notice?.task ?? use, kind: "shell", name: call.description || t?.description || "Shell", status, start,
           end: status === "running" ? null : t?.endedAt ?? notice?.at ?? null,
           tools: 0, tokens: null, step: `$ ${call.command.split("\n")[0]!.slice(0, 200)}`, active: start,
-          task: t?.id ?? null, lane: null, type: "shell", model: null, effort: null, background: true, worktree: null, children: 0, progress: await readProgress(t?.outputFile),
+          task: t?.id ?? null, lane: null, type: "shell", model: null, effort: null, background: true, worktree: null, children: 0, progress: await readProgress(t?.outputFile ?? await outputFileOf(sessionId, t?.id ?? notice?.task)),
         },
       });
       continue;
@@ -150,7 +150,7 @@ async function entries(sessionId: string, live: Live) {
         step: p ? stepOf(p, newestTool(p), [wt?.path ?? null, live.folder, WORK]) : t.lastTool ?? null,
         active: maxOf(p?.last, t.startedAt), task: t.id, lane: lane?.id ?? null, type: lane?.meta.agentType || t.kind,
         model: p?.model ?? null, effort: null, background: t.background, worktree: wt, children: kids(t),
-        progress: lane || !isShell(t) ? null : await readProgress(t.outputFile),
+        progress: lane || !isShell(t) ? null : await readProgress(t.outputFile ?? await outputFileOf(sessionId, t.id)),
       },
     });
   }
