@@ -8,8 +8,12 @@ export type Clip = { buffer: AudioBuffer; seconds: number };
 // How the page reaches its server: plain fetch on a server's own page, /s/<server>/… through the hub.
 export type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
+// The voice lives in the hub when the page is served by one (every server then has it), else in the
+// server's own runner. `hub` is the page's fetch to the hub itself, or null on a server's own page.
 export class Voice {
-  constructor(private ask: Fetcher) {}
+  private base: Fetcher;
+  constructor(private server: Fetcher, private hub: Fetcher | null) { this.base = server; }
+  private ask = (path: string, init?: RequestInit) => this.base(path, init);
   private ctx: AudioContext | null = null;
   private clips = new Map<string, Promise<Clip | null>>();
   private source: AudioBufferSourceNode | null = null;
@@ -17,12 +21,19 @@ export class Voice {
 
   // is a voice set up on this server
   async available(): Promise<boolean> {
-    try {
-      const r = await this.ask("/api/narrate");
-      return r.ok && !!(await r.json()).voice;
-    } catch {
-      return false;
+    const tries: [Fetcher, string][] = [];
+    if (this.hub) tries.push([this.hub, "/hub/narrate"]);
+    tries.push([this.server, "/api/narrate"]);
+    for (const [ask, path] of tries) {
+      try {
+        const r = await ask(path);
+        if (r.ok && (await r.json()).voice) {
+          this.base = (_p, init) => ask(path, init);
+          return true;
+        }
+      } catch { /* try the next place */ }
     }
+    return false;
   }
 
   private context() {

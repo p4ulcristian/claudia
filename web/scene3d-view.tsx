@@ -473,7 +473,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const fades: { id: string; from: number; to: number; at: number; dur: number }[] = [];
     let focus = new Set<string>();
     let cam: { at: number; dur: number; p0: THREE.Vector3; t0: THREE.Vector3; p1: THREE.Vector3; t1: THREE.Vector3 } | null = null;
-    const voice = new Voice((path, init) => server.fetch(path, init));
+    const voice = new Voice((path, init) => server.fetch(path, init), server.server ? (path, init) => fetch(path, init) : null);
     const voiceReady = voice.available();
     let checker: ReturnType<typeof makeChecker> | null = null;
     let flagged = '';
