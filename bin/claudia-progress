@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Run a command and report its progress to Claudia's chips: after every output line matching --match,
+# print `##progress <count>/<total> <label>` (src/progress.ts reads the last one from the task's output).
+#   claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command...>
+# --total may also be a command printing the number (--total-from 'ls tests | wc -l').
+set -u
+total=""; match=""; label=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --total) total="$2"; shift 2 ;;
+    --total-from) total="$(bash -c "$2")"; shift 2 ;;
+    --match) match="$2"; shift 2 ;;
+    --label) label="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo "claudia-progress: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+if [ -z "$total" ] || [ -z "$match" ] || [ $# -eq 0 ]; then
+  echo "usage: claudia-progress --total N|--total-from CMD --match REGEX [--label TEXT] -- command..." >&2
+  exit 2
+fi
+printf '##progress 0/%s %s\n' "$total" "$label"
+"$@" 2>&1 | awk -v total="$total" -v re="$match" -v label="$label" '
+  { print; fflush() }
+  $0 ~ re { n++; printf "##progress %d/%s %s\n", n, total, label; fflush() }'
+status=${PIPESTATUS[0]}
+exit "$status"

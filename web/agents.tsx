@@ -158,6 +158,17 @@ export function AgentChips({ chat, tasks, phone, readOnly, onOpen, onStop }: {
   );
 }
 
+// A job's progress (its `##progress` line): a bar and "done/total label".
+function Bar({ p, status }: { p: NonNullable<AgentInfo["progress"]>; status: AgentInfo["status"] }) {
+  const pct = Math.round((p.done / p.total) * 100);
+  return (
+    <span className={`ag-bar ${status}`} role="progressbar" aria-valuemin={0} aria-valuemax={p.total} aria-valuenow={p.done} title={`${p.done} of ${p.total}`}>
+      <span className="ag-bar-fill" style={{ width: `${pct}%` }} />
+      <span className="ag-bar-text">{p.done}/{p.total}{p.label ? ` ${p.label}` : ""} · {pct}%</span>
+    </span>
+  );
+}
+
 function Chip({ a, skew, readOnly, onOpen, onStop }: { a: AgentInfo; skew: number; readOnly: boolean; onOpen: () => void; onStop: (task: string) => void }) {
   return (
     <div className={`ag-chip ${a.status}`} role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())} title={a.name}>
@@ -166,6 +177,7 @@ function Chip({ a, skew, readOnly, onOpen, onStop }: { a: AgentInfo; skew: numbe
         <b className="ag-name">{a.name}</b>
         <Facts a={a} skew={skew} />
       </span>
+      {a.progress && <Bar p={a.progress} status={a.status} />}
       <span className="ag-l2">{a.step ?? (a.kind === "agent" ? "starting…" : "")}{a.children > 0 ? ` · +${a.children}` : ""}</span>
       {!readOnly && a.task && a.status === "running" && (
         <button className="ag-stop" onClick={(e) => { e.stopPropagation(); onStop(a.task!); }} title="Stop this agent">Stop</button>
