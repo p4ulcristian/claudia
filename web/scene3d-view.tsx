@@ -16,6 +16,9 @@ const DEG = Math.PI / 180;
 const SPEEDS = [0.25, 0.5, 1, 2];
 const UP = new THREE.Vector3(0, 1, 0);
 const SCAN_SECONDS = 12;
+const HEIGHT_KEY = "claudia.scene3d.height";
+const HEIGHT_MIN = 220;
+const clampHeight = (h: number) => Math.round(Math.min(Math.max(h, HEIGHT_MIN), Math.max(innerHeight * 1.5, 600)));
 const pairKey = ([a, b]: Overlap) => `${a} × ${b}`;
 
 // A theme colour name (green, amber…) or any CSS colour.
@@ -223,6 +226,7 @@ export default function SceneView({ data }: { data: Data }) {
   const [now, setNow] = useState<string[]>([]);
   const [seen, setSeen] = useState<string[]>([]);
   const [panel, setPanel] = useState(false);
+  const [height, setHeight] = useState(() => clampHeight(Number(localStorage.getItem(HEIGHT_KEY)) || 440));
   const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
@@ -436,7 +440,26 @@ export default function SceneView({ data }: { data: Data }) {
 
   return (
     <div className="f-scene3d" ref={host}>
-      <div className="s3-stage" />
+      <div className="s3-stage" style={{ height }} />
+      <div
+        className="s3-grip"
+        role="separator"
+        aria-orientation="horizontal"
+        title="Drag to resize the height"
+        onPointerDown={(e) => {
+          const y0 = e.clientY, h0 = height;
+          const grip = e.currentTarget;
+          grip.setPointerCapture(e.pointerId);
+          const move = (m: PointerEvent) => setHeight(clampHeight(h0 + m.clientY - y0));
+          const up = (u: PointerEvent) => {
+            grip.removeEventListener("pointermove", move);
+            grip.removeEventListener("pointerup", up);
+            localStorage.setItem(HEIGHT_KEY, String(clampHeight(h0 + u.clientY - y0)));
+          };
+          grip.addEventListener("pointermove", move);
+          grip.addEventListener("pointerup", up);
+        }}
+      />
       {error && <p className="s3-error">script: {error}</p>}
       {panel && solids > 1 && (
         <div className="s3-panel">
