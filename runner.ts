@@ -24,6 +24,7 @@ import { mergedSends, timeline, timelineDetail } from "./src/timeline";
 import { forkChat } from "./src/fork";
 import { MAX_FILE_BYTES, sentFiles } from "./src/attached";
 import { TooBig, ownFiles, saveUpload, uploadPath } from "./src/uploads";
+import { narrate, voiceConfigured } from "./src/narrate";
 import { agentDetail, agentGit, agentList, agentSteps, type Live } from "./src/agents";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
@@ -427,6 +428,21 @@ Bun.serve({
           return json({ text: await explain(body) });
         } catch (err) {
           return json({ error: String((err as Error)?.message ?? err) }, 500);
+        }
+      },
+    },
+    // Narration for a 3D scene's story (src/narrate.ts): GET says whether a voice is set up, POST makes speech.
+    "/api/narrate": {
+      GET: async () => json({ voice: await voiceConfigured() }),
+      POST: async (req) => {
+        const body = (await req.json().catch(() => null)) as { text?: unknown; instruction?: unknown } | null;
+        if (!body || typeof body.text !== "string" || !body.text.trim()) return json({ error: "text to say" }, 400);
+        try {
+          const { pcm, seconds } = await narrate(body.text, typeof body.instruction === "string" ? body.instruction : undefined);
+          return new Response(Buffer.from(pcm), { headers: { "content-type": "audio/L16;rate=24000;channels=1", "x-seconds": seconds.toFixed(3), "cache-control": "private, max-age=86400" } });
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err);
+          return json({ error: msg }, msg.startsWith("no voice") ? 501 : 502);
         }
       },
     },
