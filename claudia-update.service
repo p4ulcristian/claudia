@@ -1,0 +1,7 @@
+# Bring this checkout up to GitHub's main when it moved (deploy/update-checkout.sh); started by the timer.
+[Unit]
+Description=Claudia update from GitHub main (this checkout)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/Work/tools/claudia/deploy/update-checkout.sh
