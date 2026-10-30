@@ -10,6 +10,7 @@ import { pictureMcp, WORKSPACE_MCP, SYSTEM_APPEND } from "./prompt";
 import { FORMS, FORM_NAMES, type FormName, type FormSpec } from "./forms";
 import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
+import { reportTouch } from "./worktree-touch";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
 import { renderScene } from "./render";
@@ -616,7 +617,8 @@ export class Chat implements SessionHandler {
     return { continue: true };
   }
 
-  private async afterEdit(input: any) {
+  private async afterEdit(input: any, tool?: string, cwd?: string) {
+    reportTouch({ id: this.id, title: this.firstSent?.text ?? "", url: `${process.env.CLAUDIA_PUBLIC_URL ?? "https://claudia.irisdoes.work"}/c/${this.id}` }, tool ?? "", input, cwd);
     const path = editedPath(input);
     if (path && !this.settings.folder) this.setFolder(projectOf(path));
     return { continue: true };
@@ -1084,7 +1086,7 @@ export class Chat implements SessionHandler {
         ...(this.settings.effort ? { effort: this.settings.effort } : {}),
       },
       mcp: tools(this.settings.forms),
-      hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: EDIT_TOOLS }] },
+      hooks: { PreToolUse: [{ matcher: EDIT_TOOLS }], PostToolUse: [{ matcher: `${EDIT_TOOLS}|Bash` }] },
     }, this);
     this.q.kv("account", acct.name);
     this.q.kv("tools", toolsVersion(tools(this.settings.forms)));
@@ -1108,7 +1110,7 @@ export class Chat implements SessionHandler {
     }
     if (kind === "hook") {
       if (args.event === "PreToolUse") return this.beforeEdit(args.input?.tool_input);
-      if (args.event === "PostToolUse") return this.afterEdit(args.input?.tool_input);
+      if (args.event === "PostToolUse") return this.afterEdit(args.input?.tool_input, args.input?.tool_name, args.input?.cwd);
       return { continue: true };
     }
     return this.ask(args.name, args.input ?? {}, { signal, toolUseID: args.toolUseID, title: args.title, description: args.description });
