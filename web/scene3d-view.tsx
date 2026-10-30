@@ -369,7 +369,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       const was = t;
       try {
         for (let s = 0; s <= scanSeconds; s += 1 / 30) {
-          const o = script.frame(s);
+          const o = script.frame(s, sIdx);
           for (const [id, v] of Object.entries(o ?? {})) {
             const e = byId.get(id);
             if (e && v) applyOverride(el, e, v as Data);
@@ -427,7 +427,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const moveParts = () => {
       if (!script?.frame) return;
       try {
-        const o = script.frame(t);
+        const o = script.frame(t, sIdx);
         for (const [id, v] of Object.entries(o ?? {})) {
           const e = byId.get(id);
           if (e && v) applyOverride(el, e, v as Data);
@@ -633,6 +633,35 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const want = () => { if (!raf) raf = requestAnimationFrame(draw); };
     controls.addEventListener("change", want);
 
+    // A trackpad: two fingers sliding move the view (pan), a pinch zooms (it arrives as ctrl + wheel);
+    // a mouse wheel (whole notches) still zooms. Runs before OrbitControls' own wheel zoom.
+    const dollyBy = (factor: number) => {
+      const offset = camera.position.clone().sub(controls.target);
+      const dist = Math.min(80, Math.max(0.5, offset.length() * factor));
+      camera.position.copy(controls.target).addScaledVector(offset.normalize(), dist);
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cam = null;
+      const lines = e.deltaMode === 1;
+      const mouse = e.deltaMode !== 0 || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50);
+      if (e.ctrlKey) dollyBy(Math.exp(e.deltaY * 0.012));
+      else if (mouse) dollyBy(Math.exp(Math.sign(e.deltaY) * 0.1));
+      else {
+        const unit = lines ? 16 : 1;
+        const perPixel = (2 * camera.position.distanceTo(controls.target) * Math.tan((camera.fov * DEG) / 2)) / Math.max(stage.clientHeight, 1);
+        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+        const move = right.multiplyScalar(e.deltaX * unit * perPixel).addScaledVector(up, -e.deltaY * unit * perPixel);
+        camera.position.add(move);
+        controls.target.add(move);
+      }
+      controls.update();
+      want();
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false, capture: true });
+
     // a click (not a drag) on a part: the nearest solid one along the ray, else the nearest ghost
     const ray = new THREE.Raycaster();
     let down: { x: number; y: number } | null = null;
@@ -721,6 +750,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       io.disconnect();
       labels.domElement.removeEventListener("pointerdown", onDown);
       labels.domElement.removeEventListener("click", onClick);
+      stage.removeEventListener("wheel", onWheel, { capture: true });
       controls.dispose();
       stopTick();
       voice.close();
