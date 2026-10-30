@@ -1,27 +1,34 @@
-// The three.js side of the scene3d form (loaded on demand by scene3d.tsx).
-import React, { useEffect, useRef } from "react";
+// The three.js side of the scene3d form (loaded on demand by scene3d.tsx). Parts and arrows come
+// from the form's data; an optional `script` (run in QuickJS, web/scene3d-vm.ts) can add more of
+// them and move parts every frame.
+import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { loadScript, type SceneScript } from "./scene3d-vm";
 
 type Data = Record<string, any>;
 type V3 = [number, number, number];
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
-const V = (v: unknown, d: V3 = [0, 0, 0]): V3 => (Array.isArray(v) && v.length >= 3 ? [Number(v[0]), Number(v[1]), Number(v[2])] : d);
+const V = (v: unknown, d: V3 = [0, 0, 0]): V3 => (Array.isArray(v) && v.length >= 3 ? [Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0] : d);
 const DEG = Math.PI / 180;
+const SPEEDS = [0.25, 0.5, 1, 2];
+const UP = new THREE.Vector3(0, 1, 0);
 
 // A theme colour name (green, amber…) or any CSS colour.
 function colorOf(host: HTMLElement, c: unknown, fallback = "blue"): THREE.Color {
   const s = typeof c === "string" && c ? c : fallback;
   const css = /^[a-z]+$/.test(s) ? getComputedStyle(host).getPropertyValue(`--${s}`).trim() || s : s;
-  return new THREE.Color(css);
+  try {
+    return new THREE.Color(css);
+  } catch {
+    return new THREE.Color(0x888888);
+  }
 }
 
 // size: one number (the whole part) or [x, y, z].
-function sizeOf(p: Data): V3 {
-  const s = p.size;
-  if (typeof s === "number") return [s, s, s];
-  return V(s, [1, 1, 1]);
+function sizeOf(s: unknown): V3 {
+  return typeof s === "number" ? [s, s, s] : V(s, [1, 1, 1]);
 }
 
 // Unit-sized geometry per shape; size scales it. Extrude / lathe / tube build from the part's points.
@@ -30,17 +37,15 @@ function geometryOf(p: Data): THREE.BufferGeometry {
   switch (p.shape) {
     case "sphere": return new THREE.SphereGeometry(0.5, 40, 24);
     case "cylinder": return new THREE.CylinderGeometry(0.5, 0.5, 1, 40);
+    case "rod": return new THREE.CylinderGeometry(1, 1, 1, 16);
     case "cone": return new THREE.ConeGeometry(0.5, 1, 40);
     case "pyramid": return new THREE.ConeGeometry(0.5 * Math.SQRT2, 1, 4).rotateY(Math.PI / 4);
     case "torus": return new THREE.TorusGeometry(0.4, 0.1, 20, 56);
     case "capsule": return new THREE.CapsuleGeometry(0.25, 0.5, 8, 24);
     case "plane": return new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     case "ring": return new THREE.RingGeometry(0.3, 0.5, 48).rotateX(-Math.PI / 2);
-    case "extrude": {
-      if (pts2.length < 3) return new THREE.BoxGeometry(1, 1, 1);
-      const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts2), { depth: 1, bevelEnabled: false }).center();
-      return g;
-    }
+    case "extrude":
+      return pts2.length < 3 ? new THREE.BoxGeometry(1, 1, 1) : new THREE.ExtrudeGeometry(new THREE.Shape(pts2), { depth: 1, bevelEnabled: false }).center();
     case "lathe": return pts2.length >= 2 ? new THREE.LatheGeometry(pts2, 48) : new THREE.SphereGeometry(0.5, 32, 16);
     case "tube": {
       const path = list(p.points).map((q) => new THREE.Vector3(...V(q)));
@@ -66,10 +71,21 @@ function labelEl(text: string, note: string | undefined, color: string): HTMLDiv
   return d;
 }
 
-// Builds the objects for the data into `root`; returns what is needed to find a part by id.
-function build(host: HTMLElement, root: THREE.Group, data: Data) {
-  const byId = new Map<string, THREE.Object3D>();
-  for (const p of list(data.parts)) {
+// A rod is a cylinder between two points (a connecting rod, a strut): it follows its ends.
+function placeRod(m: THREE.Mesh, from: V3, to: V3, radius: number) {
+  const a = new THREE.Vector3(...from), b = new THREE.Vector3(...to);
+  const d = b.clone().sub(a);
+  const len = Math.max(d.length(), 1e-6);
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.scale.set(radius, len, radius);
+  m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
+}
+
+type Entry = { mesh: THREE.Mesh; spec: Data; radius: number };
+
+function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
+  const byId = new Map<string, Entry>();
+  for (const p of parts) {
     const color = colorOf(host, p.color);
     const mat = new THREE.MeshStandardMaterial({
       color, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
@@ -77,17 +93,18 @@ function build(host: HTMLElement, root: THREE.Group, data: Data) {
       wireframe: !!p.wire,
     });
     const mesh = new THREE.Mesh(geometryOf(p), mat);
-    // tube keeps its radius in the geometry, the rest scale by size
-    if (p.shape !== "tube") mesh.scale.set(...sizeOf(p));
-    mesh.position.set(...V(p.pos));
-    const r = V(p.rot);
-    mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
-    mesh.userData.id = p.id;
+    const radius = Number(p.radius) || 0.08;
+    if (p.shape === "rod") placeRod(mesh, V(p.from), V(p.to), radius);
+    else {
+      if (p.shape !== "tube") mesh.scale.set(...sizeOf(p.size));
+      mesh.position.set(...V(p.pos));
+      const r = V(p.rot);
+      mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
+    }
     root.add(mesh);
-    byId.set(p.id, mesh);
-    if (!p.wire && p.shape !== "plane" && p.shape !== "ring") {
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
-      mesh.add(edges);
+    byId.set(String(p.id), { mesh, spec: p, radius });
+    if (!p.wire && !["plane", "ring", "rod", "tube"].includes(p.shape)) {
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })));
     }
     if (p.label) {
       mesh.geometry.computeBoundingBox();
@@ -97,57 +114,84 @@ function build(host: HTMLElement, root: THREE.Group, data: Data) {
       mesh.add(l);
     }
   }
-  root.updateMatrixWorld(true);
+  return byId;
+}
 
-  // an arrow end: a part id (stops at the part's surface) or a point
-  const end = (e: unknown, toward: THREE.Vector3): THREE.Vector3 | null => {
-    if (typeof e === "string") {
-      const o = byId.get(e);
-      if (!o) return null;
-      const box = new THREE.Box3().setFromObject(o, true);
-      const c = box.getCenter(new THREE.Vector3());
-      const dir = toward.clone().sub(c);
-      if (dir.lengthSq() < 1e-9) return c;
-      const hit = new THREE.Ray(c, dir.normalize()).intersectBox(box, new THREE.Vector3());
-      return hit ?? c;
-    }
-    return Array.isArray(e) ? new THREE.Vector3(...V(e)) : null;
-  };
-  const centre = (e: unknown) => {
-    if (typeof e === "string") {
-      const o = byId.get(e);
-      return o ? new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3()) : null;
-    }
-    return Array.isArray(e) ? new THREE.Vector3(...V(e)) : null;
-  };
-  for (const a of list(data.arrows)) {
-    const fc = centre(a.from), tc = centre(a.to);
-    if (!fc || !tc) continue;
-    const from = end(a.from, tc)!, to = end(a.to, fc)!;
-    const dir = to.clone().sub(from);
-    const len = dir.length();
-    if (len < 0.05) continue;
-    const color = colorOf(host, a.color, "fg");
+// A part's centre now, or a point.
+function centre(byId: Map<string, Entry>, e: unknown): THREE.Vector3 | null {
+  if (typeof e === "string") {
+    const o = byId.get(e);
+    return o ? new THREE.Box3().setFromObject(o.mesh).getCenter(new THREE.Vector3()) : null;
+  }
+  return Array.isArray(e) ? new THREE.Vector3(...V(e)) : null;
+}
+
+// Where an arrow meets a part: the part's surface on the line towards the other end.
+function surface(byId: Map<string, Entry>, e: unknown, toward: THREE.Vector3): THREE.Vector3 | null {
+  if (typeof e !== "string") return centre(byId, e);
+  const o = byId.get(e);
+  if (!o) return null;
+  const box = new THREE.Box3().setFromObject(o.mesh);
+  const c = box.getCenter(new THREE.Vector3());
+  const dir = toward.clone().sub(c);
+  if (dir.lengthSq() < 1e-9) return c;
+  return new THREE.Ray(c, dir.normalize()).intersectBox(box, new THREE.Vector3()) ?? c;
+}
+
+// An arrow follows its two ends: update() after parts moved.
+function makeArrow(host: HTMLElement, root: THREE.Group, byId: Map<string, Entry>, a: Data) {
+  const color = colorOf(host, a.color, "fg");
+  const mat = new THREE.MeshBasicMaterial({ color });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 10), mat);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 16), mat);
+  root.add(shaft, tip);
+  let label: CSS2DObject | null = null;
+  if (a.label) {
+    label = new CSS2DObject(labelEl(String(a.label), undefined, `#${color.getHexString()}`));
+    label.element.classList.add("arrow");
+    root.add(label);
+  }
+  const update = () => {
+    const fc = centre(byId, a.from), tc = centre(byId, a.to);
+    const from = fc && tc && surface(byId, a.from, tc), to = fc && tc && surface(byId, a.to, fc);
+    const len = from && to ? from.distanceTo(to) : 0;
+    const show = len > 0.05;
+    shaft.visible = tip.visible = show;
+    if (label) label.visible = show;
+    if (!show || !from || !to) return;
+    const unit = to.clone().sub(from).normalize();
     const head = Math.min(0.4, len * 0.35);
-    const unit = dir.clone().normalize();
-    const arrow = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len - head, 10), mat);
+    shaft.scale.set(1, len - head, 1);
     shaft.position.copy(from).addScaledVector(unit, (len - head) / 2);
-    shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), unit);
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(head * 0.35, head, 16), mat);
+    shaft.quaternion.setFromUnitVectors(UP, unit);
+    tip.scale.set(head, head, head);
     tip.position.copy(to).addScaledVector(unit, -head / 2);
     tip.quaternion.copy(shaft.quaternion);
-    arrow.add(shaft, tip);
-    root.add(arrow);
-    if (a.label) {
-      const l = new CSS2DObject(labelEl(String(a.label), undefined, `#${color.getHexString()}`));
-      l.element.classList.add("arrow");
-      l.position.copy(from).add(to).multiplyScalar(0.5);
-      root.add(l);
+    label?.position.copy(from).add(to).multiplyScalar(0.5);
+  };
+  update();
+  return update;
+}
+
+// What a script's frame() says about one part.
+function applyOverride(host: HTMLElement, e: Entry, o: Data) {
+  const m = e.mesh;
+  if (e.spec.shape === "rod") {
+    if (o.from || o.to) placeRod(m, V(o.from ?? e.spec.from), V(o.to ?? e.spec.to), e.radius);
+  } else {
+    if (o.pos) m.position.set(...V(o.pos));
+    if (o.rot) {
+      const r = V(o.rot);
+      m.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
+    if (o.size !== undefined && e.spec.shape !== "tube") m.scale.set(...sizeOf(o.size));
   }
-  return new THREE.Box3().setFromObject(root, true);
+  const mat = m.material as THREE.MeshStandardMaterial;
+  if (o.color) mat.color.copy(colorOf(host, o.color));
+  if (typeof o.opacity === "number") {
+    mat.transparent = true;
+    mat.opacity = o.opacity;
+  }
 }
 
 function dispose(root: THREE.Group) {
@@ -164,7 +208,11 @@ function dispose(root: THREE.Group) {
 
 export default function SceneView({ data }: { data: Data }) {
   const host = useRef<HTMLDivElement>(null);
-  const api = useRef<{ set: (d: Data) => void; fit: () => void } | null>(null);
+  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void } | null>(null);
+  const [animated, setAnimated] = useState(false);
+  const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState(2);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const el = host.current!;
@@ -174,7 +222,8 @@ export default function SceneView({ data }: { data: Data }) {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     const labels = new CSS2DRenderer();
     labels.domElement.className = "s3-labels";
-    el.querySelector(".s3-stage")!.append(renderer.domElement, labels.domElement);
+    const stage = el.querySelector<HTMLElement>(".s3-stage")!;
+    stage.append(renderer.domElement, labels.domElement);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -198,33 +247,92 @@ export default function SceneView({ data }: { data: Data }) {
       if (box.isEmpty()) box.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 2, 2));
       const c = box.getCenter(new THREE.Vector3());
       const r = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-      const dist = r / Math.sin((camera.fov * DEG) / 2) * 0.95;
+      const dist = (r / Math.sin((camera.fov * DEG) / 2)) * 0.95;
       controls.target.copy(c);
       camera.position.copy(c).add(new THREE.Vector3(0.7, 0.55, 1).normalize().multiplyScalar(dist));
       controls.update();
     };
-    const set = (d: Data) => {
+
+    // animation state
+    let script: SceneScript | null = null;
+    let byId = new Map<string, Entry>();
+    let arrows: (() => void)[] = [];
+    let t = 0, last = 0, rate = SPEEDS[2], on = true, visible = true, token = 0;
+    let raf = 0;
+
+    const stop = () => { script?.close(); script = null; };
+
+    const set = async (d: Data) => {
+      const mine = ++token;
+      let extra: { parts?: any[]; arrows?: any[] } = {};
+      setError("");
+      stop();
+      if (typeof d.script === "string" && d.script.trim()) {
+        try {
+          const s = await loadScript(d.script);
+          if (mine !== token) return s.close();
+          script = s;
+          extra = s.build() ?? {};
+        } catch (e) {
+          if (mine !== token) return;
+          setError((e as Error).message);
+        }
+      }
+      if (mine !== token) return;
       dispose(root);
-      box = build(el, root, d);
+      byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)]);
+      root.updateMatrixWorld(true);
+      arrows = [...list(d.arrows), ...list(extra.arrows)].map((a) => makeArrow(el, root, byId, a));
+      box = new THREE.Box3().setFromObject(root);
       if (!fitted) { fit(); fitted = true; }
+      setAnimated(!!script?.frame);
+      last = 0;
       want();
     };
-    api.current = { set, fit: () => { fit(); want(); } };
 
-    // draw on demand: only while the camera moves or the scene changes
-    let raf = 0;
-    const draw = () => {
+    const moveParts = () => {
+      if (!script?.frame) return;
+      try {
+        const o = script.frame(t);
+        for (const [id, v] of Object.entries(o ?? {})) {
+          const e = byId.get(id);
+          if (e && v) applyOverride(el, e, v as Data);
+        }
+        for (const u of arrows) u();
+      } catch (e) {
+        setError((e as Error).message);
+        stop();
+        setAnimated(false);
+      }
+    };
+
+    const draw = (now: number) => {
       raf = 0;
-      const moving = controls.update();
+      let again = false;
+      if (script?.frame) {
+        if (on && visible) {
+          t += last ? Math.min((now - last) / 1000, 0.1) * rate : 0;
+          again = true;
+        }
+        moveParts();
+      }
+      last = again ? now : 0;
+      again = controls.update() || again;
       renderer.render(scene, camera);
       labels.render(scene, camera);
-      if (moving) want();
+      if (again) want();
     };
     const want = () => { if (!raf) raf = requestAnimationFrame(draw); };
     controls.addEventListener("change", want);
 
+    api.current = {
+      set: (d) => void set(d),
+      fit: () => { fit(); want(); },
+      play: (p) => { on = p; want(); },
+      speed: (s) => { rate = s; },
+    };
+
     const size = () => {
-      const stage = el.querySelector<HTMLElement>(".s3-stage")!;
       const w = stage.clientWidth, h = stage.clientHeight;
       renderer.setSize(w, h);
       labels.setSize(w, h);
@@ -234,13 +342,19 @@ export default function SceneView({ data }: { data: Data }) {
     };
     const ro = new ResizeObserver(size);
     ro.observe(el);
+    // no frames while scrolled out of view
+    const io = new IntersectionObserver(([en]) => { visible = en.isIntersecting; want(); });
+    io.observe(el);
     size();
-    set(data);
+    void set(data);
 
     return () => {
+      token++;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
       controls.dispose();
+      stop();
       dispose(root);
       renderer.dispose();
       renderer.domElement.remove();
@@ -255,9 +369,18 @@ export default function SceneView({ data }: { data: Data }) {
   return (
     <div className="f-scene3d" ref={host}>
       <div className="s3-stage" />
+      {error && <p className="s3-error">script: {error}</p>}
       <div className="s3-bar">
         <span className="f-note">drag: rotate · wheel: zoom · right drag: pan</span>
-        <button type="button" className="f-tool" onClick={() => api.current?.fit()}>↺ reset view</button>
+        <span className="s3-tools">
+          {animated && (
+            <>
+              <button type="button" className="f-tool" onClick={() => { setPlaying(!playing); api.current?.play(!playing); }}>{playing ? "⏸ pause" : "▶ play"}</button>
+              <button type="button" className="f-tool" onClick={() => { const n = (speed + 1) % SPEEDS.length; setSpeed(n); api.current?.speed(SPEEDS[n]); }}>{SPEEDS[speed]}×</button>
+            </>
+          )}
+          <button type="button" className="f-tool" onClick={() => api.current?.fit()}>↺ reset view</button>
+        </span>
       </div>
     </div>
   );
