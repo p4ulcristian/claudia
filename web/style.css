@@ -1623,3 +1623,5 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-dot.on { background: var(--amber); border-color: var(--amber); transform: scale(1.25); }
 .s3-bigplay { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); font-size: 17px; padding: 10px 22px; z-index: 4; }
 .s3-sub { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); max-width: min(82%, 720px); text-align: center; font: 700 17px/1.35 var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 88%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; pointer-events: none; z-index: 3; }
+.s3-ic { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.f-scene3d .f-tool, .f-scene3d .s3-x, .s3-bigplay { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }

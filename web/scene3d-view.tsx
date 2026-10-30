@@ -12,6 +12,23 @@ import { GAP_SECONDS, estimateSeconds, matchesAny, normalizeStory, visibleAt, ty
 import { Voice } from "./scene3d-voice";
 import { useApi } from "./api";
 
+// Drawn icons (chalk strokes), not emoji: the same hand as the rest of the board.
+const ICONS = {
+  play: "M6.5 4.5v11l9-5.5z",
+  pause: "M7 4.5v11M13 4.5v11",
+  prev: "M5 4.5v11M15 4.5l-8 5.5 8 5.5z",
+  next: "M15 4.5v11M5 4.5l8 5.5-8 5.5z",
+  volume: "M3 8v4h3l4 3.5v-11L6 8zM13 7.5a3.5 3.5 0 0 1 0 5M15.2 5.3a6.5 6.5 0 0 1 0 9.4",
+  mute: "M3 8v4h3l4 3.5v-11L6 8zM13.5 8l4 4M17.5 8l-4 4",
+  reset: "M4.5 10a5.5 5.5 0 1 0 1.8-4.1M4.5 3.5v3.7h3.7",
+  warn: "M10 3.5l7 12.2H3zM10 8.3v3.2M10 13.6v.4",
+  check: "M4 10.5l4 4 8-9",
+  close: "M5 5l10 10M15 5L5 15",
+};
+const Icon = ({ name }: { name: keyof typeof ICONS }) => (
+  <svg className="s3-ic" viewBox="0 0 20 20" aria-hidden="true"><path d={ICONS[name]} /></svg>
+);
+
 type Data = Record<string, any>;
 type Picked = { id: string; title: string; x: number; y: number; rows: [string, string][]; note?: string; shape: string; color: string; parent?: string };
 type V3 = [number, number, number];
@@ -792,7 +809,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         <div className="s3-pop" style={{ left: Math.min(picked.x + 12, (host.current?.clientWidth ?? 400) - 250), top: Math.max(4, Math.min(picked.y - 10, height - 250)) }} onPointerDown={(e) => e.stopPropagation()}>
           <div className="s3-pop-head">
             <b>{picked.title}</b>
-            <button type="button" className="s3-x" onClick={() => { setPicked(null); api.current?.select(null); }} aria-label="Close">×</button>
+            <button type="button" className="s3-x" onClick={() => { setPicked(null); api.current?.select(null); }} aria-label="Close"><Icon name="close" /></button>
           </div>
           {picked.note && <p className="s3-pop-note">{picked.note}</p>}
           <dl>
@@ -819,7 +836,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         </div>
       )}
       {storyLen > 0 && idx < 0 && !playing && (
-        <button type="button" className="primary s3-bigplay" onClick={() => api.current?.story.play()}>▶ Play the story</button>
+        <button type="button" className="primary s3-bigplay" onClick={() => api.current?.story.play()}><Icon name="play" /> Play the story</button>
       )}
       {sub && idx >= 0 && <div className="s3-sub">{sub}</div>}
       {error && <p className="s3-error">script: {error}</p>}
@@ -836,23 +853,23 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         <span className="s3-left">
           {storyLen > 0 && (
             <span className="s3-story">
-              <button type="button" className="f-tool" disabled={idx < 1} onClick={() => api.current?.story.prev()} title="Previous step">⏮</button>
-              <button type="button" className="f-tool" onClick={() => (playing ? api.current?.story.pause() : api.current?.story.play())}>{playing ? "⏸" : "▶"}</button>
-              <button type="button" className="f-tool" disabled={idx >= storyLen - 1} onClick={() => api.current?.story.next()} title="Next step">⏭</button>
+              <button type="button" className="f-tool" disabled={idx < 1} onClick={() => api.current?.story.prev()} title="Previous step"><Icon name="prev" /></button>
+              <button type="button" className="f-tool" onClick={() => (playing ? api.current?.story.pause() : api.current?.story.play())}>{playing ? <Icon name="pause" /> : <Icon name="play" />}</button>
+              <button type="button" className="f-tool" disabled={idx >= storyLen - 1} onClick={() => api.current?.story.next()} title="Next step"><Icon name="next" /></button>
               <span className="s3-dots">
                 {Array.from({ length: storyLen }, (_, i) => (
                   <button key={i} type="button" className={`s3-dot ${i === idx ? "on" : i < idx ? "past" : ""}`} onClick={() => api.current?.story.goto(i)} title={`Step ${i + 1} of ${storyLen}`} />
                 ))}
               </span>
               {voiceState.startsWith("voice") && (
-                <button type="button" className="f-tool" onClick={() => api.current?.story.mute(!muted)} title={muted ? "Voice off: click to hear it" : "Mute the voice"}>{muted ? "🔇" : "🔊"}</button>
+                <button type="button" className="f-tool" onClick={() => api.current?.story.mute(!muted)} title={muted ? "Voice off: click to hear it" : "Mute the voice"}>{muted ? <Icon name="mute" /> : <Icon name="volume" />}</button>
               )}
               {voiceState && <span className="f-note">{voiceState}</span>}
             </span>
           )}
           {solids > 1 && (
             <button type="button" className={`f-tool s3-check ${now.length ? "bad" : seen.length ? "warn" : "ok"}`} onClick={() => setPanel(!panel)} title="Solid parts that pass through each other">
-              {now.length ? `⚠ ${now.length} overlap${now.length > 1 ? "s" : ""}` : seen.length ? `✓ clear now · ${seen.length} seen` : scanned ? "✓ no overlaps in the run" : "✓ no overlaps"}
+              {now.length ? <><Icon name="warn" /> {`${now.length} overlap${now.length > 1 ? "s" : ""}`}</> : <><Icon name="check" /> {seen.length ? `clear now · ${seen.length} seen` : scanned ? "no overlaps in the run" : "no overlaps"}</>}
             </button>
           )}
           <span className="f-note">{hint || "drag: rotate · wheel: zoom · click: inspect"}</span>
@@ -860,11 +877,11 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         <span className="s3-tools">
           {animated && (
             <>
-              <button type="button" className="f-tool" onClick={() => { setRunning(!running); api.current?.play(!running); }}>{running ? "⏸ pause" : "▶ play"}</button>
+              <button type="button" className="f-tool" onClick={() => { setRunning(!running); api.current?.play(!running); }}>{running ? <><Icon name="pause" /> pause</> : <><Icon name="play" /> play</>}</button>
               <button type="button" className="f-tool" onClick={() => { const n = (speed + 1) % SPEEDS.length; setSpeed(n); api.current?.speed(SPEEDS[n]); }}>{SPEEDS[speed]}×</button>
             </>
           )}
-          <button type="button" className="f-tool" onClick={() => api.current?.fit()}>↺ reset view</button>
+          <button type="button" className="f-tool" onClick={() => api.current?.fit()}><Icon name="reset" /> reset view</button>
         </span>
       </div>
     </div>
