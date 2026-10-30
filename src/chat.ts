@@ -12,6 +12,7 @@ import type { HostClient, RemoteSession, SessionHandler } from "./host-client";
 import type { LiveSession, RpcKind } from "./host-protocol";
 import { EDIT_TOOLS, blobState, editedPath, repoRoot, lineCounts, projectOf, readState, snapshotTree, treeChanges, type ChangeMeta, type FileState } from "./changes";
 import { DATA_DIR } from "./db";
+import { renderScene } from "./render";
 import { applyDraw, describe, emptyScene, type Block, type DrawInput, type Scene } from "./scene";
 import { guardDraw, sendCode, userEdit } from "./editor";
 import { workingTops } from "./working";
@@ -186,6 +187,8 @@ function resultImages(content: unknown): { media_type: string; data: string }[] 
 }
 
 // Pictures a tool showed in the chat (show_image), kept from the live turn: the session may not have them written yet.
+// The tool calls that were draws: their result carries a screenshot for Claude, not a picture for the chat.
+const drawCalls = new Set<string>();
 const shownNow = new Map<string, { media_type: string; data: string }[]>();
 export async function shownImage(sessionId: string, toolUseId: string, n: number) {
   const mem = shownNow.get(toolUseId);
@@ -341,7 +344,8 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
           const t = tools.get(b.tool_use_id);
           if (t) {
             t.result = { error: !!b.is_error, text: short(resultText(b.content), 4000) };
-            const shown = resultImages(b.content).length;
+            // A draw's screenshot is for Claude; the chat shows only the pictures show_image put there.
+            const shown = t.name === toolLabel(DRAW_TOOL) ? 0 : resultImages(b.content).length;
             if (shown) t.images = shown;
           }
           const qs = asked.get(b.tool_use_id);
@@ -1003,6 +1007,16 @@ export class Chat implements SessionHandler {
     return `Picture updated: ${describe(scene)}${news ? `\n\n${news}` : ""}${missing.length ? `. No template named ${missing.map((m) => `"${m}"`).join(", ")} (see the templates tool).` : ""}${refused.length ? `. Not drawn: ${[...new Set(refused)].join(", ")}: switched off by the user; use another kind` : ""}${absent.length ? `. Still missing, required by the user in this chat: ${absent.join(", ")}; add ${absent.length > 1 ? "them" : "it"}.` : ""}${kept.length ? `\n\nNot drawn, kept for the user:\n${kept.join("\n\n")}` : ""}`;
   }
 
+  // The draw tool's answer: what changed, and a screenshot of the picture as it looks now, so Claude
+  // sees its own drawing. A screenshot that fails is said in the text, never the draw's failure.
+  private async drawTool(input: DrawInput) {
+    const text = this.draw(input);
+    if (!text.startsWith("Picture updated")) return { content: [{ type: "text", text }] };
+    const shot = await renderScene(this.scene);
+    if ("error" in shot) return { content: [{ type: "text", text: `${text}\n\n(No screenshot of the picture: ${shot.error})` }] };
+    return { content: [{ type: "text", text }, { type: "image", data: shot.data, mimeType: "image/png" }] };
+  }
+
   // An editor block of the live picture, changed by the user (not Claude): saved in place, in the
   // picture of the turn that drew it, and shown on every open page.
   private userBlock(block: string, change: (data: Record<string, unknown>) => Record<string, unknown> | null): boolean {
@@ -1082,7 +1096,7 @@ export class Chat implements SessionHandler {
   // The host asks: a tool call, a hook, or whether a tool may run.
   async onRpc(kind: RpcKind, args: any, signal: AbortSignal): Promise<any> {
     if (kind === "mcp") {
-      if (args.server === "picture" && args.tool === "draw") return { content: [{ type: "text", text: this.draw(args.args as DrawInput) }] };
+      if (args.server === "picture" && args.tool === "draw") return this.drawTool(args.args as DrawInput);
       if (args.server === "picture" && args.tool === "templates") return { content: [{ type: "text", text: templateList() }] };
       if (args.server === "picture" && args.tool === "save_template") {
         const a = (args.args ?? {}) as { name?: string; block?: string; html?: string; parts?: Record<string, string>; description?: string };
@@ -1329,6 +1343,7 @@ export class Chat implements SessionHandler {
       case "assistant": {
         if (m.parent_tool_use_id) return this.sub(m.parent_tool_use_id, assistantItems(m.uuid, (m.message.content as any[]) ?? []));
         this.partial = "";
+        for (const x of (m.message.content as any[]) ?? []) if (x.type === "tool_use" && x.name === DRAW_TOOL) drawCalls.add(x.id);
         const items = assistantItems(m.uuid, (m.message.content as any[]) ?? []);
         if (items.length) this.emit({ t: "items", items });
         return;
@@ -1343,7 +1358,7 @@ export class Chat implements SessionHandler {
         }
         for (const b of content)
           if (b.type === "tool_result") {
-            const shown = resultImages(b.content);
+            const shown = drawCalls.delete(b.tool_use_id) ? [] : resultImages(b.content);
             if (shown.length) shownNow.set(b.tool_use_id, shown);
             this.emit({ t: "tool_result", id: b.tool_use_id, error: !!b.is_error, text: short(resultText(b.content), 4000), ...(shown.length ? { images: shown.length } : {}) });
           }
