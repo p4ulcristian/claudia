@@ -1,6 +1,6 @@
 {
   "name": "claudia",
-  "version": "1.28.0",
+  "version": "1.29.0",
   "module": "server.ts",
   "type": "module",
   "private": true,

@@ -185,7 +185,7 @@ function apply(l: Live, ev: ChatEvent): Live {
     case "delta": return { ...l, partial: l.partial + ev.text };
     case "items": return { ...l, partial: "", items: [...l.items, ...fresher(l.items, ev.items)] };
     case "tool_result":
-      return { ...l, items: l.items.map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text } } : it)) };
+      return { ...l, items: l.items.map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text }, images: ev.images } : it)) };
     case "scene": {
       const pics = l.pictures.filter((p) => p.turn !== ev.turn);
       return { ...l, scene: ev.scene, changed: ev.changed, seq: l.seq + 1, pictures: [...pics, { turn: ev.turn, scene: ev.scene, changed: ev.changed, at: Date.now() }] };

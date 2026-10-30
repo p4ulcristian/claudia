@@ -2,7 +2,7 @@
 // (server.ts) serves the page and passes everything else here, so restarting it keeps chats running.
 import { listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
-import { Chat, NOT_HERE, WORK, loadHistory, sentImage, useHost, type ChatEvent } from "./src/chat";
+import { Chat, NOT_HERE, WORK, loadHistory, sentImage, shownImage, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store, type LastTurn } from "./src/db";
@@ -343,6 +343,16 @@ Bun.serve({
         const { id, uuid, n } = req.params;
         if (!uuidRe.test(id) || !uuidRe.test(uuid) || !/^\d{1,4}$/.test(n)) return json({ error: "bad request" }, 400);
         const im = await sentImage(id, uuid, Number(n)).catch(() => null);
+        if (!im || !/^image\/(jpeg|png|gif|webp)$/.test(im.media_type)) return new Response("not found", { status: 404 });
+        return new Response(Buffer.from(im.data, "base64"), { headers: { "Content-Type": im.media_type, "Cache-Control": "private, max-age=86400" } });
+      },
+    },
+    // One picture a tool showed in the chat (show_image), from the saved session.
+    "/api/chats/:id/shown/:tool/:n": {
+      GET: async (req) => {
+        const { id, tool, n } = req.params;
+        if (!uuidRe.test(id) || !/^[\w-]{1,100}$/.test(tool) || !/^\d{1,4}$/.test(n)) return json({ error: "bad request" }, 400);
+        const im = await shownImage(id, tool, Number(n)).catch(() => null);
         if (!im || !/^image\/(jpeg|png|gif|webp)$/.test(im.media_type)) return new Response("not found", { status: 404 });
         return new Response(Buffer.from(im.data, "base64"), { headers: { "Content-Type": im.media_type, "Cache-Control": "private, max-age=86400" } });
       },
