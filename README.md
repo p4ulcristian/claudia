@@ -81,6 +81,12 @@ Chat with Claude on the left; Claude explains on the right, in a picture it draw
 
 Questions use Claude Code's own AskUserQuestion tool. Permission mode matches the terminal: bypass. The few calls bypass still sends to the permission callback (its own safety checks) are allowed and logged by the runner, so no permission ask shows; only questions and plan approval reach the user.
 
+## Progress bars
+
+A background shell whose output has a `##progress <done>/<total> <label>` line shows a bar on its agent chip
+(`src/progress.ts` reads the last such line from the task's output file; the 2 s agents poll carries it).
+`bin/claudia-progress` wraps any command and prints the line after each output line matching a regex.
+
 ## Files
 
 - `server.ts`: the page; picks the profile and passes `/api` and `/ws` to its runner; the gate's listener

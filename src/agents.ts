@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { WORK, assistantItems, resultText, type Item, type Task } from "./chat";
 import { readLines, readLoc, sessionParts, type AgentFile, type Call, type Loc, type Parsed, type Tail } from "./timeline";
 import { isShell, topOf } from "./working";
+import { readProgress, type Progress } from "./progress";
 import { branchWork, commitDetail, filePatch, rangeDetail, rangePatch, workingDetail, type BranchCommit, type Detail } from "./git";
 
 export type AgentStatus = "running" | "completed" | "failed" | "stopped";
@@ -33,6 +34,8 @@ export type AgentInfo = {
   worktree: { path: string; branch: string } | null;
   // Its own commands and agents still running (they are part of it, not chips of their own).
   children: number;
+  // A shell's last `##progress done/total label` line of its output (src/progress.ts), else null.
+  progress: Progress | null;
 };
 export type AgentList = { v: string; now: number; agents: AgentInfo[] };
 export type Live = { running: boolean; tasks: Task[]; folder: string | null };
@@ -98,7 +101,7 @@ async function entries(sessionId: string, live: Live) {
           id: t?.id ?? notice?.task ?? use, kind: "shell", name: call.description || t?.description || "Shell", status, start,
           end: status === "running" ? null : t?.endedAt ?? notice?.at ?? null,
           tools: 0, tokens: null, step: `$ ${call.command.split("\n")[0]!.slice(0, 200)}`, active: start,
-          task: t?.id ?? null, lane: null, type: "shell", model: null, effort: null, background: true, worktree: null, children: 0,
+          task: t?.id ?? null, lane: null, type: "shell", model: null, effort: null, background: true, worktree: null, children: 0, progress: await readProgress(t?.outputFile),
         },
       });
       continue;
@@ -127,7 +130,7 @@ async function entries(sessionId: string, live: Live) {
         step: p ? stepOf(p, newestTool(p), bases) : null,
         active: maxOf(p?.last, t?.startedAt, start),
         task: t?.id ?? null, lane: lane?.id ?? null, type: call.type || lane?.meta.agentType || t?.kind || "agent",
-        model: p?.model ?? outcome?.model ?? call.model, effort: call.effort, background: call.background, worktree: wt, children: kids(t),
+        model: p?.model ?? outcome?.model ?? call.model, effort: call.effort, background: call.background, worktree: wt, children: kids(t), progress: null,
       },
     });
   }
@@ -147,6 +150,7 @@ async function entries(sessionId: string, live: Live) {
         step: p ? stepOf(p, newestTool(p), [wt?.path ?? null, live.folder, WORK]) : t.lastTool ?? null,
         active: maxOf(p?.last, t.startedAt), task: t.id, lane: lane?.id ?? null, type: lane?.meta.agentType || t.kind,
         model: p?.model ?? null, effort: null, background: t.background, worktree: wt, children: kids(t),
+        progress: lane || !isShell(t) ? null : await readProgress(t.outputFile),
       },
     });
   }
@@ -156,7 +160,7 @@ async function entries(sessionId: string, live: Live) {
     if (ra !== rb) return ra ? -1 : 1;
     return ra ? b.info.active - a.info.active : (b.info.end ?? b.info.active) - (a.info.end ?? a.info.active);
   });
-  const sig = [s.main.offset, ...s.lanes.map((l) => l.p?.offset ?? 0), live.running ? 1 : 0, ...tasks.map((t) => `${t.id}:${t.status}:${t.toolUses ?? 0}:${t.tokens ?? 0}`)].join(".");
+  const sig = [s.main.offset, ...s.lanes.map((l) => l.p?.offset ?? 0), live.running ? 1 : 0, ...tasks.map((t) => `${t.id}:${t.status}:${t.toolUses ?? 0}:${t.tokens ?? 0}`), ...out.map((x) => x.info.progress ? `${x.info.progress.done}/${x.info.progress.total}` : "")].join(".");
   return { s, out, v: Bun.hash(sig).toString(36) };
 }
 
