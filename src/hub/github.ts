@@ -4,7 +4,9 @@
 // and checks what it runs by itself.
 // - push to main: every server is poked (POST /api/update-check on its page), and pulls main.
 // - a hub-image run on main succeeded: the gate's root helper is asked to update the hub, by writing
-//   HUB_UPDATE_REQUEST (claudia-hub-update.path); it finds, pulls and verifies the image itself.
+//   HUB_UPDATE_REQUEST (claudia-hub-update.path) with the run's commit; it pulls that commit's image,
+//   checks its signature and that the commit is ahead of the one it runs (GitHub's API can still
+//   name the run before for a while after this webhook).
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hubStore } from "./store";
@@ -38,17 +40,17 @@ function pokeServers() {
   }
 }
 
-async function requestHubUpdate() {
+async function requestHubUpdate(commit: string) {
   if (!REQUEST_FILE) return console.log("github: hub image signed; HUB_UPDATE_REQUEST not set, so no update asked");
-  await Bun.write(REQUEST_FILE, `${new Date().toISOString()}\n`);
-  console.log("github: hub image signed; hub update asked");
+  await Bun.write(REQUEST_FILE, `${commit}\n`);
+  console.log(`github: hub image signed for ${commit.slice(0, 7)}; hub update asked`);
 }
 
 type Delivery = {
   ref?: string;
   action?: string;
   repository?: { full_name?: string };
-  workflow_run?: { path?: string; head_branch?: string; conclusion?: string };
+  workflow_run?: { path?: string; head_branch?: string; head_sha?: string; conclusion?: string };
 };
 
 export async function githubHook(req: Request) {
@@ -65,6 +67,6 @@ export async function githubHook(req: Request) {
   const event = req.headers.get("x-github-event");
   if (event === "push" && d.ref === "refs/heads/main") pokeServers();
   const run = d.workflow_run;
-  if (event === "workflow_run" && d.action === "completed" && run?.conclusion === "success" && run.head_branch === "main" && run.path === ".github/workflows/hub-image.yml") await requestHubUpdate();
+  if (event === "workflow_run" && d.action === "completed" && run?.conclusion === "success" && run.head_branch === "main" && run.path === ".github/workflows/hub-image.yml" && /^[0-9a-f]{40}$/.test(run.head_sha ?? "")) await requestHubUpdate(run.head_sha!);
   return new Response(null, { status: 202 });
 }
