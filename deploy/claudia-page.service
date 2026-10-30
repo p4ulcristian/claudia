@@ -10,6 +10,8 @@ User=claudia
 Group=claudia
 EnvironmentFile=/etc/claudia/env
 Environment=NODE_ENV=production HOME=/var/lib/claudia-page
+# The hub's poke after a push to main lands here; claudia-update.path starts the update.
+Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia/update-requested
 WorkingDirectory=/srv/claudia
 ExecStart=/usr/local/bin/bun /srv/claudia/server.ts
 Restart=always

@@ -1,6 +1,7 @@
-# The hub's image (deploy/hub.Dockerfile), for the gate: built on main, pushed to GHCR and signed
-# keyless with cosign. The gate's deploy verifies this workflow's signature, on main, before it ships
-# an image; the gate itself never pulls.
+# The hub's image (deploy/hub.Dockerfile), for the gate: built on main, pushed to GHCR (public) and
+# signed keyless with cosign. The gate's update helper (the gate repo's flatcar/claudia-hub/update.sh)
+# verifies this workflow's signature, on main, before it runs an image; GitHub's webhook for this run
+# finishing is what starts it (README, decision 27).
 name: hub-image
 
 on:

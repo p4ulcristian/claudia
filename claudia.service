@@ -8,6 +8,8 @@ Wants=claudia-runner.service
 [Service]
 WorkingDirectory=%h/Work/tools/claudia
 Environment=NODE_ENV=production
+# The hub's poke after a push to main lands here; claudia-update.path starts the update.
+Environment=CLAUDIA_UPDATE_TRIGGER=%t/claudia-update-requested
 ExecStart=%h/.local/bin/bun %h/Work/tools/claudia/server.ts
 Restart=on-failure
 

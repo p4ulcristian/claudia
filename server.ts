@@ -10,6 +10,10 @@ import { LOCAL_PROFILE, profileNames, viewOf, cleanName, cleanToken, saveToken, 
 
 const PORT = Number(process.env.PORT ?? 4510);
 const GATE_HOST = process.env.GATE_HOST;
+// Where a poke from the hub asks this server's update unit to look at GitHub's main now: a path
+// unit starts claudia-update when the file appears (destiny: claudia-update.path, a shared server:
+// deploy/claudia-update.path).
+const UPDATE_TRIGGER = process.env.CLAUDIA_UPDATE_TRIGGER?.trim() || null;
 
 const json = (v: unknown, status = 200) => Response.json(v, { status });
 
@@ -21,6 +25,15 @@ function serve(hostname: string, gate: boolean) {
     return json({ api: API, name: NAME, version: VERSION, commit: COMMIT, email: w.email, profile: w.profile?.name ?? null, profiles: w.profile ? profileNames() : [], viewing: v?.profile.name ?? null, readOnly: v?.readOnly ?? false, claudeToken: tokenNote(), claudeTokens: w.profile ? savedTokens() : [] });
   };
   const tokens = () => json({ ok: true, claudeToken: tokenNote(), claudeTokens: savedTokens() });
+
+  // The hub's poke after a push to main (src/hub/github.ts). It says only "look now": the update
+  // fetches main from GitHub itself, so only the gate's listener takes it, and no caller is needed.
+  const updateCheck = async () => {
+    if (!UPDATE_TRIGGER) return json({ error: "no update unit here" }, 501);
+    await Bun.write(UPDATE_TRIGGER, `${new Date().toISOString()}\n`);
+    console.log("update check asked by the hub");
+    return json({ ok: true }, 202);
+  };
 
   // Save a token under a name (same name = replaced) and switch to it.
   const putToken = async (req: Request) => {
@@ -63,6 +76,7 @@ function serve(hostname: string, gate: boolean) {
       "/api/me": { GET: me },
       "/api/claude-token": { PUT: putToken },
       "/api/claude-token/use": { POST: useSaved },
+      ...(gate ? { "/api/update-check": { POST: updateCheck } } : {}),
     },
     fetch(req: Request, server: Server<PipeData>) {
       const path = new URL(req.url).pathname;

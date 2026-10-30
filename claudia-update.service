@@ -1,7 +1,9 @@
-# Bring this checkout up to GitHub's main when it moved (deploy/update-checkout.sh); started by the timer.
+# Bring this checkout up to GitHub's main when it moved (deploy/update-checkout.sh); started by the
+# hub's poke after a push to main (claudia-update.path) and hourly by the timer.
 [Unit]
 Description=Claudia update from GitHub main (this checkout)
 
 [Service]
 Type=oneshot
+Environment=CLAUDIA_UPDATE_TRIGGER=%t/claudia-update-requested
 ExecStart=/bin/bash %h/Work/tools/claudia/deploy/update-checkout.sh

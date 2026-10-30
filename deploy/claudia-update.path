@@ -1,0 +1,11 @@
+# Start claudia-update when the hub pokes this server after a push to main (the page writes the file
+# into its own /var/lib/claudia; update.sh removes it first, so a poke during a run starts another).
+[Unit]
+Description=Claudia update on the hub's poke
+
+[Path]
+PathExists=/var/lib/claudia/update-requested
+Unit=claudia-update.service
+
+[Install]
+WantedBy=paths.target
