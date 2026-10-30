@@ -151,6 +151,8 @@ function drawGraph(g: GraphBlock, input: DrawInput, changed: Set<string>): Graph
   return { ...g, nodes, edges, groups };
 }
 
+const isScene = (b: Block) => b.kind === "form" && b.form === "scene3d";
+
 // Put a block before another one, or keep it where it is (new blocks go last).
 function place(blocks: Block[], b: Block, before?: string): Block[] {
   const rest = blocks.filter((x) => x.id !== b.id);
@@ -198,7 +200,10 @@ export function applyDraw(prev: Scene, input: DrawInput): { scene: Scene; change
       for (const name of Object.keys(b.parts ?? {})) changed.add(`${b.id}:${name}`);
     }
     if (!old || b.width || b.name) changed.add(b.id);
-    blocks = place(blocks, next, b.before);
+    // A picture holds one 3D scene: a new one takes the old one's place instead of going last.
+    const at = isScene(next) && !old && !b.before ? blocks.findIndex(isScene) : -1;
+    if (isScene(next)) blocks = blocks.map((x, i) => (i === at ? next : x)).filter((x) => x.id === next.id || !isScene(x));
+    if (at < 0) blocks = place(blocks, next, b.before);
   }
 
   if (input.nodes?.length || input.edges?.length || input.groups?.length || input.remove?.length) {
