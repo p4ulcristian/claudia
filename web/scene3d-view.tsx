@@ -13,6 +13,7 @@ import { Voice } from "./scene3d-voice";
 import { PRESETS, materialFor } from "./scene3d-materials";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useApi } from "./api";
+import { FOCUS_INK, FOCUS_PX, INK, OUTLINE_PX, outlineMaterial, toonMaterial, viewport as inkViewport } from "./scene3d-ink";
 
 // Drawn icons (chalk strokes), not emoji: the same hand as the rest of the board.
 const ICONS = {
@@ -90,7 +91,7 @@ function geometryOf(p: Data): THREE.BufferGeometry {
 
 function labelEl(text: string, note: string | undefined, color: string): HTMLDivElement {
   const d = document.createElement("div");
-  d.className = "s3-label";
+  d.className = "s3-label s3-noted";
   d.style.setProperty("--c", color);
   const b = document.createElement("b");
   b.textContent = text;
@@ -113,13 +114,19 @@ function placeRod(m: THREE.Mesh, from: V3, to: V3, radius: number) {
   m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
 }
 
-type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number };
+type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number; dim: number; lit: boolean; notes: boolean; outline: THREE.Mesh | null };
+type Style = "diagram" | "real";
 
-function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
+function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: Style) {
   const byId = new Map<string, Entry>();
   for (const p of parts) {
     const hasMaterial = typeof p.material === "string" && !!PRESETS[p.material];
-    const mat = materialFor(p.color || !hasMaterial ? colorOf(host, p.color) : null, p, p.shape === "plane" ? 0.35 : 1);
+    const tint = p.color || !hasMaterial ? colorOf(host, p.color) : null;
+    const baseOp = p.shape === "plane" ? 0.35 : 1;
+    // the diagram style: flat bands of colour; the realistic one: the material's own look
+    const mat = style === "diagram"
+      ? (() => { const m = materialFor(tint, p, baseOp); const t = toonMaterial(m.color, m.userData.op, !!p.wire); m.dispose(); return t; })()
+      : materialFor(tint, p, baseOp);
     const color = mat.color;
     const mesh = new THREE.Mesh(geometryOf(p), mat);
     mesh.userData.id = p.id;
@@ -136,8 +143,15 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       const r = V(p.rot);
       mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
-    byId.set(String(p.id), { mesh, spec: p, radius, k: 1 });
-    if (!hasMaterial && !p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
+    const entry: Entry = { mesh, spec: p, radius, k: 1, dim: 1, lit: false, notes: true, outline: null };
+    byId.set(String(p.id), entry);
+    if (style === "diagram" && p.shape !== "group" && p.outline !== false && !(p.ghost && p.shape === "sphere")) {
+      const ink = new THREE.Mesh(mesh.geometry, outlineMaterial());
+      ink.userData.outline = true;
+      mesh.add(ink);
+      entry.outline = ink;
+    }
+    if (style === "real" && !hasMaterial && !p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })));
     }
     if (p.label && p.shape !== "group") {
@@ -174,48 +188,97 @@ function surface(byId: Map<string, Entry>, e: unknown, toward: THREE.Vector3): T
   return new THREE.Ray(c, dir.normalize()).intersectBox(box, new THREE.Vector3()) ?? c;
 }
 
-// An arrow follows its two ends: update() after parts moved.
+// Where a point s along a polyline is, and which way it runs there.
+function along(pts: THREE.Vector3[], s: number): { p: THREE.Vector3; d: THREE.Vector3 } {
+  let rest = s;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const seg = pts[i + 1].clone().sub(pts[i]);
+    const len = seg.length();
+    if (rest <= len || i === pts.length - 2) return { p: pts[i].clone().addScaledVector(seg.normalize(), Math.min(rest, len)), d: seg };
+    rest -= len;
+  }
+  return { p: pts[0].clone(), d: UP.clone() };
+}
+
+// An arrow follows its ends (a part, or a point), optionally through via points; flow: true makes it
+// a stream of dashes running along it. update(seconds) after parts moved or for the flow's motion.
 function makeArrow(host: HTMLElement, root: THREE.Group, byId: Map<string, Entry>, a: Data) {
   let k = 1;
   const color = colorOf(host, a.color, "fg");
-  const mat = new THREE.MeshBasicMaterial({ color });
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 10), mat);
+  const via = list(a.via).map((q) => new THREE.Vector3(...V(q)));
+  const flow = a.flow === true;
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true });
+  const segs: THREE.Mesh[] = [];
+  for (let i = 0; i <= via.length; i++) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(flow ? 0.02 : 0.035, flow ? 0.02 : 0.035, 1, 10), mat);
+    segs.push(m);
+    root.add(m);
+  }
   const tip = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 16), mat);
-  root.add(shaft, tip);
+  root.add(tip);
+  const DASHES = flow ? 16 : 0;
+  const dashes: THREE.Mesh[] = [];
+  for (let i = 0; i < DASHES; i++) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1, 10), mat);
+    dashes.push(d);
+    root.add(d);
+  }
   let label: CSS2DObject | null = null;
   if (a.label) {
     label = new CSS2DObject(labelEl(String(a.label), undefined, `#${color.getHexString()}`));
     label.element.classList.add("arrow");
     root.add(label);
   }
-  const update = () => {
+  let now = 0;
+  const update = (seconds?: number) => {
+    if (seconds !== undefined) now = seconds;
+    const f0 = via.length ? via[0] : centre(byId, a.to), t0 = via.length ? via[via.length - 1] : centre(byId, a.from);
     const fc = centre(byId, a.from), tc = centre(byId, a.to);
-    const from = fc && tc && surface(byId, a.from, tc), to = fc && tc && surface(byId, a.to, fc);
-    const len = from && to ? from.distanceTo(to) : 0;
-    const show = len > 0.05 && k > 0.003;
-    shaft.visible = tip.visible = show;
+    const start = fc && f0 && surface(byId, a.from, f0), end = tc && t0 && surface(byId, a.to, t0);
+    const pts = start && end ? [start, ...via, end] : [];
+    let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) total += pts[i].distanceTo(pts[i + 1]);
+    const show = total > 0.05 && k > 0.003;
+    for (const m of [...segs, tip, ...dashes]) m.visible = show;
     if (label) label.visible = show;
-    if (!show || !from || !to) return;
-    const unit = to.clone().sub(from).normalize();
-    const head = Math.min(0.4, len * 0.35);
-    shaft.scale.set(1, len - head, 1);
-    shaft.position.copy(from).addScaledVector(unit, (len - head) / 2);
-    shaft.quaternion.setFromUnitVectors(UP, unit);
+    if (!show) return;
+    const head = Math.min(0.4, total * 0.35);
+    // the shaft, segment by segment (the last one stops at the arrow head)
+    for (let i = 0; i < segs.length; i++) {
+      const a0 = pts[i], b0 = pts[i + 1].clone();
+      const last = i === segs.length - 1;
+      const dir = b0.clone().sub(a0);
+      const len = dir.length();
+      dir.normalize();
+      const stop = last ? Math.max(len - head, 0.001) : len;
+      segs[i].scale.set(1, stop, 1);
+      segs[i].position.copy(a0).addScaledVector(dir, stop / 2);
+      segs[i].quaternion.setFromUnitVectors(UP, dir);
+    }
+    const tipAt = along(pts, total);
+    const td = pts[pts.length - 1].clone().sub(pts[pts.length - 2]).normalize();
     tip.scale.set(head, head, head);
-    tip.position.copy(to).addScaledVector(unit, -head / 2);
-    tip.quaternion.copy(shaft.quaternion);
-    label?.position.copy(from).add(to).multiplyScalar(0.5);
+    tip.position.copy(pts[pts.length - 1]).addScaledVector(td, -head / 2);
+    tip.quaternion.setFromUnitVectors(UP, td);
+    void tipAt;
+    for (let i = 0; i < dashes.length; i++) {
+      const s = (((i / dashes.length + now * 0.3) % 1) * (total - head));
+      const at = along(pts, s);
+      const dd = at.d.clone().normalize();
+      dashes[i].scale.set(1, 0.2, 1);
+      dashes[i].position.copy(at.p);
+      dashes[i].quaternion.setFromUnitVectors(UP, dd);
+    }
+    if (label) label.position.copy(along(pts, total / 2).p);
   };
-  // k: how far the arrow has appeared (a fade)
   const set = (v: number) => {
     k = v;
-    mat.transparent = v < 1;
     mat.opacity = v;
     if (label) label.element.style.opacity = String(v);
     update();
   };
   update();
-  return { id: String(a.id ?? ""), update, set };
+  return { id: String(a.id ?? ""), update, set, flows: flow };
 }
 
 // What a script's frame() says about one part.
@@ -238,6 +301,7 @@ function applyOverride(host: HTMLElement, e: Entry, o: Data) {
 }
 
 // How far a part has appeared (0 hidden .. 1 fully there): a fade, with its label and outline.
+// e.dim fades the part back (the spotlight leaves the others faint); e.lit thickens its outline.
 function applyReveal(e: Entry, k: number) {
   e.k = k;
   const m = e.mesh;
@@ -245,11 +309,17 @@ function applyReveal(e: Entry, k: number) {
   const mat = m.material as THREE.MeshStandardMaterial;
   const op = typeof mat.userData.op === "number" ? mat.userData.op : 1;
   m.visible = k > 0.003;
-  m.castShadow = !!m.userData.casts && k > 0.5;
-  mat.opacity = op * k;
-  mat.transparent = op < 1 || k < 1;
+  m.castShadow = !!m.userData.casts && k > 0.5 && e.dim > 0.5;
+  mat.opacity = op * k * e.dim;
+  mat.transparent = op < 1 || k < 1 || e.dim < 1;
+  if (e.outline) {
+    const u = (e.outline.material as THREE.ShaderMaterial).uniforms;
+    u.opacity.value = k * (e.dim < 1 ? 0.28 : op < 1 ? 0.6 : 1);
+    u.thickness.value = e.lit ? FOCUS_PX : OUTLINE_PX;
+    (u.color.value as THREE.Color).copy(e.lit ? FOCUS_INK : INK);
+  }
   for (const c of m.children) {
-    if (c instanceof CSS2DObject) { c.visible = k > 0.05; c.element.style.opacity = String(k); }
+    if (c instanceof CSS2DObject) { c.visible = k > 0.05 && e.dim > 0.5; c.element.style.opacity = String(k); c.element.classList.toggle("s3-noted", e.notes); }
     else if ((c as THREE.LineSegments).isLineSegments) ((c as THREE.LineSegments).material as THREE.LineBasicMaterial).opacity = 0.35 * k;
   }
 }
@@ -270,7 +340,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const send = useContext(PictureSend);
   const server = useApi();
   const host = useRef<HTMLDivElement>(null);
-  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void; quality: (q: "high" | "low") => void; story: { play: () => void; pause: () => void; next: () => void; prev: () => void; goto: (n: number) => void; mute: (m: boolean) => void } } | null>(null);
+  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void; quality: (q: "high" | "low") => void; style: (s: Style) => void; story: { play: () => void; pause: () => void; next: () => void; prev: () => void; goto: (n: number) => void; mute: (m: boolean) => void } } | null>(null);
   const [animated, setAnimated] = useState(false);
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(2);
@@ -285,6 +355,10 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const [quality, setQualityState] = useState<"high" | "low">(() => (localStorage.getItem("claudia.scene3d.quality") === "low" ? "low" : "high"));
   const quality$ = useRef(quality);
   quality$.current = quality;
+  const [style, setStyleState] = useState<Style>(() => (localStorage.getItem("claudia.scene3d.style") === "real" ? "real" : "diagram"));
+  const style$ = useRef(style);
+  style$.current = style;
+  const [legend, setLegend] = useState<{ color: string; label: string }[]>([]);
   const [hint, setHint] = useState("");
   const [storyLen, setStoryLen] = useState(0);
   const [idx, setIdx] = useState(-1);
@@ -318,7 +392,8 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environment = envTexture;
     scene.environmentIntensity = 0.9;
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.35));
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.35);
+    scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffffff, 2.1);
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0004;
@@ -334,11 +409,23 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     ground.receiveShadow = true;
     scene.add(ground);
     let high = quality$.current === "high";
+    let styleMode: Style = style$.current;
+    let lastData: Data = data;
+    // the diagram style: flat light, no reflections, no shadows; the realistic one: the room, the sun, shadows
+    const applyStyle = () => {
+      const diagram = styleMode === "diagram";
+      renderer.toneMapping = diagram ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+      scene.environment = diagram ? null : envTexture;
+      hemi.intensity = diagram ? 1.25 : 0.35;
+      sun.intensity = diagram ? 1.5 : 2.1;
+      sun.castShadow = !diagram && high;
+      ground.visible = !diagram && high;
+      grid.visible = true;
+    };
     const setQuality = (q: "high" | "low") => {
       high = q === "high";
-      sun.castShadow = high;
-      ground.visible = high;
-      renderer.setPixelRatio(high ? Math.min(devicePixelRatio, 2) : 1);
+      applyStyle();
+      renderer.setPixelRatio(high || styleMode === "diagram" ? Math.min(devicePixelRatio, 2) : 1);
       size();
     };
     const root = new THREE.Group();
@@ -401,7 +488,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const paint = (pulse = 0.5) => {
       for (const [id, e] of byId) {
         const m = e.mesh.material as THREE.MeshStandardMaterial;
-        const lit = focus.has(id) && !bad.has(id) && id !== chosen;
+        const lit = styleMode === "real" && focus.has(id) && !bad.has(id) && id !== chosen;
         m.emissive.setHex(bad.has(id) ? 0xff2a2a : id === chosen ? 0x2f6dff : lit ? 0xffc247 : 0x000000);
         m.emissiveIntensity = bad.has(id) ? 0.9 : lit ? 0.2 + 0.6 * pulse : 0.7;
       }
@@ -447,6 +534,8 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
 
     const set = async (d: Data) => {
       const mine = ++token;
+      lastData = d;
+      setLegend(list(d.legend).filter((x) => x && typeof x.label === "string"));
       let extra: { parts?: any[]; arrows?: any[]; allow?: any[] } = {};
       setError("");
       stop();
@@ -463,7 +552,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       }
       if (mine !== token) return;
       dispose(root);
-      byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)]);
+      byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)], styleMode);
       root.updateMatrixWorld(true);
       arrows = [...list(d.arrows), ...list(extra.arrows)].map((a) => makeArrow(el, root, byId, a));
       kOf.clear();
@@ -564,6 +653,19 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     };
     controls.addEventListener("start", () => { cam = null; });
 
+    // the spotlight: with a focus, the other parts fade back; the focused ones get a thick outline
+    const dimTarget = new Map<string, number>();
+    const setSpotlight = () => {
+      const on = styleMode === "diagram" && focus.size > 0;
+      for (const [id, e] of byId) {
+        const lit = on && focus.has(id);
+        dimTarget.set(id, on && !lit ? 0.16 : 1);
+        // in a story, a part's note shows only while the step is about it
+        const notes = steps.length === 0 || lit;
+        if (e.lit !== lit || e.notes !== notes) { e.lit = lit; e.notes = notes; applyReveal(e, e.k); }
+      }
+      want();
+    };
     const stopTick = () => { clearInterval(sTick); sTick = 0; };
     const endStory = () => { sPlaying = false; stopTick(); setPlayingUi(false); };
     const startStep = async (n: number, animate: boolean) => {
@@ -576,6 +678,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       setSub(st.say);
       applyStoryState(n, animate);
       focus = new Set([...byId.keys()].filter((id) => matchesAny(st.focus, id)));
+      setSpotlight();
       if (!focus.size) paint();
       if (st.camera) moveCamera(st.camera);
       let seconds = estimateSeconds(st);
@@ -650,10 +753,11 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       steps = normalizeStory(d.story);
       sInstruction = typeof d.voice === "string" ? d.voice : undefined;
       setStoryLen(steps.length);
-      if (!steps.length) { sIdx = -1; setIdx(-1); setSub(""); focus = new Set(); paint(); return; }
+      if (!steps.length) { sIdx = -1; setIdx(-1); setSub(""); focus = new Set(); setSpotlight(); paint(); return; }
       if (sIdx >= steps.length) sIdx = steps.length - 1;
       applyStoryState(sIdx, false);
       focus = sIdx >= 0 ? new Set([...byId.keys()].filter((id) => matchesAny(steps[sIdx].focus, id))) : new Set();
+      setSpotlight();
       // the voice is off until the user turns it on; then every line is asked for in order while they look around
       if (d.narrate !== false && steps.some((x) => x.say)) {
         void voiceReady.then((ok) => {
@@ -663,6 +767,25 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         });
       } else setVoiceState("");
       if (d.autoplay === true && !sAutoplay && sIdx < 0) { sAutoplay = true; storyApi.play(); }
+    };
+
+    // labels that would sit on each other are moved down a little, and eased back when there is room
+    let declutterAt = 0;
+    const declutter = () => {
+      const els = [...labels.domElement.querySelectorAll<HTMLElement>(".s3-label")].filter((x) => x.style.display !== "none");
+      for (const x of els) x.style.marginTop = "0px";
+      const boxes = els.map((x) => ({ x, r: x.getBoundingClientRect() })).sort((a, b) => a.r.top - b.r.top);
+      const placed: { left: number; right: number; top: number; bottom: number }[] = [];
+      for (const { x, r } of boxes) {
+        let dy = 0;
+        for (let guard = 0; guard < 10; guard++) {
+          const hit = placed.find((q) => r.left < q.right && r.right > q.left && r.top + dy < q.bottom && r.bottom + dy > q.top);
+          if (!hit) break;
+          dy = hit.bottom - r.top + 3;
+        }
+        if (dy) x.style.marginTop = `${Math.min(dy, 90)}px`;
+        placed.push({ left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy });
+      }
     };
 
     const draw = (now: number) => {
@@ -694,13 +817,23 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         if (p >= 1) cam = null;
         again = true;
       }
-      if (focus.size) {
+      if (focus.size && styleMode === "real") {
         paint(0.5 + 0.5 * Math.sin(wall / 260));
+        again = true;
+      }
+      for (const [id, e] of byId) {
+        const to = dimTarget.get(id) ?? 1;
+        if (Math.abs(e.dim - to) > 0.01) { e.dim += (to - e.dim) * 0.2; applyReveal(e, e.k); again = true; }
+        else if (e.dim !== to) { e.dim = to; applyReveal(e, e.k); }
+      }
+      if (visible && arrows.some((a) => a.flows)) {
+        for (const u of arrows) if (u.flows) u.update(wall / 1000);
         again = true;
       }
       again = controls.update() || again;
       renderer.render(scene, camera);
       labels.render(scene, camera);
+      if (!declutterAt || wall - declutterAt > 400) { declutterAt = wall; declutter(); }
       if (again) want();
     };
     const want = () => { if (!raf) raf = requestAnimationFrame(draw); };
@@ -799,12 +932,14 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       select,
       story: storyApi,
       quality: setQuality,
+      style: (st) => { if (st === styleMode) return; styleMode = st; applyStyle(); setQuality(high ? "high" : "low"); void set(lastData); },
     };
 
     const size = () => {
       const w = stage.clientWidth, h = stage.clientHeight;
       renderer.setSize(w, h);
       labels.setSize(w, h);
+      inkViewport.value.set(Math.max(w, 1), Math.max(h, 1));
       camera.aspect = w / Math.max(h, 1);
       camera.updateProjectionMatrix();
       want();
@@ -843,6 +978,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
 
   useEffect(() => { api.current?.set(data); }, [data]);
   useEffect(() => { api.current?.quality(quality); }, [quality]);
+  useEffect(() => { api.current?.style(style); }, [style]);
 
   return (
     <div className="f-scene3d" ref={host}>
@@ -896,6 +1032,13 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
           </button>
         </div>
       )}
+      {legend.length > 0 && (
+        <div className="s3-legend">
+          {legend.map((l) => (
+            <span key={l.label}><i style={{ background: /^[a-z]+$/.test(l.color) ? `var(--${l.color})` : l.color }} />{l.label}</span>
+          ))}
+        </div>
+      )}
       {storyLen > 0 && idx < 0 && !playing && (
         <button type="button" className="primary s3-bigplay" onClick={() => api.current?.story.play()}><Icon name="play" /> Play the story</button>
       )}
@@ -942,7 +1085,10 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
               <button type="button" className="f-tool" onClick={() => { const n = (speed + 1) % SPEEDS.length; setSpeed(n); api.current?.speed(SPEEDS[n]); }}>{SPEEDS[speed]}×</button>
             </>
           )}
-          <button type="button" className="f-tool" onClick={() => { const q = quality === "high" ? "low" : "high"; localStorage.setItem("claudia.scene3d.quality", q); setQualityState(q); }} title={quality === "high" ? "Shadows and sharp pixels on. Click for lighter drawing." : "Lighter drawing. Click for shadows and sharp pixels."}>{quality === "high" ? "High" : "Low"}</button>
+          <button type="button" className="f-tool" onClick={() => { const n = style === "diagram" ? "real" : "diagram"; localStorage.setItem("claudia.scene3d.style", n); setStyleState(n); }} title={style === "diagram" ? "Chalk diagram style. Click for the realistic look." : "Realistic look. Click for the chalk diagram style."}>{style === "diagram" ? "Diagram" : "Realistic"}</button>
+          {style === "real" && (
+                      <button type="button" className="f-tool" onClick={() => { const q = quality === "high" ? "low" : "high"; localStorage.setItem("claudia.scene3d.quality", q); setQualityState(q); }} title={quality === "high" ? "Shadows and sharp pixels on. Click for lighter drawing." : "Lighter drawing. Click for shadows and sharp pixels."}>{quality === "high" ? "High" : "Low"}</button>
+          )}
           <button type="button" className="f-tool" onClick={() => api.current?.fit()}><Icon name="reset" /> reset view</button>
         </span>
       </div>

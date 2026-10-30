@@ -1592,7 +1592,7 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-labels:active { cursor: grabbing; }
 .s3-label { font: 700 13px var(--hand); color: var(--fg); text-align: center; line-height: 1.15; text-shadow: 0 1px 3px #000a, 0 0 6px #000a; pointer-events: none; white-space: nowrap; }
 .s3-label b { font-weight: 700; color: var(--c); }
-.s3-label span { display: block; font: 12px var(--sans); color: var(--muted); }
+.s3-label span { display: none; font: 12px var(--sans); color: var(--muted); }
 .s3-label.arrow { background: var(--bg2); border: 1px solid var(--c); border-radius: 6px; padding: 0 6px; }
 .s3-bar { position: absolute; left: 8px; right: 8px; bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; pointer-events: none; }
 .s3-bar button { pointer-events: auto; }
@@ -1625,3 +1625,8 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-sub { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); max-width: min(82%, 720px); text-align: center; font: 700 17px/1.35 var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 88%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; pointer-events: none; z-index: 3; }
 .s3-ic { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .f-scene3d .f-tool, .f-scene3d .s3-x, .s3-bigplay { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.s3-legend { position: absolute; left: 10px; top: 8px; display: flex; flex-direction: column; gap: 3px; font: 700 13px var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 80%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; pointer-events: none; z-index: 2; }
+.s3-legend span { display: flex; align-items: center; gap: 7px; }
+.s3-legend i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #f3efe6; flex: none; }
+.s3-label { transition: margin-top 0.25s ease; }
+.s3-label.s3-noted span { display: block; }
