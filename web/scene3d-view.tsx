@@ -233,6 +233,12 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const [height, setHeight] = useState(() => clampHeight(Number(localStorage.getItem(HEIGHT_KEY)) || 440));
   const [scanned, setScanned] = useState(false);
   const [picked, setPicked] = useState<Picked | null>(null);
+  const [hint, setHint] = useState("");
+  useEffect(() => {
+    if (!hint) return;
+    const t = setTimeout(() => setHint(""), 1500);
+    return () => clearTimeout(t);
+  }, [hint]);
 
   useEffect(() => {
     const el = host.current!;
@@ -416,10 +422,20 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       ray.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
       root.updateMatrixWorld(true);
       const meshes = [...byId.values()].filter((e) => e.spec.shape !== "group").map((e) => e.mesh);
-      const hits = ray.intersectObjects(meshes, false);
+      // thin parts (a rod, a tube) are hard to hit: if the exact click finds nothing, try a few pixels around it
+      let hits = ray.intersectObjects(meshes, false);
+      for (const [dx, dy] of hits.length ? [] : [[6, 0], [-6, 0], [0, 6], [0, -6], [10, 10], [-10, 10], [10, -10], [-10, -10]]) {
+        ray.setFromCamera(new THREE.Vector2(((cx + dx - r.left) / r.width) * 2 - 1, -((cy + dy - r.top) / r.height) * 2 + 1), camera);
+        hits = ray.intersectObjects(meshes, false);
+        if (hits.length) break;
+      }
       const solid = hits.find((h) => isSolid(byId.get(String(h.object.userData.id))!.spec));
       const hit = solid ?? hits[0];
-      if (!hit) return select(null);
+      if (!hit) {
+        select(null);
+        setHint("no part there");
+        return;
+      }
       const id = String(hit.object.userData.id);
       select(id);
       const e = byId.get(id)!;
@@ -443,12 +459,15 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       paint();
     };
     const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
-    const onUp = (e: PointerEvent) => {
-      if (down && e.button === 0 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) pick(e.clientX, e.clientY);
+    // a click is a press and release in place; dragging to rotate is not
+    const onClick = (e: MouseEvent) => {
+      const d = down;
       down = null;
+      if (!d || e.button !== 0 || Math.hypot(e.clientX - d.x, e.clientY - d.y) >= 5) return;
+      pick(e.clientX, e.clientY);
     };
     labels.domElement.addEventListener("pointerdown", onDown);
-    labels.domElement.addEventListener("pointerup", onUp);
+    labels.domElement.addEventListener("click", onClick);
 
     api.current = {
       set: (d) => void set(d),
@@ -481,7 +500,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       ro.disconnect();
       io.disconnect();
       labels.domElement.removeEventListener("pointerdown", onDown);
-      labels.domElement.removeEventListener("pointerup", onUp);
+      labels.domElement.removeEventListener("click", onClick);
       controls.dispose();
       stop();
       dispose(root);
@@ -564,7 +583,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
               {now.length ? `⚠ ${now.length} overlap${now.length > 1 ? "s" : ""}` : seen.length ? `✓ clear now · ${seen.length} seen` : scanned ? "✓ no overlaps in the run" : "✓ no overlaps"}
             </button>
           )}
-          <span className="f-note">drag: rotate · wheel: zoom · right drag: pan</span>
+          <span className="f-note">{hint || "drag: rotate · wheel: zoom · right drag: pan · click a part: inspect"}</span>
         </span>
         <span className="s3-tools">
           {animated && (
