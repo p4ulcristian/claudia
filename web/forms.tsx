@@ -10,6 +10,7 @@ import { ClojureForm } from "./clojure";
 import { CallsForm } from "./calls";
 import { Flow } from "./flow";
 import { EditorForm } from "./editor";
+import { Scene3D } from "./scene3d";
 
 type Data = Record<string, any>;
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -624,6 +625,7 @@ const RENDER: Record<FormName, (p: { data: Data; chat?: string; block?: string; 
   clojure: ClojureForm,
   calls: CallsForm,
   flow: Flow,
+  scene3d: Scene3D,
   editor: EditorForm,
 };
 

@@ -226,6 +226,24 @@ export const FORMS = {
       ],
     },
   },
+  scene3d: {
+    label: "3D scene",
+    when: "Something best understood as a shape in space that the user can rotate and zoom: an architecture with layers, a mechanism, a building, a molecule, a product, a map with height. Predefined shapes placed in 3D, arrows between them, labels. Pick it when depth or a free viewpoint helps; a flat graph is better for plain boxes and arrows.",
+    fields: "parts: [{ id, shape: box|sphere|cylinder|cone|pyramid|torus|capsule|plane|ring|extrude|lathe|tube, pos?: [x,y,z] (y is up, 1 unit is about a box), size?: number or [x,y,z], rot?: [x,y,z] degrees, color? (green|red|amber|blue|grey|violet or any CSS colour), label?, note?, opacity?: 0..1, wire?: true, points? (extrude: [[x,y]…] outline pulled 1 unit deep, scale it with size; lathe: [[radius,y]…] profile spun round y; tube: [[x,y,z]…] path), radius? (tube) }], arrows?: [{ id, from, to (a part id, or [x,y,z]), label?, color? }]",
+    sample: {
+      parts: [
+        { id: "app", shape: "box", pos: [0, 3.6, 0], size: [3, 0.6, 2], color: "blue", label: "App" },
+        { id: "api", shape: "box", pos: [0, 1.8, 0], size: [3, 0.6, 2], color: "green", label: "API" },
+        { id: "db", shape: "cylinder", pos: [0, 0.3, 0], size: [1.8, 0.6, 1.8], color: "amber", label: "Postgres" },
+        { id: "cache", shape: "sphere", pos: [4, 1.8, 0], size: 1.1, color: "violet", label: "Cache", note: "hot reads" },
+      ],
+      arrows: [
+        { id: "a1", from: "app", to: "api", label: "calls" },
+        { id: "a2", from: "api", to: "db", label: "SQL" },
+        { id: "a3", from: "api", to: "cache", label: "reads", color: "violet" },
+      ],
+    },
+  },
   flow: {
     label: "Flow",
     when: "Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline.",
