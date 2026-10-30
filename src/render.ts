@@ -50,6 +50,8 @@ function later() {
 }
 
 async function shoot(scene: Scene): Promise<{ data: string } | { error: string }> {
+  // A render is starting: the idle close must not take the browser away under it.
+  if (idle) clearTimeout(idle);
   const b = await launch();
   const page = await b.newPage({ viewport: { width: WIDTH, height: 700 } });
   try {
