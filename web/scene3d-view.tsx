@@ -766,7 +766,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
           else void preloadVoice();
         });
       } else setVoiceState("");
-      if (d.autoplay === true && !sAutoplay && sIdx < 0) { sAutoplay = true; storyApi.play(); }
+      if (d.autoplay !== false && !sAutoplay && sIdx < 0) { sAutoplay = true; storyApi.play(); }
     };
 
     // labels that would sit on each other are moved down a little, and eased back when there is room
@@ -1039,7 +1039,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
           ))}
         </div>
       )}
-      {storyLen > 0 && idx < 0 && !playing && (
+      {storyLen > 0 && idx < 0 && !playing && data.autoplay === false && (
         <button type="button" className="primary s3-bigplay" onClick={() => api.current?.story.play()}><Icon name="play" /> Play the story</button>
       )}
       {sub && idx >= 0 && <div className="s3-sub">{sub}</div>}
