@@ -15,6 +15,7 @@ import { DATA_DIR } from "./db";
 import { applyDraw, describe, emptyScene, type Block, type DrawInput, type Scene } from "./scene";
 import { guardDraw, sendCode, userEdit } from "./editor";
 import { workingTops } from "./working";
+import { withFiles, type SentFile } from "./attached";
 
 // Decision 6: every chat runs in ~/Work, where the user's full memory lives.
 export const WORK = process.env.CLAUDIA_CWD ?? join(homedir(), "Work");
@@ -758,12 +759,13 @@ export class Chat implements SessionHandler {
     return this.asks.size + this.permits.size > 0;
   }
 
-  async send(text: string, images: SentImage[] = []) {
+  async send(typed: string, images: SentImage[] = [], files: SentFile[] = []) {
     const uuid = crypto.randomUUID();
     if (!this.firstSent) {
-      this.firstSent = { text: text.trim().split("\n")[0].slice(0, 120) || "New chat", at: Date.now() };
+      this.firstSent = { text: typed.trim().split("\n")[0].slice(0, 120) || files[0]?.name || "New chat", at: Date.now() };
       this.onChange();
     }
+    const text = withFiles(typed, files);
     // A note goes right before its image (a video's frames start with one saying what they are).
     const content: any[] = images.flatMap((im) => [
       ...(typeof im.note === "string" && im.note ? [{ type: "text", text: videoNote(im) }] : []),

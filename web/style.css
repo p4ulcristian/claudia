@@ -918,7 +918,25 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 @keyframes block-glow { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); } to { box-shadow: 0 0 0 2px transparent; } }
 
 /* The composer's photo/video button and what it attached. */
-.attach svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.attach svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+/* Attached files (web/chat.tsx Upload, SentFileChip): a chip each, in the composer and the sent message. */
+.file-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bubble .file-chips { margin: 6px 0 0; }
+.bubble .file-chips:first-child { margin-top: 0; }
+.file-chip { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font: 12px var(--mono); color: var(--fg); text-decoration: none; }
+a.file-chip:hover { border-color: var(--accent); }
+.file-chip svg { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.file-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-chip-size { flex: none; color: var(--muted); }
+.file-chip button { flex: none; margin-right: -4px; width: 18px; height: 18px; border-radius: 50%; font-size: 13px; line-height: 1; color: var(--muted); }
+.file-chip button:hover { color: var(--fg); }
+.file-chip.sending { border-style: dashed; }
+.file-chip-bar { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: 0.18; transition: width 0.2s; pointer-events: none; }
+.file-chip.failed { border-color: var(--red); }
+.file-chip.failed .file-chip-size { color: var(--red); }
+/* A file dragged over the window: the composer takes it wherever it is dropped. */
+.drop-veil { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgb(0 0 0 / 0.35); pointer-events: none; }
+.drop-veil span { padding: 14px 26px; border: 2px dashed var(--accent); border-radius: 16px; background: var(--panel); color: var(--fg); font: 22px var(--hand, var(--sans)); }
 .thumb-video { position: absolute; left: 3px; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 5px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 10px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .thumb.reading { width: 64px; height: 64px; border-radius: 8px; border: 1px dashed var(--muted); animation: breathe 0.9s ease-in-out infinite; }
 .sent-media { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
