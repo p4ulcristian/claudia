@@ -95,6 +95,7 @@ Questions use Claude Code's own AskUserQuestion tool. Permission mode matches th
 - `src/prompt.ts`: what Claude is told about the two halves, and the draw tool
 - `src/scene.ts`: the picture's parts and how a draw call changes them
 - `src/changes.ts`: before/after copies, git snapshots, diffs
+- `src/render.ts` + `web/render.html`: a headless Chromium shoots the picture, and every draw returns that screenshot to Claude
 - `src/account.ts`: the Claude token the chats run on
 - `src/meta.ts`: models, slash commands and plan limits, read by a short probe
 - `src/db.ts`: pictures, changes and chat settings
