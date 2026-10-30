@@ -10,6 +10,8 @@ import { loadScript, type SceneScript } from "./scene3d-vm";
 import { isSolid, makeChecker, type Overlap } from "./scene3d-overlap";
 import { GAP_SECONDS, estimateSeconds, matchesAny, normalizeStory, visibleAt, type CameraSpec, type Step } from "./scene3d-story";
 import { Voice } from "./scene3d-voice";
+import { PRESETS, materialFor } from "./scene3d-materials";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useApi } from "./api";
 
 // Drawn icons (chalk strokes), not emoji: the same hand as the rest of the board.
@@ -115,15 +117,15 @@ type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number };
 function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
   const byId = new Map<string, Entry>();
   for (const p of parts) {
-    const color = colorOf(host, p.color);
-    const mat = new THREE.MeshStandardMaterial({
-      color, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
-      transparent: p.opacity !== undefined || p.shape === "plane", opacity: p.opacity ?? (p.shape === "plane" ? 0.35 : 1),
-      wireframe: !!p.wire,
-    });
-    mat.userData.op = p.opacity ?? (p.shape === "plane" ? 0.35 : 1);
+    const hasMaterial = typeof p.material === "string" && !!PRESETS[p.material];
+    const mat = materialFor(p.color || !hasMaterial ? colorOf(host, p.color) : null, p, p.shape === "plane" ? 0.35 : 1);
+    const color = mat.color;
     const mesh = new THREE.Mesh(geometryOf(p), mat);
     mesh.userData.id = p.id;
+    // solid parts cast and catch shadows; housings and air do not
+    mesh.userData.casts = p.shape !== "group" && isSolid(p);
+    mesh.castShadow = mesh.userData.casts;
+    mesh.receiveShadow = p.shape !== "group" && !p.ghost;
     if (p.shape === "group") mat.visible = false;
     const radius = Number(p.radius) || 0.08;
     if (p.shape === "rod") placeRod(mesh, V(p.from), V(p.to), radius);
@@ -134,7 +136,7 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
     byId.set(String(p.id), { mesh, spec: p, radius, k: 1 });
-    if (!p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
+    if (!hasMaterial && !p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })));
     }
     if (p.label && p.shape !== "group") {
@@ -242,6 +244,7 @@ function applyReveal(e: Entry, k: number) {
   const mat = m.material as THREE.MeshStandardMaterial;
   const op = typeof mat.userData.op === "number" ? mat.userData.op : 1;
   m.visible = k > 0.003;
+  m.castShadow = !!m.userData.casts && k > 0.5;
   mat.opacity = op * k;
   mat.transparent = op < 1 || k < 1;
   for (const c of m.children) {
@@ -266,7 +269,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const send = useContext(PictureSend);
   const server = useApi();
   const host = useRef<HTMLDivElement>(null);
-  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void; story: { play: () => void; pause: () => void; next: () => void; prev: () => void; goto: (n: number) => void; mute: (m: boolean) => void } } | null>(null);
+  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void; select: (id: string | null) => void; quality: (q: "high" | "low") => void; story: { play: () => void; pause: () => void; next: () => void; prev: () => void; goto: (n: number) => void; mute: (m: boolean) => void } } | null>(null);
   const [animated, setAnimated] = useState(false);
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(2);
@@ -278,6 +281,9 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const [height, setHeight] = useState(() => clampHeight(Number(localStorage.getItem(HEIGHT_KEY)) || 440));
   const [scanned, setScanned] = useState(false);
   const [picked, setPicked] = useState<Picked | null>(null);
+  const [quality, setQualityState] = useState<"high" | "low">(() => (localStorage.getItem("claudia.scene3d.quality") === "low" ? "low" : "high"));
+  const quality$ = useRef(quality);
+  quality$.current = quality;
   const [hint, setHint] = useState("");
   const [storyLen, setStoryLen] = useState(0);
   const [idx, setIdx] = useState(-1);
@@ -297,19 +303,43 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     const labels = new CSS2DRenderer();
     labels.domElement.className = "s3-labels";
     const stage = el.querySelector<HTMLElement>(".s3-stage")!;
     stage.append(renderer.domElement, labels.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(4, 8, 6);
-    scene.add(sun);
+    // light: a soft room around everything (reflections for metal and glass), one sun for the shadows
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    scene.environmentIntensity = 0.9;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.35));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
+    sun.shadow.radius = 4;
+    scene.add(sun, sun.target);
     const grid = new THREE.GridHelper(20, 20, 0x888888, 0x555555);
     (grid.material as THREE.Material).transparent = true;
     (grid.material as THREE.Material).opacity = 0.35;
     scene.add(grid);
+    // the floor only shows shadows
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.3 }));
+    ground.receiveShadow = true;
+    scene.add(ground);
+    let high = quality$.current === "high";
+    const setQuality = (q: "high" | "low") => {
+      high = q === "high";
+      sun.castShadow = high;
+      ground.visible = high;
+      renderer.setPixelRatio(high ? Math.min(devicePixelRatio, 2) : 1);
+      size();
+    };
     const root = new THREE.Group();
     scene.add(root);
 
@@ -328,6 +358,18 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       controls.target.copy(c);
       camera.position.copy(c).add(new THREE.Vector3(0.7, 0.55, 1).normalize().multiplyScalar(dist));
       controls.update();
+    };
+
+    // the sun and the floor follow the scene's size
+    const fitLight = () => {
+      const c = box.getCenter(new THREE.Vector3());
+      const r = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 2);
+      sun.position.copy(c).add(new THREE.Vector3(0.45, 1, 0.55).normalize().multiplyScalar(r * 2.2));
+      sun.target.position.copy(c);
+      const cam = sun.shadow.camera;
+      cam.left = -r * 1.15; cam.right = r * 1.15; cam.top = r * 1.15; cam.bottom = -r * 1.15; cam.near = 0.1; cam.far = r * 5;
+      cam.updateProjectionMatrix();
+      ground.position.y = grid.position.y = box.min.y - 0.01;
     };
 
     // animation state
@@ -434,6 +476,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       flagged = "";
       runCheck();
       box = new THREE.Box3().setFromObject(root);
+      fitLight();
       if (!fitted) { fit(); fitted = true; }
       setAnimated(!!script?.frame);
       last = 0;
@@ -742,6 +785,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       scan,
       select,
       story: storyApi,
+      quality: setQuality,
     };
 
     const size = () => {
@@ -758,6 +802,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     const io = new IntersectionObserver(([en]) => { visible = en.isIntersecting; want(); });
     io.observe(el);
     size();
+    setQuality(quality$.current);
     void set(data);
 
     return () => {
@@ -769,6 +814,8 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       labels.domElement.removeEventListener("click", onClick);
       stage.removeEventListener("wheel", onWheel, { capture: true });
       controls.dispose();
+      envTexture.dispose();
+      pmrem.dispose();
       stopTick();
       voice.close();
       stop();
@@ -782,6 +829,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   }, []);
 
   useEffect(() => { api.current?.set(data); }, [data]);
+  useEffect(() => { api.current?.quality(quality); }, [quality]);
 
   return (
     <div className="f-scene3d" ref={host}>
@@ -881,6 +929,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
               <button type="button" className="f-tool" onClick={() => { const n = (speed + 1) % SPEEDS.length; setSpeed(n); api.current?.speed(SPEEDS[n]); }}>{SPEEDS[speed]}×</button>
             </>
           )}
+          <button type="button" className="f-tool" onClick={() => { const q = quality === "high" ? "low" : "high"; localStorage.setItem("claudia.scene3d.quality", q); setQualityState(q); }} title={quality === "high" ? "Shadows and sharp pixels on. Click for lighter drawing." : "Lighter drawing. Click for shadows and sharp pixels."}>{quality === "high" ? "High" : "Low"}</button>
           <button type="button" className="f-tool" onClick={() => api.current?.fit()}><Icon name="reset" /> reset view</button>
         </span>
       </div>

@@ -12,7 +12,7 @@ export type Overlap = [string, string];
 type Item = { id: string; mesh: THREE.Mesh; bvh: MeshBVH; shrink: THREE.Matrix4 };
 
 export const isSolid = (spec: Record<string, any>) =>
-  !spec.ghost && !spec.wire && !(typeof spec.opacity === "number" && spec.opacity < 1) && !["plane", "ring", "group"].includes(spec.shape);
+  !spec.ghost && !spec.wire && !(typeof spec.opacity === "number" && spec.opacity < 1) && !["plane", "ring", "group"].includes(spec.shape) && spec.material !== "glass";
 
 // "pin*" matches every id that starts with "pin".
 const matches = (pattern: string, id: string) => (pattern.endsWith("*") ? id.startsWith(pattern.slice(0, -1)) : pattern === id);
