@@ -2,7 +2,7 @@
 // compiled to WebAssembly: the script cannot see window, the DOM, cookies or the network, runs out of
 // time rather than freezing the tab, and exchanges only JSON with the page. It defines
 //   build()   -> { parts?, arrows? }   parts and arrows made by code (loops, maths)
-//   frame(t)  -> { [partId]: { pos?, rot?, size?, color?, opacity?, from?, to? } }   t = seconds
+//   frame(t, step) -> { [partId]: { pos?, rot?, size?, color?, opacity?, from?, to? } }   t = seconds, step = the story's current step (-1 before it starts, -1 without a story)
 import variant from "@jitl/quickjs-singlefile-browser-release-sync";
 import { newQuickJSWASMModuleFromVariant, type QuickJSContext, type QuickJSHandle, type QuickJSRuntime } from "quickjs-emscripten-core";
 
@@ -12,7 +12,7 @@ const MEMORY = 32 * 1024 * 1024;
 
 export type SceneScript = {
   build: () => { parts?: any[]; arrows?: any[] };
-  frame: ((t: number) => Record<string, any>) | null;
+  frame: ((t: number, step: number) => Record<string, any>) | null;
   close: () => void;
 };
 
@@ -62,7 +62,7 @@ export async function loadScript(source: string): Promise<SceneScript> {
     run(source, BUILD_MS);
     run(
       `globalThis.__build = typeof build === "function" ? () => JSON.stringify(build()) : null;
-       globalThis.__frame = typeof frame === "function" ? (t) => JSON.stringify(frame(t)) : null;`,
+       globalThis.__frame = typeof frame === "function" ? (t, s) => JSON.stringify(frame(t, s)) : null;`,
       BUILD_MS,
     );
   } catch (e) {
@@ -74,7 +74,7 @@ export async function loadScript(source: string): Promise<SceneScript> {
   const f = fn("__frame");
   return {
     build: () => (b ? call(b, BUILD_MS) ?? {} : {}),
-    frame: f ? (t) => call(f, FRAME_MS, t) : null,
+    frame: f ? (t, step) => call(f, FRAME_MS, t, step) : null,
     close: () => {
       b?.dispose();
       f?.dispose();
