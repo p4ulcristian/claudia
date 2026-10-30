@@ -1562,3 +1562,16 @@ button.cl-fn:hover { text-decoration: underline; }
 .pair-state.fetched, .pair-state.on-WireGuard { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .pair-state.peer-up { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .pair-state.waiting-for-peer { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+
+/* scene3d form */
+.f-scene3d { position: relative; border: 2px solid var(--line); border-radius: 10px; background: var(--bg2); overflow: hidden; }
+.s3-stage { position: relative; height: 440px; touch-action: none; }
+.s3-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.s3-labels { position: absolute; inset: 0; cursor: grab; }
+.s3-labels:active { cursor: grabbing; }
+.s3-label { font: 700 13px var(--hand); color: var(--fg); text-align: center; line-height: 1.15; text-shadow: 0 1px 3px #000a, 0 0 6px #000a; pointer-events: none; white-space: nowrap; }
+.s3-label b { font-weight: 700; color: var(--c); }
+.s3-label span { display: block; font: 12px var(--sans); color: var(--muted); }
+.s3-label.arrow { background: var(--bg2); border: 1px solid var(--c); border-radius: 6px; padding: 0 6px; }
+.s3-bar { position: absolute; left: 8px; right: 8px; bottom: 6px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+.s3-bar button { pointer-events: auto; }
