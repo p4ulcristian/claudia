@@ -1575,3 +1575,6 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-label.arrow { background: var(--bg2); border: 1px solid var(--c); border-radius: 6px; padding: 0 6px; }
 .s3-bar { position: absolute; left: 8px; right: 8px; bottom: 6px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
 .s3-bar button { pointer-events: auto; }
+.s3-tools { display: flex; gap: 6px; pointer-events: none; }
+.s3-tools button { pointer-events: auto; }
+.s3-error { position: absolute; left: 8px; top: 6px; margin: 0; font: 12px var(--mono); color: var(--red); background: var(--red-bg); border-radius: 6px; padding: 2px 8px; }
