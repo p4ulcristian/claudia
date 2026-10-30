@@ -348,4 +348,7 @@ Bun.serve<PipeData>({
 });
 
 console.log(`Claudia hub on http://${HOST}:${PORT}`);
+// In the gate's container bun is PID 1, and the kernel gives PID 1 no default action for SIGTERM:
+// without these handlers `docker stop` waited its full 10 s and then killed the hub on every update.
+for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => process.exit(0));
 await startPush();
