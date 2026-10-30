@@ -362,6 +362,8 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const [hint, setHint] = useState("");
   const [storyLen, setStoryLen] = useState(0);
   const [idx, setIdx] = useState(-1);
+  const [prog, setProg] = useState(0);
+  const [peek, setPeek] = useState(-1);
   const [playing, setPlayingUi] = useState(false);
   const [sub, setSub] = useState("");
   const [voiceState, setVoiceState] = useState("");
@@ -673,6 +675,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       const mine = ++sToken;
       voice.stop();
       sIdx = n; sElapsed = 0; sDur = 0;
+      setProg(0);
       setIdx(n);
       const st = steps[n];
       setSub(st.say);
@@ -704,6 +707,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       const now = performance.now();
       if (sPlaying && sDur) sElapsed += (now - sLast) / 1000;
       sLast = now;
+      if (sDur) setProg(Math.min(1, sElapsed / sDur));
       if (sPlaying && sDur && sElapsed >= sDur) {
         if (sIdx + 1 < steps.length) void startStep(sIdx + 1, true);
         else endStory();
@@ -980,6 +984,9 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   useEffect(() => { api.current?.quality(quality); }, [quality]);
   useEffect(() => { api.current?.style(style); }, [style]);
 
+  const story$ = normalizeStory(data.story).map((x) => x.say);
+  const steps$ = normalizeStory(data.story).map((x) => estimateSeconds(x));
+
   return (
     <div className="f-scene3d" ref={host}>
       <div className="s3-stage" style={{ height }} />
@@ -1060,9 +1067,12 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
               <button type="button" className="f-tool" disabled={idx < 1} onClick={() => api.current?.story.prev()} title="Previous step"><Icon name="prev" /></button>
               <button type="button" className="f-tool" onClick={() => (playing ? api.current?.story.pause() : api.current?.story.play())}>{playing ? <Icon name="pause" /> : <Icon name="play" />}</button>
               <button type="button" className="f-tool" disabled={idx >= storyLen - 1} onClick={() => api.current?.story.next()} title="Next step"><Icon name="next" /></button>
-              <span className="s3-dots">
-                {Array.from({ length: storyLen }, (_, i) => (
-                  <button key={i} type="button" className={`s3-dot ${i === idx ? "on" : i < idx ? "past" : ""}`} onClick={() => api.current?.story.goto(i)} title={`Step ${i + 1} of ${storyLen}`} />
+              <span className="s3-track" onMouseLeave={() => setPeek(-1)}>
+                {peek >= 0 && <span className="s3-tip" style={{ left: `${(steps$.slice(0, peek).reduce((t, x) => t + x, 0) + steps$[peek] / 2) / Math.max(1, steps$.reduce((t, x) => t + x, 0)) * 100}%` }}>{peek + 1}. {story$[peek]}</span>}
+                {steps$.map((w, i) => (
+                  <button key={i} type="button" className={`s3-seg ${i === peek ? "peek" : ""}`} style={{ flexGrow: w }} onMouseEnter={() => setPeek(i)} onClick={() => api.current?.story.goto(i)} aria-label={`Step ${i + 1} of ${storyLen}`}>
+                    <i style={{ width: `${i < idx ? 100 : i === idx ? prog * 100 : 0}%` }} />
+                  </button>
                 ))}
               </span>
               {voiceState.startsWith("voice") && (
@@ -1071,12 +1081,12 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
               {voiceState && <span className="f-note">{voiceState}</span>}
             </span>
           )}
-          {solids > 1 && (
+          {solids > 1 && (now.length > 0 || seen.length > 0) && (
             <button type="button" className={`f-tool s3-check ${now.length ? "bad" : seen.length ? "warn" : "ok"}`} onClick={() => setPanel(!panel)} title="Solid parts that pass through each other">
               {now.length ? <><Icon name="warn" /> {`${now.length} overlap${now.length > 1 ? "s" : ""}`}</> : <><Icon name="check" /> {seen.length ? `clear now · ${seen.length} seen` : scanned ? "no overlaps in the run" : "no overlaps"}</>}
             </button>
           )}
-          <span className="f-note">{hint || "drag: rotate · wheel: zoom · click: inspect"}</span>
+          {hint && <span className="f-note">{hint}</span>}
         </span>
         <span className="s3-tools">
           {animated && (
