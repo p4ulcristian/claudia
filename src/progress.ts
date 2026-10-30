@@ -1,6 +1,7 @@
 // A long job's progress, read from its output file: the last line `##progress <done>/<total> [label]`
 // (bin/claudia-progress writes them; any script can). No imports, so a test can load it alone.
-import { open } from "node:fs/promises";
+import { open, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 export type Progress = { done: number; total: number; label: string };
 
@@ -36,4 +37,19 @@ export async function readProgress(file: string | undefined): Promise<Progress |
   } catch {
     return null;
   }
+}
+
+// A running task reports its output file only when it ends (task_notification), but Claude Code
+// writes it from the start at <tmp>/claude-<uid>/<folder>/<session>/tasks/<task>.output: found here
+// by session and task id.
+export async function outputFileOf(sessionId: string, taskId: string | null | undefined): Promise<string | undefined> {
+  if (!taskId || !/^[\w-]{1,80}$/.test(taskId) || !/^[\w-]{1,80}$/.test(sessionId)) return undefined;
+  const base = `${tmpdir()}/claude-${process.getuid?.() ?? ""}`;
+  try {
+    for (const folder of await readdir(base)) {
+      const file = `${base}/${folder}/${sessionId}/tasks/${taskId}.output`;
+      if (await Bun.file(file).exists()) return file;
+    }
+  } catch {}
+  return undefined;
 }
