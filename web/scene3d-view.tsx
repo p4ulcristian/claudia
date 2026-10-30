@@ -38,6 +38,7 @@ function sizeOf(s: unknown): V3 {
 function geometryOf(p: Data): THREE.BufferGeometry {
   const pts2 = list(p.points).map((q) => new THREE.Vector2(Number(q[0]), Number(q[1])));
   switch (p.shape) {
+    case "group": return new THREE.BufferGeometry();
     case "sphere": return new THREE.SphereGeometry(0.5, 40, 24);
     case "cylinder": return new THREE.CylinderGeometry(0.5, 0.5, 1, 40);
     case "rod": return new THREE.CylinderGeometry(1, 1, 1, 16);
@@ -96,6 +97,7 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       wireframe: !!p.wire,
     });
     const mesh = new THREE.Mesh(geometryOf(p), mat);
+    if (p.shape === "group") mat.visible = false;
     const radius = Number(p.radius) || 0.08;
     if (p.shape === "rod") placeRod(mesh, V(p.from), V(p.to), radius);
     else {
@@ -104,12 +106,11 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       const r = V(p.rot);
       mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
-    root.add(mesh);
     byId.set(String(p.id), { mesh, spec: p, radius });
-    if (!p.wire && !["plane", "ring", "rod", "tube"].includes(p.shape)) {
+    if (!p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })));
     }
-    if (p.label) {
+    if (p.label && p.shape !== "group") {
       mesh.geometry.computeBoundingBox();
       const l = new CSS2DObject(labelEl(String(p.label), p.note, `#${color.getHexString()}`));
       // above the part's top, in its own (scaled) units
@@ -117,6 +118,8 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[]) {
       mesh.add(l);
     }
   }
+  // a part with a parent moves, turns and scales with it (a rotor and its blades)
+  for (const { mesh, spec } of byId.values()) (byId.get(String(spec.parent))?.mesh ?? root).add(mesh);
   return byId;
 }
 
@@ -337,7 +340,7 @@ export default function SceneView({ data }: { data: Data }) {
       byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)]);
       root.updateMatrixWorld(true);
       arrows = [...list(d.arrows), ...list(extra.arrows)].map((a) => makeArrow(el, root, byId, a));
-      checker = makeChecker([...byId].map(([id, e]) => ({ id, mesh: e.mesh, spec: e.spec })), [...list(d.allow), ...list(extra.allow)]);
+      checker = makeChecker(root, [...byId].map(([id, e]) => ({ id, mesh: e.mesh, spec: e.spec })), [...list(d.allow), ...list(extra.allow)]);
       scanSeconds = Number(d.scan) > 0 ? Number(d.scan) : SCAN_SECONDS;
       everSeen.clear();
       setSolids(checker.count);
@@ -360,6 +363,7 @@ export default function SceneView({ data }: { data: Data }) {
           const e = byId.get(id);
           if (e && v) applyOverride(el, e, v as Data);
         }
+        root.updateMatrixWorld(true);
         for (const u of arrows) u();
         if (++frames % 2 === 0) runCheck();
       } catch (e) {

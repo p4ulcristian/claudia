@@ -12,14 +12,14 @@ export type Overlap = [string, string];
 type Item = { id: string; mesh: THREE.Mesh; bvh: MeshBVH; shrink: THREE.Matrix4 };
 
 export const isSolid = (spec: Record<string, any>) =>
-  !spec.ghost && !spec.wire && !(typeof spec.opacity === "number" && spec.opacity < 1) && !["plane", "ring"].includes(spec.shape);
+  !spec.ghost && !spec.wire && !(typeof spec.opacity === "number" && spec.opacity < 1) && !["plane", "ring", "group"].includes(spec.shape);
 
 // "pin*" matches every id that starts with "pin".
 const matches = (pattern: string, id: string) => (pattern.endsWith("*") ? id.startsWith(pattern.slice(0, -1)) : pattern === id);
 
 const _a = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _ray = new THREE.Ray();
 
-export function makeChecker(parts: { id: string; mesh: THREE.Mesh; spec: Record<string, any> }[], allow: unknown[]) {
+export function makeChecker(root: THREE.Object3D, parts: { id: string; mesh: THREE.Mesh; spec: Record<string, any> }[], allow: unknown[]) {
   const items: Item[] = parts.filter((p) => isSolid(p.spec)).map((p) => {
     const g = p.mesh.geometry;
     g.boundsTree ??= new MeshBVH(g);
@@ -50,8 +50,8 @@ export function makeChecker(parts: { id: string; mesh: THREE.Mesh; spec: Record<
   return {
     count: items.length,
     check(): Overlap[] {
+      root.updateMatrixWorld(true);
       const boxes = items.map((it) => {
-        it.mesh.updateMatrixWorld();
         return new THREE.Box3().setFromObject(it.mesh);
       });
       const out: Overlap[] = [];
