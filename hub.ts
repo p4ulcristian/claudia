@@ -18,6 +18,7 @@ import { beat } from "./src/hub/presence";
 import { deviceKey } from "./src/hub/seal";
 import { shortToken } from "./src/hub/apns";
 import { githubHook } from "./src/hub/github";
+import { hubNarrate, hubVoice } from "./src/hub/narrate";
 import { COMMIT, VERSION } from "./src/version";
 
 const HOST = process.env.HUB_HOST ?? "127.0.0.1";
@@ -146,6 +147,26 @@ Bun.serve<PipeData>({
           commit: COMMIT,
           servers: hubStore.allowed(c.email).map((s) => ({ name: s.name, label: s.label })),
         });
+      },
+    },
+
+    // Narration for 3D stories (src/hub/narrate.ts): one voice for every server. GET: is a voice set up here.
+    "/hub/narrate": {
+      GET: async (req: Request) => {
+        if (!caller(req)) return json({ error: "not signed in" }, 401);
+        return json({ voice: await hubVoice() });
+      },
+      POST: async (req: Request) => {
+        if (!caller(req)) return json({ error: "not signed in" }, 401);
+        const body = (await req.json().catch(() => null)) as { text?: unknown; instruction?: unknown } | null;
+        if (!body || typeof body.text !== "string" || !body.text.trim()) return json({ error: "text to say" }, 400);
+        try {
+          const { pcm, seconds } = await hubNarrate(body.text, typeof body.instruction === "string" ? body.instruction : undefined);
+          return new Response(Buffer.from(pcm), { headers: { "content-type": "audio/L16;rate=24000;channels=1", "x-seconds": seconds.toFixed(3), "cache-control": "private, max-age=86400" } });
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err);
+          return json({ error: msg }, msg.startsWith("no voice") ? 501 : 502);
+        }
       },
     },
 

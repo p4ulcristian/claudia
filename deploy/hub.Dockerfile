@@ -15,7 +15,7 @@ RUN printf '%s\n' "$COMMIT" > src/commit.txt \
  && cp -r web/app-icon /out/web/app-icon \
  && mkdir -p /out/app/src/hub /out/app/web \
  && cp hub.ts package.json /out/app/ \
- && cp src/proxy.ts src/version.ts src/api-version.ts src/presence.ts src/commit.txt /out/app/src/ \
+ && cp src/proxy.ts src/version.ts src/api-version.ts src/presence.ts src/narrator.ts src/commit.txt /out/app/src/ \
  && cp src/hub/*.ts /out/app/src/hub/ \
  && mkdir -p /out/app/node_modules && cp -r node_modules/jose /out/app/node_modules/jose \
  && cp -r web/app-icon /out/app/web/app-icon \
