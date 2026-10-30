@@ -114,7 +114,7 @@ function placeRod(m: THREE.Mesh, from: V3, to: V3, radius: number) {
   m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
 }
 
-type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number; dim: number; lit: boolean; notes: boolean; outline: THREE.Mesh | null };
+type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number; dim: number; lit: boolean; notes: boolean; outline: THREE.Mesh | null; label: CSS2DObject | null; lift: number };
 type Style = "diagram" | "real";
 
 function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: Style) {
@@ -143,7 +143,7 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: 
       const r = V(p.rot);
       mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
-    const entry: Entry = { mesh, spec: p, radius, k: 1, dim: 1, lit: false, notes: true, outline: null };
+    const entry: Entry = { mesh, spec: p, radius, k: 1, dim: 1, lit: false, notes: true, outline: null, label: null, lift: NaN };
     byId.set(String(p.id), entry);
     if (style === "diagram" && p.shape !== "group" && p.outline !== false && !(p.ghost && p.shape === "sphere")) {
       const ink = new THREE.Mesh(mesh.geometry, outlineMaterial());
@@ -157,14 +157,26 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: 
     if (p.label && p.shape !== "group") {
       mesh.geometry.computeBoundingBox();
       const l = new CSS2DObject(labelEl(String(p.label), p.note, `#${color.getHexString()}`));
-      // above the part's top, in its own (scaled) units
-      l.position.set(0, mesh.geometry.boundingBox!.max.y + 0.2 / (mesh.scale.y || 1), 0);
       mesh.add(l);
+      entry.label = l;
     }
   }
   // a part with a parent moves, turns and scales with it (a rotor and its blades)
   for (const { mesh, spec } of byId.values()) (byId.get(String(spec.parent))?.mesh ?? root).add(mesh);
   return byId;
+}
+
+// A part's label sits above the part's centre by half the part's height, measured once upright, so a part
+// that turns (a blade, a rod swinging between its ends) does not swing its label around or bob it up and down.
+const _lc = new THREE.Vector3(), _lb = new THREE.Box3();
+function placeLabel(e: Entry) {
+  const l = e.label;
+  if (!l || !e.mesh.visible) return;
+  const box = e.mesh.geometry.boundingBox!;
+  if (Number.isNaN(e.lift)) e.lift = _lb.copy(box).applyMatrix4(e.mesh.matrixWorld).getSize(_lc).y / 2 + 0.2;
+  e.mesh.localToWorld(box.getCenter(_lc));
+  _lc.y += e.lift;
+  l.position.copy(e.mesh.worldToLocal(_lc));
 }
 
 // A part's centre now, or a point.
@@ -292,7 +304,7 @@ function applyOverride(host: HTMLElement, e: Entry, o: Data) {
       const r = V(o.rot);
       m.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
-    if (o.size !== undefined && e.spec.shape !== "tube") m.scale.set(...sizeOf(o.size));
+    if (o.size !== undefined && e.spec.shape !== "tube") { m.scale.set(...sizeOf(o.size)); e.lift = NaN; }
   }
   const mat = m.material as THREE.MeshStandardMaterial;
   if (o.color) mat.color.copy(colorOf(host, o.color));
@@ -773,23 +785,40 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       if (d.autoplay !== false && !sAutoplay && sIdx < 0) { sAutoplay = true; storyApi.play(); }
     };
 
-    // labels that would sit on each other are moved down a little, and eased back when there is room
-    let declutterAt = 0;
+    // labels that would sit on each other are moved apart. Each label is measured where it sits unmoved (its
+    // place minus the shift applied here), so a shift never feeds back into the next measure; the earlier label
+    // keeps its place, a later one moves above or below it and keeps that side while they still meet, and every
+    // shift eases to its target frame by frame. Returns true while a label is still easing.
+    const shifts = new Map<HTMLElement, { y: number; to: number; side: number }>();
     const declutter = () => {
       const els = [...labels.domElement.querySelectorAll<HTMLElement>(".s3-label")].filter((x) => x.style.display !== "none");
-      for (const x of els) x.style.marginTop = "0px";
-      const boxes = els.map((x) => ({ x, r: x.getBoundingClientRect() })).sort((a, b) => a.r.top - b.r.top);
+      for (const [x] of shifts) if (!els.includes(x)) { shifts.delete(x); x.style.translate = ""; }
+      const rects = els.map((x) => x.getBoundingClientRect());
       const placed: { left: number; right: number; top: number; bottom: number }[] = [];
-      for (const { x, r } of boxes) {
+      let easing = false;
+      els.forEach((x, i) => {
+        const r = rects[i];
+        const s = shifts.get(x) ?? { y: 0, to: 0, side: 0 };
+        shifts.set(x, s);
+        const top = r.top - s.y, bottom = r.bottom - s.y;
         let dy = 0;
         for (let guard = 0; guard < 10; guard++) {
-          const hit = placed.find((q) => r.left < q.right && r.right > q.left && r.top + dy < q.bottom && r.bottom + dy > q.top);
+          const hit = placed.find((q) => r.left < q.right && r.right > q.left && top + dy < q.bottom && bottom + dy > q.top);
           if (!hit) break;
-          dy = hit.bottom - r.top + 3;
+          s.side ||= top + bottom < hit.top + hit.bottom ? -1 : 1;
+          dy = s.side > 0 ? hit.bottom - top + 3 : hit.top - bottom - 3;
         }
-        if (dy) x.style.marginTop = `${Math.min(dy, 90)}px`;
-        placed.push({ left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy });
-      }
+        if (!dy) s.side = 0;
+        s.to = Math.max(-90, Math.min(90, dy));
+        placed.push({ left: r.left, right: r.right, top: top + s.to, bottom: bottom + s.to });
+      });
+      els.forEach((x) => {
+        const s = shifts.get(x)!;
+        if (Math.abs(s.to - s.y) < 0.5) s.y = s.to;
+        else { s.y += (s.to - s.y) * 0.25; easing = true; }
+        x.style.translate = s.y ? `0 ${s.y.toFixed(1)}px` : "";
+      });
+      return easing;
     };
 
     const draw = (now: number) => {
@@ -835,9 +864,11 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         again = true;
       }
       again = controls.update() || again;
+      scene.updateMatrixWorld();
+      for (const e of byId.values()) placeLabel(e);
       renderer.render(scene, camera);
       labels.render(scene, camera);
-      if (!declutterAt || wall - declutterAt > 400) { declutterAt = wall; declutter(); }
+      if (declutter()) again = true;
       if (again) want();
     };
     const want = () => { if (!raf) raf = requestAnimationFrame(draw); };

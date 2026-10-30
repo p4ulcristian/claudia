@@ -1628,7 +1628,6 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-legend { position: absolute; left: 10px; top: 8px; display: flex; flex-direction: column; gap: 3px; font: 700 13px var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 80%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; pointer-events: none; z-index: 2; }
 .s3-legend span { display: flex; align-items: center; gap: 7px; }
 .s3-legend i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #f3efe6; flex: none; }
-.s3-label { transition: margin-top 0.25s ease; }
 .s3-label.s3-noted span { display: block; }
 .s3-track { position: relative; display: flex; gap: 3px; align-items: flex-end; flex: 1 1 180px; min-width: 140px; height: 22px; padding: 0 2px; }
 .s3-seg { flex-basis: 0; min-width: 6px; height: 18px; padding: 0; display: flex; align-items: center; background: none; border: 0; cursor: pointer; }
