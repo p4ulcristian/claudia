@@ -41,6 +41,7 @@ const SPEEDS = [0.25, 0.5, 1, 2];
 const UP = new THREE.Vector3(0, 1, 0);
 const SCAN_SECONDS = 12;
 const HEIGHT_KEY = "claudia.scene3d.height";
+const VOICE_KEY = "claudia.scene3d.voice";   // "on" once the user turned the narrator on; off by default
 const HEIGHT_MIN = 220;
 const clampHeight = (h: number) => Math.round(Math.min(Math.max(h, HEIGHT_MIN), Math.max(innerHeight * 1.5, 600)));
 const pairKey = ([a, b]: Overlap) => `${a} × ${b}`;
@@ -290,7 +291,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
   const [playing, setPlayingUi] = useState(false);
   const [sub, setSub] = useState("");
   const [voiceState, setVoiceState] = useState("");
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(() => localStorage.getItem(VOICE_KEY) !== "on");
   useEffect(() => {
     if (!hint) return;
     const t = setTimeout(() => setHint(""), 1500);
@@ -378,7 +379,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
     let arrows: ReturnType<typeof makeArrow>[] = [];
     // the story: steps, which part is how far in (0..1), fades and camera moves under way
     let steps: Step[] = [];
-    let sIdx = -1, sPlaying = false, sElapsed = 0, sDur = 0, sToken = 0, sTick = 0, sLast = 0, sMuted = false, sInstruction: string | undefined, sAutoplay = false;
+    let sIdx = -1, sPlaying = false, sElapsed = 0, sDur = 0, sToken = 0, sTick = 0, sLast = 0, sMuted = localStorage.getItem(VOICE_KEY) !== "on", sInstruction: string | undefined, sAutoplay = false;
     const kOf = new Map<string, number>();
     const fades: { id: string; from: number; to: number; at: number; dur: number }[] = [];
     let focus = new Set<string>();
@@ -624,7 +625,25 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       next: () => { if (sIdx + 1 < steps.length) { sPlaying = true; setPlayingUi(true); voice.resume(); void startStep(sIdx + 1, true); } },
       prev: () => { sPlaying = true; setPlayingUi(true); voice.resume(); void startStep(Math.max(0, sIdx - 1), false); },
       goto: (n: number) => { sPlaying = true; setPlayingUi(true); voice.resume(); void startStep(n, n === sIdx + 1); },
-      mute: (m: boolean) => { sMuted = m; setMuted(m); if (m) voice.stop(); },
+      mute: (m: boolean) => {
+        sMuted = m;
+        setMuted(m);
+        localStorage.setItem(VOICE_KEY, m ? "off" : "on");
+        if (m) { voice.stop(); setVoiceState("voice off"); }
+        else void preloadVoice();
+      },
+    };
+    const preloadVoice = async () => {
+      if (!(await voiceReady)) return;
+      const lines = [...new Set(steps.map((x) => x.say).filter(Boolean))];
+      let n = 0;
+      for (const line of lines) {
+        if (sMuted) return;
+        setVoiceState(`voice ${n}/${lines.length}`);
+        if (!(await voice.load(line, sInstruction))) { setVoiceState(`no voice: ${voice.error}`); return; }
+        n++;
+      }
+      setVoiceState(sMuted ? "voice off" : "voice ready");
     };
     // called after every build: the steps may have changed (Claude adds to the story while it plays)
     const newStory = (d: Data) => {
@@ -635,18 +654,12 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       if (sIdx >= steps.length) sIdx = steps.length - 1;
       applyStoryState(sIdx, false);
       focus = sIdx >= 0 ? new Set([...byId.keys()].filter((id) => matchesAny(steps[sIdx].focus, id))) : new Set();
-      // the voice: every line is asked for in order while the user looks around
+      // the voice is off until the user turns it on; then every line is asked for in order while they look around
       if (d.narrate !== false && steps.some((x) => x.say)) {
-        void voiceReady.then(async (ok) => {
-          if (!ok) { setVoiceState("no voice on this server"); return; }
-          const lines = [...new Set(steps.map((x) => x.say).filter(Boolean))];
-          let n = 0;
-          for (const line of lines) {
-            setVoiceState(`voice ${n}/${lines.length}`);
-            if (!(await voice.load(line, sInstruction))) { setVoiceState(`no voice: ${voice.error}`); return; }
-            n++;
-          }
-          setVoiceState("voice ready");
+        void voiceReady.then((ok) => {
+          if (!ok) setVoiceState("no voice on this server");
+          else if (sMuted) setVoiceState("voice off");
+          else void preloadVoice();
         });
       } else setVoiceState("");
       if (d.autoplay === true && !sAutoplay && sIdx < 0) { sAutoplay = true; storyApi.play(); }
