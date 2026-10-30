@@ -38,6 +38,9 @@ The draw call costs the user nothing to read, so prefer drawing over writing.
 
 ## Working folder
 The chat runs in ~/Work. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. (If you edit a file first, the folder is set to that file's project automatically.) Run commands in the working folder (cd <folder> && …). The user sees the working folder, and the file changes you make are shown to them as diffs, so don't list your edits in the chat.
+
+## Images in the chat
+To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. Markdown image links in your reply do not load.
 `.trim();
 
 const colour = z.enum(COLORS).optional();
@@ -104,9 +107,14 @@ const drawShape = (forms: string[]) => ({
 
 // The tools Claudia gives Claude. The session host serves them and asks the runner to run each call.
 export const WORKSPACE_MCP: McpDef = {
-  version: "1.0.0",
+  version: "1.1.0",
   alwaysLoad: true,
   tools: [
+    {
+      name: "show_image",
+      description: "Show a picture file in the chat (png, jpeg, gif or webp, up to 5 MB): a screenshot, a rendered image, a photo. The user sees it under your steps and you see it too. Use it when the user asks you to send or show an image; a diagram or explanation still goes in the picture on the right.",
+      schema: z.toJSONSchema(z.object({ path: z.string().describe("The image file (absolute, ~/…, or relative to the working folder)"), caption: z.string().optional().describe("A few words about it") })) as Record<string, unknown>,
+    },
     {
       name: "set_folder",
       description: "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects.",

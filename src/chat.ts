@@ -1,7 +1,7 @@
 // One chat = one Claude Code session, driven through the Agent SDK.
 import { getSessionMessages, getSessionInfo, type SDKMessage, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import { store } from "./db";
 import { noteLimits, refreshSoon } from "./meta";
@@ -26,12 +26,17 @@ const SETTLE_MS = 5_000;
 const SETTLE_INIT_MS = 30_000;
 const DRAW_TOOL = "mcp__picture__draw";
 const FOLDER_TOOL = "mcp__workspace__set_folder";
+const SHOW_IMAGE_TOOL = "mcp__workspace__show_image";
+
+const SHOWN_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
+const SHOWN_MAX = 5_000_000;
 
 export type Item =
   // queued: sent while Claude was working and not taken in yet; it waits below the chat until then.
   | { k: "user"; uuid: string; text: string; images: number; media?: Media[]; queued?: boolean }
   | { k: "text"; id: string; text: string }
-  | { k: "tool"; id: string; name: string; title: string; detail: string; result?: { error: boolean; text: string } }
+  // images: pictures the tool's result carried (show_image); the chat shows them under the steps.
+  | { k: "tool"; id: string; name: string; title: string; detail: string; result?: { error: boolean; text: string }; images?: number }
   | { k: "note"; id: string; text: string };
 
 // Work Claude runs beside the chat: subagents and background shell commands.
@@ -76,7 +81,7 @@ export type ChatEvent =
   | { t: "queue"; uuid: string; state: "started" | "cancelled" }
   | { t: "delta"; text: string }
   | { t: "items"; items: Item[] }
-  | { t: "tool_result"; id: string; error: boolean; text: string }
+  | { t: "tool_result"; id: string; error: boolean; text: string; images?: number }
   | { t: "scene"; scene: Scene; changed: string[]; turn: string }
   | { t: "ask"; ask: Ask }
   | { t: "ask_done"; id: string }
@@ -171,6 +176,27 @@ export function resultText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map((b: any) => (b.type === "text" ? b.text : b.type === "image" ? "[image]" : "")).join("\n");
   return "";
+}
+
+// The base64 images in a tool result's content, in order.
+function resultImages(content: unknown): { media_type: string; data: string }[] {
+  if (!Array.isArray(content)) return [];
+  return content.filter((b: any) => b.type === "image" && b.source?.type === "base64").map((b: any) => ({ media_type: String(b.source.media_type), data: String(b.source.data) }));
+}
+
+// Pictures a tool showed in the chat (show_image), kept from the live turn: the session may not have them written yet.
+const shownNow = new Map<string, { media_type: string; data: string }[]>();
+export async function shownImage(sessionId: string, toolUseId: string, n: number) {
+  const mem = shownNow.get(toolUseId);
+  if (mem) return mem[n] ?? null;
+  const msgs = await withEarlierChains(sessionId, await getSessionMessages(sessionId, { dir: WORK }));
+  for (const m of msgs) {
+    const content = (m.message as any)?.content;
+    if (m.type !== "user" || !Array.isArray(content)) continue;
+    const r = content.find((b: any) => b.type === "tool_result" && b.tool_use_id === toolUseId);
+    if (r) return resultImages(r.content)[n] ?? null;
+  }
+  return null;
 }
 
 // Messages API content → chat items. Thinking is left out on purpose.
@@ -312,7 +338,11 @@ export async function loadHistory(sessionId: string): Promise<Item[]> {
       for (const b of content ?? []) {
         if (b.type === "tool_result") {
           const t = tools.get(b.tool_use_id);
-          if (t) t.result = { error: !!b.is_error, text: short(resultText(b.content), 4000) };
+          if (t) {
+            t.result = { error: !!b.is_error, text: short(resultText(b.content), 4000) };
+            const shown = resultImages(b.content).length;
+            if (shown) t.images = shown;
+          }
           const qs = asked.get(b.tool_use_id);
           if (qs && !b.is_error) {
             // The result reads: … "question"="answer" …
@@ -543,6 +573,19 @@ export class Chat implements SessionHandler {
       claudeMd ? `\n<claude-md path="${abs}/CLAUDE.md">\n${claudeMd}\n</claude-md>` : "\n(no CLAUDE.md in this folder)",
       `\n<git-status>\n${status}\n</git-status>`,
     ].join("\n");
+  }
+
+  // Show a picture file in the chat: the result carries the image, so it is saved with the session and Claude sees it too.
+  private async showImage(path: string, caption: string) {
+    const abs = resolve(this.settings.folder ?? WORK, path.replace(/^~(?=\/|$)/, homedir()));
+    const type = SHOWN_TYPES[extname(abs).toLowerCase()];
+    const fail = (text: string) => ({ isError: true, content: [{ type: "text", text }] });
+    if (!type) return fail(`${abs} is not a png, jpeg, gif or webp picture.`);
+    const st = await stat(abs).catch(() => null);
+    if (!st?.isFile()) return fail(`No file at ${abs}.`);
+    if (st.size > SHOWN_MAX) return fail(`${abs} is ${Math.round(st.size / 1e6)} MB; the chat shows pictures up to ${SHOWN_MAX / 1e6} MB. Make it smaller first.`);
+    const data = Buffer.from(await Bun.file(abs).arrayBuffer()).toString("base64");
+    return { content: [{ type: "image", data, mimeType: type }, { type: "text", text: `Shown in the chat: ${basename(abs)}${caption ? ` (${caption})` : ""}.` }] };
   }
 
   private indexFile(root: string) {
@@ -1016,7 +1059,7 @@ export class Chat implements SessionHandler {
         env: acct.env,
         ...(exists ? { resume: this.id } : { sessionId: this.id }),
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM_APPEND },
-        allowedTools: [DRAW_TOOL, "mcp__picture__templates", "mcp__picture__save_template", FOLDER_TOOL],
+        allowedTools: [DRAW_TOOL, "mcp__picture__templates", "mcp__picture__save_template", FOLDER_TOOL, SHOW_IMAGE_TOOL],
         // Same as the user's terminal Claude (defaultMode bypassPermissions).
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
@@ -1044,6 +1087,7 @@ export class Chat implements SessionHandler {
         return { content: [{ type: "text", text: this.saveTemplate(String(a.name ?? ""), a) }] };
       }
       if (args.server === "workspace" && args.tool === "set_folder") return { content: [{ type: "text", text: await this.folderTool(String(args.args?.path ?? "")) }] };
+      if (args.server === "workspace" && args.tool === "show_image") return this.showImage(String(args.args?.path ?? ""), String(args.args?.caption ?? ""));
       throw new Error(`No tool ${args.server}/${args.tool}`);
     }
     if (kind === "hook") {
@@ -1296,7 +1340,11 @@ export class Chat implements SessionHandler {
           return;
         }
         for (const b of content)
-          if (b.type === "tool_result") this.emit({ t: "tool_result", id: b.tool_use_id, error: !!b.is_error, text: short(resultText(b.content), 4000) });
+          if (b.type === "tool_result") {
+            const shown = resultImages(b.content);
+            if (shown.length) shownNow.set(b.tool_use_id, shown);
+            this.emit({ t: "tool_result", id: b.tool_use_id, error: !!b.is_error, text: short(resultText(b.content), 4000), ...(shown.length ? { images: shown.length } : {}) });
+          }
         return;
       }
       case "result": {

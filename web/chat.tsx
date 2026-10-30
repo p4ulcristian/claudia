@@ -8,12 +8,15 @@ import { readMedia, type Attachment, type SentImage } from "./media";
 import { ImageBig } from "./forms";
 
 type Tool = Extract<Item, { k: "tool" }>;
-type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string };
+type Block = { k: "user" | "text" | "note"; item: Item } | { k: "steps"; tools: Tool[]; id: string } | { k: "shown"; tool: Tool };
 
 function blocks(items: Item[]): Block[] {
   const out: Block[] = [];
   for (const it of items) {
-    if (it.k === "tool") {
+    if (it.k === "tool" && it.images) {
+      // a picture shown in the chat stands on its own, between the step groups
+      out.push({ k: "steps", tools: [it], id: it.id }, { k: "shown", tool: it });
+    } else if (it.k === "tool") {
       const last = out[out.length - 1];
       if (last?.k === "steps") last.tools.push(it);
       else out.push({ k: "steps", tools: [it], id: it.id });
@@ -133,9 +136,25 @@ export function Transcript({ items, live }: { items: Item[]; live: boolean }) {
     <div className="transcript">
       {bs.map((b, i) =>
         b.k === "steps" ? <Steps key={b.id} tools={b.tools} live={live && i === bs.length - 1} />
+          : b.k === "shown" ? null
           : b.k === "text" ? <div key={(b.item as any).id} className="msg claude small"><Markdown text={(b.item as any).text} /></div>
           : null,
       )}
+    </div>
+  );
+}
+
+// The pictures Claude showed in the chat (show_image); a click shows one big.
+function ShownImages({ chat, tool }: { chat: string; tool: Tool }) {
+  const api = useApi();
+  const [big, setBig] = useState<string | null>(null);
+  return (
+    <div className="msg claude shown">
+      {Array.from({ length: tool.images ?? 0 }, (_, n) => {
+        const src = api.src(`/api/chats/${chat}/shown/${tool.id}/${n}`);
+        return <img key={n} src={src} alt={tool.title} loading="lazy" onClick={() => setBig(src)} />;
+      })}
+      {big && <ImageBig src={big} close={() => setBig(null)} />}
     </div>
   );
 }
@@ -227,6 +246,7 @@ export function Messages(props: {
           const before = prev?.k === "text" ? (prev.item as Extract<Item, { k: "text" }>).text : undefined;
           return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} ctx={{ asked, before }} />;
         }
+        if (b.k === "shown") return <ShownImages key={`shown-${b.tool.id}`} chat={props.chat} tool={b.tool} />;
         if (b.k === "user") {
           const it = b.item as Extract<Item, { k: "user" }>;
           const files = props.changeTurns.get(it.uuid) ?? 0;
