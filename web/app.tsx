@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createRoot } from "react-dom/client";
 import { Messages, Composer } from "./chat";
 import type { SentImage } from "./media";
+import type { SentFile } from "../src/attached";
 import { PictureView } from "./picture";
 import { PictureSend } from "./editor";
 import { AskPanel, PermitPanel } from "./panels";
@@ -706,17 +707,17 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const title = row?.title ?? (live.items.length ? "New chat" : "New chat");
   useEffect(() => { document.title = `${title} · ${brandName(hubMode ? null : me?.name)}`; }, [title, me]);
 
-  const onSend = (text: string, images: SentImage[]) => {
+  const onSend = (text: string, images: SentImage[], files: SentFile[]) => {
     setViewing(null);
     // A typed message while Claude is asking answers the question.
-    if (live.asks.length && text && !images.length) {
+    if (live.asks.length && text && !images.length && !files.length) {
       const ask = live.asks[0];
       send({ t: "answer", chat: current.id, id: ask.id, answers: Object.fromEntries(ask.questions.map((q) => [q.question, text])) });
       return;
     }
     if (!fromPath()) history.replaceState(history.state, "", pathOf(current));
     if (hubMode) store.set("hub.server", current.server);
-    send({ t: "send", chat: current.id, text, images });
+    send({ t: "send", chat: current.id, text, images, files });
   };
   const onStop = () => send({ t: "stop", chat: current.id });
 
@@ -776,7 +777,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
   const onCtxMenu = (e: React.MouseEvent) => { e.preventDefault(); if (!readOnly) setCtxMenu({ x: e.clientX, y: e.clientY }); };
-  const compact = readOnly || live.running ? undefined : () => onSend("/compact", []);
+  const compact = readOnly || live.running ? undefined : () => onSend("/compact", [], []);
 
   // Which picture to show: live, or the one that was current at an older message.
   const pictureTurns = useMemo(() => new Set(live.pictures.map((p) => p.turn)), [live.pictures]);
@@ -1130,6 +1131,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             />
           )}
           <Composer
+            chat={current.id}
             running={live.running}
             asking={live.asks.length > 0}
             onSend={onSend}

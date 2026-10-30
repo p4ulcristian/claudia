@@ -5,6 +5,7 @@ import { md } from "./md";
 import type { Command, Item, Media } from "./types";
 import { CodeChip, codeSends } from "./editor";
 import { readMedia, type Attachment, type SentImage } from "./media";
+import { MAX_FILE_BYTES, sentFiles, sizeLabel, type SentFile } from "../src/attached";
 import { ImageBig } from "./forms";
 
 type Tool = Extract<Item, { k: "tool" }>;
@@ -257,7 +258,7 @@ export function Messages(props: {
             <div key={it.uuid} data-at={it.uuid} className={`msg user ${props.viewing === it.uuid ? "viewing" : ""}`}>
               <div className="bubble">
                 {it.images > 0 && <SentMedia chat={props.chat} it={it} />}
-                <UserText text={it.text} />
+                <UserText text={it.text} chat={props.chat} />
               </div>
               {(has || forkable) && (
                 <div className="msg-links">
@@ -289,7 +290,7 @@ export function Messages(props: {
         <div key={it.uuid} className="msg user queued" title="Claude reads this at its next step">
           <div className="bubble">
             {it.images > 0 && <SentMedia chat={props.chat} it={it} />}
-            <UserText text={it.text} />
+            <UserText text={it.text} chat={props.chat} />
           </div>
           <span className="queued-tag">queued</span>
         </div>
@@ -301,21 +302,53 @@ export function Messages(props: {
 }
 
 // The user's message: code sent from an editor block shows as a chip per file (its diff on click), the rest as text.
-function UserText({ text }: { text: string }) {
-  const sent = useMemo(() => codeSends(text), [text]);
-  if (!sent) return <Markdown text={text} />;
+// Attached files (src/attached.ts) show as file chips after it.
+function UserText({ text, chat }: { text: string; chat: string }) {
+  const { text: typed, files } = useMemo(() => sentFiles(text), [text]);
+  const sent = useMemo(() => codeSends(typed), [typed]);
   return (
     <>
-      {sent.note && <Markdown text={sent.note} />}
-      {sent.sends.map((s, i) => <CodeChip key={i} send={s} />)}
+      {!sent ? typed && <Markdown text={typed} /> : <>
+        {sent.note && <Markdown text={sent.note} />}
+        {sent.sends.map((s, i) => <CodeChip key={i} send={s} />)}
+      </>}
+      {files.length > 0 && (
+        <div className="file-chips">
+          {files.map((f, i) => <SentFileChip key={i} chat={chat} file={f} />)}
+        </div>
+      )}
     </>
   );
 }
 
-export function Composer(props: { running: boolean; asking: boolean; onSend: (text: string, images: SentImage[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode; actions?: React.ReactNode }) {
+// A sent file: its name and size; a click downloads it from the chat's server.
+function SentFileChip({ chat, file }: { chat: string; file: SentFile }) {
+  const api = useApi();
+  const saved = file.path.split("/").pop() ?? file.name;
+  return (
+    <a className="file-chip" href={api.src(`/api/chats/${chat}/uploads/${encodeURIComponent(saved)}`)} download={file.name} title={`Saved for Claude at ${file.path}`}>
+      <FileIcon />
+      <span className="file-chip-name">{file.name}</span>
+      <span className="file-chip-size">{sizeLabel(file.size)}</span>
+    </a>
+  );
+}
+
+const FileIcon = () => (
+  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.5h7l3.5 3.5v11.5h-10.5z M12 2.5v3.5h3.5" /></svg>
+);
+
+// A file in the composer that goes to Claude as a file: sent to the chat's server as soon as it is
+// added (`done` bytes so far), sendable once `saved`.
+type Upload = { key: string; name: string; size: number; done: number; saved?: SentFile; error?: string; xhr?: XMLHttpRequest };
+
+export function Composer(props: { chat: string; running: boolean; asking: boolean; onSend: (text: string, images: SentImage[], files: SentFile[]) => void; onStop: () => void; focusKey: string; initialText?: string; commands: Command[]; tools?: React.ReactNode; actions?: React.ReactNode }) {
+  const api = useApi();
   const [text, setText] = useState(props.initialText ?? "");
   const [attached, setAttached] = useState<Attachment[]>([]);
+  const [uploads, setUploads] = useState<Upload[]>([]);
   const [reading, setReading] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const [pick, setPick] = useState(0);
   const [menuOff, setMenuOff] = useState(false);
@@ -343,31 +376,121 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
     el.style.height = Math.min(el.scrollHeight, 260) + "px";
   }, [text]);
 
-  // Photos and videos (web/media.ts): each shows as a thumbnail once it is read.
+  // An uploaded file is saved for one chat: switching chats lets go of the composer's files.
+  useEffect(() => () => setUploads((us) => {
+    for (const u of us) u.xhr?.abort();
+    return [];
+  }), [props.chat, api]);
+
+  const patch = (key: string, p: Partial<Upload>) => setUploads((us) => us.map((u) => (u.key === key ? { ...u, ...p } : u)));
+  const upload = (f: File) => {
+    const key = crypto.randomUUID();
+    if (f.size > MAX_FILE_BYTES) {
+      setUploads((us) => [...us, { key, name: f.name, size: f.size, done: 0, error: `over ${sizeLabel(MAX_FILE_BYTES)}` }]);
+      return;
+    }
+    // (XHR, not fetch: it tells how much of the file has gone)
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", api.src(`/api/chats/${props.chat}/uploads?name=${encodeURIComponent(f.name)}`));
+    xhr.upload.onprogress = (e) => patch(key, { done: e.loaded });
+    xhr.onload = () => {
+      let body: any = null;
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status === 200 && body?.path) patch(key, { saved: body, done: f.size, xhr: undefined });
+      else patch(key, { error: body?.error ?? `not saved (${xhr.status})`, xhr: undefined });
+    };
+    xhr.onerror = () => patch(key, { error: "not sent: no connection", xhr: undefined });
+    setUploads((us) => [...us, { key, name: f.name, size: f.size, done: 0, xhr }]);
+    xhr.send(f);
+  };
+  const removeUpload = (key: string) => setUploads((us) => us.filter((u) => {
+    if (u.key === key) u.xhr?.abort();
+    return u.key !== key;
+  }));
+
+  // Photos and videos become images (web/media.ts), shown as thumbnails once read; every other
+  // file, and a photo the browser can't draw (HEIC, SVG), goes to the server as a file.
   const addFiles = (files: FileList | File[]) => {
     for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/") && !f.type.startsWith("video/")) continue;
+      if (!f.type.startsWith("image/") && !f.type.startsWith("video/")) {
+        upload(f);
+        continue;
+      }
       setReading((n) => n + 1);
       readMedia(f).then((a) => {
         if (a) setAttached((xs) => [...xs, a]);
+        else upload(f);
       }).finally(() => setReading((n) => n - 1));
     }
   };
 
+  // A drop anywhere in the window attaches: dropped folders are refused (only files can be sent).
+  const drop = (dt: DataTransfer) => {
+    const items = Array.from(dt.items ?? []);
+    const files: File[] = [];
+    Array.from(dt.files).forEach((f, i) => {
+      if (items[i]?.webkitGetAsEntry?.()?.isDirectory) setUploads((us) => [...us, { key: crypto.randomUUID(), name: f.name, size: 0, done: 0, error: "a folder: send its files" }]);
+      else files.push(f);
+    });
+    addFiles(files);
+  };
+  const dropRef = useRef(drop);
+  dropRef.current = drop;
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+    const enter = (e: DragEvent) => { if (hasFiles(e)) { depth++; setDragging(true); } };
+    const leave = (e: DragEvent) => { if (hasFiles(e) && --depth <= 0) { depth = 0; setDragging(false); } };
+    const over = (e: DragEvent) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = "copy"; } };
+    const dropped = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = 0;
+      setDragging(false);
+      // (a code editor block takes a dropped text file itself)
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      dropRef.current(e.dataTransfer!);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", dropped);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", dropped);
+    };
+  }, []);
+
+  const uploading = uploads.some((u) => !u.saved && !u.error);
+  const ready = uploads.filter((u) => u.saved);
+  const busy = reading > 0 || uploading;
   const send = () => {
     const t = text.trim();
-    if ((!t && !attached.length) || reading) return;
-    props.onSend(t, attached.flatMap((a) => a.images));
+    if ((!t && !attached.length && !ready.length) || busy) return;
+    props.onSend(t, attached.flatMap((a) => a.images), ready.map((u) => u.saved!));
     setText("");
     setAttached([]);
+    setUploads([]);
   };
 
   return (
-    <div
-      className="composer"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
-    >
+    <div className="composer">
+      {dragging && <div className="drop-veil" aria-hidden="true"><span>Drop to attach</span></div>}
+      {uploads.length > 0 && (
+        <div className="file-chips">
+          {uploads.map((u) => (
+            <span key={u.key} className={`file-chip ${u.error ? "failed" : u.saved ? "" : "sending"}`} title={u.error ? `${u.name}: ${u.error}` : u.saved ? `Saved for Claude at ${u.saved.path}` : `Sending ${u.name}…`}>
+              {!u.saved && !u.error && <span className="file-chip-bar" style={{ width: `${u.size ? Math.round((100 * u.done) / u.size) : 0}%` }} />}
+              <FileIcon />
+              <span className="file-chip-name">{u.name}</span>
+              <span className="file-chip-size">{u.error ?? (u.saved ? sizeLabel(u.size) : `${u.size ? Math.round((100 * u.done) / u.size) : 0}%`)}</span>
+              <button type="button" onClick={() => removeUpload(u.key)} title="Remove" aria-label={`Remove ${u.name}`}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
       {(attached.length > 0 || reading > 0) && (
         <div className="thumbs">
           {attached.map((a, i) => (
@@ -410,13 +533,13 @@ export function Composer(props: { running: boolean; asking: boolean; onSend: (te
         />
         <div className="toolbar">
           <div className="tools">{props.tools}</div>
-          <input ref={picker} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
-          <button className="icon attach" onClick={() => picker.current?.click()} title="Add photos or videos" aria-label="Add photos or videos">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6.5h3l1.5-2h4l1.5 2h3v9h-13z" /><circle cx="10" cy="10.8" r="2.8" /></svg>
+          <input ref={picker} type="file" multiple hidden onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
+          <button className="icon attach" onClick={() => picker.current?.click()} title="Add files, photos or videos" aria-label="Add files, photos or videos">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14.5 9.5l-5.3 5.3a3.2 3.2 0 0 1-4.5-4.5l6-6a2.1 2.1 0 0 1 3 3l-5.8 5.8a1 1 0 0 1-1.4-1.4l5.2-5.2" /></svg>
           </button>
           {props.actions}
           {props.running && <button className="stop" onClick={props.onStop} title="Stop (Esc)">Stop</button>}
-          <button className="send primary" onClick={send} disabled={(!text.trim() && !attached.length) || reading > 0} title="Send (Enter)">Send</button>
+          <button className="send primary" onClick={send} disabled={(!text.trim() && !attached.length && !ready.length) || busy} title={uploading ? "Wait until the files are sent" : "Send (Enter)"}>Send</button>
         </div>
       </div>
     </div>

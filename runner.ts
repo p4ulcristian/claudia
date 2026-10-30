@@ -22,6 +22,8 @@ import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
 import { mergedSends, timeline, timelineDetail } from "./src/timeline";
 import { forkChat } from "./src/fork";
+import { MAX_FILE_BYTES, sentFiles } from "./src/attached";
+import { TooBig, ownFiles, saveUpload, uploadPath } from "./src/uploads";
 import { agentDetail, agentGit, agentList, agentSteps, type Live } from "./src/agents";
 
 const PORT = Number(process.env.RUNNER_PORT ?? 4511);
@@ -132,12 +134,21 @@ async function listChats(all: boolean, archivedView: boolean) {
   ];
 }
 
+// A first message with attached files: its text, else the first file's name (the SDK may have cut
+// the message short inside a tag).
+function firstPromptTitle(first: string | undefined) {
+  if (!first) return "";
+  const at = first.indexOf("<claudia-file ");
+  if (at < 0) return first;
+  return first.slice(0, at).trim() || sentFiles(first).files[0]?.name || first.match(/\bname="([^"]*)"/)?.[1] || "";
+}
+
 function shownRows(shown: Awaited<ReturnType<typeof listSessions>>, ours: Set<string>, archived: Set<string>, colors: Map<string, string>, att: Attention) {
   return shown
     .sort((a, b) => (a.createdAt ?? a.lastModified) - (b.createdAt ?? b.lastModified))
     .map((s) => ({
       id: s.sessionId,
-      title: s.customTitle || s.summary || s.firstPrompt || "New chat",
+      title: s.customTitle || s.summary || firstPromptTitle(s.firstPrompt) || "New chat",
       at: s.lastModified,
       // When it was started: the list's order, and how the hub's page merges several servers' lists.
       started: s.createdAt ?? s.lastModified,
@@ -345,6 +356,39 @@ Bun.serve({
         const im = await sentImage(id, uuid, Number(n)).catch(() => null);
         if (!im || !/^image\/(jpeg|png|gif|webp)$/.test(im.media_type)) return new Response("not found", { status: 404 });
         return new Response(Buffer.from(im.data, "base64"), { headers: { "Content-Type": im.media_type, "Cache-Control": "private, max-age=86400" } });
+      },
+    },
+    // A file the user attaches to a message (src/attached.ts): the body is the file, ?name= its name.
+    // Saved now; the message that sends it names its path.
+    "/api/chats/:id/uploads": {
+      POST: async (req) => {
+        const id = req.params.id;
+        const name = new URL(req.url).searchParams.get("name") ?? "";
+        if (!uuidRe.test(id) || !name || !req.body) return json({ error: "bad request" }, 400);
+        if (Number(req.headers.get("content-length")) > MAX_FILE_BYTES) return json({ error: "file too big" }, 413);
+        try {
+          return json(await saveUpload(id, name, req.headers.get("content-type") ?? "", req.body));
+        } catch (e) {
+          if (e instanceof TooBig) return json({ error: "file too big" }, 413);
+          console.error("upload", id, e);
+          return json({ error: "could not save the file" }, 500);
+        }
+      },
+    },
+    // One attached file back, to download (never shown inline: it is whatever the user sent).
+    "/api/chats/:id/uploads/:name": {
+      GET: async (req) => {
+        const name = decodeURIComponent(req.params.name);
+        const path = uuidRe.test(req.params.id) ? await uploadPath(req.params.id, name) : null;
+        if (!path) return new Response("not found", { status: 404 });
+        return new Response(Bun.file(path), {
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=86400",
+          },
+        });
       },
     },
     // One picture a tool showed in the chat (show_image), from the saved session.
@@ -659,7 +703,7 @@ Bun.serve({
             store.unarchive(m.chat); // writing to an archived chat brings it back
             if (ws.data.chat !== m.chat) await openChat(ws, m.chat);
             await wake(c);
-            await c.send(String(m.text ?? ""), m.images ?? []);
+            await c.send(String(m.text ?? ""), m.images ?? [], await ownFiles(m.chat, m.files));
             return broadcastChats();
           }
           // The user typing in an editor block (saved as they type) and its Send.
