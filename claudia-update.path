@@ -1,0 +1,11 @@
+# Start claudia-update when the hub pokes this server after a push to main (server.ts writes the file;
+# update-checkout.sh removes it first, so a poke during a run starts another when that one ends).
+[Unit]
+Description=Claudia update on the hub's poke
+
+[Path]
+PathExists=%t/claudia-update-requested
+Unit=claudia-update.service
+
+[Install]
+WantedBy=paths.target

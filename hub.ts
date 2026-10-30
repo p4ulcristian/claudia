@@ -5,7 +5,8 @@
 // profile there.
 //
 // Behind the gate's Caddy only: it believes X-Auth-Request-Email and -Groups, which Caddy clears
-// and the login sets. /hub/enroll is the one way in without a login (a joining server, with its secret).
+// and the login sets. Two ways in without a login: /hub/enroll (a joining server, with its secret) and
+// /hub/github (GitHub's webhook, signed: src/hub/github.ts).
 import type { BunRequest, Server } from "bun";
 import { join, normalize } from "node:path";
 import { forward, pipe, upgrade, type PipeData } from "./src/proxy";
@@ -16,6 +17,7 @@ import { liveEnded, liveReported } from "./src/hub/live";
 import { beat } from "./src/hub/presence";
 import { deviceKey } from "./src/hub/seal";
 import { shortToken } from "./src/hub/apns";
+import { githubHook } from "./src/hub/github";
 import { COMMIT, VERSION } from "./src/version";
 
 const HOST = process.env.HUB_HOST ?? "127.0.0.1";
@@ -306,6 +308,8 @@ Bun.serve<PipeData>({
         return changed();
       },
     },
+    // GitHub's webhook: main moved, or its hub image was signed (no login: Caddy lets this path through).
+    "/hub/github": { POST: githubHook },
     // A joining server fetching its address with its secret (no login: Caddy lets only this path through).
     "/hub/enroll": {
       POST: async (req: Request) => {

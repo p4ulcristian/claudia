@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Keep a shared server on GitHub's main (run as root by claudia-update.timer): when main's commit is
+# Keep a shared server on GitHub's main (run as root by claudia-update.path on the hub's poke after a
+# push to main, and hourly by claudia-update.timer): when main's commit is
 # not the one in /srv/claudia, export main with git archive (which writes src/commit.txt) and run
 # that copy's install.sh. Runners restart (chats keep going in the session hosts); host.ts changes
 # wait for `install.sh <checkout> --restart-hosts` or the next host restart.
 set -euo pipefail
+# The poke is taken: one that comes during this run starts another (claudia-update.path).
+[ -z "${CLAUDIA_UPDATE_TRIGGER:-}" ] || rm -f "$CLAUDIA_UPDATE_TRIGGER"
 repo=https://github.com/p4ulcristian/claudia
 mirror=/var/lib/claudia-update/claudia.git
 

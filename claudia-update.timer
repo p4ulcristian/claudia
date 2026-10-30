@@ -1,10 +1,10 @@
-# Check GitHub's main every five minutes.
+# Check GitHub's main hourly: catches a poke the hub could not deliver (claudia-update.path).
 [Unit]
 Description=Claudia update check
 
 [Timer]
 OnStartupSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=1h
 
 [Install]
 WantedBy=timers.target

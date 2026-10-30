@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Keep a server that runs straight from this checkout (destiny: the user units symlinked from here)
-# on GitHub's main, run by the user unit claudia-update.timer: when origin/main moved, fast-forward
+# on GitHub's main, run by the user units claudia-update.path (the hub's poke after a push to main)
+# and claudia-update.timer (hourly): when origin/main moved, fast-forward
 # the checkout and restart the page and the runner (chats keep going in the session host). Host code
 # changes wait for `systemctl --user restart claudia-host` by hand, which stops every running chat.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The poke is taken: one that comes during this run starts another (claudia-update.path).
+[ -z "${CLAUDIA_UPDATE_TRIGGER:-}" ] || rm -f "$CLAUDIA_UPDATE_TRIGGER"
 
 git fetch --quiet origin main
 have=$(git rev-parse HEAD)
@@ -24,6 +27,8 @@ echo "updating Claudia ${have:0:7} -> ${want:0:7}"
 if grep -qx -e package.json -e bun.lock <<<"$changed"; then
   "$(command -v bun || echo "$HOME/.local/bin/bun")" install --frozen-lockfile
 fi
+# The units are symlinks into this checkout: changed ones are read again before the restart.
+if grep -qE '^[^/]+\.(service|timer|path)$' <<<"$changed"; then systemctl --user daemon-reload; fi
 systemctl --user restart claudia-runner.service claudia.service
 if grep -qx -e host.ts -e src/host-protocol.ts <<<"$changed"; then
   echo "host code changed: restart claudia-host by hand when its chats may stop"
