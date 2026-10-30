@@ -1590,10 +1590,10 @@ button.cl-fn:hover { text-decoration: underline; }
 .s3-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .s3-labels { position: absolute; inset: 0; cursor: grab; }
 .s3-labels:active { cursor: grabbing; }
-.s3-label { font: 700 13px var(--hand); color: var(--fg); text-align: center; line-height: 1.15; text-shadow: 0 1px 3px #000a, 0 0 6px #000a; pointer-events: none; white-space: nowrap; }
+.s3-label { font: 700 13px var(--hand); color: var(--fg); text-align: center; line-height: 1.2; pointer-events: none; white-space: nowrap; background: color-mix(in srgb, var(--bg2) 90%, transparent); border: 1px solid var(--line); border-left: 3px solid var(--c, var(--line)); border-radius: 7px; padding: 2px 9px 3px; box-shadow: 0 2px 8px #0006; }
 .s3-label b { font-weight: 700; color: var(--c); }
 .s3-label span { display: none; font: 12px var(--sans); color: var(--muted); }
-.s3-label.arrow { background: var(--bg2); border: 1px solid var(--c); border-radius: 6px; padding: 0 6px; }
+.s3-label.arrow { border: 1px solid var(--c); border-radius: 12px; padding: 0 9px; }
 .s3-bar { position: absolute; left: 8px; right: 8px; bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; pointer-events: none; }
 .s3-bar button { pointer-events: auto; }
 .s3-tools { display: flex; gap: 6px; pointer-events: none; }
