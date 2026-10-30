@@ -48,6 +48,7 @@
     "react": "19",
     "react-dom": "19",
     "three": "0.187.0",
+    "three-mesh-bvh": "^0.9.17",
     "zod": "^4.6.7"
   },
   "scripts": {

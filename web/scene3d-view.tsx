@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { loadScript, type SceneScript } from "./scene3d-vm";
+import { makeChecker, type Overlap } from "./scene3d-overlap";
 
 type Data = Record<string, any>;
 type V3 = [number, number, number];
@@ -14,6 +15,8 @@ const V = (v: unknown, d: V3 = [0, 0, 0]): V3 => (Array.isArray(v) && v.length >
 const DEG = Math.PI / 180;
 const SPEEDS = [0.25, 0.5, 1, 2];
 const UP = new THREE.Vector3(0, 1, 0);
+const SCAN_SECONDS = 12;
+const pairKey = ([a, b]: Overlap) => `${a} × ${b}`;
 
 // A theme colour name (green, amber…) or any CSS colour.
 function colorOf(host: HTMLElement, c: unknown, fallback = "blue"): THREE.Color {
@@ -208,11 +211,16 @@ function dispose(root: THREE.Group) {
 
 export default function SceneView({ data }: { data: Data }) {
   const host = useRef<HTMLDivElement>(null);
-  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void } | null>(null);
+  const api = useRef<{ set: (d: Data) => void; fit: () => void; play: (p: boolean) => void; speed: (s: number) => void; scan: () => void } | null>(null);
   const [animated, setAnimated] = useState(false);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(2);
   const [error, setError] = useState("");
+  const [solids, setSolids] = useState(0);
+  const [now, setNow] = useState<string[]>([]);
+  const [seen, setSeen] = useState<string[]>([]);
+  const [panel, setPanel] = useState(false);
+  const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
     const el = host.current!;
@@ -257,14 +265,60 @@ export default function SceneView({ data }: { data: Data }) {
     let script: SceneScript | null = null;
     let byId = new Map<string, Entry>();
     let arrows: (() => void)[] = [];
+    let checker: ReturnType<typeof makeChecker> | null = null;
+    let flagged = '';
+    const everSeen = new Set<string>();
+    let frames = 0, scanSeconds = SCAN_SECONDS;
     let t = 0, last = 0, rate = SPEEDS[2], on = true, visible = true, token = 0;
     let raf = 0;
 
     const stop = () => { script?.close(); script = null; };
 
+    // flag the solid parts that overlap now (red glow) and remember every pair seen
+    const runCheck = () => {
+      if (!checker) return;
+      const hits = checker.check();
+      const key = hits.map(pairKey).join("|");
+      if (key === flagged) return;
+      flagged = key;
+      const bad = new Set(hits.flat());
+      for (const [id, e] of byId) {
+        const m = e.mesh.material as THREE.MeshStandardMaterial;
+        m.emissive.setHex(bad.has(id) ? 0xff2a2a : 0x000000);
+        m.emissiveIntensity = 0.9;
+      }
+      let more = false;
+      for (const h of hits) if (!everSeen.has(pairKey(h))) { everSeen.add(pairKey(h)); more = true; }
+      setNow(hits.map(pairKey));
+      if (more) setSeen([...everSeen]);
+      want();
+    };
+
+    // run a whole stretch of the script without drawing, to catch overlaps that only happen later
+    const scan = () => {
+      if (!checker || !script?.frame) return runCheck();
+      const was = t;
+      try {
+        for (let s = 0; s <= scanSeconds; s += 1 / 30) {
+          const o = script.frame(s);
+          for (const [id, v] of Object.entries(o ?? {})) {
+            const e = byId.get(id);
+            if (e && v) applyOverride(el, e, v as Data);
+          }
+          runCheck();
+        }
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      t = was;
+      moveParts();
+      runCheck();
+      setScanned(true);
+    };
+
     const set = async (d: Data) => {
       const mine = ++token;
-      let extra: { parts?: any[]; arrows?: any[] } = {};
+      let extra: { parts?: any[]; arrows?: any[]; allow?: any[] } = {};
       setError("");
       stop();
       if (typeof d.script === "string" && d.script.trim()) {
@@ -283,6 +337,14 @@ export default function SceneView({ data }: { data: Data }) {
       byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)]);
       root.updateMatrixWorld(true);
       arrows = [...list(d.arrows), ...list(extra.arrows)].map((a) => makeArrow(el, root, byId, a));
+      checker = makeChecker([...byId].map(([id, e]) => ({ id, mesh: e.mesh, spec: e.spec })), [...list(d.allow), ...list(extra.allow)]);
+      scanSeconds = Number(d.scan) > 0 ? Number(d.scan) : SCAN_SECONDS;
+      everSeen.clear();
+      setSolids(checker.count);
+      setSeen([]);
+      setScanned(false);
+      flagged = "";
+      runCheck();
       box = new THREE.Box3().setFromObject(root);
       if (!fitted) { fit(); fitted = true; }
       setAnimated(!!script?.frame);
@@ -299,6 +361,7 @@ export default function SceneView({ data }: { data: Data }) {
           if (e && v) applyOverride(el, e, v as Data);
         }
         for (const u of arrows) u();
+        if (++frames % 2 === 0) runCheck();
       } catch (e) {
         setError((e as Error).message);
         stop();
@@ -330,6 +393,7 @@ export default function SceneView({ data }: { data: Data }) {
       fit: () => { fit(); want(); },
       play: (p) => { on = p; want(); },
       speed: (s) => { rate = s; },
+      scan,
     };
 
     const size = () => {
@@ -370,8 +434,24 @@ export default function SceneView({ data }: { data: Data }) {
     <div className="f-scene3d" ref={host}>
       <div className="s3-stage" />
       {error && <p className="s3-error">script: {error}</p>}
+      {panel && solids > 1 && (
+        <div className="s3-panel">
+          <b>Overlapping now</b>
+          {now.length ? now.map((x) => <div key={x} className="bad">{x}</div>) : <div className="f-note">none</div>}
+          <b>Seen while it ran</b>
+          {seen.length ? seen.map((x) => <div key={x}>{x}</div>) : <div className="f-note">none</div>}
+          {animated && <button type="button" className="f-tool" onClick={() => api.current?.scan()}>scan the whole run</button>}
+        </div>
+      )}
       <div className="s3-bar">
-        <span className="f-note">drag: rotate · wheel: zoom · right drag: pan</span>
+        <span className="s3-left">
+          {solids > 1 && (
+            <button type="button" className={`f-tool s3-check ${now.length ? "bad" : seen.length ? "warn" : "ok"}`} onClick={() => setPanel(!panel)} title="Solid parts that pass through each other">
+              {now.length ? `⚠ ${now.length} overlap${now.length > 1 ? "s" : ""}` : seen.length ? `✓ clear now · ${seen.length} seen` : scanned ? "✓ no overlaps in the run" : "✓ no overlaps"}
+            </button>
+          )}
+          <span className="f-note">drag: rotate · wheel: zoom · right drag: pan</span>
+        </span>
         <span className="s3-tools">
           {animated && (
             <>
