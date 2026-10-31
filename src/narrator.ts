@@ -2,19 +2,20 @@
 // so a story replays without asking again. Used by the hub (config from the environment: HUB_TTS_URL,
 // HUB_TTS_TOKEN) and by a server's runner (src/narrate.ts: ~/.config/claudia/tts.json:
 // { "url": "https://…", "token": "…" }). The service's speech route is
-// <url>/v1/audio/speech: form fields text and instruction, or text with ref_audio and ref_text to speak
-// in a cloned voice; it answers raw 16-bit mono PCM at 24 kHz).
+// <url>/v1/audio/speech (iris-voice: github.com/p4ulcristian/iris-voice): form fields text alone,
+// spoken in the service's default voice; text and instruction; or text with ref_audio and ref_text
+// to speak in a cloned voice. It answers raw 16-bit mono PCM at 24 kHz.
 //
-// One narrator: asked for a voice only by a description, the service invents a slightly different
-// person for every line. So the description makes ONE reference clip (kept on disk), and every line
-// is spoken in a clone of it. To use a recording of your own voice instead, put it in the config:
+// The narrator is the service's default voice, unless a story asks for one (instruction) or the
+// profile has its own recording. Asked for a voice only by a description, the service invents a
+// slightly different person for every line, so a description makes ONE reference clip (kept on
+// disk) and every line is spoken in a clone of it. A recording of your own voice goes in the config:
 // { "reference": { "audio": "/path/clip.wav", "text": "the exact words in the clip" } }.
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const MAX_CHARS = 1200;
-const DEFAULT_VOICE = "a calm, warm woman, clear and unhurried";
 const BYTES_PER_SECOND = 24000 * 2;
 
 export type Config = { url: string; token: string; reference?: { audio: string; text: string } };
@@ -71,9 +72,9 @@ export function narrator(load: () => Promise<Config | null>, cache: string) {
   if (!clean) throw new Error("nothing to say");
   const c = await load();
   if (!c) throw new Error("no voice set up for this profile (~/.config/claudia/tts.json)");
-  const voice = (instruction ?? "").trim().slice(0, 200) || DEFAULT_VOICE;
-  // the narrator is the reference (own recording, or the description's one clip), then every line is a clone of it
-  const who = c.reference ? `own:${c.reference.audio}\n${c.reference.text}` : `made:${voice}`;
+  const voice = (instruction ?? "").trim().slice(0, 200);
+  // the narrator: the profile's own recording, a story's described voice (its one clip), or the service's default voice
+  const who = c.reference ? `own:${c.reference.audio}\n${c.reference.text}` : voice ? `made:${voice}` : `default:${c.url}`;
   const key = createHash("sha256").update(`clone1\n${who}\n${clean}`).digest("hex");
   let p = pending.get(key);
   if (!p) {
@@ -82,11 +83,13 @@ export function narrator(load: () => Promise<Config | null>, cache: string) {
       const kept = await readFile(file).catch(() => null);
       if (kept) return new Uint8Array(kept);
       const next = line.then(async () => {
-        const ref = await reference(c, cache, voice);
         const form = new FormData();
         form.set("text", clean);
-        form.set("ref_audio", new Blob([Buffer.from(ref.wav)], { type: "audio/wav" }), "narrator.wav");
-        form.set("ref_text", ref.text);
+        if (c.reference || voice) {
+          const ref = await reference(c, cache, voice);
+          form.set("ref_audio", new Blob([Buffer.from(ref.wav)], { type: "audio/wav" }), "narrator.wav");
+          form.set("ref_text", ref.text);
+        }
         const pcm = await speak(c, form);
         await mkdir(cache, { recursive: true });
         await writeFile(file, pcm);
