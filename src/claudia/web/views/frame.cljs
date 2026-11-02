@@ -99,6 +99,8 @@ addEventListener('load',post);
          "<script src=\"https://cdn.jsdelivr.net/npm/vega@5\"></script>"
          "<script src=\"https://cdn.jsdelivr.net/npm/vega-lite@5\"></script>"
          "<script src=\"https://cdn.jsdelivr.net/npm/vega-embed@6\"></script>"
+         ;; The interpreter runs Vega's expressions without eval, so the page's CSP stays strict.
+         "<script src=\"https://cdn.jsdelivr.net/npm/vega-interpreter@1\"></script>"
          "<script>(()=>{const data=" spec-data ";
 const cs=getComputedStyle(document.documentElement);const v=(n)=>cs.getPropertyValue(n).trim();
 const fg=v('--fg'),muted=v('--muted'),line=v('--line');
@@ -117,7 +119,7 @@ axis:{labelColor:muted,titleColor:muted,domainColor:line,tickColor:line,gridColo
 legend:{labelColor:muted,titleColor:muted}}};
 const show=(t)=>{document.getElementById('c').textContent=t;};
 if(!window.vegaEmbed){show('Chart failed: Vega did not load.');return;}
-document.fonts.ready.then(()=>vegaEmbed('#c',spec,{actions:false,renderer:'svg'})).catch((e)=>show('Chart failed: '+(e.message||e)));
+document.fonts.ready.then(()=>vegaEmbed('#c',spec,{actions:false,renderer:'svg',ast:true,expr:vega.expressionInterpreter})).catch((e)=>show('Chart failed: '+(e.message||e)));
 })();</script>")))
 
 (defn chart-frame [data]

@@ -1,7 +1,7 @@
 (ns claudia.web.md
   "Markdown to safe HTML: marked renders, DOMPurify cleans."
   (:require ["marked" :refer [Marked]]
-            ["dompurify" :default DOMPurify]))
+            ["dompurify" :as DOMPurify]))
 
 (defn- escape [s]
   (-> (str s)

@@ -70,7 +70,7 @@
    (let [[s c :as k] (:open db)
          pending (get-in db [:pending-new c])]
      (when k
-       {:key k
+       {:ck k
         :server s
         :chat c
         :pending? (boolean pending)

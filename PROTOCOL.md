@@ -152,7 +152,8 @@ The runner applies each `draw` call (same input as the draw tool: `title`, `clea
 
 1. Claude calls `mcp__workspace__run_with_secret { ref, env_name, reason, command }` in a chat on server S.
 2. S's runner makes a one-time keypair (libsodium `crypto_box_keypair`), sends `ask { kind: "secret", … pubkey }`.
-3. Allow: the page calls `POST /s/<vault>/api/secret/read { ref, pubkey, request }` on the person's
+3. Allow: the page calls `POST /s/<vault>/api/secret/read { ref, pubkey, request }` (`request` = the
+   ask's `id`; `pubkey` and `sealed` are standard base64 with padding) on the person's
    vault server V (the hub lets only that person's own profile through). V's runner runs
    `op read --account <CLAUDIA_OP_ACCOUNT> <ref>` (the desktop app asks for the fingerprint), seals the
    value to `pubkey` (`crypto_box_seal`) and answers `{ sealed }` (base64). Paste instead: the page

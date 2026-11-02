@@ -3,7 +3,7 @@
   right, top to bottom, top to bottom with groups stacked) and the one that fits the pane best is
   kept; it changes only when another fits clearly better, so the picture doesn't jump. Nodes and
   arrows move to their new places with CSS transitions; new ones pop in."
-  (:require ["elkjs/lib/elk.bundled.js" :default ELK]
+  (:require ["elkjs/lib/elk.bundled.js" :as ELK]
             [clojure.string :as str]
             [reagent.hooks :as h]
             [claudia.web.chalk :as chalk]))
@@ -229,8 +229,11 @@
                  (.then (fn [all]
                           (when-not @gone
                             (let [all (vec all)
-                                  fits (mapv #(fit-of % aw ah) all)
-                                  best (apply max-key fits (range (count all)))
+                                  ;; Past 1.2 the picture is drawn at 1.2 anyway: a tie, and the
+                                  ;; first variant (left to right) wins it.
+                                  fits (mapv #(min 1.2 (fit-of % aw ah)) all)
+                                  top (apply max fits)
+                                  best (first (keep-indexed #(when (= %2 top) %1) fits))
                                   k (.-current kept)
                                   ki (when k (first (keep-indexed #(when (= %2 k) %1) variants)))
                                   best (if (and ki (< (fits best) (* 1.25 (fits ki)))) ki best)

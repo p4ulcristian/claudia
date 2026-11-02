@@ -14,17 +14,18 @@
   (let [state (r/atom {})] ; question index -> {:picked [labels] :other text}
     (fn [k ask]
       (let [qs (vec (:questions ask))
+            st @state
             {:keys [busy error]} @(rf/subscribe [:ask-state (:id ask)])
             send! (fn [st]
                     (rf/dispatch [:ask/answer k (:id ask)
                                   (into {} (map-indexed (fn [i q] [(:question q) (answer-of (get st i))]) qs))]))
-            complete? (every? #(not (str/blank? (answer-of (get @state %)))) (range (count qs)))
+            complete? (every? #(not (str/blank? (answer-of (get st %)))) (range (count qs)))
             ;; One question, one choice: a click is the answer.
             instant? (and (= 1 (count qs)) (not (:multiSelect (first qs))))]
         [:div.panel.ask {:class (when busy "busy")}
          (for [[i q] (map-indexed vector qs)
                :let [multi? (:multiSelect q)
-                     {:keys [picked other]} (get @state i)]]
+                     {:keys [picked other]} (get st i)]]
            ^{:key i}
            [:div.question
             [:div.q-head (when-not (str/blank? (:header q)) [:span.chip (:header q)])
@@ -112,8 +113,7 @@
   (when (seq asks)
     [:div.asks
      (for [a asks]
-       ^{:key (:id a)}
        (case (:kind a)
-         "question" [question-card k a]
-         "secret" [secret-card k a]
+         "question" ^{:key (:id a)} [question-card k a]
+         "secret" ^{:key (:id a)} [secret-card k a]
          nil))]))

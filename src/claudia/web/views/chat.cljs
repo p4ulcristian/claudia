@@ -21,16 +21,16 @@
 
 ;; ---- header ----
 
-(defn- header [{:keys [key server chat pending? row state status]}]
+(defn- header [{:keys [ck server chat pending? row state status]}]
   (let [menu? (r/atom false)
         editing (r/atom nil)]
-    (fn [{:keys [key server chat pending? row state status]}]
+    (fn [{:keys [ck server chat pending? row state status]}]
       (let [title (or (:title row) (:title state) (when pending? "New chat") "Chat")
             multi? @(rf/subscribe [:multi-server?])
             waiting @(rf/subscribe [:waiting-count])
             commit! (fn []
                       (when-let [t @editing]
-                        (when (and chat (not= t title)) (rf/dispatch [:chat/rename key t])))
+                        (when (and chat (not= t title)) (rf/dispatch [:chat/rename ck t])))
                       (reset! editing nil))]
         [:header.chat-head
          [:button.back-btn.phone-only {:on-click #(rf/dispatch [:nav/list])}
@@ -55,7 +55,7 @@
                [:div.menu-away {:on-click #(reset! menu? false)}]
                [:div.menu
                 [:button {:on-click #(do (reset! menu? false) (reset! editing title))} "Rename"]
-                [:button {:on-click #(do (reset! menu? false) (rf/dispatch [:chat/archive key true]))} "Archive"]]])])
+                [:button {:on-click #(do (reset! menu? false) (rf/dispatch [:chat/archive ck true]))} "Archive"]]])])
          [:button.icon.pic-open.phone-only {:title "Picture" :on-click #(rf/dispatch [:nav/screen :picture])}
           (icon picture-icon)]]))))
 
@@ -72,7 +72,7 @@
     [:div.msg.claude {:class (when streaming "streaming")}
      [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]]))
 
-(defn- messages-view [{:keys [key state outbox pending?]}]
+(defn- messages-view [{:keys [ck state outbox pending?]}]
   (let [box (h/use-ref nil)
         stuck (h/use-ref true)
         msgs (:messages state)
@@ -84,8 +84,8 @@
        (when-let [el (.-current box)]
          (when (.-current stuck) (set! (.-scrollTop el) (.-scrollHeight el))))
        nil)
-     [key (count msgs) last-len (count outbox) running (count (:asks state))])
-    (h/use-effect (fn [] (set! (.-current stuck) true) nil) [key])
+     [ck (count msgs) last-len (count outbox) running (count (:asks state))])
+    (h/use-effect (fn [] (set! (.-current stuck) true) nil) [ck])
     [:div.messages {:ref #(set! (.-current box) %)
                     :on-scroll (fn [e]
                                  (let [el (.-target e)]
@@ -99,8 +99,8 @@
      (when (or running pending?)
        [:div.working [:span.pulse] (if pending? "Starting…" "Working…")])
      (when-let [err (:error state)]
-       [:div.error-line {:on-click #(rf/dispatch [:error/dismiss key])} err])
-     [asks/asks-area key (:asks state)]]))
+       [:div.error-line {:on-click #(rf/dispatch [:error/dismiss ck])} err])
+     [asks/asks-area ck (:asks state)]]))
 
 ;; ---- composer ----
 
@@ -157,7 +157,7 @@
         error @(rf/subscribe [:error])]
     [:section.left
      (if oc
-       ^{:key (str (:key oc))} [header oc]
+       ^{:key (str (:ck oc))} [header oc]
        [:header.chat-head
         [:button.back-btn.phone-only {:on-click #(rf/dispatch [:nav/list])} (icon back-icon) "Chats"]
         [:h1 "New chat"]])
@@ -169,7 +169,7 @@
        oc [:f> messages-view oc]
        :else [new-chat])
      (when (and me (seq (:servers me)))
-       [:f> composer {:draft-key (if oc (:key oc) :new)
+       [:f> composer {:draft-key (if oc (:ck oc) :new)
                       :running (get-in oc [:state :running])
                       :can-stop (and oc (not (:pending? oc)))
                       :placeholder (if oc "Reply…" "Start a chat…")}])]))
