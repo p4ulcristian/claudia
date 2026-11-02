@@ -28,16 +28,24 @@ const ADMINS = process.env.HUB_ADMIN_GROUP ?? "admins";
 // served as files from HUB_WEB, so the gate's little memory never bundles it. Elsewhere: Bun's
 // HTML import, bundled when the hub starts (with hot reload in development).
 const WEB = process.env.HUB_WEB ?? null;
-const index = WEB ? new Response(Bun.file(join(WEB, "index.html"))) : (await import("./web/index.html")).default;
+// The page itself is checked again on every load (its hashed files are kept a year): a copy kept
+// from before an update would ask for files the new build no longer has, and show nothing.
+const index = WEB ? new Response(Bun.file(join(WEB, "index.html")), { headers: { "cache-control": "no-cache" } }) : (await import("./web/index.html")).default;
 const json = (v: unknown, status = 200) => Response.json(v, { status });
 
-// A built file (hashed names: kept a year), or nothing.
+// A page from before an update (kept by a browser or the iPhone app) asks for a script this build
+// doesn't have: instead, a script that loads the page again past any cache (once: the fresh page
+// has the new scripts).
+const STALE_JS = `if (!/[?&]fresh=/.test(location.search)) location.replace(location.pathname + (location.search ? location.search + "&" : "?") + "fresh=" + Date.now());`;
+const STALE = () => new Response(STALE_JS, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" } });
+
+// A built file (hashed names: kept a year), a stale page's reload (above), or nothing.
 async function webFile(path: string) {
   if (!WEB) return null;
   const rel = normalize(decodeURIComponent(path)).replace(/^\/+/, "");
   if (!rel || rel.startsWith("..")) return null;
   const f = Bun.file(join(WEB, rel));
-  if (!(await f.exists())) return null;
+  if (!(await f.exists())) return /^[\w-]+\.js$/.test(rel) ? STALE() : null;
   return new Response(f, { headers: rel.startsWith("app-icon/") ? {} : { "cache-control": "public, max-age=31536000, immutable" } });
 }
 
