@@ -2,7 +2,8 @@
 // parts. Pure logic (no three.js): which parts are on at which step, how long a step takes.
 export type V3 = [number, number, number];
 export type CameraSpec = { frame?: string[]; target?: string | V3; dist?: number; az?: number; el?: number };
-export type Step = { say: string; show: string[]; hide: string[]; focus: string[]; camera: CameraSpec | null; hold: number };
+// pose: a person id -> the pose they move into in this step; move: how many seconds that takes
+export type Step = { say: string; show: string[]; hide: string[]; focus: string[]; camera: CameraSpec | null; hold: number; pose: Record<string, unknown> | null; move: number };
 
 const strings = (v: unknown): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
@@ -17,6 +18,8 @@ export function normalizeStory(v: unknown): Step[] {
       focus: strings(s.focus),
       camera: c ? { frame: strings(c.frame), target: c.target, dist: Number.isFinite(+c.dist) && c.dist !== undefined ? +c.dist : undefined, az: c.az !== undefined && Number.isFinite(+c.az) ? +c.az : undefined, el: c.el !== undefined && Number.isFinite(+c.el) ? +c.el : undefined } : null,
       hold: Number.isFinite(+s.hold) && +s.hold > 0 ? +s.hold : 0,
+      pose: s.pose && typeof s.pose === "object" && !Array.isArray(s.pose) ? s.pose : null,
+      move: Number.isFinite(+s.move) && +s.move > 0 ? Math.min(+s.move, 20) : 1.4,
     };
   });
 }
@@ -40,10 +43,17 @@ export function visibleAt(steps: Step[], n: number, ids: string[]): Set<string> 
   return on;
 }
 
+// The pose a person is in after step n: the latest step up to n that gave them one (undefined: their own).
+export function poseAt(steps: Step[], n: number, id: string): unknown {
+  for (let i = Math.min(n, steps.length - 1); i >= 0; i--) if (steps[i].pose && id in steps[i].pose!) return steps[i].pose![id];
+  return undefined;
+}
+
 const WORDS_PER_SECOND = 2.6;
 export const GAP_SECONDS = 0.45;
 // How long a step lasts without a recording: the words at a calm pace, or its hold.
 export function estimateSeconds(step: Step): number {
-  if (!step.say) return Math.max(step.hold, 1.6);
-  return Math.max(step.hold, step.say.split(/\s+/).length / WORDS_PER_SECOND + 0.6);
+  const moving = step.pose ? step.move : 0;
+  if (!step.say) return Math.max(step.hold, moving, 1.6);
+  return Math.max(step.hold, moving, step.say.split(/\s+/).length / WORDS_PER_SECOND + 0.6);
 }

@@ -24,11 +24,18 @@ export function toonMaterial(color: THREE.Color, op: number, wire: boolean): THR
 }
 
 const vertex = /* glsl */ `
+  #include <common>
+  #include <skinning_pars_vertex>
   uniform float thickness;
   uniform vec2 viewport;
   void main() {
-    vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    vec3 n = normalize(normalMatrix * normal);
+    #include <beginnormal_vertex>
+    #include <skinbase_vertex>
+    #include <skinnormal_vertex>
+    #include <begin_vertex>
+    #include <skinning_vertex>
+    vec4 clip = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+    vec3 n = normalize(normalMatrix * objectNormal);
     vec2 dir = (projectionMatrix * vec4(n, 0.0)).xy;
     float len = length(dir);
     dir = len > 1e-5 ? dir / len : vec2(0.0);
@@ -42,7 +49,8 @@ const fragment = /* glsl */ `
   void main() { gl_FragColor = vec4(color, opacity); }
 `;
 
-export function outlineMaterial(): THREE.ShaderMaterial {
+// skinned: drawn on a SkinnedMesh (a person), so it bends with the bones
+export function outlineMaterial(skinned = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { color: { value: INK.clone() }, opacity: { value: 1 }, thickness: { value: OUTLINE_PX }, viewport },
     vertexShader: vertex,
