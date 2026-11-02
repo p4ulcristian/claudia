@@ -197,9 +197,10 @@ export function usePhoneSwipes(s: Screens) {
       return { surface: $(".app > .sidebar-slot"), moves: g ? [g] : [] };
     }
     if (s.screen !== "chat") return { surface: null, moves: [] };
-    const pic = $(".right.pic-drawer"), shade = $(".pic-backdrop");
+    // The picture is a screen over the chat, as the chat is over the list.
+    const pic = $(".right.pic-drawer"), chat = $(".app > main > .left");
     if (s.picOpen) {
-      const g = drawer(pic, shade, false, s.closePicture, () => !pic?.classList.contains("open"));
+      const g = slideBack(pic, chat, s.closePicture, () => !pic?.classList.contains("open"));
       return { surface: $(".app > main"), moves: g ? [g] : [] };
     }
     if (s.agentShown) {
@@ -208,7 +209,7 @@ export function usePhoneSwipes(s: Screens) {
     }
     const moves = [
       slideBack($(".app > main"), $(".app > .sidebar-slot"), s.toList, () => !has("no-sidebar")),
-      drawer(pic, shade, true, s.openPicture, () => !!pic?.classList.contains("open")),
+      slideOver(pic, chat, s.openPicture, () => !!pic?.classList.contains("open")),
     ].filter((g): g is Gesture => !!g);
     return { surface: $(".app > main"), moves };
   });
@@ -268,25 +269,5 @@ export function slideOver(top: HTMLElement | null, under: HTMLElement | null, fo
     commit: forward,
     settled,
     clear: () => unset(top, under),
-  };
-}
-
-// A drawer from the right (off by `off` of its width when shut): pulled in by a left move, or
-// pushed out by a right one; its backdrop fades with it.
-export function drawer(el: HTMLElement | null, backdrop: HTMLElement | null, opening: boolean, step: () => void, settled: () => boolean, off = 1.05): Gesture | null {
-  if (!el) return null;
-  const w = el.getBoundingClientRect().width || innerWidth;
-  const shut = w * off;
-  return {
-    dir: opening ? -1 : 1,
-    width: shut,
-    paint: (p) => {
-      const open = opening ? p : 1 - p;
-      setStyles(el, { transform: px((1 - open) * shut) });
-      setStyles(backdrop, { opacity: String(open), visibility: "visible" });
-    },
-    commit: step,
-    settled,
-    clear: () => unset(el, backdrop),
   };
 }

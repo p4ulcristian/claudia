@@ -154,12 +154,9 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
   .app > main.split { position: relative; z-index: 12; background: var(--bg); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35);
     transition: transform 0.32s var(--screen-ease), visibility 0s; }
   .app:not(.no-sidebar) > main.split { transform: translateX(100%); visibility: hidden; transition: transform 0.32s var(--screen-ease), visibility 0s 0.32s; }
-  /* The picture's backdrop stays, shown with the drawer (a swipe fades it with the finger). */
-  .pic-backdrop { opacity: 0; visibility: hidden; animation: none; transition: opacity 0.32s var(--screen-ease), visibility 0s 0.32s; }
-  .pic-backdrop.open { opacity: 1; visibility: visible; transition: opacity 0.32s var(--screen-ease), visibility 0s; }
 }
 /* Reduced motion: screens switch without sliding (and the swipes don't follow the finger). */
 @media (max-width: 679px) and (prefers-reduced-motion: reduce) {
-  .app .sidebar-slot, .app > main.split, .right.pic-drawer, .pic-backdrop, .cs-pane, .st-pane { transition: none !important; }
+  .app .sidebar-slot, .app > main.split, .right.pic-drawer, .split > .left, .cs-pane, .st-pane { transition: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { .cs-pane, .st-pane, .app:not(.no-sidebar) .sidebar-slot { transition: none !important; } }

@@ -213,7 +213,7 @@ function apply(l: Live, ev: ChatEvent): Live {
 }
 
 // Below 1100px the picture folds without motion; below 680px (phones) the chats are screens (the list,
-// Settings, the chat) and the picture a drawer from the right.
+// Settings, the chat) and the picture a screen over the chat.
 function useMedia(q: string) {
   const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
   useEffect(() => {
@@ -309,7 +309,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   phoneRef.current = phone;
   const screenRef = useRef(screen);
   screenRef.current = screen;
-  // Phone: the picture is a drawer from the right, over the chat; picAt = when it was last closed.
+  // Phone: the picture is a screen over the chat, from the right; picAt = when it was last closed.
   const [picOpen, setPicOpen] = useState(false);
   const [picAt, setPicAt] = useState(() => Date.now());
   const closePicture = useCallback(() => { setPicOpen(false); setPicAt(Date.now()); }, []);
@@ -657,7 +657,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     history.pushState({ screen: "chat", list: true }, "", row ? pathOf(current) : undefined);
     setScreen("chat");
   };
-  // Phone: back to the list (the picture drawer closes first).
+  // Phone: back to the list (the picture closes first).
   const goList = () => {
     closePicture();
     if (history.state?.list) return history.back();
@@ -1088,7 +1088,7 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       </div>
       <main
         ref={fold.ref}
-        className={`split ${fold.shown ? "folded" : ""} ${fold.cls}`}
+        className={`split ${fold.shown ? "folded" : ""} ${fold.cls} ${phone && picOpen ? "pic-shown" : ""}`}
         style={{
           gridTemplateColumns: fold.cols ?? (fold.shown ? `minmax(300px, 1fr) 6px ${EDGE}px` : `max(300px, min(${chatW}px, calc(100% - 286px))) 6px minmax(280px, 1fr)`),
           ...(fold.width !== null ? { "--fold-w": `${fold.width}px` } : {}),
@@ -1193,7 +1193,6 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
           </>}
         </section>
         <div className="divider" onPointerDown={fold.shown ? undefined : dragSplit} />
-        {phone && <div className={`pic-backdrop ${picOpen ? "open" : ""}`} onClick={closePicture} />}
         {fold.shown ? (
           <section className="right fold-edge">
             <button className={`unfold ${unseen ? "unseen" : ""}`} onClick={toggleFold} title={unseen ? "New picture · show (Alt+P)" : "Show picture (Alt+P)"} aria-label="Show picture">
