@@ -42,6 +42,9 @@ type Live = {
   id: string;
   loaded: boolean;
   items: Item[];
+  // Older items not on the page yet (the server sends the newest page first), and a page asked for.
+  more: boolean;
+  older: boolean;
   partial: string;
   running: boolean;
   since: number;
@@ -63,7 +66,7 @@ type Live = {
 };
 
 const fresh = (id: string): Live => ({
-  id, loaded: false, items: [], partial: "", running: false, since: Date.now(),
+  id, loaded: false, items: [], more: false, older: false, partial: "", running: false, since: Date.now(),
   scene: empty, changed: [], seq: 0, pictures: [], asks: [], permits: [],
   tasks: [], subs: {}, context: null, settings: { model: null, effort: null, folder: null, color: null, forms: {}, cols: 0, prevColor: null }, model: "", changes: [],
 });
@@ -189,7 +192,7 @@ function apply(l: Live, ev: ChatEvent): Live {
       return { ...l, items: l.items.map((it) => (it.k === "tool" && it.id === ev.id ? { ...it, result: { error: ev.error, text: ev.text }, images: ev.images } : it)) };
     case "scene": {
       const pics = l.pictures.filter((p) => p.turn !== ev.turn);
-      return { ...l, scene: ev.scene, changed: ev.changed, seq: l.seq + 1, pictures: [...pics, { turn: ev.turn, scene: ev.scene, changed: ev.changed, at: Date.now() }] };
+      return { ...l, scene: ev.scene, changed: ev.changed, seq: l.seq + 1, pictures: [...pics, { turn: ev.turn, title: ev.scene.title, scene: ev.scene, changed: ev.changed, at: Date.now() }] };
     }
     case "ask": return { ...l, asks: [...l.asks.filter((a) => a.id !== ev.ask.id), ev.ask] };
     case "ask_done": return { ...l, asks: l.asks.filter((a) => a.id !== ev.id) };
@@ -350,6 +353,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const [resolving, setResolving] = useState(first.old);
   const curKey = keyOf(current.server, current.id);
   const [live, setLive] = useState<Live>(() => fresh(current.id));
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  // Asks for the open chat's page of older items (set once send exists, below).
+  const olderRef = useRef<(until?: string) => void>(() => {});
   // An agent's view (or the list of them, "") over the chat column (decision 25).
   const agentView = useAgentView(curKey, phone);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -494,7 +501,10 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
     let tries = 0;
     const iv = setInterval(() => {
       const el = document.querySelector<HTMLElement>(`[data-at="${CSS.escape(jumpTo)}"]`);
-      if (el || ++tries > 40) {
+      // Not on the page yet and older items are: the page back to it is asked for.
+      const l = liveRef.current;
+      if (!el && l.loaded && l.more && !l.older) olderRef.current(jumpTo);
+      if (el || ++tries > (l.more ? 400 : 40)) {
         clearInterval(iv);
         setJumpTo(null);
         if (!el) return;
@@ -552,10 +562,15 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
       if (m.t === "history") {
         const last = m.pictures.at(-1);
         setLive((l) => ({
-          ...l, loaded: true, items: m.items, partial: m.partial, running: m.running, since: m.since || Date.now(), scene: m.scene,
+          ...l, loaded: true, items: m.items, more: !!m.more, older: false, partial: m.partial, running: m.running, since: m.since || Date.now(), scene: m.scene,
           changed: last?.changed ?? [], seq: l.seq + 1, pictures: m.pictures, asks: m.asks, permits: m.permits,
           tasks: m.tasks ?? [], subs: m.subs ?? {}, context: m.context, settings: m.settings, model: m.model, changes: m.changes ?? [],
         }));
+      } else if (m.t === "older") {
+        // Put in front only if the page still starts where it asked from.
+        setLive((l) => (l.items[0] && itemKey(l.items[0]) === m.before ? { ...l, items: [...m.items, ...l.items], more: !!m.more, older: false } : { ...l, older: false }));
+      } else if (m.t === "picture") {
+        if (m.scene) setLive((l) => ({ ...l, pictures: l.pictures.map((p) => (p.turn === m.turn ? { ...p, scene: m.scene } : p)) }));
       } else if (m.t === "event") setLive((l) => apply(l, m.ev));
     },
     open: (s) => {
@@ -609,6 +624,14 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
   const up = ready[current.server] ?? false;
   // Messages about the open chat go to its server.
   const send = useCallback((m: unknown) => sendTo(currentRef.current.server, m), [sendTo]);
+  // The page of items before the first one the chat shows (until: back to that message at least).
+  const loadOlder = useCallback((until?: string) => {
+    const l = liveRef.current;
+    if (!l.more || l.older || !l.items[0]) return;
+    setLive((x) => (x.id === l.id ? { ...x, older: true } : x));
+    send({ t: "older", chat: l.id, before: itemKey(l.items[0]), ...(until ? { until } : {}) });
+  }, [send]);
+  olderRef.current = loadOlder;
 
   // show: on a phone, go to the chat's screen (opening a chat in the background, e.g. another
   // person's latest, leaves the list showing).
@@ -781,14 +804,30 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
 
   // Which picture to show: live, or the one that was current at an older message.
   const pictureTurns = useMemo(() => new Set(live.pictures.map((p) => p.turn)), [live.pictures]);
-  const shown = useMemo(() => {
-    if (!viewing) return { scene: live.scene, changed: live.changed, seq: live.seq };
+  // An earlier picture comes without its scene: it is fetched, and the picture shown until then stays.
+  const lastShown = useRef<{ scene: Scene; changed: string[]; seq: number }>({ scene: empty, changed: [], seq: 0 });
+  const viewed = useMemo(() => {
+    if (!viewing) return -1;
+    const exact = live.pictures.findIndex((p) => p.turn === viewing);
+    if (exact >= 0) return exact;
+    // Else the last picture before that message (pictures of turns not on the page yet are older than all of it).
     const users = live.items.filter((i) => i.k === "user").map((i) => (i as any).uuid as string);
     const upTo = users.indexOf(viewing);
     const pos = new Map(users.map((u, i) => [u, i]));
-    const pic = live.pictures.filter((p) => (pos.get(p.turn) ?? Infinity) <= upTo).at(-1);
-    return pic ? { scene: pic.scene, changed: pic.changed, seq: live.seq + 1000 + upTo } : { scene: empty, changed: [], seq: 0 };
-  }, [viewing, live.scene, live.changed, live.seq, live.pictures, live.items]);
+    return live.pictures.findLastIndex((p) => (pos.get(p.turn) ?? (live.more ? -1 : Infinity)) <= upTo);
+  }, [viewing, live.pictures, live.items, live.more]);
+  const viewedPic = viewing ? live.pictures[viewed] : undefined;
+  const shown = useMemo(() => {
+    if (!viewing) return { scene: live.scene, changed: live.changed, seq: live.seq };
+    if (!viewedPic) return { scene: empty, changed: [], seq: 0 };
+    if (!viewedPic.scene) return lastShown.current;
+    return { scene: viewedPic.scene, changed: viewedPic.changed, seq: live.seq + 1000 + viewed };
+  }, [viewing, viewedPic, viewed, live.scene, live.changed, live.seq]);
+  lastShown.current = shown;
+  const missing = viewedPic && !viewedPic.scene ? viewedPic.turn : null;
+  useEffect(() => {
+    if (missing) send({ t: "picture", chat: current.id, turn: missing });
+  }, [missing]);
   // The open chat stays in view in the list and the rail (a new chat sits at the end).
   // (Only the list's own scroll moves: scrollIntoView would also shift the hidden sidebar's frame.)
   useEffect(() => {
@@ -1107,6 +1146,9 @@ function App({ hubFirst }: { hubFirst: HubMe | null }) {
             note={live.asks.length ? "Waiting for your answer" : live.permits.length ? "Waiting for your OK" : live.note}
             error={live.error}
             stopped={!!live.lastTurn?.stopped}
+            more={live.more}
+            loadingOlder={live.older}
+            onOlder={() => loadOlder()}
             pictureTurns={pictureTurns}
             changeTurns={changeTurns}
             viewing={viewing}

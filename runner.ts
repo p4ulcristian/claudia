@@ -2,7 +2,7 @@
 // (server.ts) serves the page and passes everything else here, so restarting it keeps chats running.
 import { listSessions, renameSession } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerWebSocket } from "bun";
-import { Chat, NOT_HERE, WORK, loadHistory, sentImage, shownImage, useHost, type ChatEvent } from "./src/chat";
+import { Chat, NOT_HERE, WORK, sentImage, shownImage, useHost, type ChatEvent } from "./src/chat";
 import { HostClient } from "./src/host-client";
 import { CHAT_COLORS, PASSIVE, pickColor } from "./src/colors";
 import { store, type LastTurn } from "./src/db";
@@ -20,7 +20,8 @@ import { basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import { TOKEN_FILE } from "./src/mode";
 import { githubUser, setGithubToken } from "./src/github";
-import { mergedSends, timeline, timelineDetail } from "./src/timeline";
+import { timeline, timelineDetail } from "./src/timeline";
+import { history, olderPage, pageStart } from "./src/history-pages";
 import { forkChat } from "./src/fork";
 import { MAX_FILE_BYTES, sentFiles } from "./src/attached";
 import { TooBig, ownFiles, saveUpload, uploadPath } from "./src/uploads";
@@ -177,7 +178,7 @@ async function openChat(ws: Sock, id: string) {
   const forward = (ev: ChatEvent) => ws.send(JSON.stringify({ t: "event", chat: id, ev }));
   ws.data.off = c.on((ev: ChatEvent) => (ready ? forward(ev) : held.push(ev)));
   const now = {
-    pictures: store.pictures(id),
+    pictures: store.pictureList(id),
     scene: c.scene,
     running: c.running,
     since: c.since,
@@ -192,9 +193,12 @@ async function openChat(ws: Sock, id: string) {
     model: c.model,
     changes: store.changes(id),
   };
-  const [items, merged] = await Promise.all([loadHistory(id).catch(() => []), mergedSends(id).catch(() => new Set<string>())]);
+  const { items, merged } = await history(id);
   if (ws.data.chat !== id) return;
-  ws.send(JSON.stringify({ t: "history", chat: id, items: c.withUnsaved(items, merged), ...now }));
+  // The newest page only; the page asks for older ones as the user scrolls up ("older" below).
+  const all = c.withUnsaved(items, merged);
+  const start = pageStart(all, all.length);
+  ws.send(JSON.stringify({ t: "history", chat: id, items: all.slice(start), more: start > 0, ...now }));
   ready = true;
   for (const ev of held.splice(0)) forward(ev);
 }
@@ -574,7 +578,7 @@ Bun.serve({
         const body = (await req.json().catch(() => ({}))) as { text?: unknown };
         const text = typeof body.text === "string" ? body.text.trim() : "";
         if (!text || text.length > 20_000) return json({ error: "text: 1 to 20000 characters" }, 400);
-        if (!chats.has(id) && (await loadHistory(id).catch(() => [])).length === 0) return json({ error: "no such chat" }, 404);
+        if (!chats.has(id) && (await history(id)).items.length === 0) return json({ error: "no such chat" }, 404);
         store.unarchive(id);
         await wake(chat(id));
         await chat(id).send(text);
@@ -605,7 +609,7 @@ Bun.serve({
         const id = req.params.id;
         if (!uuidRe.test(id)) return json({ error: "bad id" }, 400);
         const c = chats.get(id);
-        const items = await loadHistory(id).catch(() => []);
+        const { items } = await history(id);
         const lastUser = items.map((i) => i.k).lastIndexOf("user");
         const last = items.slice(lastUser + 1).filter((i) => i.k === "text").map((i) => (i as { text: string }).text).join("\n\n");
         // What it is doing now, for a watcher's progress line: the newest step of this turn (a tool's
@@ -714,6 +718,19 @@ Bun.serve({
       try {
         switch (m.t) {
           case "open": return await openChat(ws, m.chat);
+          // The page before the first item the page has (until: a search hit's message to reach).
+          case "older": {
+            if (typeof m.before !== "string") return;
+            const page = olderPage((await history(m.chat)).items, m.before, typeof m.until === "string" ? m.until : undefined);
+            ws.send(JSON.stringify({ t: "older", chat: m.chat, before: m.before, ...page }));
+            return;
+          }
+          // One earlier picture's scene, when the user steps back to it.
+          case "picture": {
+            if (typeof m.turn !== "string") return;
+            ws.send(JSON.stringify({ t: "picture", chat: m.chat, turn: m.turn, scene: store.picture(m.chat, m.turn) }));
+            return;
+          }
           case "send": {
             const c = chat(m.chat);
             store.unarchive(m.chat); // writing to an archived chat brings it back

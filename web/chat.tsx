@@ -1,5 +1,5 @@
 // The left half: the conversation, kept short, with tool steps folded away.
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "./api";
 import { md } from "./md";
 import type { Command, Item, Media } from "./types";
@@ -160,9 +160,10 @@ function ShownImages({ chat, tool }: { chat: string; tool: Tool }) {
   );
 }
 
-function Markdown({ text }: { text: string }) {
+// Rendered once per text: the chat re-renders on every streamed word, and highlighting is the costly part.
+const Markdown = memo(function Markdown({ text }: { text: string }) {
   return <div className="md" dangerouslySetInnerHTML={{ __html: md(text) }} />;
-}
+});
 
 function Elapsed({ since }: { since: number }) {
   const [, tick] = useState(0);
@@ -202,6 +203,10 @@ export function Messages(props: {
   note?: string;
   error?: string;
   stopped: boolean;
+  // Older items the server has not sent yet; onOlder asks for the next page of them.
+  more: boolean;
+  loadingOlder: boolean;
+  onOlder: () => void;
   pictureTurns: Set<string>;
   changeTurns: Map<string, number>;
   viewing: string | null;
@@ -215,13 +220,34 @@ export function Messages(props: {
   // Messages sent while Claude works wait below everything until Claude takes them in.
   const queued = items.filter((it): it is Extract<Item, { k: "user" }> => it.k === "user" && !!it.queued);
   const bs = blocks(queued.length ? items.filter((it) => !(it.k === "user" && it.queued)) : items);
+  // The last message the user sent before each block, as the map below goes (for the steps' context).
+  let asked: string | undefined;
   // The turn running now can't be forked yet: its message gets no fork link.
   const lastUser = running ? (items.findLast((it) => it.k === "user" && !it.queued) as Extract<Item, { k: "user" }> | undefined)?.uuid : undefined;
 
+  // Older items put in front keep what the user reads in place: the message that was first stays
+  // where it was on screen (measured here, before the new items are on the page).
+  const firstKey = items[0] ? (items[0].k === "user" ? items[0].uuid : items[0].id) : "";
+  const shownFirst = useRef(firstKey);
+  const anchor = useRef<{ el: Element; top: number } | null>(null);
+  if (shownFirst.current !== firstKey) {
+    const el = ref.current?.querySelector(":scope > [data-at]");
+    anchor.current = el && !stick.current ? { el, top: el.getBoundingClientRect().top } : null;
+    shownFirst.current = firstKey;
+  }
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    const a = anchor.current;
+    anchor.current = null;
+    if (el && a?.el.isConnected) el.scrollTop += a.el.getBoundingClientRect().top - a.top;
+    else if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [items, partial, running]);
+  // Near the top (or a first page shorter than the column): the next older page.
+  const nearTop = (el: HTMLElement) => el.scrollTop < 600;
+  useEffect(() => {
+    const el = ref.current;
+    if (el && props.more && !props.loadingOlder && nearTop(el)) props.onOlder();
+  }, [items, props.more, props.loadingOlder]);
   // A shorter column (a phone's keyboard opening, the message box growing) keeps its end in view.
   useLayoutEffect(() => {
     const el = ref.current!;
@@ -237,12 +263,15 @@ export function Messages(props: {
       onScroll={(e) => {
         const el = e.currentTarget;
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        if (props.more && !props.loadingOlder && nearTop(el)) props.onOlder();
       }}
     >
+      {/* (there while older items are, so its showing doesn't push the messages down) */}
+      {props.more && <div className="muted small older-line">{props.loadingOlder ? "Loading earlier messages…" : ""}</div>}
       {!items.length && !running && <div className="hello"><h2>What are we working on?</h2><p className="muted">Claude answers short here and explains on the right.</p></div>}
       {bs.map((b, i) => {
+        if (b.k === "user") asked = (b.item as Extract<Item, { k: "user" }>).text;
         if (b.k === "steps") {
-          const asked = (bs.slice(0, i).reverse().find((x) => x.k === "user") as { item: Extract<Item, { k: "user" }> } | undefined)?.item.text;
           const prev = bs[i - 1];
           const before = prev?.k === "text" ? (prev.item as Extract<Item, { k: "text" }>).text : undefined;
           return <Steps key={b.id} tools={b.tools} live={running && i === bs.length - 1} ctx={{ asked, before }} />;

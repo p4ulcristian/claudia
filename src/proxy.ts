@@ -30,9 +30,11 @@ export function upgrade(req: Request, server: Server<PipeData>, target: Target, 
   return server.upgrade(req, { data: { target, readOnly, upstream: null, queue: [], as } });
 }
 
+// What a read-only socket may send: reading a chat (opening it, its older pages, an earlier picture).
+const READS = new Set(["open", "older", "picture"]);
 function opensOnly(m: string | Buffer) {
   try {
-    return JSON.parse(String(m)).t === "open";
+    return READS.has(JSON.parse(String(m)).t);
   } catch {
     return false;
   }

@@ -495,7 +495,7 @@ export class Chat implements SessionHandler {
   model = "";
 
   constructor(readonly id: string, private onChange: () => void) {
-    const last = store.pictures(id).at(-1);
+    const last = store.lastPicture(id);
     this.scene = last?.scene ?? emptyScene();
     this.sceneTurn = last?.turn ?? "";
     this.settings = store.settings(id);
