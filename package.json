@@ -4,7 +4,8 @@
   "private": true,
   "description": "Chat with Claude on the left; Claude explains on the right, in a picture it draws.",
   "scripts": {
-    "build": "shadow-cljs release host runner front hub web",
+    "build": "shadow-cljs release host runner front hub web && npm run build:web-files",
+    "build:web-files": "node -e \"const fs=require('fs');if(!fs.existsSync('resources/web/index.html')){console.error('resources/web/index.html is missing: the page has nothing to load');process.exit(1)}fs.cpSync('resources/web','out/web',{recursive:true})\"",
     "watch": "shadow-cljs watch web"
   },
   "dependencies": {
