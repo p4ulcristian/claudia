@@ -1,0 +1,15 @@
+# Claudia beta runner (one profile): chats, pictures, secrets, the SQLite store. Restarting it keeps
+# running chats: the host holds them.
+[Unit]
+Description=Claudia beta runner
+Wants=claudia-beta-host.service
+After=claudia-beta-host.service
+
+[Service]
+EnvironmentFile=%h/.config/claudia-beta/env
+ExecStart=/usr/bin/env node ${CLAUDIA_CHECKOUT}/out/runner.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
