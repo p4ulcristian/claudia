@@ -1,0 +1,19 @@
+# Claudia beta on a shared server: the front, one per machine (user claudia). It
+# believes X-Claudia-Email, so the machine's firewall lets only the hub reach FRONT_PORT.
+[Unit]
+Description=Claudia beta front (takes the hub's calls, picks the profile)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=claudia
+EnvironmentFile=/etc/claudia-beta/env
+Environment=FRONT_PROFILES=/etc/claudia-beta/profiles
+ExecStart=/usr/bin/env node /srv/claudia-beta/out/front.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
