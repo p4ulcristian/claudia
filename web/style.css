@@ -847,9 +847,10 @@ svg.logo { flex: none; color: var(--fg); }
 
 /* ---------- Phones (under 680px) ----------
    Screens: the chat list (the sidebar, full width; Settings over it) and the open chat (full width,
-   no rail) over the list (sidebar.css). The picture is a drawer from the right over the chat,
-   opened from the button at the end of the chat's header; the chat's start stays in view beside it. */
-.back-to-list, .pic-open, .pic-backdrop { display: none; }
+   no rail) over the list (sidebar.css). The picture is a full screen over the chat, the way the chat
+   is over the list: it slides in from the right (the button at the end of the chat's header, or a
+   left swipe) and the chat waits 30% to the left under it. */
+.back-to-list, .pic-open { display: none; }
 @media (max-width: 679px) {
   .split { grid-template-columns: 1fr !important; }
   .divider { display: none; }
@@ -874,10 +875,12 @@ svg.logo { flex: none; color: var(--fg); }
   .pic-open { display: grid; flex: none; width: 36px; height: 36px; margin-right: -6px; }
   .pic-open svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .pic-open.unseen { color: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); animation: breathe 1.6s ease-in-out infinite; }
-  .right.pic-drawer { position: fixed; top: 0; bottom: 0; right: 0; width: 88%; z-index: 30; padding-top: var(--top-safe); box-sizing: border-box; transform: translateX(105%); transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: -10px 0 40px rgb(0 0 0 / 0.45); }
-  .right.pic-drawer.open { transform: none; }
-  .pic-backdrop { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.4); animation: fade-in 0.2s ease-out; }
-  /* No hover on a phone: the bar sits at the bottom of the drawer; its fold button closes the drawer. */
+  .right.pic-drawer { position: fixed; inset: 0; width: auto !important; z-index: 30; padding-top: var(--top-safe); box-sizing: border-box; background: var(--bg); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35);
+    transform: translateX(100%); visibility: hidden; transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 0.32s; }
+  .right.pic-drawer.open { transform: none; visibility: visible; transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s; }
+  .split > .left { transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+  .split.pic-shown > .left { transform: translateX(-30%); }
+  /* No hover on a phone: the bar sits at the bottom of the picture; its fold button closes it. */
   .right.pic-drawer .rbar-zone { position: static; opacity: 1; transform: none; pointer-events: auto; padding: 6px 10px 10px; }
 }
 @keyframes fade-in { from { opacity: 0; } }
