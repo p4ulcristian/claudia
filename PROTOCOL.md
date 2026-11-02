@@ -56,7 +56,16 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 - Caddy clears `X-Auth-Request-*` and `X-Claudia-*` from the browser, then sets
   `X-Auth-Request-Email` from the login.
 - hub → front: `X-Claudia-Email: <email>`, and `X-Claudia-View: <profile>` when the caller looks at
-  another profile's chats (read only). The hub drops any `X-Claudia-*` that came from the browser.
+  another profile's chats (read only). The page asks for a view with the query parameter
+  `?view=<profile>` on `/s/<server>/api/…` and `/s/<server>/ws` (a browser cannot set headers on a
+  WebSocket, and Caddy clears `X-Claudia-*`); the hub takes `view` out of the query and sends it as
+  `X-Claudia-View`. Whether the caller may see that profile is the front's call.
+- The hub passes on no browser header but `Content-Type`, `Content-Length` and `Accept`: not the
+  login cookie, not `X-Auth-Request-*`, not any `X-Claudia-*`. From the front's answer it drops
+  `Set-Cookie` and the hop-by-hop headers.
+- `/hub/*` and `/s/*` refuse (403) a request another site's page made: `Sec-Fetch-Site` other than
+  `same-origin`/`none`, or an `Origin` whose host is not this one (`X-Forwarded-Host`, else `Host`).
+- A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
 - front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view.
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
@@ -65,11 +74,17 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 | Call | Answer |
 |---|---|
 | `GET /` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
-| `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` | the built page's files |
+| `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
-| `GET /hub/servers/:name/state` | `{ up: bool }` (a quick look at the front) |
-| `ANY /s/<server>/api/…` | passed to that front's `/api/…` (refused 403 if not in the person's list) |
-| `WS /s/<server>/ws` | passed to that front's `/ws` |
+| `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
+| `ANY /s/<server>/api/…` | passed to that front's `/api/…`, bodies streamed both ways (refused 403 if not in the person's list; 502 when the front is not reachable) |
+| `WS /s/<server>/ws` | passed to that front's `/ws`; the front's own refusal (status and body) reaches the page; frames pass as they are, close codes too |
+
+No `X-Auth-Request-Email` → 401 `{ error }`; an email not in `hub.json` → 403 `{ error }`. The page's
+files are served without either check (they hold no data). The hub listens on `HUB_HOST`
+(default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
+has no default. `hub.json` is read again when it changes (checked every 2 s); a broken change is
+logged and the last good one kept; a broken file at start stops the hub.
 
 ## Front / runner HTTP (`/api/…`)
 
