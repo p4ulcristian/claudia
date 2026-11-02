@@ -8,12 +8,13 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { loadScript, type SceneScript } from "./scene3d-vm";
 import { isSolid, makeChecker, type Overlap } from "./scene3d-overlap";
-import { GAP_SECONDS, estimateSeconds, matchesAny, normalizeStory, visibleAt, type CameraSpec, type Step } from "./scene3d-story";
+import { GAP_SECONDS, estimateSeconds, matchesAny, normalizeStory, poseAt, visibleAt, type CameraSpec, type Step } from "./scene3d-story";
 import { Voice } from "./scene3d-voice";
 import { PRESETS, materialFor } from "./scene3d-materials";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useApi } from "./api";
 import { FOCUS_INK, FOCUS_PX, INK, OUTLINE_PX, outlineMaterial, toonMaterial, viewport as inkViewport } from "./scene3d-ink";
+import { PERSON_HEIGHT, Person, loadPerson } from "./scene3d-person";
 
 // Drawn icons (chalk strokes), not emoji: the same hand as the rest of the board.
 const ICONS = {
@@ -114,10 +115,12 @@ function placeRod(m: THREE.Mesh, from: V3, to: V3, radius: number) {
   m.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
 }
 
-type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number; dim: number; lit: boolean; notes: boolean; outline: THREE.Mesh | null; label: CSS2DObject | null; lift: number };
+type Entry = { mesh: THREE.Mesh; spec: Data; radius: number; k: number; dim: number; lit: boolean; notes: boolean; outline: THREE.Mesh | null; label: CSS2DObject | null; lift: number; person?: Person; poseKey?: string };
 type Style = "diagram" | "real";
 
-function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: Style) {
+// A person part needs the person model (loaded beforehand) and a way to find other parts (a hand that
+// reaches for a switch).
+function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: Style, people: THREE.Object3D | null = null) {
   const byId = new Map<string, Entry>();
   for (const p of parts) {
     const hasMaterial = typeof p.material === "string" && !!PRESETS[p.material];
@@ -134,24 +137,25 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: 
     mesh.userData.casts = p.shape !== "group" && isSolid(p);
     mesh.castShadow = mesh.userData.casts;
     mesh.receiveShadow = p.shape !== "group" && !p.ghost;
-    if (p.shape === "group") mat.visible = false;
+    if (p.shape === "group" || p.shape === "person") mat.visible = false;
     const radius = Number(p.radius) || 0.08;
     if (p.shape === "rod") placeRod(mesh, V(p.from), V(p.to), radius);
     else {
-      if (p.shape !== "tube") mesh.scale.set(...sizeOf(p.size));
+      if (p.shape === "person") mesh.scale.setScalar(personScale(p.size));
+      else if (p.shape !== "tube") mesh.scale.set(...sizeOf(p.size));
       mesh.position.set(...V(p.pos));
       const r = V(p.rot);
       mesh.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG);
     }
     const entry: Entry = { mesh, spec: p, radius, k: 1, dim: 1, lit: false, notes: true, outline: null, label: null, lift: NaN };
     byId.set(String(p.id), entry);
-    if (style === "diagram" && p.shape !== "group" && p.outline !== false && !(p.ghost && p.shape === "sphere")) {
+    if (style === "diagram" && p.shape !== "group" && p.shape !== "person" && p.outline !== false && !(p.ghost && p.shape === "sphere")) {
       const ink = new THREE.Mesh(mesh.geometry, outlineMaterial());
       ink.userData.outline = true;
       mesh.add(ink);
       entry.outline = ink;
     }
-    if (style === "real" && !hasMaterial && !p.wire && !["plane", "ring", "rod", "tube", "group"].includes(p.shape)) {
+    if (style === "real" && !hasMaterial && !p.wire && !["plane", "ring", "rod", "tube", "group", "person"].includes(p.shape)) {
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })));
     }
     if (p.label && p.shape !== "group") {
@@ -161,9 +165,27 @@ function buildParts(host: HTMLElement, root: THREE.Group, parts: Data[], style: 
       entry.label = l;
     }
   }
-  // a part with a parent moves, turns and scales with it (a rotor and its blades)
-  for (const { mesh, spec } of byId.values()) (byId.get(String(spec.parent))?.mesh ?? root).add(mesh);
+  // a person: the model, posed (its hands may reach for parts, found here once all are made)
+  for (const [id, e] of byId) {
+    if (e.spec.shape !== "person" || !people) continue;
+    e.person = new Person(e.mesh, people, id, style, (c) => colorOf(host, c), (target) => centre(byId, target), e.spec);
+    e.poseKey = JSON.stringify(e.spec.pose ?? "stand");
+  }
+  // a part with a parent moves, turns and scales with it (a rotor and its blades); "<person>.<joint>"
+  // hangs it from a person's hand, head, hips…
+  for (const { mesh, spec } of byId.values()) {
+    const par = String(spec.parent ?? "");
+    const dot = par.indexOf(".");
+    const joint = dot > 0 ? byId.get(par.slice(0, dot))?.person?.joint(par.slice(dot + 1)) : null;
+    (joint ?? byId.get(par)?.mesh ?? root).add(mesh);
+  }
   return byId;
+}
+
+// A person's size is their height; the model is PERSON_HEIGHT tall.
+function personScale(size: unknown): number {
+  const h = typeof size === "number" ? size : Array.isArray(size) ? Number(size[1]) : NaN;
+  return Number.isFinite(h) && h > 0 ? h / PERSON_HEIGHT : 1;
 }
 
 // A part's label sits above the part's centre by half the part's height, measured once upright, so a part
@@ -172,6 +194,7 @@ const _lc = new THREE.Vector3(), _lb = new THREE.Box3();
 function placeLabel(e: Entry) {
   const l = e.label;
   if (!l || !e.mesh.visible) return;
+  if (e.person) { l.position.copy(e.mesh.worldToLocal(e.person.labelPoint(_lc))); return; }
   const box = e.mesh.geometry.boundingBox!;
   if (Number.isNaN(e.lift)) e.lift = _lb.copy(box).applyMatrix4(e.mesh.matrixWorld).getSize(_lc).y / 2 + 0.2;
   e.mesh.localToWorld(box.getCenter(_lc));
@@ -179,9 +202,12 @@ function placeLabel(e: Entry) {
   l.position.copy(e.mesh.worldToLocal(_lc));
 }
 
-// A part's centre now, or a point.
+// A part's centre now, a person's joint ("<person>.<joint>"), or a point.
 function centre(byId: Map<string, Entry>, e: unknown): THREE.Vector3 | null {
   if (typeof e === "string") {
+    const dot = e.indexOf(".");
+    const j = dot > 0 ? byId.get(e.slice(0, dot))?.person?.joint(e.slice(dot + 1)) : null;
+    if (j) return j.getWorldPosition(new THREE.Vector3());
     const o = byId.get(e);
     return o ? new THREE.Box3().setFromObject(o.mesh).getCenter(new THREE.Vector3()) : null;
   }
@@ -296,6 +322,16 @@ function makeArrow(host: HTMLElement, root: THREE.Group, byId: Map<string, Entry
 // What a script's frame() says about one part.
 function applyOverride(host: HTMLElement, e: Entry, o: Data) {
   const m = e.mesh;
+  if (e.person) {
+    if (o.pose) e.person.setPose(o.pose, 0);
+    if (o.color || o.look) e.person.recolour(o);
+    if (o.pos) m.position.set(...V(o.pos));
+    if (o.rot) { const r = V(o.rot); m.rotation.set(r[0] * DEG, r[1] * DEG, r[2] * DEG); }
+    if (o.size !== undefined) m.scale.setScalar(personScale(o.size));
+    if (typeof o.opacity === "number") (m.material as THREE.Material).userData.op = o.opacity;
+    applyReveal(e, e.k);
+    return;
+  }
   if (e.spec.shape === "rod") {
     if (o.from || o.to) placeRod(m, V(o.from ?? e.spec.from), V(o.to ?? e.spec.to), e.radius);
   } else {
@@ -324,6 +360,7 @@ function applyReveal(e: Entry, k: number) {
   m.castShadow = !!m.userData.casts && k > 0.5 && e.dim > 0.5;
   mat.opacity = op * k * e.dim;
   mat.transparent = op < 1 || k < 1 || e.dim < 1;
+  e.person?.reveal(k, e.dim, e.lit, op, { color: INK, focusInk: FOCUS_INK, thick: FOCUS_PX, thin: OUTLINE_PX });
   if (e.outline) {
     const u = (e.outline.material as THREE.ShaderMaterial).uniforms;
     u.opacity.value = k * (e.dim < 1 ? 0.28 : op < 1 ? 0.6 : 1);
@@ -503,8 +540,11 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       for (const [id, e] of byId) {
         const m = e.mesh.material as THREE.MeshStandardMaterial;
         const lit = styleMode === "real" && focus.has(id) && !bad.has(id) && id !== chosen;
-        m.emissive.setHex(bad.has(id) ? 0xff2a2a : id === chosen ? 0x2f6dff : lit ? 0xffc247 : 0x000000);
-        m.emissiveIntensity = bad.has(id) ? 0.9 : lit ? 0.2 + 0.6 * pulse : 0.7;
+        const hex = bad.has(id) ? 0xff2a2a : id === chosen ? 0x2f6dff : lit ? 0xffc247 : 0x000000;
+        const strength = bad.has(id) ? 0.9 : lit ? 0.2 + 0.6 * pulse : 0.7;
+        m.emissive.setHex(hex);
+        m.emissiveIntensity = strength;
+        e.person?.emissive(hex, hex === 0x2f6dff ? 0.35 : strength);
       }
       want();
     };
@@ -565,8 +605,18 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         }
       }
       if (mine !== token) return;
+      const all = [...list(d.parts), ...list(extra.parts)];
+      let people: THREE.Object3D | null = null;
+      if (all.some((p) => p?.shape === "person")) {
+        try {
+          people = await loadPerson();
+        } catch (e) {
+          setError(`person model: ${(e as Error).message}`);
+        }
+        if (mine !== token) return;
+      }
       dispose(root);
-      byId = buildParts(el, root, [...list(d.parts), ...list(extra.parts)], styleMode);
+      byId = buildParts(el, root, all, styleMode, people);
       root.updateMatrixWorld(true);
       arrows = [...list(d.arrows), ...list(extra.arrows)].map((a) => makeArrow(el, root, byId, a));
       kOf.clear();
@@ -692,6 +742,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       const st = steps[n];
       setSub(st.say);
       applyStoryState(n, animate);
+      posePeople(n, animate ? st.move : 0);
       focus = new Set([...byId.keys()].filter((id) => matchesAny(st.focus, id)));
       setSpotlight();
       if (!focus.size) paint();
@@ -764,6 +815,18 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       }
       setVoiceState(sMuted ? "voice off" : "voice ready");
     };
+    // people take the pose their part gives, or the latest one the story gave them up to step n
+    const posePeople = (n: number, seconds: number) => {
+      for (const [id, e] of byId) {
+        if (!e.person) continue;
+        const spec = poseAt(steps, n, id) ?? e.spec.pose ?? "stand";
+        const key = JSON.stringify(spec);
+        if (key === e.poseKey) continue;
+        e.poseKey = key;
+        e.person.setPose(spec, seconds);
+      }
+      want();
+    };
     // called after every build: the steps may have changed (Claude adds to the story while it plays)
     const newStory = (d: Data) => {
       steps = normalizeStory(d.story);
@@ -772,6 +835,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       if (!steps.length) { sIdx = -1; setIdx(-1); setSub(""); focus = new Set(); setSpotlight(); paint(); return; }
       if (sIdx >= steps.length) sIdx = steps.length - 1;
       applyStoryState(sIdx, false);
+      posePeople(sIdx, 0);
       focus = sIdx >= 0 ? new Set([...byId.keys()].filter((id) => matchesAny(steps[sIdx].focus, id))) : new Set();
       setSpotlight();
       // the voice is off until the user turns it on; then every line is asked for in order while they look around
@@ -843,6 +907,9 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
         for (const u of arrows) u.update();
         again = true;
       }
+      let posed = false;
+      for (const e of byId.values()) if (e.person?.update(wall)) posed = true;
+      if (posed) { for (const u of arrows) u.update(); again = true; }
       if (cam) {
         const p = Math.min(1, (wall - cam.at) / cam.dur), e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
         camera.position.lerpVectors(cam.p0, cam.p1, e);
@@ -910,7 +977,7 @@ export default function SceneView({ data, chat, block, live }: { data: Data; cha
       const r = labels.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
       root.updateMatrixWorld(true);
-      const meshes = [...byId.values()].filter((e) => e.spec.shape !== "group" && e.k > 0.05).map((e) => e.mesh);
+      const meshes: THREE.Object3D[] = [...byId.values()].filter((e) => e.spec.shape !== "group" && e.k > 0.05).flatMap((e) => (e.person ? e.person.meshes : [e.mesh]));
       // thin parts (a rod, a tube) are hard to hit: if the exact click finds nothing, try a few pixels around it
       let hits = ray.intersectObjects(meshes, false);
       for (const [dx, dy] of hits.length ? [] : [[6, 0], [-6, 0], [0, 6], [0, -6], [10, 10], [-10, 10], [10, -10], [-10, -10]]) {
