@@ -1,0 +1,14 @@
+# Claudia beta session host: owns the chats' Claude Code processes. A user unit; restarting it stops
+# every running chat, so it is restarted only when host.js itself changed.
+# Settings: ~/.config/claudia-beta/env (see env.example). PATH there must find node.
+[Unit]
+Description=Claudia beta session host
+
+[Service]
+EnvironmentFile=%h/.config/claudia-beta/env
+ExecStart=/usr/bin/env node ${CLAUDIA_CHECKOUT}/out/host.js
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

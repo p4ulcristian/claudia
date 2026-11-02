@@ -75,7 +75,7 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 
 | Call | Answer |
 |---|---|
-| `GET /api/me` | `{ server, profile, viewing, readOnly, version, commit }` |
+| `GET /api/me` | `{ server, profile, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `viewing` = the profile looked at (read only) or null |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 
 ## WebSocket (`/ws`): page ↔ runner
@@ -142,6 +142,7 @@ The runner applies each `draw` call (same input as the draw tool: `title`, `clea
    `op read --account <CLAUDIA_OP_ACCOUNT> <ref>` (the desktop app asks for the fingerprint), seals the
    value to `pubkey` (`crypto_box_seal`) and answers `{ sealed }` (base64). Paste instead: the page
    seals the pasted text to `pubkey` itself.
+   `pubkey` and `sealed` are standard base64 with padding.
 4. The page sends `secret { chat, ask, sealed }` to S. S opens it, runs `command` (in the chat's folder,
    `sh -c`) with `env_name=<value>` in that process's environment only, replaces every occurrence of
    the value in the output with `[secret]`, and answers Claude with the output. The keypair is dropped.
@@ -150,10 +151,19 @@ The runner applies each `draw` call (same input as the draw tool: `title`, `clea
 
 ## Host ↔ runner (unix socket, JSON lines)
 
-Runner → host: `{ op: "start", id, spec }` (spec = SDK options without callbacks + the MCP tool list
-(`{ server: { tool: { description, inputSchema (JSON Schema) } } }`) + hook matchers),
-`{ op: "send", id, text }`, `{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`.
+Runner → host: `{ op: "start", id, spec }` with spec = `{ options, mcp, hooks }`: `options` = SDK
+query options without callbacks, `mcp` = the tool list (`{ server: { tool: { description, inputSchema
+(JSON Schema) } } }`), `hooks` = `{ <HookEvent>: [{ matcher? }] }`;
+`{ op: "send", id, text, uuid? }` (uuid: the user message's id, kept in the session file),
+`{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
 `{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
 on every runner connect so it can take running chats back).
+
+rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool result (`{ content, isError? }`);
+`hook` `{ event, index, input }` → value = the hook's output; `canUseTool` `{ name, input, toolUseID }`
+→ value = a permission result (`{ behavior: "allow", updatedInput }` or `{ behavior: "deny", message }`).
+Only the newest runner connection is listened to. Right after `sessions` on a connect, the host sends
+every rpc still unanswered again (a runner that restarted asks the person again); the runner sends
+nothing before that first `sessions`.
