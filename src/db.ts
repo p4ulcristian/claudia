@@ -167,6 +167,13 @@ const q = {
   pictures: db.query<{ turn_uuid: string; scene: string; changed: string; created_at: number }, [string]>(
     "SELECT turn_uuid, scene, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
   ),
+  pictureList: db.query<{ turn_uuid: string; title: string | null; changed: string; created_at: number }, [string]>(
+    "SELECT turn_uuid, json_extract(scene, '$.title') AS title, changed, created_at FROM pictures WHERE session_id = ? ORDER BY created_at",
+  ),
+  picture: db.query<{ scene: string }, [string, string]>("SELECT scene FROM pictures WHERE session_id = ? AND turn_uuid = ?"),
+  lastPicture: db.query<{ turn_uuid: string; scene: string }, [string]>(
+    "SELECT turn_uuid, scene FROM pictures WHERE session_id = ? ORDER BY created_at DESC LIMIT 1",
+  ),
 };
 
 export const store = {
@@ -253,7 +260,20 @@ export const store = {
       changed: JSON.parse(r.changed) as string[],
       at: r.created_at,
     })),
+  // The chat's pictures without their scenes, for a chat being opened: a scene is fetched when it is looked at.
+  pictureList: (id: string): PictureMeta[] =>
+    q.pictureList.all(id).map((r) => ({ turn: r.turn_uuid, title: r.title ?? "", changed: JSON.parse(r.changed) as string[], at: r.created_at })),
+  picture: (id: string, turn: string): Scene | null => {
+    const r = q.picture.get(id, turn);
+    return r ? (JSON.parse(r.scene) as Scene) : null;
+  },
+  lastPicture: (id: string): { turn: string; scene: Scene } | null => {
+    const r = q.lastPicture.get(id);
+    return r ? { turn: r.turn_uuid, scene: JSON.parse(r.scene) as Scene } : null;
+  },
 };
+
+export type PictureMeta = { turn: string; title: string; changed: string[]; at: number };
 
 function asTemplate(r: { name: string; html: string; parts: string; description: string; updated_at: number }): Template {
   return { name: r.name, html: r.html, parts: JSON.parse(r.parts), description: r.description, updatedAt: r.updated_at };

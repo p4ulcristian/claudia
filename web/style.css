@@ -100,6 +100,9 @@ code, pre { font-family: var(--mono); }
 
 .messages { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-wrap: anywhere; padding: 18px 18px 120px; display: flex; flex-direction: column; gap: 12px; }
 .messages > * { flex-shrink: 0; }
+/* Older messages put in front are kept in place by the chat itself (web/chat.tsx), the same in every browser. */
+.messages { overflow-anchor: none; }
+.older-line { min-height: 1.5em; text-align: center; }
 .hello { margin: auto; text-align: center; }
 .hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .msg { max-width: 100%; min-width: 0; }

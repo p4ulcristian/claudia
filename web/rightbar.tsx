@@ -121,7 +121,7 @@ function Scrubber({ pictures, index, onPick }: { pictures: Picture[]; index: num
       ))}
       {hover !== null && pictures[hover] && (
         <span className="rbar-tip" ref={tipRef}>
-          <b>{hover + 1}</b> {pictures[hover].scene.title || "Untitled"} <span className="muted">{clock(pictures[hover].at)}</span>
+          <b>{hover + 1}</b> {pictures[hover].title || "Untitled"} <span className="muted">{clock(pictures[hover].at)}</span>
         </span>
       )}
     </div>

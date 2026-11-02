@@ -15,7 +15,8 @@ export type ChatRow = {
   lastTurn?: { id: string; ago: number; stopped: boolean; failed: boolean; reply: string } | null;
   runningFor?: number | null;
 };
-export type Picture = { turn: string; scene: Scene; changed: string[]; at: number };
+// A chat's picture; an open sends them without scenes, and an earlier one's scene is fetched when it is looked at.
+export type Picture = { turn: string; title: string; changed: string[]; at: number; scene?: Scene };
 export type { Timeline, Lane as TimelineLane, TimelineEvent, Detail as TimelineDetail } from "../src/timeline";
 
 // /api/search: chats with their best hits; a snippet marks the matched words with \u0001 … \u0002.
