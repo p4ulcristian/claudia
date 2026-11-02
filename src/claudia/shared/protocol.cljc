@@ -9,9 +9,11 @@
      :clj  (throw (ex-info "read-json is ClojureScript only" {}))))
 
 (defn write-json
-  "ClojureScript data -> JSON text (keywords become strings)."
+  "ClojureScript data -> JSON text (keywords become strings). A key read from JSON that holds a slash
+  (an AskUserQuestion answer keyed by its question, a chart field) became a namespaced keyword, so the
+  whole keyword is written, not only its name."
   [data]
-  #?(:cljs (js/JSON.stringify (clj->js data))
+  #?(:cljs (js/JSON.stringify (clj->js data :keyword-fn #(subs (str %) 1)))
      :clj  (throw (ex-info "write-json is ClojureScript only" {}))))
 
 (def page->runner
