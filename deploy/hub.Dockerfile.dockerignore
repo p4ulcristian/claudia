@@ -1,0 +1,7 @@
+# Only what the hub's image is built from.
+*
+!package.json
+!package-lock.json
+!shadow-cljs.edn
+!src
+!resources
