@@ -11,4 +11,6 @@
   :web    {:target :browser
            :output-dir "out/web/js"
            :asset-path "/js"
-           :modules {:main {:init-fn claudia.web.app/init}}}}}
+           :modules {:main {:init-fn claudia.web.app/init}}
+           ;; libsodium's Node paths (node:fs, crypto) are never taken in a browser.
+           :js-options {:resolve {"node:fs" false "crypto" false}}}}}
