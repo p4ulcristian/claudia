@@ -1,6 +1,8 @@
-See README.md for what this is and the decisions behind it.
+See README.md for what this is, PROTOCOL.md for the one contract between the programs.
 
-- Bun everywhere: `bun install`, `bun server.ts`, `bun:sqlite`, HTML imports for the page (no Vite).
-- Type-check: `bunx -p typescript@5 tsc --noEmit -p .`
-- Three services: page/proxy edits (`web/`, `server.ts`, `src/proxy.ts`, `src/tunnel.ts`) need `systemctl --user restart claudia`; runner edits (`runner.ts`, the rest of `src/`) need `systemctl --user restart claudia-runner`. Both keep chats running. Host edits (`host.ts`, `src/host-protocol.ts`) need `systemctl --user restart claudia-host`, which stops every running chat: say so before doing it. Never stop either with `pkill -f` (other services run `bun server.ts` too).
-- The core rule: chat replies stay short; explanation goes into the picture. Keep that in `src/prompt.ts` when changing what Claude is told.
+- ClojureScript everywhere, built by shadow-cljs (`npx shadow-cljs release <build>`; builds: host runner front hub web). Plain Node at run time (22.13+ for node:sqlite). No Bun, no TypeScript.
+- Plain JSON on every wire; keyword keys only inside ClojureScript (`claudia.shared.protocol`).
+- Folders: `src/claudia/hub` = the master (gate), `src/claudia/slave` = front, runner, host (every server), `src/claudia/web` = the page (Reagent + re-frame), `src/claudia/shared` = .cljc both use.
+- Public repository: never commit domains, addresses, emails, tokens or host names. Those live in each machine's environment files.
+- The core rule: chat replies stay short; explanation goes into the picture (the runner's system prompt says so).
+- The TypeScript Claudia (branch main) is the behaviour reference, not a template: this is a clean slate.
