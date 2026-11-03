@@ -92,14 +92,14 @@
         side ($ ".app > .sidebar-slot")
         left ($ ".app .split > .left")
         right ($ ".app .split > .right")
-        settings ($ ".st-pane")]
+        settings (when (some-> app .-classList (.contains "settings-shown")) ($ ".st-pane"))]
     (cond
       (nil? app) nil
-      ;; Settings takes the list's place: right goes back to the chats.
+      ;; Settings lies over the list: right goes back to the chats under it.
       (and settings (= screen "list"))
       {:surface settings
-       :moves (keep identity [(slide-back settings nil #(rf/dispatch [:ops/settings false])
-                                          #(not (js/document.querySelector ".st-pane")))])}
+       :moves (keep identity [(slide-back settings ($ ".cs-pane") #(rf/dispatch [:ops/settings false])
+                                          #(not (.contains (.-classList ^js ($ ".app")) "settings-shown")))])}
 
       (= screen "list")
       {:surface side

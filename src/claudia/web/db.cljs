@@ -22,7 +22,9 @@
    :chats {}               ; [server chat] -> {:title :folder :messages [Msg] :scene :running :asks [Ask] :error}
    :open nil               ; [server chat] of the open chat, or nil (a new chat)
    :screen :list           ; phone only: :list | :chat | :picture
-   :sidebar? (stored "claudia.sidebar" true)
+   :sidebar? false         ; desktop: the full list open as a drawer over the rail (never kept)
+   :rail-search? false     ; the drawer was opened by the rail's search: Escape folds it back
+   :turn-since {}          ; [server chat] -> when its running turn was first seen running (ms)
    :new-server (stored "claudia.newServer" nil) ; where a new chat starts (the last used)
    :pending-new {}         ; uuid -> {:server :text}: a new chat sent, `created` not back yet
    :outbox {}              ; [server chat] -> [text]: sent, the runner's echo not back yet

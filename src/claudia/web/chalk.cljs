@@ -45,7 +45,7 @@
    "r8-15-dash" {:r 8 :b 1.5 :dash 4}
    "c30-18" {:r 15 :b 1.8}
    "c30-22" {:r 15 :b 2.2}
-   ;; The rest of the old set (the usage meters, moons, lines).
+   ;; The rest of the TypeScript Claudia's set (web/chalk.ts SHAPES).
    "r18-2" {:r 18 :b 2}
    "line3" {:r 1.5 :noise :line}
    "line3-soft" {:r 1.5 :noise :soft}

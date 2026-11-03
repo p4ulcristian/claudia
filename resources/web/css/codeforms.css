@@ -319,6 +319,9 @@
 .code-chip { display: inline-flex; align-items: baseline; gap: 8px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--line); font: 12px var(--mono); color: var(--fg); }
 .code-chip:hover, .code-chip.on { border-color: var(--accent); }
 
+/* The Forms button over the picture (phones). */
+.forms-btn { flex: none; font: 700 14px var(--hand); color: var(--muted); padding: 2px 10px; border-radius: 8px; }
+.forms-btn:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 40%, transparent); }
 .form-tools { display: flex; gap: 10px; }
 .gallery .g-sample .form-view { width: 100%; }
 

@@ -1,7 +1,9 @@
 (ns claudia.web.md
   "Markdown to safe HTML: marked renders, DOMPurify cleans."
   (:require ["marked" :refer [Marked]]
-            ["dompurify" :as DOMPurify]))
+            ["dompurify" :as DOMPurify]
+            ["highlight.js/lib/core" :as hljs]
+            [claudia.web.hl :as hl]))
 
 (defn- escape [s]
   (-> (str s)
@@ -16,8 +18,16 @@
         :breaks false
         :renderer
         #js {:code (fn [^js tok]
-                     (str "<div class=\"code\"><button class=\"copy\" type=\"button\">Copy</button>"
-                          "<pre><code>" (escape (.-text tok)) "</code></pre></div>"))
+                     ;; Coloured as the TypeScript Claudia did (github-dark, claudia.css): by its
+                     ;; language when known, else guessed.
+                     (let [text (.-text tok)
+                           lang (hl/lang-of (.-lang tok))
+                           html (try (.-value (if lang
+                                                (.highlight hljs text #js {:language lang :ignoreIllegals true})
+                                                (.highlightAuto hljs text)))
+                                     (catch :default _ (escape text)))]
+                       (str "<div class=\"code\"><button class=\"copy\" type=\"button\" title=\"Copy\">Copy</button>"
+                            "<pre><code class=\"hljs\">" html "</code></pre></div>")))
              :link (fn [^js tok]
                      (this-as ^js this
                               (str "<a href=\"" (escape (.-href tok)) "\" target=\"_blank\" rel=\"noreferrer\">"

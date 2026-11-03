@@ -73,6 +73,7 @@
           :running (boolean (:running s))
           :waiting (boolean (seq asks))
           :at (:at r)
+          :started (:created r)
           :preview (or question (some #(when (= "secret" (:kind %)) (str "Secret: " (:reason %))) asks) (:preview r))
 ;; Work Claude started still runs: not done yet (README decision 25).
           :agents agents

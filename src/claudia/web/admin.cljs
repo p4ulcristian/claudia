@@ -83,7 +83,7 @@
          [:td.mono (:name s)]
          [:td [:input.mono {:value @address :aria-label (str (:name s) "'s address") :spell-check false
                             :on-change #(reset! address (.. % -target -value))}]]
-         [:td [:span.pair-state {:title tip} note]]
+         [:td [:span.pair-state {:class (str/replace note " " "-") :data-tip tip} note]]
          [:td.row-actions
           (when changed?
             [:button {:on-click #(call! "PUT" path {:label (str/trim @label) :address (str/trim @address)})} "Save"])
@@ -194,17 +194,17 @@
   []
   (r/with-let [_ (js/window.addEventListener "keydown" on-key)]
     (when-let [{:keys [tab state error]} @(rf/subscribe [:admin])]
-      [:div.admin-backdrop {:on-click #(rf/dispatch [:admin/close])}
-       [:div.admin-dialog {:role "dialog" :aria-label (if (= tab :servers) "Servers" "Access")
-                           :on-click #(.stopPropagation %)}
+      [:div.settings-backdrop {:on-click #(rf/dispatch [:admin/close])}
+       [:div.settings.hub-admin {:role "dialog" :aria-label (if (= tab :servers) "Servers" "Access")
+                                 :on-click #(.stopPropagation %)}
         [:header
-         [:div.admin-tabs {:role "tablist"}
+         [:div.profile-tabs {:role "tablist"}
           (for [[t label] [[:servers "Servers"] [:access "Access"]]]
             ^{:key t}
             [:button {:role "tab" :aria-selected (= tab t) :class (when (= tab t) "on")
                       :on-click #(rf/dispatch [:admin/tab t])} label])]
-         [:button.admin-close {:title "Close (Esc)" :on-click #(rf/dispatch [:admin/close])} "×"]]
-        (when error [:p.admin-error error])
+         [:button.icon {:title "Close (Esc)" :on-click #(rf/dispatch [:admin/close])} "×"]]
+        (when error [:p.token-error error])
         (cond
           (nil? state) [:p.muted.small "Loading…"]
           (= tab :servers) [servers-page state]
