@@ -14,50 +14,68 @@
 
 (defn available? [] @available)
 
+(defn- context! "The audio context, made on first use." [{:keys [ctx]}]
+  (or @ctx (reset! ctx (js/AudioContext. #js {:sampleRate rate}))))
+
+(defn- answer-buffer
+  "The hub's answer: the PCM bytes, or a rejection with its error."
+  [^js r]
+  (if (.-ok r)
+    (.arrayBuffer r)
+    (-> (.json r)
+        (.catch (fn [_] #js {}))
+        (.then (fn [^js j] (throw (js/Error. (or (.-error j) (str "voice answered " (.-status r))))))))))
+
+(defn- clip-of "16-bit PCM bytes as a clip {:buffer AudioBuffer :seconds n}." [voice ^js buf]
+  (let [pcm (js/Int16Array. buf 0 (js/Math.floor (/ (.-byteLength buf) 2)))
+        ^js b (.createBuffer ^js (context! voice) 1 (.-length pcm) rate)
+        out (.getChannelData b 0)]
+    (dotimes [i (.-length pcm)] (aset out i (/ (aget pcm i) 32768)))
+    {:buffer b :seconds (/ (.-length pcm) rate)}))
+
+(defn- fetch-clip "A promise of a line's clip, or nil (the error kept)." [{:keys [error] :as voice} text instruction]
+  (-> (js/fetch "/hub/narrate"
+                #js {:method "POST" :credentials "same-origin"
+                     :headers #js {"content-type" "application/json"}
+                     :body (js/JSON.stringify #js {:text text :instruction instruction})})
+      (.then answer-buffer)
+      (.then #(clip-of voice %))
+      (.catch (fn [e] (reset! error (.-message e)) nil))))
+
+(defn- load! "A line's clip, fetched once per text and instruction." [{:keys [clips] :as voice} text instruction]
+  (let [k [instruction text]]
+    (or (get @clips k)
+        (let [p (fetch-clip voice text instruction)] (swap! clips assoc k p) p))))
+
+(defn- stop! [{:keys [source]}]
+  (when-let [^js s @source] (try (.stop s) (catch :default _ nil)))
+  (reset! source nil))
+
+(defn- play! [{:keys [source] :as voice} {:keys [buffer]}]
+  (stop! voice)
+  (let [^js c (context! voice)]
+    (-> (if (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)) (js/Promise.resolve nil))
+        (.then (fn [_]
+                 (let [^js src (.createBufferSource c)]
+                   (set! (.-buffer src) buffer)
+                   (.connect src (.-destination c))
+                   (.start src)
+                   (reset! source src)))))))
+
+(defn- close! [{:keys [ctx] :as voice}]
+  (stop! voice)
+  (some-> ^js @ctx .close)
+  (reset! ctx nil))
+
 (defn make
   "One story's voice: {:load (fn [text instruction] promise of clip or nil) :play :stop :pause
   :resume :close :error (atom)}. A clip is {:buffer AudioBuffer :seconds n}."
   []
-  (let [ctx (atom nil)
-        clips (atom {})
-        source (atom nil)
-        error (atom "")
-        context (fn [] (or @ctx (reset! ctx (js/AudioContext. #js {:sampleRate rate}))))
-        fetch-clip (fn [text instruction]
-                     (-> (js/fetch "/hub/narrate"
-                                   #js {:method "POST" :credentials "same-origin"
-                                        :headers #js {"content-type" "application/json"}
-                                        :body (js/JSON.stringify #js {:text text :instruction instruction})})
-                         (.then (fn [^js r]
-                                  (if (.-ok r)
-                                    (.arrayBuffer r)
-                                    (-> (.json r)
-                                        (.catch (fn [_] #js {}))
-                                        (.then (fn [^js j] (throw (js/Error. (or (.-error j) (str "voice answered " (.-status r)))))))))))
-                         (.then (fn [buf]
-                                  (let [pcm (js/Int16Array. buf 0 (js/Math.floor (/ (.-byteLength buf) 2)))
-                                        ^js b (.createBuffer ^js (context) 1 (.-length pcm) rate)
-                                        out (.getChannelData b 0)]
-                                    (dotimes [i (.-length pcm)] (aset out i (/ (aget pcm i) 32768)))
-                                    {:buffer b :seconds (/ (.-length pcm) rate)})))
-                         (.catch (fn [e] (reset! error (.-message e)) nil))))
-        stop! (fn [] (when-let [^js s @source] (try (.stop s) (catch :default _ nil))) (reset! source nil))]
+  (let [{:keys [ctx error] :as voice} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :error (atom "")}]
     {:error error
-     :load (fn [text instruction]
-             (let [k [instruction text]]
-               (or (get @clips k)
-                   (let [p (fetch-clip text instruction)] (swap! clips assoc k p) p))))
-     :play (fn [{:keys [buffer]}]
-             (stop!)
-             (let [^js c (context)]
-               (-> (if (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)) (js/Promise.resolve nil))
-                   (.then (fn [_]
-                            (let [^js src (.createBufferSource c)]
-                              (set! (.-buffer src) buffer)
-                              (.connect src (.-destination c))
-                              (.start src)
-                              (reset! source src)))))))
-     :stop stop!
+     :load #(load! voice %1 %2)
+     :play #(play! voice %)
+     :stop #(stop! voice)
      :pause (fn [] (some-> ^js @ctx .suspend))
      :resume (fn [] (some-> ^js @ctx .resume))
-     :close (fn [] (stop!) (some-> ^js @ctx .close) (reset! ctx nil))}))
+     :close #(close! voice)}))
