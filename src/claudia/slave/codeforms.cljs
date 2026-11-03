@@ -200,12 +200,12 @@
   (or (ok? (drawn [scene] f k)) (ok? (drawn @past f k))))
 
 (defn root-ok?
-  "A drawn root, a folder inside one, or one above it up to the work folder (the form's path can be
-  clicked to go up)."
-  [roots root work]
+  "A drawn root, a folder inside one, or one above it up to top (the form's path can be clicked to go
+  up; top: the home folder, for a view the work folder)."
+  [roots root top]
   (some #(or (= % root)
              (str/starts-with? root (str % "/"))
-             (and (str/starts-with? % (str root "/")) (reach/within? work root)))
+             (and (str/starts-with? % (str root "/")) (reach/within? top root)))
         roots))
 
 (defn- query [^js req]
@@ -213,10 +213,10 @@
     (fn [k] (.get (.-searchParams u) k))))
 
 (defn- files-refusal
-  "Why this caller may not read root and rel inside it (reach/reach-refusal), or nil."
+  "Why this caller may not read root and rel inside it (reach/view-refusal), or nil."
   [{:keys [work view?]} root rel]
-  (or (reach/reach-refusal work root view?)
-      (if-let [full (files/inside root rel)] (reach/reach-refusal work full view?) "outside the folder")))
+  (or (reach/view-refusal work root view?)
+      (reach/view-refusal work (path/resolve root (if (seq rel) rel ".")) view?)))
 
 (defn- send-image [^js res full]
   (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname full)) 1) "application/octet-stream")
@@ -228,7 +228,7 @@
   (let [root (or (q "root") "")
         rel (or (q "path") "")]
     (cond
-      (not (drawn? scenes "files" :root #(root-ok? % root work))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
+      (not (drawn? scenes "files" :root #(root-ok? % root (if view? work (os/homedir))))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
       (files-refusal caller root rel) (io/send-json res 403 {:error (files-refusal caller root rel)})
       (= "1" (q "read")) (io/send-json res 200 (files/read-text root rel (some-> (q "since") js/Number)))
       (= "1" (q "image")) (if-let [full (files/image-file root rel)]
@@ -248,8 +248,8 @@
 (defn- repo-refusal
   "Why this caller may not read the repo and, given, the file in it (relative to the repo), or nil."
   [{:keys [work view?]} repo file]
-  (or (reach/reach-refusal work repo view?)
-      (when file (reach/reach-refusal work (path/resolve repo file) view?))))
+  (or (reach/view-refusal work repo view?)
+      (when file (reach/view-refusal work (path/resolve repo file) view?))))
 
 (defn- repo-answer
   "Promise of the git form's read; a view's commit details leave out paths with a dot part."
@@ -298,7 +298,7 @@
     (cond
       (not (turned-on form)) (io/send-json res 404 {:error (str "no " form " form here")})
       (not (drawn? scenes form :root #(contains? % root))) (io/send-json res 403 {:error "not a project of this chat's pictures"})
-      (reach/reach-refusal work root view?) (io/send-json res 403 {:error (reach/reach-refusal work root view?)})
+      (reach/view-refusal work root view?) (io/send-json res 403 {:error (reach/view-refusal work root view?)})
       (and view? (sql-id-hidden? (q "var"))) (io/send-json res 403 {:error "a dot path, hidden in a read-only view"})
       (= form "calls") (reply-promise res (calls-answer root q))
       :else (reply-promise res (clojure-answer root q)))))
@@ -370,7 +370,7 @@
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
   there is no such chat); tools-changed!: every chat's draw tool changed (a form deleted or
-  restored in the Forms window); work: the work folder every read stays in."
+  restored in the Forms window); work: the work folder a read-only view's reads stay in."
   [^js req ^js res url who {:keys [tools-changed!] :as opts}]
   (let [{:keys [op] :as r} (form-route (.-method req) url)
         read-only (:read-only who)]

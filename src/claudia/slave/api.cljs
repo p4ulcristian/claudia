@@ -242,7 +242,7 @@
 
 (defn- reachable-project
   "The folder's project when this caller may read the folder, its logo left out when the logo may
-  not be read (both inside the work folder; a view: no dot part); nil otherwise."
+  not be read (a view: both inside the work folder, no dot part); nil otherwise."
   [folder view?]
   (when (reach/reach? chats/cwd folder view?)
     (when-let [found (projects/project-of folder chats/cwd)]

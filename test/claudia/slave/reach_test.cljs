@@ -1,5 +1,5 @@
 (ns claudia.slave.reach-test
-  "Where the page's reads may go: the work folder, and in a view no dot part; on plain data."
+  "Where a read-only view may read: the work folder, no dot part; on plain data."
   (:require [cljs.test :refer [deftest is]]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.git :as git]
@@ -22,34 +22,37 @@
   (is (not (reach/hidden? "")))
   (is (not (reach/hidden? "notes.v2.md"))))
 
-(deftest refusal-keeps-reads-in-the-work-folder
-  (is (nil? (reach/refusal "/h/u/Work" "/h/u/Work/x/.env" false)))
-  (is (= "a dot path, hidden in a read-only view" (reach/refusal "/h/u/Work" "/h/u/Work/x/.env" true)))
-  (is (= "a dot path, hidden in a read-only view" (reach/refusal "/h/u/Work" "/h/u/Work/x/.git/HEAD" true)))
-  (is (nil? (reach/refusal "/h/u/Work" "/h/u/Work/x/README.md" true)))
-  (is (nil? (reach/refusal "/h/u/Work" "/h/u/Work" true)))
-  (is (= "outside the work folder" (reach/refusal "/h/u/Work" "/h/u/.config/gh/hosts.yml" false)))
-  (is (= "outside the work folder" (reach/refusal "/h/u/Work" "/h/u" true))))
+(deftest refusal-keeps-a-views-reads-in-the-work-folder
+  (is (= "a dot path, hidden in a read-only view" (reach/refusal "/h/u/Work" "/h/u/Work/x/.env")))
+  (is (= "a dot path, hidden in a read-only view" (reach/refusal "/h/u/Work" "/h/u/Work/x/.git/HEAD")))
+  (is (nil? (reach/refusal "/h/u/Work" "/h/u/Work/x/README.md")))
+  (is (nil? (reach/refusal "/h/u/Work" "/h/u/Work")))
+  (is (= "outside the work folder" (reach/refusal "/h/u/Work" "/h/u/.config/gh/hosts.yml")))
+  (is (= "outside the work folder" (reach/refusal "/h/u/Work" "/h/u"))))
 
-(deftest reach-refuses-paths-that-are-not-absolute
-  (is (= "not an absolute path" (reach/reach-refusal "/" "relative/path" false)))
-  (is (= "not an absolute path" (reach/reach-refusal "/" nil false)))
-  (is (not (reach/reach? "/" "" false))))
+(deftest view-refusal-limits-only-views
+  (is (nil? (reach/view-refusal "/h/u/Work" "/h/u/.config/gh/hosts.yml" false)))
+  (is (nil? (reach/view-refusal "/h/u/Work" "relative/path" false)))
+  (is (reach/reach? "/h/u/Work" nil false))
+  (is (= "not an absolute path" (reach/view-refusal "/" "relative/path" true)))
+  (is (= "not an absolute path" (reach/view-refusal "/" nil true)))
+  (is (not (reach/reach? "/" "" true))))
 
 (deftest shown-entries-hide-dot-names-in-a-view
   (let [entries [{:name ".github" :dir true} {:name "src" :dir true} {:name ".env"} {:name "a.md"}]]
     (is (= entries (reach/shown-entries entries false)))
     (is (= [{:name "src" :dir true} {:name "a.md"}] (reach/shown-entries entries true)))))
 
-(deftest root-ok-goes-up-only-to-the-work-folder
+(deftest root-ok-goes-up-only-to-top
   (let [roots #{"/h/u/Work/apps/x"}]
     (is (codeforms/root-ok? roots "/h/u/Work/apps/x" "/h/u/Work"))
     (is (codeforms/root-ok? roots "/h/u/Work/apps/x/src" "/h/u/Work"))
     (is (codeforms/root-ok? roots "/h/u/Work/apps" "/h/u/Work"))
     (is (codeforms/root-ok? roots "/h/u/Work" "/h/u/Work"))
     (is (not (codeforms/root-ok? roots "/h/u" "/h/u/Work")))
-    (is (not (codeforms/root-ok? roots "/h" "/h/u/Work")))
-    (is (not (codeforms/root-ok? roots "/h/u/Work/apps/y" "/h/u/Work")))))
+    (is (codeforms/root-ok? roots "/h/u" "/h/u"))
+    (is (not (codeforms/root-ok? roots "/h" "/h/u")))
+    (is (not (codeforms/root-ok? roots "/h/u/Work/apps/y" "/h/u")))))
 
 (deftest sql-ids-with-a-dot-part-are-hidden
   (is (codeforms/sql-id-hidden? "file:.secret/q.sql"))
