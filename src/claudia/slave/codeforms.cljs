@@ -9,6 +9,7 @@
             [clojure.string :as str]
             [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]
+            [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
             [claudia.slave.git :as git]
@@ -77,6 +78,7 @@
                 (case (form-of scene b)
                   "files" (with-root scene folder b :root)
                   "git" (with-root scene folder b :repo)
+                  ("clojure" "calls") (with-root scene folder b :root)
                   "editor" (if (:data b)
                              (let [known (known-block scene (:id b))
                                    {:keys [data refused]} (editor/guard-draw (when (= "editor" (:form known)) (:data known)) (:data b))]
@@ -193,12 +195,31 @@
                 (.then #(h/json-reply res 200 %))
                 (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))))
 
+(defn- clojure-read [^js res scene q form]
+  (let [root (or (q "root") "")
+        reply (fn [p] (-> p (.then #(h/json-reply res 200 %)) (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))]
+    (cond
+      (not (turned-on form)) (h/json-reply res 404 {:error (str "no " form " form here")})
+      (not (contains? (drawn scene form :root) root)) (h/json-reply res 403 {:error "not a project of this chat's picture"})
+      (= form "calls")
+      (reply (let [v (q "var")]
+               (cond (nil? v) (clojure/calls-fp root (q "fp"))
+                     (= "1" (q "map")) (clojure/calls-map root v (let [n (js/parseInt (or (q "up") "2"))] (if (js/isNaN n) 2 n))
+                                                          (let [n (js/parseInt (or (q "down") "3"))] (if (js/isNaN n) 3 n)))
+                     :else (clojure/calls-var root v))))
+      :else
+      (reply (let [from (q "from") to (q "to") ns (q "ns") v (q "var")]
+               (cond (and from to) (clojure/edge-uses root from (= "1" (q "fx")) to (= "1" (q "tx")))
+                     (and ns v) (clojure/var-source root ns v)
+                     ns (clojure/ns-detail root ns)
+                     :else (clojure/namespaces root (q "fp"))))))))
+
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
   there is no such chat). on-scene: a chat's scene changed by the page (the template button)."
   [^js req ^js res url who scene-of]
   (let [method (.-method req)
-        [_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|blocks/([^/]+)/template)" url)
+        [_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|blocks/([^/]+)/template)" url)
         q (query req)]
     (cond
       (and (= url "/api/forms") (= method "GET"))
@@ -220,6 +241,7 @@
           (nil? scene) (h/json-reply res 404 {:error "No such chat."})
           (and (= sub "files") (= method "GET")) (files-read res scene q)
           (and (= sub "git") (= method "GET")) (git-read res scene q)
+          (and (#{"clojure" "calls"} sub) (= method "GET")) (clojure-read res scene q sub)
           (and block (= method "POST"))
           (if (:read-only who)
             (h/json-reply res 403 {:error "Read only."})
@@ -270,7 +292,8 @@
 (def auto-forms
   "Forms that need no thinking: turned required, Claudia puts the chat folder's block on the picture."
   {"files" {:k :root :name "Project files"}
-   "git" {:k :repo :name "History"}})
+   "git" {:k :repo :name "History"}
+   "clojure" {:k :root :name "Namespaces"}})
 
 (defn- choices
   "A chat's form row choices with string keys (JSON made them keywords)."
