@@ -212,16 +212,6 @@
 
 ;; ---- the Forms gallery ----
 
-(rf/reg-event-db
- :codeforms/gallery
- ;; Opens the Forms window for a server (nil: the open chat's, else the first), or closes it (false).
- (fn [db [_ server]]
-   (if (false? server)
-     (assoc-in db [:codeforms :gallery] nil)
-     (assoc-in db [:codeforms :gallery] (or server (first (:open db)) (first (keys (:servers db))))))))
-
-(rf/reg-sub :codeforms/gallery (fn [db] (get-in db [:codeforms :gallery])))
-
 (def ^:private sample-graph
   {:id "graph" :kind "graph"
    :nodes [{:id "you" :label "You" :color "violet"} {:id "page" :label "Page" :shape "box" :color "blue"}
@@ -337,12 +327,6 @@
               (do (set-hidden! (conj hidden (:name deleting))) (set-deleting nil))))
           #(set-deleting nil)])])))
 
-(defn gallery-host
-  "The Forms window when it is open ([:codeforms/gallery server] opens it). Mounted once, in the app."
-  []
-  (let [server @(rf/subscribe [:codeforms/gallery])]
-    (when server [:f> gallery server #(rf/dispatch [:codeforms/gallery false])])))
-
 ;; ---- where the form row goes ----
 
 (defn- use-phone []
@@ -370,11 +354,10 @@
       [:f> form-row ck (off-here info) true])))
 
 (defn picture-tools
-  "Over the picture of the open chat: on phones, the form row (desktops have it in the right rail)."
+  "Over the picture of the open chat: on phones, the form row (desktops have it in the right rail,
+  form-rail)."
   [{:keys [server ck]}]
   (let [ro @(rf/subscribe [:read-only?])
         phone (use-phone)
         info (use-info server)]
-    [:<>
-     (when server [:button.forms-btn {:type "button" :on-click #(rf/dispatch [:codeforms/gallery server]) :title "Every form Claude can draw, and the saved templates"} "Forms"])
-     (when (and ck info (not ro) phone) [:f> form-row ck (off-here info) false])]))
+    (when (and ck info (not ro) phone) [:f> form-row ck (off-here info) false])))

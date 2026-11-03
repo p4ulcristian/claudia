@@ -274,7 +274,7 @@
          (if (:note w-mark)
            [:span.g-note (:note w-mark)]
            [:<>
-            (for [f (take 4 (:files dirty))] ^{:key (:path f)} [:span.g-wf {:class (st-class (:status f))} (last (str/split (:path f) #"/"))])
+            (for [f (take 4 (:files dirty))] ^{:key (:path f)} [:span.g-wf {:class (st-class (:status f))} (last (str/split (:path f) #"/" -1))])
             (when (> (count (:files dirty)) 4) [:span (str "+" (- (count (:files dirty)) 4))])])]])
      (for [[i c] (map-indexed vector commits)
            :let [m (mark-of c) colour (lane-colour (:colorKey c))]]

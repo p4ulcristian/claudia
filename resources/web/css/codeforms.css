@@ -321,9 +321,6 @@
 
 /* The picture header: the Forms button and the form row under the title. */
 .picture-head { flex-wrap: wrap; }
-.forms-btn { flex: none; font: 700 14px var(--hand); color: var(--muted); padding: 2px 10px; border-radius: 8px; }
-.forms-btn:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 40%, transparent); }
-.picture-head .form-row { position: relative; flex: 1 0 100%; margin: 4px 0 0; padding: 6px 0; background: none; backdrop-filter: none; border-bottom: 0; }
 .form-tools { display: flex; gap: 10px; }
 .right { container-type: inline-size; }
 .gallery header .icon { font: 700 26px var(--hand); color: var(--muted); }
@@ -484,3 +481,4 @@ button.cl-fn:hover { text-decoration: underline; }
 .ca-box b em { font: 700 11px var(--hand); font-style: normal; color: var(--amber); white-space: nowrap; }
 .ca-box span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9.5px var(--mono); color: var(--muted); }
 .ca-cut { text-align: center; }
+.picture-head > .form-row { flex: 1 0 100%; }

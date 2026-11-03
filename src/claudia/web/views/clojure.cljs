@@ -71,7 +71,7 @@
         layer (loop [layer (zipmap ids (repeat 0)) pass 0]
                 (let [next (reduce (fn [l [a b]] (if (or (back [a b]) (>= (l b) (inc (l a)))) l (assoc l b (inc (l a))))) layer (keys pairs))]
                   (if (or (= next layer) (> pass (count ids))) next (recur next (inc pass)))))
-        n-layers (inc (reduce max 0 (vals layer)))
+        n-layers (if (seq ids) (inc (reduce max 0 (vals layer))) 0)
         cols (vec (for [li (range n-layers)] (vec (filter #(= li (layer %)) ids))))
         place (fn [cols] (into {} (for [c cols [i id] (map-indexed vector c)] [id (- i (/ (dec (count c)) 2))])))
         near (fn [pos id dir] (for [[a b] (keys pairs) :when (if (= dir 1) (= b id) (= a id))] (pos (if (= dir 1) a b))))
