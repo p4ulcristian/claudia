@@ -1,6 +1,6 @@
 (ns claudia.hub.main
   "Claudia's hub, on the gate behind Caddy: serves the page, knows the servers and who may use which
-  (hub.json), and passes /s/<server>/api/… and /s/<server>/ws on to that server's front, saying who
+  (its store, claudia.hub.config), runs its own operations (claudia.hub.ops), and passes /s/<server>/api/… and /s/<server>/ws on to that server's front, saying who
   is calling. Caddy logs people in and sets X-Auth-Request-Email; the hub believes it and nothing
   else from the browser."
   (:require ["fs" :as fs]
@@ -102,7 +102,7 @@
       (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
       (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
       (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-      ;; The hub's own poke to the front (README decision 11), never a page's call.
+      ;; The hub's own poke to the front (README, Hub operations: following beta), never a page's call.
       (= rest-path "/api/update-check") {:status 404 :error "not found"}
       error {:status 400 :error error}
       ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).

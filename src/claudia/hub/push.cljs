@@ -1,5 +1,5 @@
 (ns claudia.hub.push
-  "Phone pushes (README decision 10): the hub tells a person's iPhones when one of their chats finished
+  "Phone pushes (README, Hub operations: push): the hub tells a person's iPhones when one of their chats finished
   a turn, asks them a question, or waits on a secret they must allow. It learns that the way the page
   does, as that person: for each server the access grid lets them use, the front's socket (/ws, with
   X-Claudia-Email and no view, so only the person's own chats) sends `chats` on `hello` and on every

@@ -1,5 +1,5 @@
 (ns claudia.hub.store
-  "The hub's own store (node:sqlite, HUB_DATA/hub.db), the source of truth since decision 9: the
+  "The hub's own store (node:sqlite, HUB_DATA/hub.db), the source of truth since README, Hub operations: servers and access: the
   servers it reaches, the people and who may use which server (the access grid), servers pairing
   over WireGuard, and for push the phones, what each person was told, and Live Activities."
   (:require ["node:sqlite" :refer [DatabaseSync]]

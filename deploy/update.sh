@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep this server on the beta branch's newest signed release (README decision 11). Started by the
+# Keep this server on the beta branch's newest signed release (README, Hub operations: following beta). Started by the
 # path unit when the hub pokes the front (POST /api/update-check writes CLAUDIA_UPDATE_TRIGGER), and
 # hourly by the timer for a poke that was missed.
 #

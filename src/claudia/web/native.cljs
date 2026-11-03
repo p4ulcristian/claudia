@@ -1,5 +1,5 @@
 (ns claudia.web.native
-  "The iPhone app is this page in a native shell (README decision 10). The shell sets
+  "The iPhone app is this page in a native shell (README, Hub operations: push). The shell sets
   window.claudiaNative before the page loads, and when iOS gives it an APNs token it sets
   claudiaNative.pushToken and fires \"claudia-push-token\" (before or after this runs, so both are
   read), again whenever a field changes: the key alert texts are sealed with, and ActivityKit's

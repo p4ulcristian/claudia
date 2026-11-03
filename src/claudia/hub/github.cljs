@@ -2,7 +2,7 @@
   "GitHub's webhook for this repository (POST /hub/github; no login: the gate's Caddy lets this path
   through). GitHub signs each delivery with the shared secret (X-Hub-Signature-256, HMAC-SHA256 with
   the secret in HUB_GITHUB_SECRET_FILE); a delivery can only make machines look at the beta branch
-  sooner: each one fetches and checks what it runs by itself (README decision 11).
+  sooner: each one fetches and checks what it runs by itself (README, Hub operations: following beta).
   - push to beta: every server is poked (POST /api/update-check on its front).
   - a beta-release run on beta succeeded: the gate's root helper is asked to update the hub, by
     writing the run's commit into HUB_UPDATE_REQUEST, and every server is poked again (its slave

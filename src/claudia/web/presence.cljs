@@ -1,5 +1,5 @@
 (ns claudia.web.presence
-  "At the desktop (README decision 10): a hub page outside the iPhone app tells the hub whether its
+  "At the desktop (README, Hub operations: push): a hub page outside the iPhone app tells the hub whether its
   person is working at it, so their phone alerts wait meanwhile. Active = the page shows, has the
   focus, and had mouse, keyboard or touch input within away-after-ms. Said every heartbeat while
   active, and at once when that stops (blur, hidden, idle, the page closing)."

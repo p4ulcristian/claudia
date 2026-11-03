@@ -1,4 +1,4 @@
-# Claudia beta follows its branch by itself (README decision 11). On every push to beta:
+# Claudia beta follows its branch by itself (README, Hub operations: following beta). On every push to beta:
 # - slave: all five builds, then the slave release (out/, production node_modules for linux-x64,
 #   deploy/, package.json, commit.txt) as claudia-beta-slave-<commit>.tar.gz on the GitHub release
 #   beta-<short commit>, with its cosign keyless signature bundle (<file>.sigstore.json).

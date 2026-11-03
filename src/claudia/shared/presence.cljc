@@ -1,5 +1,5 @@
 (ns claudia.shared.presence
-  "At the desktop (README decision 10): while a person works at a Claudia page outside the iPhone app,
+  "At the desktop (README, Hub operations: push): while a person works at a Claudia page outside the iPhone app,
   the hub holds their phone alerts. The page (claudia.web.presence) and the hub
   (claudia.hub.presence) both read these.")
 

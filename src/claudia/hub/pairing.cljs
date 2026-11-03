@@ -1,5 +1,5 @@
 (ns claudia.hub.pairing
-  "A new server joins the hub over WireGuard (README decision 9). On the server, deploy/pair.sh makes a
+  "A new server joins the hub over WireGuard (README, Hub operations: servers and access). On the server, deploy/pair.sh makes a
   WireGuard key pair and a one-time secret and prints a key:
 
     claudia-pair:<host name>:<WireGuard public key>:<secret>
