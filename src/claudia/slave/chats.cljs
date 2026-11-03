@@ -294,6 +294,20 @@
                      :input input :resolve resolve})))
     {:behavior "allow" :updatedInput input}))
 
+(defn- folder-from-edit!
+  "Claude edited a file while the chat has no folder: the file's project (its git root, else its own
+  folder) becomes the chat's folder, so its changes and logo follow."
+  [id {:keys [tool_name tool_input]}]
+  (let [p (or (:file_path tool_input) (:notebook_path tool_input))]
+    (when (and (not= "Bash" tool_name) (string? p) (str/starts-with? p "/") (not (:folder (store/chat id))))
+      (let [dir (path/dirname p)]
+        (cp/execFile "git" #js ["-C" dir "rev-parse" "--show-toplevel"] #js {:timeout 10000}
+                     (fn [err stdout]
+                       (let [root (if err dir (or (not-empty (str/trim (str stdout))) dir))]
+                         (when-not (:folder (store/chat id))
+                           (store/update! id {:folder root})
+                           (changed!)))))))))
+
 (defn- on-rpc [{:keys [rpc id kind args]}]
   (-> (js/Promise.resolve)
       (.then (fn [] (case kind
@@ -302,6 +316,7 @@
                       "hook" (case (:event args)
                                "PreToolUse" (changes/before-edit! id (get-in args [:input :tool_input]))
                                "PostToolUse" (do (worktree/report! (store/chat id) (:input args))
+                                                 (folder-from-edit! id (:input args))
                                                  {:continue true})
                                {:continue true})
                       {:continue true})))
@@ -539,9 +554,10 @@
              (:effort (settings id)) (assoc :effort (:effort (settings id))))
    :mcp tools/mcp
    ;; A copy of each file before Claude's edit tools first touch it (the turn's changes).
-   :hooks (cond-> {:PreToolUse [{:matcher changes/edit-tools}]}
-            ;; Edits and commands inside Eye on Rainbow's worktrees are reported (where configured).
-            (worktree/on?) (assoc :PostToolUse [{:matcher (str changes/edit-tools "|Bash")}]))})
+   :hooks {:PreToolUse [{:matcher changes/edit-tools}]
+           ;; After an edit: a chat with no folder gets the edited file's project. Edits and commands
+           ;; inside Eye on Rainbow's worktrees are reported (where configured).
+           :PostToolUse [{:matcher (if (worktree/on?) (str changes/edit-tools "|Bash") changes/edit-tools)}]}})
 
 (defn- ensure-session! [id]
   (if (:live (st id))
