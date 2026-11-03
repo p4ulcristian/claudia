@@ -4,6 +4,7 @@
   it is one bubble that opens on click. A namespace lists its vars below the map, a var opens its
   source, an arrow lists the functions that cross it. Read live through the runner (clj-kondo)."
   (:require [clojure.string :as str]
+            [claudia.web.fullscreen :as fs]
             [claudia.web.hooks :as hooks]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
@@ -510,12 +511,7 @@
 
 (defn- use-fullscreen [box]
   (let [[full set-full] (h/use-state false)]
-    (h/use-effect
-     (fn []
-       (let [on #(set-full (and (.-current box) (identical? js/document.fullscreenElement (.-current box))))]
-         (js/document.addEventListener "fullscreenchange" on)
-         #(js/document.removeEventListener "fullscreenchange" on)))
-     [])
+    (h/use-effect (fn [] (fs/on-change! #(set-full (fs/full? (.-current box))))) [])
     full))
 
 ;; ---- the panel below the map ----
@@ -615,7 +611,7 @@
       [:button.cl-full {:type "button" :on-click #((:zoom-at z) 1.4 nil nil) :title "Zoom in (or pinch, Ctrl + scroll)"} "+"]
       (when (> k 1) [:button.cl-full {:type "button" :on-click #(do (set! (.-current (:zoom z)) nil) ((:apply! z))) :title "The whole map"} "fit"])]
      [:button.cl-full {:type "button" :title (if full "Leave full screen (Esc)" "Full screen")
-                       :on-click #(-> (if full (js/document.exitFullscreen) (.requestFullscreen (.-current box))) (.catch (fn [_])))}
+                       :on-click #(fs/toggle! (.-current box))}
       (if full "✕ exit" "⤢ full screen")]]))
 
 (defn- arrow-defs []
