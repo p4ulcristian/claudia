@@ -42,6 +42,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`) |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
+| runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
 | host | `HOST_SOCKET` | unix socket it listens on |
 
 `hub.json`:
@@ -113,6 +114,9 @@ Page → runner:
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `seen` | `chat` | the person looked at its last turn |
+| `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
+| `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
+| `settings` | `chat`, `forms?`, `cols?` | the chat's form row (`{ <kind>: "required" \| "off" }`, kinds = forms plus `graph`, `freeform`, `questions`; left out = allowed) and its picture's columns (0 = Claude's layout, 1-3) |
 
 Runner → page:
 
@@ -128,6 +132,7 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
+| `settings` | `chat`, `settings: { forms, cols }` (also in `chat` as `settings`) |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
 preview (start of the last reply or the open question), unseen, archived }`
@@ -143,7 +148,7 @@ preview (start of the last reply or the open question), unseen, archived }`
 (`"graph"`, `"html"`, `"form"`), `width` (`"full"`/`"half"`) and:
 - graph: `nodes: [{ id, label, shape, color, note, group, state }]`, `edges: [{ from, to, label, dashed, color }]`, `groups: [{ id, label, color }]`
 - html: `html`, `parts: { name: markup }`
-- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`), `data` (as the draw tool's description says)
+- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`, and the code forms `files`, `editor`, `flow`, opt-in `git`), `data` (as the draw tool's description says; `claudia.shared.forms`)
 
 The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
 `edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`.
@@ -183,3 +188,26 @@ rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool resul
 Only the newest runner connection is listened to. Right after `sessions` on a connect, the host sends
 every rpc still unanswered again (a runner that restarted asks the person again); the runner sends
 nothing before that first `sessions`.
+
+## Code forms and templates (`claudia.slave.codeforms`)
+
+Page → runner reads, through the front (`/s/<server>/api/…` from the page). A read-only view may read.
+
+| Call | Answer |
+|---|---|
+| `GET /api/forms` | `{ forms: [names this runner offers], templates: [Template] }` |
+| `GET /api/templates` | `[Template]`: `{ name, html, parts, description }` |
+| `DELETE /api/templates/<name>` | `{ ok }` (not for a view) |
+| `POST /api/chats/<id>/blocks/<block>/template` `{ name, description? }` | `{ ok, text }`: the freeform block kept as a template (not for a view) |
+| `GET /api/chats/<id>/files?root&path` | `{ entries: [{ name, dir, status?, changed?, lines? }] }`: a folder of a files block's `root` (or inside it, or above it up to the home folder) |
+| `…/files?root&path&read=1&since?` | `{ text, mtime }`, `{ same: true }` while the mtime is `since`, or `{ error }` |
+| `…/files?root&path&image=1` | the image itself (up to 25 MB) |
+| `GET /api/chats/<id>/git?repo&limit?&branches?&fp?` | `{ fp, commits, head, currentBranch, detached, dirty, branches, more }`, or `{ same: true }` while `fp` is the repo's; only a `repo` a git block of the chat's picture names; 404 without `git` in `CLAUDIA_FORMS` |
+| `…/git?repo&commit=<rev or WORKING>&file?` | `{ meta, files, diff, stats, truncated? }`; with `file`, `{ diff }` of that file |
+
+The draw tool goes through the chat's form row: kinds switched off are refused; a change that takes
+the last block of a required kind away is refused whole; a required `files`/`git` puts Claudia's own
+block (`auto-files`, `auto-git`, the chat's folder) on the picture. The form row's change is told to
+Claude once, in a `<system-reminder>` before the next message. `templates` and `save_template` are
+tools of the `picture` server; a block `{ id, template: "<name>", parts? }` is drawn from the template.
+A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
