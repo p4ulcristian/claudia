@@ -7,6 +7,8 @@ Wants=claudia-beta-host@%i.service
 
 [Service]
 User=claudia-%i
+# Reads the Claude token in use, which the front writes (group claudia-run).
+SupplementaryGroups=claudia-run
 EnvironmentFile=/etc/claudia-beta/env
 EnvironmentFile=-/etc/claudia-beta/profile-%i.env
 Environment=RUNNER_PROFILE=%i RUNNER_SOCKET=/run/claudia-beta-%i/runner.sock HOST_SOCKET=/run/claudia-beta-host-%i/host.sock

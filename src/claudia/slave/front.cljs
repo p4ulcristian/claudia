@@ -5,7 +5,9 @@
             ["node:net" :as net]
             ["node:fs" :as fs]
             [clojure.string :as str]
-            [claudia.slave.http :as h]))
+            [claudia.shared.protocol :as p]
+            [claudia.slave.http :as h]
+            [claudia.slave.tokens :as tokens]))
 
 (def ^:private env (.-env js/process))
 
@@ -62,6 +64,27 @@
          (catch :default e (h/json-reply res 500 {:error (.-message e)})))
     (h/json-reply res 501 {:error "no update unit here"})))
 
+(defn- token-call
+  "Settings' Claude tokens, answered here, not by a runner: the front writes them (on a shared server
+  it is the page's own user, as the TypeScript Claudia's page process was; runners only read the token
+  in use). by = the caller's email. True when it was one of them."
+  [^js req ^js res url {:keys [own read-only]} email]
+  (let [method (.-method req)
+        body #(-> (h/read-body req 65536) (.then (fn [t] (or (try (p/read-json t) (catch :default _ nil)) {}))))
+        answer (fn [v] (if (:error v)
+                         (h/json-reply res (or (:status v) 400) (dissoc v :status))
+                         (h/json-reply res 200 v)))
+        who (or (not-empty email) (:profile own))]
+    (cond
+      (not (#{"/api/claude-tokens" "/api/claude-token" "/api/claude-token/use"} url)) nil
+      read-only (do (h/json-reply res 403 {:error "Read only."}) true)
+      (and (= url "/api/claude-tokens") (= method "GET")) (do (h/json-reply res 200 (tokens/state)) true)
+      (and (= url "/api/claude-token") (= method "PUT"))
+      (do (-> (body) (.then #(answer (tokens/save! (:name %) (:token %) who)))) true)
+      (and (= url "/api/claude-token/use") (= method "POST"))
+      (do (-> (body) (.then #(answer (tokens/use! (:name %) who)))) true)
+      :else (do (h/json-reply res 405 {:error "Not allowed."}) true))))
+
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
@@ -71,6 +94,7 @@
       (if (= "POST" (.-method req)) (update-check res) (h/json-reply res 405 {:error "POST only"}))
       status (h/json-reply res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
+      (token-call req res url r (some-> (aget (.-headers req) "x-claudia-email") str/trim str/lower-case)) nil
       (and read-only (not= "GET" (.-method req))) (h/json-reply res 403 {:error "Read only."})
       :else
       (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))

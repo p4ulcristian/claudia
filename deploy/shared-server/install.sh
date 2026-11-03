@@ -22,6 +22,14 @@ else git -C "$src" rev-parse HEAD > "$new/commit.txt" 2>/dev/null || true; fi
 chown -R root:root "$new"; chmod -R go-w "$new"
 rm -rf /srv/claudia-beta.old; [ -d /srv/claudia-beta ] && mv /srv/claudia-beta /srv/claudia-beta.old
 mv "$new" /srv/claudia-beta
+# The Claude token in use: the front (user claudia) writes it, the runners (group
+# claudia-run) read it; the saved tokens beside it (<token file>.d) are the front's only.
+getent group claudia-run >/dev/null || groupadd --system claudia-run
+token_file=$(sed -n 's/^CLAUDIA_TOKEN_FILE=//p' /etc/claudia-beta/env | tail -1)
+if [ -n "$token_file" ] && [ ! -d "$(dirname "$token_file")" ]; then
+	install -d -o claudia -g claudia-run -m 2750 "$(dirname "$token_file")"
+fi
+for p in "${profiles[@]}"; do id "claudia-$p" >/dev/null 2>&1 && usermod -aG claudia-run "claudia-$p"; done
 install -m 0644 "$(dirname "$0")"/claudia-beta-*.service "$(dirname "$0")"/claudia-beta-update.{path,timer} /etc/systemd/system/
 systemctl daemon-reload
 # Follows the beta branch by itself: the hub's poke and an hourly check (deploy/update.sh).

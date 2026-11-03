@@ -2,8 +2,11 @@
   "Settings' tokens. Claude: long-term tokens saved by name (`claude setup-token`), one of them in use
   (copied over CLAUDIA_TOKEN_FILE, which every chat reads on its next start); anyone with a profile
   can add, replace or switch; nobody can read one back. The saved ones live in CLAUDIA_TOKENS_DIR
-  (default: `claude-tokens` beside the token file), the note of who switched to which beside the token
-  file (`<token file>.json`). GitHub: this profile's own login, handed to gh (kept in this Linux
+  (default `<token file>.d`, as the TypeScript Claudia's src/mode.ts), the note of who switched to
+  which beside the token file (`<token file>.json`). The front writes them (on a shared server it
+  runs as the page's own user, like the TypeScript Claudia's page process): the saved tokens' folder
+  is the front's only (0700), the token in use is readable by the runners' group (0640, in a folder
+  setgid to that group). GitHub: this profile's own login, handed to gh (kept in this Linux
   user's ~/.config/gh); git uses gh as its credential helper and commits carry the account's name."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
@@ -16,7 +19,7 @@
 (defn- token-file [] (.-CLAUDIA_TOKEN_FILE env))
 (defn- tokens-dir []
   (or (not-empty (.-CLAUDIA_TOKENS_DIR env))
-      (some-> (token-file) path/dirname (path/join "claude-tokens"))))
+      (some-> (token-file) (str ".d"))))
 (defn- note-file [] (some-> (token-file) (str ".json")))
 
 (defn- read-json-file [f] (try (p/read-json (fs/readFileSync f "utf8")) (catch :default _ nil)))
@@ -59,12 +62,15 @@
       (not (token-file)) {:error "No token file is set for this runner (CLAUDIA_TOKEN_FILE)."}
       (not s) {:error "No saved token by that name." :status 404}
       :else
-      (let [token (str/trim (fs/readFileSync (path/join (tokens-dir) (key-of (:name s))) "utf8"))]
-        (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
-        (write-atomic! (note-file) (p/write-json {:by by :at (js/Date.now) :name (:name s)}) "644")
-        (write-atomic! (token-file) (str token "\n") "640")
-        (js/console.log (str "Claude token switched to \"" (:name s) "\" by " by))
-        (state)))))
+      (try
+        (let [token (str/trim (fs/readFileSync (path/join (tokens-dir) (key-of (:name s))) "utf8"))]
+          (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
+          ;; The note first: the runners read it again when the token file changes.
+          (write-atomic! (note-file) (p/write-json {:by by :at (js/Date.now) :name (:name s)}) "644")
+          (write-atomic! (token-file) (str token "\n") "640")
+          (js/console.log (str "Claude token switched to \"" (:name s) "\" by " by))
+          (state))
+        (catch :default e {:error (str "Couldn't switch the token: " (.-message e)) :status 500})))))
 
 (defn save!
   "Saves a token under a name (same name = replaced) and switches to it."
