@@ -8,8 +8,12 @@
             ["ws" :refer [WebSocketServer]]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
+            [claudia.slave.history :as history]
+            [claudia.slave.search :as search]
+            [claudia.slave.uploads :as uploads]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
             [claudia.slave.meta :as meta]
@@ -41,6 +45,15 @@
 
 (defn- known? [id] (and (string? id) (some? (store/chat id))))
 
+(def ^:private page-size "Messages per page of a chat's history." 120)
+
+(defn- sent-images
+  "A frame's photos and video frames as the host sends them: [{media_type data}] (at most 40)."
+  [f]
+  (vec (for [i (take 40 (when (sequential? (:images f)) (:images f)))
+             :when (and (re-matches #"image/(jpeg|png|gif|webp)" (str (:media_type i))) (string? (:data i)))]
+         {:media_type (:media_type i) :data (:data i)})))
+
 (defn- on-frame [c {:keys [type chat] :as f}]
   (let [who (:profile c)]
     (cond
@@ -49,20 +62,34 @@
       (= type "hello") (do (reset! (:hello c) true)
                            (send! c {:type "chats" :chats (chats/rows)})
                            (send! c (meta/frame)))
-      (= type "new") (let [id (chats/new-chat! (str (:text f)) (:folder f))]
+      (= type "new") (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
+                                               (:folder f) (sent-images f))]
                        (swap! (:open c) conj id)
                        (send! c {:type "created" :chat id :id (:id f)}))
       (not (known? chat)) (send! c {:type "error" :chat chat :text "No such chat."})
       :else
       (case type
+        ;; A chat opens with its newest page; older pages come with `older` as the page scrolls up.
         "open" (-> (chats/snapshot chat)
                    (.then (fn [frame]
-                            (send! c frame)
+                            (let [ms (:messages frame)
+                                  n (count ms)]
+                              (send! c (assoc frame :messages (subvec ms (max 0 (- n page-size))) :more (> n page-size))))
                             (send! c {:type "pictures" :chat chat :pictures (pictures/listing chat)})
                             (swap! (:open c) conj chat))))
         "picture" (send! c {:type "picture" :chat chat :turn (:turn f) :scene (pictures/one chat (str (:turn f)))})
+        "older" (-> (chats/snapshot chat)
+                    (.then (fn [frame]
+                             (let [ms (:messages frame)
+                                   end (or (first (keep-indexed #(when (= (:before f) (:id %2)) %1) ms)) 0)]
+                               (send! c {:type "older" :chat chat :before (:before f)
+                                         :messages (subvec ms (max 0 (- end page-size)) end)
+                                         :more (> end page-size)})))))
         "close" (swap! (:open c) disj chat)
-        "send" (when (seq (:text f)) (chats/send-text! chat (:text f)))
+        "send" (let [files (uploads/own-files (:files f))
+                     images (sent-images f)]
+                 (when (or (seq (:text f)) (seq files) (seq images))
+                   (chats/send-text! chat (uploads/with-files (str (:text f)) files) images)))
         "stop" (chats/stop! chat)
         "answer" (chats/answer! chat (:ask f) (:answers f))
         "secret" (chats/secret! chat (:ask f) (:sealed f) who)
@@ -148,10 +175,11 @@
       (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" (.-method req)))
       (timeline-reply req res chat-id sub)
       (and (= url "/api/me") (= "GET" (.-method req)))
-      (h/json-reply res 200 {:server nil :profile (:profile who) :viewing nil :readOnly (:read-only who)
+      (h/json-reply res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
+      (api/handle req res who) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 
 (defn- on-socket [^js ws ^js req]
@@ -165,6 +193,10 @@
 
 (defn main [& _]
   (store/open! data-dir)
+  (uploads/set-root! data-dir)
+  (search/open! data-dir)
+  ;; The search index catches up with every chat in the background, newest first.
+  (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
   (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
@@ -174,9 +206,11 @@
        (fn []
          (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
          (chats/init!)
-         (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 16 1024 1024)})
+         (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
                server (http/createServer on-request)]
            (.on wss "connection" on-socket)
+           ;; Uploads take up to 100 MB: no 5-minute cap on a request.
+           (set! (.-requestTimeout server) 0)
            (.on server "upgrade"
                 (fn [req sock head]
                   (if (str/starts-with? (.-url req) "/ws")

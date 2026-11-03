@@ -106,7 +106,7 @@
         [:div.ag-row {:ref #(set! (.-current box) %)}
          (when (seq shown)
            [:div.ag-chips {:style {:grid-template-columns (str "repeat(" (min cols (count shown) (if phone? 2 4)) ", minmax(0, 1fr))")}}
-            (for [a shown] ^{:key (:id a)} [chip ck a false])])
+            (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])])
          (when (or (pos? more) (seq finished))
            [:div.ag-sum
             (when (pos? more)
@@ -127,7 +127,7 @@
       [:p.muted.small.ag-pad "No agents in this chat."]
       [:div.ag-scroll
        [:h2.ag-title "Agents " [:span.muted.small (str (when (pos? n) (str n " running · ")) (count agents) " in this chat")]]
-       [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a false])]])))
+       [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])]])))
 
 (defn- step-view [{:keys [role text tool summary error]}]
   (case role
@@ -221,7 +221,7 @@
           [:div.ag-state
            [:span.chip {:class (case (:status a) "failed" "red" "running" "amber" "completed" "green" "")}
             (case (:status a) "completed" "done" (:status a))]
-           (when (and live (:task a))
+           (when (and live (:task a) (not @(rf/subscribe [:read-only?])))
              [:button.stop {:on-click #(rf/dispatch [:agents/stop ck (:task a)])} "Stop"])]
           [:dl.ag-dl (for [[k v] facts] ^{:key k} [:<> [:dt k] [:dd v]])]
           (when (and live (:step a)) [:p.ag-now [:span.muted "Now"] " " [:code (:step a)]])]

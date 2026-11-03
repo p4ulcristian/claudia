@@ -161,7 +161,15 @@
       "send" (when s
                (reset! (:busy s) true)
                ((:push s) (cond-> #js {:type "user"
-                                       :message #js {:role "user" :content (.-text msg)}
+                                       :message #js {:role "user"
+                                                     ;; images (photos, video frames) go before the text
+                                                     :content (if (seq (.-images msg))
+                                                                (.concat (.map (.-images msg)
+                                                                               (fn [^js i]
+                                                                                 #js {:type "image"
+                                                                                      :source #js {:type "base64" :media_type (.-media_type i) :data (.-data i)}}))
+                                                                         #js [#js {:type "text" :text (.-text msg)}])
+                                                                (.-text msg))}
                                        :parent_tool_use_id nil
                                        :session_id id}
                             (.-uuid msg) (doto (aset "uuid" (.-uuid msg))))))

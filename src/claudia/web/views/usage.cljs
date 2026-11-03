@@ -90,17 +90,9 @@
         :title (str/join " · " (for [l shown]
                                  (str (:label l) " " (:percent l) "%"
                                       (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)))))))
-        :on-click #(rf/dispatch [:usage/toggle])}
+        ;; What they summarise: the plan bars with their reset times, in Settings.
+        :on-click #(rf/dispatch [:ops/settings true])}
        (for [l shown] ^{:key (:key l)} [ring {:short (short-name (:key l)) :percent (:percent l)}])])))
-
-(rf/reg-event-fx
- :usage/toggle
- (fn [{:keys [db]} _]
-   (let [v (not (:usage-open? db (not= "false" (try (js/localStorage.getItem "claudia.usageOpen") (catch :default _ nil)))))]
-     {:db (assoc db :usage-open? v) :store ["claudia.usageOpen" v]})))
-
-(rf/reg-sub :usage-open?
-            (fn [db] (:usage-open? db (not= "false" (try (js/localStorage.getItem "claudia.usageOpen") (catch :default _ nil))))))
 
 (defn- meter [{:keys [label percent title]} & children]
   (into [:div.meter {:class (level percent) :title title}
@@ -109,13 +101,14 @@
          [:span.m-num (str percent "%")]]
         children))
 
-(defn usage-foot
-  "The list's foot: each plan limit as a bar with when it resets and a ticking countdown."
-  []
-  (let [limits @(rf/subscribe [:limits])
-        open? @(rf/subscribe [:usage-open?])
+(defn plan-meters
+  "Settings' plan section: each limit of the server's token as a bar with when it resets and a
+  ticking countdown."
+  [server]
+  (let [limits (:limits @(rf/subscribe [:meta server]))
         now (use-now!)]
-    (when (and (seq limits) open?)
+    (if (empty? limits)
+      [:p.muted.small "Usage bars show once a turn on this server reports its limits."]
       [:div.meters
        (for [l limits]
          ^{:key (:key l)}
@@ -123,13 +116,19 @@
           (when (:resetsAt l)
             [:span.m-reset "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])])])))
 
+(declare context-ring)
+
 (defn rail-meters
-  "The same meters for a folded list: a ring per limit, the details in the hover text."
+  "The same meters on the rail (a folded list): the open chat's context (a click compacts), then a
+  ring per limit, the details in the hover text."
   []
   (let [limits @(rf/subscribe [:limits])
+        oc @(rf/subscribe [:open-chat])
+        ro @(rf/subscribe [:read-only?])
         now (use-now!)]
-    (when (seq limits)
+    (when (or (seq limits) (get-in oc [:state :context]))
       [:div.rail-meters
+       (when oc [context-ring (cond-> oc ro (assoc :pending? true))])
        (for [l limits]
          ^{:key (:key l)}
          [ring {:short (short-name (:key l) (:label l)) :percent (:percent l)
@@ -158,7 +157,7 @@
         chosen (or (some #(when (= (:value %) (or (:model settings) "default")) %) models) (first models))
         efforts (:efforts chosen)
         running (pretty-model (:model state))]
-    (when (and ck (not pending?) (seq models))
+    (when (and ck (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
       [:<>
        [:label.pick.model {:title (if (seq running) (str "Model: " running (when-not (:model settings) " (your default)")) "Model for this chat")}
         [:select {:value (or (:model settings) "")
