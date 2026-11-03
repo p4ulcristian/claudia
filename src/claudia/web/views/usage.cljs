@@ -61,11 +61,11 @@
 
 (defn ring
   "A chalk ring with its percent; with on-click a button whose number turns into its icon on hover."
-  [{:keys [short percent tip icon on-click]}]
+  [{:keys [short percent tip icon on-click on-context-menu]}]
   (let [r 14
         len (* 2 js/Math.PI r)]
     [(if on-click :button.ring.action :div.ring)
-     {:class (level percent) :title tip :on-click on-click}
+     {:class (level percent) :data-tip tip :on-click on-click :on-context-menu on-context-menu}
      [:svg {:viewBox "0 0 34 34" :aria-hidden true}
       [:circle.r-track {:cx 17 :cy 17 :r r}]
       [:circle.r-fill {:cx 17 :cy 17 :r r :transform "rotate(-90 17 17)"
@@ -79,20 +79,20 @@
   (keep (fn [k] (some #(when (= k (:key %)) %) limits)) ["five_hour" "seven_day"]))
 
 (defn limit-rings
-  "The list header's two rings (5-hour, week); a click folds the bars at the foot open or shut."
+  "The list header's two rings (5-hour, week): one button that opens what they summarise (the plan
+  bars with their reset times, in Settings)."
   []
   (let [limits @(rf/subscribe [:limits])
         now (use-now!)
-        shown (two limits)]
+        shown (two limits)
+        tip (str/join " · " (for [l shown]
+                              (str (:label l) " " (:percent l) "%"
+                                   (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)))))))]
     (when (seq shown)
       [:button.limit-rings
        {:aria-label (str "Usage: " (str/join ", " (map #(str (:label %) " " (:percent %) "%") shown)))
-        :title (str/join " · " (for [l shown]
-                                 (str (:label l) " " (:percent l) "%"
-                                      (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)))))))
-        ;; What they summarise: the plan bars with their reset times, in Settings.
         :on-click #(rf/dispatch [:ops/settings true])}
-       (for [l shown] ^{:key (:key l)} [ring {:short (short-name (:key l)) :percent (:percent l)}])])))
+       (for [l shown] ^{:key (:key l)} [ring {:short (short-name (:key l) (:label l)) :percent (:percent l) :tip tip}])])))
 
 (defn- meter [{:keys [label percent title]} & children]
   (into [:div.meter {:class (level percent) :title title}
@@ -102,17 +102,42 @@
         children))
 
 (defn plan-meters
-  "Settings' plan section: each limit of the server's token as a bar with when it resets and a
-  ticking countdown."
+  "Settings' meters: the open chat's Context bar (right click: compact), whose plan the chats run
+  on (a select with two saved tokens or more), each limit as a bar with when it resets and a
+  ticking countdown. Nothing until there is a context or a limit."
   [server]
   (let [limits (:limits @(rf/subscribe [:meta server]))
+        oc @(rf/subscribe [:open-chat])
+        context (get-in oc [:state :context])
+        tokens @(rf/subscribe [:tokens server])
+        account (get-in tokens [:inUse :name])
+        saved (map :name (:tokens tokens))
+        plan (if account (str account "'s plan") "Plan")
         now (use-now!)]
-    (if (empty? limits)
-      [:p.muted.small "Usage bars show once a turn on this server reports its limits."]
+    (when (or context (seq limits))
       [:div.meters
+       (when context
+         [:div.meter {:class (level (:percent context))
+                      :title (str "This chat: " (k-tokens (:used context)) " of " (k-tokens (:max context)) " tokens ("
+                                  (pretty-model (:model context)) ") · right click to compact")
+                      :on-context-menu (fn [^js e] (.preventDefault e)
+                                         (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}
+          [:span.m-label "Context"]
+          [:span.m-bar [:span {:style {:width (str (min 100 (:percent context)) "%")}}]]
+          [:span.m-num (str (:percent context) "%")]])
+       (cond
+         (and account (> (count saved) 1))
+         [:label.pick.m-account {:title "Switch the Claude subscription for every chat here (applies on each chat's next message)"}
+          [:select {:value account
+                    :on-change #(rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
+                                                            :method "POST" :body {:name (.. % -target -value)}
+                                                            :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}])}
+           (when-not (some #{account} saved) [:option {:value ""} plan])
+           (for [n saved] ^{:key n} [:option {:value n} (str n "'s plan")])]]
+         account [:span.m-account {:title "Add or switch tokens in Settings"} plan])
        (for [l limits]
          ^{:key (:key l)}
-         [meter {:label (:label l) :percent (:percent l) :title (str (:label l) " limit: " (:percent l) "% used")}
+         [meter {:label (:label l) :percent (:percent l) :title (str plan ", " (:label l) " limit: " (:percent l) "% used")}
           (when (:resetsAt l)
             [:span.m-reset "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])])])))
 
@@ -142,9 +167,10 @@
     (let [can? (and (not pending?) (not (:running state)))]
       [ring {:short "ctx" :percent (:percent c) :icon compact-icon
              :tip (str "Context " (:percent c) "% · " (k-tokens (:used c)) " of " (k-tokens (:max c))
-                       (when (:model c) (str " (" (pretty-model (:model c)) ")"))
                        (when can? " · click to compact"))
-             :on-click (when can? #(rf/dispatch [:chat/compact ck]))}])))
+             :on-click (when can? #(rf/dispatch [:chat/compact ck]))
+             :on-context-menu (fn [^js e] (.preventDefault e)
+                                (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}])))
 
 ;; ---- model and effort ----
 

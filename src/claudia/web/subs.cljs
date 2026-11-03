@@ -7,6 +7,8 @@
 (rf/reg-sub :open (fn [db] (:open db)))
 (rf/reg-sub :screen (fn [db] (:screen db)))
 (rf/reg-sub :sidebar? (fn [db] (:sidebar? db)))
+(rf/reg-sub :rail-search? (fn [db] (:rail-search? db)))
+(rf/reg-sub :turn-since (fn [db [_ k]] (get-in db [:turn-since k])))
 (rf/reg-sub :error (fn [db] (:error db)))
 (rf/reg-sub :pending-new (fn [db] (:pending-new db)))
 (rf/reg-sub :ask-state (fn [db [_ id]] (get-in db [:ask-state id])))
@@ -39,7 +41,7 @@
 
 (rf/reg-sub
  :rows
- ;; Every shown server's chats in one list, newest first; archived ones only in the archived list.
+ ;; Every shown server's chats in one list; archived ones only in the archived list.
  :<- [:servers]
  :<- [:archived-mode?]
  :<- [:hidden-server-set]
@@ -49,7 +51,8 @@
         (mapcat (fn [[s {:keys [rows status]}]]
                   (map #(assoc % :server s :off (not= :open status)) (vals rows))))
         (filter #(= archived? (boolean (:archived %))))
-        (sort-by #(- (or (:at %) 0))))))
+        ;; In the order the chats were started (the TypeScript Claudia's list): a new chat sits last.
+        (sort-by #(or (:started %) (:at %) 0)))))
 
 (rf/reg-sub
  :row

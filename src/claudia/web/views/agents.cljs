@@ -9,7 +9,8 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.md :as md]
-            [claudia.web.views.diff :as diff]))
+            [claudia.web.views.diff :as diff]
+            [claudia.web.views.steps :as steps]))
 
 ;; ---- small words ----
 
@@ -129,13 +130,6 @@
        [:h2.ag-title "Agents " [:span.muted.small (str (when (pos? n) (str n " running · ")) (count agents) " in this chat")]]
        [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])]])))
 
-(defn- step-view [{:keys [role text tool summary error]}]
-  (case role
-    "tool" [:div.step {:class (when error "err")} [:span.step-dot] [:b (or tool "tool")] [:span.step-title (or summary "")]]
-    "user" [:div.msg.user [:div.bubble text]]
-    "note" [:div.msg.note text]
-    [:div.msg.claude [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]]))
-
 (defn- file-row [f]
   (let [open? (r/atom false)]
     (fn [f]
@@ -222,7 +216,7 @@
            [:span.chip {:class (case (:status a) "failed" "red" "running" "amber" "completed" "green" "")}
             (case (:status a) "completed" "done" (:status a))]
            (when (and live (:task a) (not @(rf/subscribe [:read-only?])))
-             [:button.stop {:on-click #(rf/dispatch [:agents/stop ck (:task a)])} "Stop"])]
+             [:button.task-stop {:on-click #(rf/dispatch [:agents/stop ck (:task a)])} "Stop"])]
           [:dl.ag-dl (for [[k v] facts] ^{:key k} [:<> [:dt k] [:dd v]])]
           (when (and live (:step a)) [:p.ag-now [:span.muted "Now"] " " [:code (:step a)]])]
          [:div.ag-tabs {:role "tablist"}
@@ -235,7 +229,7 @@
                       shell? (if (seq (:output d))
                                [:pre.ag-prompt (:output d)]
                                [:p.muted.small "No output yet."])
-                      (seq (:steps d)) [:div.ag-steps (for [m (:steps d)] ^{:key (:id m)} [step-view m])]
+                      (seq (:steps d)) [:div.ag-steps [steps/transcript (:steps d) (running? a)]]
                       :else [:p.muted.small "Its steps show once its file is written."])
             "files" (if (nil? d)
                       [:p.muted.small "Loading…"]

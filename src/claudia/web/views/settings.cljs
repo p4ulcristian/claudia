@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
+            [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
             [claudia.web.chatops :as ops]
             [claudia.web.logo :as logo]
@@ -16,6 +17,22 @@
   (when at (.toLocaleString (js/Date. at) js/undefined #js {:dateStyle "medium" :timeStyle "short"})))
 
 ;; ---- the title menu ----
+
+(defn- title-box
+  "The title's menu box: a click outside or Escape closes it."
+  [open & children]
+  (let [box (h/use-ref nil)]
+    (h/use-effect
+     (fn []
+       (when @open
+         (let [away (fn [e] (when-not (some-> (.-current box) (.contains (.-target e))) (reset! open false)))
+               esc (fn [e] (when (= "Escape" (.-key e)) (.stopPropagation e) (reset! open false)))]
+           (js/window.addEventListener "pointerdown" away true)
+           (js/window.addEventListener "keydown" esc true)
+           #(do (js/window.removeEventListener "pointerdown" away true)
+                (js/window.removeEventListener "keydown" esc true)))))
+     [@open])
+    (into [:div.cs-title-box {:ref #(set! (.-current box) %)}] children)))
 
 (defn title-menu []
   (let [open (r/atom false)]
@@ -36,22 +53,21 @@
             text [:<> [:span.cs-title-t title] (when hint [:span.cs-title-hint (str "· " hint)])]]
         (if-not has-menu?
           [:h2.cs-title text]
-          [:div.cs-title-box
-           [:button.cs-title {:aria-haspopup "menu" :on-click #(swap! open not)}
+          [:f> title-box open
+           [:button.cs-title {:aria-haspopup "menu" :aria-expanded @open :on-click #(swap! open not)}
             text
-            [:svg.cs-caret {:viewBox "0 0 12 12"} [:path {:d "M3 4.5l3 3 3-3"}]]]
+            [:svg.cs-caret {:viewBox "0 0 12 12" :aria-hidden true} [:path {:d "M3 4.5l3 3 3-3"}]]]
            (when @open
              [:<>
-              [:div.menu-away {:on-click #(reset! open false)}]
               [:div.cs-menu {:role "menu"}
                (when (seq people)
                  [:<>
                   [:div.cs-menu-head "Whose chats"]
                   (for [[k label] (cons [nil "My chats"] (map (fn [p] [p (str (cap p) "'s chats")]) people))]
                     ^{:key (str k)}
-                    [:button.cs-menu-item {:class (when (= k view) "on")
+                    [:button.cs-menu-item {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
                                            :on-click #(do (reset! open false) (when (not= k view) (rf/dispatch [:ops/view k])))}
-                     [:span.cs-tick (when (= k view) "✓")]
+                     [:span.cs-tick {:aria-hidden true} (when (= k view) "✓")]
                      [:span.cs-menu-label label]
                      (when k [:span.cs-menu-note "read only"])])])
                (when (> (count servers) 1)
@@ -61,21 +77,21 @@
                         :let [inv (in-view name)
                               on (and inv (not (hidden name)))]]
                     ^{:key name}
-                    [:button.cs-menu-item {:class (when on "on")
+                    [:button.cs-menu-item {:class (when on "on") :role "menuitemcheckbox" :aria-checked (boolean on)
                                            :disabled (or (not inv) (and on (= 1 (count ticked))))
                                            :on-click #(rf/dispatch [:ops/tick-server name])}
-                     [:span.cs-tick.box (when on "✓")]
-                     [:span.server-mark (subs (str label) 0 1)]
+                     [:span.cs-tick.box {:aria-hidden true} (when on "✓")]
+                     [:span.server-mark {:aria-hidden true} (str/upper-case (subs (str label) 0 1))]
                      [:span.cs-menu-label label]
                      (when-not inv [:span.cs-menu-note.warn (str "no " (cap view) " here")])])])]])])))))
 
 (defn lock-icon []
-  [:span.cs-ro {:title "Read only"}
-   [:svg {:viewBox "0 0 16 16"} [:rect {:x 3.5 :y 7 :width 9 :height 6.5 :rx 1.5}] [:path {:d "M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"}]]])
+  [:span.cs-ro {:title "Read only" :aria-label "read only"}
+   [:svg {:viewBox "0 0 16 16" :aria-hidden true} [:rect {:x 3.5 :y 7 :width 9 :height 6.5 :rx 1.5}] [:path {:d "M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"}]]])
 
 (defn gear-button []
-  [:button.cs-icon.cs-gear {:title "Settings" :on-click #(rf/dispatch [:ops/settings true])}
-   [:svg {:viewBox "0 0 20 20"}
+  [:button.cs-icon.cs-gear {:aria-label "Settings" :data-tip "Settings" :on-click #(rf/dispatch [:ops/settings true])}
+   [:svg {:viewBox "0 0 20 20" :aria-hidden true}
     [:circle {:cx 10 :cy 10 :r 2.6}]
     [:path {:d "M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"}]
     [:circle {:cx 10 :cy 10 :r 5.4}]]])
@@ -115,7 +131,7 @@
                (rf/dispatch [:ops/put-now {:url (ops/api-url server p) :method method :body body
                                            :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}]))]
     [:<>
-     [:p.muted.small "profile " [:b (:profile me)] (when (:server me) (str " on " (:server me)))]
+     [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]
      [:section.st-section
       [:h3 "Claude subscription " [:span.muted.small "shared by every profile here"]]
       [:p.small
@@ -160,6 +176,7 @@
     [:div.brand
      [logo/mark]
      [:span.wordmark "Claudia"]
+     (when me [:span.brand-break])
      (when me
        [:span.instance {:title (str "Claudia " (:version me) (when (:commit me) (str " (" (:commit me) ")"))
                                     (when (:server me) (str " on " (:server me)))
@@ -168,14 +185,35 @@
         (when token [:span.instance-token token])
         [:span.instance-version (or (:commit me) (str "v" (:version me)))]])]))
 
-(defn plan-bars
-  "The plan's limits as bars with when each resets; until a server reports them, a line that says so."
-  [server]
-  (let [tokens @(rf/subscribe [:tokens server])
-        token (get-in tokens [:inUse :name])]
-    [:section.st-section.st-plan
-     [:h3 (if token (str token "'s plan") "Plan")]
-     [:f> usage/plan-meters server]]))
+(def ^:private chev [:svg.st-chev {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M7.5 4l6 6-6 6"}]])
+
+(defn- archive-icon []
+  [:svg {:width 16 :height 16 :viewBox "0 0 16 16" :fill "none" :stroke "currentColor" :stroke-width 1.5
+         :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
+   [:rect {:x 1.5 :y 2.5 :width 13 :height 3.5 :rx 0.8}]
+   [:path {:d "M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6"}]
+   [:path {:d "M6.3 9h3.4"}]])
+
+(defn- server-pick
+  "Which server's settings (a tab each, with two or more), and its name, version and commit."
+  [servers server]
+  (let [all @(rf/subscribe [:servers])
+        me @(rf/subscribe [:server-me server])
+        label @(rf/subscribe [:server-label server])]
+    [:div.settings-servers
+     (when (> (count servers) 1)
+       [:div.profile-tabs {:role "tablist" :aria-label "Which server's settings"}
+        (for [{:keys [name label]} servers
+              :let [up? (= :open (get-in all [name :status]))]]
+          ^{:key name}
+          [:button {:role "tab" :aria-selected (= name server) :class (when (= name server) "on") :disabled (not up?)
+                    :title (if up? (str label "'s settings") (str label " is off"))
+                    :on-click #(rf/dispatch [:ops/load-settings name])}
+           label
+           (when-not up? [:span.sf-note "off"])])])
+     (when me
+       [:p.muted.small [:b label] (when (:name me) (str " (" (:name me) ")")) " · Claudia " (:version me) " "
+        [:span.mono (:commit me)]])]))
 
 (defn- switch-row [on on-change label note]
   [:label.st-row.st-switch
@@ -183,41 +221,64 @@
    [:input {:type "checkbox" :role "switch" :checked (boolean on) :on-change #(on-change (.. % -target -checked))}]
    [:span.st-knob]])
 
-(defn settings-pane []
+(defn- back! [] (rf/dispatch [:ops/settings false]))
+
+(defn- settings-view [shown?]
   (let [servers @(rf/subscribe [:server-list])
         server @(rf/subscribe [:settings-server])
         ro @(rf/subscribe [:read-only?])
         {:keys [all-sessions?]} @(rf/subscribe [:list-mode])]
+    ;; Escape goes back while shown, before the page's own keys see it (Escape there stops a chat).
+    (h/use-effect
+     (fn []
+       (when shown?
+         (let [esc (fn [^js e]
+                     (when (and (= "Escape" (.-key e)) (not (some-> (.-target e) (.closest "input, textarea"))))
+                       (.preventDefault e)
+                       (.stopPropagation e)
+                       (back!)))]
+           (js/window.addEventListener "keydown" esc true)
+           #(js/window.removeEventListener "keydown" esc true))))
+     [shown?])
+    [:div.st-pane {:role "dialog" :aria-label "Settings" :aria-hidden (not shown?) :inert (when-not shown? true)}
+     [:header.st-head
+      [:button.st-back {:on-click back!}
+       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Chats"]
+      [:h2 "Settings"]]
+     [:div.st-scroll
+      [brand server]
+      [:f> usage/plan-meters server]
+      [:section.st-group {:aria-label "Chats"}
+       [:button.st-row {:on-click #(rf/dispatch [:ops/archived true])}
+        [archive-icon]
+        [:span.st-label "Archived chats"]
+        chev]
+       [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]]
+      [:section.st-group {:aria-label "Alerts"}
+       [alerts/toggles]]
+      [:section.st-group {:aria-label "Drawing"}
+       [:button.st-row {:on-click #(rf/dispatch [:gallery/open true])}
+        [:svg.st-icon {:viewBox "0 0 20 20" :aria-hidden true}
+         [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]
+        [:span.st-label "Forms " [:span.st-note "everything Claude can draw, and your templates"]]
+        chev]]
+      (when (:admin @(rf/subscribe [:me]))
+        [:section.st-group {:aria-label "Hub"}
+         [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
+          [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]
+         [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
+          [:span.st-label "Access " [:span.st-note "who may use which server"]]]])
+      (when (and (not ro) @(rf/subscribe [:server-me server]))
+        [:div.st-server
+         [server-pick servers server]
+         ^{:key server} [server-settings server]])]]))
+
+(defn settings-pane
+  "The Settings screen over the list; mounted while shown and for its slide out."
+  [shown?]
+  (let [server @(rf/subscribe [:settings-server])]
     (r/with-let [_ (rf/dispatch [:ops/load-settings server])]
-      [:div.st-pane {:role "dialog" :aria-label "Settings"}
-       [:header.st-head
-        [:button.st-back {:on-click #(rf/dispatch [:ops/settings false])}
-         [:svg {:viewBox "0 0 20 20"} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Chats"]
-        [:h2 "Settings"]]
-       [:div.st-scroll
-        [brand server]
-        [plan-bars server]
-        [:section.st-group
-         [:button.st-row {:on-click #(rf/dispatch [:ops/archived true])}
-          [:span.st-label "Archived chats"]
-          [:svg.st-chev {:viewBox "0 0 20 20"} [:path {:d "M7.5 4l6 6-6 6"}]]]
-         [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"
-          "Claude Code sessions that are not chats here; one opens as a chat"]
-         [alerts/toggles]]
-        (when (:admin @(rf/subscribe [:me]))
-          [:section.st-group.st-hub {:aria-label "Hub"}
-           [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
-            [:span.st-label "Servers" [:span.st-note "the servers this hub reaches"]]]
-           [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
-            [:span.st-label "Access" [:span.st-note "who may use which server"]]]])
-        (when-not ro
-          [:div.st-server
-           (when (> (count servers) 1)
-             [:div.st-pick
-              (for [{:keys [name label]} servers]
-                ^{:key name}
-                [:button {:class (when (= name server) "on") :on-click #(rf/dispatch [:ops/load-settings name])} label])])
-           ^{:key server} [server-settings server]])]])))
+      [:f> settings-view shown?])))
 
 ;; ---- the GitHub prompt ----
 
@@ -227,8 +288,8 @@
       (when-let [{:keys [server profile]} @(rf/subscribe [:github-prompt])]
         (let [close #(rf/dispatch [:ops/github-prompt nil])]
           [:div.settings-backdrop
-           [:div.github-prompt {:role "dialog" :aria-label "Connect GitHub"}
-            [:h2 "Connect GitHub"]
+           [:div.settings.github-prompt {:role "dialog" :aria-label "Connect GitHub"}
+            [:header [:h2 "Connect GitHub"]]
             (if @done
               [:<>
                [:p "Done: Claude now pushes and opens pull requests as " [:b (str "@" @done)] "."]

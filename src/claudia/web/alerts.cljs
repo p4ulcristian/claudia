@@ -82,10 +82,10 @@
 
 ;; ---- the toggles ----
 
-(defonce ^:private on (r/atom {:sounds (= "on" (js/localStorage.getItem "claudia.sounds"))
+(defonce on (r/atom {:sounds (= "on" (js/localStorage.getItem "claudia.sounds"))
                                :popups (and (= "on" (js/localStorage.getItem "claudia.popups")) (popups-allowed?))}))
 
-(defn- set-sounds! [v]
+(defn set-sounds! [v]
   (swap! on assoc :sounds v)
   (js/localStorage.setItem "claudia.sounds" (if v "on" "off"))
   (when v (play! :done (get-in @rdb/app-db [:servers (first (:open @rdb/app-db)) :rows (second (:open @rdb/app-db)) :color]))))
@@ -109,9 +109,7 @@
   (let [{:keys [sounds popups]} @on]
     [:<>
      [switch-row sounds set-sounds! "Sounds" "when a chat finishes or waits on you"]
-     (when (notifications?)
-       [switch-row popups set-popups! "Desktop popups"
-        (when (and (not popups) (= "denied" (.-permission js/Notification))) "blocked in this browser's settings")])]))
+     [switch-row popups set-popups! "Desktop popups" nil]]))
 
 ;; ---- watching the chat lists ----
 

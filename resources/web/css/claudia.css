@@ -1,5 +1,6 @@
-/* Claudia beta: the Chalkboard look (DESIGN.md). Slate board, chalk colours, chalk lines between
-   the parts. Dark only. The chalk masks (--chalk-*) are baked at load by claudia.web.chalk. */
+/* Claudia beta: the Chalkboard look (DESIGN.md), ported rule for rule from the TypeScript Claudia's
+   web/style.css (main = aeb57a1). Slate board, chalk colours, chalk lines between the parts. Dark
+   only. The chalk masks (--chalk-*) are baked at load by claudia.web.chalk. */
 
 :root {
   --bg: #383838; --bg2: #2e2e2e; --panel: #404040; --panel2: #484848; --fg: #ededed; --muted: #acacac; --line: #565656;
@@ -19,195 +20,241 @@
   --chalk: color-mix(in srgb, var(--accent) 40%, var(--line));
   --top-safe: env(safe-area-inset-top);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --screen-ease: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: dark;
 }
 
-/* The open chat's colour is a whole theme: every surface is mixed from its hue. Picture colours keep their meaning. */
+/* A chat's colour is a whole theme: every surface and text colour is mixed from its hue,
+   so switching chats repaints the window. Diff and picture colours keep their meaning. */
 :root[data-chat] {
   --bg: color-mix(in oklch, var(--hue) 18%, #343434); --bg2: color-mix(in oklch, var(--hue) 14%, #2a2a2a);
   --board: color-mix(in oklch, var(--hue) 15%, #323232);
   --panel: color-mix(in oklch, var(--hue) 20%, #3c3c3c); --panel2: color-mix(in oklch, var(--hue) 24%, #444444);
   --line: color-mix(in oklch, var(--hue) 32%, #525252);
   --fg: color-mix(in oklch, var(--hue) 8%, #efefef); --muted: color-mix(in oklch, var(--hue) 25%, #a9a9a9);
+  /* coloured chalk: the chat's hue, chalky */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
 }
 
 * { box-sizing: border-box; scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
-/* The page never scrolls (claudia.web.viewport): html is the window, body the page's one layer, the
-   visible area above a phone's keyboard while it is up. */
-html { height: 100%; overflow: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; }
-body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100dvh); translate: var(--vv-left, 0px) var(--vv-top, 0px);
-  overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans);
-  overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
-@media (display-mode: standalone) {
-  :root { --top-safe: calc(env(safe-area-inset-top) + 16px); }
-  body { height: var(--vv-h, 100lvh); }
-}
+/* The page never scrolls (claudia.web.viewport): html is the window, and body the page's one layer,
+   in flow and not fixed, the visible area above a phone's keyboard while it is up. */
+html { height: 100%; overflow: hidden; }
+body { position: relative; width: var(--vv-w, 100%); height: var(--vv-h, 100dvh); translate: var(--vv-left, 0px) var(--vv-top, 0px); overflow: hidden; overflow: clip; margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--sans); }
 #root { height: 100%; }
-input, select, textarea { min-width: 0; font: inherit; color: inherit; }
+/* A field may shrink with its row (its own width is wide at a phone's 16px). */
+input, select, textarea { min-width: 0; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
-button:disabled { cursor: default; }
+input, textarea { font: inherit; color: inherit; }
 code, pre { font-family: var(--mono); }
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 .grow { flex: 1; }
+.link { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; font-size: 12.5px; }
+.primary { background: var(--accent); color: var(--on-hue); font-weight: 600; border-radius: 8px; padding: 7px 14px; }
+.primary:disabled { opacity: 0.4; cursor: default; }
 .phone-only { display: none !important; }
 
-/* ---------- Layout (desktop) ---------- */
-.app { --side-w: 300px; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%;
-  padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); transition: grid-template-columns 0.24s var(--ease); }
-.app.folded { --side-w: 0px; }
-.sidebar-slot { min-width: 0; min-height: 0; overflow: hidden; display: flex; }
-.sidebar-slot > .sidebar { width: 300px; flex: none; }
-.split { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; padding-top: var(--top-safe); }
-.left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.left { container-type: inline-size; }
-.left::after { content: ""; position: absolute; top: 10px; bottom: 10px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); z-index: 2; }
-
+/* ---------- Layout ----------
+   The chats rail's column is always --rail-w (wide enough for a chat's name and server under its
+   circle); the full list opens over the page as a drawer. The forms rail on the right stays 64px. */
+.app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
+.app > main { grid-column: 2; }
+.app > .right-rail { grid-column: 3; }
+.sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
+.app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
+.sidebar-slot > .sidebar { width: 250px; flex: none; }
 /* One menu button, always in the same top-left spot. */
-.menu-toggle { position: fixed; top: calc(12px + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); z-index: 20; width: 32px; height: 32px; border-radius: 50%;
-  display: grid; place-items: center; color: var(--fg); isolation: isolate; --ring: var(--chalk-c32-2); --ink: transparent; }
-.menu-toggle:hover { --ink: var(--chalk); }
-.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
-.app.folded .chat-head { padding-left: 54px; }
+.menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
+.split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
+.left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 10px 2px; }
+.divider:hover { --ink: var(--accent); width: 3px; margin: 10px 1.5px; }
+.split.folded > .divider { visibility: hidden; }
+.backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
 
-/* ---------- Sidebar: the chat list ---------- */
-.sidebar { position: relative; background: var(--bg2); display: flex; flex-direction: column; gap: 8px; min-height: 0;
-  padding: calc(12px + var(--top-safe)) 10px calc(10px + env(safe-area-inset-bottom)); }
-.sidebar::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.cs-head { display: flex; align-items: center; gap: 6px; min-height: 34px; padding-left: 40px; }
-.cs-title { flex: 1; margin: 0; font: 700 21px/1.2 var(--hand); }
-.cs-icon { flex: none; position: relative; isolation: isolate; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--fg); }
-.cs-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
-.cs-add { --ring: var(--chalk-c32-2); --ink: var(--chalk); }
-.cs-add:hover { --ink: var(--accent); }
-.cs-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 6px 4px 12px; }
-.cs-list > * { flex-shrink: 0; }
-.cs-empty { margin: 8px 10px; }
-.chat-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 8px 8px 8px 10px; border-radius: 10px; text-align: left; }
+/* ---------- Sidebar: the plain rules (chatops.css holds the list's own) ---------- */
+.sidebar { border-right: 0; position: relative; background: var(--bg2); display: flex; flex-direction: column; gap: 10px; padding: 14px 10px; min-height: 0; }
+.brand { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 6px; padding: 2px 0 2px 6px; font: 700 19px var(--hand); letter-spacing: 0; }
+.new { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; text-align: left; background: var(--panel); font-weight: 500; }
+.search { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; }
+.search:focus { border-color: var(--blue); }
+.chat-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; text-align: left; min-height: 34px; }
 .chat-row:hover { background: var(--panel); }
-.chat-row.active { background: color-mix(in srgb, var(--chat, var(--grey)) 14%, var(--panel)); }
-.chat-row.off { opacity: 0.45; filter: grayscale(0.8); }
-.cs-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.cs-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.cs-l1 .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
-.chat-row.unseen .cs-l1 .t { font-weight: 700; }
-.cs-l1 .when { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.cs-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; line-height: 1.45; color: var(--muted); min-height: 1.45em; }
-.cs-l2.waiting { color: var(--amber); }
-.cs-l2.working { color: var(--blue); }
-
-/* A chat's circle: chalked on in its colour, its first letter inside. */
-.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); position: relative; isolation: isolate;
-  background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); --ring: var(--chalk-c34-22); --ink: var(--chat, var(--grey)); }
-.chat-row.active .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 14px 1px color-mix(in srgb, var(--chat, var(--grey)) 50%, transparent); }
-/* State badges: amber ? waits on you, three dots = working, green check = done since you looked. */
-.state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate;
-  border-radius: 9px; background: color-mix(in oklch, var(--bg2) 80%, var(--b)); --ring: var(--chalk-r9-2); --ink: var(--b); }
-.state-badge.waiting { --b: var(--amber); animation: breathe 1.4s ease-in-out 4; }
-.state-badge.thinking { --b: var(--blue); }
-.state-badge.done { --b: var(--green); }
-.state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out 3; }
-.state-badge i:nth-child(2) { animation-delay: 0.2s; }
-.state-badge i:nth-child(3) { animation-delay: 0.4s; }
-.chat-row.active .state-badge i, .chat-row.active .state-badge.waiting { animation-iteration-count: infinite; }
-
-/* A server's mark: a small chalk chip with its label's first letter; struck through while it is off. */
-.server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none;
-  background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); text-transform: uppercase; }
-.server-mark.off { opacity: 0.6; text-decoration: line-through; }
+.chat-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.chat-row .when { color: var(--muted); font-size: 11.5px; }
+.archived-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; padding: 2px 6px; text-align: left; }
+.archived-toggle:hover, .archived-toggle.on { color: var(--fg); }
 
 /* ---------- Chat ---------- */
-.chat-head { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; min-height: 58px; transition: padding 0.24s var(--ease); }
-.chat-head h1 { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 700 22px/1.25 var(--hand); padding-bottom: 6px; text-decoration: underline 3px var(--accent); text-underline-offset: 6px; }
-.title-edit { flex: 1; min-width: 0; font: 700 20px var(--hand); background: var(--bg2); border: 0; border-radius: 6px; padding: 2px 8px; outline: 2px solid var(--accent); }
-.offline { color: var(--amber); font-size: 12px; flex: none; }
-.icon { width: 32px; height: 32px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; font-size: 18px; flex: none; }
+.left { container-type: inline-size; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 58px; }
+.chat-head h1 { font: 700 22px/1.25 var(--hand); padding-bottom: 6px; margin: 0; flex: 1 1 auto; min-width: min(40%, 200px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
+/* The chat title renames itself: click it; a chalk pencil shows on hover. */
+.chat-head h1 .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline 3px var(--accent); text-underline-offset: 6px; padding-bottom: 6px; }
+.chat-head h1.renamable { cursor: text; }
+.chat-head h1 .pencil { flex: none; font: 400 16px var(--hand); color: var(--muted); opacity: 0; transition: opacity 0.15s; text-decoration: none; }
+.chat-head h1.renamable:hover .pencil { opacity: 0.8; }
+.title-edit { flex: 1; font: 700 20px var(--hand); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 3px 8px; outline: none; }
+.icon { width: 30px; height: 30px; border-radius: 7px; color: var(--muted); display: grid; place-items: center; }
 .icon:hover { background: var(--panel); color: var(--fg); }
-.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.menu-box { position: relative; flex: none; }
-.menu-away { position: fixed; inset: 0; z-index: 30; }
-.menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 31; min-width: 150px; display: grid; gap: 1px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.4); animation: rise 0.14s ease-out; }
-.menu button { text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; }
-.menu button:hover { background: var(--panel2); }
+.offline { color: var(--amber); font-size: 12px; }
+/* Working folder (and server) in the chat header: quiet mono text; the folder gives way first. */
+.folder-chip { font: 500 11.5px var(--mono); color: var(--muted); border: 0; border-radius: 0; padding: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+.chat-head .folder-chip { flex: 0 4 auto; min-width: 0; }
+.server-chip { font-family: var(--sans); }
+@container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
 
-.messages { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-wrap: anywhere; padding: 14px 18px 24px;
-  display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.6; }
+/* Chat colour: a dot in the header, the palette under it. */
+.color-pick { position: relative; flex: none; display: grid; }
+.color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
+.color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
+.color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
+.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.swatch { width: 26px; height: 26px; border-radius: 50%; }
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
+.swatch.passive { opacity: 0.85; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.12); }
+.swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
+.swatch.none { border: 1.5px dashed var(--muted); position: relative; }
+.swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
+
+.messages { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-wrap: anywhere; padding: 18px 18px 120px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.6; }
 .messages > * { flex-shrink: 0; }
-.loading { text-align: center; font-size: 13px; }
-.hello { margin: auto; text-align: center; display: grid; gap: 6px; justify-items: center; }
-.hello h2 { margin: 0; font: 700 26px var(--hand); }
-.hello p { margin: 0; }
+/* Older messages put in front are kept in place by the chat itself, the same in every browser. */
+.messages { overflow-anchor: none; }
+.older-line { min-height: 1.5em; text-align: center; }
+.hello { margin: auto; text-align: center; }
+.hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .msg { max-width: 100%; min-width: 0; }
-.msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; max-width: 88%; }
-.msg.user .bubble { font: 400 18px/1.45 var(--hand); color: var(--accent); text-align: right; white-space: pre-wrap; }
-.msg.user.queued { opacity: 0.6; }
-.queued-tag { font-size: 11px; color: var(--muted); }
-.msg.note { align-self: center; color: var(--muted); font-size: 12.5px; font-style: italic; text-align: center; }
+.msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
+.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 400 18px/1.45 var(--hand); color: var(--accent); text-align: right; }
+.msg.user.viewing .bubble { outline: 0; text-decoration: underline 2px; text-underline-offset: 4px; }
+.pic-link { font-size: 11.5px; color: var(--muted); }
+.pic-link:hover { color: var(--blue); }
+.msg-links { display: flex; gap: 10px; }
+/* fork link: shown on hover where there is a pointer that hovers */
+@media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
+.msg.claude { padding: 0 2px; }
+.msg.small { font-size: 13px; }
 .streaming .md > :last-child::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
+/* A message sent while Claude works, waiting below the chat until Claude takes it in. */
+.msg.user.queued { opacity: 0.6; }
+.queued-tag { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.found-flash { animation: found-flash 1.8s ease-out; border-radius: 10px; }
 
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p { margin: 0 0 8px; }
 .md ul, .md ol { margin: 0 0 8px; padding-left: 20px; }
-.md h1, .md h2, .md h3 { font: 700 19px/1.3 var(--hand); margin: 10px 0 4px; }
-.md code { font-size: 12.5px; background: var(--panel2); padding: 0 4px; border-radius: 4px; }
-.md pre code { padding: 0; background: none; }
+.md code { font-size: 12.5px; background: var(--panel2); border: 1px solid var(--line); padding: 0 4px; border-radius: 4px; }
+.md pre code { border: 0; padding: 0; background: none; }
 .md a { color: var(--blue); }
 .md table { border-collapse: collapse; margin: 6px 0; font-size: 13px; }
 .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; }
-.md blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
 .code { position: relative; margin: 6px 0 8px; }
-.code pre { margin: 0; padding: 10px 12px; background: var(--bg2); border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+.code pre { margin: 0; padding: 10px 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+.code pre code.hljs { background: none; padding: 0; }
 .code .copy { position: absolute; top: 6px; right: 6px; font-size: 11px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); border-radius: 5px; padding: 1px 7px; opacity: 0; transition: opacity 0.15s; }
 .code:hover .copy { opacity: 1; }
-@media (hover: none) { .code .copy { opacity: 1; } }
+/* highlight.js's GitHub Dark, for code in the chat (the picture's code forms colour their own). */
+.md .hljs { color: #c9d1d9; }
+.md :is(.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag, .hljs-template-variable, .hljs-type, .hljs-variable.language_) { color: #ff7b72; }
+.md :is(.hljs-title, .hljs-title.class_, .hljs-title.class_.inherited__, .hljs-title.function_) { color: #d2a8ff; }
+.md :is(.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-variable, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id) { color: #79c0ff; }
+.md :is(.hljs-regexp, .hljs-string, .hljs-meta .hljs-string) { color: #a5d6ff; }
+.md :is(.hljs-built_in, .hljs-symbol) { color: #ffa657; }
+.md :is(.hljs-comment, .hljs-code, .hljs-formula) { color: #8b949e; font-style: normal; }
+.md :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) { color: #7ee787; }
+.md .hljs-subst { color: #c9d1d9; }
+.md .hljs-section { color: #1f6feb; font-weight: bold; }
+.md .hljs-bullet { color: #f2cc60; }
+.md .hljs-emphasis { color: #c9d1d9; font-style: italic; }
+.md .hljs-strong { color: #c9d1d9; font-weight: bold; }
+.md .hljs-addition { color: #aff5b4; background-color: #033a16; }
+.md .hljs-deletion { color: #ffdcd7; background-color: #67060c; }
 
-/* A tool step: one line, a dot, the tool, what it did. */
-.step { display: flex; gap: 8px; align-items: center; font-size: 12.5px; min-width: 0; margin: -6px 0; color: var(--muted); }
-.step b { font-weight: 600; color: var(--fg); flex: none; }
-.step-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font: 11.5px var(--mono); }
+/* Tool steps: folded into "N steps" groups; open, one row per step. */
+.steps { border-left: 2px solid var(--line); padding-left: 10px; margin-left: 2px; }
+.steps.busy { border-left-color: var(--blue); }
+.steps-head { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; text-align: left; width: 100%; color: var(--muted); }
+.steps-head > span:nth-child(2) { color: var(--fg); font-weight: 500; white-space: nowrap; }
+.steps-head .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.chev { display: inline-block; transition: transform 0.15s; width: 8px; }
+.chev.open { transform: rotate(90deg); }
+.err-count { color: var(--red); white-space: nowrap; }
+/* Explain: a small hand-written button on each step (on hover; always on the running one) and the
+   answer under it as a chalk note. */
+.step-line, .steps-head-line { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.step-line .step-row, .steps-head-line .steps-head { flex: 1; min-width: 0; width: auto; }
+.explain-btn { flex: none; font: 700 12.5px var(--hand); color: var(--muted); padding: 0 6px; border-radius: 6px; opacity: 0; transition: opacity 0.12s; }
+.step:hover .explain-btn, .explain-btn:focus-visible, .explain-btn.live, .step.busy .explain-btn { opacity: 1; }
+.explain-btn:hover { color: var(--fg); background: var(--panel2); }
+.explain-btn.live { color: var(--blue); }
+.explain-under { flex-basis: 100%; }
+.explain-note { position: relative; isolation: isolate; display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 6px 14px; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--fg);
+  border-radius: 9px; background: color-mix(in srgb, var(--blue) 8%, transparent); --ring: var(--chalk-r9-15); --ink: color-mix(in srgb, var(--blue) 55%, transparent); }
+.explain-note.busy { color: var(--muted); font: 700 13px var(--hand); }
+.explain-note.err { --ink: color-mix(in srgb, var(--red) 55%, transparent); }
+.explain-note span { flex: 1; }
+.explain-x { flex: none; color: var(--muted); font-size: 15px; line-height: 1; }
+.explain-x:hover { color: var(--fg); }
+.steps ul { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.step-row { display: flex; gap: 8px; align-items: center; font-size: 12.5px; width: 100%; text-align: left; padding: 2px 0; }
+.step-row b { font-weight: 600; }
+.step-title { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-family: var(--mono); font-size: 11.5px; flex: 1; }
 .step-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
+.step.busy .step-dot { background: var(--blue); animation: breathe 1s ease-in-out infinite; }
 .step.err .step-dot { background: var(--red); }
-.step.err .step-title { color: var(--red); }
-.msg + .step, .step + .msg { margin-top: 0; }
+.step-detail { display: grid; gap: 4px; margin: 4px 0 6px 14px; }
+.step-detail pre { margin: 0; max-height: 220px; overflow: auto; font-size: 11.5px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
+.step-detail pre.err { border-color: var(--red); }
+.steps li, .steps, .steps ul, .step-row { min-width: 0; max-width: 100%; }
+.step-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcript { display: grid; gap: 6px; max-height: 360px; overflow: auto; padding-right: 4px; }
 
-.working { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 700 14px var(--hand); }
+.working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: breathe 1.2s ease-in-out infinite; }
-.error-line { color: var(--red); font-size: 13px; border: 1px solid var(--red); background: var(--red-bg); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; cursor: pointer; }
-.error-line.global { margin: 0 16px 6px; }
+.error-line { color: var(--red); font-size: 13px; border: 1px solid var(--red); background: var(--red-bg); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; }
+.error-line.global { margin: 0 16px 6px; cursor: pointer; }
+/* Notes: slash-command output, compaction */
+.note-line { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--bg2); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 
 /* The composer sits under a chalk line. */
-.composer { position: relative; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+.composer { position: relative; background: none; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
 .composer::before { content: ""; position: absolute; top: -2px; left: 12px; right: 12px; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.input-row { display: flex; flex-direction: column; gap: 2px; padding: 6px 6px 6px 12px; border-radius: 10px; }
-.input-row textarea { width: 100%; resize: none; border: 0; outline: none; background: none; padding: 4px 0; max-height: 260px; line-height: 1.5; }
+.input-row { display: flex; flex-direction: column; gap: 2px; background: var(--bg2); border: 0; border-radius: 6px; padding: 6px 6px 6px 12px; }
 .toolbar { display: flex; align-items: center; gap: 6px; }
-.primary { color: var(--on-hue); font-weight: 700; border-radius: 8px; padding: 7px 14px; }
-.primary:disabled { opacity: 0.4; }
 .toolbar .primary, .toolbar .stop { padding: 4px 12px; font-size: 13px; border-radius: 7px; }
-.stop { color: var(--red); border-radius: 8px; padding: 6px 12px; font-weight: 600; }
+.tools { display: flex; flex-wrap: nowrap; gap: 2px; flex: 1; min-width: 0; margin-left: -6px; }
+.input-row textarea { width: 100%; resize: none; border: 0; outline: none; background: none; padding: 4px 0; max-height: 260px; line-height: 1.5; }
+.stop { border: 1px solid var(--red); color: var(--red); border-radius: 8px; padding: 6px 12px; font-weight: 500; }
+.read-only-note { padding: 14px 16px; text-align: center; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
 
-/* ---------- Asks: Claude's questions and the secret card ---------- */
-.asks { display: grid; gap: 12px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; animation: rise 0.28s ease-out; }
-.panel.ask { border-color: color-mix(in srgb, var(--violet) 60%, var(--line)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 14%, transparent); }
-.panel.ask.secret { border-color: color-mix(in srgb, var(--amber) 60%, var(--line)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 14%, transparent); }
+/* ---------- Questions (a modal over the window) and the secret card ---------- */
+.interface { padding: 14px 18px 0; display: grid; gap: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; animation: rise 0.28s ease-out; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.panel.ask { border-color: color-mix(in srgb, var(--violet) 55%, var(--line)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 12%, transparent); }
+.panel.ask.secret { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 12%, transparent); }
+.panel.permit { border-color: var(--amber); }
 .panel.busy { opacity: 0.75; }
 .panel h3 { margin: 0; font-size: 15.5px; line-height: 1.35; }
 .question { display: grid; gap: 8px; }
 .question + .question { border-top: 1px solid var(--line); padding-top: 12px; }
 .q-head { display: flex; gap: 8px; align-items: center; font-size: 12px; }
-.chip { font: 700 13px var(--hand); padding: 1px 9px; border-radius: 99px; color: var(--violet); background: var(--violet-bg); }
+.chip { font: 700 13px var(--hand); text-transform: none; letter-spacing: 0; padding: 2px 8px; border-radius: 99px; color: var(--violet); background: var(--violet-bg); }
 .chip.amber { color: var(--amber); background: var(--amber-bg); }
+.chip.green { color: var(--green); background: var(--green-bg); }
+.chip.red { color: var(--red); background: var(--red-bg); }
 .options { display: grid; gap: 6px; }
-.option { display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--bg); transition: border-color 0.12s, background 0.12s; font-size: 14px; }
-.option:hover:not(:disabled) { border-color: color-mix(in srgb, var(--violet) 50%, var(--line)); }
+.option { display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--bg); transition: border-color 0.12s, background 0.12s; }
+.option:hover { border-color: color-mix(in srgb, var(--violet) 50%, var(--line)); }
 .option.on { border-color: var(--violet); background: var(--violet-bg); }
 .o-text { display: grid; gap: 2px; min-width: 0; }
 .o-text b { font-weight: 600; }
+.o-num { display: inline-block; min-width: 18px; margin-right: 6px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px var(--mono); color: var(--muted); text-align: center; }
 .o-text .md { color: var(--muted); font-size: 13px; }
 .mark { flex: none; width: 16px; height: 16px; border: 1.5px solid var(--muted); margin-top: 2px; position: relative; }
 .mark.dot { border-radius: 50%; }
@@ -216,11 +263,12 @@ code, pre { font-family: var(--mono); }
 .option.on .mark.dot::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--violet); }
 .option.on .mark.box::after { content: ""; position: absolute; left: 4px; top: 0.5px; width: 4px; height: 8px; border: solid var(--violet); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .option.other { align-items: center; cursor: text; }
-.option.other .mark { margin-top: 0; }
 .option.other input { flex: 1; border: 0; outline: none; background: none; }
-.actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
-.actions button:not(.primary) { border-radius: 8px; padding: 7px 14px; }
-.actions button:disabled { opacity: 0.5; }
+.preview { margin: 0; font-size: 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; max-height: 260px; overflow: auto; }
+.actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.key-hint { margin-right: auto; }
+.actions button:not(.primary) { border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; }
+.actions button:disabled { opacity: 0.5; cursor: default; }
 .ask-error { margin: 0; color: var(--red); font-size: 13px; }
 .secret-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 13.5px; }
 .secret-facts dt { color: var(--muted); }
@@ -229,12 +277,38 @@ code, pre { font-family: var(--mono); }
 .paste-row { display: flex; gap: 8px; }
 .paste-row input { flex: 1; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; outline: none; }
 .paste-row input:focus { border-color: var(--accent); }
+/* Long unbroken lines wrap inside a panel instead of widening it. */
+.panel > *, .question, .options, .option, .o-text, .q-head { min-width: 0; }
+.panel h3, .o-text, .panel .md, .panel p { overflow-wrap: anywhere; }
+.panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.panel pre { max-width: 100%; overflow-x: auto; }
+/* Claude's question: a modal over the whole window, so it has room to be read.
+   Esc or "See picture" hides it; the pill at the bottom brings it back. */
+.ask-modal { position: fixed; inset: 0; z-index: 40; overflow-y: auto; overscroll-behavior: contain; padding: 5vh 24px; display: grid; place-items: start center; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); }
+.ask-modal[hidden] { display: none; }
+.ask-modal .panel.ask { width: min(1040px, 100%); padding: 24px 28px; gap: 16px; font-size: 15px; }
+.ask-modal .panel h3 { font-size: 21px; }
+.ask-modal .question { gap: 12px; }
+.ask-modal .question + .question { padding-top: 18px; }
+.ask-modal .options { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+.ask-modal .option { padding: 12px 14px; }
+.ask-modal .option.other { grid-column: 1 / -1; }
+.ask-modal .o-text .md { font-size: 14px; }
+.ask-modal .preview { font-size: 13px; max-height: 50vh; }
+.ask-modal .panel.permit, .ask-modal .panel.secret { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
+.ask-modal > * + * { margin-top: 16px; }
+.ask-return { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 9px 18px; border-radius: 99px; border: 1px solid var(--violet); background: var(--violet-bg); color: var(--violet); font-weight: 600; box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
 
-/* Where a new chat starts. */
-.new-on { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
-.new-on button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 5px; border-radius: 999px; color: var(--muted); position: relative; isolation: isolate; --ring: var(--chalk-r12-15); --ink: transparent; }
+/* Where a new chat starts: a row of servers over the composer of an empty chat. */
+.new-on { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 16px; font-size: 12px; }
+.new-on > .muted { margin-right: 2px; }
+.new-on button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border-radius: 999px; font-size: 12px; color: var(--muted); position: relative; isolation: isolate; --ring: var(--chalk-r12-15); --ink: transparent; }
 .new-on button:hover { color: var(--fg); }
 .new-on button.on { color: var(--fg); font-weight: 600; --ink: var(--accent); background: var(--panel2); }
+.new-on button:disabled { opacity: 0.5; cursor: default; }
+.new-on .server-mark { min-width: 15px; height: 15px; font-size: 10.5px; }
+.sf-note { font-size: 10px; color: var(--amber); font-weight: 600; }
+.sf-note.warn { color: var(--red); }
 
 /* ---------- Picture: the board ---------- */
 .right { background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); container-type: inline-size; }
@@ -361,115 +435,248 @@ code, pre { font-family: var(--mono); }
 .f-bar i { display: block; height: 100%; background: var(--tile, var(--green)); }
 .f-chart { width: 100%; min-height: 60px; }
 
+/* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 10px; background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
+.sidebar-slot > .rail { width: var(--rail-w); }
+.sidebar::after, .rail::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.right-rail { padding-bottom: 14px; }
+.right-rail::after { right: auto; left: 0; }
+.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 22px; }
+/* A chat on the rail: its circle, its title under it (two lines at most), then its server's name. */
+.rail-chat { align-self: stretch; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; position: relative; }
+/* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
+.rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
+/* Each circle is chalked on: a wobbly ring in the chat's colour with a faint fill. */
+.rail-dot { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 17px var(--hand); color: var(--chat, var(--grey)); position: relative; isolation: isolate;
+  background: color-mix(in srgb, var(--chat, var(--grey)) 14%, transparent); --ring: var(--chalk-c34-22); --ink: var(--chat, var(--grey)); transition: background-color 0.15s, box-shadow 0.15s; }
+/* Passive chats: at the bottom of the rail, above a chalk line, faded until hovered or open. */
+.rail-chat.passive { opacity: 0.55; }
+.rail-chat.passive:hover, .rail-chat.passive.on { opacity: 1; }
+.rail-chat.passive.first { margin-top: auto; }
+.rail-chat.passive.last::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -11px; border-top: 1.5px dashed var(--line); }
+/* Spotlight: the open chat glows; the others fade (their state badges stay bright) until hovered. */
+.rail-chat.on .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
+.rail-dot::before, .rail-dot > .rail-logo, .rail-dot > .rail-tag, .rail-dot > .rail-blank, .rail-chat > .rail-name, .rail-chat > .rail-server { transition: opacity 0.15s, filter 0.15s; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) :is(.rail-logo, .rail-tag, .rail-blank, .rail-name, .rail-server) { opacity: 0.35; filter: saturate(0.4); }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) .rail-dot::before { opacity: 0.35; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on, :hover) .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 5%, transparent); }
+/* State badges, chalked like the circles: amber ? waits on you, three dots = working, green ✓ = done since you looked. */
+.state-badge { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 3px; display: grid; grid-auto-flow: column; place-items: center; gap: 1.5px; font: 700 13px/1 var(--hand); color: var(--b); isolation: isolate;
+  border-radius: 9px; background: color-mix(in oklch, var(--bg2) 80%, var(--b)); --ring: var(--chalk-r9-2); --ink: var(--b); }
+.state-badge.waiting { --b: var(--amber); animation: breathe 1.4s ease-in-out 4; }
+.state-badge.thinking { --b: var(--blue); }
+.state-badge.done { --b: var(--green); }
+.state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out 3; }
+.state-badge i:nth-child(2) { animation-delay: 0.2s; }
+.state-badge i:nth-child(3) { animation-delay: 0.4s; }
+/* Idle dots: the badges, moons and run dots move on for good only on the open chat; on the other
+   chats they run a few times when they appear, then rest. */
+.rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i) { animation-iteration-count: infinite; }
+.rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
+.rail-search { margin-top: -10px; } /* 8px under the +, not the rail's 18px gap */
+.rail-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.chalk-defs { position: absolute; width: 0; height: 0; }
+/* Rail: the chat's title under its circle, plain and readable, cut after two lines (the hover
+   bubble has it whole); the circle holds the project. */
+.rail-name { max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; text-align: center;
+  font: 600 10.5px/1.25 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
+.rail-chat.on .rail-name, .rail-chat:hover .rail-name { color: var(--fg); }
+/* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
+.rail-server { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px 1px; border-radius: 6px; font: 700 11.5px/1.1 var(--hand); color: var(--muted); position: relative; isolation: isolate; pointer-events: none;
+  background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
+.rail-chat.on .rail-server, .rail-chat:hover .rail-server { color: var(--fg); }
+.rail-chat.off .rail-server { text-decoration: line-through; }
+.rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
+.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
+/* The chat's project: a small chalk tag at the circle's bottom right. */
+.project-tag { position: absolute; right: -12px; bottom: -7px; padding: 0 4px; font: 700 10.5px/15px var(--sans); color: var(--tag, var(--muted)); letter-spacing: 0.02em; isolation: isolate; pointer-events: none;
+  border-radius: 8px; background: var(--bg2); --ring: var(--chalk-r8-15); --ink: color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); }
+/* With a logo: the logo fills the circle. */
+.rail-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; pointer-events: none; }
+.letter-tag { position: absolute; right: -7px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 2px var(--bg2); font: 700 10.5px/1 var(--sans); color: var(--on-hue); pointer-events: none; }
+/* Agents still working: small chalk moons around the chat's circle. */
+.moons { position: absolute; inset: 0; pointer-events: none; }
+/* A chalk dot with a ring of the rail's colour round it, 2px of room for its rough edge. */
+.moons i { position: absolute; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; background: radial-gradient(circle, var(--chat, var(--grey)) 0 4px, var(--bg2) 4px 5.5px, transparent 5.5px); -webkit-mask-box-image: var(--chalk-dot11); animation: breathe 1.4s ease-in-out 3; }
+/* Sounds and Forms, on the rail too (sidebar closed). */
+.rail-forms { display: grid; place-items: center; width: 34px; height: 30px; margin: 0 auto 6px; color: var(--muted); }
+.rail-forms:hover { color: var(--fg); }
+.rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.rail-sound { color: var(--muted); opacity: 0.7; }
+.rail-sound.on { color: var(--accent); opacity: 1; }
+
+/* ---------- The hub: one list over several servers ----------
+   A server's mark is a small chalk chip (its label's first letter); a server that is off greys its chats. */
+.server-mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 6px; font: 700 11.5px/1 var(--hand); color: var(--muted); position: relative; isolation: isolate; flex: none;
+  background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
+.server-mark.off { opacity: 0.6; text-decoration: line-through; }
+.rail-chat.off { opacity: 0.4; filter: grayscale(0.8); }
+.rail-chat.off:hover, .rail-chat.off.on { opacity: 0.75; }
+.chat-row.off { opacity: 0.5; filter: grayscale(0.8); }
+.chat-row.off:hover, .chat-row.off.active { opacity: 0.8; }
+.server-off-note { margin: 2px 8px 6px; font-size: 12px; color: var(--amber); }
+
 /* ---------- Chalk ----------
-   Chalked things paint their colour (--ink) through a baked mask (--ring) on a ::before 2px bigger
-   than the box: room for the rough edge. A box keeps its fill on itself, under the outline. */
-.rail-dot::before, .state-badge::before, .chalk-box::before, .server-mark::before, .new-on button::before, .cs-add::before, .menu-toggle::before,
-.input-row::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .picture-empty .dots span::before, .cs-fab::before, .ask-return::before {
+   Everything drawn in chalk (outlines, circles, lines) is its colour (--ink) painted through a
+   baked chalk mask (--ring: one of the --chalk-* images claudia.web.chalk draws once at load) on a
+   ::before 2px bigger than its box on every side: room for the rough edge. An outlined box keeps
+   its fill on itself (--chalk-bg on buttons), under the outline, so the text stays crisp.
+   --chalk-c = a button's outline colour. */
+.explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
+.f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
+.form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .new-on button::before,
+.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
+.view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
-  border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring);
+  border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
-/* Chalk lines: each ::before or ::after 2px past its line on every side. */
-.sidebar::after, .left::after, .composer::before, .f-arrow::before, .f-timeline::before {
+/* Chalk lines: each places its own ::before (or ::after) 2px past the line on every side. */
+.divider::before, .sidebar::after, .rail::after, .composer::before, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before {
   content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
 }
-.f-arrow::before { inset: -2px; }
-/* Without nine-slice masks (Firefox): plain outlines and lines. */
+.divider::before, .edge-line::before, .f-arrow::before { inset: -2px; }
+/* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.input-row, .primary, .stop, .actions button:not(.primary) {
-  position: relative; isolation: isolate; background: var(--chalk-bg, transparent); --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip, .act-pill {
+  position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
+  --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
-.input-row { --chalk-bg: var(--bg2); --ring: var(--chalk-r10-2); }
+.rbar { --ring: var(--chalk-r12-2); }
+.input-row { --chalk-bg: var(--bg2); border-radius: 10px; --ring: var(--chalk-r10-2); }
 .input-row:focus-within { --chalk-c: var(--accent); }
+.new { --chalk-bg: var(--panel); }
+.new:hover { --chalk-c: var(--accent); }
+.search-box { display: grid; border-radius: 8px; --chalk-bg: var(--bg); }
+.search-box .search { border: 0; background: none; }
+.search-box:focus-within { --chalk-c: var(--accent); }
 .primary { --chalk-c: var(--accent); --chalk-bg: var(--accent); }
 .stop { --chalk-c: var(--red); }
 .toolbar .primary, .toolbar .stop { --ring: var(--chalk-r7-2); }
+.prompt-actions button.primary { --chalk-c: var(--accent); }
+.view-switch { --chalk-bg: var(--bg); --ring: var(--chalk-r9-2); }
+.view-switch button.on { --chalk-bg: var(--panel2); --ring: var(--chalk-r7-2); }
+.rbar-fold { --ring: var(--chalk-r7-2); }
+.rbar-chip { --ring: var(--chalk-r12-2); }
+.rbar-chip.live { --chalk-c: color-mix(in srgb, var(--green) 55%, transparent); --chalk-bg: var(--green-bg); }
+.rbar-chip.live.still { --chalk-c: var(--line); --chalk-bg: var(--grey-bg); }
+.rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
+.act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
+.rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
+
+/* The menu button: three chalk strokes, centred over the closed rail; a chalk ring on hover. */
+.menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); --ring: var(--chalk-c32-2); --ink: var(--chalk-c, var(--chalk)); }
+.menu-toggle:hover { background: none; }
+.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
+/* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
+.burger, .rail-forms svg, .form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 
 @keyframes breathe { 50% { opacity: 0.35; } }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes fade { from { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; scale: 0.6; } }
+@keyframes ring { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18); } }
+@keyframes glow { 0% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
 @keyframes chalk-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+@keyframes found-flash { 0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 70%, transparent); background: color-mix(in srgb, var(--amber) 12%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
 @keyframes block-glow { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); } to { box-shadow: 0 0 0 2px transparent; } }
+@keyframes confirm-in { from { opacity: 0; } }
+@keyframes confirm-pop { from { opacity: 0; transform: scale(0.94) translateY(6px); } }
 
-/* ---------- Phones (under 680px): three full screens ----------
-   list -> chat -> picture; the next screen slides over the one before, which waits 30% to the left. */
+/* ---------- Touch screens and safe areas ----------
+   No double-tap zoom, no grey tap flash, no rubber-band scroll of the whole page, and the notch /
+   home bar keep their room (viewport-fit=cover puts the page under them). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; }
+body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+.app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+/* A Home Screen app: iOS 26 lays its own blurred band over the status bar and about 16px below it. */
+@media (display-mode: standalone) { :root { --top-safe: calc(env(safe-area-inset-top) + 16px); } }
+.split { padding-top: var(--top-safe); box-sizing: border-box; }
+.rail { padding-top: calc(46px + var(--top-safe)); }
+.sidebar { padding-top: calc(14px + var(--top-safe)); }
+@media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
+.menu-toggle { top: calc(10px + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); }
+.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
+.sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+/* ---------- Phones (under 680px) ----------
+   Three full screens, list -> chat -> picture: the next one slides over the one before, which waits
+   30% to the left under it (claudia.web.swipe follows the finger). */
+.back-to-list, .pic-open { display: none; }
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
-  .menu-toggle { display: none; }
-  .app, .app.folded { display: block; position: relative; overflow: hidden; }
-  .sidebar-slot, .split > .left, .split > .right { position: absolute; inset: 0; transition: transform 0.32s var(--ease), visibility 0s; }
+  .menu-toggle, .divider, .backdrop, .right-rail { display: none; }
+  .app, .app.no-sidebar { display: block; position: relative; overflow: hidden; }
+  .sidebar-slot, .app:not(.no-sidebar) .sidebar-slot, .split > .left, .split > .right { position: absolute; inset: 0; width: auto; box-shadow: none; transition: transform 0.32s var(--screen-ease), visibility 0s; }
   .split { display: contents; }
   .sidebar-slot > .sidebar { width: 100%; }
-  .sidebar::after, .left::after { display: none; }
-  .split > .left { z-index: 2; background: var(--bg); padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35); }
-  .split > .right { z-index: 3; padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35); }
+  .sidebar::after { display: none; }
+  .split > .left { z-index: 12; background: var(--bg); padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35); }
+  .split > .right { z-index: 30; padding-top: var(--top-safe); background: var(--bg); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35); }
   .app[data-screen="list"] .split > .left, .app[data-screen="list"] .split > .right, .app[data-screen="chat"] .split > .right {
-    transform: translateX(100%); visibility: hidden; transition: transform 0.32s var(--ease), visibility 0s 0.32s; }
-  .app[data-screen="chat"] .sidebar-slot, .app[data-screen="picture"] .sidebar-slot { transform: translateX(-30%); visibility: hidden; transition: transform 0.32s var(--ease), visibility 0s 0.32s; }
+    transform: translateX(100%); visibility: hidden; transition: transform 0.32s var(--screen-ease), visibility 0s 0.32s; }
+  .app[data-screen="chat"] .sidebar-slot, .app[data-screen="picture"] .sidebar-slot { transform: translateX(-30%); visibility: hidden; transition: transform 0.32s var(--screen-ease), visibility 0s 0.32s; }
   .app[data-screen="picture"] .split > .left { transform: translateX(-30%); }
-
-  .cs-head { padding-left: 4px; min-height: 44px; }
-  .cs-title { font-size: 25px; padding: 0 6px; }
-  .cs-head .cs-add { display: none; }
-  .chat-row { min-height: 66px; padding: 10px 8px 10px 10px; }
-  .cs-l1 .t { font-size: 16px; }
-  .cs-l1 .when { font-size: 12.5px; }
-  .cs-l2 { font-size: 14px; }
-  .cs-list { padding-bottom: 96px; }
-  .cs-fab { position: absolute; z-index: 5; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); isolation: isolate; width: 56px; height: 56px; border-radius: 50%;
-    place-items: center; justify-content: center; align-items: center; color: var(--on-hue); --ring: var(--chalk-dot56); --ink: var(--accent); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
-  .cs-fab svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
-
-  .chat-head, .picture-head { gap: 6px; padding: 8px 12px 6px; min-height: 52px; }
-  .app.folded .chat-head { padding-left: 12px; }
-  .chat-head h1, .picture-title { font-size: 20px; }
-  .back-btn { align-items: center; gap: 2px; flex: none; margin-left: -6px; padding: 4px 6px 4px 0; min-height: 44px; color: var(--accent); font: 700 17px var(--hand); }
-  .back-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-  .back-btn .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px; background: var(--amber); color: #000; font: 700 11px var(--sans); }
-  .pic-open { width: 44px; height: 44px; margin-right: -8px; color: var(--fg); align-items: center; justify-content: center; }
-  .messages { padding: 10px 14px 18px; }
-  .picture-scroll { padding: 6px 12px calc(30px + env(safe-area-inset-bottom)); }
-  .picture.blocks { grid-template-columns: minmax(0, 1fr); }
-  .block.w-half { grid-column: 1 / -1; }
+  .chat-row { min-height: 44px; }
+  .chat-row .t { font-size: 15px; }
+  .back-to-list { display: flex; align-items: center; gap: 2px; flex: none; margin-left: -8px; padding: 4px 6px 4px 0; color: var(--accent); font: 700 17px var(--hand); }
+  .back-to-list svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .back-to-list .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--on-hue); font: 700 11px var(--sans); }
+  .back-to-list .count.waiting { background: var(--amber); color: #000; }
+  /* The header: Chats, colour, title and the picture button on one line; the pill on a second line. */
+  .chat-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
+  .chat-head h1 { flex: 1 1 0; min-width: 0; }
+  .chat-head .act { order: 5; flex-basis: 100%; margin-left: 0; }
+  .chat-head .act-pill { width: fit-content; }
+  .pic-open { display: grid; flex: none; width: 36px; height: 36px; margin-right: -6px; }
+  .pic-open svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .pic-open.unseen { color: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); animation: breathe 1.6s ease-in-out infinite; }
   /* iOS zooms into any field with text under 16px when it gets focus. */
   input, textarea, select { font-size: 16px !important; }
-  .composer { padding: 10px 10px calc(8px + env(safe-area-inset-bottom)); }
+  .composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  /* While the keyboard is up the composer sits right on it. */
   :root[data-keyboard] .composer { padding-bottom: 8px; }
-  .ask-return { white-space: nowrap; position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 5; isolation: isolate;
-    padding: 10px 18px; border-radius: 99px; background: var(--violet-bg); color: var(--violet); font: 700 16px var(--hand); --ring: var(--chalk-r14-2); --ink: var(--violet); box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-slot, .split > .left, .split > .right, .app { transition: none !important; }
+@media (max-width: 679px) and (prefers-reduced-motion: reduce) {
+  .sidebar-slot, .split > .left, .split > .right, .cs-pane, .st-pane { transition: none !important; }
 }
 
-/* ---------- Admins: Servers and Access (claudia.web.admin) ---------- */
-.admin-links { display: flex; gap: 4px; padding: 0 4px 6px; }
-.admin-links button { color: var(--muted); font: 600 13.5px var(--hand); padding: 3px 9px; border-radius: 999px; }
-.admin-links button:hover { color: var(--fg); background: var(--panel); }
-.admin-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); }
-.admin-dialog { width: min(780px, calc(100vw - 24px)); max-height: calc(100% - 48px); overflow-y: auto; background: var(--bg); border: 2px solid var(--chalk);
-  border-radius: 14px; padding: 12px 18px 18px; box-shadow: 0 12px 48px rgb(0 0 0 / 0.45); }
-.admin-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.admin-tabs { display: flex; gap: 4px; }
-.admin-tabs button { padding: 4px 14px; border-radius: 999px; color: var(--muted); font: 700 16px var(--hand); }
-.admin-tabs button.on { color: var(--fg); background: var(--panel2); }
-.admin-close { width: 30px; height: 30px; border-radius: 50%; font-size: 20px; color: var(--muted); }
-.admin-close:hover { color: var(--fg); background: var(--panel); }
-.admin-dialog h3 { margin: 16px 0 6px; font: 700 17px var(--hand); color: var(--accent); }
-.admin-error { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--red-bg); color: var(--red); font-size: 13px; }
-.pair-state { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* ---------- Dialogs: the settings card, the admins' Servers and Access pages ---------- */
+.settings-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; z-index: 50; }
+.settings { width: min(520px, calc(100vw - 32px)); max-height: calc(var(--vv-h, 100vh) - 48px); overflow-y: auto; overscroll-behavior: contain; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.4); }
+.settings header { display: flex; align-items: center; justify-content: space-between; }
+.settings h2 { margin: 0; font: 700 22px var(--hand); }
+.settings h3 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+.settings section { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.settings p { margin: 0; }
+.no-profile { min-height: 100%; display: grid; place-content: center; gap: 12px; text-align: center; padding: 24px; }
+.no-profile .brand { justify-content: center; }
+.hub-admin-links { display: flex; justify-content: center; gap: 10px; }
+/* Tabs (which server's settings, the admins' Servers and Access pages). */
+.profile-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.profile-tabs button { flex: 1; min-width: 0; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; justify-content: center; }
+.profile-tabs button:hover { color: var(--fg); }
+.profile-tabs button.on { background: var(--panel2); color: var(--fg); font-weight: 600; }
+.profile-tabs .you { font-size: 10px; color: var(--accent); font-weight: 600; }
+.settings-servers { display: grid; gap: 6px; }
+.settings-servers .profile-tabs button:disabled { opacity: 0.5; cursor: default; }
+.needs-update { color: var(--red); font-weight: 600; }
+.mono { font-family: var(--mono); }
+.settings.hub-admin { width: min(760px, calc(100vw - 32px)); }
+.settings.hub-admin > header .profile-tabs { width: 220px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .admin-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .admin-table td { padding: 4px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); vertical-align: middle; }
-.admin-table .mono, .admin-form .mono { font-family: var(--mono); font-size: 12px; }
-.admin-table input:not([type="checkbox"]), .admin-form input { width: 100%; border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; background: var(--bg2); outline: none; font-size: 13px; }
-.admin-table input:focus, .admin-form input:focus { border-color: var(--accent); }
+.admin-table td.mono { font-size: 12px; }
+.admin-table input:not([type="checkbox"]), .admin-form input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; background: var(--bg); outline: none; font-size: 12.5px; }
+.admin-table input.mono, .admin-form input.mono { font-family: var(--mono); font-size: 12px; }
+.admin-table input:focus, .admin-form input:focus { border-color: var(--blue); }
 .admin-table .row-actions { white-space: nowrap; text-align: right; }
-.admin-table .row-actions button, .admin-form button { border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; background: var(--panel2); font-size: 12.5px; margin-left: 4px; }
-.admin-form button:disabled { opacity: 0.5; }
+.admin-table .row-actions button, .admin-form button { border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; background: var(--panel2); font-size: 12px; margin-left: 4px; }
+.admin-form button:disabled { opacity: 0.5; cursor: default; }
 .admin-table button.danger { border-color: var(--red); color: var(--red); }
 .admin-table.grid th:not(:first-child), .admin-table.grid td.cell { text-align: center; }
 .admin-table.grid td.person { font-family: var(--mono); font-size: 12px; }
@@ -478,6 +685,7 @@ code, pre { font-family: var(--mono); }
 .admin-form { display: grid; grid-template-columns: 8em 1fr 1fr auto; gap: 6px; }
 .admin-form.pair { grid-template-columns: 2fr 1fr 1fr auto; }
 .admin-form.person { grid-template-columns: 1fr auto; }
-@media (max-width: 679px) {
-  .admin-form, .admin-form.pair { grid-template-columns: 1fr; }
-}
+.pair-state { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.pair-state.fetched, .pair-state.on-WireGuard { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
+.pair-state.peer-up { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
+.pair-state.waiting-for-peer { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }

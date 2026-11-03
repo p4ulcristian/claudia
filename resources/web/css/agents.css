@@ -108,8 +108,8 @@
 .slash-menu { position: absolute; left: 14px; right: 14px; bottom: calc(100% - 6px); list-style: none; margin: 0; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.35); z-index: 5; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
 .slash-menu li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 6px; padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
 .slash-menu li.on { background: var(--panel2); box-shadow: inset 2px 0 0 var(--accent); }
-.slash-menu b { font: 600 12.5px var(--mono); }
-.slash-menu .hint { color: var(--muted); font: 12px var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-menu b { white-space: nowrap; }
+.slash-menu .hint { color: var(--muted); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slash-menu .desc { grid-column: 1 / -1; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Usage: bars at the list's foot, rings in its header and on a rail, the context ring in the chat's header. */
@@ -129,7 +129,7 @@
 .limit-rings:hover { background: var(--panel); }
 .limit-rings .ring { width: 26px; height: 26px; }
 .rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
-.ring { position: relative; flex: none; width: 28px; height: 28px; display: grid; place-items: center; }
+.ring { position: relative; width: 28px; height: 28px; display: grid; place-items: center; }
 .ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; -webkit-mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 .ring circle { fill: none; stroke-width: 3; }
 .r-track { stroke: var(--line); }
@@ -143,24 +143,24 @@
 .ring.action:hover .r-num { opacity: 0; }
 .ring.action:hover .r-track { stroke: color-mix(in srgb, var(--fg) 35%, var(--line)); fill: color-mix(in srgb, var(--fg) 10%, transparent); }
 .r-label { position: absolute; right: -9px; bottom: -4px; font: 700 10px/1 var(--hand); color: var(--muted); }
-.chat-head .ring { margin-right: 6px; }
 
 /* The changes pill and its list. */
-.act { position: relative; flex: none; z-index: 6; }
+.act { position: relative; flex: none; margin-left: auto; z-index: 6; }
+.chat-head .act { margin-left: 0; }
 .act-pill { display: flex; align-items: center; height: 28px; padding: 0 3px; border-radius: 99px; background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--line); box-shadow: 0 2px 10px rgb(0 0 0 / 0.18); font: 600 11.5px var(--sans); color: var(--muted); }
 .act-part { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; color: inherit; font: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s, color 0.12s; }
 .act-part:hover, .act-part.on { background: var(--panel2); color: var(--fg); }
-.act-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 31; width: min(560px, calc(100cqw - 24px)); max-height: min(70vh, 640px); overflow: auto; border-radius: 12px; box-shadow: 0 10px 34px rgb(0 0 0 / 0.38); animation: rise 0.16s ease-out; background: var(--panel); }
+.act-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 31; width: min(560px, calc(100cqw - 24px)); max-height: min(70vh, 640px); overflow: auto; border-radius: 12px; box-shadow: 0 10px 34px rgb(0 0 0 / 0.38); animation: rise 0.16s ease-out; }
 .act-pop > .panel { animation: none; }
-.act-turns { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; }
-.act-turns button { font: 700 13px var(--hand); color: var(--muted); padding: 1px 9px; border-radius: 99px; }
-.act-turns button.on { color: var(--fg); background: var(--panel2); }
-.link { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; font-size: 12.5px; }
-.chev { display: inline-block; transition: transform 0.15s; width: 8px; }
-.chev.open { transform: rotate(90deg); }
-.chip.green { color: var(--green); background: var(--green-bg); }
-.chip.red { color: var(--red); background: var(--red-bg); }
-.changes-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.act-sep { width: 1px; height: 14px; background: var(--line); }
+/* Changes panel */
+.panel.changes { gap: 6px; padding: 10px 12px; }
+.changes-head { display: flex; align-items: baseline; gap: 8px; }
+.changes-head .tasks-head { flex: 1; min-width: 0; }
+.tasks-head { display: flex; align-items: baseline; gap: 8px; text-align: left; }
+.tasks-head:disabled { cursor: default; color: inherit; opacity: 1; }
+.task-stop { font-size: 11.5px; color: var(--red); border: 1px solid var(--red); border-radius: 6px; padding: 1px 8px; flex: none; }
+.read-only .task-stop { display: none; }
 .toggle-split { white-space: nowrap; }
 .plus { color: var(--green); font-variant-numeric: tabular-nums; }
 .minus { color: var(--red); font-variant-numeric: tabular-nums; }
@@ -182,7 +182,8 @@
 .diff mark { color: inherit; border-radius: 2px; padding: 0 1px; }
 .diff tr.del mark, .diff td.del mark { background: color-mix(in srgb, var(--red) 40%, transparent); }
 .diff tr.add mark, .diff td.add mark { background: color-mix(in srgb, var(--green) 40%, transparent); }
-.ag-steps { display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; }
+.ag-steps .transcript { max-height: none; overflow: visible; }
+.ag-commit-view .g-detail { max-height: none; border-left: 0; padding: 8px 0 0; }
 .ag-git h3 { margin: 0 0 6px; font: 700 16px var(--hand); }
 .ag-git h3 code { font-size: 12.5px; }
 .ag-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }

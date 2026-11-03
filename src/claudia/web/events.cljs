@@ -101,7 +101,8 @@
              (assoc-in [:chats k] (-> (select-keys f [:title :folder :scene :running :asks :more
                                                   :agents :changes :settings :model :commands :context :pictureSettings])
                                       (assoc :messages msgs :loaded true)))
-             (update-in [:outbox k] (fn [ob] (reduce drop-echo (vec ob) (keep #(when (= "user" (:role %)) (:text %)) msgs)))))
+             (update-in [:outbox k] (fn [ob] (reduce drop-echo (vec ob) (keep #(when (= "user" (:role %)) (:text %)) msgs))))
+             (update-in [:turn-since k] #(when (:running f) (or % (js/Date.now)))))
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
@@ -129,7 +130,8 @@
   {:db (assoc-in db [:chats [server chat] :scene] scene)})
 
 (defmethod on-frame "turn" [db server {:keys [chat running]}]
-  {:db (cond-> (assoc-in db [:chats [server chat] :running] running)
+  {:db (cond-> (-> (assoc-in db [:chats [server chat] :running] running)
+                   (update-in [:turn-since [server chat]] #(when running (or % (js/Date.now)))))
          ;; A turn's end settles every streamed message.
          (not running) (update-in [:chats [server chat] :messages]
                                   (fn [ms] (mapv #(dissoc % :streaming) ms))))
@@ -156,8 +158,9 @@
  (fn [{:keys [db]} [_ [server chat :as k] {:keys [history?] :or {history? true}}]]
    (let [[ps pc :as prev] (:open db)]
      (if (= prev k)
-       {:db (assoc db :screen :chat)}
-       {:db (-> db (assoc :open k :screen :chat) (assoc-in [:chats k :error] nil))
+       {:db (assoc db :screen :chat :sidebar? false :rail-search? false :settings? false)}
+       {:db (-> db (assoc :open k :screen :chat :sidebar? false :rail-search? false :settings? false)
+                (assoc-in [:chats k :error] nil))
         :ws/send-all (cond-> []
                        (and pc (not= prev k)) (conj [ps {:type "close" :chat pc}])
                        chat (conj [server {:type "open" :chat chat}]))
@@ -168,14 +171,15 @@
  :nav/new
  (fn [{:keys [db]} _]
    (let [[ps pc] (:open db)]
-     {:db (assoc db :open nil :screen :chat)
+     {:db (assoc db :open nil :screen :chat :sidebar? false :rail-search? false :settings? false)
       :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
       :history/push nil})))
 
 (rf/reg-event-fx
  :nav/list
  (fn [{:keys [db]} _]
-   {:db (assoc db :screen :list)}))
+   {:db (cond-> (assoc db :screen :list)
+          (= :picture (:screen db)) (assoc :pic-closed-at (js/Date.now)))}))
 
 (rf/reg-event-fx
  :nav/popstate
@@ -187,13 +191,24 @@
 
 (rf/reg-event-db
  :nav/screen
- (fn [db [_ screen]] (assoc db :screen screen)))
+ (fn [db [_ screen]]
+   (cond-> (assoc db :screen screen)
+     ;; Pictures drawn after the picture screen closed light its button (phone).
+     (and (= :picture (:screen db)) (not= :picture screen)) (assoc :pic-closed-at (js/Date.now)))))
 
-(rf/reg-event-fx
+(rf/reg-event-db
  :sidebar/toggle
- (fn [{:keys [db]} _]
-   (let [v (not (:sidebar? db))]
-     {:db (assoc db :sidebar? v) :store ["claudia.sidebar" v]})))
+ ;; The drawer (desktop); from a rail search it only folds that back. Closing it leaves Settings.
+ (fn [db [_ open?]]
+   (let [v (if (some? open?) open? (and (not (:rail-search? db)) (not (:sidebar? db))))]
+     (cond-> (assoc db :sidebar? v :rail-search? false)
+       (not v) (assoc :settings? false)
+       (and (not v) (:rail-search? db)) (assoc :search nil)))))
+
+(rf/reg-event-db
+ :sidebar/search
+ ;; The rail's search: the drawer opens with the search box focused (shell focuses it).
+ (fn [db _] (assoc db :sidebar? true :rail-search? true)))
 
 (rf/reg-event-fx
  :new/server
