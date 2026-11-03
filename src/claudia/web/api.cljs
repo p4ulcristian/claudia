@@ -36,3 +36,15 @@
 (defn post-json [u body]
   (fetch-json u {:method "POST" :headers {"content-type" "application/json" "accept" "application/json"}
                  :body (protocol/write-json body)}))
+
+(defn call-opts
+  "fetch options for method with body (data, sent as JSON when given), asking for JSON back."
+  [method body]
+  (cond-> {:method method :headers {"accept" "application/json"}}
+    body (-> (assoc-in [:headers "content-type"] "application/json")
+             (assoc :body (protocol/write-json body)))))
+
+(defn call-json
+  "Promise of the JSON answer to method on u, with body (data or nil); rejects like fetch-json."
+  [method u body]
+  (fetch-json u (call-opts method body)))

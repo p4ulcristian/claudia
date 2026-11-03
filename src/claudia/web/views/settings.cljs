@@ -10,9 +10,9 @@
             [claudia.web.alerts :as alerts]
             [claudia.web.chatops :as ops]
             [claudia.web.logo :as logo]
+            [claudia.web.views.pure.settings :as pure]
+            [claudia.web.views.pure.words :as words]
             [claudia.web.views.usage :as usage]))
-
-(defn- cap [n] (str (str/upper-case (subs n 0 1)) (subs n 1)))
 
 ;; ---- the title menu ----
 
@@ -32,6 +32,43 @@
      [@open])
     (into [:div.cs-title-box {:ref #(set! (.-current box) %)}] children)))
 
+(defn- whose-menu [open view people]
+  [:<>
+   [:div.cs-menu-head "Whose chats"]
+   (for [[k label] (pure/whose-items people)]
+     ^{:key (str k)}
+     [:button.cs-menu-item {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
+                            :on-click #(do (reset! open false) (when (not= k view) (rf/dispatch [:ops/view k])))}
+      [:span.cs-tick {:aria-hidden true} (when (= k view) "✓")]
+      [:span.cs-menu-label label]
+      (when k [:span.cs-menu-note "read only"])])])
+
+(defn- servers-menu [{:keys [view servers usable ticked]}]
+  [:<>
+   [:div.cs-menu-head "Servers"]
+   (for [{server-name :name :keys [label]} servers
+         :let [inv (some #(= server-name (:name %)) usable)
+               on (and inv (some #(= server-name (:name %)) ticked))]]
+     ^{:key server-name}
+     [:button.cs-menu-item {:class (when on "on") :role "menuitemcheckbox" :aria-checked (boolean on)
+                            :disabled (or (not inv) (and on (= 1 (count ticked))))
+                            :on-click #(rf/dispatch [:ops/tick-server server-name])}
+      [:span.cs-tick.box {:aria-hidden true} (when on "✓")]
+      [:span.server-mark {:aria-hidden true} (words/initial label)]
+      [:span.cs-menu-label label]
+      (when-not inv [:span.cs-menu-note.warn (str "no " (words/capital view) " here")])])])
+
+(defn- title-menu-box [open text {:keys [view people servers] :as m}]
+  [:f> title-box open
+   [:button.cs-title {:aria-haspopup "menu" :aria-expanded @open :on-click #(swap! open not)}
+    text
+    [:svg.cs-caret {:viewBox "0 0 12 12" :aria-hidden true} [:path {:d "M3 4.5l3 3 3-3"}]]]
+   (when @open
+     [:<>
+      [:div.cs-menu {:role "menu"}
+       (when (seq people) (whose-menu open view people))
+       (when (> (count servers) 1) (servers-menu m))]])])
+
 (defn title-menu []
   (let [open (r/atom false)]
     (fn []
@@ -41,47 +78,12 @@
             hidden @(rf/subscribe [:hidden-servers])
             mes @(rf/subscribe [:server-mes])
             {:keys [archived?]} @(rf/subscribe [:list-mode])
-            in-view (fn [s] (or (nil? view) (some #{view} (get-in mes [s :profiles]))))
-            usable (filter #(in-view (:name %)) servers)
-            ticked (remove #(hidden (:name %)) usable)
-            filtered? (and (seq ticked) (< (count ticked) (count usable)))
-            title (cond archived? "Archived chats" view (str (cap view) "'s chats") :else "My chats")
-            hint (when filtered? (if (= 1 (count ticked)) (:label (first ticked)) (str (count ticked) " servers")))
-            has-menu? (or (seq people) (> (count servers) 1))
-            text [:<> [:span.cs-title-t title] (when hint [:span.cs-title-hint (str "· " hint)])]]
-        (if-not has-menu?
+            {:keys [usable ticked]} (pure/servers-in-view servers view mes hidden)
+            hint (pure/servers-hint usable ticked)
+            text [:<> [:span.cs-title-t (pure/list-title archived? view)] (when hint [:span.cs-title-hint (str "· " hint)])]]
+        (if-not (or (seq people) (> (count servers) 1))
           [:h2.cs-title text]
-          [:f> title-box open
-           [:button.cs-title {:aria-haspopup "menu" :aria-expanded @open :on-click #(swap! open not)}
-            text
-            [:svg.cs-caret {:viewBox "0 0 12 12" :aria-hidden true} [:path {:d "M3 4.5l3 3 3-3"}]]]
-           (when @open
-             [:<>
-              [:div.cs-menu {:role "menu"}
-               (when (seq people)
-                 [:<>
-                  [:div.cs-menu-head "Whose chats"]
-                  (for [[k label] (cons [nil "My chats"] (map (fn [p] [p (str (cap p) "'s chats")]) people))]
-                    ^{:key (str k)}
-                    [:button.cs-menu-item {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
-                                           :on-click #(do (reset! open false) (when (not= k view) (rf/dispatch [:ops/view k])))}
-                     [:span.cs-tick {:aria-hidden true} (when (= k view) "✓")]
-                     [:span.cs-menu-label label]
-                     (when k [:span.cs-menu-note "read only"])])])
-               (when (> (count servers) 1)
-                 [:<>
-                  [:div.cs-menu-head "Servers"]
-                  (for [{:keys [name label]} servers
-                        :let [inv (in-view name)
-                              on (and inv (not (hidden name)))]]
-                    ^{:key name}
-                    [:button.cs-menu-item {:class (when on "on") :role "menuitemcheckbox" :aria-checked (boolean on)
-                                           :disabled (or (not inv) (and on (= 1 (count ticked))))
-                                           :on-click #(rf/dispatch [:ops/tick-server name])}
-                     [:span.cs-tick.box {:aria-hidden true} (when on "✓")]
-                     [:span.server-mark {:aria-hidden true} (str/upper-case (subs (str label) 0 1))]
-                     [:span.cs-menu-label label]
-                     (when-not inv [:span.cs-menu-note.warn (str "no " (cap view) " here")])])])]])])))))
+          (title-menu-box open text {:view view :people people :servers servers :usable usable :ticked ticked}))))))
 
 (defn lock-icon []
   [:span.cs-ro {:title "Read only" :aria-label "read only"}
@@ -96,20 +98,25 @@
 
 ;; ---- token forms ----
 
-(defn- token-form [{:keys [placeholder named? save]}]
+(defn- submit-token
+  "The token form's submit: save, then clear it unless it failed."
+  [{:keys [value nm busy error]} ready save]
+  (fn [e]
+    (.preventDefault e)
+    (when ready
+      (reset! busy true)
+      (save @value (str/trim @nm)
+            (fn [err]
+              (reset! busy false)
+              (reset! error err)
+              (when-not err (reset! value "") (reset! nm "")))))))
+
+(defn- token-form [_props]
   (let [value (r/atom "") nm (r/atom "") busy (r/atom false) error (r/atom nil)]
     (fn [{:keys [placeholder named? save]}]
       (let [ready (and (seq (str/trim @value)) (or (not named?) (seq (str/trim @nm))))]
         [:form.token-form {:class (when named? "named")
-                           :on-submit (fn [e]
-                                        (.preventDefault e)
-                                        (when ready
-                                          (reset! busy true)
-                                          (save @value (str/trim @nm)
-                                                (fn [err]
-                                                  (reset! busy false)
-                                                  (reset! error err)
-                                                  (when-not err (reset! value "") (reset! nm ""))))))}
+                           :on-submit (submit-token {:value value :nm nm :busy busy :error error} ready save)}
          (when named?
            [:input.token-name {:auto-complete "off" :spell-check false :placeholder "Whose (Paul)"
                                :value @nm :on-change #(reset! nm (.. % -target -value))}])
@@ -126,7 +133,7 @@
   (let [[prefs set-prefs] (h/use-state nil)
         u (ops/api-url server "prefs")
         save! (fn [v] (-> (js/fetch u #js {:method "PATCH" :headers #js {"content-type" "application/json"}
-                                          :body (js/JSON.stringify #js {:chatColors v})})
+                                           :body (js/JSON.stringify #js {:chatColors v})})
                           (.then #(when (.-ok %) (.json %)))
                           (.then #(when % (set-prefs (js->clj % :keywordize-keys true))))))]
     (h/use-effect
@@ -145,51 +152,67 @@
                        :on-change #(save! "none")}]
        "Default look; colour a chat by hand from its header dot"]]]))
 
-(defn- server-settings [server]
+(defn- put-fn
+  "A write to server's API now: on-ok gets the answer, done the error (nil when it went)."
+  [server]
+  (fn [method p body on-ok done]
+    (rf/dispatch [:ops/put-now {:url (ops/api-url server p) :method method :body body
+                                :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}])))
+
+(defn- token-status [tokens in-use]
+  [:p.small
+   (cond (nil? tokens) "Checking…"
+         (nil? (:inUse tokens)) "None in use from Settings yet."
+         (not in-use) (str "In use: a token without a name, set by " (get-in tokens [:inUse :by]) ".")
+         :else [:<> "Switched to " [:b in-use] " by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."])
+   " A switch applies to every chat on its next message."])
+
+(defn- token-choice [server tokens in-use put!]
+  [:div.choice
+   (for [t (:tokens tokens)]
+     ^{:key (:name t)}
+     [:label
+      [:input {:type "radio" :name (str "claudeToken-" server) :checked (= (:name t) in-use)
+               :on-change #(put! "POST" "claude-token/use" {:name (:name t)}
+                                 (fn [ok] (rf/dispatch [:ops/tokens server ok])) nil)}]
+      (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]])])
+
+(defn- subscription-section [server put!]
   (let [tokens @(rf/subscribe [:tokens server])
-        github @(rf/subscribe [:github server])
-        me @(rf/subscribe [:server-me server])
-        in-use (get-in tokens [:inUse :name])
-        put! (fn [method p body on-ok done]
-               (rf/dispatch [:ops/put-now {:url (ops/api-url server p) :method method :body body
-                                           :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}]))]
+        in-use (get-in tokens [:inUse :name])]
+    [:section.st-section
+     [:h3 "Claude subscription " [:span.muted.small "shared by every profile here"]]
+     (token-status tokens in-use)
+     (when (seq (:tokens tokens)) (token-choice server tokens in-use put!))
+     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches to it."]
+     [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
+                  :save (fn [token nm done]
+                          (put! "PUT" "claude-token" {:name nm :token token}
+                                (fn [ok] (rf/dispatch [:ops/tokens server ok])) done))}]]))
+
+(defn- github-section [server put!]
+  (let [github @(rf/subscribe [:github server])]
+    [:section.st-section
+     [:h3 "GitHub " [:span.muted.small "yours only"]]
+     [:p.small
+      (cond (nil? github) "Checking…"
+            github [:<> "Pushes and pull requests come from " [:b (str "@" (:login github))] "."]
+            :else "Not connected: Claude can't push or open pull requests for you.")
+      " " [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
+      " (the boxes come ticked) and paste it here."]
+     [token-form {:placeholder (if github "Replace with a new token" "GitHub token (ghp_…)")
+                  :save (fn [token _ done]
+                          (put! "PUT" "github" {:token token}
+                                (fn [ok] (rf/dispatch [:ops/github-user server ok])) done))}]]))
+
+(defn- server-settings [server]
+  (let [me @(rf/subscribe [:server-me server])
+        put! (put-fn server)]
     [:<>
      [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]
      (when-not (:readOnly me) [:f> chat-colours server])
-     [:section.st-section
-      [:h3 "Claude subscription " [:span.muted.small "shared by every profile here"]]
-      [:p.small
-       (cond (nil? tokens) "Checking…"
-             (nil? (:inUse tokens)) "None in use from Settings yet."
-             (not in-use) (str "In use: a token without a name, set by " (get-in tokens [:inUse :by]) ".")
-             :else [:<> "Switched to " [:b in-use] " by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."])
-       " A switch applies to every chat on its next message."]
-      (when (seq (:tokens tokens))
-        [:div.choice
-         (for [t (:tokens tokens)]
-           ^{:key (:name t)}
-           [:label
-            [:input {:type "radio" :name (str "claudeToken-" server) :checked (= (:name t) in-use)
-                     :on-change #(put! "POST" "claude-token/use" {:name (:name t)}
-                                       (fn [ok] (rf/dispatch [:ops/tokens server ok])) nil)}]
-            (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]])])
-      [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches to it."]
-      [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
-                   :save (fn [token nm done]
-                           (put! "PUT" "claude-token" {:name nm :token token}
-                                 (fn [ok] (rf/dispatch [:ops/tokens server ok])) done))}]]
-     [:section.st-section
-      [:h3 "GitHub " [:span.muted.small "yours only"]]
-      [:p.small
-       (cond (nil? github) "Checking…"
-             github [:<> "Pushes and pull requests come from " [:b (str "@" (:login github))] "."]
-             :else "Not connected: Claude can't push or open pull requests for you.")
-       " " [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
-       " (the boxes come ticked) and paste it here."]
-      [token-form {:placeholder (if github "Replace with a new token" "GitHub token (ghp_…)")
-                   :save (fn [token _ done]
-                           (put! "PUT" "github" {:token token}
-                                 (fn [ok] (rf/dispatch [:ops/github-user server ok])) done))}]]]))
+     (subscription-section server put!)
+     (github-section server put!)]))
 
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
 
@@ -227,13 +250,13 @@
     [:div.settings-servers
      (when (> (count servers) 1)
        [:div.profile-tabs {:role "tablist" :aria-label "Which server's settings"}
-        (for [{:keys [name label]} servers
-              :let [up? (= :open (get-in all [name :status]))]]
-          ^{:key name}
-          [:button {:role "tab" :aria-selected (= name server) :class (when (= name server) "on") :disabled (not up?)
-                    :title (if up? (str label "'s settings") (str label " is off"))
-                    :on-click #(rf/dispatch [:ops/load-settings name])}
-           label
+        (for [{server-name :name tab-label :label} servers
+              :let [up? (= :open (get-in all [server-name :status]))]]
+          ^{:key server-name}
+          [:button {:role "tab" :aria-selected (= server-name server) :class (when (= server-name server) "on") :disabled (not up?)
+                    :title (if up? (str tab-label "'s settings") (str tab-label " is off"))
+                    :on-click #(rf/dispatch [:ops/load-settings server-name])}
+           tab-label
            (when-not up? [:span.sf-note "off"])])])
      (when me
        [:p.muted.small [:b label] (when (:name me) (str " (" (:name me) ")")) " · Claudia " (:version me) " "
@@ -247,23 +270,50 @@
 
 (defn- back! [] (rf/dispatch [:ops/settings false]))
 
+(defn- use-escape-back!
+  "Escape goes back while shown, before the page's own keys see it (Escape there stops a chat)."
+  [shown?]
+  (h/use-effect
+   (fn []
+     (when shown?
+       (let [esc (fn [^js e]
+                   (when (and (= "Escape" (.-key e)) (not (some-> (.-target e) (.closest "input, textarea"))))
+                     (.preventDefault e)
+                     (.stopPropagation e)
+                     (back!)))]
+         (js/window.addEventListener "keydown" esc true)
+         #(js/window.removeEventListener "keydown" esc true))))
+   [shown?]))
+
+(defn- chats-group [all-sessions?]
+  [:section.st-group {:aria-label "Chats"}
+   [:button.st-row {:on-click #(rf/dispatch [:ops/archived true])}
+    [archive-icon]
+    [:span.st-label "Archived chats"]
+    chev]
+   [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]])
+
+(defn- drawing-group []
+  [:section.st-group {:aria-label "Drawing"}
+   [:button.st-row {:on-click #(rf/dispatch [:gallery/open true])}
+    [:svg.st-icon {:viewBox "0 0 20 20" :aria-hidden true}
+     [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]
+    [:span.st-label "Forms " [:span.st-note "everything Claude can draw, and your templates"]]
+    chev]])
+
+(defn- hub-group []
+  [:section.st-group {:aria-label "Hub"}
+   [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
+    [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]
+   [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
+    [:span.st-label "Access " [:span.st-note "who may use which server"]]]])
+
 (defn- settings-view [shown?]
   (let [servers @(rf/subscribe [:server-list])
         server @(rf/subscribe [:settings-server])
         ro @(rf/subscribe [:read-only?])
         {:keys [all-sessions?]} @(rf/subscribe [:list-mode])]
-    ;; Escape goes back while shown, before the page's own keys see it (Escape there stops a chat).
-    (h/use-effect
-     (fn []
-       (when shown?
-         (let [esc (fn [^js e]
-                     (when (and (= "Escape" (.-key e)) (not (some-> (.-target e) (.closest "input, textarea"))))
-                       (.preventDefault e)
-                       (.stopPropagation e)
-                       (back!)))]
-           (js/window.addEventListener "keydown" esc true)
-           #(js/window.removeEventListener "keydown" esc true))))
-     [shown?])
+    (use-escape-back! shown?)
     [:div.st-pane {:role "dialog" :aria-label "Settings" :aria-hidden (not shown?) :inert (when-not shown? true)}
      [:header.st-head
       [:button.st-back {:on-click back!}
@@ -272,26 +322,11 @@
      [:div.st-scroll
       [brand server]
       [:f> usage/plan-meters server]
-      [:section.st-group {:aria-label "Chats"}
-       [:button.st-row {:on-click #(rf/dispatch [:ops/archived true])}
-        [archive-icon]
-        [:span.st-label "Archived chats"]
-        chev]
-       [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]]
+      (chats-group all-sessions?)
       [:section.st-group {:aria-label "Alerts"}
        [alerts/toggles]]
-      [:section.st-group {:aria-label "Drawing"}
-       [:button.st-row {:on-click #(rf/dispatch [:gallery/open true])}
-        [:svg.st-icon {:viewBox "0 0 20 20" :aria-hidden true}
-         [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]
-        [:span.st-label "Forms " [:span.st-note "everything Claude can draw, and your templates"]]
-        chev]]
-      (when (:admin @(rf/subscribe [:me]))
-        [:section.st-group {:aria-label "Hub"}
-         [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
-          [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]
-         [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
-          [:span.st-label "Access " [:span.st-note "who may use which server"]]]])
+      (drawing-group)
+      (when (:admin @(rf/subscribe [:me])) (hub-group))
       (when (and (not ro) @(rf/subscribe [:server-me server]))
         [:div.st-server
          [server-pick servers server]
@@ -306,39 +341,50 @@
 
 ;; ---- the GitHub prompt ----
 
+(defn- github-done [login close]
+  [:<>
+   [:p "Done: Claude now pushes and opens pull requests as " [:b (str "@" login)] "."]
+   [:div.prompt-actions [:button.primary {:on-click close} "Start"]]])
+
+(defn- submit-github
+  "The prompt's submit: the token to the server; done holds the login once it went."
+  [server {:keys [value busy error done]}]
+  (fn [e]
+    (.preventDefault e)
+    (reset! busy true)
+    (rf/dispatch [:ops/put-now {:url (ops/api-url server "github") :method "PUT" :body {:token @value}
+                                :on-done (fn [ok err]
+                                           (reset! busy false)
+                                           (reset! error err)
+                                           (when ok
+                                             (rf/dispatch [:ops/github-user server ok])
+                                             (reset! done (get-in ok [:user :login]))))}])))
+
+(defn- github-ask [server profile {:keys [value busy error] :as form} close]
+  [:<>
+   [:p "So Claude can push your branches and open pull requests as you, it needs a GitHub token of yours. It stays in your profile only."]
+   [:ol.prompt-steps
+    [:li [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
+     ": the boxes are already ticked; pick an expiry, then " [:b "Generate token"] "."]
+    [:li "Copy it and paste it here."]]
+   [:form.token-form
+    {:on-submit (submit-github server form)}
+    [:input {:type "password" :auto-complete "off" :spell-check false :placeholder "ghp_…" :auto-focus true
+             :value @value :on-change #(reset! value (.. % -target -value))}]
+    [:button {:disabled (or @busy (str/blank? @value))} (if @busy "Saving…" "Save")]
+    (when @error [:p.token-error @error])]
+   [:div.prompt-actions
+    [:button {:on-click #(do (js/localStorage.setItem (ops/github-later-key server profile) "1") (close))} "Later"]
+    [:span.muted.small "You can add it any time in Settings."]]])
+
 (defn github-prompt []
-  (let [value (r/atom "") busy (r/atom false) error (r/atom nil) done (r/atom nil)]
+  (let [form {:value (r/atom "") :busy (r/atom false) :error (r/atom nil) :done (r/atom nil)}]
     (fn []
       (when-let [{:keys [server profile]} @(rf/subscribe [:github-prompt])]
         (let [close #(rf/dispatch [:ops/github-prompt nil])]
           [:div.settings-backdrop
            [:div.settings.github-prompt {:role "dialog" :aria-label "Connect GitHub"}
             [:header [:h2 "Connect GitHub"]]
-            (if @done
-              [:<>
-               [:p "Done: Claude now pushes and opens pull requests as " [:b (str "@" @done)] "."]
-               [:div.prompt-actions [:button.primary {:on-click close} "Start"]]]
-              [:<>
-               [:p "So Claude can push your branches and open pull requests as you, it needs a GitHub token of yours. It stays in your profile only."]
-               [:ol.prompt-steps
-                [:li [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
-                 ": the boxes are already ticked; pick an expiry, then " [:b "Generate token"] "."]
-                [:li "Copy it and paste it here."]]
-               [:form.token-form
-                {:on-submit (fn [e]
-                              (.preventDefault e)
-                              (reset! busy true)
-                              (rf/dispatch [:ops/put-now {:url (ops/api-url server "github") :method "PUT" :body {:token @value}
-                                                          :on-done (fn [ok err]
-                                                                     (reset! busy false)
-                                                                     (reset! error err)
-                                                                     (when ok
-                                                                       (rf/dispatch [:ops/github-user server ok])
-                                                                       (reset! done (get-in ok [:user :login]))))}]))}
-                [:input {:type "password" :auto-complete "off" :spell-check false :placeholder "ghp_…" :auto-focus true
-                         :value @value :on-change #(reset! value (.. % -target -value))}]
-                [:button {:disabled (or @busy (str/blank? @value))} (if @busy "Saving…" "Save")]
-                (when @error [:p.token-error @error])]
-               [:div.prompt-actions
-                [:button {:on-click #(do (js/localStorage.setItem (ops/github-later-key server profile) "1") (close))} "Later"]
-                [:span.muted.small "You can add it any time in Settings."]]])]])))))
+            (if @(:done form)
+              (github-done @(:done form) close)
+              (github-ask server profile form close))]])))))

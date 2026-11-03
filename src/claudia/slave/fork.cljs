@@ -5,7 +5,6 @@
   files on disk are not touched."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             ["node:fs/promises" :as fsp]
-            [clojure.string :as str]
             [claudia.slave.history :as history]
             [claudia.slave.store :as store]))
 
@@ -31,16 +30,69 @@
   "The session file's entries (JS objects)."
   [cwd id]
   (-> (fsp/readFile (history/session-file cwd id) "utf8")
-      (.then (fn [text] (vec (keep #(try (js/JSON.parse %) (catch :default _ nil)) (remove str/blank? (str/split-lines text))))))))
+      (.then history/jsonl-entries)))
 
-(defn sent-mid-turn
-  "A message sent while a turn ran isn't saved as a user entry: Claude Code saves a queued_command
-  attachment holding the sent uuid as source_uuid (src/chat.ts sentMidTurn). The sent uuid, or nil."
-  [^js e]
-  (let [^js a (when (and e (= "attachment" (.-type e))) (.-attachment e))]
-    (when (and a (= "queued_command" (.-type a)) (not (.-isMeta a)) (not (.-forwardedIntent a))
-               (or (string? (.-prompt a)) (array? (.-prompt a))))
-      (if (and (string? (.-source_uuid a)) (seq (.-source_uuid a))) (.-source_uuid a) (.-uuid e)))))
+(defn turn-starts
+  "The places in the chain (indexes) of the user entries that start a turn."
+  [chain]
+  (filterv #(starts-turn? chain %) (range (count chain))))
+
+(defn cut-at
+  "Where the fork's chain ends: the index of the first entry it leaves out, nil for all of it. at:
+  the uuid of a user message whose turn is the last kept; nil = up to the last finished turn (only
+  needed while a turn runs). Throws when that cannot be forked."
+  [chain at running?]
+  (when (empty? chain) (throw (js/Error. "This chat has nothing to fork yet.")))
+  (let [starts (turn-starts chain)]
+    (cond
+      at (let [i (first (keep-indexed #(when (= at (:uuid %2)) %1) chain))]
+           (when-not i (throw (js/Error. "That message isn't saved in the chat yet.")))
+           (let [c (first (filter #(> % i) starts))]
+             (when (and (nil? c) running?) (throw (js/Error. "That turn is still running: fork it once it's done.")))
+             c))
+      running? (let [c (peek starts)]
+                 (when-not (and c (pos? c)) (throw (js/Error. "No finished turn to fork yet.")))
+                 c))))
+
+(defn- up-to
+  "The kept turn's last entry, which the next turn's message hangs on (it can be an entry the chat
+  doesn't show); the shown message before it if that isn't found. nil when everything is kept."
+  [chain by-uuid cut]
+  (when cut
+    (or (not-empty (some-> ^js (get by-uuid (:uuid (nth chain cut))) .-parentUuid))
+        (:uuid (nth chain (dec cut))))))
+
+(defn turn-map
+  "Each copied entry names the one it came from: the kept turns' uuids, old -> new; a message sent
+  mid-turn by its attachment's. by-uuid: the old chat's entries by uuid."
+  [by-uuid copied]
+  (reduce (fn [m ^js e]
+            (let [from (some-> e .-forkedFrom .-messageUuid)]
+              (if (and from (.-uuid e))
+                (let [m (assoc m from (.-uuid e))
+                      was (history/sent-mid-turn (get by-uuid from))
+                      is (history/sent-mid-turn e)]
+                  (if (and was is) (assoc m was is) m))
+                m)))
+          {} copied))
+
+(defn- copy-rows!
+  "The fork's own rows: its chat (a title and colour of its own), settings, form row, the kept
+  turns' pictures and changes, and its picture: the last one of the turns it keeps. Returns its id."
+  [id fork turns colour]
+  (let [r (store/chat id)
+        t (js/Date.now)]
+    (store/add! {:id fork :title (str (:title r) " (fork)") :at t :folder (:folder r) :color colour})
+    (store/update! fork {:ended t :seen t})
+    (when-let [s (store/kv id "settings")] (store/kv! fork "settings" s))
+    (store/save-settings! fork (dissoc (store/settings id) :forms-seen))
+    (store/copy-turns! id fork turns)
+    (if-let [newest (peek (store/pictures fork))]
+      (store/save-scene! fork (store/picture fork (:turn newest)))
+      ;; A chat older than the picture history has only its last picture.
+      (when (and (empty? (store/pictures id)) (store/scene id))
+        (store/save-scene! fork (store/scene id))))
+    fork))
 
 (defn fork!
   "Promise of the new chat's id. at: the uuid of a user message whose turn is the last kept; nil =
@@ -50,51 +102,10 @@
       (.then
        (fn [[msgs old]]
          (let [chain (vec (remove :parent_tool_use_id (js->clj msgs :keywordize-keys true)))
-               _ (when (empty? chain) (throw (js/Error. "This chat has nothing to fork yet.")))
-               starts (filterv #(starts-turn? chain %) (range (count chain)))
-               cut (cond
-                     at (let [i (first (keep-indexed #(when (= at (:uuid %2)) %1) chain))]
-                          (when-not i (throw (js/Error. "That message isn't saved in the chat yet.")))
-                          (let [c (first (filter #(> % i) starts))]
-                            (when (and (nil? c) running?) (throw (js/Error. "That turn is still running: fork it once it's done.")))
-                            c))
-                     running? (let [c (peek starts)]
-                                (when-not (and c (pos? c)) (throw (js/Error. "No finished turn to fork yet.")))
-                                c))
+               cut (cut-at chain at running?)
                by-uuid (into {} (keep (fn [^js e] (when (.-uuid e) [(.-uuid e) e]))) old)
-               ;; The kept turn's last entry is what the next turn's message hangs on (it can be an
-               ;; entry the chat doesn't show); the shown message before it if that isn't found.
-               up-to (when cut
-                       (or (not-empty (some-> ^js (get by-uuid (:uuid (nth chain cut))) .-parentUuid))
-                           (:uuid (nth chain (dec cut)))))]
-           (-> (sdk/forkSession id (clj->js (cond-> {:dir cwd} up-to (assoc :upToMessageId up-to))))
+               until (up-to chain by-uuid cut)]
+           (-> (sdk/forkSession id (clj->js (cond-> {:dir cwd} until (assoc :upToMessageId until))))
                (.then (fn [^js res]
                         (let [fork (.-sessionId res)]
-                          (-> (entries cwd fork)
-                              (.then (fn [copied]
-                                       ;; Each copied entry names the one it came from: the kept turns'
-                                       ;; uuids, old -> new; a message sent mid-turn by its attachment's.
-                                       (let [turns (reduce (fn [m ^js e]
-                                                             (let [from (some-> e .-forkedFrom .-messageUuid)]
-                                                               (if (and from (.-uuid e))
-                                                                 (let [m (assoc m from (.-uuid e))
-                                                                       was (sent-mid-turn (get by-uuid from))
-                                                                       now (sent-mid-turn e)]
-                                                                   (if (and was now) (assoc m was now) m))
-                                                                 m)))
-                                                           {} copied)
-                                             r (store/chat id)
-                                             t (js/Date.now)]
-                                         (store/add! {:id fork :title (str (:title r) " (fork)") :at t
-                                                      :folder (:folder r) :color colour})
-                                         (store/update! fork {:ended t :seen t})
-                                         (when-let [s (store/kv id "settings")] (store/kv! fork "settings" s))
-                                         (store/save-settings! fork (dissoc (store/settings id) :forms-seen))
-                                         (store/copy-turns! id fork turns)
-                                         ;; The fork's own picture: the last one of the turns it keeps.
-                                         (if-let [last (peek (store/pictures fork))]
-                                           (store/save-scene! fork (store/picture fork (:turn last)))
-                                           ;; A chat older than the picture history has only its last picture.
-                                           (when (and (empty? (store/pictures id)) (store/scene id))
-                                             (store/save-scene! fork (store/scene id))))
-                                         fork)))))))))))))
+                          (.then (entries cwd fork) #(copy-rows! id fork (turn-map by-uuid %) colour)))))))))))

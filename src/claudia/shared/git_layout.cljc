@@ -21,13 +21,13 @@
         (let [col (or (first (keep-indexed #(when (= %2 (:hash c)) %1) lanes)) (free lanes))
               ;; a merge can have several lanes waiting on this commit: collapse them
               lanes (put (mapv #(if (= % (:hash c)) nil %) lanes) col nil)
-              parents (filter present (:parents c))
-              lanes (if (empty? parents)
+              in-view (filter present (:parents c))
+              lanes (if (empty? in-view)
                       (assoc lanes col nil)
                       ;; the first parent continues this lane
                       (reduce (fn [ls p] (if (some #{p} ls) ls (put ls (free ls) p)))
-                              (assoc lanes col (first parents))
-                              (rest parents)))]
+                              (assoc lanes col (first in-view))
+                              (rest in-view)))]
           (recur (rest cs) lanes (conj out (assoc c :col col))))
         out))))
 

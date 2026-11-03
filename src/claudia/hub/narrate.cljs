@@ -12,9 +12,10 @@
 
   GET /hub/narrate -> {voice: bool}; POST /hub/narrate {text, instruction?} -> the PCM
   (audio/L16;rate=24000;channels=1, x-seconds), or {error} (501 without a voice)."
-  (:require ["crypto" :as crypto]
+  (:require [claudia.node.crypto :refer [sha256-hex]]
             [claudia.node.http :as io]
             [claudia.node.env :refer [env]]
+            [claudia.shared.text :as text]
             ["fs/promises" :as fsp]
             ["path" :as path]
             [clojure.string :as str]))
@@ -44,8 +45,6 @@
                  (when (and url (not (str/blank? token)))
                    {:url (str/replace url #"/$" "") :token token}))))))
 
-(defn- sha [s] (-> (crypto/createHash "sha256") (.update s) (.digest "hex")))
-
 (defn- wav
   "Raw 16-bit mono PCM at 24 kHz as a WAV file: the 44-byte RIFF header, then the samples."
   [^js pcm]
@@ -70,52 +69,90 @@
                  (when (< (.-length pcm) 2) (throw (js/Error. "the voice answered with no sound")))
                  pcm)))))
 
+(defn- form-of
+  "Form fields for the speech route, as [name value] or [name value file-name]."
+  [fields]
+  (let [form (js/FormData.)]
+    (doseq [[k v file-name] fields]
+      (if file-name (.set form k v file-name) (.set form k v)))
+    form))
+
+(defn- saved
+  "Writes data to file in the cache folder -> Promise of data."
+  [file data]
+  (-> (fsp/mkdir @cache-dir #js {:recursive true})
+      (.then #(fsp/writeFile file data))
+      (.then (fn [_] data))))
+
 (defn- reference
   "The narrator's reference clip for a described voice, made once."
   [c voice]
-  (let [file (path/join @cache-dir (str "narrator-" (subs (sha (str "ref1\n" voice "\n" reference-text)) 0 24) ".wav"))]
+  (let [file (path/join @cache-dir (str "narrator-" (subs (sha256-hex (str "ref1\n" voice "\n" reference-text)) 0 24) ".wav"))]
     (-> (fsp/readFile file)
         (.catch (fn [_]
-                  (let [form (js/FormData.)]
-                    (.set form "text" reference-text)
-                    (.set form "instruction" voice)
-                    (-> (speak c form)
-                        (.then (fn [pcm]
-                                 (let [w (wav pcm)]
-                                   (-> (fsp/mkdir @cache-dir #js {:recursive true})
-                                       (.then #(fsp/writeFile file w))
-                                       (.then (fn [_] w))))))))))
+                  (-> (speak c (form-of [["text" reference-text] ["instruction" voice]]))
+                      (.then #(saved file (wav %))))))
         (.then (fn [w] {:wav w :text reference-text})))))
+
+(defn voice-of
+  "A story's voice description, trimmed and cut to 200 characters (\"\" for none)."
+  [instruction]
+  (text/cut (str/trim (or instruction "")) 200 ""))
+
+(defn clip-key
+  "What a clip is kept under: its voice (described, or the service's default) and its text."
+  [voice url said]
+  (sha256-hex (str "clone1\n" (if (seq voice) (str "made:" voice) (str "default:" url)) "\n" said)))
+
+(defn- clone-form [said ref]
+  (form-of (cond-> [["text" said]]
+             ref (conj ["ref_audio" (js/Blob. #js [(:wav ref)] #js {:type "audio/wav"}) "narrator.wav"]
+                       ["ref_text" (:text ref)]))))
+
+(defn- made
+  "Makes the clip in line after the ones before it -> Promise of the PCM, written to file."
+  [c said voice file]
+  (let [p (.then @line
+                 (fn [_]
+                   (-> (if (seq voice) (reference c voice) (js/Promise.resolve nil))
+                       (.then #(speak c (clone-form said %)))
+                       (.then #(saved file %)))))]
+    (reset! line (.catch p (fn [_] nil)))
+    p))
 
 (defn- narrate
   "A promise of the PCM for text in the default voice, or a clone of the described one."
-  [c text instruction]
-  (let [voice (subs (str/trim (or instruction "")) 0 (min 200 (count (str/trim (or instruction "")))))
-        who (if (seq voice) (str "made:" voice) (str "default:" (:url c)))
-        key (sha (str "clone1\n" who "\n" text))
-        file (path/join @cache-dir (str key ".pcm"))]
-    (or (get @pending key)
+  [c said instruction]
+  (let [voice (voice-of instruction)
+        k (clip-key voice (:url c) said)
+        file (path/join @cache-dir (str k ".pcm"))]
+    (or (get @pending k)
         (let [p (-> (fsp/readFile file)
-                    (.catch (fn [_]
-                              (let [next (.then @line
-                                                (fn [_]
-                                                  (-> (if (seq voice) (reference c voice) (js/Promise.resolve nil))
-                                                      (.then (fn [ref]
-                                                               (let [form (js/FormData.)]
-                                                                 (.set form "text" text)
-                                                                 (when ref
-                                                                   (.set form "ref_audio" (js/Blob. #js [(:wav ref)] #js {:type "audio/wav"}) "narrator.wav")
-                                                                   (.set form "ref_text" (:text ref)))
-                                                                 (speak c form))))
-                                                      (.then (fn [pcm]
-                                                               (-> (fsp/mkdir @cache-dir #js {:recursive true})
-                                                                   (.then #(fsp/writeFile file pcm))
-                                                                   (.then (fn [_] pcm))))))))]
-                                (reset! line (.catch next (fn [_] nil)))
-                                next)))
-                    (.finally #(swap! pending dissoc key)))]
-          (swap! pending assoc key p)
+                    (.catch (fn [_] (made c said voice file)))
+                    (.finally #(swap! pending dissoc k)))]
+          (swap! pending assoc k p)
           p))))
+
+(defn said-text
+  "The text to say from a POST body: trimmed and cut to max-chars, nil when there is none."
+  [body]
+  (some-> (when (string? (:text body)) (str/trim (:text body))) (text/cut max-chars "")))
+
+(defn- answer-pcm [^js res ^js pcm]
+  (.writeHead res 200 #js {"content-type" "audio/L16;rate=24000;channels=1"
+                           "x-seconds" (.toFixed (/ (.-length pcm) bytes-per-second) 3)
+                           "cache-control" "private, max-age=86400"})
+  (.end res pcm))
+
+(defn- say [res c body]
+  (let [said (said-text body)
+        instruction (when (string? (:instruction body)) (:instruction body))]
+    (cond
+      (str/blank? said) (io/send-json res 400 {:error "text to say"})
+      (not c) (io/send-json res 501 {:error "no voice set up on this hub (HUB_TTS_URL, HUB_TTS_TOKEN_FILE)"})
+      :else (-> (narrate c said instruction)
+                (.then #(answer-pcm res %))
+                (.catch (fn [e] (io/send-json res 502 {:error (.-message e)})))))))
 
 (defn call
   "GET or POST /hub/narrate for a signed-in caller."
@@ -123,20 +160,7 @@
   (case (.-method req)
     "GET" (.then (config) #(io/send-json res 200 {:voice (boolean %)}))
     "POST" (-> (js/Promise.all #js [(config) (io/read-json req max-body)])
-               (.then (fn [[c body]]
-                        (let [text (when (string? (:text body)) (str/trim (:text body)))
-                              text (when text (subs text 0 (min max-chars (count text))))
-                              instruction (when (string? (:instruction body)) (:instruction body))]
-                          (cond
-                            (str/blank? text) (io/send-json res 400 {:error "text to say"})
-                            (not c) (io/send-json res 501 {:error "no voice set up on this hub (HUB_TTS_URL, HUB_TTS_TOKEN_FILE)"})
-                            :else (-> (narrate c text instruction)
-                                      (.then (fn [^js pcm]
-                                               (.writeHead res 200 #js {"content-type" "audio/L16;rate=24000;channels=1"
-                                                                        "x-seconds" (.toFixed (/ (.-length pcm) bytes-per-second) 3)
-                                                                        "cache-control" "private, max-age=86400"})
-                                               (.end res pcm)))
-                                      (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))))
+               (.then (fn [[c body]] (say res c body)))
                (.catch (fn [e] (when-not (.-headersSent res) (io/send-json res 400 {:error (.-message e)})))))
     (do (.setHeader res "allow" "GET, POST")
         (io/send-json res 405 {:error "GET or POST"}))))

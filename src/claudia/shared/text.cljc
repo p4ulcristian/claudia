@@ -18,3 +18,9 @@
   "s (as text) on one line: every run of whitespace one space, trimmed."
   [s]
   (str/trim (str/replace (str s) #"\s+" " ")))
+
+#?(:cljs
+   (defn error-text
+     "An error (or anything thrown) as text: its message, else itself."
+     [e]
+     (str (or (some-> e .-message) e))))

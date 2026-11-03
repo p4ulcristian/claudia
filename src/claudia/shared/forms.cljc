@@ -231,8 +231,8 @@
   (set (for [[n s] specs :when (:opt-in s)] n)))
 
 (defn help-line [n]
-  (let [{:keys [when fields]} (get specs n)]
-    (str "- " n ": " when " Data: " fields ".")))
+  (let [{use-when :when fields :fields} (get specs n)]
+    (str "- " n ": " use-when " Data: " fields ".")))
 
 (def base
   "The forms that are not code forms, for the gallery and the form row: {:label :when :sample}."

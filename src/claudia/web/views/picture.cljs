@@ -12,30 +12,10 @@
             [claudia.web.views.forms :as forms]
             [claudia.web.views.frame :as frame]
             [claudia.web.views.graph :as graph]
+            [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
             [claudia.web.views.snapshot :as snapshot]
             [claudia.web.views.timeline :as timeline]))
-
-;; ---- what changed since the last picture shown (the glow, a node's ring, a hot arrow) ----
-
-(defn- by-id [xs] (into {} (map (juxt :id identity)) xs))
-(defn- eid [{:keys [from to]}] (str from "->" to))
-
-(defn- changed-ids
-  "Ids of the blocks, nodes and arrows that are new or different in scene against prev."
-  [prev scene]
-  (let [old (by-id (:blocks prev))]
-    (into #{}
-          (mapcat (fn [b]
-                    (let [p (old (:id b))]
-                      (concat
-                       (when (not= p b) [(:id b)])
-                       (when (and p (= "graph" (:kind b)) (not= p b))
-                         (let [on (by-id (:nodes p))
-                               oe (into {} (map (juxt eid identity)) (:edges p))]
-                           (concat (for [n (:nodes b) :when (not= n (on (:id n)))] (:id n))
-                                   (for [e (:edges b) :when (not= e (oe (eid e)))] (eid e)))))))))
-          (:blocks scene))))
 
 ;; ---- one block ----
 
@@ -102,6 +82,22 @@
 
 ;; ---- the picture ----
 
+(defn- blocks-view [{:keys [blocks p live? cols kept-ids gone keep! unkeep!]}]
+  [:div.picture.blocks {:class (when (pos? cols) (str "cols-" cols))}
+   (for [b blocks
+         :let [kept? (and live? (some #{(:id b)} kept-ids))]]
+     ^{:key (:id b)}
+     [block-view b {:changed (:changed p) :seq-no (:seq p) :live? live?
+                    :kept (when kept? (if (gone (:id b)) :gone :here))
+                    :on-touch (when (and live? (= "form" (:kind b)) (= "files" (:form b))) #(keep! (:id b)))
+                    :on-unkeep #(unkeep! (:id b))}])])
+
+(defn- old-picture [scene p]
+  [:div.picture
+   (when (seq (:nodes scene)) [:f> graph/graph-view scene (:changed p) (:seq p)])
+   (when (seq (:cards scene))
+     [:div.cards (for [c (:cards scene)] ^{:key (:id c)} [card c])])])
+
 (defn picture-view
   "A scene's blocks. k: the chat it belongs to; live?: it is the chat's live picture (forms that
   write, templates and kept blocks work only there); cols: 0 = Claude's layout, 1-3 = every block
@@ -113,45 +109,21 @@
         [kept set-kept] (h/use-state {:k nil :ids []})
         copies (h/use-ref {})
         kept-ids (if (= (:k kept) k) (:ids kept) [])
-        p (.-current prev)
-        p (cond
-            (or (nil? p) (not= (:k p) k)) {:k k :scene scene :changed #{} :seq 0}
-            (identical? (:scene p) scene) p
-            :else {:k k :scene scene :changed (changed-ids (:scene p) scene) :seq (inc (:seq p))})
+        p (pure/next-shown (.-current prev) k scene)
         _ (set! (.-current prev) p)
-        _ (when (not= (:k (.-current copies)) k) (set! (.-current copies) {:k k}))
-        blocks (:blocks scene)
-        _ (doseq [[i b] (map-indexed vector blocks) :when (some #{(:id b)} kept-ids)]
-            (set! (.-current copies) (assoc (.-current copies) (:id b) {:block b :at i})))
-        present (set (map :id blocks))
-        gone (if live? (set (remove present (filter #(get (.-current copies) %) kept-ids))) #{})
-        blocks (reduce (fn [bs id]
-                         (let [{:keys [block at]} (get (.-current copies) id)
-                               [a b] (split-at (min at (count bs)) bs)]
-                           (vec (concat a [block] b))))
-                       (vec blocks) (filter gone kept-ids))
-        keep! (fn [id] (set-kept (fn [kp] (if (and (= (:k kp) k) (some #{id} (:ids kp)))
-                                            kp
-                                            {:k k :ids (conj (if (= (:k kp) k) (:ids kp) []) id)}))))
-        unkeep! (fn [id]
-                  (set! (.-current copies) (dissoc (.-current copies) id))
-                  (set-kept (fn [kp] {:k k :ids (vec (remove #{id} (:ids kp)))})))]
+        _ (set! (.-current copies) (pure/copies-of (.-current copies) k (:blocks scene) kept-ids))
+        gone (pure/gone-ids (:blocks scene) kept-ids (.-current copies) live?)
+        blocks (pure/with-gone (:blocks scene) kept-ids gone (.-current copies))]
     (cond
       (seq blocks)
-      [:div.picture.blocks {:class (when (pos? cols) (str "cols-" cols))}
-       (for [b blocks
-             :let [kept? (and live? (some #{(:id b)} kept-ids))]]
-         ^{:key (:id b)}
-         [block-view b {:changed (:changed p) :seq-no (:seq p) :live? live?
-                        :kept (when kept? (if (gone (:id b)) :gone :here))
-                        :on-touch (when (and live? (= "form" (:kind b)) (= "files" (:form b))) #(keep! (:id b)))
-                        :on-unkeep #(unkeep! (:id b))}])]
+      (blocks-view {:blocks blocks :p p :live? live? :cols cols :kept-ids kept-ids :gone gone
+                    :keep! (fn [id] (set-kept #(pure/kept-with % k id)))
+                    :unkeep! (fn [id]
+                               (set! (.-current copies) (dissoc (.-current copies) id))
+                               (set-kept (fn [kp] {:k k :ids (vec (remove #{id} (:ids kp)))})))})
 
       (and (nil? (:blocks scene)) (or (seq (:nodes scene)) (seq (:cards scene))))
-      [:div.picture
-       (when (seq (:nodes scene)) [:f> graph/graph-view scene (:changed p) (:seq p)])
-       (when (seq (:cards scene))
-         [:div.cards (for [c (:cards scene)] ^{:key (:id c)} [card c])])]
+      (old-picture scene p)
 
       :else [empty-state])))
 

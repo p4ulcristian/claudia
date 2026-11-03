@@ -5,32 +5,11 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
-            [claudia.web.md :as md]))
+            [claudia.web.md :as md]
+            [claudia.web.views.pure.steps :as pure]))
 
-(defn tool-label
-  "A tool's name as the chat shows it: Draw, Folder, Ask; an MCP tool without its mcp__ prefix."
-  [name]
-  (let [name (str name)]
-    (case name
-      "mcp__picture__draw" "Draw"
-      "mcp__workspace__set_folder" "Folder"
-      "AskUserQuestion" "Ask"
-      (if (str/starts-with? name "mcp__") (str/join " " (rest (str/split name #"__"))) name))))
-
-(defn blocks
-  "The messages as the page shows them: runs of tool steps folded into one group; a step that showed
-  a picture stands on its own, its picture after it."
-  [msgs]
-  (reduce (fn [out m]
-            (cond
-              (and (= "tool" (:role m)) (:image m))
-              (conj out {:k :steps :id (:id m) :tools [m]} {:k :shown :tool m})
-              (= "tool" (:role m))
-              (if (= :steps (:k (peek out)))
-                (conj (pop out) (update (peek out) :tools conj m))
-                (conj out {:k :steps :id (:id m) :tools [m]}))
-              :else (conj out {:k :msg :m m})))
-          [] msgs))
+(def tool-label pure/tool-label)
+(def blocks pure/blocks)
 
 (rf/reg-event-db :explain/close (fn [db [_ k]] (assoc-in db [:explain k :open] false)))
 
@@ -48,41 +27,47 @@
                           :on-click #(rf/dispatch [:ops/explain ck id])}
      (if busy "…" "explain")]))
 
-(defn- step [ck {:keys [id tool summary error detail result] :as _t} busy?]
+(defn- step-detail [{:keys [error detail]} result]
+  [:div.step-detail
+   (when detail [:pre detail])
+   (when result [:pre {:class (when error "err")} (if (str/blank? result) "(no output)" result)])])
+
+(defn- step [_ck _t _busy?]
   (let [open (r/atom false)]
-    (fn [ck {:keys [id tool summary error detail result] :as t} busy?]
-      ;; The runner sends the old step's one line (title) and its result as {error text}.
-      (let [summary (if (contains? t :title) (:title t) summary)
-            result (if (map? result) (:text result) result)]
-      [:li.step {:class (cond busy? "busy" error "err" :else "ok")}
-       [:div.step-line
-        [:button.step-row {:on-click #(swap! open not)}
-         [:span.step-dot]
-         [:b (tool-label (or tool "tool"))]
-         [:span.step-title (or summary "")]]
-        (when ck [explain-button ck id false])]
-       (when ck [explain-note ck id])
-       (when (and @open (or detail result))
-         [:div.step-detail
-          (when detail [:pre detail])
-          (when result [:pre {:class (when error "err")} (if (str/blank? result) "(no output)" result)])])]))))
+    (fn [ck {:keys [id tool error detail] :as t} busy?]
+      (let [summary (pure/step-summary t)
+            result (pure/step-result (:result t))]
+        [:li.step {:class (cond busy? "busy" error "err" :else "ok")}
+         [:div.step-line
+          [:button.step-row {:on-click #(swap! open not)}
+           [:span.step-dot]
+           [:b (tool-label (or tool "tool"))]
+           [:span.step-title (or summary "")]]
+          (when ck [explain-button ck id false])]
+         (when ck [explain-note ck id])
+         (when (and @open (or detail result))
+           (step-detail t result))]))))
+
+(defn- steps-head [open tools current]
+  (let [errors (count (filter :error tools))]
+    [:button.steps-head {:on-click #(swap! open not)}
+     [:span.chev {:class (when @open "open")} "›"]
+     [:span (str (count tools) (if (= 1 (count tools)) " step" " steps"))]
+     [:span.muted (if current
+                    (str (tool-label (:tool current)) " " (pure/step-summary current))
+                    (pure/group-names tools))]
+     (when (pos? errors) [:span.err-count (str errors " failed")])]))
 
 (defn steps
   "A run of tool steps, folded: › N steps, what they were (the current one while it runs), N failed;
   open, a row per step. ck nil: no explain (an agent's transcript)."
-  [ck tools live?]
+  [_ck _tools _live?]
   (let [open (r/atom false)]
     (fn [ck tools live?]
-      (let [current (when live? (peek tools))
-            errors (count (filter :error tools))
-            names (str/join ", " (take 4 (distinct (map #(tool-label (or (:tool %) "tool")) tools))))]
+      (let [current (when live? (peek tools))]
         [:div.steps {:class (when live? "busy")}
          [:div.steps-head-line
-          [:button.steps-head {:on-click #(swap! open not)}
-           [:span.chev {:class (when @open "open")} "›"]
-           [:span (str (count tools) (if (= 1 (count tools)) " step" " steps"))]
-           [:span.muted (if current (str (tool-label (:tool current)) " " (if (contains? current :title) (:title current) (:summary current))) names)]
-           (when (pos? errors) [:span.err-count (str errors " failed")])]
+          (steps-head open tools current)
           (when (and ck current (not @open))
             [:<>
              [explain-button ck (:id current) true]
@@ -90,7 +75,6 @@
                [:div.explain-under [explain-note ck (:id current)]])])]
          (when @open
            [:ul (for [t tools] ^{:key (:id t)} [step ck t (and live? (= t current))])])]))))
-
 
 (defn transcript
   "A subagent's messages, in the same compact form as the main chat."

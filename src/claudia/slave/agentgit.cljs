@@ -12,11 +12,68 @@
 
 (defn- git [root args]
   (js/Promise.
-   (fn [resolve]
+   (fn [done]
      (cp/execFile "git" (clj->js (into ["-C" root] args))
                   #js {:maxBuffer (* 16 1024 1024) :timeout 30000
                        :env (js/Object.assign #js {} (.-env js/process) #js {:GIT_OPTIONAL_LOCKS "0"})}
-                  (fn [err stdout] (resolve (if err "" (str stdout))))))))
+                  (fn [err stdout] (done (if err "" (str stdout))))))))
+
+(defn a-hash
+  "The trimmed text when it is a full commit hash, else nil."
+  [text]
+  (let [h (str/trim (str text))] (when (re-matches hash-re h) h)))
+
+(defn repo-of
+  "The main repo's folder from git's common dir (trimmed text) or, when that does not tell, from
+  the worktree's path (<repo>/.claude/worktrees/<name>); nil when neither tells."
+  [common worktree]
+  (if (str/ends-with? common "/.git")
+    (subs common 0 (- (count common) 5))
+    (second (re-matches #"^(.*)/\.claude/worktrees/[^/]+/?$" worktree))))
+
+(defn parse-commits
+  "git log's %H%x1f%s%x1f%ar%x1e records as [{:hash :subject :when}]."
+  [log]
+  (vec (for [rec (str/split log #"\x1e")
+             :let [rec (str/trim rec)]
+             :when (seq rec)
+             :let [[h s w] (str/split rec #"\x1f")]]
+         {:hash h :subject (or s "") :when (or w "")})))
+
+(defn- made-at
+  "Promise of where the branch was made (its oldest reflog entry), if that is still under tip."
+  [root branch tip]
+  (-> (git root ["reflog" "show" "--format=%H" (str "refs/heads/" branch) "--"])
+      (.then (fn [log]
+               (let [made (last (str/split-lines (str/trim log)))]
+                 (if (and made (re-matches hash-re made))
+                   (-> (git root ["merge-base" made tip])
+                       (.then (fn [mb] (if (= (str/trim mb) made) made nil))))
+                   nil))))))
+
+(defn- base-of
+  "Promise of the branch's base: where it was made, else where it meets the repo's HEAD."
+  [root repo branch tip]
+  (.then (made-at root branch tip)
+         (fn [base] (or base (when repo (.then (git repo ["merge-base" tip "HEAD"]) a-hash))))))
+
+(defn- commits-since [root base tip]
+  (.then (if base
+           (git root ["log" "--format=%H%x1f%s%x1f%ar%x1e" "-n" "200" (str base ".." tip)])
+           (js/Promise.resolve ""))
+         parse-commits))
+
+(defn- work-at
+  "Promise of the branch's work in root (repo = the main repo, here = the worktree folder is there)."
+  [root repo branch here]
+  (.then (git root ["rev-parse" "--verify" "--quiet" (str "refs/heads/" branch)])
+         (fn [tip-text]
+           (when-let [tip (a-hash tip-text)]
+             (.then (base-of root repo branch tip)
+                    (fn [base]
+                      (.then (commits-since root base tip)
+                             (fn [commits]
+                               {:root root :branch branch :base base :worktree here :commits commits}))))))))
 
 (defn branch-work
   "Promise of {:root :branch :base :commits [{:hash :subject :when}] :worktree (folder still there)}, or nil."
@@ -24,45 +81,12 @@
   (if-not (and (string? worktree) (string? branch) (re-matches branch-re branch))
     (js/Promise.resolve nil)
     (let [here (dir? worktree)]
-      (-> (if here (git worktree ["rev-parse" "--path-format=absolute" "--git-common-dir"]) (js/Promise.resolve ""))
-          (.then
-           (fn [common]
-             (let [common (str/trim common)
-                   repo (if (str/ends-with? common "/.git")
-                          (subs common 0 (- (count common) 5))
-                          (second (re-matches #"^(.*)/\.claude/worktrees/[^/]+/?$" worktree)))
-                   root (if here worktree repo)]
-               (if-not (and root (dir? root))
-                 nil
-                 (-> (git root ["rev-parse" "--verify" "--quiet" (str "refs/heads/" branch)])
-                     (.then
-                      (fn [tip]
-                        (let [tip (str/trim tip)]
-                          (when (re-matches hash-re tip)
-                            (-> (git root ["reflog" "show" "--format=%H" (str "refs/heads/" branch) "--"])
-                                (.then (fn [log]
-                                         (let [made (last (str/split-lines (str/trim log)))]
-                                           (if (and made (re-matches hash-re made))
-                                             ;; Where the branch was made, if it is still under its tip.
-                                             (-> (git root ["merge-base" made tip])
-                                                 (.then (fn [mb] (if (= (str/trim mb) made) made nil))))
-                                             nil))))
-                                (.then (fn [base]
-                                         (or base
-                                             (when repo
-                                               (-> (git repo ["merge-base" tip "HEAD"])
-                                                   (.then #(let [mb (str/trim %)] (when (re-matches hash-re mb) mb))))))))
-                                (.then (fn [base]
-                                         (-> (if base
-                                               (git root ["log" "--format=%H%x1f%s%x1f%ar%x1e" "-n" "200" (str base ".." tip)])
-                                               (js/Promise.resolve ""))
-                                             (.then (fn [log]
-                                                      {:root root :branch branch :base base :worktree here
-                                                       :commits (vec (for [rec (str/split log #"\x1e")
-                                                                           :let [rec (str/trim rec)]
-                                                                           :when (seq rec)
-                                                                           :let [[h s w] (str/split rec #"\x1f")]]
-                                                                       {:hash h :subject (or s "") :when (or w "")}))})))))))))))))))))))
+      (.then (if here (git worktree ["rev-parse" "--path-format=absolute" "--git-common-dir"]) (js/Promise.resolve ""))
+             (fn [common]
+               (let [repo (repo-of (str/trim common) worktree)
+                     root (if here worktree repo)]
+                 (when (and root (dir? root))
+                   (work-at root repo branch here))))))))
 
 (defn- cap [text]
   (if (> (count text) max-patch) (str (subs text 0 max-patch) "\n… (cut: too long to show)") text))

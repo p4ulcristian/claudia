@@ -26,13 +26,13 @@
 (defn- header [^js req k]
   (aget (.-headers req) k))
 
-(defn- caller
+(defn caller
   "The signed-in email (lower case) from Caddy's X-Auth-Request-Email, or nil."
   [req]
   (let [v (some-> (header req "x-auth-request-email") str/trim str/lower-case)]
     (when (and v (re-matches #"^[^\s@,]+@[^\s@,]+$" v)) v)))
 
-(defn- cross-site?
+(defn cross-site?
   "A request another site's page made, riding the login cookie: refused. Browsers say where a
   request comes from in Sec-Fetch-Site (also on WebSocket handshakes); Origin, when sent, must be
   this host. Requests without either (curl, a navigation typed in) pass."
@@ -47,23 +47,20 @@
               (not= host (try (str/lower-case (.-host (js/URL. origin)))
                               (catch :default _ nil))))))))
 
-(defn- split-url
+(defn split-url
   "\"/a/b?x=1\" -> [\"/a/b\" \"x=1\"] (query nil when there is none)."
   [url]
   (let [i (str/index-of url "?")]
     (if i [(subs url 0 i) (subs url (inc i))] [url nil])))
 
-(defn- decode [s]
-  (try (js/decodeURIComponent s) (catch :default _ nil)))
-
-(defn- take-view
+(defn take-view
   "The `view` query parameter (PROTOCOL.md: the profile whose chats the page looks at) taken out of
   the query. -> {:view v-or-nil :query \"?rest\"-or-\"\" :error text-or-nil}. The other parameters
   pass on byte for byte."
   [query]
   (let [parts (if (str/blank? query) [] (str/split query #"&"))
-        view-part? #(= "view" (decode (first (str/split % #"=" 2))))
-        views (map #(decode (or (second (str/split % #"=" 2)) "")) (filter view-part? parts))
+        view-part? #(= "view" (io/decode (first (str/split % #"=" 2))))
+        views (map #(io/decode (or (second (str/split % #"=" 2)) "")) (filter view-part? parts))
         rest-parts (remove view-part? parts)
         view (first views)]
     {:view view
@@ -73,40 +70,48 @@
               (and (seq views) (not (and view (re-matches #"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" view))))
               "view: a profile name")}))
 
-(defn- safe-rest?
+(defn safe-rest?
   "The path under /s/<server> may not climb out of /api/ on the front (`..`, `.`, encoded
   slashes)."
   [path]
   (every? (fn [seg]
-            (let [d (decode seg)]
+            (let [d (io/decode seg)]
               (and d (not (#{"." ".."} d)) (not (re-find #"[/\\\u0000]" d)))))
           (rest (str/split path #"/"))))
+
+(defn path-problem
+  "What is wrong with the path under /s/<server> for this kind of call (`ws?`), and with its view
+  (`view`, and `error` from take-view): {:status :error}, or nil when it may pass."
+  [rest-path ws? view error]
+  (cond
+    (and ws? (not= rest-path "/ws")) {:status 404 :error "not found"}
+    (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
+    (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
+    (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
+    ;; The hub's own poke to the front (README, Hub operations: following main), never a page's call.
+    (= rest-path "/api/update-check") {:status 404 :error "not found"}
+    error {:status 400 :error error}
+    ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
+    (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
+    :else nil))
 
 (defn- to-server
   "Checks a /s/<server>/… call: a WebSocket handshake (`ws?`) for /s/<server>/ws, a plain request
   for /s/<server>/api/…. -> {:status :error} to refuse, or {:server :target :email :view}."
   [req pathname query ws?]
-  (let [[_ name rest-path] (re-matches #"^/s/([a-z][a-z0-9-]{0,30})(/.*)?$" pathname)
+  (let [[_ server-name rest-path] (re-matches #"^/s/([a-z][a-z0-9-]{0,30})(/.*)?$" pathname)
         email (caller req)
         person (some-> email config/person)
-        server (when (and person name) (config/server-of person name))
+        server (when (and person server-name) (config/server-of person server-name))
         {:keys [view error] q :query} (take-view query)]
     (cond
-      (not name) {:status 404 :error "not found"}
+      (not server-name) {:status 404 :error "not found"}
       (not email) {:status 401 :error "not signed in"}
       (cross-site? req) {:status 403 :error "cross-site request"}
       (not person) {:status 403 :error "you have no access to Claudia here"}
-      (not server) {:status 403 :error (str "no access to " name)}
-      (and ws? (not= rest-path "/ws")) {:status 404 :error "not found"}
-      (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
-      (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
-      (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-      ;; The hub's own poke to the front (README, Hub operations: following main), never a page's call.
-      (= rest-path "/api/update-check") {:status 404 :error "not found"}
-      error {:status 400 :error error}
-      ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
-      (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
-      :else {:server server :target (str rest-path q) :email email :view view})))
+      (not server) {:status 403 :error (str "no access to " server-name)}
+      :else (or (path-problem rest-path ws? view error)
+                {:server server :target (str rest-path q) :email email :view view}))))
 
 (defn- admin-group?
   "The login's groups (X-Auth-Request-Groups, set by the gate's login like the email) hold
@@ -115,6 +120,17 @@
   (let [group (env "HUB_ADMIN_GROUP" nil)]
     (boolean (and group
                   (some #{group} (map str/trim (str/split (or (header req "x-auth-request-groups") "") #",")))))))
+
+(defn- me
+  "What /hub/me answers: who the caller is, the hub's version, and the servers they may use."
+  [person admin?]
+  {:email (:email person)
+   :name (:name person)
+   :admin admin?
+   :push (push/on?)
+   :version (:version version-info)
+   :commit (:commit version-info)
+   :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
 (defn- hub-api [^js req ^js res pathname]
   (let [[_ state-of] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/state$" pathname)
@@ -132,14 +148,7 @@
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
       (not own?) (ops/call req res pathname email admin?)
 
-      (= pathname "/hub/me")
-      (io/send-json res 200 {:email (:email person)
-                          :name (:name person)
-                          :admin admin?
-                          :push (push/on?)
-                          :version (:version version-info)
-                          :commit (:commit version-info)
-                          :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
+      (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
 
       :else
       (if-let [server (config/server-of person state-of)]
@@ -173,47 +182,64 @@
                            "application/json; charset=utf-8")
       (pass/ws! req socket head server target email view))))
 
+(defn settings
+  "Where the hub listens and keeps its things, from the environment (env-of: name, default -> value)."
+  [env-of]
+  {:host (env-of "HUB_HOST" "127.0.0.1")
+   :port (js/parseInt (env-of "HUB_PORT" "4590"))
+   :web-root (env-of "HUB_WEB" "out/web")
+   :config-file (env-of "HUB_CONFIG" nil)
+   :data-dir (env-of "HUB_DATA" (path/join (env-of "XDG_DATA_HOME" (path/join (env-of "HOME" "/tmp") ".local/share")) "claudia-hub"))})
+
+(defn- start-parts!
+  "The store (a broken one stops the hub), pairing, narration, GitHub's webhook and push."
+  [{:keys [web-root config-file data-dir]}]
+  (when-not (fs/existsSync (path/join web-root "index.html"))
+    (js/console.warn (str "hub: " web-root "/index.html is missing: the page is not built")))
+  (try (config/start! data-dir config-file)
+       (catch :default e
+         (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
+         (js/process.exit 1)))
+  (pairing/start! data-dir)
+  (narrate/start! data-dir)
+  (github/start!)
+  (push/start!))
+
+(defn- stopper
+  "The stop for a signal, once: everything closes, then the process exits."
+  [^js server beat]
+  (let [stopping (atom false)]
+    (fn [sig]
+      (when-not @stopping
+        (reset! stopping true)
+        (js/console.log (str "hub: " sig ", stopping"))
+        (push/stop!)
+        (config/stop!)
+        (js/clearInterval beat)
+        (pass/close-all!)
+        (.close server #(js/process.exit 0))
+        (.closeIdleConnections server)
+        ;; Requests still streaming get a few seconds, then everything is cut.
+        (.unref (js/setTimeout #(do (.closeAllConnections server) (js/process.exit 0)) 3000))))))
+
+(defn- listen! [^js server {:keys [host port web-root]} stop]
+  ;; Caddy keeps its connections to the hub open for 2 minutes between requests; the hub must
+  ;; not close one first, or a request Caddy sends on it just then fails with 502.
+  (set! (.-keepAliveTimeout server) 130000)
+  ;; Uploads and long answers stream through; Caddy, in front, deals with slow clients.
+  (set! (.-requestTimeout server) 0)
+  (.on server "upgrade" on-upgrade)
+  (.on server "error" (fn [e] (js/console.error (str "hub: " (.-message e))) (js/process.exit 1)))
+  ;; As PID 1 in a container the hub gets no default action for these signals: it must exit
+  ;; itself, or `docker stop` waits its full timeout and kills it.
+  (doseq [sig ["SIGTERM" "SIGINT"]]
+    (js/process.on sig #(stop sig)))
+  (.listen server port host
+           #(js/console.log (str "Claudia hub on http://" host ":" port ", page from " web-root))))
+
 (defn main [& _args]
-  (let [host (env "HUB_HOST" "127.0.0.1")
-        port (js/parseInt (env "HUB_PORT" "4590"))
-        web-root (env "HUB_WEB" "out/web")
-        config-file (env "HUB_CONFIG" nil)
-        data-dir (env "HUB_DATA" (path/join (env "XDG_DATA_HOME" (path/join (env "HOME" "/tmp") ".local/share")) "claudia-hub"))]
-    (when-not (fs/existsSync (path/join web-root "index.html"))
-      (js/console.warn (str "hub: " web-root "/index.html is missing: the page is not built")))
-    (try (config/start! data-dir config-file)
-         (catch :default e
-           (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
-           (js/process.exit 1)))
-    (pairing/start! data-dir)
-    (narrate/start! data-dir)
-    (github/start!)
-    (push/start!)
-    (let [^js server (http/createServer (partial on-request web-root))
-          beat (pass/heartbeat!)
-          stopping (atom false)
-          stop (fn [sig]
-                 (when-not @stopping
-                   (reset! stopping true)
-                   (js/console.log (str "hub: " sig ", stopping"))
-                   (push/stop!)
-                   (config/stop!)
-                   (js/clearInterval beat)
-                   (pass/close-all!)
-                   (.close server #(js/process.exit 0))
-                   (.closeIdleConnections server)
-                   ;; Requests still streaming get a few seconds, then everything is cut.
-                   (.unref (js/setTimeout #(do (.closeAllConnections server) (js/process.exit 0)) 3000))))]
-      ;; Caddy keeps its connections to the hub open for 2 minutes between requests; the hub must
-      ;; not close one first, or a request Caddy sends on it just then fails with 502.
-      (set! (.-keepAliveTimeout server) 130000)
-      ;; Uploads and long answers stream through; Caddy, in front, deals with slow clients.
-      (set! (.-requestTimeout server) 0)
-      (.on server "upgrade" on-upgrade)
-      (.on server "error" (fn [e] (js/console.error (str "hub: " (.-message e))) (js/process.exit 1)))
-      ;; As PID 1 in a container the hub gets no default action for these signals: it must exit
-      ;; itself, or `docker stop` waits its full timeout and kills it.
-      (doseq [sig ["SIGTERM" "SIGINT"]]
-        (js/process.on sig #(stop sig)))
-      (.listen server port host
-               #(js/console.log (str "Claudia hub on http://" host ":" port ", page from " web-root))))))
+  (let [s (settings env)]
+    (start-parts! s)
+    (let [^js server (http/createServer (partial on-request (:web-root s)))
+          beat (pass/heartbeat!)]
+      (listen! server s (stopper server beat)))))

@@ -3,6 +3,7 @@
   Data shapes as the draw tool describes them (PROTOCOL.md)."
   (:require [clojure.string :as str]
             [reagent.hooks :as h]
+            [claudia.web.hooks :as hooks]
             [claudia.shared.forms :as forms]
             [claudia.web.scene3d :as scene3d]))
 
@@ -30,19 +31,16 @@
 ;; Stages side by side while each gets at least this many px; narrower, they stack.
 (def ^:private stage-min 120)
 
+(defn stacked?
+  "Whether n stages stack in a box width px wide (each needs stage-min side by side)."
+  [width n]
+  (< width (* n stage-min)))
+
 (defn- pipeline [data]
   (let [stages (items (:stages data))
         box (h/use-ref nil)
         [down? set-down] (h/use-state false)]
-    (h/use-effect
-     (fn []
-       (let [el (.-current box)
-             fit #(set-down (< (.-clientWidth el) (* (count stages) stage-min)))
-             ro (js/ResizeObserver. fit)]
-         (fit)
-         (.observe ro el)
-         #(.disconnect ro)))
-     [(count stages)])
+    (hooks/use-resize box #(set-down (stacked? (.-clientWidth %) (count stages))) [(count stages)])
     [:div.f-pipeline {:ref #(set! (.-current box) %) :class (when down? "down")}
      (for [[i s] (map-indexed vector stages)
            :let [st (or (:status s) "todo")]]
@@ -96,42 +94,53 @@
       (reset! embed-lib (-> ((js/Function. "u" "return import(u)") "https://cdn.jsdelivr.net/npm/vega-embed@6/+esm")
                             (.then #(.-default ^js %))))))
 
+(defn chart-spec
+  "The Vega-Lite spec for a chart form, themed to the board: theme {:fg :muted :line :palette}."
+  [data {:keys [fg muted line palette]}]
+  (let [x (or (:x data) "x") y (or (:y data) "y")
+        values (mapv #(dissoc % :id) (items (:rows data)))
+        numeric-x (and (seq values) (every? #(number? (get % (keyword x))) values))]
+    (merge
+     {"$schema" "https://vega.github.io/schema/vega-lite/v5.json"
+      :width "container" :height 220 :background "transparent"
+      :data {:values values}
+      :mark (merge {:type (or (:mark data) "bar") :tooltip true}
+                   (if (#{"line" "area"} (:mark data)) {:point true :strokeWidth 3} {:cornerRadiusEnd 3}))
+      :encoding (merge {:x {:field x :type (if numeric-x "quantitative" "ordinal") :sort nil :axis {:labelAngle 0}}
+                        :y {:field y :type "quantitative"}}
+                       (if (:color data) {:color {:field (:color data) :type "nominal"}} {:color {:value (first palette)}}))
+      :config {:font "Atkinson Hyperlegible" :view {:stroke nil} :range {:category palette}
+               :title {:font "Kalam" :fontSize 18 :fontWeight 700 :color fg :anchor "start"}
+               :axis {:labelColor muted :titleColor muted :domainColor line :tickColor line :gridColor line :gridOpacity 0.5
+                      :labelFontSize 12 :titleFont "Kalam" :titleFontSize 14 :titleFontWeight 700}
+               :legend {:labelColor muted :titleColor muted}}}
+     (when (:title data) {:title (:title data)}))))
+
+(defn- board-theme
+  "The board's colours, read from the element's CSS variables."
+  [^js el]
+  (let [cs (js/getComputedStyle el)
+        v #(str/trim (.getPropertyValue cs %))]
+    {:fg (v "--fg") :muted (v "--muted") :line (v "--line")
+     :palette (mapv v ["--blue" "--amber" "--green" "--violet" "--red" "--grey"])}))
+
+(defn- draw-chart!
+  "Draws the chart into el; returns the cleanup."
+  [^js el data]
+  (let [gone (atom false)
+        view (atom nil)
+        spec (chart-spec data (board-theme el))]
+    (-> (embed)
+        (.then (fn [vega-embed] (when-not @gone (vega-embed el (clj->js spec) #js {:actions false :renderer "svg"}))))
+        (.then (fn [^js r] (reset! view (some-> r .-view))))
+        (.catch (fn [e] (when-not @gone (set! (.-textContent el) (str "Chart failed: " (or (.-message e) e)))))))
+    #(do (reset! gone true) (some-> ^js @view .finalize))))
+
 (defn- chart [data]
   (let [box (h/use-ref nil)
         k (js/JSON.stringify (clj->js data))]
     (h/use-effect
-     (fn []
-       (when-let [^js el (.-current box)]
-         (let [gone (atom false)
-               view (atom nil)
-               cs (js/getComputedStyle el)
-               v #(str/trim (.getPropertyValue cs %))
-               fg (v "--fg") muted (v "--muted") line (v "--line")
-               palette (mapv v ["--blue" "--amber" "--green" "--violet" "--red" "--grey"])
-               x (or (:x data) "x") y (or (:y data) "y")
-               values (mapv #(dissoc % :id) (items (:rows data)))
-               numeric-x (and (seq values) (every? #(number? (get % (keyword x))) values))
-               mark (or (:mark data) "bar")
-               spec (merge
-                     {"$schema" "https://vega.github.io/schema/vega-lite/v5.json"
-                      :width "container" :height 220 :background "transparent"
-                      :data {:values values}
-                      :mark (merge {:type mark :tooltip true}
-                                   (if (#{"line" "area"} (:mark data)) {:point true :strokeWidth 3} {:cornerRadiusEnd 3}))
-                      :encoding (merge {:x {:field x :type (if numeric-x "quantitative" "ordinal") :sort nil :axis {:labelAngle 0}}
-                                        :y {:field y :type "quantitative"}}
-                                       (if (:color data) {:color {:field (:color data) :type "nominal"}} {:color {:value (first palette)}}))
-                      :config {:font "Atkinson Hyperlegible" :view {:stroke nil} :range {:category palette}
-                               :title {:font "Kalam" :fontSize 18 :fontWeight 700 :color fg :anchor "start"}
-                               :axis {:labelColor muted :titleColor muted :domainColor line :tickColor line :gridColor line :gridOpacity 0.5
-                                      :labelFontSize 12 :titleFont "Kalam" :titleFontSize 14 :titleFontWeight 700}
-                               :legend {:labelColor muted :titleColor muted}}}
-                     (when (:title data) {:title (:title data)}))]
-           (-> (embed)
-               (.then (fn [vega-embed] (when-not @gone (vega-embed el (clj->js spec) #js {:actions false :renderer "svg"}))))
-               (.then (fn [^js r] (reset! view (some-> r .-view))))
-               (.catch (fn [e] (when-not @gone (set! (.-textContent el) (str "Chart failed: " (or (.-message e) e)))))))
-           #(do (reset! gone true) (some-> ^js @view .finalize)))))
+     (fn [] (when-let [^js el (.-current box)] (draw-chart! el data)))
      [k])
     [:div.f-chart {:ref #(set! (.-current box) %)}]))
 

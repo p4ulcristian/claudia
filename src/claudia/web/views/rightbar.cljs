@@ -5,6 +5,7 @@
   fold (Alt+P; on a phone: back to the chat)."
   (:require [re-frame.core :as rf]
             [claudia.web.hooks :as hooks]
+            [claudia.web.views.pure.shell :as pure]
             [reagent.core :as r]
             [reagent.hooks :as h]))
 
@@ -23,6 +24,36 @@
              :on-click #(rf/dispatch [:right/view :timeline])}
     "Timeline"]])
 
+(defn- use-tip-place!
+  "The hover label sits over its mark (at, in percent of the track) but never leaves the right half."
+  [track tip at hover]
+  (h/use-layout-effect
+   (fn []
+     (when-let [t (.-current tip)]
+       (let [el (.-current track)
+             box (.getBoundingClientRect (or (.closest el ".right") js/document.body))
+             rect (.getBoundingClientRect el)
+             w (.-offsetWidth t)
+             x (- (+ (.-left rect) (/ (* (.-width rect) (at hover)) 100)) (/ w 2))
+             ;; The tip is fixed: placed in the page's layer (the body, moved with the keyboard).
+             l (.getBoundingClientRect js/document.body)]
+         (set! (.. t -style -left) (str (- (pure/tip-left x w (.-left box) (.-right box)) (.-left l)) "px"))
+         (set! (.. t -style -top) (str (- (.-top rect) (.-offsetHeight t) 6 (.-top l)) "px"))))
+     js/undefined)))
+
+(defn- track-events
+  "Click or drag on the track picks the nearest picture; hovering marks it."
+  [nearest index set-hover]
+  {:on-pointer-down (fn [^js e]
+                      (.setPointerCapture (.-currentTarget e) (.-pointerId e))
+                      (rf/dispatch [:picture/pick (nearest (.-clientX e))]))
+   :on-pointer-move (fn [^js e]
+                      (let [i (nearest (.-clientX e))]
+                        (set-hover i)
+                        (when (and (.hasPointerCapture (.-currentTarget e) (.-pointerId e)) (not= i index))
+                          (rf/dispatch [:picture/pick i]))))
+   :on-pointer-leave #(set-hover nil)})
+
 (defn- scrubber
   "One mark per picture along a track; click or drag to move through them, hover to see which one."
   [pictures index]
@@ -31,38 +62,14 @@
         [hover set-hover] (h/use-state nil)
         width (hooks/use-width track [])
         n (count pictures)
-        at (fn [i] (if (= n 1) 100 (* 100 (/ i (dec n)))))
+        at #(pure/mark-at n %)
         nearest (fn [x]
-                  (let [rect (.getBoundingClientRect (.-current track))
-                        f (min 1 (max 0 (/ (- x (.-left rect)) (max 1 (.-width rect)))))]
-                    (js/Math.round (* f (dec n)))))
-        gap (if (> n 1) (/ width (dec n)) width)
-        density (cond (>= gap 14) "" (>= gap 4) "dense" :else "packed")]
-    ;; The hover label sits over its mark but never leaves the right half.
-    (h/use-layout-effect
-     (fn []
-       (when-let [t (.-current tip)]
-         (let [el (.-current track)
-               box (.getBoundingClientRect (or (.closest el ".right") js/document.body))
-               rect (.getBoundingClientRect el)
-               w (.-offsetWidth t)
-               x (- (+ (.-left rect) (/ (* (.-width rect) (at hover)) 100)) (/ w 2))
-               ;; The tip is fixed: placed in the page's layer (the body, moved with the keyboard).
-               l (.getBoundingClientRect js/document.body)]
-           (set! (.. t -style -left) (str (- (max (+ (.-left box) 8) (min x (- (.-right box) w 8))) (.-left l)) "px"))
-           (set! (.. t -style -top) (str (- (.-top rect) (.-offsetHeight t) 6 (.-top l)) "px"))))
-       js/undefined))
-    [:div.rbar-track {:class density :ref #(set! (.-current track) %)
-                      :role "slider" :aria-label "Pictures" :aria-valuemin 1 :aria-valuemax n :aria-valuenow (inc index)
-                      :on-pointer-down (fn [^js e]
-                                         (.setPointerCapture (.-currentTarget e) (.-pointerId e))
-                                         (rf/dispatch [:picture/pick (nearest (.-clientX e))]))
-                      :on-pointer-move (fn [^js e]
-                                         (let [i (nearest (.-clientX e))]
-                                           (set-hover i)
-                                           (when (and (.hasPointerCapture (.-currentTarget e) (.-pointerId e)) (not= i index))
-                                             (rf/dispatch [:picture/pick i]))))
-                      :on-pointer-leave #(set-hover nil)}
+                  (let [rect (.getBoundingClientRect (.-current track))]
+                    (pure/nearest-mark n (.-left rect) (.-width rect) x)))]
+    (use-tip-place! track tip at hover)
+    [:div.rbar-track (merge {:class (pure/density n width) :ref #(set! (.-current track) %)
+                             :role "slider" :aria-label "Pictures" :aria-valuemin 1 :aria-valuemax n :aria-valuenow (inc index)}
+                            (track-events nearest index set-hover))
      [:span.rbar-rail]
      [:span.rbar-fill {:style {:width (str (at index) "%")}}]
      (for [[i p] (map-indexed vector pictures)]

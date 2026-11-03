@@ -11,23 +11,25 @@
 
 (def ^:private env (.-env js/process))
 
-(defn- read-profiles
-  "The profiles file: `<profile> <email> <runner socket>` per line; # starts a comment."
-  [file]
-  (vec (for [line (str/split-lines (fs/readFileSync file "utf8"))
+(defn parse-profiles
+  "The profiles file's text: `<profile> <email> <runner socket>` per line; # starts a comment."
+  [text]
+  (vec (for [line (str/split-lines text)
              :let [[profile email socket] (str/split (str/trim (str/replace line #"#.*" "")) #"\s+")]
              :when (and (seq profile) (seq email) (seq socket))]
          {:profile profile :email (str/lower-case email) :socket socket})))
 
 (def ^:private profiles (atom []))
 
-(defn- route
-  "Whose runner the call goes to: {:own :target :read-only}, or {:status :error}."
-  [^js headers]
-  (let [email (some-> (aget headers "x-claudia-email") str/trim str/lower-case)
-        view (some-> (aget headers "x-claudia-view") str/trim)
-        own (some #(when (= (:email %) email) %) @profiles)
-        target (when (seq view) (some #(when (= (:profile %) view) %) @profiles))]
+(defn- caller-email [^js headers]
+  (some-> (aget headers "x-claudia-email") str/trim str/lower-case))
+
+(defn route-of
+  "Whose runner a call goes to among profiles, for the caller's email and the profile it views
+  (blank = its own): {:own :target :read-only}, or {:status :error}."
+  [profile-list email view]
+  (let [own (some #(when (= (:email %) email) %) profile-list)
+        target (when (seq view) (some #(when (= (:profile %) view) %) profile-list))]
     (cond (not (seq email)) {:status 401 :error "No caller."}
           (not own) {:status 403 :error "No profile on this server for this person."}
           (and (seq view) (not target)) {:status 404 :error (str "No profile " view " on this server.")}
@@ -35,7 +37,12 @@
                  :target (or target own)
                  :read-only (boolean (and target (not= (:profile target) (:profile own))))})))
 
-(defn- runner-headers
+(defn- route
+  "Whose runner the call goes to: {:own :target :read-only}, or {:status :error}."
+  [^js headers]
+  (route-of @profiles (caller-email headers) (some-> (aget headers "x-claudia-view") str/trim)))
+
+(defn runner-headers
   "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's own."
   [^js raw {:keys [target read-only]}]
   (let [pairs (->> (partition 2 raw)
@@ -64,26 +71,40 @@
          (catch :default e (io/send-json res 500 {:error (.-message e)})))
     (io/send-json res 501 {:error "no update unit here"})))
 
+(def ^:private token-urls #{"/api/claude-tokens" "/api/claude-token" "/api/claude-token/use"})
+
+(defn token-op
+  "Which Settings token call url and method are: nil (not one), :read-only, :state, :save, :use or
+  :not-allowed."
+  [url method read-only]
+  (cond
+    (not (token-urls url)) nil
+    read-only :read-only
+    (and (= url "/api/claude-tokens") (= method "GET")) :state
+    (and (= url "/api/claude-token") (= method "PUT")) :save
+    (and (= url "/api/claude-token/use") (= method "POST")) :use
+    :else :not-allowed))
+
+(defn- answer-token [^js res v]
+  (if (:error v)
+    (io/send-json res (or (:status v) 400) (dissoc v :status))
+    (io/send-json res 200 v)))
+
 (defn- token-call
   "Settings' Claude tokens, answered here, not by a runner: the front writes them (on a shared server
   it is the page's own user, as the TypeScript Claudia's page process was; runners only read the token
   in use). by = the caller's email. True when it was one of them."
   [^js req ^js res url {:keys [own read-only]} email]
-  (let [method (.-method req)
-        body #(io/read-json req 65536)
-        answer (fn [v] (if (:error v)
-                         (io/send-json res (or (:status v) 400) (dissoc v :status))
-                         (io/send-json res 200 v)))
-        who (or (not-empty email) (:profile own))]
-    (cond
-      (not (#{"/api/claude-tokens" "/api/claude-token" "/api/claude-token/use"} url)) nil
-      read-only (do (io/send-json res 403 {:error "Read only."}) true)
-      (and (= url "/api/claude-tokens") (= method "GET")) (do (io/send-json res 200 (tokens/state)) true)
-      (and (= url "/api/claude-token") (= method "PUT"))
-      (do (-> (body) (.then #(answer (tokens/save! (:name %) (:token %) who)))) true)
-      (and (= url "/api/claude-token/use") (= method "POST"))
-      (do (-> (body) (.then #(answer (tokens/use! (:name %) who)))) true)
-      :else (do (io/send-json res 405 {:error "Not allowed."}) true))))
+  (let [who (or (not-empty email) (:profile own))
+        op (token-op url (.-method req) read-only)]
+    (case op
+      nil nil
+      :read-only (io/send-json res 403 {:error "Read only."})
+      :state (io/send-json res 200 (tokens/state))
+      :save (.then (io/read-json req 65536) #(answer-token res (tokens/save! (:name %) (:token %) who)))
+      :use (.then (io/read-json req 65536) #(answer-token res (tokens/use! (:name %) who)))
+      :not-allowed (io/send-json res 405 {:error "Not allowed."}))
+    (some? op)))
 
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
@@ -94,7 +115,7 @@
       (if (= "POST" (.-method req)) (update-check res) (io/send-json res 405 {:error "POST only"}))
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
-      (token-call req res url r (some-> (aget (.-headers req) "x-claudia-email") str/trim str/lower-case)) nil
+      (token-call req res url r (caller-email (.-headers req))) nil
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       :else
       (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))
@@ -108,19 +129,24 @@
                             (io/send-json res 502 {:error "The runner is not answering."}))))
         (.pipe req up)))))
 
+(defn request-head
+  "An HTTP/1.1 request's first line and headers ([name value] pairs) as text, the blank line included."
+  [method url pairs]
+  (str method " " url " HTTP/1.1\r\n"
+       (apply str (for [[k v] pairs] (str k ": " v "\r\n")))
+       "\r\n"))
+
 (defn- on-upgrade
   "A WebSocket: the upgrade request is written to the runner socket as it came (with the front's
   headers), then bytes flow both ways untouched. Read-only frames are enforced by the runner."
   [^js req ^js sock ^js head]
   (let [{:keys [status error target] :as r} (route (.-headers req))]
     (if status
-      (do (.end sock (str "HTTP/1.1 " status " " error "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")))
+      (.end sock (str "HTTP/1.1 " status " " error "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
       (let [up (net/connect (:socket target))]
         (.on up "connect"
              (fn []
-               (.write up (str (.-method req) " " (.-url req) " HTTP/1.1\r\n"
-                               (apply str (for [[k v] (runner-headers (.-rawHeaders req) r)] (str k ": " v "\r\n")))
-                               "\r\n"))
+               (.write up (request-head (.-method req) (.-url req) (runner-headers (.-rawHeaders req) r)))
                (when (pos? (.-length head)) (.write up head))
                (.pipe up sock)
                (.pipe sock up)))
@@ -130,7 +156,7 @@
 (defn main [& _]
   (let [file (.-FRONT_PROFILES env)]
     (when-not (seq file) (throw (js/Error. "FRONT_PROFILES is not set.")))
-    (reset! profiles (read-profiles file))
+    (reset! profiles (parse-profiles (fs/readFileSync file "utf8")))
     (let [server (doto (http/createServer on-request)
                    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
                    (aset "requestTimeout" 0))

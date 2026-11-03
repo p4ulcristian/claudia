@@ -16,6 +16,12 @@
    (clj->js (cond-> {:token (.-token t) :env (.-env t) :topic (.-topic t) :key (.-key t)}
               (.-liveStartToken t) (assoc :liveStartToken (.-liveStartToken t))))))
 
+(defn retry?
+  "Whether a registration is tried again: the hub unreachable (status nil) or failing (5xx), within
+  tries-max tries. Refused: not again until a field changes or the app starts again."
+  [status tries]
+  (and (or (nil? status) (>= status 500)) (< (inc tries) tries-max)))
+
 (defn- register! [^js t tries]
   (let [body (fields t)]
     (when-not (= body @sent)
@@ -24,9 +30,8 @@
                                              :headers #js {"content-type" "application/json"} :body body})
           (.catch (fn [_] nil))
           (.then (fn [^js r]
-                   ;; Unreachable or failing: again in a while (unless a newer token came). Refused:
-                   ;; not again until a field changes or the app starts again.
-                   (when (and (or (nil? r) (>= (.-status r) 500)) (< (inc tries) tries-max))
+                   ;; Again in a while, unless a newer token came.
+                   (when (retry? (some-> r .-status) tries)
                      (reset! sent "")
                      (js/setTimeout #(when (identical? @latest t) (register! t (inc tries))) retry-ms))))))))
 

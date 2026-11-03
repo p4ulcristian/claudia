@@ -15,9 +15,9 @@
 (defn seal
   "base64 of nonce (12) || ciphertext || tag (16): a fresh random nonce each time, no AAD."
   [key-b64 text]
-  (let [key (js/Buffer.from key-b64 "base64")
-        _ (when-not (= 32 (.-length key)) (throw (js/Error. "not a 32-byte key")))
+  (let [k (js/Buffer.from key-b64 "base64")
+        _ (when-not (= 32 (.-length k)) (throw (js/Error. "not a 32-byte key")))
         nonce (crypto/randomBytes 12)
-        c (crypto/createCipheriv "aes-256-gcm" key nonce)
+        c (crypto/createCipheriv "aes-256-gcm" k nonce)
         sealed (js/Buffer.concat #js [(.update c (js/JSON.stringify (clj->js text)) "utf8") (.final c)])]
     (.toString (js/Buffer.concat #js [nonce sealed (.getAuthTag c)]) "base64")))

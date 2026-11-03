@@ -10,12 +10,12 @@
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
+            [claudia.web.views.pure.sidebar :as pure]
+            [claudia.web.views.pure.words :as words]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.usage :as usage]))
 
-(def ^:private chat-colors
-  #{"burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan" "sky" "blue" "indigo"
-    "violet" "purple" "magenta" "pink" "brown" "ash"})
+(def ^:private chat-colors (set words/colours-with-ash))
 
 (defn chat-color-var [c] (when (chat-colors c) (str "var(--c-" c ")")))
 
@@ -23,27 +23,8 @@
   "How long ago: now, 5m, 3h, 2d, then the date (Oct 3)."
   [t]
   (when t
-    (let [s (/ (- (js/Date.now) t) 1000)]
-      (cond (< s 60) "now"
-            (< s 3600) (str (js/Math.floor (/ s 60)) "m")
-            (< s 86400) (str (js/Math.floor (/ s 3600)) "h")
-            (< s (* 86400 7)) (str (js/Math.floor (/ s 86400)) "d")
-            :else (.toLocaleDateString (js/Date. t) js/undefined #js {:month "short" :day "numeric"})))))
-
-(defn- one-line [s] (str/trim (str/replace (str s) #"\s+" " ")))
-
-(defn- second-line
-  "What the chat does while it works or waits on you, else the start of Claude's last reply."
-  [{:keys [waiting running agents asks preview]}]
-  (let [n (or agents 0)
-        ask (first asks)]
-    (cond
-      waiting (cond (= "question" (:kind ask)) ["waiting" (str "Asks you: " (one-line (:text ask)))]
-                    (seq preview) ["waiting" (one-line preview)]
-                    :else ["waiting" "Waiting for you"])
-      running ["working" (if (pos? n) (str "Claude working · " n " agent" (when (not= n 1) "s")) "Claude working")]
-      (pos? n) ["agents" (str "Agents working · " n)]
-      :else ["reply" (one-line preview)])))
+    (or (pure/ago-text t (js/Date.now))
+        (.toLocaleDateString (js/Date. t) js/undefined #js {:month "short" :day "numeric"}))))
 
 (defn pick!
   "A chat picked from the list or the rail nods \"yes\" and opens; the open one shakes \"no, already
@@ -72,7 +53,7 @@
   [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click]
                                                 :or {line2? true}}]
   (let [k [server id]
-        [kind text] (when line2? (second-line row))]
+        [kind text] (when line2? (pure/second-line row))]
     [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen")]
                               :style {"--chat" (chat-color-var color)}
                               :on-click (or on-click #(pick! k active? %))
@@ -84,34 +65,39 @@
        (when read-only? [settings/lock-icon])
        (when multi? [chat/server-mark server])
        [:span.when (or when-text (ago (:at row)))]]
-      (when line2? [:span.cs-l2 {:class kind} (if (str/blank? text) "\u00a0" text)])]]))
+      (when line2? [:span.cs-l2 {:class kind} (if (str/blank? text) " " text)])]]))
+
+(defn- found-hit [k h]
+  [:button.found-hit {:class (:role h) :on-click #(rf/dispatch [:nav/jump k (:uuid h)])}
+   [:span.who (if (= "user" (:role h)) "you" "claude")]
+   (into [:span.snip]
+         (map-indexed (fn [i part] (if (odd? i) ^{:key i} [:mark part] part))
+                      (str/split (str (:snippet h)) #"[\u0001\u0002]")))])
+
+(defn- found-chat [r f multi? ro search-text]
+  (let [k [(:server r) (:id r)]]
+    [:div.found {:style {"--chat" (chat-color-var (:color r))}}
+     [row-view r {:multi? multi? :read-only? ro :line2? false
+                  :title-view (if (:title f) [marked-title (:title r) search-text] (:title r))
+                  :when-text (if (pos? (:count f)) (pure/hits-label (:count f)) (ago (:at r)))
+                  :on-click #(rf/dispatch [:nav/open k])}]
+     (for [h (:hits f)]
+       ^{:key (:uuid h)} [found-hit k h])]))
 
 (defn- found-list [found rows-by multi? ro search-text]
   (let [hits (for [[server fs] found, f fs :let [r (rows-by [server (:id f)])] :when r] [r f])]
     (if (and (empty? hits) (seq found))
       [:p.muted.small.cs-empty "Nothing said matches."]
       [:<>
-       (for [[r f] hits
-             :let [k [(:server r) (:id r)]]]
+       (for [[r f] hits]
          ^{:key (str (:server r) "/" (:id r))}
-         [:div.found {:style {"--chat" (chat-color-var (:color r))}}
-          [row-view r {:multi? multi? :read-only? ro :line2? false
-                       :title-view (if (:title f) [marked-title (:title r) search-text] (:title r))
-                       :when-text (if (pos? (:count f)) (str (:count f) " hit" (when (not= 1 (:count f)) "s")) (ago (:at r)))
-                       :on-click #(rf/dispatch [:nav/open k])}]
-          (for [h (:hits f)]
-            ^{:key (:uuid h)}
-            [:button.found-hit {:class (:role h) :on-click #(rf/dispatch [:nav/jump k (:uuid h)])}
-             [:span.who (if (= "user" (:role h)) "you" "claude")]
-             (into [:span.snip]
-                   (map-indexed (fn [i part] (if (odd? i) ^{:key i} [:mark part] part))
-                                (str/split (str (:snippet h)) #"[\u0001\u0002]")))])])])))
+         [found-chat r f multi? ro search-text])])))
 
 (defn- sessions-list [sessions]
   (when (seq (mapcat val sessions))
     [:<>
      [:div.cs-section "~/Work sessions"]
-     (for [[server list] sessions, s list]
+     (for [[server server-sessions] sessions, s server-sessions]
        ^{:key (str server "/" (:id s))}
        [:button.chat-row.cs-row.session-row {:on-click #(rf/dispatch [:ops/adopt server (:id s)])}
         [:span.rail-dot [:span.rail-blank]]
@@ -125,9 +111,9 @@
         all @(rf/subscribe [:servers])]
     (when (> (count servers) 1)
       [:<>
-       (for [{:keys [name label]} servers
-             :when (and (not (hidden name)) (= :closed (get-in all [name :status])))]
-         ^{:key name} [:p.server-off-note (str (or label name) " is off · its chats as last seen")])])))
+       (for [{server-name :name :keys [label]} servers
+             :when (and (not (hidden server-name)) (= :closed (get-in all [server-name :status])))]
+         ^{:key server-name} [:p.server-off-note (str (or label server-name) " is off · its chats as last seen")])])))
 
 (defn- scroll-open-into-view!
   "The open chat stays in view in the list and the rail (only the list's own scroll moves)."
@@ -135,75 +121,83 @@
   (h/use-effect
    (fn []
      (doseq [^js el (array-seq (js/document.querySelectorAll ".cs-list .chat-row.active, .rail-dots .rail-chat.on"))]
-       (let [^js list (.-parentElement el)
+       (let [^js scroller (.-parentElement el)
              r (.getBoundingClientRect el)
-             l (.getBoundingClientRect list)]
-         (cond (> (.-bottom r) (.-bottom l)) (set! (.-scrollTop list) (+ (.-scrollTop list) (- (.-bottom r) (.-bottom l)) 8))
-               (< (.-top r) (.-top l)) (set! (.-scrollTop list) (- (.-scrollTop list) (- (.-top l) (.-top r)) 8)))))
+             l (.getBoundingClientRect scroller)]
+         (cond (> (.-bottom r) (.-bottom l)) (set! (.-scrollTop scroller) (+ (.-scrollTop scroller) (- (.-bottom r) (.-bottom l)) 8))
+               (< (.-top r) (.-top l)) (set! (.-scrollTop scroller) (- (.-scrollTop scroller) (- (.-top l) (.-top r)) 8)))))
      nil)
    deps))
+
+(defn- list-head [ro phone? archived?]
+  [:<>
+   [:header.cs-head
+    [settings/title-menu]
+    [:f> usage/limit-rings]
+    [settings/gear-button]
+    (when (and (not ro) (not phone?))
+      [:button.cs-icon.cs-add {:aria-label "New chat" :data-tip "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])}
+       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])]
+   (when archived?
+     [:button.cs-archived {:on-click #(rf/dispatch [:ops/archived false])}
+      [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Back to chats"])])
+
+(defn- search-box [search-ref text rail-search?]
+  [:label.search-box.cs-search
+   [:input.search {:ref #(set! (.-current search-ref) %)
+                   :placeholder "Search chats" :value (or text "")
+                   :on-change #(rf/dispatch [:ops/search (.. % -target -value)])
+                   :on-key-down #(when (and (= "Escape" (.-key %)) rail-search?)
+                                   (.stopPropagation %)
+                                   (rf/dispatch [:sidebar/toggle false]))}]])
+
+(defn- chat-rows [{:keys [shown open multi? ro new-pending? q archived?]}]
+  [:<>
+   (for [r shown
+         :let [k [(:server r) (:id r)]]]
+     ^{:key (str (:server r) "/" (:id r))}
+     [row-view r {:active? (= open k) :multi? multi? :read-only? ro
+                  :done? (and (not ro) (:unseen r) (not= open k))}])
+   (when new-pending?
+     [:div.chat-row.cs-row.active.cs-new
+      [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
+      [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
+   (when (and (empty? shown) (not new-pending?))
+     [:p.muted.small.cs-empty (pure/empty-note q archived?)])])
+
+(defn- use-search-focus! [search-ref rail-search?]
+  (h/use-effect
+   (fn []
+     (when rail-search?
+       (js/requestAnimationFrame #(some-> (.-current search-ref) .focus)))
+     nil)
+   [rail-search?]))
 
 (defn chat-list [phone?]
   (let [rows @(rf/subscribe [:rows])
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
-        multi? @(rf/subscribe [:multi-server?])
-        me @(rf/subscribe [:me])
         ro @(rf/subscribe [:read-only?])
         rail-search? @(rf/subscribe [:rail-search?])
         {:keys [archived? all-sessions?]} @(rf/subscribe [:list-mode])
         {:keys [text found]} @(rf/subscribe [:search])
-        sessions (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))
         rows-by (into {} (map (juxt (juxt :server :id) identity)) rows)
-        q (str/lower-case (str/trim (str text)))
-        shown (if (seq q) (filter #(str/includes? (str/lower-case (str (:title %))) q) rows) rows)
-        listed? (and open (contains? rows-by open))
-        new-pending? (and open (not listed?) (contains? pending (second open)))
-        search-ref (h/use-ref nil)]
+        q (pure/search-key text)
+        search-ref (h/use-ref nil)
+        m {:shown (pure/by-title rows q) :open open :multi? @(rf/subscribe [:multi-server?]) :ro ro :q q :archived? archived?
+           :new-pending? (and open (not (contains? rows-by open)) (contains? pending (second open)))}]
     (scroll-open-into-view! [(str open) (count rows)])
-    (h/use-effect
-     (fn []
-       (when rail-search?
-         (js/requestAnimationFrame #(some-> (.-current search-ref) .focus)))
-       nil)
-     [rail-search?])
+    (use-search-focus! search-ref rail-search?)
     [:div.cs-pane
-     [:header.cs-head
-      [settings/title-menu]
-      [:f> usage/limit-rings]
-      [settings/gear-button]
-      (when (and (not ro) (not phone?))
-        [:button.cs-icon.cs-add {:aria-label "New chat" :data-tip "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])}
-         [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])]
-     (when archived?
-       [:button.cs-archived {:on-click #(rf/dispatch [:ops/archived false])}
-        [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Back to chats"])
-     [:label.search-box.cs-search
-      [:input.search {:ref #(set! (.-current search-ref) %)
-                      :placeholder "Search chats" :value (or text "")
-                      :on-change #(rf/dispatch [:ops/search (.. % -target -value)])
-                      :on-key-down #(when (and (= "Escape" (.-key %)) rail-search?)
-                                      (.stopPropagation %)
-                                      (rf/dispatch [:sidebar/toggle false]))}]]
+     (list-head ro phone? archived?)
+     (search-box search-ref text rail-search?)
      [:nav.cs-list {:aria-label "Chats"}
       [off-notes]
       (cond
-        (nil? me) nil
-        found [found-list found rows-by multi? ro text]
-        :else
-        [:<>
-         (for [r shown
-               :let [k [(:server r) (:id r)]]]
-           ^{:key (str (:server r) "/" (:id r))}
-           [row-view r {:active? (= open k) :multi? multi? :read-only? ro
-                        :done? (and (not ro) (:unseen r) (not= open k))}])
-         (when new-pending?
-           [:div.chat-row.cs-row.active.cs-new
-            [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
-            [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
-         (when (and (empty? shown) (not new-pending?))
-           [:p.muted.small.cs-empty (cond (seq q) "No match." archived? "Nothing archived." :else "No chats yet.")])])
-      (when-not found [sessions-list sessions])]
+        (nil? @(rf/subscribe [:me])) nil
+        found [found-list found rows-by (:multi? m) ro text]
+        :else (chat-rows m))
+      (when-not found [sessions-list (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))])]
      (when (and (not ro) phone?)
        [:button.cs-fab {:aria-label "New chat" :on-click #(rf/dispatch [:nav/new])}
         [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M12 5v14M5 12h14"}]]])]))

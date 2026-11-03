@@ -5,63 +5,38 @@
   the composer, and the / command menu."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
-            [reagent.hooks :as h]))
+            [reagent.hooks :as h]
+            [claudia.web.views.pure.usage :as pure]))
 
-(defn- k-tokens [n]
-  (cond (nil? n) "?"
-        (>= n 1e6) (str (/ (js/Math.round (/ n 1e5)) 10) "M")
-        (>= n 1000) (str (js/Math.round (/ n 1000)) "k")
-        :else (str n)))
-
-(defn pretty-model
-  "\"claude-opus-5-5[1m]\" -> \"Opus 5.5 1M\"."
-  [id]
-  (when (seq id)
-    (let [long? (re-find #"(?i)\[1m\]" id)
-          parts (->> (str/split (-> id (str/replace #"\[.*\]" "") (str/replace #"^claude-" "")) #"-")
-                     (remove #(re-matches #"\d{8}" %)))
-          family (or (some #(when (re-matches #"(?i)[a-z]+" %) %) parts) (first parts))
-          version (str/join "." (filter #(re-matches #"\d+" %) parts))]
-      (str/trim (str (str/upper-case (subs family 0 1)) (subs family 1) " " version (when long? " 1M"))))))
-
-(defn- level [p] (cond (>= p 90) "red" (>= p 70) "amber" :else "ok"))
+(def ^:private k-tokens pure/k-tokens)
+(def pretty-model pure/pretty-model)
+(def ^:private level pure/level)
+(def ^:private countdown pure/countdown)
+(def ^:private short-name pure/short-name)
 
 (defn- reset-label
   "When a limit resets: \"today 14:30\", \"tomorrow 09:00\", \"Thu 23 Oct, 09:00\"."
   [ms]
   (let [d (js/Date. ms)
-        time (.toLocaleTimeString d js/undefined #js {:hour "2-digit" :minute "2-digit"})
+        hh-mm (.toLocaleTimeString d js/undefined #js {:hour "2-digit" :minute "2-digit"})
         day #(.getTime (js/Date. (.getFullYear %) (.getMonth %) (.getDate %)))
         days (js/Math.round (/ (- (day d) (day (js/Date.))) 86400000))]
     (case days
-      0 (str "today " time)
-      1 (str "tomorrow " time)
-      (str (.toLocaleDateString d js/undefined #js {:weekday "short" :day "numeric" :month "short"}) ", " time))))
-
-(defn- countdown
-  "Time left: \"2d 4h\", \"3h 12m\", seconds in the last hour (\"14m 05s\")."
-  [ms]
-  (if (<= ms 0)
-    "now"
-    (let [s (js/Math.floor (/ ms 1000))
-          d (quot s 86400) hh (quot (mod s 86400) 3600) m (quot (mod s 3600) 60) sec (mod s 60)]
-      (cond (pos? d) (str d "d " hh "h")
-            (pos? hh) (str hh "h " m "m")
-            :else (str m "m " (when (< sec 10) "0") sec "s")))))
+      0 (str "today " hh-mm)
+      1 (str "tomorrow " hh-mm)
+      (str (.toLocaleDateString d js/undefined #js {:weekday "short" :day "numeric" :month "short"}) ", " hh-mm))))
 
 (defn- use-now! []
   (let [[now set-now] (h/use-state (js/Date.now))]
     (h/use-effect (fn [] (let [t (js/setInterval #(set-now (js/Date.now)) 1000)] #(js/clearInterval t))) [])
     now))
 
-(def ^:private short-name {"five_hour" "5h" "seven_day" "wk" "seven_day_opus" "op" "seven_day_sonnet" "so"})
-
 (def ^:private compact-icon
   "M17 7.5v6m-3.2-3.2 3.2 3.2 3.2-3.2M17 26.5v-6m-3.2 3.2 3.2-3.2 3.2 3.2M10.5 17h13")
 
 (defn ring
   "A chalk ring with its percent; with on-click a button whose number turns into its icon on hover."
-  [{:keys [short percent tip icon on-click on-context-menu]}]
+  [{short-label :short :keys [percent tip icon on-click on-context-menu]}]
   (let [r 14
         len (* 2 js/Math.PI r)]
     [(if on-click :button.ring.action :div.ring)
@@ -73,10 +48,7 @@
       (when on-click
         [:g.r-icon {:transform "translate(17 17) scale(0.7) translate(-17 -17)"} [:path {:d icon}]])]
      [:span.r-num percent]
-     [:span.r-label short]]))
-
-(defn- two [limits]
-  (keep (fn [k] (some #(when (= k (:key %)) %) limits)) ["five_hour" "seven_day"]))
+     [:span.r-label short-label]]))
 
 (defn limit-rings
   "The list header's two rings (5-hour, week): one button that opens what they summarise (the plan
@@ -84,10 +56,8 @@
   []
   (let [limits @(rf/subscribe [:limits])
         now (use-now!)
-        shown (two limits)
-        tip (str/join " · " (for [l shown]
-                              (str (:label l) " " (:percent l) "%"
-                                   (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)))))))]
+        shown (pure/two limits)
+        tip (pure/limits-tip shown now)]
     (when (seq shown)
       [:button.limit-rings
        {:aria-label (str "Usage: " (str/join ", " (map #(str (:label %) " " (:percent %) "%") shown)))
@@ -101,6 +71,33 @@
          [:span.m-num (str percent "%")]]
         children))
 
+(defn- context-meter [context]
+  [:div.meter {:class (level (:percent context))
+               :title (str "This chat: " (k-tokens (:used context)) " of " (k-tokens (:max context)) " tokens ("
+                           (pretty-model (:model context)) ") · right click to compact")
+               :on-context-menu (fn [^js e] (.preventDefault e)
+                                  (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}
+   [:span.m-label "Context"]
+   [:span.m-bar [:span {:style {:width (str (min 100 (:percent context)) "%")}}]]
+   [:span.m-num (str (:percent context) "%")]])
+
+(defn- account-pick [server account saved plan]
+  (cond
+    (and account (> (count saved) 1))
+    [:label.pick.m-account {:title "Switch the Claude subscription for every chat here (applies on each chat's next message)"}
+     [:select {:value account
+               :on-change #(rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
+                                                       :method "POST" :body {:name (.. % -target -value)}
+                                                       :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}])}
+      (when-not (some #{account} saved) [:option {:value ""} plan])
+      (for [n saved] ^{:key n} [:option {:value n} (str n "'s plan")])]]
+    account [:span.m-account {:title "Add or switch tokens in Settings"} plan]))
+
+(defn- limit-meter [l plan now]
+  [meter {:label (:label l) :percent (:percent l) :title (str plan ", " (:label l) " limit: " (:percent l) "% used")}
+   (when (:resetsAt l)
+     [:span.m-reset "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])])
+
 (defn plan-meters
   "Settings' meters: the open chat's Context bar (right click: compact), whose plan the chats run
   on (a select with two saved tokens or more), each limit as a bar with when it resets and a
@@ -111,35 +108,14 @@
         context (get-in oc [:state :context])
         tokens @(rf/subscribe [:tokens server])
         account (get-in tokens [:inUse :name])
-        saved (map :name (:tokens tokens))
         plan (if account (str account "'s plan") "Plan")
         now (use-now!)]
     (when (or context (seq limits))
       [:div.meters
-       (when context
-         [:div.meter {:class (level (:percent context))
-                      :title (str "This chat: " (k-tokens (:used context)) " of " (k-tokens (:max context)) " tokens ("
-                                  (pretty-model (:model context)) ") · right click to compact")
-                      :on-context-menu (fn [^js e] (.preventDefault e)
-                                         (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}
-          [:span.m-label "Context"]
-          [:span.m-bar [:span {:style {:width (str (min 100 (:percent context)) "%")}}]]
-          [:span.m-num (str (:percent context) "%")]])
-       (cond
-         (and account (> (count saved) 1))
-         [:label.pick.m-account {:title "Switch the Claude subscription for every chat here (applies on each chat's next message)"}
-          [:select {:value account
-                    :on-change #(rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
-                                                            :method "POST" :body {:name (.. % -target -value)}
-                                                            :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}])}
-           (when-not (some #{account} saved) [:option {:value ""} plan])
-           (for [n saved] ^{:key n} [:option {:value n} (str n "'s plan")])]]
-         account [:span.m-account {:title "Add or switch tokens in Settings"} plan])
+       (when context (context-meter context))
+       (account-pick server account (map :name (:tokens tokens)) plan)
        (for [l limits]
-         ^{:key (:key l)}
-         [meter {:label (:label l) :percent (:percent l) :title (str plan ", " (:label l) " limit: " (:percent l) "% used")}
-          (when (:resetsAt l)
-            [:span.m-reset "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])])])))
+         ^{:key (:key l)} [limit-meter l plan now])])))
 
 (declare context-ring)
 
@@ -177,54 +153,40 @@
 (rf/reg-event-db :new/settings (fn [db [_ m]] (update db :new-settings merge m)))
 (rf/reg-sub :new-settings (fn [db] (:new-settings db)))
 
+(defn- model-pick [models settings running put!]
+  [:label.pick.model {:title (if (seq running) (str "Model: " running (when-not (:model settings) " (your default)")) "Model for this chat")}
+   [:select {:value (or (:model settings) "")
+             :on-change #(put! {:model (not-empty (.. % -target -value))})}
+    [:option {:value ""} (if (and (not (:model settings)) (seq running)) running "Default model")]
+    (for [m models :when (not= "default" (:value m))]
+      ^{:key (:value m)} [:option {:value (:value m)} (:name m)])]])
+
+(defn- effort-pick [efforts settings put!]
+  [:label.pick.effort {:title (str "Effort: " (or (:effort settings) "your default"))}
+   [:select {:value (or (:effort settings) "")
+             :on-change #(put! {:effort (not-empty (.. % -target -value))})}
+    [:option {:value ""} "effort"]
+    (for [e efforts] ^{:key e} [:option {:value e} e])]])
+
 (defn pickers
   "The chat's model and effort (applied on its next start; a live session takes them at once). A
   new chat keeps them until it is made (events.cljs sends them with `created`)."
   [{:keys [ck server state pending?]}]
   (let [server (or server @(rf/subscribe [:new-server]))
-        meta @(rf/subscribe [:meta server])
-        models (:models meta)
+        server-meta @(rf/subscribe [:meta server])
+        models (:models server-meta)
         settings (if ck (:settings state) @(rf/subscribe [:new-settings]))
         put! (fn [m] (if ck (rf/dispatch [:chat/settings ck m]) (rf/dispatch [:new/settings m])))
-        chosen (or (some #(when (= (:value %) (or (:model settings) "default")) %) models) (first models))
-        efforts (:efforts chosen)
-        running (pretty-model (or (not-empty (:model state)) (when-not (:model settings) (:defaultModel meta))))]
+        efforts (:efforts (pure/chosen-model models settings))
+        running (pretty-model (or (not-empty (:model state)) (when-not (:model settings) (:defaultModel server-meta))))]
     (when (and (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
       [:<>
-       [:label.pick.model {:title (if (seq running) (str "Model: " running (when-not (:model settings) " (your default)")) "Model for this chat")}
-        [:select {:value (or (:model settings) "")
-                  :on-change #(put! {:model (not-empty (.. % -target -value))})}
-         [:option {:value ""} (if (and (not (:model settings)) (seq running)) running "Default model")]
-         (for [m models :when (not= "default" (:value m))]
-           ^{:key (:value m)} [:option {:value (:value m)} (:name m)])]]
-       (when (seq efforts)
-         [:label.pick.effort {:title (str "Effort: " (or (:effort settings) "your default"))}
-          [:select {:value (or (:effort settings) "")
-                    :on-change #(put! {:effort (not-empty (.. % -target -value))})}
-           [:option {:value ""} "effort"]
-           (for [e efforts] ^{:key e} [:option {:value e} e])]])])))
+       (model-pick models settings running put!)
+       (when (seq efforts) (effort-pick efforts settings put!))])))
 
 ;; ---- the / menu ----
 
-(defn- commands-of
-  "The chat's slash commands: its own (the SDK's init) with the descriptions the probe read, else the
-  probe's list."
-  [state meta]
-  (let [described (into {} (map (juxt :name identity)) (:commands meta))]
-    (if (seq (:commands state))
-      (vec (for [n (:commands state)] (or (described n) {:name n})))
-      (vec (:commands meta)))))
-
-(defn matches
-  "\"/\" at the start, before any space: the commands that fit, those starting with it first."
-  [text oc meta]
-  (when-let [[_ q] (re-matches #"/(\S*)" (or text ""))]
-    (let [q (str/lower-case q)]
-      (->> (commands-of (:state oc) meta)
-           (filter #(str/includes? (str/lower-case (:name %)) q))
-           (sort-by #(if (str/starts-with? (str/lower-case (:name %)) q) 0 1))
-           (take 8)
-           vec))))
+(def matches pure/matches)
 
 (defn slash-key!
   "The composer's keys while the menu shows: arrows move, Tab and Enter complete. True when handled."

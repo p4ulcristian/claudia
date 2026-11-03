@@ -28,10 +28,10 @@
 
 (defn- rpc [id kind args ^js signal]
   (js/Promise.
-   (fn [resolve reject]
+   (fn [done fail]
      (let [n (swap! next-rpc inc)
            ev #js {:ev "rpc" :rpc n :id id :kind kind :args args}]
-       (swap! waiting assoc n {:id id :ev ev :resolve resolve :reject reject})
+       (swap! waiting assoc n {:id id :ev ev :resolve done :reject fail})
        (when signal
          (.addEventListener signal "abort"
                             (fn []
@@ -39,15 +39,15 @@
                                 (swap! waiting dissoc n)
                                 ;; The runner takes the ask's card away.
                                 (send! #js {:ev "cancel" :rpc n :id id})
-                                (reject (js/Error. "aborted"))))
+                                (fail (js/Error. "aborted"))))
                             #js {:once true}))
        (send! ev)))))
 
 (defn- drop-rpcs [id]
-  (doseq [[n {wid :id reject :reject}] @waiting
+  (doseq [[n {wid :id fail :reject}] @waiting
           :when (= wid id)]
     (swap! waiting dissoc n)
-    (reject (js/Error. "session closed"))))
+    (fail (js/Error. "session closed"))))
 
 (defn- inbox
   "The query's streaming input: an async iterable fed by push, finished by end."
@@ -56,12 +56,12 @@
         wake (atom nil)
         done (atom false)
         wake! #(when-let [w @wake] (reset! wake nil) (w))
-        next (fn next []
+        pull (fn pull []
                (cond (pos? (.-length buf)) (js/Promise.resolve #js {:value (.shift buf) :done false})
                      @done (js/Promise.resolve #js {:value js/undefined :done true})
-                     :else (js/Promise. (fn [res] (reset! wake #(res (next)))))))
+                     :else (js/Promise. (fn [res] (reset! wake #(res (pull)))))))
         iterable #js {}]
-    (aset iterable js/Symbol.asyncIterator (fn [] #js {:next next}))
+    (aset iterable js/Symbol.asyncIterator (fn [] #js {:next pull}))
     {:iterable iterable
      :push (fn [m] (.push buf m) (wake!))
      :end (fn [] (reset! done true) (wake!))}))
@@ -137,9 +137,9 @@
                  #js {} (.-options spec)
                  #js {:mcpServers (mcp-servers id (or (.-mcp spec) #js {}))
                       :hooks (hooks id (.-hooks spec))
-                      :canUseTool (fn [name input ^js opts]
+                      :canUseTool (fn [tool-name input ^js opts]
                                     (rpc id "canUseTool"
-                                         #js {:name name :input input :toolUseID (.-toolUseID opts)
+                                         #js {:name tool-name :input input :toolUseID (.-toolUseID opts)
                                               :title (.-title opts) :description (.-description opts)}
                                          (.-signal opts)))
                       :stderr (fn [s] (js/console.error (str "[" (subs id 0 8) "] " (.trimEnd s))))})
@@ -163,6 +163,44 @@
 (defn- session-list []
   (into-array (for [[id {:keys [busy]}] @sessions] #js {:id id :busy @busy})))
 
+(defn- user-message
+  "A send op as the SDK's user message for session id: images (photos, video frames) go before the text."
+  [id ^js msg]
+  (cond-> #js {:type "user"
+               :message #js {:role "user"
+                             :content (if (seq (.-images msg))
+                                        (.concat (.map (.-images msg)
+                                                       (fn [^js i]
+                                                         #js {:type "image"
+                                                              :source #js {:type "base64" :media_type (.-media_type i) :data (.-data i)}}))
+                                                 #js [#js {:type "text" :text (.-text msg)}])
+                                        (.-text msg))}
+               :parent_tool_use_id nil
+               :session_id id}
+    (.-uuid msg) (doto (aset "uuid" (.-uuid msg)))))
+
+(defn- reply! [^js msg]
+  (when-let [{done :resolve fail :reject} (get @waiting (.-rpc msg))]
+    (swap! waiting dissoc (.-rpc msg))
+    (if (some? (.-error msg))
+      (fail (js/Error. (.-error msg)))
+      (done (.-value msg)))))
+
+(defn- control!
+  "A call on the chat's query object (stop a task, read the context use, change the model):
+  answered with ev \"control\" and the same req."
+  [id s ^js msg]
+  (let [req (.-req msg)
+        method (.-method msg)
+        answer #(send! (js/Object.assign #js {:ev "control" :req req} %))]
+    (if-not (and s (contains? control-methods method))
+      (answer #js {:error (if s (str "no control method " method) "no session")})
+      (-> (js/Promise.resolve (if (= method "setMcp")
+                                (set-mcp id (:q s) (aget (or (.-args msg) #js []) 0))
+                                (.apply (aget (:q s) method) (:q s) (or (.-args msg) #js []))))
+          (.then (fn [v] (answer #js {:value (if (undefined? v) nil v)}))
+                 (fn [e] (answer #js {:error (message e)})))))))
+
 (defn- handle [^js msg]
   (let [id (.-id msg)
         s (get @sessions id)]
@@ -170,39 +208,12 @@
       "start" (start! id (.-spec msg))
       "send" (when s
                (reset! (:busy s) true)
-               ((:push s) (cond-> #js {:type "user"
-                                       :message #js {:role "user"
-                                                     ;; images (photos, video frames) go before the text
-                                                     :content (if (seq (.-images msg))
-                                                                (.concat (.map (.-images msg)
-                                                                               (fn [^js i]
-                                                                                 #js {:type "image"
-                                                                                      :source #js {:type "base64" :media_type (.-media_type i) :data (.-data i)}}))
-                                                                         #js [#js {:type "text" :text (.-text msg)}])
-                                                                (.-text msg))}
-                                       :parent_tool_use_id nil
-                                       :session_id id}
-                            (.-uuid msg) (doto (aset "uuid" (.-uuid msg))))))
+               ((:push s) (user-message id msg)))
       "interrupt" (when s (-> (.interrupt ^js (:q s)) (.catch (fn [_]))))
       "close" (close! id)
-      "reply" (when-let [{:keys [resolve reject]} (get @waiting (.-rpc msg))]
-                (swap! waiting dissoc (.-rpc msg))
-                (if (some? (.-error msg))
-                  (reject (js/Error. (.-error msg)))
-                  (resolve (.-value msg))))
+      "reply" (reply! msg)
       "list" (send! #js {:ev "sessions" :list (session-list)})
-      ;; A call on the chat's query object (stop a task, read the context use, change the model):
-      ;; answered with ev "control" and the same req.
-      "control" (let [req (.-req msg)
-                      method (.-method msg)
-                      answer #(send! (js/Object.assign #js {:ev "control" :req req} %))]
-                  (if-not (and s (contains? control-methods method))
-                    (answer #js {:error (if s (str "no control method " method) "no session")})
-                    (-> (js/Promise.resolve (if (= method "setMcp")
-                                              (set-mcp id (:q s) (aget (or (.-args msg) #js []) 0))
-                                              (.apply (aget (:q s) method) (:q s) (or (.-args msg) #js []))))
-                        (.then (fn [v] (answer #js {:value (if (undefined? v) nil v)}))
-                               (fn [e] (answer #js {:error (message e)}))))))
+      "control" (control! id s msg)
       (js/console.error "host: unknown op" (.-op msg)))))
 
 (defn- connected

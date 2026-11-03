@@ -4,6 +4,7 @@
   (:require ["node:sqlite" :refer [DatabaseSync]]
             ["node:fs" :as fs]
             ["node:path" :as path]
+            [clojure.string :as str]
             [claudia.shared.protocol :as p]))
 
 (defonce ^:private db (atom nil))
@@ -18,10 +19,9 @@
   [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
    :last_turn :stopped :failed :reply])
 
-(defn open! [dir]
-  (fs/mkdirSync dir #js {:recursive true})
-  (let [d (DatabaseSync. (path/join dir "claudia.db"))]
-    (.exec d "PRAGMA journal_mode = WAL;
+(def ^:private schema
+  "The tables, made when missing."
+  "PRAGMA journal_mode = WAL;
               CREATE TABLE IF NOT EXISTS chats (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL DEFAULT '',
@@ -79,14 +79,25 @@
                 at INTEGER NOT NULL,
                 PRIMARY KEY (chat, turn)
               );")
-    (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
-      (doseq [[c sql] [["prev_color" "prev_color TEXT"]
-                       ["last_turn" "last_turn TEXT"]
-                       ["stopped" "stopped INTEGER NOT NULL DEFAULT 0"]
-                       ["failed" "failed INTEGER NOT NULL DEFAULT 0"]
-                       ["reply" "reply TEXT NOT NULL DEFAULT ''"]]
-              :when (not (have c))]
-        (.exec d (str "ALTER TABLE chats ADD COLUMN " sql))))
+
+(def ^:private added-columns
+  "Columns of chats added after the table was first made: [name definition]."
+  [["prev_color" "prev_color TEXT"]
+   ["last_turn" "last_turn TEXT"]
+   ["stopped" "stopped INTEGER NOT NULL DEFAULT 0"]
+   ["failed" "failed INTEGER NOT NULL DEFAULT 0"]
+   ["reply" "reply TEXT NOT NULL DEFAULT ''"]])
+
+(defn- add-missing-columns! [^js d]
+  (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
+    (doseq [[c sql] added-columns :when (not (have c))]
+      (.exec d (str "ALTER TABLE chats ADD COLUMN " sql)))))
+
+(defn open! [dir]
+  (fs/mkdirSync dir #js {:recursive true})
+  (let [d (DatabaseSync. (path/join dir "claudia.db"))]
+    (.exec d schema)
+    (add-missing-columns! d)
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -117,23 +128,28 @@
   (.run (stmt "INSERT OR IGNORE INTO chats (id, title, folder, color, created, at, seen) VALUES (?, ?, ?, ?, ?, ?, ?)")
         id title folder color at at at))
 
-(defn update!
-  "Sets the given columns of one chat (keys from columns; booleans stored as 0/1)."
+(defn update-statement
+  "The UPDATE for one chat's given columns (keys from columns; booleans stored as 0/1): [sql args],
+  or nil when m sets none."
   [id m]
   (let [ks (filter (set (rest columns)) (keys m))]
     (when (seq ks)
-      (let [^js st (stmt (str "UPDATE chats SET "
-                                        (apply str (interpose ", " (map #(str (name %) " = ?") ks)))
-                                        " WHERE id = ?"))
-            vals (for [k ks :let [v (get m k)]] (if (boolean? v) (if v 1 0) v))]
-        (.apply (.-run st) st (into-array (concat vals [id])))))))
+      [(str "UPDATE chats SET " (str/join ", " (map #(str (name %) " = ?") ks)) " WHERE id = ?")
+       (vec (concat (for [k ks :let [v (get m k)]] (if (boolean? v) (if v 1 0) v)) [id]))])))
+
+(defn update!
+  "Sets the given columns of one chat (keys from columns; booleans stored as 0/1)."
+  [id m]
+  (when-let [[sql args] (update-statement id m)]
+    (let [^js st (stmt sql)]
+      (.apply (.-run st) st (into-array args)))))
 
 (defn scene [id]
   (let [^js r (.get (stmt "SELECT scene FROM chats WHERE id = ?") id)]
     (some-> r .-scene p/read-json)))
 
-(defn save-scene! [id scene]
-  (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json scene) id))
+(defn save-scene! [id s]
+  (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json s) id))
 
 ;; Templates: freeform blocks kept by name (save_template, the badge's "save as template").
 
@@ -143,15 +159,15 @@
 
 (defn templates [] (mapv template-row (.all (stmt "SELECT * FROM templates ORDER BY name COLLATE NOCASE"))))
 
-(defn template [name] (template-row (.get (stmt "SELECT * FROM templates WHERE name = ?") name)))
+(defn template [template-name] (template-row (.get (stmt "SELECT * FROM templates WHERE name = ?") template-name)))
 
-(defn save-template! [{:keys [name html parts description]}]
+(defn save-template! [{template-name :name :keys [html parts description]}]
   (.run (stmt "INSERT INTO templates (name, html, parts, description, at) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(name) DO UPDATE SET html = excluded.html, parts = excluded.parts,
                description = excluded.description, at = excluded.at")
-        name html (p/write-json (or parts {})) (or description "") (js/Date.now)))
+        template-name html (p/write-json (or parts {})) (or description "") (js/Date.now)))
 
-(defn delete-template! [name] (.run (stmt "DELETE FROM templates WHERE name = ?") name))
+(defn delete-template! [template-name] (.run (stmt "DELETE FROM templates WHERE name = ?") template-name))
 
 ;; A chat's picture settings: the form row's choices ({form "required"|"off"}), the columns (0 =
 ;; Claude's layout, 1-3) and the forms its Claude last heard of (nil: not told yet).
@@ -170,16 +186,16 @@
 
 (defn kv
   "The value kept under [chat key] (ClojureScript data), or nil."
-  [chat k]
-  (let [^js r (.get (stmt "SELECT value FROM kv WHERE chat = ? AND key = ?") chat k)]
+  [chat-id k]
+  (let [^js r (.get (stmt "SELECT value FROM kv WHERE chat = ? AND key = ?") chat-id k)]
     (some-> r .-value p/read-json)))
 
-(defn kv! [chat k v]
+(defn kv! [chat-id k v]
   (if (nil? v)
-    (.run (stmt "DELETE FROM kv WHERE chat = ? AND key = ?") chat k)
+    (.run (stmt "DELETE FROM kv WHERE chat = ? AND key = ?") chat-id k)
     (.run (stmt "INSERT INTO kv (chat, key, value) VALUES (?, ?, ?)
                  ON CONFLICT (chat, key) DO UPDATE SET value = excluded.value")
-          chat k (p/write-json v))))
+          chat-id k (p/write-json v))))
 
 ;; changes ----------------------------------------------------------------------------------------
 
@@ -189,29 +205,29 @@
 
 (defn add-change!
   "One changed file of a turn; returns its row (without the texts)."
-  [chat {:keys [turn path before after added removed status skipped at]}]
+  [chat-id {:keys [turn path before after added removed status skipped at]}]
   (let [^js r (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                    chat turn path before after added removed status skipped at)]
+                    chat-id turn path before after added removed status skipped at)]
     (change-row (.get (stmt "SELECT * FROM changes WHERE id = ?") (.-lastInsertRowid r)))))
 
 (defn changes
   "The chat's changes, oldest first (the newest 500)."
-  [chat]
+  [chat-id]
   (vec (reverse (map change-row (.all (stmt "SELECT id, turn, path, added, removed, status, skipped, at FROM changes
-                                             WHERE chat = ? ORDER BY id DESC LIMIT 500") chat)))))
+                                             WHERE chat = ? ORDER BY id DESC LIMIT 500") chat-id)))))
 
 (defn change-texts
   "{:before :after} of one change of the chat, or nil."
-  [chat id]
-  (when-let [^js r (.get (stmt "SELECT before, after, skipped FROM changes WHERE chat = ? AND id = ?") chat id)]
+  [chat-id id]
+  (when-let [^js r (.get (stmt "SELECT before, after, skipped FROM changes WHERE chat = ? AND id = ?") chat-id id)]
     {:before (.-before r) :after (.-after r) :skipped (.-skipped r)}))
 (defn save-picture!
   "The picture as a turn left it (so far): one row per chat and turn, its first time kept."
-  [id turn scene at]
+  [id turn s at]
   (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?)
                ON CONFLICT (chat, turn) DO UPDATE SET scene = excluded.scene")
-        id turn (p/write-json scene) at))
+        id turn (p/write-json s) at))
 
 (defn pictures
   "The chat's pictures without their scenes, oldest first: [{:turn :title :at}]."

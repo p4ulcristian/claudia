@@ -9,7 +9,7 @@
   Updates are state, not news: at most one per update-gap-ms per person, priority 10 only when a chat
   newly waits on them; one that fails is not retried as such: the state as it then stands is sent
   again a little later."
-  (:require [clojure.string :as str]
+  (:require [claudia.shared.text :as text]
             [claudia.hub.apns :as apns]
             [claudia.hub.store :as store]))
 
@@ -35,12 +35,15 @@
   (reset! sender send)
   (reset! summary-of summary))
 
-(defn- cut-title [s]
-  (let [chars (vec (or (not-empty (str/trim (str/replace (str s) #"\s+" " "))) "Chat"))]
-    (if (> (count chars) title-max) (str (apply str (take (dec title-max) chars)) "…") (apply str chars))))
+(defn cut-title
+  "A chat's title on the card: one line, at most title-max characters, \"Chat\" when it has none."
+  [s]
+  (text/fit (or (not-empty (text/one-line s)) "Chat") title-max))
 
-(defn- person [email] (get @people email {:last 0 :waiting #{}}))
-(defn- person! [email f & args] (swap! people update email #(apply f (or % {:last 0 :waiting #{}}) args)))
+(def ^:private fresh-person {:last 0 :waiting #{}})
+
+(defn- person [email] (get @people email fresh-person))
+(defn- person! [email f & args] (swap! people update email #(apply f (or % fresh-person) args)))
 
 (defn- on? [s] (pos? (+ (count (:running s)) (count (:waiting s)))))
 
@@ -59,6 +62,26 @@
         (if (>= (count r) (count w)) (recur (pop r) w) (recur r (pop w)))
         (state r w)))))
 
+(defn update-push [now-s st] {:aps {:timestamp now-s :event "update" :content-state st}})
+
+(defn start-push [now-s st]
+  {:aps {:timestamp now-s :event "start" :content-state st
+         :attributes-type attributes :attributes {}
+         :alert {:title "Claudia" :body "Chats running"}}})
+
+(defn end-push [now-s st]
+  {:aps {:timestamp now-s :event "end" :content-state st :dismissal-date (+ now-s dismiss-s)}})
+
+(defn noted
+  "The person's card state p after their summary s changed at now: urgent when a chat newly waits,
+  quiet since now when nothing runs or waits any more."
+  [p s now]
+  (let [waiting (set (map #(str (:server %) "/" (:chat %)) (:waiting s)))]
+    (cond-> (assoc p :waiting waiting)
+      (some #(not ((:waiting p) %)) waiting) (assoc :urgent true)
+      (on? s) (assoc :quiet-since nil)
+      (and (not (on? s)) (not (:quiet-since p))) (assoc :quiet-since now))))
+
 (declare schedule!)
 
 (defn changed!
@@ -66,109 +89,144 @@
   [email]
   (when @sender
     (let [s (@summary-of email)
-          waiting (set (map #(str (:server %) "/" (:chat %)) (:waiting s)))]
-      (person! email (fn [p]
-                       (cond-> (assoc p :waiting waiting)
-                         (some #(not ((:waiting p) %)) waiting) (assoc :urgent true)
-                         (on? s) (assoc :quiet-since nil)
-                         (and (not (on? s)) (not (:quiet-since p))) (assoc :quiet-since (js/Date.now)))))
+          now (js/Date.now)]
+      (person! email noted s now)
       (schedule! email nil))))
 
 (defn- in-order
-  "Runs (f x) for each x, one after another -> Promise."
+  "Runs (f x) for each x, one after another -> Promise of their results."
   [xs f]
-  (reduce (fn [p x] (.then p #(f x))) (js/Promise.resolve) xs))
+  (reduce (fn [p x] (.then p (fn [acc] (.then (js/Promise.resolve (f x)) #(conj acc %)))))
+          (js/Promise.resolve [])
+          xs))
+
+(defn outcome
+  "What a flush's sends add up to: :sent when any push went out, :again when any asks to retry.
+  Results nest (a phone's results are its activities' results); nil is a push not sent."
+  [results]
+  (let [all (remove nil? (flatten (vector results)))]
+    {:sent (boolean (some :sent all)) :again (boolean (some :again all))}))
 
 (defn- target [d token]
   {:token token :env (:env d) :topic (str (:topic d) ".push-type.liveactivity")})
+
+(defn- send! [d token payload prio]
+  (@sender (target d token) payload {:type "liveactivity" :priority prio}))
+
+(defn- sent [status] {:sent true :again (= status :retry)})
 
 (defn- gone! [activity d]
   (js/console.log (str "push: APNs says a Live Activity token of " (apns/short-token (:token d)) " is gone; dropped"))
   (store/drop-activity! activity)
   (swap! sent-sig dissoc activity))
 
+(defn state-sig
+  "What a content-state looks like apart from its time: the same one is not sent twice."
+  [state]
+  (js/JSON.stringify (clj->js (assoc state :updatedAt 0))))
+
+(defn- update-one! [d a payload sig priority]
+  (when-not (= sig (get @sent-sig (:activity a)))
+    (.then (send! d (:token a) payload priority)
+           (fn [{:keys [status detail]}]
+             (case status
+               (:ok :dry) (swap! sent-sig assoc (:activity a) sig)
+               :gone (gone! (:activity a) d)
+               :retry nil
+               (js/console.error (str "push: Live Activity update to " (apns/short-token (:token d)) " not sent: " detail)))
+             (sent status)))))
+
+(defn- update-card! [d acts s now-s priority]
+  (let [state (content-of s now-s (partial update-push now-s))
+        sig (state-sig state)]
+    (in-order acts #(update-one! d % (update-push now-s state) sig priority))))
+
+(defn- start-card! [d s now now-s]
+  (.then (send! d (:live-start d) (start-push now-s (content-of s now-s (partial start-push now-s))) 10)
+         (fn [{:keys [status detail]}]
+           (case status
+             (:ok :dry) (store/live-started! (:token d) now)
+             :gone (do (js/console.log (str "push: the push-to-start token of " (apns/short-token (:token d)) " is gone (" detail "); dropped"))
+                       (store/set-live-start! (:token d) nil))
+             :retry nil
+             (js/console.error (str "push: Live Activity start on " (apns/short-token (:token d)) " not sent: " detail)))
+           (sent status))))
+
+(defn- end-one! [d a s now-s]
+  (.then (send! d (:token a) (end-push now-s (content-of s now-s (partial end-push now-s))) 5)
+         (fn [{:keys [status detail]}]
+           (when-not (= status :retry)
+             (when (= status :failed)
+               (js/console.error (str "push: Live Activity end to " (apns/short-token (:token d)) " not sent: " detail)))
+             (store/end-activity! (:activity a))
+             (swap! sent-sig dissoc (:activity a)))
+           (sent status))))
+
+(defn- end-card!
+  "Ends each of the phone's activities; once all ended (none asks to retry), it may get a new card."
+  [d acts s now-s]
+  (.then (in-order acts #(end-one! d % s now-s))
+         (fn [results]
+           (when (and (:live-started-at d) (not (:again (outcome results))))
+             (store/live-started! (:token d) nil))
+           results)))
+
+(defn card-step
+  "What a phone's card needs now: :update its activities, :start one, :end them, or nil."
+  [d acts on quiet]
+  (cond
+    (and (or on quiet) (seq acts)) :update
+    (and on (:live-start d) (nil? (:live-started-at d))) :start
+    (and (not on) (not quiet)) :end
+    :else nil))
+
+(defn- flush-phone! [d {:keys [s on quiet now now-s priority]}]
+  (let [acts (store/activities (:token d))]
+    (case (card-step d acts on quiet)
+      :update (update-card! d acts s now-s priority)
+      :start (start-card! d s now now-s)
+      :end (end-card! d acts s now-s)
+      nil)))
+
+(defn next-flush
+  "When to flush again (ms), or nil: soon after a retry was asked for; while quiet, when the quiet
+  ends (not before the gap since the last send)."
+  [{:keys [again]} quiet quiet-since last-sent now]
+  (cond
+    again (+ now retry-ms)
+    quiet (max (+ quiet-since end-after-ms) (+ last-sent update-gap-ms))
+    :else nil))
+
 (defn- flush! [email]
   (let [p (person email)
         now (js/Date.now)
-        now-s (js/Math.floor (/ now 1000))
         s (@summary-of email)
         on (on? s)
-        quiet (and (not on) (:quiet-since p) (< (- now (:quiet-since p)) end-after-ms))
-        priority (if (:urgent p) 10 5)
-        sent (atom false)
-        again (atom false)
-        send (fn [d token payload prio]
-               (reset! sent true)
-               (@sender (target d token) payload {:type "liveactivity" :priority prio}))]
-    (-> (in-order
-         (store/devices email)
-         (fn [d]
-           (let [acts (store/activities (:token d))]
-             (cond
-               (and (or on quiet) (seq acts))
-               (let [wrap (fn [st] {:aps {:timestamp now-s :event "update" :content-state st}})
-                     state (content-of s now-s wrap)
-                     sig (js/JSON.stringify (clj->js (assoc state :updatedAt 0)))]
-                 (in-order acts
-                           (fn [a]
-                             (when-not (= sig (get @sent-sig (:activity a)))
-                               (.then (send d (:token a) (wrap state) priority)
-                                      (fn [{:keys [status detail]}]
-                                        (case status
-                                          (:ok :dry) (swap! sent-sig assoc (:activity a) sig)
-                                          :gone (gone! (:activity a) d)
-                                          :retry (reset! again true)
-                                          (js/console.error (str "push: Live Activity update to " (apns/short-token (:token d)) " not sent: " detail)))))))))
+        quiet (boolean (and (not on) (:quiet-since p) (< (- now (:quiet-since p)) end-after-ms)))
+        ctx {:s s :on on :quiet quiet :now now :now-s (js/Math.floor (/ now 1000))
+             :priority (if (:urgent p) 10 5)}]
+    (.then (in-order (store/devices email) #(flush-phone! % ctx))
+           (fn [results]
+             (let [o (outcome results)]
+               (when (:sent o) (person! email assoc :last now :urgent false))
+               (when-let [at (next-flush o quiet (:quiet-since p) (:last (person email)) (js/Date.now))]
+                 (schedule! email at)))))))
 
-               (and on (:live-start d) (nil? (:live-started-at d)))
-               (let [wrap (fn [st] {:aps {:timestamp now-s :event "start" :content-state st
-                                          :attributes-type attributes :attributes {}
-                                          :alert {:title "Claudia" :body "Chats running"}}})]
-                 (.then (send d (:live-start d) (wrap (content-of s now-s wrap)) 10)
-                        (fn [{:keys [status detail]}]
-                          (case status
-                            (:ok :dry) (store/live-started! (:token d) now)
-                            :gone (do (js/console.log (str "push: the push-to-start token of " (apns/short-token (:token d)) " is gone (" detail "); dropped"))
-                                      (store/set-live-start! (:token d) nil))
-                            :retry (reset! again true)
-                            (js/console.error (str "push: Live Activity start on " (apns/short-token (:token d)) " not sent: " detail))))))
-
-               (and (not on) (not quiet))
-               (let [wrap (fn [st] {:aps {:timestamp now-s :event "end" :content-state st :dismissal-date (+ now-s dismiss-s)}})
-                     failed-retry (atom false)]
-                 (-> (in-order acts
-                               (fn [a]
-                                 (.then (send d (:token a) (wrap (content-of s now-s wrap)) 5)
-                                        (fn [{:keys [status detail]}]
-                                          (if (= status :retry)
-                                            (do (reset! again true) (reset! failed-retry true))
-                                            (do (when (= status :failed)
-                                                  (js/console.error (str "push: Live Activity end to " (apns/short-token (:token d)) " not sent: " detail)))
-                                                (store/end-activity! (:activity a))
-                                                (swap! sent-sig dissoc (:activity a))))))))
-                     (.then #(when (and (:live-started-at d) (not @failed-retry))
-                               (store/live-started! (:token d) nil)))))))))
-        (.then (fn []
-                 (when @sent (person! email assoc :last now :urgent false))
-                 (cond @again (schedule! email (+ (js/Date.now) retry-ms))
-                       quiet (schedule! email (max (+ (:quiet-since p) end-after-ms)
-                                                   (+ (:last (person email)) update-gap-ms)))))))))
+(defn- run-flush! [email]
+  (person! email assoc :timer nil)
+  (if (:busy (person email))
+    (schedule! email (+ (js/Date.now) 200))
+    (do (person! email assoc :busy true)
+        (-> (flush! email)
+            (.catch #(js/console.error (str "push: Live Activity: " (.-message %))))
+            (.finally #(person! email assoc :busy false))))))
 
 (defn- schedule! [email at]
-  (let [p (person email)]
+  (let [p (person email)
+        due (or at (max (+ (:last p) update-gap-ms) (js/Date.now)))]
     (some-> (:timer p) js/clearTimeout)
-    (let [when-ms (or at (max (+ (:last p) update-gap-ms) (js/Date.now)))]
-      (person! email assoc :timer
-               (js/setTimeout
-                (fn []
-                  (person! email assoc :timer nil)
-                  (if (:busy (person email))
-                    (schedule! email (+ (js/Date.now) 200))
-                    (do (person! email assoc :busy true)
-                        (-> (flush! email)
-                            (.catch #(js/console.error (str "push: Live Activity: " (.-message %))))
-                            (.finally #(person! email assoc :busy false))))))
-                (max 0 (- when-ms (js/Date.now))))))))
+    (person! email assoc :timer
+             (js/setTimeout #(run-flush! email) (max 0 (- due (js/Date.now)))))))
 
 (defn ended!
   "The app saw its activity end (iOS's 8 hours, or the person dismissed it)."

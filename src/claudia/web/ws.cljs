@@ -18,10 +18,15 @@
 
 (declare connect!)
 
+(defn backoff-ms
+  "How long to wait before reconnect number tries+1: 0.5 s, 1 s, 2 s ... up to 15 s, plus jitter
+  (ms) so servers don't reconnect in step."
+  [tries jitter]
+  (+ (min 15000 (* 500 (js/Math.pow 2 tries))) jitter))
+
 (defn- retry! [server]
   (let [tries (get-in @sockets [server :tries] 0)
-        ;; 0.5 s, 1 s, 2 s ... up to 15 s, with a little jitter so servers don't reconnect in step.
-        wait (+ (min 15000 (* 500 (js/Math.pow 2 tries))) (rand-int 400))]
+        wait (backoff-ms tries (rand-int 400))]
     (swap! sockets assoc-in [server :tries] (inc tries))
     (swap! sockets assoc-in [server :timer] (js/setTimeout #(connect! server) wait))))
 

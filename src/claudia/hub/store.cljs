@@ -126,14 +126,14 @@
 
 (defn servers [] (all "SELECT name, label, address FROM servers ORDER BY added_at, name"))
 
-(defn server [name] (one "SELECT name, label, address FROM servers WHERE name = ?" name))
+(defn server [server-name] (one "SELECT name, label, address FROM servers WHERE name = ?" server-name))
 
-(defn save-server! [{:keys [name label address]}]
+(defn save-server! [{server-name :name label :label address :address}]
   (exec! "INSERT INTO servers (name, label, address, added_at) VALUES (?, ?, ?, ?)
          ON CONFLICT (name) DO UPDATE SET label = excluded.label, address = excluded.address"
-        name label address (now)))
+         server-name label address (now)))
 
-(defn drop-server! [name] (exec! "DELETE FROM servers WHERE name = ?" name))
+(defn drop-server! [server-name] (exec! "DELETE FROM servers WHERE name = ?" server-name))
 
 (defn- person-row [r]
   (when r (-> r (update :admin #(= 1 %)))))
@@ -146,20 +146,20 @@
 
 (defn save-person!
   "Adds a person, or changes the name/admin given (nil leaves it)."
-  [{:keys [email name admin]}]
+  [{:keys [email admin] person-name :name}]
   (exec! "INSERT INTO people (email, name, admin, added_at) VALUES (?, COALESCE(?, ''), COALESCE(?, 0), ?)
          ON CONFLICT (email) DO UPDATE SET name = COALESCE(?, people.name), admin = COALESCE(?, people.admin)"
-        email name (when (some? admin) (if admin 1 0)) (now)
-        name (when (some? admin) (if admin 1 0))))
+         email person-name (when (some? admin) (if admin 1 0)) (now)
+         person-name (when (some? admin) (if admin 1 0))))
 
 (defn drop-person! [email] (exec! "DELETE FROM people WHERE email = ?" email))
 
 (defn access [] (all "SELECT email, server FROM access ORDER BY email, server"))
 
-(defn set-access! [email server granted]
+(defn set-access! [email server-name granted]
   (if granted
-    (exec! "INSERT OR IGNORE INTO access (email, server) VALUES (?, ?)" email server)
-    (exec! "DELETE FROM access WHERE email = ? AND server = ?" email server)))
+    (exec! "INSERT OR IGNORE INTO access (email, server) VALUES (?, ?)" email server-name)
+    (exec! "DELETE FROM access WHERE email = ? AND server = ?" email server-name)))
 
 (defn allowed
   "The servers this person may use, in the order they were added."
@@ -167,8 +167,8 @@
   (all "SELECT s.name, s.label, s.address FROM servers s JOIN access a ON a.server = s.name
         WHERE a.email = ? ORDER BY s.added_at, s.name" email))
 
-(defn may? [email server]
-  (some? (one "SELECT 1 AS n FROM access WHERE email = ? AND server = ?" email server)))
+(defn may? [email server-name]
+  (some? (one "SELECT 1 AS n FROM access WHERE email = ? AND server = ?" email server-name)))
 
 ;; Pairings --------------------------------------------------------------------------------------
 
@@ -186,13 +186,13 @@
    (fn []
      (save-server! s)
      (exec! "INSERT INTO pairings (server, public_key, ip, secret_hash, created_at) VALUES (?, ?, ?, ?, ?)"
-           (:name s) public-key ip secret-hash (now)))))
+            (:name s) public-key ip secret-hash (now)))))
 
-(defn pairing-by-secret [hash]
-  (pairing-row (one "SELECT server, public_key, ip, created_at, fetched_at FROM pairings WHERE secret_hash = ?" hash)))
+(defn pairing-by-secret [secret-hash]
+  (pairing-row (one "SELECT server, public_key, ip, created_at, fetched_at FROM pairings WHERE secret_hash = ?" secret-hash)))
 
-(defn mark-fetched! [server]
-  (exec! "UPDATE pairings SET fetched_at = ? WHERE server = ? AND fetched_at IS NULL" (now) server))
+(defn mark-fetched! [server-name]
+  (exec! "UPDATE pairings SET fetched_at = ? WHERE server = ? AND fetched_at IS NULL" (now) server-name))
 
 ;; Phones ----------------------------------------------------------------------------------------
 
@@ -204,7 +204,7 @@
 (defn save-device!
   "A phone registered (again). A token registered by another person moves to them and starts over (no
   card, no badge of the last person's); a push-to-start token left out keeps the one it had."
-  [{:keys [token email env topic key live-start]}]
+  [{:keys [token email env topic live-start] device-key :key}]
   (transaction!
    (fn []
      (let [was (:email (one "SELECT email FROM devices WHERE token = ?" token))]
@@ -214,7 +214,7 @@
      (exec! "INSERT INTO devices (token, email, env, topic, key, live_start, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (token) DO UPDATE SET email = excluded.email, env = excluded.env, topic = excluded.topic,
               key = excluded.key, live_start = COALESCE(excluded.live_start, devices.live_start)"
-           token email env topic key live-start (now)))))
+            token email env topic device-key live-start (now)))))
 
 (defn devices [email]
   (mapv device-row (all "SELECT * FROM devices WHERE email = ? ORDER BY added_at" email)))
@@ -241,13 +241,13 @@
 
 (defn claim!
   "Takes the right to tell a person about an event: true only the first time."
-  [email server chat event]
+  [email server-name chat event]
   (pos? (exec! "INSERT OR IGNORE INTO pushed (email, server, chat, event, at) VALUES (?, ?, ?, ?, ?)"
-              email server chat event (now))))
+               email server-name chat event (now))))
 
-(defn told? [email server chat event]
+(defn told? [email server-name chat event]
   (some? (one "SELECT 1 AS n FROM pushed WHERE email = ? AND server = ? AND chat = ? AND event = ?"
-              email server chat event)))
+              email server-name chat event)))
 
 (defn prune-pushed! [before] (exec! "DELETE FROM pushed WHERE at < ?" before))
 
@@ -266,7 +266,7 @@
   (exec! "INSERT INTO live_activities (activity, device, token, added_at) VALUES (?, ?, ?, ?)
          ON CONFLICT (activity) DO UPDATE SET token = excluded.token
          WHERE live_activities.ended_at IS NULL AND live_activities.device = excluded.device"
-        id device token (now)))
+         id device token (now)))
 
 (defn activities
   "A phone's activities still on: [{:activity :token}]."

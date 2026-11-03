@@ -15,6 +15,7 @@
             [claudia.web.views.rail :as rail]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.picture :as picture]
+            [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]))
 
 (defn- chat-colour!
@@ -78,7 +79,7 @@
   (let [main (.getBoundingClientRect (.. e -currentTarget -parentElement))
         width (atom nil)
         move (fn [^js m]
-               (let [w (js/Math.round (min (- (.-width main) 6 280) (max 300 (- (.-clientX m) (.-left main)))))]
+               (let [w (pure/dragged-width (.-left main) (.-width main) (.-clientX m))]
                  (reset! width w)
                  (set-w w)))
         up (fn up []
@@ -98,6 +99,47 @@
     (let [server (or (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
       (when server [:f> codeforms/gallery server #(rf/dispatch [:gallery/open false])]))))
 
+(defn- menu-toggle [shown?]
+  [:button.icon.menu-toggle {:title (if shown? "Hide chats (Ctrl+B)" "Show chats (Ctrl+B)")
+                             :aria-expanded shown?
+                             :on-click #(rf/dispatch [:sidebar/toggle])}
+   [:svg.burger {:viewBox "0 0 18 18" :aria-hidden true} [:path {:d "M3 4.6h12M3.4 9h11.3M3 13.4h12"}]]])
+
+(defn- split-view [{:keys [phone? folded? chat-w set-chat-w]}]
+  [:main.split {:class (when folded? "folded")
+                :style (when-not phone?
+                         {:grid-template-columns (pure/split-columns folded? chat-w)})}
+   [chat/chat-pane]
+   [:div.divider {:on-pointer-down (when-not folded? #(drag-split! % set-chat-w))}]
+   [picture/picture-pane]])
+
+(defn- layers
+  "Over the page: the list's backdrop, the menus, the GitHub prompt, the drop zone."
+  [{:keys [shown? phone? settings-shown? draft-key ro]}]
+  [:<>
+   (when (and shown? (not phone?))
+     [:div.backdrop {:on-click #(rf/dispatch [:sidebar/toggle false])}])
+   [chatmenu/chat-menu]
+   [chatmenu/context-menu]
+   (when-not settings-shown? [settings/github-prompt])
+   [:f> attach/drop-zone draft-key (not ro)]])
+
+(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key] :as m}]
+  [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
+                     (when narrow? "narrow") (when ro "read-only")]
+             :data-screen (name screen)}
+   [asks/modal]
+   (menu-toggle shown?)
+   [:div.sidebar-slot
+    (when (and (not shown?) (not phone?)) [:f> rail/rail])
+    [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]]
+   (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
+   (split-view m)
+   ;; The right rail, mirroring the chats rail: this chat's forms (claudia.web.views.picture/right-rail).
+   (when-not phone? [picture/right-rail])
+   [gallery]
+   [admin/dialog]])
+
 (defn app []
   (let [screen @(rf/subscribe [:screen])
         drawer? @(rf/subscribe [:sidebar?])
@@ -106,43 +148,15 @@
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
         {:keys [settings?]} @(rf/subscribe [:list-mode])
-        draft-key (if (and open (not (contains? pending (second open)))) open :new)
         folded? (:folded? @(rf/subscribe [:fold-state]))
         phone? (use-media "(max-width: 679px)")
         narrow? (use-media "(max-width: 1099px)")
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Desktop: the drawer.
-        shown? (if phone? (= screen :list) drawer?)
-        settings-shown? (and shown? settings?)]
+        shown? (if phone? (= screen :list) drawer?)]
     (chat-colour! color)
     (keys!)
-    [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
-                       (when narrow? "narrow") (when ro "read-only")]
-               :data-screen (name screen)}
-     [asks/modal]
-     [:button.icon.menu-toggle {:title (if shown? "Hide chats (Ctrl+B)" "Show chats (Ctrl+B)")
-                                :aria-expanded shown?
-                                :on-click #(rf/dispatch [:sidebar/toggle])}
-      [:svg.burger {:viewBox "0 0 18 18" :aria-hidden true} [:path {:d "M3 4.6h12M3.4 9h11.3M3 13.4h12"}]]]
-     [:div.sidebar-slot
-      (when (and (not shown?) (not phone?)) [:f> rail/rail])
-      [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]]
-     (when (and shown? (not phone?))
-       [:div.backdrop {:on-click #(rf/dispatch [:sidebar/toggle false])}])
-     [chatmenu/chat-menu]
-     [chatmenu/context-menu]
-     (when-not settings-shown? [settings/github-prompt])
-     [:f> attach/drop-zone draft-key (not ro)]
-     [:main.split {:class (when folded? "folded")
-                   :style (when-not phone?
-                            {:grid-template-columns
-                             (if folded?
-                               "minmax(300px, 1fr) 6px 16px"
-                               (str "max(300px, min(" chat-w "px, calc(100% - 286px))) 6px minmax(280px, 1fr)"))})}
-      [chat/chat-pane]
-      [:div.divider {:on-pointer-down (when-not folded? #(drag-split! % set-chat-w))}]
-      [picture/picture-pane]]
-     ;; The right rail, mirroring the chats rail: this chat's forms (claudia.web.views.picture/right-rail).
-     (when-not phone? [picture/right-rail])
-     [gallery]
-     [admin/dialog]]))
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded?
+               :chat-w chat-w :set-chat-w set-chat-w
+               :shown? shown? :settings-shown? (and shown? settings?)
+               :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

@@ -27,12 +27,16 @@
       (swap! timers assoc email
              (js/setTimeout #(check! email true) (+ (- (+ newest p/stale-ms) (js/Date.now)) 50))))))
 
+(defn beaten
+  "A person's pages ({page-id at}) after one page's word at now: an active page beat now, an
+  inactive one is gone, and pages silent for stale-ms are dropped."
+  [m page active now]
+  (into {} (filter #(< (- now (val %)) p/stale-ms))
+        (if active (assoc m page now) (dissoc m page))))
+
 (defn beat!
   "One page's word: active (a beat) or not (blurred, hidden, idle, closing)."
   [email page active]
-  (let [was (present? email)
-        now (js/Date.now)]
-    (swap! pages update email
-           (fn [m] (into {} (filter #(< (- now (val %)) p/stale-ms))
-                         (if active (assoc m page now) (dissoc m page)))))
+  (let [was (present? email)]
+    (swap! pages update email beaten page active (js/Date.now))
     (check! email was)))
