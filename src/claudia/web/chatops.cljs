@@ -159,9 +159,10 @@
     :ops/search-later text}))
 
 (defn search-path
-  "The runner's search for text, among the archived chats when archived?."
+  "The runner's search for text: among the archived chats when archived? (the archived list),
+  else among every chat, archived ones too."
   [text archived?]
-  (str "search?q=" (js/encodeURIComponent text) (when archived? "&archived=1")))
+  (str "search?q=" (js/encodeURIComponent text) "&archived=" (if archived? "1" "all")))
 
 (rf/reg-event-fx
  :ops/search-now

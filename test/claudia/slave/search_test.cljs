@@ -33,3 +33,11 @@
             {:id "c1" :hits [{:uuid "1" :role "user" :snippet "a"} {:uuid "2" :role "user" :snippet "b"}]
              :count 2 :title false}]
            (search/ranked rows chats ["red" "car"])))))
+
+(deftest in-scope-picks-the-chats-a-search-covers
+  (is (true? (search/in-scope? "all" true)))
+  (is (true? (search/in-scope? "all" nil)))
+  (is (true? (search/in-scope? "1" true)))
+  (is (false? (search/in-scope? "1" nil)))
+  (is (true? (search/in-scope? nil nil)))
+  (is (false? (search/in-scope? nil true))))
