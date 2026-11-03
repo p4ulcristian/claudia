@@ -11,26 +11,15 @@
             [reagent.hooks :as h]
             [claudia.web.md :as md]
             [claudia.web.views.diff :as diff]
+            [claudia.web.views.pure.agents :as pure]
             [claudia.web.views.steps :as steps]))
 
 ;; ---- small words ----
 
-(defn dur [ms]
-  (let [s (max 0 (js/Math.floor (/ ms 1000)))]
-    (cond (< s 60) (str s "s")
-          (< s 3600) (str (quot s 60) "m " (mod s 60) "s")
-          :else (str (quot s 3600) "h " (quot (mod s 3600) 60) "m"))))
+(def dur pure/dur)
+(def tokens pure/tokens)
 
-(defn tokens
-  "Tokens only (no cost, no share of a limit): 950, 155k, 1.2M."
-  [n]
-  (cond (nil? n) ""
-        (< n 1000) (str n)
-        (< n 1e6) (str (js/Math.round (/ n 1000)) "k")
-        :else (str (.toFixed (/ n 1e6) 1) "M")))
-
-(defn- running? [a] (= "running" (:status a)))
-(defn- elapsed [a] (- (or (:end a) (js/Date.now)) (:start a)))
+(def ^:private running? pure/running?)
 
 (defn- use-tick!
   "Re-renders every second while on."
@@ -43,10 +32,7 @@
                   [on])))
 
 (defn- facts-line [a]
-  [:span.ag-facts
-   (str/join " · " (remove nil? [(dur (elapsed a))
-                                 (when (= "agent" (:kind a)) (str (:tools a) (if (= 1 (:tools a)) " tool" " tools")))
-                                 (when (:tokens a) (tokens (:tokens a)))]))])
+  [:span.ag-facts (str/join " · " (pure/facts-words a (js/Date.now)))])
 
 (defn- status-mark [a]
   (if (running? a)
@@ -77,8 +63,16 @@
 
 ;; ---- the chips under the title ----
 
-(def ^:private chip-min 250)
-(def ^:private gap 6)
+(defn- chip-sum [ck {:keys [more finished failed done]}]
+  [:div.ag-sum
+   (when (pos? more)
+     [:button.ag-pill {:title "Every agent of this chat" :on-click #(rf/dispatch [:agents/open ck ""])}
+      (str "+" more " more")])
+   (when (seq finished)
+     [:button.ag-pill.done {:title (str done " finished" (when (pos? failed) (str ", " failed " failed")) ": every agent of this chat")
+                            :on-click #(rf/dispatch [:agents/open ck ""])}
+      (when (pos? done) [:span.ok (str "✓ " done)])
+      (when (pos? failed) [:span.bad (str "✕ " failed)])])])
 
 (defn chips
   "The running ones (as many as fit: up to four on a desktop, two on a phone), +N more, ✓ N ✕ M."
@@ -86,31 +80,15 @@
   (let [box (h/use-ref nil)
         agents (:agents state)
         width (hooks/use-width box [(boolean (seq agents))])
-        running (filter #(and (running? %) (or (= "agent" (:kind %)) (:background %))) agents)
-        phone? (< js/window.innerWidth 680)]
-    (use-tick! (boolean (seq running)))
+        {:keys [shown more finished columns] :as row} (pure/chip-row agents width (< js/window.innerWidth 680))]
+    (use-tick! (boolean (some #(and (running? %) (or (= "agent" (:kind %)) (:background %))) agents)))
     (when (seq agents)
-      (let [finished (remove running? agents)
-            failed (count (filter #(= "failed" (:status %)) finished))
-            done (- (count finished) failed)
-            cols (max 1 (js/Math.floor (/ (+ width gap) (+ chip-min gap))))
-            room (cond phone? 2 (= cols 1) 3 :else (min 4 (* cols 2)))
-            shown (->> running (sort-by #(- (:active %))) (take room) (sort-by :start))
-            more (- (count running) (count shown))]
-        [:div.ag-row {:ref #(set! (.-current box) %)}
-         (when (seq shown)
-           [:div.ag-chips {:style {:grid-template-columns (str "repeat(" (min cols (count shown) (if phone? 2 4)) ", minmax(0, 1fr))")}}
-            (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])])
-         (when (or (pos? more) (seq finished))
-           [:div.ag-sum
-            (when (pos? more)
-              [:button.ag-pill {:title "Every agent of this chat" :on-click #(rf/dispatch [:agents/open ck ""])}
-               (str "+" more " more")])
-            (when (seq finished)
-              [:button.ag-pill.done {:title (str done " finished" (when (pos? failed) (str ", " failed " failed")) ": every agent of this chat")
-                                     :on-click #(rf/dispatch [:agents/open ck ""])}
-               (when (pos? done) [:span.ok (str "✓ " done)])
-               (when (pos? failed) [:span.bad (str "✕ " failed)])])])]))))
+      [:div.ag-row {:ref #(set! (.-current box) %)}
+       (when (seq shown)
+         [:div.ag-chips {:style {:grid-template-columns (str "repeat(" columns ", minmax(0, 1fr))")}}
+          (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])])
+       (when (or (pos? more) (seq finished))
+         (chip-sum ck row))])))
 
 ;; ---- the list and one agent ----
 
@@ -123,7 +101,7 @@
        [:h2.ag-title "Agents " [:span.muted.small (str (when (pos? n) (str n " running · ")) (count agents) " in this chat")]]
        [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])]])))
 
-(defn- file-row [f]
+(defn- file-row [_f]
   (let [open? (r/atom false)]
     (fn [f]
       [:li.change {:class (when @open? "open")}
@@ -139,10 +117,30 @@
             [:span.muted.small (if (= "Write" (:name e)) "Written whole" (:name e))]
             [diff/diff-table (:before e) (:after e) false false]]))])))
 
+(defn- commit-list [g rev pick!]
+  [:ul.ag-commits
+   [:li [:button.ag-commit {:class (when (= @rev "BRANCHED") "on") :disabled (not (:base g))
+                            :on-click #(pick! "BRANCHED")}
+         [:b "All of it since it branched"]
+         [:span.muted.small (if (:base g)
+                              (str "from " (subs (:base g) 0 8) (when (:worktree g) ", uncommitted work too"))
+                              "where it branched isn't known")]]]
+   (for [c (:commits g)]
+     ^{:key (:hash c)}
+     [:li [:button.ag-commit {:class (when (= @rev (:hash c)) "on") :on-click #(pick! (:hash c))}
+           [:code.h (subs (:hash c) 0 8)] [:span.ag-subj (:subject c)] [:span.muted.small (:when c)]]])
+   (when (empty? (:commits g)) [:li.muted.small "No commits on the branch yet."])])
+
+(defn- patch-of [p]
+  (cond (nil? p) [:p.muted.small "Loading…"]
+        (:error p) [:p.muted.small (:error p)]
+        (str/blank? (:patch p)) [:p.muted.small "No changes."]
+        :else [diff/patch-view (:patch p)]))
+
 (defn- branch-section
   "An agent in a worktree of its own: its branch, the commits on it and the whole change since it
   branched, each opening its patch."
-  [ck id wt g]
+  [_ck _id _wt _g]
   (let [rev (r/atom nil)]
     (fn [ck id wt g]
       (let [p (when @rev @(rf/subscribe [:agent-git ck id @rev]))
@@ -153,93 +151,81 @@
            [:p.muted.small "The branch is gone."]
            [:<>
             (when-not (:worktree g) [:p.muted.small "Its worktree folder is gone; the branch is read from the repo."])
-            [:ul.ag-commits
-             [:li [:button.ag-commit {:class (when (= @rev "BRANCHED") "on") :disabled (not (:base g))
-                                      :on-click #(pick! "BRANCHED")}
-                   [:b "All of it since it branched"]
-                   [:span.muted.small (if (:base g)
-                                        (str "from " (subs (:base g) 0 8) (when (:worktree g) ", uncommitted work too"))
-                                        "where it branched isn't known")]]]
-             (for [c (:commits g)]
-               ^{:key (:hash c)}
-               [:li [:button.ag-commit {:class (when (= @rev (:hash c)) "on") :on-click #(pick! (:hash c))}
-                     [:code.h (subs (:hash c) 0 8)] [:span.ag-subj (:subject c)] [:span.muted.small (:when c)]]])
-             (when (empty? (:commits g)) [:li.muted.small "No commits on the branch yet."])]
-            (when @rev
-              (cond (nil? p) [:p.muted.small "Loading…"]
-                    (:error p) [:p.muted.small (:error p)]
-                    (str/blank? (:patch p)) [:p.muted.small "No changes."]
-                    :else [diff/patch-view (:patch p)]))])]))))
+            (commit-list g rev pick!)
+            (when @rev (patch-of p))])]))))
+
+(defn- steps-tab [a d shell?]
+  (cond
+    (nil? d) [:p.muted.small "Loading…"]
+    shell? (if (seq (:output d))
+             [:pre.ag-prompt (:output d)]
+             [:p.muted.small "No output yet."])
+    (seq (:steps d)) [:div.ag-steps [steps/transcript (:steps d) (running? a)]]
+    :else [:p.muted.small "Its steps show once its file is written."]))
+
+(defn- files-tab [ck id d live]
+  (if (nil? d)
+    [:p.muted.small "Loading…"]
+    [:div.ag-files
+     (if (seq (:files d))
+       [:ul.ag-file-list (for [f (:files d)] ^{:key (:path f)} [file-row f])]
+       [:p.muted.small (str "No Edit or Write calls" (when live " yet") ".")])
+     (when (:worktree d) [branch-section ck id (:worktree d) (:git d)])]))
+
+(defn- tab-body [tab {:keys [ck id a d live shell?]}]
+  (case tab
+    "steps" (steps-tab a d shell?)
+    "files" (files-tab ck id d live)
+    "prompt" (let [p (if shell? (:command d) (:prompt d))]
+               (cond (nil? d) [:p.muted.small "Loading…"]
+                     (seq p) [:pre.ag-prompt p]
+                     :else [:p.muted.small "The prompt isn't known."]))
+    "report" (cond live [:p.muted.small "It reports when it finishes."]
+                   (nil? d) [:p.muted.small "Loading…"]
+                   (seq (:report d)) [:div.md.ag-report {:dangerouslySetInnerHTML (r/unsafe-html (md/html (:report d)))}]
+                   :else [:p.muted.small "No report."])
+    nil))
+
+(defn- agent-head [{:keys [ck a d live]}]
+  (let [[chip-class word] (pure/status-chip (:status a))]
+    [:div.ag-head
+     [:h2.ag-title.ag-name-line [status-mark a] [:span.ag-title-text (:name a)]]
+     [:div.ag-state
+      [:span.chip {:class chip-class} word]
+      (when (and live (:task a) (not @(rf/subscribe [:read-only?])))
+        [:button.task-stop {:on-click #(rf/dispatch [:agents/stop ck (:task a)])} "Stop"])]
+     [:dl.ag-dl (for [[k v] (pure/facts a d (js/Date.now))] ^{:key k} [:<> [:dt k] [:dd v]])]
+     (when (and live (:step a)) [:p.ag-now [:span.muted "Now"] " " [:code (:step a)]])]))
+
+(defn- agent-page [tab set-tab {:keys [d shell?] :as props}]
+  [:div.ag-scroll
+   (agent-head props)
+   [:div.ag-tabs {:role "tablist"}
+    (for [[t label] (pure/tabs shell? (:files d))]
+      ^{:key t} [:button {:role "tab" :aria-selected (= tab t) :class (when (= tab t) "on") :on-click #(set-tab t)} label])]
+   [:div.ag-body (tab-body tab props)]])
+
+(defn- use-agent-reads!
+  "Its view again every 2 s while it runs (steps grow without a task event)."
+  [ck id live end]
+  (h/use-effect (fn []
+                  (rf/dispatch [:agents/fetch ck id])
+                  (when live
+                    (let [t (js/setInterval #(rf/dispatch [:agents/fetch ck id]) 2000)]
+                      #(js/clearInterval t))))
+                [(str ck) id live end]))
 
 (defn- agent-view [ck id info]
   (let [[tab set-tab] (h/use-state "steps")
         d @(rf/subscribe [:agent-detail ck id])
-        a (when (or info (:info d)) (merge (:info d) (into {} (remove (comp nil? val)) info)))
-        live (running? a)
-        shell? (= "shell" (:kind a))]
+        a (pure/merged-info info d)
+        live (running? a)]
     (use-tick! live)
-    ;; Its view again every 2 s while it runs (steps grow without a task event).
-    (h/use-effect (fn []
-                    (rf/dispatch [:agents/fetch ck id])
-                    (when live
-                      (let [t (js/setInterval #(rf/dispatch [:agents/fetch ck id]) 2000)]
-                        #(js/clearInterval t))))
-                  [(str ck) id live (:end a)])
+    (use-agent-reads! ck id live (:end a))
     (cond
       (and (nil? a) (:error d)) [:p.muted.small.ag-pad (:error d)]
       (nil? a) [:p.muted.small.ag-pad "Loading…"]
-      :else
-      (let [tabs (if shell?
-                   [["steps" "Output"] ["prompt" "Command"]]
-                   [["steps" "Steps"] ["files" (if (seq (:files d)) (str "Files " (count (:files d))) "Files")]
-                    ["prompt" "Prompt"] ["report" "Report"]])
-            facts (remove nil?
-                          [[(if live "Running for" "Took") (dur (elapsed a))]
-                           (when-not shell? ["Tools" (str (:tools a))])
-                           (when (:tokens a) ["Tokens" (tokens (:tokens a))])
-                           (when (:model a) ["Model" (:model a)])
-                           ["Kind" (if shell? "background shell" (str (:type a) (when (:background a) " · background")))]
-                           (when-let [wt (:worktree d)]
-                             ["Worktree" (str (:branch wt) (when-let [g (:git d)]
-                                                             (let [n (count (:commits g))] (str " · " n (if (= 1 n) " commit" " commits")))))])])]
-        [:div.ag-scroll
-         [:div.ag-head
-          [:h2.ag-title.ag-name-line [status-mark a] [:span.ag-title-text (:name a)]]
-          [:div.ag-state
-           [:span.chip {:class (case (:status a) "failed" "red" "running" "amber" "completed" "green" "")}
-            (case (:status a) "completed" "done" (:status a))]
-           (when (and live (:task a) (not @(rf/subscribe [:read-only?])))
-             [:button.task-stop {:on-click #(rf/dispatch [:agents/stop ck (:task a)])} "Stop"])]
-          [:dl.ag-dl (for [[k v] facts] ^{:key k} [:<> [:dt k] [:dd v]])]
-          (when (and live (:step a)) [:p.ag-now [:span.muted "Now"] " " [:code (:step a)]])]
-         [:div.ag-tabs {:role "tablist"}
-          (for [[t label] tabs]
-            ^{:key t} [:button {:role "tab" :aria-selected (= tab t) :class (when (= tab t) "on") :on-click #(set-tab t)} label])]
-         [:div.ag-body
-          (case tab
-            "steps" (cond
-                      (nil? d) [:p.muted.small "Loading…"]
-                      shell? (if (seq (:output d))
-                               [:pre.ag-prompt (:output d)]
-                               [:p.muted.small "No output yet."])
-                      (seq (:steps d)) [:div.ag-steps [steps/transcript (:steps d) (running? a)]]
-                      :else [:p.muted.small "Its steps show once its file is written."])
-            "files" (if (nil? d)
-                      [:p.muted.small "Loading…"]
-                      [:div.ag-files
-                       (if (seq (:files d))
-                         [:ul.ag-file-list (for [f (:files d)] ^{:key (:path f)} [file-row f])]
-                         [:p.muted.small (str "No Edit or Write calls" (when live " yet") ".")])
-                       (when (:worktree d) [branch-section ck id (:worktree d) (:git d)])])
-            "prompt" (let [p (if shell? (:command d) (:prompt d))]
-                       (cond (nil? d) [:p.muted.small "Loading…"]
-                             (seq p) [:pre.ag-prompt p]
-                             :else [:p.muted.small "The prompt isn't known."]))
-            "report" (cond live [:p.muted.small "It reports when it finishes."]
-                           (nil? d) [:p.muted.small "Loading…"]
-                           (seq (:report d)) [:div.md.ag-report {:dangerouslySetInnerHTML (r/unsafe-html (md/html (:report d)))}]
-                           :else [:p.muted.small "No report."])
-            nil)]]))))
+      :else (agent-page tab set-tab {:ck ck :id id :a a :d d :live live :shell? (= "shell" (:kind a))}))))
 
 (defn screen
   "Over the chat in its column: the list (id \"\") or one agent."

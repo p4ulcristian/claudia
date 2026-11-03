@@ -6,7 +6,8 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
-            [claudia.web.chatops :as ops]))
+            [claudia.web.chatops :as ops]
+            [claudia.web.views.pure.attach :as pure]))
 
 (defn- clip-icon []
   [:svg.ic {:viewBox "0 0 24 24" :aria-hidden true}
@@ -39,37 +40,67 @@
 (defn file-icon []
   [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M5 2.5h7l3.5 3.5v11.5h-10.5z M12 2.5v3.5h3.5"}]])
 
+(defn- upload-chip [draft-key {:keys [id size busy progress error] file-name :name :as item}]
+  (let [pct (js/Math.round (* 100 (or progress 0)))]
+    [:span.file-chip {:class (cond error "failed" busy "sending")
+                      :title (pure/upload-title item)}
+     (when (and busy (not error)) [:span.file-chip-bar {:style {:width (str pct "%")}}])
+     [file-icon]
+     [:span.file-chip-name file-name]
+     [:span.file-chip-size (or error (if busy (str pct "%") (files/size-label size)))]
+     [:button {:type "button" :title "Remove" :aria-label (str "Remove " file-name)
+               :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]]))
+
+(defn- thumbs [draft-key media reading?]
+  [:div.thumbs
+   (for [{:keys [id url video images]} media]
+     ^{:key id}
+     [:div.thumb
+      [:img {:src url :alt ""}]
+      (when video [:span.thumb-video (str "▶ " (js/Math.round video) " s · " (count images) " frames")])
+      [:button {:title "Remove" :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]])
+   (when reading? [:div.thumb.reading {:aria-label "Reading the file…"}])])
+
 (defn chips
   "What the composer holds: files as chips (sent to the chat's server at once, the share sent as a
   bar), photos and videos as thumbnails."
   [draft-key]
-  (let [items @(rf/subscribe [:attach draft-key])
-        media (filter #(and (= "media" (:kind %)) (:url %)) items)
-        reading? (some #(and (:busy %) (not (:progress %)) (not (:error %))) items)
-        uploads (remove #(or (= "media" (:kind %)) (and (:busy %) (not (:progress %)) (not (:error %)))) items)]
+  (let [{:keys [media reading? uploads]} (pure/groups @(rf/subscribe [:attach draft-key]))]
     [:<>
      (when (seq uploads)
        [:div.file-chips
-        (for [{:keys [id name size busy progress error file]} uploads
-              :let [pct (js/Math.round (* 100 (or progress 0)))]]
-          ^{:key id}
-          [:span.file-chip {:class (cond error "failed" busy "sending")
-                            :title (cond error (str name ": " error) file (str "Saved for Claude at " (:path file)) :else (str "Sending " name "…"))}
-           (when (and busy (not error)) [:span.file-chip-bar {:style {:width (str pct "%")}}])
-           [file-icon]
-           [:span.file-chip-name name]
-           [:span.file-chip-size (or error (if busy (str pct "%") (files/size-label size)))]
-           [:button {:type "button" :title "Remove" :aria-label (str "Remove " name)
-                     :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]])])
+        (for [item uploads]
+          ^{:key (:id item)} [upload-chip draft-key item])])
      (when (or (seq media) reading?)
-       [:div.thumbs
-        (for [{:keys [id url video images]} media]
-          ^{:key id}
-          [:div.thumb
-           [:img {:src url :alt ""}]
-           (when video [:span.thumb-video (str "▶ " (js/Math.round video) " s · " (count images) " frames")])
-           [:button {:title "Remove" :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]])
-        (when reading? [:div.thumb.reading {:aria-label "Reading the file…"}])])]))
+       (thumbs draft-key media reading?))]))
+
+(defn- files-dragged? [^js e]
+  (some #(= "Files" %) (array-seq (or (some-> e .-dataTransfer .-types) #js []))))
+
+(defn- dropped!
+  "Files dropped: to the composer of draft-key (dk holds it); a folder is refused. A code editor
+  block takes a dropped text file itself (the event comes prevented)."
+  [^js e dk]
+  (when-not (.-defaultPrevented e)
+    (.preventDefault e)
+    (let [items (array-seq (js/Array.from (.. e -dataTransfer -items)))
+          folder? (some #(some-> ^js % .webkitGetAsEntry .-isDirectory) items)]
+      (if folder?
+        (rf/dispatch [:ops/error "A folder can't be attached: drop the files in it."])
+        (add-files! (.-current dk) (.. e -dataTransfer -files))))))
+
+(defn- drag-listeners
+  "The window's drag listeners: the veil shows while files are dragged over the page."
+  [dk set-over]
+  (let [depth (atom 0)]
+    {"dragenter" (fn [^js e] (when (files-dragged? e) (swap! depth inc) (set-over true)))
+     "dragleave" (fn [^js e] (when (and (files-dragged? e) (<= (swap! depth dec) 0)) (reset! depth 0) (set-over false)))
+     "dragover" (fn [^js e] (when (files-dragged? e) (.preventDefault e) (set! (.. e -dataTransfer -dropEffect) "copy")))
+     "drop" (fn [^js e]
+              (when (files-dragged? e)
+                (reset! depth 0)
+                (set-over false)
+                (dropped! e dk)))}))
 
 (defn drop-zone
   "Files dropped anywhere in the window go to the open composer; a folder is refused."
@@ -81,31 +112,9 @@
      (fn []
        (if-not enabled?
          js/undefined
-         (let [depth (atom 0)
-               files? (fn [^js e] (some #(= "Files" %) (array-seq (or (some-> e .-dataTransfer .-types) #js []))))
-               enter! (fn [^js e] (when (files? e) (swap! depth inc) (set-over true)))
-               leave! (fn [^js e] (when (and (files? e) (<= (swap! depth dec) 0)) (reset! depth 0) (set-over false)))
-               over! (fn [^js e] (when (files? e) (.preventDefault e) (set! (.. e -dataTransfer -dropEffect) "copy")))
-               drop! (fn [^js e]
-                       (when (files? e)
-                         (reset! depth 0)
-                         (set-over false)
-                         ;; (a code editor block takes a dropped text file itself)
-                         (when-not (.-defaultPrevented e)
-                           (.preventDefault e)
-                           (let [items (array-seq (js/Array.from (.. e -dataTransfer -items)))
-                                 folder? (some #(some-> ^js % .webkitGetAsEntry .-isDirectory) items)]
-                             (if folder?
-                               (rf/dispatch [:ops/error "A folder can't be attached: drop the files in it."])
-                               (add-files! (.-current dk) (.. e -dataTransfer -files)))))))]
-           (js/window.addEventListener "dragenter" enter!)
-           (js/window.addEventListener "dragleave" leave!)
-           (js/window.addEventListener "dragover" over!)
-           (js/window.addEventListener "drop" drop!)
-           #(do (js/window.removeEventListener "dragenter" enter!)
-                (js/window.removeEventListener "dragleave" leave!)
-                (js/window.removeEventListener "dragover" over!)
-                (js/window.removeEventListener "drop" drop!)))))
+         (let [ls (drag-listeners dk set-over)]
+           (doseq [[t f] ls] (js/window.addEventListener t f))
+           #(doseq [[t f] ls] (js/window.removeEventListener t f)))))
      [enabled?])
     (when over [:div.drop-veil {:aria-hidden true} [:span "Drop to attach"]])))
 
@@ -124,21 +133,20 @@
 
 (defn file-chips
   "A sent message's files: name and size; a click downloads it from the chat's server."
-  [server chat sent]
+  [server _chat sent]
   (let [view @(rf/subscribe [:view])]
     [:div.file-chips
-     (for [{:keys [path name size]} sent
-           :let [folder (last (butlast (.split (str path) "/")))
-                 saved (or (last (.split (str path) "/")) name)]]
+     (for [{:keys [path size] file-name :name} sent
+           :let [{:keys [folder saved]} (pure/upload-path path file-name)]]
        ^{:key path}
        [:a.file-chip {:href (ops/api-url server (str "chats/" folder "/uploads/" (js/encodeURIComponent saved)) view)
-                      :download name :title (str "Saved for Claude at " path)}
-        [file-icon] [:span.file-chip-name name] [:span.file-chip-size (files/size-label size)]])]))
+                      :download file-name :title (str "Saved for Claude at " path)}
+        [file-icon] [:span.file-chip-name file-name] [:span.file-chip-size (files/size-label size)]])]))
 
 (defn- retrying-img
   "An image the session file may not hold yet (it is written just after the message comes): tried
   again a few times."
-  [src _attrs]
+  [_src _attrs]
   (let [tries (r/atom 0)]
     (fn [src attrs]
       [:img (merge {:src (str src (when (pos? @tries) (str (if (re-find #"\?" src) "&" "?") "t=" @tries))) :alt ""
