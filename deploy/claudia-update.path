@@ -1,0 +1,11 @@
+# Start claudia-update when the hub pokes this machine's front (POST /api/update-check writes
+# CLAUDIA_UPDATE_TRIGGER, which must be this file: set it in ~/.config/claudia/env).
+[Unit]
+Description=Claudia update on the hub's poke
+
+[Path]
+PathExists=%t/claudia-update-requested
+Unit=claudia-update.service
+
+[Install]
+WantedBy=default.target

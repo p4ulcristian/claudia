@@ -2,7 +2,7 @@
   "What Claude asks the person (web/panels.tsx of the TypeScript Claudia): its questions fill the
   window as a modal, so they have room to be read; Esc or \"See picture\" hides it and the pill at the
   bottom brings it back. Keys: 1-9 pick an option of the first question still without one, Enter
-  answers. Beta's secret card (1Password) sits in the same modal."
+  answers. The secret card (1Password) sits in the same modal."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]

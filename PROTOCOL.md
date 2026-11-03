@@ -1,4 +1,4 @@
-# Claudia beta: the protocol
+# Claudia: the protocol
 
 The one contract between the four programs. Everything is plain JSON (UTF-8). In ClojureScript, keys
 become keywords once, where data comes in (`claudia.shared.protocol/read-json`), and go back to strings
@@ -30,7 +30,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 |---|---|---|
 | hub | `HUB_HOST`, `HUB_PORT` | where it listens (Caddy in front) |
 | hub | `HUB_CONFIG` | path of `hub.json` (below), imported once into an empty store |
-| hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-beta-hub`) |
+| hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-hub`) |
 | hub | `HUB_ADMIN_GROUP` | a login group (`X-Auth-Request-Groups`) whose members are admins (optional) |
 | hub | `HUB_WG_POOL`, `HUB_SERVER_PORT` | addresses paired servers get (`10.0.0.100-10.0.0.199`; unset: no pairing), their front's port (4540) |
 | hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
@@ -118,7 +118,7 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
 | `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
-| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/beta` pokes every front; a successful `beta-release.yml` run on beta writes its commit to `HUB_UPDATE_REQUEST` and pokes again; anything else ignored (202). 401 bad signature, 503 no secret |
+| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front; a successful `release.yml` run on main writes its commit to `HUB_UPDATE_REQUEST` and pokes again; anything else ignored (202). 401 bad signature, 503 no secret |
 | `POST /hub/push/devices` `{ token (hex), env: development\|production, topic (bundle id), key (base64 of 32 bytes), liveStartToken? }` | person | `{ ok, push }` |
 | `DELETE /hub/push/devices/:token` | person | their own phone only |
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |

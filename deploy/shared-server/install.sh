@@ -1,44 +1,44 @@
 #!/usr/bin/env bash
-# Installs Claudia beta on a shared server from a built checkout (out/ and node_modules made by
+# Installs Claudia on a shared server from a built checkout (out/ and node_modules made by
 # `npm ci && npx shadow-cljs release host runner front`, here or on another machine; add
 # `web && npm run build:web-files` for the screenshots Claude gets back from each draw):
 #   sudo deploy/shared-server/install.sh <checkout> <profile>...
-# Code goes to /srv/claudia-beta (root-owned), units to /etc/systemd/system. Settings stay in
-# /etc/claudia-beta (env, profiles, profile-<p>.env), written by hand, never from the repo.
+# Code goes to /srv/claudia (root-owned), units to /etc/systemd/system. Settings stay in
+# /etc/claudia (env, profiles, profile-<p>.env), written by hand, never from the repo.
 # Restarts the front and the runners; hosts only when --restart-hosts is given (that stops chats).
-# deploy/update.sh --shared runs this from each signed beta release (claudia-beta-update.path/.timer).
+# deploy/update.sh --shared runs this from each signed release (claudia-update.path/.timer).
 set -euo pipefail
 src=${1:?checkout}; shift
 restart_hosts=0; profiles=()
 for a in "$@"; do [ "$a" = --restart-hosts ] && restart_hosts=1 || profiles+=("$a"); done
 [ -f "$src/out/runner.js" ] || { echo "$src/out/runner.js missing: build first" >&2; exit 1; }
-[ -f /etc/claudia-beta/env ] && [ -f /etc/claudia-beta/profiles ] || { echo "write /etc/claudia-beta/env and profiles first" >&2; exit 1; }
-new=/srv/claudia-beta.new
+[ -f /etc/claudia/env ] && [ -f /etc/claudia/profiles ] || { echo "write /etc/claudia/env and profiles first" >&2; exit 1; }
+new=/srv/claudia.new
 rm -rf "$new"; mkdir -p "$new"
 cp -r "$src/out" "$src/node_modules" "$src/package.json" "$src/deploy" "$new/"
 # A release (deploy/update.sh) says its commit; a checkout gets it from git.
 if [ -f "$src/commit.txt" ]; then cp "$src/commit.txt" "$new/"
 else git -C "$src" rev-parse HEAD > "$new/commit.txt" 2>/dev/null || true; fi
 chown -R root:root "$new"; chmod -R go-w "$new"
-rm -rf /srv/claudia-beta.old; [ -d /srv/claudia-beta ] && mv /srv/claudia-beta /srv/claudia-beta.old
-mv "$new" /srv/claudia-beta
+rm -rf /srv/claudia.old; [ -d /srv/claudia ] && mv /srv/claudia /srv/claudia.old
+mv "$new" /srv/claudia
 # The Claude token in use: the front (user claudia) writes it, the runners (group
 # claudia-run) read it; the saved tokens beside it (<token file>.d) are the front's only.
 getent group claudia-run >/dev/null || groupadd --system claudia-run
-token_file=$(sed -n 's/^CLAUDIA_TOKEN_FILE=//p' /etc/claudia-beta/env | tail -1)
+token_file=$(sed -n 's/^CLAUDIA_TOKEN_FILE=//p' /etc/claudia/env | tail -1)
 if [ -n "$token_file" ] && [ ! -d "$(dirname "$token_file")" ]; then
 	install -d -o claudia -g claudia-run -m 2750 "$(dirname "$token_file")"
 fi
 for p in "${profiles[@]}"; do id "claudia-$p" >/dev/null 2>&1 && usermod -aG claudia-run "claudia-$p"; done
-install -m 0644 "$(dirname "$0")"/claudia-beta-*.service "$(dirname "$0")"/claudia-beta-update.{path,timer} /etc/systemd/system/
+install -m 0644 "$(dirname "$0")"/claudia-*.service "$(dirname "$0")"/claudia-update.{path,timer} /etc/systemd/system/
 systemctl daemon-reload
-# Follows the beta branch by itself: the hub's poke and an hourly check (deploy/update.sh).
-systemctl enable --now claudia-beta-update.path claudia-beta-update.timer >/dev/null
-systemctl enable --now claudia-beta-front.service >/dev/null
-systemctl restart claudia-beta-front.service
+# Follows the main branch by itself: the hub's poke and an hourly check (deploy/update.sh).
+systemctl enable --now claudia-update.path claudia-update.timer >/dev/null
+systemctl enable --now claudia-front.service >/dev/null
+systemctl restart claudia-front.service
 for p in "${profiles[@]}"; do
-	systemctl enable claudia-beta-host@"$p".service claudia-beta-runner@"$p".service >/dev/null
-	if [ $restart_hosts = 1 ]; then systemctl restart claudia-beta-host@"$p".service; else systemctl start claudia-beta-host@"$p".service; fi
-	systemctl restart claudia-beta-runner@"$p".service
+	systemctl enable claudia-host@"$p".service claudia-runner@"$p".service >/dev/null
+	if [ $restart_hosts = 1 ]; then systemctl restart claudia-host@"$p".service; else systemctl start claudia-host@"$p".service; fi
+	systemctl restart claudia-runner@"$p".service
 done
-systemctl --no-pager --lines=0 status claudia-beta-front.service "${profiles[@]/#/claudia-beta-runner@}" | grep -E '●|Active:' || true
+systemctl --no-pager --lines=0 status claudia-front.service "${profiles[@]/#/claudia-runner@}" | grep -E '●|Active:' || true

@@ -5,7 +5,7 @@
 #   docker run --read-only -p 127.0.0.1:4590:4590 -v /var/lib/claudia-hub:/data claudia-hub
 # /data (writable, owned by the hub's uid) holds the store (hub.db) and the peer requests; a
 # hub.json there is imported once into an empty store. Built and signed by
-# .github/workflows/beta-release.yml.
+# .github/workflows/release.yml.
 
 # shadow-cljs needs Java to compile; the JRE comes from Temurin, Node from the official image.
 FROM eclipse-temurin:25-jre AS java

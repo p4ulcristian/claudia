@@ -1,0 +1,15 @@
+# Claudia front: takes the hub's calls on FRONT_HOST:FRONT_PORT and passes them to the caller's
+# runner socket. Only the hub may reach that address (firewall).
+[Unit]
+Description=Claudia front
+Wants=claudia-runner.service
+After=claudia-runner.service
+
+[Service]
+EnvironmentFile=%h/.config/claudia/env
+ExecStart=/usr/bin/env node ${CLAUDIA_CHECKOUT}/out/front.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

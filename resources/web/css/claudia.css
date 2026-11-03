@@ -1,4 +1,4 @@
-/* Claudia beta: the Chalkboard look (DESIGN.md), ported rule for rule from the TypeScript Claudia's
+/* Claudia: the Chalkboard look (DESIGN.md), ported rule for rule from the TypeScript Claudia's
    web/style.css (main = aeb57a1). Slate board, chalk colours, chalk lines between the parts. Dark
    only. The chalk masks (--chalk-*) are baked at load by claudia.web.chalk. */
 

@@ -1,0 +1,21 @@
+# Claudia on a shared server: a profile's session host (the Agent SDK sessions), as
+# claudia-<profile>. Restarting it stops that profile's running chats; the runner does not.
+[Unit]
+Description=Claudia session host for %i
+
+[Service]
+User=claudia-%i
+EnvironmentFile=/etc/claudia/env
+EnvironmentFile=-/etc/claudia/profile-%i.env
+Environment=HOST_SOCKET=/run/claudia-host-%i/host.sock
+RuntimeDirectory=claudia-host-%i
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/env node /srv/claudia/out/host.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

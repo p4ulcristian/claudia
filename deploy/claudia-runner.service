@@ -1,0 +1,15 @@
+# Claudia runner (one profile): chats, pictures, secrets, the SQLite store. Restarting it keeps
+# running chats: the host holds them.
+[Unit]
+Description=Claudia runner
+Wants=claudia-host.service
+After=claudia-host.service
+
+[Service]
+EnvironmentFile=%h/.config/claudia/env
+ExecStart=/usr/bin/env node ${CLAUDIA_CHECKOUT}/out/runner.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

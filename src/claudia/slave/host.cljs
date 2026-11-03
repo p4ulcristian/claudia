@@ -12,7 +12,7 @@
 
 (def socket-path
   (or (.. js/process -env -HOST_SOCKET)
-      (str (or (.. js/process -env -XDG_RUNTIME_DIR) "/tmp") "/claudia-beta-host.sock")))
+      (str (or (.. js/process -env -XDG_RUNTIME_DIR) "/tmp") "/claudia-host.sock")))
 
 ;; id -> {:q query :push fn :end fn :busy atom :closed atom}
 (defonce sessions (atom {}))

@@ -1,4 +1,4 @@
-# Claudia (beta: ClojureScript)
+# Claudia
 
 Chat with Claude on the left; Claude explains on the right, in a picture it draws as it works. Chat
 stays short, like two friends talking; the explaining lives in the picture.
@@ -52,18 +52,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   change of the count alone goes as a badge-only push; one summary Live Activity per phone. While the
   person works at a desktop page (`POST /hub/presence`), alerts are held; when they leave, the newest
   per chat that still matters goes.
-- **Following beta**: `.github/workflows/beta-release.yml` builds everything on each push to `beta`,
-  publishes the hub image `ghcr.io/<owner>/claudia-beta-hub:sha-<commit>` and the slave release
-  `claudia-beta-slave-<commit>.tar.gz` (out/, production node_modules for linux-x64, deploy/,
-  commit.txt) on the GitHub release `beta-<short commit>`, both signed keyless by cosign. GitHub's
+- **Following main**: `.github/workflows/release.yml` builds everything on each push to `main`,
+  publishes the hub image `ghcr.io/<owner>/claudia-hub:sha-<commit>` and the slave release
+  `claudia-slave-<commit>.tar.gz` (out/, production node_modules for linux-x64, deploy/,
+  commit.txt) on the GitHub release `release-<short commit>`, both signed keyless by cosign. GitHub's
   webhook (`POST /hub/github`, HMAC with `HUB_GITHUB_SECRET_FILE`) makes the hub poke every front
-  (`POST /api/update-check`, which writes `CLAUDIA_UPDATE_TRIGGER`) on a push to beta and again when
+  (`POST /api/update-check`, which writes `CLAUDIA_UPDATE_TRIGGER`) on a push to main and again when
   the run succeeded, and on that success writes the commit into `HUB_UPDATE_REQUEST` for the gate.
-  Each server's `deploy/update.sh` (path unit on the trigger, hourly timer) installs the newest beta
-  release only after `cosign verify-blob` against this workflow on beta, only forward, restarts the
+  Each server's `deploy/update.sh` (path unit on the trigger, hourly timer) installs the newest
+  release only after `cosign verify-blob` against this workflow on main, only forward, restarts the
   front and the runners, never the hosts. A single-user machine's `CLAUDIA_CHECKOUT` must be a release
   folder (a git checkout is never replaced): first install with
-  `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-beta-update.path` and `.timer`.
+  `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`.
 
 ## The 3D scene, the phone and alerts (2026-11-03, ported from the TypeScript Claudia's decisions 26 and 29)
 

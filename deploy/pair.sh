@@ -6,7 +6,7 @@
 # Makes a WireGuard key pair and a one-time secret, prints the pairing key to paste into the hub's
 # Servers page, then waits until the hub has added this server as a WireGuard peer of the gate and
 # sets up the tunnel: interface `claudia`, this server's address from the hub, the gate as its only
-# peer. The front then listens on that address only (FRONT_HOST in /etc/claudia-beta/env), and a
+# peer. The front then listens on that address only (FRONT_HOST in /etc/claudia/env), and a
 # firewall rule lets FRONT_PORT in only through the tunnel, so nobody on this machine can call the
 # front pretending to be the hub.
 #
@@ -20,8 +20,8 @@ hub="${1:?usage: pair.sh https://<hub address>}"
 hub="${hub%/}"
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 for t in wg wg-quick curl nft node; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
-env=/etc/claudia-beta/env
-[ -f $env ] || { echo "install Claudia beta first (deploy/shared-server/install.sh)" >&2; exit 1; }
+env=/etc/claudia/env
+[ -f $env ] || { echo "install Claudia first (deploy/shared-server/install.sh)" >&2; exit 1; }
 port=$(sed -n 's/^FRONT_PORT=//p' $env | tail -1); port=${port:-4540}
 [[ $port =~ ^[0-9]{1,5}$ ]] || { echo "FRONT_PORT in $env is not a port" >&2; exit 1; }
 
@@ -31,8 +31,8 @@ set_env() { # name value
 
 # FRONT_PORT only through the tunnel (and so only from the gate, its one peer).
 guard() {
-	install -m 0644 /dev/stdin /etc/claudia-beta/guard.nft <<EOF
-table inet claudia_beta_guard {
+	install -m 0644 /dev/stdin /etc/claudia/guard.nft <<EOF
+table inet claudia_guard {
   chain input {
     type filter hook input priority -10; policy accept;
     tcp dport $port iifname != "claudia" drop
@@ -41,24 +41,24 @@ table inet claudia_beta_guard {
 EOF
 	local nft
 	nft=$(command -v nft)
-	install -m 0644 /dev/stdin /etc/systemd/system/claudia-beta-guard.service <<EOF
+	install -m 0644 /dev/stdin /etc/systemd/system/claudia-guard.service <<EOF
 [Unit]
-Description=Claudia beta: the front's port reachable through the hub's tunnel only
-Before=claudia-beta-front.service
+Description=Claudia: the front's port reachable through the hub's tunnel only
+Before=claudia-front.service
 After=nftables.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=-$nft delete table inet claudia_beta_guard
-ExecStart=$nft -f /etc/claudia-beta/guard.nft
-ExecStop=$nft delete table inet claudia_beta_guard
+ExecStartPre=-$nft delete table inet claudia_guard
+ExecStart=$nft -f /etc/claudia/guard.nft
+ExecStop=$nft delete table inet claudia_guard
 
 [Install]
 WantedBy=multi-user.target
 EOF
 	systemctl daemon-reload
-	systemctl enable --now claudia-beta-guard.service
+	systemctl enable --now claudia-guard.service
 }
 
 if [ -e /etc/wireguard/claudia.conf ]; then
@@ -66,13 +66,13 @@ if [ -e /etc/wireguard/claudia.conf ]; then
 	[[ $address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "no address in /etc/wireguard/claudia.conf" >&2; exit 1; }
 	guard
 	set_env FRONT_HOST "$address"
-	systemctl restart claudia-beta-front.service
+	systemctl restart claudia-front.service
 	echo "Already on the hub's WireGuard: the front listens on $address:$port."
 	echo "On the hub's Servers page, add this server (already on WireGuard) with the address $address:$port."
 	exit 0
 fi
 
-dir=/etc/claudia-beta/pairing
+dir=/etc/claudia/pairing
 install -d -m 0700 "$dir"
 umask 077
 [ -f "$dir/private" ] || wg genkey >"$dir/private"
@@ -123,6 +123,6 @@ chmod 0600 /etc/wireguard/claudia.conf
 systemctl enable --now wg-quick@claudia
 guard
 set_env FRONT_HOST "$address"
-systemctl restart claudia-beta-front.service
+systemctl restart claudia-front.service
 rm -f "$dir/secret" "$dir/enroll.json"
 echo "Paired as $name ($address). Tick people for it on the hub's Access page."

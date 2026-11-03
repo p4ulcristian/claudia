@@ -108,7 +108,7 @@
       (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
       (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
       (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-      ;; The hub's own poke to the front (README, Hub operations: following beta), never a page's call.
+      ;; The hub's own poke to the front (README, Hub operations: following main), never a page's call.
       (= rest-path "/api/update-check") {:status 404 :error "not found"}
       error {:status 400 :error error}
       ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
@@ -185,7 +185,7 @@
         port (js/parseInt (env "HUB_PORT" "4590"))
         web-root (env "HUB_WEB" "out/web")
         config-file (env "HUB_CONFIG" nil)
-        data-dir (env "HUB_DATA" (path/join (env "XDG_DATA_HOME" (path/join (env "HOME" "/tmp") ".local/share")) "claudia-beta-hub"))]
+        data-dir (env "HUB_DATA" (path/join (env "XDG_DATA_HOME" (path/join (env "HOME" "/tmp") ".local/share")) "claudia-hub"))]
     (when-not (fs/existsSync (path/join web-root "index.html"))
       (js/console.warn (str "hub: " web-root "/index.html is missing: the page is not built")))
     (try (config/start! data-dir config-file)

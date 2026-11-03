@@ -54,7 +54,7 @@
                          :commit h/commit}))
 
 (defn- update-check
-  "The hub's poke after a push to the beta branch (README, Hub operations: following beta): writes CLAUDIA_UPDATE_TRIGGER,
+  "The hub's poke after a push to the main branch (README, Hub operations: following main): writes CLAUDIA_UPDATE_TRIGGER,
   which a path unit watches to start deploy/update.sh. Says only \"look now\": the update fetches
   and verifies what it installs by itself."
   [^js res]

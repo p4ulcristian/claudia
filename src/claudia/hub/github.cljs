@@ -1,10 +1,10 @@
 (ns claudia.hub.github
   "GitHub's webhook for this repository (POST /hub/github; no login: the gate's Caddy lets this path
   through). GitHub signs each delivery with the shared secret (X-Hub-Signature-256, HMAC-SHA256 with
-  the secret in HUB_GITHUB_SECRET_FILE); a delivery can only make machines look at the beta branch
-  sooner: each one fetches and checks what it runs by itself (README, Hub operations: following beta).
-  - push to beta: every server is poked (POST /api/update-check on its front).
-  - a beta-release run on beta succeeded: the gate's root helper is asked to update the hub, by
+  the secret in HUB_GITHUB_SECRET_FILE); a delivery can only make machines look at the main branch
+  sooner: each one fetches and checks what it runs by itself (README, Hub operations: following main).
+  - push to main: every server is poked (POST /api/update-check on its front).
+  - a release run on main succeeded: the gate's root helper is asked to update the hub, by
     writing the run's commit into HUB_UPDATE_REQUEST, and every server is poked again (its slave
     release exists only now).
   Everything else (other branches, other workflows, other events) is answered 202 and ignored."
@@ -17,8 +17,8 @@
 
 (defn- env [k default] (let [v (aget js/process.env k)] (if (str/blank? v) default (str/trim v))))
 
-(def branch "beta")
-(def workflow ".github/workflows/beta-release.yml")
+(def branch "main")
+(def workflow ".github/workflows/release.yml")
 
 (defonce ^:private secret (atom nil))
 

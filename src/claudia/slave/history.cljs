@@ -49,7 +49,7 @@
         tool))))
 
 ;; The TypeScript Claudia's one-line step (src/chat.ts toolLabel, toolTitle): sent with each tool Msg
-;; as label and title beside beta's summary, with the call's input (detail) and its result.
+;; as label and title beside the summary, with the call's input (detail) and its result.
 
 (defn cut-to
   "s cut to n characters with an ellipsis (newlines kept)."

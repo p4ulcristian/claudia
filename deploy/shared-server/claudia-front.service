@@ -1,0 +1,21 @@
+# Claudia on a shared server: the front, one per machine (user claudia). It
+# believes X-Claudia-Email, so the machine's firewall lets only the hub reach FRONT_PORT.
+[Unit]
+Description=Claudia front (takes the hub's calls, picks the profile)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=claudia
+EnvironmentFile=/etc/claudia/env
+Environment=FRONT_PROFILES=/etc/claudia/profiles
+# The hub's poke (POST /api/update-check) lands here; claudia-update.path watches it.
+Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia/update-requested
+ExecStart=/usr/bin/env node /srv/claudia/out/front.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

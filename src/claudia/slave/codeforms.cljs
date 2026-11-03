@@ -474,7 +474,7 @@
      :workspace tools/workspace-mcp}))
 
 (defn prompt-for
-  "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then (beta) every form this runner
+  "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then every form this runner
   offers with its data, since Claude Code cuts long tool descriptions. Not per chat: a change of the
   form row reaches Claude through the tools and a reminder, without a new prompt."
   []

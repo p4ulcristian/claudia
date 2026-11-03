@@ -25,9 +25,9 @@
             [claudia.slave.timeline :as timeline]))
 
 (def ^:private env (.-env js/process))
-(def socket-path (or (.-RUNNER_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-beta-runner.sock")))
-(def host-socket (or (.-HOST_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-beta-host.sock")))
-(def data-dir (or (.-RUNNER_DATA env) (path/join (os/homedir) ".local/share/claudia-beta")))
+(def socket-path (or (.-RUNNER_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-runner.sock")))
+(def host-socket (or (.-HOST_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-host.sock")))
+(def data-dir (or (.-RUNNER_DATA env) (path/join (os/homedir) ".local/share/claudia")))
 (def profile (or (.-RUNNER_PROFILE env) ""))
 
 ;; One per page socket: {:ws :profile :read-only :hello (atom) :open (atom #{chat ids})}

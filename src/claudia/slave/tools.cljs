@@ -1,7 +1,7 @@
 (ns claudia.slave.tools
   "What Claude is told: the system prompt's Claudia part and the tools the runner serves (their
   descriptions and input schemas, as plain JSON Schema for the host). Word for word as the
-  TypeScript Claudia's src/prompt.ts and src/forms.ts; beta adds the Secrets section and
+  TypeScript Claudia's src/prompt.ts and src/forms.ts; this version adds the Secrets section and
   run_with_secret."
   (:require [clojure.string :as str]))
 
@@ -191,7 +191,7 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                       :description (s "One line: what it shows and when to use it")))}})
 
 (def workspace-mcp
-  "The workspace server's tools (src/prompt.ts WORKSPACE_MCP, beta adds run_with_secret)."
+  "The workspace server's tools (src/prompt.ts WORKSPACE_MCP, this version adds run_with_secret)."
   {:show_image {:description "Show a picture file in the chat (png, jpeg, gif or webp, up to 5 MB): a screenshot, a rendered image, a photo. The user sees it under your steps and you see it too. Use it when the user asks you to send or show an image; a diagram or explanation still goes in the picture on the right."
                 :inputSchema (obj ["path"] (array-map :path (s "The image file (absolute, ~/…, or relative to the working folder)")
                                                       :caption (s "A few words about it")))}
@@ -205,7 +205,7 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                                   :command (s "The shell command, using the variable (e.g. curl -H \"Authorization: Bearer $GITHUB_TOKEN\" ...)")))}})
 
 (defn forms-prompt
-  "Beta's addition to the system prompt: Claude Code cuts long tool descriptions, so every form this
+  "This version's addition to the system prompt: Claude Code cuts long tool descriptions, so every form this
   runner offers is said here with its data too (the draw tool's description stays the live list)."
   [forms]
   (str "The forms of the draw tool and their data (blocks[].form + blocks[].data):\n" (help-lines forms)))

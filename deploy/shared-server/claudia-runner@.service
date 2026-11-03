@@ -1,0 +1,26 @@
+# Claudia on a shared server: a profile's runner, as its own Linux user claudia-<profile>.
+# Its socket's folder lets the front (user claudia) in and nobody else.
+[Unit]
+Description=Claudia runner for %i
+After=claudia-host@%i.service
+Wants=claudia-host@%i.service
+
+[Service]
+User=claudia-%i
+# Reads the Claude token in use, which the front writes (group claudia-run).
+SupplementaryGroups=claudia-run
+EnvironmentFile=/etc/claudia/env
+EnvironmentFile=-/etc/claudia/profile-%i.env
+Environment=RUNNER_PROFILE=%i RUNNER_SOCKET=/run/claudia-%i/runner.sock HOST_SOCKET=/run/claudia-host-%i/host.sock
+Environment=RUNNER_DATA=/home/claudia-%i/.local/share/claudia CLAUDIA_CWD=/home/claudia-%i/Work
+RuntimeDirectory=claudia-%i
+RuntimeDirectoryMode=0710
+ExecStartPre=+/usr/bin/setfacl -m u:claudia:x,m::x -m d:u:claudia:rw /run/claudia-%i
+ExecStart=/usr/bin/env node /srv/claudia/out/runner.js
+Restart=always
+RestartSec=5
+UMask=0002
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

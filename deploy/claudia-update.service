@@ -1,0 +1,11 @@
+# Bring $CLAUDIA_CHECKOUT (a release folder, not a git checkout) to the main branch's newest signed
+# release (deploy/update.sh); started by the hub's poke (claudia-update.path) and hourly.
+[Unit]
+Description=Claudia update from the main branch's signed release
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/claudia/env
+Environment=CLAUDIA_UPDATE_TRIGGER=%t/claudia-update-requested
+ExecStart=/usr/bin/env bash ${CLAUDIA_CHECKOUT}/deploy/update.sh
