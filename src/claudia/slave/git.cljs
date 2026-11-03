@@ -54,6 +54,22 @@
                (assoc r :tracked (boolean (seq (:upstream t))) :gone (boolean (:gone t)) :ahead (or (:ahead t) 0) :behind (or (:behind t) 0)))
              r)))))
 
+(defn- roster
+  "Every branch once: a local one (\"both\" when it tracks a live upstream, else \"local\"), plus
+  each remote branch no local branch tracks (\"remote\"); locals first."
+  [root tr current]
+  (.then (git root ["for-each-ref" "--format=%(refname)" "refs/remotes"] true)
+         (fn [out]
+           (let [ups (set (keep #(not-empty (:upstream %)) (vals tr)))
+                 locals (for [[nm t] tr :let [remote (and (seq (:upstream t)) (not (:gone t)))]]
+                          (assoc t :name nm :local true :remote (boolean remote) :kind (if remote "both" "local")
+                                 :tracked (boolean (seq (:upstream t))) :current (= nm current)))
+                 remotes (for [ref (str/split-lines out)
+                               :let [nm (str/replace (str/trim ref) #"^refs/remotes/" "")]
+                               :when (and (seq nm) (not (str/ends-with? nm "/HEAD")) (not (ups nm)))]
+                           {:name nm :local false :remote true :kind "remote" :tracked false :gone false :ahead 0 :behind 0})]
+             (vec (concat (sort-by :name locals) (sort-by :name remotes)))))))
+
 (defn- working-copy [root]
   (.then (git root ["status" "--porcelain=v1" "--untracked-files=all"] true)
          (fn [out]
@@ -126,14 +142,16 @@
                       (git root ["symbolic-ref" "--quiet" "--short" "HEAD"] true)
                       (tracking root)
                       (working-copy root))
+                 (.then (fn [[head current tr dirty]]
+                          (.then (roster root tr (str/trim current)) #(vector head current tr dirty %))))
                  (.then
-                  (fn [[head current tr dirty]]
+                  (fn [[head current tr dirty branches-list]]
                     (let [head (str/trim head)
                           wanted (when (seq branches) (filterv #(re-matches rev-re %) (str/split branches #",")))
                           revs (if (seq wanted) wanted ["--branches" "--tags" "--remotes" "HEAD"])
                           fmt (str (str/join F ["%H" "%P" "%an" "%ar" "%D" "%s" "%at"]) R)]
                       (if-not (seq head)
-                        {:fp now :commits [] :head "" :currentBranch (str/trim current) :dirty dirty :more false}
+                        {:fp now :commits [] :head "" :currentBranch (str/trim current) :dirty dirty :more false :branches branches-list}
                         (.then (git root (concat ["log"] revs ["--topo-order" (str "--max-count=" (inc limit)) (str "--pretty=format:" fmt) "--"]))
                                (fn [out]
                                  (let [cs (vec (for [rec (map str/trim (str/split out (re-pattern R))) :when (seq rec)
@@ -143,7 +161,7 @@
                                        more (> (count cs) limit)
                                        cs (if more (subvec cs 0 limit) cs)]
                                    {:fp now :commits (colour-trunks (lanes cs)) :head head :currentBranch (str/trim current)
-                                    :detached (not (seq (str/trim current))) :dirty dirty :more more}))))))))))))))
+                                    :detached (not (seq (str/trim current))) :dirty dirty :more more :branches branches-list}))))))))))))))
 
 ;; ---- one commit, or WORKING (the uncommitted changes) ----
 
