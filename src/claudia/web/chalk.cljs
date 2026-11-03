@@ -246,4 +246,17 @@
       (.setProperty style (str "--chalk-" n) (nine-slice shape)))
     (.setProperty style "--chalk-grain" (str "url(" (grain-url :edge) ")"))
     (.setProperty style "--chalk-grain-soft" (str "url(" (grain-url :soft) ")"))
-    (.setProperty style "--chalk-grain-size" (str grain-size "px"))))
+    (.setProperty style "--chalk-grain-size" (str grain-size "px"))
+    ;; The grain for SVG drawn outside the picture's graphs (charts, the git and clojure maps): SVG
+    ;; shapes take a mask by id, #chalk-grain and #chalk-grain-soft.
+    (when-not (js/document.getElementById "chalk-grain")
+      (let [defs (js/document.createElement "div")
+            one (fn [id kind]
+                  (str "<pattern id=\"" id "-tile\" patternUnits=\"userSpaceOnUse\" width=\"" grain-size "\" height=\"" grain-size "\">"
+                       "<image href=\"" (grain-url kind) "\" width=\"" grain-size "\" height=\"" grain-size "\"/></pattern>"
+                       "<mask id=\"" id "\" maskUnits=\"userSpaceOnUse\" x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\" style=\"mask-type:alpha\">"
+                       "<rect x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\" fill=\"url(#" id "-tile)\"/></mask>"))]
+        (set! (.-innerHTML defs)
+              (str "<svg class=\"chalk-defs\" aria-hidden=\"true\" style=\"position:absolute;width:0;height:0\">"
+                   (one "chalk-grain" :edge) (one "chalk-grain-soft" :soft) "</svg>"))
+        (.appendChild js/document.body (.-firstChild defs))))))
