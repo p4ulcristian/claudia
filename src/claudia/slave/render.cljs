@@ -34,7 +34,7 @@
 (def ^:private page
   (str "<!doctype html><html lang=\"en\" class=\"render\"><head><meta charset=\"utf-8\">"
        "<link rel=\"stylesheet\" href=\"" fonts "\">"
-       "<link rel=\"stylesheet\" href=\"/css/claudia.css\"><link rel=\"stylesheet\" href=\"/css/right.css\">"
+       "<link rel=\"stylesheet\" href=\"/css/claudia.css\"><link rel=\"stylesheet\" href=\"/css/right.css\"><link rel=\"stylesheet\" href=\"/css/codeforms.css\">"
        "<link rel=\"stylesheet\" href=\"/css/scene3d.css\">"
        "<script>window.claudiaRender = true;</script></head>"
        "<body><div id=\"root\"></div><script src=\"/js/main.js\"></script></body></html>"))

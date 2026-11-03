@@ -31,6 +31,19 @@
                 preview TEXT NOT NULL DEFAULT '',
                 scene TEXT
               );
+              CREATE TABLE IF NOT EXISTS templates (
+                name TEXT PRIMARY KEY COLLATE NOCASE,
+                html TEXT NOT NULL,
+                parts TEXT NOT NULL DEFAULT '{}',
+                description TEXT NOT NULL DEFAULT '',
+                at INTEGER NOT NULL
+              );
+              CREATE TABLE IF NOT EXISTS chat_settings (
+                id TEXT PRIMARY KEY,
+                forms TEXT NOT NULL DEFAULT '{}',
+                cols INTEGER NOT NULL DEFAULT 0,
+                forms_seen TEXT
+              );
               -- Small per-chat values as JSON (chat '' = the profile's own): settings, tasks, limits.
               CREATE TABLE IF NOT EXISTS kv (
                 chat TEXT NOT NULL,
@@ -108,6 +121,37 @@
 (defn save-scene! [id scene]
   (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json scene) id))
 
+;; Templates: freeform blocks kept by name (save_template, the badge's "save as template").
+
+(defn- template-row [^js r]
+  (when r
+    {:name (.-name r) :html (.-html r) :parts (p/read-json (.-parts r)) :description (.-description r)}))
+
+(defn templates [] (mapv template-row (.all (stmt "SELECT * FROM templates ORDER BY at DESC"))))
+
+(defn template [name] (template-row (.get (stmt "SELECT * FROM templates WHERE name = ?") name)))
+
+(defn save-template! [{:keys [name html parts description]}]
+  (.run (stmt "INSERT INTO templates (name, html, parts, description, at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET html = excluded.html, parts = excluded.parts,
+               description = excluded.description, at = excluded.at")
+        name html (p/write-json (or parts {})) (or description "") (js/Date.now)))
+
+(defn delete-template! [name] (.run (stmt "DELETE FROM templates WHERE name = ?") name))
+
+;; A chat's picture settings: the form row's choices ({form "required"|"off"}), the columns (0 =
+;; Claude's layout, 1-3) and the forms its Claude last heard of (nil: not told yet).
+
+(defn settings [id]
+  (let [^js r (.get (stmt "SELECT * FROM chat_settings WHERE id = ?") id)]
+    {:forms (or (some-> r .-forms p/read-json) {})
+     :cols (or (some-> r .-cols) 0)
+     :forms-seen (some-> r .-forms_seen p/read-json)}))
+
+(defn save-settings! [id {:keys [forms cols forms-seen]}]
+  (.run (stmt "INSERT INTO chat_settings (id, forms, cols, forms_seen) VALUES (?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET forms = excluded.forms, cols = excluded.cols, forms_seen = excluded.forms_seen")
+        id (p/write-json (or forms {})) (or cols 0) (some-> forms-seen p/write-json)))
 ;; kv ---------------------------------------------------------------------------------------------
 
 (defn kv

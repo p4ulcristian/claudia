@@ -11,6 +11,7 @@
             [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
+            [claudia.slave.codeforms :as codeforms]
             [claudia.slave.history :as history]
             [claudia.slave.search :as search]
             [claudia.slave.uploads :as uploads]
@@ -104,7 +105,18 @@
         "agent_git" (-> (chats/agent-git chat (str (:agent f)) (str (:rev f)))
                         (.then (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
         "diff" (send! c (merge {:type "diff" :chat chat :change (:change f)}
-                               (or (chats/change-texts chat (:change f)) {:error "No such change."})))))))
+                               (or (chats/change-texts chat (:change f)) {:error "No such change."})))
+        ;; The editor form: the user's typing saved into the picture, and its Send.
+        "code_edit" (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat))
+        "code_send" (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
+                      (chats/set-scene! chat scene)
+                      (when (seq text) (chats/send-text! chat text)))
+        ;; The form row and the columns of this chat's picture.
+        "picture_settings" (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
+                     (when scene (chats/set-scene! chat scene))
+                     (when (some? (:forms f)) (chats/tools-changed! chat))
+                     (emit chat {:type "picture_settings" :chat chat :settings settings}))))))
+
 
 (defn- caller [^js req]
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
@@ -179,6 +191,7 @@
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
+      (codeforms/handle req res url who chats/scene-of) nil
       (api/handle req res who) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 

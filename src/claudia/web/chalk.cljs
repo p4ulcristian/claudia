@@ -38,7 +38,13 @@
    "line2" {:r 1 :noise :line}
    "dot18" {:r 9}
    "dot56" {:r 28}
-   "bar35" {:r 3.5}})
+   "bar35" {:r 3.5}
+   ;; The code forms (codeforms.css): file tags, kind chips, form row circles, column buttons.
+   "r5-15" {:r 5 :b 1.5}
+   "r7-15" {:r 7 :b 1.5}
+   "r8-15-dash" {:r 8 :b 1.5 :dash 4}
+   "c30-18" {:r 15 :b 1.8}
+   "c30-22" {:r 15 :b 2.2}})
 
 ;; ---- The SVG spec's turbulence (Filter Effects, feTurbulence reference code) ----
 

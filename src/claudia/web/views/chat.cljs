@@ -9,6 +9,7 @@
             [claudia.web.md :as md]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.asks :as asks]
+            [claudia.web.views.codesend :as codesend]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.changes :as changes]
             [claudia.web.views.usage :as usage]))
@@ -89,7 +90,7 @@
                  [server chat] ck]
              [:div.msg.user
               (when (and images (pos? images)) [attach/sent-images server chat id images])
-              (when (seq t) [:div.bubble t])
+              (when (seq t) [:div.bubble [codesend/bubble t]])
               (when (seq sent) [attach/file-chips server chat sent])])
     "tool" [:<>
             [:div.step {:class (when error "err")}
