@@ -10,8 +10,6 @@
   - a stage run succeeded (stage.yml; its title names the tree it published): servers and the gate
     are told to fetch that tree ahead (`{stage: tree}`; `stage <tree>`), and they look at main
     again (a tree published only after the push installs now).
-  - a release run on main succeeded (release.yml, the old way until it is removed): the gate is
-    asked to update to the run's commit, and every server is poked again.
   Everything else (other branches, other workflows, other events) is answered 202 and ignored."
   (:require ["node:crypto" :as crypto]
             [claudia.node.env :refer [env]]
@@ -22,7 +20,6 @@
             [claudia.shared.protocol :as protocol]))
 
 (def branch "main")
-(def workflow ".github/workflows/release.yml")
 (def stage-workflow ".github/workflows/stage.yml")
 
 (defonce ^:private secret (atom nil))
@@ -87,16 +84,6 @@
                (= "success" (:conclusion run)) (= stage-workflow (:path run)))
       (second (re-matches #"^stage ([0-9a-f]{40})$" (str (:display_title run)))))))
 
-(defn release-done?
-  "A delivery for a release run on main that succeeded, with the commit it ran on."
-  [event d]
-  (let [run (:workflow_run d)]
-    (boolean
-     (and (= event "workflow_run") (= (:action d) "completed")
-          (= "success" (:conclusion run)) (= branch (:head_branch run))
-          (= workflow (:path run))
-          (re-matches #"^[0-9a-f]{40}$" (str (:head_sha run)))))))
-
 (defn- poke-all! [body]
   (doseq [s (config/all-servers)] (poke! s body)))
 
@@ -107,12 +94,7 @@
       (when commit (ask-gate! (str "update " commit " " tree)))))
   (when-let [tree (staged-tree event d)]
     (poke-all! {:stage tree})
-    (ask-gate! (str "stage " tree)))
-  (when (release-done? event d)
-    (ask-gate! (get-in d [:workflow_run :head_sha]))
-    ;; The slave release is published now: the servers look again (the poke on the push came
-    ;; before it existed).
-    (poke-all! nil)))
+    (ask-gate! (str "stage " tree))))
 
 (defn handle
   "One delivery -> status. body: the raw bytes (Buffer)."

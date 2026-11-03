@@ -12,10 +12,9 @@
 #
 # Steps: ask GitHub for main's newest commit and its git tree; if that commit is not the installed
 # one (commit.txt) and is ahead of it, install the build of that tree: the one fetched ahead
-# (staged/<tree>, verified when fetched), else the release tree-<tree> (stage.yml), else the old
-# commit release release-<short commit> (release.yml, until it is removed). Every download's cosign
-# signature must be the named workflow's on main (keyless), and the tarball must say the tree (or
-# commit) it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
+# (staged/<tree>, verified when fetched), else the release tree-<tree> (stage.yml). Every
+# download's cosign signature must be stage.yml's on main (keyless), and the tarball must say the
+# tree it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
 # The front and the runners restart (chats keep going in the hosts); the hosts never restart here:
 # their new code waits for a restart by hand. Nothing published yet is not an error: the next poke
 # installs it.
@@ -23,7 +22,6 @@ set -euo pipefail
 repo=${CLAUDIA_REPO:-p4ulcristian/claudia}
 branch=main
 stage_identity="https://github.com/$repo/.github/workflows/stage.yml@refs/heads/$branch"
-release_identity="https://github.com/$repo/.github/workflows/release.yml@refs/heads/$branch"
 issuer=https://token.actions.githubusercontent.com
 mode=user
 [ "${1:-}" = --shared ] && mode=shared
@@ -87,14 +85,6 @@ fetch_tree() {
 	[ "$(cat "$2/tree.txt" 2>/dev/null)" = "$1" ] || { echo "the build for tree ${1:0:7} says another tree" >&2; rm -rf "$2"; return 2; }
 }
 
-# fetch_commit <commit> <into>: release.yml's build of a commit (the old way).
-fetch_commit() {
-	local rc=0
-	fetch "https://github.com/$repo/releases/download/release-${1:0:7}" "claudia-slave-$1.tar.gz" "$release_identity" "$2" || rc=$?
-	[ $rc = 0 ] || return $rc
-	[ "$(cat "$2/commit.txt" 2>/dev/null)" = "$1" ] || { echo "the release's commit.txt is not ${1:0:7}" >&2; rm -rf "$2"; return 2; }
-}
-
 # main's commit from git's own ref list (the API can name the commit before a push a few seconds
 # longer, and this costs no API call), then its tree from the API (a commit never changes).
 main_now() {
@@ -122,9 +112,6 @@ get() {
 		return 0
 	fi
 	fetch_tree "$tree" "$1" || rc=$?
-	[ $rc = 1 ] || return $rc
-	rc=0
-	fetch_commit "$want" "$1" || rc=$?
 	return $rc
 }
 

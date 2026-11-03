@@ -42,7 +42,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_TTS_URL`, `HUB_TTS_TOKEN_FILE` (or `HUB_TTS_TOKEN`) | the narrator's voice service for 3D stories and its bearer token (unset: no voice) |
 | front | `FRONT_HOST`, `FRONT_PORT` | the WireGuard address it listens on |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
-| front | `FRONT_NAME` | this server's name (`destiny`, `box`) |
+| front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
 | runner | `RUNNER_DATA` | folder for `claudia.db` and uploads |
@@ -50,15 +50,15 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ name, by, at }` |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
-| runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
+| runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (e.g. `home`) |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
 | runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_EOR_URL`, `CLAUDIA_EOR_TOKEN_FILE` (default `~/.config/eor/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Eye on Rainbow (`POST <url>/api/worktrees/touches`) |
 | host | `HOST_SOCKET` | unix socket it listens on |
 
 `hub.json`:
 ```json
-{ "servers": [ { "name": "destiny", "label": "destiny", "address": "10.0.0.2:4540" } ],
-  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["destiny"] } ] }
+{ "servers": [ { "name": "home", "label": "Home", "address": "10.0.0.2:4540" } ],
+  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["home"] } ] }
 ```
 The profiles file (front): one line per profile, `<profile> <email> <runner socket path>`.
 
@@ -120,7 +120,7 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
 | `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
-| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front; a successful `release.yml` run on main writes its commit to `HUB_UPDATE_REQUEST` and pokes again; anything else ignored (202). 401 bad signature, 503 no secret |
+| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front with `{ main: commit }` and adds `update <commit> <tree>` to `HUB_UPDATE_REQUEST`; a successful `stage.yml` run (title `stage <tree>`) pokes every front with `{ stage: tree }` and adds `stage <tree>`; anything else ignored (202). 401 bad signature, 503 no secret |
 | `POST /hub/push/devices` `{ token (hex), env: development\|production, topic (bundle id), key (base64 of 32 bytes), liveStartToken? }` | person | `{ ok, push }` |
 | `DELETE /hub/push/devices/:token` | person | their own phone only |
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
