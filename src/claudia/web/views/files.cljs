@@ -96,10 +96,11 @@
         [big set-big] (h/use-state nil)
         tree-ref (h/use-ref nil)
         url (fn [p q] (api/url server (str "chats/" (js/encodeURIComponent chat) "/files") (merge {:root root :path p} q)))
+        ;; A folder read again replaces its entries only when they changed, so nothing redraws for nothing.
         read-dir (fn [d gone?]
                    (-> (api/fetch-json (url d nil))
-                       (.then (fn [j] (:entries j)) (fn [e] {:error (.-message e)}))
-                       (.then (fn [next] (when-not (gone?) (set-dirs #(if (= (get % d) next) % (assoc % d next))))))))
+                       (.then (fn [j] (:entries j)) (fn [e] (if (instance? js/TypeError e) ::offline {:error (or (.-message e) "can't read")})))
+                       (.then (fn [next] (when-not (or (gone?) (= next ::offline)) (set-dirs #(if (= (get % d) next) % (assoc % d next))))))))
         fill (fn [f] (set-files #(if (contains? % (:path f)) (assoc % (:path f) f) %)))
         open-ref (h/use-ref open)
         files-ref (h/use-ref files)
@@ -152,7 +153,8 @@
                                                                 (and (not slash) (string? (:code e))) (assoc :lines (count (str/split (str/replace (:code e) #"\n$" "") #"\n")))
                                                                 (and (not slash) (:status e)) (assoc :status (:status e)))))))))
                                       base made)]
-                      (sort-by (juxt #(if (:dir %) 0 1) :name) (vals all))))))))
+                      (sort (fn [a b] (if (= (boolean (:dir a)) (boolean (:dir b))) (.localeCompare (:name a) (:name b)) (if (:dir a) -1 1)))
+                            (vals all))))))))
           load (fn [p]
                  (set-files #(if (contains? % p) % (assoc % p {:path p})))
                  (let [m (some #(when (= (str/replace (:path %) #"/$" "") p) %) made)
@@ -160,7 +162,7 @@
                        listed (get dirs (if cut (subs p 0 cut) ""))
                        on-disk (and live (sequential? listed) (some #(= (:name %) (subs p (inc (or cut -1)))) listed))]
                    (cond
-                     (and live (re-find image-re p) (not (and m (not on-disk)))) (fill {:path p :image (url p {:image 1})})
+                     (and live (re-find image-re p)) (fill {:path p :image (url p {:image 1})})
                      (and m (not on-disk)) (fill {:path p :text (or (:code m) (if demo "// a file opens here, coloured like VS Code" "(no code given for this file)"))})
                      (not live) (fill {:path p :error "not given"})
                      :else (-> (api/fetch-json (url p {:read 1}))

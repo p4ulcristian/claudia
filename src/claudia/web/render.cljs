@@ -9,11 +9,10 @@
             [claudia.web.views.sidebar :as sidebar]))
 
 (defn- stage [scene]
-  [:section.right.render-stage
-   (when (seq (:title scene)) [:h2.picture-title (:title scene)])
-   [:div.picture.blocks
-    (for [b (:blocks scene)]
-      ^{:key (:id b)} [:f> picture/block-view b])]])
+  ;; As the user sees it, without the title (the board has none).
+  [:section.render-stage
+   [:div.stage {:style {:padding-bottom 18}}
+    [:f> picture/picture-view {:scene scene :k :render :live? false :cols 0}]]])
 
 (defn start! []
   (chalk/bake-all!)

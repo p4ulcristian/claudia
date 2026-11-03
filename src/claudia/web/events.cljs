@@ -142,7 +142,7 @@
 (defmethod on-frame "turn" [db server {:keys [chat running stopped]}]
   {:db (cond-> (-> (assoc-in db [:chats [server chat] :running] running)
                    ;; A turn the person stopped says "Stopped." until the next one starts.
-                   (assoc-in [:chats [server chat] :stopped] (boolean (and (not running) stopped))))
+                   (assoc-in [:chats [server chat] :stopped] (boolean (and (not running) stopped)))
                    (update-in [:turn-since [server chat]] #(when running (or % (js/Date.now)))))
          ;; A turn's end settles every streamed message.
          (not running) (update-in [:chats [server chat] :messages]

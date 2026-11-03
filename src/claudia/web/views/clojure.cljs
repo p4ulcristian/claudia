@@ -4,10 +4,9 @@
   it is one bubble that opens on click. A namespace lists its vars below the map, a var opens its
   source, an arrow lists the functions that cross it. Read live through the runner (clj-kondo)."
   (:require [clojure.string :as str]
-            [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
-            [claudia.web.hl :as hl]
+            [claudia.web.shiki :as shiki]
             [claudia.web.views.code :as code]))
 
 (def ^:private poll-ms 4000)
@@ -72,7 +71,7 @@
         layer (loop [layer (zipmap ids (repeat 0)) pass 0]
                 (let [next (reduce (fn [l [a b]] (if (or (back [a b]) (>= (l b) (inc (l a)))) l (assoc l b (inc (l a))))) layer (keys pairs))]
                   (if (or (= next layer) (> pass (count ids))) next (recur next (inc pass)))))
-        n-layers (inc (reduce max 0 (vals layer)))
+        n-layers (if (seq ids) (inc (reduce max 0 (vals layer))) 0)
         cols (vec (for [li (range n-layers)] (vec (filter #(= li (layer %)) ids))))
         place (fn [cols] (into {} (for [c cols [i id] (map-indexed vector c)] [id (- i (/ (dec (count c)) 2))])))
         near (fn [pos id dir] (for [[a b] (keys pairs) :when (if (= dir 1) (= b id) (= a id))] (pos (if (= dir 1) a b))))
@@ -128,13 +127,16 @@
         (str "M" x1 " " y1 "C" x1 " " my " " x2 " " my " " x2 " " y2)))))
 
 (defn source-view [{:keys [code row lang]}]
-  (let [html (h/use-memo #(hl/lines code (or lang "clj")) [code lang])]
+  (let [tokens (shiki/use-tokens code (or lang "clj") false)]
     (into [:pre.cl-src]
           (map-indexed (fn [i l]
                          ^{:key i}
-                         [:div [:span.cl-no (+ (or row 1) i)]
-                          (if-let [x (nth html i nil)] [:span {:dangerouslySetInnerHTML (r/unsafe-html x)}] l)])
-                       (str/split (str code) #"\n")))))
+                         (into [:div [:span.cl-no (+ (or row 1) i)]]
+                               (if-let [toks (shiki/line tokens i)]
+                                 (for [[j ^js t] (map-indexed vector (array-seq toks))]
+                                   ^{:key j} [:span {:style {:color (.-color t)}} (.-content t)])
+                                 [l])))
+                       (str/split (str code) #"\n" -1)))))
 
 (defn- edge-panel [edge used go]
   (let [by-ns (group-by :ns used)
@@ -218,14 +220,47 @@
         [hover set-hover] (h/use-state nil)
         [full set-full] (h/use-state false)
         [chosen-dir set-chosen-dir] (h/use-state (when (#{"down" "across"} (:direction data)) (:direction data)))
-        [zoom set-zoom] (h/use-state nil)
+        ;; The zoom lives in a ref and moves the viewBox straight on the element (no re-render per
+        ;; wheel step, chalk masks off while moving); zoom-k follows once it rests, for the buttons.
+        zoom (h/use-ref nil) ; nil: the whole map; else {:k :cx :cy}
+        [zoom-k set-zoom-k] (h/use-state 1)
+        latest (h/use-ref nil) ; {:frame :vb}
+        frame-req (h/use-ref 0)
+        rest-timer (h/use-ref nil)
+        dragged (h/use-ref false)
         [box-w set-box-w] (h/use-state 0)
         [bounds set-bounds] (h/use-state nil)
         box (h/use-ref nil)
         mapbox (h/use-ref nil)
         svg-ref (h/use-ref nil)
         drawn (h/use-ref nil)
-        pan (h/use-ref nil)]
+        pan (h/use-ref nil)
+        apply! (fn []
+                 (js/cancelAnimationFrame (.-current frame-req))
+                 (set! (.-current frame-req)
+                       (js/requestAnimationFrame
+                        (fn []
+                          (let [el (.-current svg-ref) l (.-current latest)]
+                            (when (and el l)
+                              (let [vb (view-of (:frame l) (.-current zoom))]
+                                (set! (.-current latest) (assoc l :vb vb))
+                                (.setAttribute el "viewBox" (str (:x vb) " " (:y vb) " " (:w vb) " " (:h vb)))
+                                (.add (.-classList el) "moving")
+                                (js/clearTimeout (.-current rest-timer))
+                                (set! (.-current rest-timer)
+                                      (js/setTimeout (fn [] (.remove (.-classList el) "moving") (set-zoom-k (or (:k (.-current zoom)) 1))) 160)))))))))
+        ;; Zoom by f at a point of the screen (the map's middle when none), keeping that point still.
+        zoom-at (fn [f cx cy]
+                  (let [el (.-current svg-ref) l (.-current latest) ctm (some-> el .getScreenCTM)]
+                    (when (and el l ctm)
+                      (let [r (.getBoundingClientRect el)
+                            pt (.matrixTransform (js/DOMPoint. (or cx (+ (.-left r) (/ (.-width r) 2))) (or cy (+ (.-top r) (/ (.-height r) 2)))) (.inverse ctm))
+                            vb (:vb l) fr (:frame l)
+                            fx (/ (- (.-x pt) (:x vb)) (:w vb)) fy (/ (- (.-y pt) (:y vb)) (:h vb))
+                            k (min 16 (max 1 (* (or (:k (.-current zoom)) 1) f)))
+                            w (/ (:w fr) k) hh (/ (:h fr) k)]
+                        (set! (.-current zoom) (when-not (= k 1) {:k k :cx (+ (- (.-x pt) (* fx w)) (/ w 2)) :cy (+ (- (.-y pt) (* fy hh)) (/ hh 2))}))
+                        (apply!)))))]
     (h/use-effect (fn [] (when (#{"down" "across"} (:direction data)) (set-chosen-dir (:direction data))) nil) [(:direction data)])
     (h/use-effect (fn [] (when (string? (:at data)) (set-at (:at data))) nil) [(:at data)])
     (h/use-effect
@@ -251,7 +286,7 @@
                           (-> (if js/document.hidden (js/Promise.resolve nil)
                                   (-> (api/fetch-json (url-of {:fp @fp}))
                                       (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (reset! fp (:fp j)) (set-all (:namespaces j))))))
-                                      (.catch (fn [e] (when-not @gone (set-error (.-message e)))))))
+                                      (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
                               (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
                 (ask)
                 #(do (reset! gone true) (js/clearTimeout @timer)))))
@@ -340,7 +375,8 @@
          (fn []
            (let [b (some-> (.-current drawn) .getBBox)]
              (set-bounds (when (and b (pos? (.-width b))) {:x (- (.-x b) 14) :y (- (.-y b) 14) :w (+ (.-width b) 28) :h (+ (.-height b) 28)}))
-             (set-zoom nil))
+             (set! (.-current zoom) nil)
+             (set-zoom-k 1))
            nil)
          [view dir full])
         (h/use-effect
@@ -350,7 +386,7 @@
                            (when (or (.-ctrlKey e) (.-metaKey e) js/document.fullscreenElement)
                              (.preventDefault e)
                              (let [f (js/Math.exp (* (- (.-deltaY e)) (if (.-ctrlKey e) 0.01 0.002)))]
-                               (set-zoom (fn [z] (let [k (min 16 (max 1 (* (or (:k z) 1) f)))] (when (> k 1) (assoc z :k k))))))))]
+                               (zoom-at f (.-clientX e) (.-clientY e)))))]
                (.addEventListener el "wheel" wheel #js {:passive false})
                #(.removeEventListener el "wheel" wheel))))
          [(some? view)])
@@ -369,9 +405,9 @@
                                    :else (let [f (id-of focus)]
                                            (or (= (id-of n) f) (some #(or (and (= (:from %) f) (= (:to %) (id-of n))) (and (= (:to %) f) (= (:from %) (id-of n)))) (:edges view))))))
                 frame (or bounds {:x 0 :y 0 :w w :h h})
-                vb (view-of frame zoom)
-                k (or (:k zoom) 1)
-                zoom-by (fn [f] (set-zoom (fn [z] (let [k (min 16 (max 1 (* (or (:k z) 1) f)))] (when (> k 1) (merge {:cx (+ (:x vb) (/ (:w vb) 2)) :cy (+ (:y vb) (/ (:h vb) 2))} z {:k k}))))))
+                vb (view-of frame (.-current zoom))
+                _ (set! (.-current latest) {:frame frame :vb vb})
+                k zoom-k
                 crumbs (if (seq (:at view)) (str/split (:at view) #"\.") [])
                 project (or (last (filter seq (str/split root #"/"))) "project")
                 reset-to (fn [p] (set-at p) (set-pick nil) (set-edge nil))]
@@ -386,9 +422,9 @@
                (if (= dir "down") "↓ down" "→ across")]
               (when chosen-dir [:button.cl-full {:type "button" :on-click #(set-chosen-dir nil) :title "Pick the direction by the map's shape again"} "auto"])
               [:span.cl-zoom
-               [:button.cl-full {:type "button" :on-click #(zoom-by (/ 1 1.4)) :disabled (= k 1) :title "Zoom out"} "−"]
-               [:button.cl-full {:type "button" :on-click #(zoom-by 1.4) :title "Zoom in (or Ctrl + scroll)"} "+"]
-               (when (> k 1) [:button.cl-full {:type "button" :on-click #(set-zoom nil) :title "The whole map"} "fit"])]
+               [:button.cl-full {:type "button" :on-click #(zoom-at (/ 1 1.4) nil nil) :disabled (= k 1) :title "Zoom out"} "−"]
+               [:button.cl-full {:type "button" :on-click #(zoom-at 1.4 nil nil) :title "Zoom in (or pinch, Ctrl + scroll)"} "+"]
+               (when (> k 1) [:button.cl-full {:type "button" :on-click #(do (set! (.-current zoom) nil) (apply!)) :title "The whole map"} "fit"])]
               [:button.cl-full {:type "button" :title (if full "Leave full screen (Esc)" "Full screen")
                                 :on-click #(-> (if full (js/document.exitFullscreen) (.requestFullscreen (.-current box))) (.catch (fn [_])))}
                (if full "✕ exit" "⤢ full screen")]]
@@ -397,16 +433,23 @@
                             :viewBox (str (:x vb) " " (:y vb) " " (:w vb) " " (:h vb))
                             :style (when (and (not full) (pos? box-w)) {:height (* (:h frame) (min 1.1 (/ box-w (:w frame))))})
                             :on-pointer-down (fn [e]
-                                               (when-let [ctm (and zoom (some-> (.-current svg-ref) .getScreenCTM))]
-                                                 (set! (.-current pan) {:x (.-clientX e) :y (.-clientY e) :cx (+ (:x vb) (/ (:w vb) 2)) :cy (+ (:y vb) (/ (:h vb) 2)) :s (/ 1 (.-a ctm)) :moved false})))
+                                               (let [ctm (some-> (.-current svg-ref) .getScreenCTM)
+                                                     vb (:vb (.-current latest))]
+                                                 (when (and (.-current zoom) ctm)
+                                                   (set! (.-current pan) {:x (.-clientX e) :y (.-clientY e) :cx (+ (:x vb) (/ (:w vb) 2)) :cy (+ (:y vb) (/ (:h vb) 2)) :s (/ 1 (.-a ctm))})
+                                                   (set! (.-current dragged) false))))
                             :on-pointer-move (fn [e]
                                                (when-let [p (.-current pan)]
                                                  (let [dx (- (.-clientX e) (:x p)) dy (- (.-clientY e) (:y p))]
-                                                   (when (or (:moved p) (>= (js/Math.hypot dx dy) 4))
-                                                     (set! (.-current pan) (assoc p :moved true))
-                                                     (set-zoom #(when % (assoc % :cx (- (:cx p) (* dx (:s p))) :cy (- (:cy p) (* dy (:s p))))))))))
-                            :on-pointer-up #(js/setTimeout (fn [] (set! (.-current pan) nil)) 0)
-                            :on-click-capture #(when (:moved (.-current pan)) (.stopPropagation %))}
+                                                   (when (or (.-current dragged) (>= (js/Math.hypot dx dy) 4))
+                                                     (when-not (.-current dragged)
+                                                       (set! (.-current dragged) true)
+                                                       (some-> (.-current svg-ref) (.setPointerCapture (.-pointerId e))))
+                                                     (when (.-current zoom)
+                                                       (set! (.-current zoom) (assoc (.-current zoom) :cx (- (:cx p) (* dx (:s p))) :cy (- (:cy p) (* dy (:s p)))))
+                                                       (apply!))))))
+                            :on-pointer-up #(set! (.-current pan) nil)
+                            :on-click-capture #(when (.-current dragged) (.stopPropagation %) (set! (.-current dragged) false))}
                [:defs
                 (for [c ["muted" "blue" "green" "violet" "red"]]
                   ^{:key c} [:marker {:id (str "cl-a-" c) :viewBox "0 0 10 10" :refX 8 :refY 5 :markerUnits "userSpaceOnUse" :markerWidth 11 :markerHeight 11 :orient "auto"}

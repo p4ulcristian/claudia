@@ -28,8 +28,8 @@
   #{"git" "clojure" "calls"})
 
 (def all-forms
-  "Every form this runner has, in the draw tool's order (src/forms.ts FORM_NAMES): opt-in ones only
-  when CLAUDIA_FORMS names them."
+  "Every form this runner has, in the draw tool's order (src/forms.ts FORM_NAMES, also
+  claudia.shared.forms/order): opt-in ones only when CLAUDIA_FORMS names them."
   (vec (filter #(or (not (opt-in %)) (turned-on %)) (keys tools/form-help))))
 
 (def not-here
@@ -38,27 +38,32 @@
 
 ;; ---- the profile's preferences (/api/prefs) ----------------------------------------------------
 
+(defn deleted-forms
+  "The forms the user deleted in the Forms window (this profile's): Claude doesn't get them."
+  []
+  (let [v (store/kv "" "hiddenForms")] (if (sequential? v) (filterv string? v) [])))
+
 (defn prefs
   "{:chatColors \"each\"|\"none\" :hiddenForms [forms the user deleted in the Forms window]}."
   []
-  (let [p (store/kv "" "prefs")]
-    {:chatColors (if (= "none" (:chatColors p)) "none" "each")
-     :hiddenForms (vec (filter string? (:hiddenForms p)))}))
+  {:chatColors (if (= "none" (:chatColors (store/kv "" "prefs"))) "none" "each")
+   :hiddenForms (deleted-forms)})
 
 (defn set-prefs!
   "Changes the given preferences; returns them all."
   [next]
   (let [p (prefs)]
-    (store/kv! "" "prefs"
-               (cond-> p
-                 (#{"each" "none"} (:chatColors next)) (assoc :chatColors (:chatColors next))
-                 (sequential? (:hiddenForms next)) (assoc :hiddenForms (vec (filter string? (:hiddenForms next))))))
+    (when (#{"each" "none"} (:chatColors next))
+      (store/kv! "" "prefs" {:chatColors (:chatColors next)}))
+    (when (sequential? (:hiddenForms next))
+      (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help))) (:hiddenForms next))))))
+    p
     (prefs)))
 
 (defn hidden-forms
   "Forms Claude doesn't get here: the ones the user deleted and the opt-in ones not on this runner."
   []
-  (into (set (:hiddenForms (prefs))) not-here))
+  (into (set (deleted-forms)) not-here))
 
 ;; ---- before a draw ----------------------------------------------------------------------------
 
@@ -173,10 +178,16 @@
 ;; ---- the page's reads --------------------------------------------------------------------------
 
 (defn- drawn
-  "The values of field k of every block of form f in the scene."
-  [scene f k]
-  (set (for [b (:blocks scene) :when (and (= "form" (:kind b)) (= f (:form b)) (string? (get-in b [:data k])))]
+  "The values of field k of every block of form f in these pictures."
+  [scenes f k]
+  (set (for [scene scenes b (:blocks scene) :when (and (= "form" (:kind b)) (= f (:form b)) (string? (get-in b [:data k])))]
          (get-in b [:data k]))))
+
+(defn- drawn?
+  "ok? holds for the values of field k of form f in the chat's picture, or else in one of its
+  earlier pictures (read only when the current one doesn't do)."
+  [[scene past] f k ok?]
+  (or (ok? (drawn [scene] f k)) (ok? (drawn @past f k))))
 
 (defn- root-ok?
   "A drawn root, a folder inside one, or one above it up to the home folder (the form's path can be
@@ -192,14 +203,14 @@
   (let [u (js/URL. (.-url req) "http://x")]
     (fn [k] (.get (.-searchParams u) k))))
 
-(defn- files-read [^js res scene q]
+(defn- files-read [^js res scenes q]
   (let [root (or (q "root") "")
         rel (or (q "path") "")]
     (cond
-      (not (root-ok? (drawn scene "files" :root) root)) (h/json-reply res 403 {:error "not a folder of this chat's picture"})
+      (not (drawn? scenes "files" :root #(root-ok? % root))) (h/json-reply res 403 {:error "not a folder of this chat's pictures"})
       (= "1" (q "read")) (h/json-reply res 200 (files/read-text root rel (some-> (q "since") js/Number)))
       (= "1" (q "image")) (if-let [abs (files/image-file root rel)]
-                            (do (.writeHead res 200 #js {"content-type" (get files/mime (str/lower-case (path/extname abs)) "application/octet-stream")
+                            (do (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname abs)) 1) "application/octet-stream")
                                                          "cache-control" "max-age=60"
                                                          "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
                                 (.pipe (fs/createReadStream abs) res))
@@ -208,23 +219,23 @@
               (h/json-reply res 200 {:entries entries})
               (h/json-reply res 404 {:error "no such folder"})))))
 
-(defn- git-read [^js res scene q]
+(defn- git-read [^js res scenes q]
   (let [repo (or (q "repo") "")]
     (cond
       (not (turned-on "git")) (h/json-reply res 404 {:error "no git form here"})
-      (not (contains? (drawn scene "git" :repo) repo)) (h/json-reply res 403 {:error "not a repo of this chat's picture"})
+      (not (drawn? scenes "git" :repo #(contains? % repo))) (h/json-reply res 403 {:error "not a repo of this chat's pictures"})
       :else (-> (if-let [rev (q "commit")]
                   (git/commit-detail repo rev (q "file"))
                   (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")}))
                 (.then #(h/json-reply res 200 %))
                 (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))))
 
-(defn- clojure-read [^js res scene q form]
+(defn- clojure-read [^js res scenes q form]
   (let [root (or (q "root") "")
         reply (fn [p] (-> p (.then #(h/json-reply res 200 %)) (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))]
     (cond
       (not (turned-on form)) (h/json-reply res 404 {:error (str "no " form " form here")})
-      (not (contains? (drawn scene form :root) root)) (h/json-reply res 403 {:error "not a project of this chat's picture"})
+      (not (drawn? scenes form :root #(contains? % root))) (h/json-reply res 403 {:error "not a project of this chat's pictures"})
       (= form "calls")
       (reply (let [v (q "var")]
                (cond (nil? v) (clojure/calls-fp root (q "fp"))
@@ -240,14 +251,28 @@
 
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
-  there is no such chat). on-scene: a chat's scene changed by the page (the template button)."
-  [^js req ^js res url who scene-of]
+  there is no such chat); tools-changed!: every chat's draw tool changed (a form deleted or
+  restored in the Forms window)."
+  [^js req ^js res url who {:keys [scene-of tools-changed!]}]
   (let [method (.-method req)
         [_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|blocks/([^/]+)/template)" url)
         q (query req)]
     (cond
       (and (= url "/api/forms") (= method "GET"))
-      (do (h/json-reply res 200 {:forms all-forms :hidden (:hiddenForms (prefs)) :templates (store/templates)}) true)
+      (do (h/json-reply res 200 {:forms all-forms :hidden (deleted-forms) :notHere not-here :templates (store/templates)}) true)
+
+      ;; A form deleted or restored in the Forms window: every chat gets the new draw tool.
+      (and (= url "/api/forms") (= method "PATCH"))
+      (do (if (:read-only who)
+            (h/json-reply res 403 {:error "Read only."})
+            (-> (h/read-body req 65536)
+                (.then (fn [body]
+                         (let [{:keys [hidden]} (p/read-json body)]
+                           (set-prefs! {:hiddenForms (if (sequential? hidden) hidden [])})
+                           (when tools-changed! (tools-changed!))
+                           (h/json-reply res 200 {:hidden (deleted-forms)}))))
+                (.catch #(h/json-reply res 400 {:error (str (.-message %))}))))
+          true)
 
       (and (= url "/api/templates") (= method "GET"))
       (do (h/json-reply res 200 (store/templates)) true)
@@ -260,12 +285,14 @@
           true)
 
       chat
-      (let [scene (scene-of chat)]
+      (let [scene (scene-of chat)
+            ;; Reads are allowed inside what this chat drew, now or in an earlier picture.
+            scenes [scene (delay (store/picture-scenes chat))]]
         (cond
           (nil? scene) (h/json-reply res 404 {:error "No such chat."})
-          (and (= sub "files") (= method "GET")) (files-read res scene q)
-          (and (= sub "git") (= method "GET")) (git-read res scene q)
-          (and (#{"clojure" "calls"} sub) (= method "GET")) (clojure-read res scene q sub)
+          (and (= sub "files") (= method "GET")) (files-read res scenes q)
+          (and (= sub "git") (= method "GET")) (git-read res scenes q)
+          (and (#{"clojure" "calls"} sub) (= method "GET")) (clojure-read res scenes q sub)
           (and block (= method "POST"))
           (if (:read-only who)
             (h/json-reply res 403 {:error "Read only."})
@@ -331,7 +358,10 @@
 
 (defn off? [id kind] (= "off" (get (choices (store/settings id)) kind)))
 
-(defn- off-set [ch] (set (for [[k v] ch :when (= v "off")] k)))
+(defn- off-set
+  "The kinds a chat can't draw: switched off in its form row, or deleted in the Forms window."
+  [ch]
+  (into (set (for [[k v] ch :when (= v "off")] k)) (hidden-forms)))
 (defn- required-kinds [ch] (vec (for [[k v] ch :when (and (= v "required") (not= k "questions"))] k)))
 
 (defn- kind-of-block [b]
@@ -393,7 +423,7 @@
   "What the form row now asks, in words for Claude."
   [ch]
   (let [req (required-kinds ch)
-        off (vec (off-set ch))]
+        off (vec (for [[k v] ch :when (= v "off")] k))]
     (str/join " " (remove nil?
                           [(when (seq req)
                              (str "The user made these REQUIRED in Claudia's form row: " (str/join ", " (map kind-name req))

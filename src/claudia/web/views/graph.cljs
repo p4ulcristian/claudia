@@ -154,13 +154,14 @@
                              :label (when lab {:x (+ ox (.-x lab)) :y (+ oy (.-y lab)) :w (.-width lab) :h (.-height lab)})}))}))))))
 
 (defn- fit-of
-  "How much a layout must scale to fit: the width, and up to twice the pane's visible height."
+  "How much a layout must scale to fit: the width, and up to twice the pane's visible height (the
+  right side scrolls)."
   [{:keys [w h]} avail-w avail-h]
   (min (/ avail-w (+ w (* 2 pad))) (/ (* 2 avail-h) (+ h (* 2 pad)))))
 
 (def ^:private variants [:right :down :down-stacked])
 
-(defn- node-view [{:keys [x y w h d lines notes node]} fresh?]
+(defn- node-view [{:keys [x y w h d lines notes node]} fresh? pulse]
   (let [shape (or (:shape node) "circle")
         circle? (= shape "circle")
         cx (/ w 2)
@@ -177,6 +178,11 @@
         color (if (some #{(:color node)} colors) (:color node) "blue")]
     [:g {:class (str "node c-" color " s-" (or (:state node) "none") (when fresh? " fresh"))
          :style {:transform (str "translate(" x "px, " y "px)")}}
+     ;; A changed node rings three times; a new key per draw starts it again.
+     (when (pos? pulse)
+       (if circle?
+         ^{:key pulse} [:circle.ring {:cx cx :cy cy :r (+ 5 (/ d 2))}]
+         ^{:key pulse} [:rect.ring {:x -5 :y -5 :width (+ w 10) :height (+ h 10) :rx (if (= shape "pill") (+ 5 (/ h 2)) 13)}]))
      (draw "fray")
      (draw "body")
      (into [:text.label {:x cx :y text-top :text-anchor "middle" :dominant-baseline "middle"}]
@@ -192,103 +198,149 @@
                   [:circle {:r 8}] [:path {:d "M-3,-3 L3,3 M3,-3 L-3,3"}]]
        nil)]))
 
+(defn- avail-size
+  "The room for a graph: its block's width (or the scroller's, less its padding) and 80% of the
+  scroller's height."
+  [^js el]
+  (let [^js stage (some-> el (.closest ".right-scroll"))
+        w (let [cw (some-> el .-clientWidth)] (if (pos? cw) cw (- (or (some-> stage .-clientWidth) 800) 36)))]
+    [w (max 320 (* 0.8 (or (some-> stage .-clientHeight) 700)))]))
+
 (defn graph-view
-  "Render with [:f> graph-view block]."
-  [{:keys [nodes edges groups]}]
-  (let [uid (str/replace (h/use-id) #"[^a-zA-Z0-9]" "")
-        box (h/use-ref nil)
-        [laid set-laid] (h/use-state nil)
-        [width set-width] (h/use-state 0)
-        known (h/use-ref #{})
-        fresh (h/use-ref #{})
-        kept (h/use-ref nil)
-        g {:nodes (vec nodes) :edges (vec edges) :groups (vec groups)}]
-    ;; Lay out again when the block's width changes noticeably (window resize, folding the list).
-    (h/use-effect
-     (fn []
-       (let [t (atom nil)
-             ro (js/ResizeObserver.
-                 (fn [entries]
-                   (let [w (.. (aget entries 0) -contentRect -width)]
-                     (js/clearTimeout @t)
-                     (reset! t (js/setTimeout #(set-width (fn [old] (if (> (js/Math.abs (- w old)) 40) w old))) 150)))))]
-         (.observe ro (.-current box))
-         #(do (.disconnect ro) (js/clearTimeout @t))))
-     [])
-    (h/use-effect
-     (fn []
-       (let [gone (atom false)]
-         (if (empty? (:nodes g))
-           (set-laid nil)
-           (let [^js el (.-current box)
-                 ^js stage (some-> el (.closest ".picture-scroll"))
-                 aw (or (some-> el .-clientWidth) 600)
-                 ah (max 320 (* 0.8 (or (some-> stage .-clientHeight) 700)))]
-             (-> (.-ready js/document.fonts)
-                 (.then #(js/Promise.all (clj->js (map (fn [v] (layout g v)) variants))))
-                 (.then (fn [all]
-                          (when-not @gone
-                            (let [all (vec all)
-                                  ;; Past 1.2 the picture is drawn at 1.2 anyway: a tie, and the
-                                  ;; first variant (left to right) wins it.
-                                  fits (mapv #(min 1.2 (fit-of % aw ah)) all)
-                                  top (apply max fits)
-                                  best (first (keep-indexed #(when (= %2 top) %1) fits))
-                                  k (.-current kept)
-                                  ki (when k (first (keep-indexed #(when (= %2 k) %1) variants)))
-                                  best (if (and ki (< (fits best) (* 1.25 (fits ki)))) ki best)
-                                  l (nth all best)
-                                  ids (set (concat (map :id (:nodes l)) (map :id (:edges l))))]
-                              (set! (.-current kept) (:variant l))
-                              (set! (.-current fresh) (into #{} (remove (.-current known)) ids))
-                              (set! (.-current known) ids)
-                              (set-laid (assoc l :scale (max 0.5 (min 1.2 (fits best)))))))))
-                 (.catch #(js/console.error "layout" %)))))
-         #(reset! gone true)))
-     [g width])
-    [:div.diagram {:ref #(set! (.-current box) %)
-                   :style {"--chalk-mask" (str "url(#chalk-" uid ")")}}
-     (when laid
+  "Render with [:f> graph-view block changed seq]: changed = ids (nodes, arrows) the last draw
+  changed, seq = that draw's number (a changed node rings once per draw)."
+  ([block] (graph-view block #{} 0))
+  ([{:keys [nodes edges groups]} changed seq-no]
+   (let [uid (str/replace (h/use-id) #"[^a-zA-Z0-9]" "")
+         box (h/use-ref nil)
+         layer (h/use-ref nil)
+         [laid set-laid] (h/use-state nil)
+         [width set-width] (h/use-state 0)
+         [view set-view] (h/use-state {:k 1 :x 0 :y 0})
+         known (h/use-ref #{})
+         fresh (h/use-ref #{})
+         kept (h/use-ref nil)
+         changed (set changed)
+         ;; Zoom around a point of the diagram box (px from its top-left).
+         zoom-at (fn [px py factor]
+                   (set-view (fn [{:keys [k x y]}]
+                               (let [k2 (min 4 (max 0.3 (* k factor)))
+                                     ^js l (.-current layer)
+                                     lx (or (some-> l .-offsetLeft) 0) ly (or (some-> l .-offsetTop) 0)
+                                     ux (/ (- px lx x) k) uy (/ (- py ly y) k)]
+                                 {:k k2 :x (- px lx (* ux k2)) :y (- py ly (* uy k2))}))))]
+     ;; Ctrl+wheel and trackpad pinch zoom the picture, not the page: a native listener, as React's
+     ;; wheel listener is passive and can't stop the browser's zoom.
+     (h/use-effect
+      (fn []
+        (when-let [^js el (.-current box)]
+          (let [wheel (fn [^js e]
+                        (when (or (.-ctrlKey e) (.-metaKey e))
+                          (.preventDefault e)
+                          (let [r (.getBoundingClientRect el)]
+                            (zoom-at (- (.-clientX e) (.-left r)) (- (.-clientY e) (.-top r)) (js/Math.exp (* -0.0025 (.-deltaY e)))))))]
+            (.addEventListener el "wheel" wheel #js {:passive false})
+            #(.removeEventListener el "wheel" wheel))))
+      [laid])
+     ;; Lay out again when the block's width changes noticeably (window resize, divider drag).
+     (h/use-effect
+      (fn []
+        (let [t (atom nil)
+              ro (js/ResizeObserver.
+                  (fn [entries]
+                    (let [w (.. (aget entries 0) -contentRect -width)]
+                      (js/clearTimeout @t)
+                      (reset! t (js/setTimeout #(set-width (fn [old] (if (> (js/Math.abs (- w old)) 40) w old))) 150)))))]
+          (.observe ro (.-current box))
+          #(do (.disconnect ro) (js/clearTimeout @t))))
+      [])
+     (h/use-effect
+      (fn []
+        (let [gone (atom false)
+              g {:nodes (vec nodes) :edges (vec edges) :groups (vec groups)}]
+          (if (empty? (:nodes g))
+            (do (set-laid nil) (set! (.-current kept) nil))
+            (let [[aw ah] (avail-size (.-current box))]
+              (-> (.-ready js/document.fonts)
+                  (.then #(js/Promise.all (clj->js (map (fn [v] (layout g v)) variants))))
+                  (.then (fn [all]
+                           (when-not @gone
+                             (let [all (vec all)
+                                   ;; The layout that fits the pane best; another only when it fits
+                                   ;; clearly better, so the picture doesn't jump.
+                                   fits (mapv #(fit-of % aw ah) all)
+                                   top (apply max fits)
+                                   best (first (keep-indexed #(when (= %2 top) %1) fits))
+                                   k (.-current kept)
+                                   ki (when k (first (keep-indexed #(when (= %2 k) %1) variants)))
+                                   best (if (and ki (< (fits best) (* 1.25 (fits ki)))) ki best)
+                                   l (nth all best)
+                                   ids (set (concat (map :id (:nodes l)) (map :id (:edges l))))]
+                               (set! (.-current kept) (:variant l))
+                               (set! (.-current fresh) (into #{} (remove (.-current known)) ids))
+                               (set! (.-current known) ids)
+                               (set-laid (assoc l :scale (max 0.5 (min 1.2 (fits best)))))))))
+                  (.catch #(js/console.error "layout" %)))))
+          #(reset! gone true)))
+      [nodes edges groups width])
+     (if-not laid
+       [:div.diagram {:ref #(set! (.-current box) %)}]
        (let [{:keys [w h scale]} laid
              vw (+ w (* 2 pad)) vh (+ h (* 2 pad))
-             fresh-ids (.-current fresh)]
-         [:svg {:viewBox (str (- pad) " " (- pad) " " vw " " vh)
-                :width (* vw scale) :height (* vh scale)}
-          [:defs
-           [:pattern {:id (str "grain-" uid) :patternUnits "userSpaceOnUse" :width chalk/grain-size :height chalk/grain-size}
-            [:image {:href (chalk/grain-url :fray) :width chalk/grain-size :height chalk/grain-size}]]
-           [:mask {:id (str "chalk-" uid) :maskUnits "userSpaceOnUse"
-                   :x (- (- pad) 40) :y (- (- pad) 40) :width (+ vw 80) :height (+ vh 80)
-                   :style {:mask-type "alpha"}}
-            [:rect {:x (- (- pad) 40) :y (- (- pad) 40) :width (+ vw 80) :height (+ vh 80)
-                    :fill (str "url(#grain-" uid ")")}]]
-           (for [c colors]
-             ^{:key c}
-             [:marker {:id (str "arrow-" uid "-" c) :viewBox "0 0 10 10" :refX 9 :refY 5
-                       :markerWidth 7 :markerHeight 7 :orient "auto-start-reverse"}
-              [:path {:d "M0,0 L10,5 L0,10 z" :class (str "arrowhead c-" c)}]])]
-          [:g
-           (for [{:keys [id x y group] gw :w gh :h} (:groups laid)]
-             ^{:key (str "g:" id)}
-             [:g {:class (str "group c-" (if (some #{(:color group)} colors) (:color group) "grey"))
-                  :style {:transform (str "translate(" x "px, " y "px)")}}
-              [:rect.fray {:width gw :height gh :rx 13}]
-              [:rect {:width gw :height gh :rx 13}]
-              [:text {:x 16 :y 22} (:label group)]])
-           (for [{:keys [id d edge label]} (:edges laid)
-                 :let [c (if (some #{(:color edge)} colors) (:color edge) "grey")
-                       dash (when (:dashed edge) "5 4")
-                       css-d (str "path(\"" d "\")")]]
-             ^{:key (str "e:" id)}
-             [:g {:class (str "edge c-" c (when (fresh-ids id) " fresh"))}
-              [:path.fray {:d d :style {:d css-d} :stroke-dasharray dash}]
-              [:path {:d d :style {:d css-d} :stroke-dasharray dash
-                      :marker-end (str "url(#arrow-" uid "-" c ")")}]
-              (when (and label (not (str/blank? (:label edge))))
-                [:g.edge-label {:style {:transform (str "translate(" (:x label) "px, " (:y label) "px)")}}
-                 [:rect {:width (:w label) :height (:h label) :rx 5}]
-                 [:text {:x (/ (:w label) 2) :y (+ 0.5 (/ (:h label) 2)) :text-anchor "middle" :dominant-baseline "middle"}
-                  (:label edge)]])])
-           (for [n (:nodes laid)]
-             ^{:key (str "n:" (:id n))}
-             [node-view n (contains? fresh-ids (:id n))])]]))]))
+             fresh-ids (.-current fresh)
+             on-down (fn [^js e]
+                       (let [sx (.-clientX e) sy (.-clientY e) vx (:x view) vy (:y view)
+                             move (fn [^js m] (set-view #(assoc % :x (+ vx (- (.-clientX m) sx)) :y (+ vy (- (.-clientY m) sy)))))
+                             up (atom nil)]
+                         (reset! up (fn []
+                                      (js/window.removeEventListener "pointermove" move)
+                                      (js/window.removeEventListener "pointerup" @up)))
+                         (js/window.addEventListener "pointermove" move)
+                         (js/window.addEventListener "pointerup" @up)))]
+         [:div.diagram {:ref #(set! (.-current box) %)
+                        :on-pointer-down on-down
+                        :on-double-click #(set-view {:k 1 :x 0 :y 0})
+                        :style {"--chalk-mask" (str "url(#chalk-" uid ")")}}
+          [:div.zoom-layer {:ref #(set! (.-current layer) %)
+                            :style {:transform (str "translate(" (:x view) "px, " (:y view) "px) scale(" (:k view) ")")}}
+           [:svg {:viewBox (str (- pad) " " (- pad) " " vw " " vh)
+                  :width (* vw scale) :height (* vh scale)}
+            [:defs
+             [:pattern {:id (str "grain-" uid) :patternUnits "userSpaceOnUse" :width chalk/grain-size :height chalk/grain-size}
+              [:image {:href (chalk/grain-url :fray) :width chalk/grain-size :height chalk/grain-size}]]
+             [:mask {:id (str "chalk-" uid) :maskUnits "userSpaceOnUse"
+                     :x (- (- pad) 40) :y (- (- pad) 40) :width (+ vw 80) :height (+ vh 80)
+                     :style {:mask-type "alpha"}}
+              [:rect {:x (- (- pad) 40) :y (- (- pad) 40) :width (+ vw 80) :height (+ vh 80)
+                      :fill (str "url(#grain-" uid ")")}]]
+             (for [c colors]
+               ^{:key c}
+               [:marker {:id (str "arrow-" uid "-" c) :viewBox "0 0 10 10" :refX 9 :refY 5
+                         :markerWidth 7 :markerHeight 7 :orient "auto-start-reverse"}
+                [:path {:d "M0,0 L10,5 L0,10 z" :class (str "arrowhead c-" c)}]])]
+            [:g
+             (for [{:keys [id x y group] gw :w gh :h} (:groups laid)]
+               ^{:key (str "g:" id)}
+               [:g {:class (str "group c-" (if (some #{(:color group)} colors) (:color group) "grey"))
+                    :style {:transform (str "translate(" x "px, " y "px)")}}
+                [:rect.fray {:width gw :height gh :rx 13}]
+                [:rect {:width gw :height gh :rx 13}]
+                [:text {:x 16 :y 22} (:label group)]])
+             (for [{:keys [id d edge label]} (:edges laid)
+                   :let [c (if (some #{(:color edge)} colors) (:color edge) "grey")
+                         dash (when (:dashed edge) "5 4")
+                         css-d (str "path(\"" d "\")")]]
+               ^{:key (str "e:" id)}
+               [:g {:class (str "edge c-" c (when (fresh-ids id) " fresh") (when (changed id) " hot"))}
+                [:path.fray {:d d :style {:d css-d} :stroke-dasharray dash}]
+                [:path {:d d :style {:d css-d} :stroke-dasharray dash
+                        :marker-end (str "url(#arrow-" uid "-" c ")")}]
+                (when (and label (not (str/blank? (:label edge))))
+                  [:g.edge-label {:style {:transform (str "translate(" (:x label) "px, " (:y label) "px)")}}
+                   [:rect {:width (:w label) :height (:h label) :rx 5}]
+                   [:text {:x (/ (:w label) 2) :y (+ 0.5 (/ (:h label) 2)) :text-anchor "middle" :dominant-baseline "middle"}
+                    (:label edge)]])])
+             (for [n (:nodes laid)
+                   :let [f? (contains? fresh-ids (:id n))]]
+               ^{:key (str "n:" (:id n))}
+               [node-view n f? (if (and (changed (:id n)) (not f?)) seq-no 0)])]]]])))))

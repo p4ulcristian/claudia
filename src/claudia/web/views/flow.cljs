@@ -4,9 +4,8 @@
   it is at; a caption says what happens. Back / next (or left/right while it has focus), and several
   ways through (scenarios) to switch between."
   (:require [clojure.string :as str]
-            [reagent.core :as r]
             [reagent.hooks :as h]
-            [claudia.web.hl :as hl]
+            [claudia.web.shiki :as shiki]
             [claudia.web.views.code :as code]))
 
 (def ^:private card-w 260)
@@ -15,20 +14,32 @@
 (defn- card-body
   "A card's text, coloured when it names a language; fresh (a piece of it) is marked as new."
   [text lang fresh]
-  (let [html (h/use-memo #(hl/lines text lang) [text lang])
-        from (if (seq fresh) (str/index-of text fresh) nil)]
-    (cond
-      ;; Coloured, the new part is marked by line (the lines it covers).
-      html (let [nl-before (when from (count (re-seq #"\n" (subs text 0 from))))
-                 nl-in (when from (count (re-seq #"\n" fresh)))]
-             [:pre (map-indexed (fn [i l]
-                                  ^{:key i}
-                                  [:span {:class (when (and from (<= nl-before i (+ nl-before nl-in))) "new")}
-                                   [:span {:dangerouslySetInnerHTML (r/unsafe-html l)}]
-                                   (when (< i (dec (count html))) "\n")])
-                                html)])
-      from [:pre (subs text 0 from) [:span.new fresh] (subs text (+ from (count fresh)))]
-      :else [:pre text])))
+  (let [tokens (shiki/use-tokens text lang)
+        from (if (seq fresh) (or (str/index-of text fresh) -1) -1)
+        to (if (neg? from) -1 (+ from (count fresh)))
+        lines (if tokens
+                (map (fn [^js l] (map (fn [^js t] {:s (.-content t) :color (.-color t)}) (array-seq l))) (array-seq tokens))
+                (map (fn [l] [{:s l}]) (str/split text #"\n" -1)))
+        n (count lines)
+        ;; Pieces of text with their colour, split where the new part starts and ends.
+        pieces (loop [ls (map-indexed vector lines) at 0 out []]
+                 (if-let [[li line] (first ls)]
+                   (let [[at out] (reduce (fn [[at out] t]
+                                            (let [len (count (:s t))
+                                                  edges (vec (concat [0] (sort (distinct (filter #(and (pos? %) (< % len)) [(- from at) (- to at)]))) [len]))]
+                                              [(+ at len)
+                                               (into out (for [k (range (dec (count edges)))]
+                                                           {:s (subs (:s t) (edges k) (edges (inc k))) :color (:color t) :at (+ at (edges k))}))]))
+                                          [at out]
+                                          (concat line (when (< li (dec n)) [{:s "\n"}])))]
+                     (recur (rest ls) at out))
+                   out))]
+    (into [:pre]
+          (map-indexed (fn [k p]
+                         ^{:key k} [:span {:class (when (and (>= (:at p) from) (< (:at p) to)) "new")
+                                           :style (when (:color p) {:color (:color p)})}
+                                    (:s p)])
+                       pieces))))
 
 (defn flow-form [data]
   (let [stations (items (:stations data))
@@ -99,7 +110,7 @@
         (for [l lanes]
           (let [now (card-of (:id l) f)
                 card (or now (some #(card-of (:id l) (nth frames %)) (range (dec n) -1 -1)))
-                lines (apply max 1 (for [fr frames :let [c (card-of (:id l) fr)] :when c] (count (str/split (str (:body c)) #"\n"))))
+                lines (apply max 1 (for [fr frames :let [c (card-of (:id l) fr)] :when c] (count (str/split (str (:body c)) #"\n" -1))))
                 w (min card-w (* 0.48 (:w x)))
                 at (if card (get-in x [:at (:at card)] 0) 0)
                 left (max 0 (min (- at (/ w 2)) (- (:w x) w)))]

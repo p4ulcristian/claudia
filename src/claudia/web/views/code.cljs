@@ -3,9 +3,8 @@
   lines, long code folded around what matters, copy. Used by the files form (a file opened) and the
   git form (a diff)."
   (:require [clojure.string :as str]
-            [reagent.core :as r]
             [reagent.hooks :as h]
-            [claudia.web.hl :as hl]))
+            [claudia.web.shiki :as shiki]))
 
 (def ^:private fold-over 60) ; longer code folds
 (def ^:private around 4)     ; lines kept open around each marked or noted line
@@ -42,13 +41,26 @@
         (let [on (set (mapcat #(range (max 0 (- % around)) (inc (min (dec (count rows)) (+ % around)))) idx))]
           (mapv on (range (count rows))))))))
 
+(defn token-spans
+  "A line's Shiki tokens as coloured spans."
+  [^js toks]
+  (for [[k ^js t] (map-indexed vector (array-seq toks))]
+    ^{:key k} [:span {:style (merge {:color (.-color t)} (shiki/font-style (.-fontStyle t)))} (.-content t)]))
+
+(defn ext-of
+  "A file name's extension (what picks its language), or nil."
+  [file]
+  (let [file (str file)]
+    (when (str/includes? file ".") (last (str/split file #"\.")))))
+
 (defn code-view
   "data: {:file :code :lang :line (first number) :diff :mark :notes :whole :error}."
   [data]
   (let [rows (h/use-memo #(code-rows data) [(:code data) (:line data) (:diff data)])
-        file (or (:file data) "")
-        lang (or (:lang data) (hl/ext-of file))
-        coloured (h/use-memo #(hl/lines (str/join "\n" (map :text rows)) lang) [rows lang])
+        file (if (string? (:file data)) (:file data) "")
+        lang (or (:lang data) (ext-of file))
+        text (h/use-memo #(str/join "\n" (map :text rows)) [rows])
+        tokens (shiki/use-tokens text lang)
         marked (marked-lines (:mark data))
         notes (group-by #(js/Number (:line %)) (items (:notes data)))
         shown (if (:whole data) (vec (repeat (count rows) true)) (shown-rows rows (into marked (keys notes))))
@@ -73,7 +85,7 @@
                                    [:button.f-fold {:type "button" :on-click (fn [] (set-opened #(conj % i)))}
                                     (str "⋯ " (- j i) " line" (when (not= 1 (- j i)) "s"))]))))
                   (let [r (nth rows i)
-                        html (nth coloured i nil)]
+                        toks (shiki/line tokens i)]
                     (recur (inc i) open-until
                            (-> out
                                (conj ^{:key i}
@@ -81,8 +93,8 @@
                                                     (when (and (:n r) (marked (:n r))) "hot")]}
                                  [:span.num (or (:n r) "")]
                                  [:span.sign (if (= "-" (:sign r)) "−" (:sign r))]
-                                 (if html
-                                   [:code {:dangerouslySetInnerHTML (r/unsafe-html (if (seq html) html " "))}]
+                                 (if (and toks (pos? (.-length toks)))
+                                   (into [:code] (token-spans toks))
                                    [:code (if (seq (:text r)) (:text r) " ")])])
                                (into (for [nt (when (:n r) (get notes (:n r)))]
                                        ^{:key (str "n" (:id nt))}

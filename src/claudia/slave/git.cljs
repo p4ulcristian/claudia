@@ -3,7 +3,12 @@
   commit's files and patch. Read only: nothing here writes to a repo."
   (:require ["node:child_process" :as cp]
             ["node:crypto" :as crypto]
-            [clojure.string :as str]))
+            ["node:fs" :as fs]
+            ["node:path" :as path]
+            [clojure.string :as str]
+            [claudia.shared.git-layout :as layout]))
+
+(defn- locale< [a b] (.localeCompare (str a) (str b)))
 
 (defn- git
   "Promise of git's stdout; allow-fail: an error exit gives what it printed (or \"\")."
@@ -68,55 +73,36 @@
                                :let [nm (str/replace (str/trim ref) #"^refs/remotes/" "")]
                                :when (and (seq nm) (not (str/ends-with? nm "/HEAD")) (not (ups nm)))]
                            {:name nm :local false :remote true :kind "remote" :tracked false :gone false :ahead 0 :behind 0})]
-             (vec (concat (sort-by :name locals) (sort-by :name remotes)))))))
+             (vec (concat (sort-by :name locale< locals) (sort-by :name locale< remotes)))))))
 
-(defn- working-copy [root]
+(defn- working-copy
+  "Uncommitted work: staged / unstaged / untracked counts and the files (one git status). A file
+  both staged and changed again counts in both."
+  [root]
   (.then (git root ["status" "--porcelain=v1" "--untracked-files=all"] true)
          (fn [out]
-           (let [files (vec (for [line (str/split-lines out) :when (> (count line) 3)
-                                  :let [x (subs line 0 1) y (subs line 1 2)
-                                        p (last (str/split (subs line 3) #" -> "))]]
-                              {:path p :x x :y y
-                               :status (if (= "??" (str x y)) "?" (let [s (str/trim (if (not= y " ") y x))] (if (seq s) s "M")))}))]
-             {:staged (count (filter #(and (not= "?" (:status %)) (not= " " (:x %))) files))
-              :unstaged (count (filter #(and (not= "?" (:status %)) (not= " " (:y %))) files))
-              :untracked (count (filter #(= "?" (:status %)) files))
-              :total (count files)
-              :files (mapv #(select-keys % [:path :status]) files)}))))
+           (let [rows (for [line (str/split out #"\n") :when (seq line)
+                            :let [x (subs line 0 1) y (subs line 1 (min 2 (count line)))
+                                  p (last (str/split (subs line (min 3 (count line))) #" -> "))]]
+                        (if (= "??" (str x y))
+                          {:path p :status "?" :untracked true}
+                          {:path p :status (let [s (str/trim (if (not= y " ") y x))] (if (seq s) s "M"))
+                           :staged (not= x " ") :unstaged (not= y " ")}))
+                 staged (count (filter :staged rows))
+                 unstaged (count (filter :unstaged rows))
+                 untracked (count (filter :untracked rows))]
+             {:staged staged :unstaged unstaged :untracked untracked :total (+ staged unstaged untracked)
+              :files (mapv #(select-keys % [:path :status]) rows)}))))
 
-(defn- lanes
-  "Each commit's lane (:col), newest first, children before parents; only parents in view get one."
-  [commits]
-  (let [present (set (map :hash commits))]
-    (loop [cs commits lanes [] out []]
-      (if-let [c (first cs)]
-        (let [free #(or (first (keep-indexed (fn [i x] (when (nil? x) i)) %)) (count %))
-              col (or (first (keep-indexed #(when (= %2 (:hash c)) %1) lanes)) (free lanes))
-              lanes (mapv #(if (= % (:hash c)) nil %) (if (>= col (count lanes)) (conj lanes nil) lanes))
-              parents (filter present (:parents c))
-              lanes (if (empty? parents)
-                      (assoc lanes col nil)
-                      (reduce (fn [ls p] (if (some #{p} ls) ls (let [i (free ls)] (assoc (if (>= i (count ls)) (conj ls nil) ls) i p))))
-                              (assoc lanes col (first parents))
-                              (rest parents)))]
-          (recur (rest cs) lanes (conj out (assoc c :col col))))
-        out))))
-
-(defn- colour-trunks
-  "A commit on a branch's first-parent trunk gets that tip's colour key; merged-in history stays nil."
-  [commits]
-  (let [idx (into {} (map-indexed (fn [i c] [(:hash c) i])) commits)
-        tip? (fn [types c] (some #(types (:type %)) (:refs c)))
-        tips (concat (filter #(tip? #{"branch" "head"} %) commits)
-                     (filter #(and (not (tip? #{"branch" "head"} %)) (tip? #{"remote"} %)) commits))]
-    (first
-     (reduce (fn [[cs n] tip]
-               (loop [cs cs i (idx (:hash tip))]
-                 (if (and i (nil? (:colorKey (nth cs i))))
-                   (recur (assoc-in cs [i :colorKey] n) (some-> (first (:parents (nth cs i))) idx))
-                   [cs (inc n)])))
-             [(mapv #(assoc % :colorKey nil) commits) 0]
-             tips))))
+(defn- last-fetched
+  "When the repo last fetched (FETCH_HEAD's time, ISO), or nil."
+  [root]
+  (.then (git root ["rev-parse" "--absolute-git-dir"] true)
+         (fn [dir]
+           (let [dir (str/trim dir)]
+             (when (seq dir)
+               (try (.toISOString (.-mtime (fs/statSync (path/join dir "FETCH_HEAD"))))
+                    (catch :default _ nil)))))))
 
 (defn fingerprint
   "A digest of everything the graph shows: refs, HEAD, the working tree."
@@ -141,17 +127,20 @@
              (-> (all (git root ["rev-parse" "HEAD"] true)
                       (git root ["symbolic-ref" "--quiet" "--short" "HEAD"] true)
                       (tracking root)
-                      (working-copy root))
-                 (.then (fn [[head current tr dirty]]
-                          (.then (roster root tr (str/trim current)) #(vector head current tr dirty %))))
+                      (working-copy root)
+                      (last-fetched root))
+                 (.then (fn [[head current tr dirty fetched]]
+                          (.then (roster root tr (str/trim current)) #(vector head current tr dirty fetched %))))
                  (.then
-                  (fn [[head current tr dirty branches-list]]
+                  (fn [[head current tr dirty fetched branches-list]]
                     (let [head (str/trim head)
-                          wanted (when (seq branches) (filterv #(re-matches rev-re %) (str/split branches #",")))
+                          ;; A stale branch filter can't break the log: only names that still exist count.
+                          known (set (map :name branches-list))
+                          wanted (when (seq branches) (filterv known (str/split branches #",")))
                           revs (if (seq wanted) wanted ["--branches" "--tags" "--remotes" "HEAD"])
                           fmt (str (str/join F ["%H" "%P" "%an" "%ar" "%D" "%s" "%at"]) R)]
                       (if-not (seq head)
-                        {:fp now :commits [] :head "" :currentBranch (str/trim current) :dirty dirty :more false :branches branches-list}
+                        {:fp now :commits [] :head "" :currentBranch (str/trim current) :detached false :dirty dirty :more false :branches branches-list :fetched fetched}
                         (.then (git root (concat ["log"] revs ["--topo-order" (str "--max-count=" (inc limit)) (str "--pretty=format:" fmt) "--"]))
                                (fn [out]
                                  (let [cs (vec (for [rec (map str/trim (str/split out (re-pattern R))) :when (seq rec)
@@ -160,35 +149,93 @@
                                                   :time (js/Number at) :refs (parse-refs refs tr) :subject subject}))
                                        more (> (count cs) limit)
                                        cs (if more (subvec cs 0 limit) cs)]
-                                   {:fp now :commits (colour-trunks (lanes cs)) :head head :currentBranch (str/trim current)
-                                    :detached (not (seq (str/trim current))) :dirty dirty :more more :branches branches-list}))))))))))))))
+                                   {:fp now :commits (layout/layout-graph cs) :head head :currentBranch (str/trim current)
+                                    :detached (not (seq (str/trim current))) :dirty dirty :more more :branches branches-list :fetched fetched}))))))))))))))
 
 ;; ---- one commit, or WORKING (the uncommitted changes) ----
 
-(def ^:private budget (* 1536 1024))
+(def ^:private max-lines
+  "Beyond this many changed lines the patch isn't made at all (it can be hundreds of MB); the files
+  load one at a time."
+  20000)
+(def ^:private budget
+  "Beyond this many bytes of patch only the first files' patches come."
+  (* 1.5 1024 1024))
 
-(defn- name-status [out]
-  (vec (for [line (str/split-lines out) :when (seq line)
+(defn- too-big? [files] (> (reduce + (map #(+ (:additions %) (:deletions %)) files)) max-lines))
+
+(defn- name-status
+  "\"M\tpath\", \"A\tpath\", \"D\tpath\", \"R100\told\tnew\"."
+  [out]
+  (vec (for [line (str/split out #"\n") :when (seq line)
              :let [[st a b] (str/split line #"\t")]]
          (if (#{"R" "C"} (subs st 0 1)) {:path b :oldPath a :status "R"} {:path a :oldPath nil :status (subs st 0 1)}))))
 
-(defn- numstat [out]
-  (into {} (for [line (str/split-lines out) :when (seq line)
+(defn- numstat
+  "\"12\t3\tpath\" per file (\"-\t-\tpath\" when binary; renames as \"old => new\" or \"dir/{a => b}/f\")."
+  [out]
+  (into {} (for [line (str/split out #"\n") :when (seq line)
                  :let [[add del & rest-parts] (str/split line #"\t")
                        raw (str/join "\t" rest-parts)
                        [_ pre _ new post] (re-matches #"^(.*)\{(.*) => (.*)\}(.*)$" raw)
                        p (if pre (str/replace (str pre new post) "//" "/") (or (second (re-matches #"^.* => (.*)$" raw)) raw))]]
              [p {:binary (= add "-") :additions (if (= add "-") 0 (js/Number add)) :deletions (if (= del "-") 0 (js/Number del))}])))
 
-(defn- finish [meta files diff]
+(defn- merge-files [counts statuses]
+  (mapv #(merge % (get counts (:path %) {:binary false :additions 0 :deletions 0})) statuses))
+
+(defn- finish
+  "The detail with its stats; diff nil: too big to make, every file loads on its own."
+  [meta files diff]
   (let [stats {:files (count files) :additions (reduce + (map :additions files)) :deletions (reduce + (map :deletions files))}]
-    (if (<= (count diff) budget)
-      {:meta meta :files files :diff diff :stats stats}
+    (cond
+      (nil? diff) {:meta meta :files (mapv #(assoc % :omitted true) files) :diff "" :truncated true :stats stats}
+      (<= (count diff) budget) {:meta meta :files files :diff diff :stats stats}
+      :else
       (let [secs (str/split diff #"(?m)^(?=diff --git )")
             [kept _] (reduce (fn [[k size] s] (if (> (+ size (count s)) budget) [k size] [(conj k s) (+ size (count s))])) [[] 0] secs)
-            paths (set (keep #(second (or (re-find #"(?m)^\+\+\+ (.+)$" %) (re-find #"(?m)^--- (.+)$" %))) kept))]
+            paths (set (keep #(let [m (second (or (re-find #"(?m)^\+\+\+ (.+)$" %) (re-find #"(?m)^--- (.+)$" %)))]
+                                (when (not= m "/dev/null") m))
+                             kept))]
         {:meta meta :files (mapv #(if (paths (:path %)) % (assoc % :omitted true)) files)
          :diff (str/join kept) :truncated true :stats stats}))))
+
+(defn- line-count
+  "A file's line count, nil when it is binary."
+  [abs]
+  (try
+    (let [buf (fs/readFileSync abs)]
+      (when-not (.includes (.subarray buf 0 8000) 0)
+        (let [nl (loop [i 0 n 0] (if (< i (.-length buf)) (recur (inc i) (if (= 10 (aget buf i)) (inc n) n)) n))]
+          (if (and (pos? (.-length buf)) (not= 10 (aget buf (dec (.-length buf))))) (inc nl) nl))))
+    (catch :default _ 0)))
+
+(defn- working-detail
+  "Everything not committed: tracked changes against HEAD (staged and not) plus untracked files as
+  additions."
+  [root]
+  (.then (all (git root ["diff" "HEAD" "--no-color" "--numstat" "-M"] true)
+              (git root ["diff" "HEAD" "--no-color" "--name-status" "-M"] true)
+              (git root ["ls-files" "--others" "--exclude-standard"] true)
+              (git root ["rev-parse" "HEAD"] true))
+         (fn [[ns nst untracked-raw head]]
+           (let [untracked (filterv seq (str/split untracked-raw #"\n"))
+                 files (into (merge-files (numstat ns) (name-status nst))
+                             (for [f untracked :let [n (line-count (path/join root f))]]
+                               {:path f :oldPath nil :status "?" :binary (nil? n) :additions (or n 0) :deletions 0}))
+                 meta {:hash "WORKING" :author "" :email "" :date (.toISOString (js/Date.)) :when "now"
+                       :parents (if (seq (str/trim head)) [(str/trim head)] []) :subject "Uncommitted changes" :body ""}]
+             (if (too-big? files)
+               (finish meta files nil)
+               (-> (git root ["diff" "HEAD" "--no-color" "--no-prefix" "--patch" "-M"] true)
+                   ;; Untracked files: each one's patch against /dev/null (git exits 1 on it), one by one.
+                   (.then (fn [diff]
+                            (reduce (fn [p f]
+                                      (.then p (fn [acc]
+                                                 (.then (git root ["diff" "--no-index" "--no-color" "--no-prefix" "/dev/null" f] true)
+                                                        (fn [d] (if (seq d) (str acc (when (and (seq acc) (not (str/ends-with? acc "\n"))) "\n") d) acc))))))
+                                    (js/Promise.resolve diff) untracked)))
+                   (.then #(finish meta files %))))))))
 
 (defn commit-detail
   "{:meta :files :diff :stats} for a commit (or \"WORKING\"); with file, {:diff} of that one file."
@@ -197,39 +244,25 @@
     (not (re-matches rev-re rev)) (js/Promise.reject (js/Error. "bad commit"))
     (and file (or (str/includes? file "\u0000") (str/starts-with? file "-"))) (js/Promise.reject (js/Error. "bad path"))
     file (.then (if (= rev "WORKING")
-                  (git root ["diff" "HEAD" "--no-color" "--no-prefix" "--patch" "-M" "--" file] true)
+                  (.then (git root ["diff" "HEAD" "--no-color" "--no-prefix" "--patch" "-M" "--" file] true)
+                         (fn [tracked] (if (seq tracked) tracked (git root ["diff" "--no-index" "--no-color" "--no-prefix" "/dev/null" file] true))))
                   (git root ["show" "--format=" "--diff-merges=first-parent" "--no-color" "--no-prefix" "--patch" "-M" "--end-of-options" rev "--" file]))
                 (fn [d] {:diff d}))
-    (= rev "WORKING")
-    (.then (all (git root ["diff" "HEAD" "--no-color" "--numstat" "-M"] true)
-                (git root ["diff" "HEAD" "--no-color" "--name-status" "-M"] true)
-                (git root ["ls-files" "--others" "--exclude-standard"] true)
-                (git root ["diff" "HEAD" "--no-color" "--no-prefix" "--patch" "-M"] true))
-           (fn [[ns nst untracked diff]]
-             ;; Untracked files are additions: each one's patch against /dev/null (git exits 1 on it).
-             (let [new-files (vec (take 200 (filter seq (str/split-lines untracked))))]
-               (.then (apply all (map #(git root ["diff" "--no-index" "--no-color" "--no-prefix" "/dev/null" %] true) new-files))
-                      (fn [patches]
-                        (let [counts (numstat ns)
-                              files (into (mapv #(merge % (get counts (:path %) {:binary false :additions 0 :deletions 0})) (name-status nst))
-                                          (map (fn [f d] {:path f :oldPath nil :status "?" :binary (str/includes? d "Binary files")
-                                                          :additions (count (filter #(and (str/starts-with? % "+") (not (str/starts-with? % "+++"))) (str/split-lines d)))
-                                                          :deletions 0})
-                                               new-files patches))]
-                          (finish {:hash "WORKING" :when "now" :subject "Uncommitted changes" :body "" :parents []} files
-                                  (str/join (cons diff (map #(if (and (seq diff) (not (str/ends-with? diff "\n"))) (str "\n" %) %) patches))))))))))
+    (= rev "WORKING") (working-detail root)
     :else
     (.then (git root ["rev-parse" "--verify" "--end-of-options" (str rev "^{commit}")])
            (fn [full]
              (let [full (str/trim full)]
+               ;; Merges diff against their first parent (the combined diff git show prints is usually empty).
                (.then (all (git root ["show" "-s" (str "--format=" (str/join F ["%H" "%an" "%ae" "%aI" "%ar" "%P" "%s" "%b"])) full])
                            (git root ["show" "--format=" "--diff-merges=first-parent" "--numstat" "-M" full])
-                           (git root ["show" "--format=" "--diff-merges=first-parent" "--name-status" "-M" full])
-                           (git root ["show" "--format=" "--diff-merges=first-parent" "--no-color" "--no-prefix" "--patch" "-M" full]))
-                      (fn [[meta ns nst diff]]
+                           (git root ["show" "--format=" "--diff-merges=first-parent" "--name-status" "-M" full]))
+                      (fn [[meta ns nst]]
                         (let [[h author email date when parents subject body] (str/split meta (re-pattern F))
-                              counts (numstat ns)
-                              files (mapv #(merge % (get counts (:path %) {:binary false :additions 0 :deletions 0})) (name-status nst))]
-                          (finish {:hash h :author author :email email :date date :when when
-                                   :parents (filterv seq (str/split (or parents "") #" ")) :subject subject :body (str/trim (or body ""))}
-                                  files diff)))))))))
+                              files (merge-files (numstat ns) (name-status nst))
+                              m {:hash h :author author :email email :date date :when when
+                                 :parents (filterv seq (str/split (or parents "") #" ")) :subject subject :body (str/trim (or body ""))}]
+                          (if (too-big? files)
+                            (finish m files nil)
+                            (.then (git root ["show" "--format=" "--diff-merges=first-parent" "--no-color" "--no-prefix" "--patch" "-M" full])
+                                   #(finish m files %)))))))))))

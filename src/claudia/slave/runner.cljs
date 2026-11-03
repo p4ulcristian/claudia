@@ -199,7 +199,8 @@
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
-      (codeforms/handle req res url who chats/scene-of) nil
+      (codeforms/handle req res url who {:scene-of chats/scene-of
+                                         :tools-changed! chats/prefs-changed!}) nil
       (api/handle req res who) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 
