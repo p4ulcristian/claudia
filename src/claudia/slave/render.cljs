@@ -35,10 +35,12 @@
   (str "<!doctype html><html lang=\"en\" class=\"render\"><head><meta charset=\"utf-8\">"
        "<link rel=\"stylesheet\" href=\"" fonts "\">"
        "<link rel=\"stylesheet\" href=\"/css/claudia.css\"><link rel=\"stylesheet\" href=\"/css/right.css\">"
+       "<link rel=\"stylesheet\" href=\"/css/scene3d.css\">"
        "<script>window.claudiaRender = true;</script></head>"
        "<body><div id=\"root\"></div><script src=\"/js/main.js\"></script></body></html>"))
 
-(def ^:private types {".js" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml" ".map" "application/json"})
+(def ^:private types {".js" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml" ".map" "application/json"
+                      ".glb" "model/gltf-binary"})
 
 (defn- serve [^js req ^js res]
   (let [url (first (str/split (.-url req) #"\?"))]
@@ -46,7 +48,7 @@
       (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
       (let [file (path/join web-dir (path/normalize url))]
         (if (and (str/starts-with? file (str web-dir "/"))
-                 (re-find #"^/(js|css|img)/" url)
+                 (re-find #"^/(js|css|img|person)/" url)
                  (fs/existsSync file))
           (do (.writeHead res 200 #js {"content-type" (get types (path/extname file) "application/octet-stream")})
               (.pipe (fs/createReadStream file) res))
