@@ -24,3 +24,16 @@
   "The Whose chats entries: [person label], mine first (person nil)."
   [people]
   (cons [nil "My chats"] (map (fn [p] [p (str (words/capital p) "'s chats")]) people)))
+
+(defn sync-state
+  "Where a server is with the hub's token in use: :off (not reached), :on, or :behind."
+  [{:keys [ok current]} in-use]
+  (cond (not ok) :off (= current in-use) :on :else :behind))
+
+(defn sync-title
+  "The hover text for a server's state."
+  [{:keys [label current error]} state]
+  (case state
+    :off (str label " not reached: " error)
+    :on (str label " runs on " current)
+    (str label " still runs on " (or current "a token set by hand") "; the hub writes it within a minute")))

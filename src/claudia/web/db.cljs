@@ -52,4 +52,4 @@
    :projects {}            ; [server folder] -> {:name :logo}
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
-   :tokens {} :github {} :github-prompt nil})
+   :tokens nil :github {} :github-prompt nil})

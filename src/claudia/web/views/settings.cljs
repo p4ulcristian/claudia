@@ -1,6 +1,6 @@
 (ns claudia.web.views.settings
   "The list's title menu (whose chats, which servers), the Settings screen behind the gear (archived
-  chats, all ~/Work sessions, sounds and desktop popups, the instance chip, the plan, each server's Claude tokens and GitHub
+  chats, all ~/Work sessions, sounds and desktop popups, the instance chip, the plan, the hub's Claude tokens, each server's GitHub
   login) and the GitHub prompt for a profile without a login."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -159,37 +159,6 @@
     (rf/dispatch [:ops/put-now {:url (ops/api-url server p) :method method :body body
                                 :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}])))
 
-(defn- token-status [tokens in-use]
-  [:p.small
-   (cond (nil? tokens) "Checking…"
-         (nil? (:inUse tokens)) "None in use from Settings yet."
-         (not in-use) (str "In use: a token without a name, set by " (get-in tokens [:inUse :by]) ".")
-         :else [:<> "Switched to " [:b in-use] " by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."])
-   " A switch applies to every chat on its next message."])
-
-(defn- token-choice [server tokens in-use put!]
-  [:div.choice
-   (for [t (:tokens tokens)]
-     ^{:key (:name t)}
-     [:label
-      [:input {:type "radio" :name (str "claudeToken-" server) :checked (= (:name t) in-use)
-               :on-change #(put! "POST" "claude-token/use" {:name (:name t)}
-                                 (fn [ok] (rf/dispatch [:ops/tokens server ok])) nil)}]
-      (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]])])
-
-(defn- subscription-section [server put!]
-  (let [tokens @(rf/subscribe [:tokens server])
-        in-use (get-in tokens [:inUse :name])]
-    [:section.st-section
-     [:h3 "Claude subscription " [:span.muted.small "shared by every profile here"]]
-     (token-status tokens in-use)
-     (when (seq (:tokens tokens)) (token-choice server tokens in-use put!))
-     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches to it."]
-     [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
-                  :save (fn [token nm done]
-                          (put! "PUT" "claude-token" {:name nm :token token}
-                                (fn [ok] (rf/dispatch [:ops/tokens server ok])) done))}]]))
-
 (defn- github-section [server put!]
   (let [github @(rf/subscribe [:github server])]
     [:section.st-section
@@ -211,15 +180,81 @@
     [:<>
      [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]
      (when-not (:readOnly me) [:f> chat-colours server])
-     (subscription-section server put!)
      (github-section server put!)]))
 
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
 
+(defn switch-token!
+  "Every server onto the saved token called n (the hub writes it into each one's token file)."
+  [n]
+  (rf/dispatch [:ops/put-now {:url "/hub/claude-token/use" :method "POST" :body {:name n}
+                              :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}]))
+
+(defn- server-sync
+  "Each of the person's servers: on the token in use, on another, or not reached."
+  [{:keys [inUse servers]}]
+  (when (seq servers)
+    [:p.small.token-servers
+     (for [s servers
+           :let [state (pure/sync-state s (:name inUse))]]
+       ^{:key (:name s)}
+       [:span {:class (name state) :title (pure/sync-title s state)}
+        (:label s) " " (case state :off "off" :on "✓" "…")])]))
+
+(defn- remove-token! [token-name]
+  (when (js/confirm (str "Remove " token-name "'s token from the hub?"))
+    (rf/dispatch [:ops/put-now {:url (str "/hub/claude-tokens/" (js/encodeURIComponent token-name))
+                                :method "DELETE"
+                                :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}])))
+
+(defn- token-row [t in-use]
+  [:label
+   [:input {:type "radio" :name "claudeToken" :checked (= (:name t) in-use)
+            :on-change #(switch-token! (:name t))}]
+   (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]
+   (when-not (= (:name t) in-use)
+     [:button.token-remove {:type "button" :title (str "Remove " (:name t) "'s token from the hub")
+                            :on-click (fn [e] (.preventDefault e) (remove-token! (:name t)))}
+      "Remove"])])
+
+(defn- in-use-note [tokens in-use]
+  [:p.small
+   (if in-use
+     [:<> "In use: " [:b in-use] ", switched by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."]
+     "None saved yet.")
+   " A switch applies to every chat on its next message."])
+
+(defn- save-token-form []
+  [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
+               :save (fn [token nm done]
+                       (rf/dispatch [:ops/put-now {:url "/hub/claude-token" :method "PUT" :body {:name nm :token token}
+                                                   :on-done (fn [ok err] (when ok (rf/dispatch [:ops/tokens ok])) (done err))}]))}])
+
+(defn- hub-tokens [tokens]
+  (let [in-use (get-in tokens [:inUse :name])]
+    [:<>
+     (in-use-note tokens in-use)
+     [server-sync tokens]
+     (when (seq (:tokens tokens))
+       [:div.choice
+        (for [t (:tokens tokens)] ^{:key (:name t)} [token-row t in-use])])
+     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches every server to it."]
+     [save-token-form]]))
+
+(defn- claude-subscription
+  "The hub's Claude tokens: one in use on every server; save, switch, remove."
+  []
+  (let [tokens @(rf/subscribe [:tokens])]
+    [:section.st-section.st-claude
+     [:h3 "Claude subscription " [:span.muted.small "kept by the hub, the same on every server"]]
+     (cond
+       (nil? tokens) [:p.small "Checking…"]
+       (not (:on tokens)) [:p.small "This hub keeps no tokens (no key set): each server keeps the token it has."]
+       :else (hub-tokens tokens))]))
+
 (defn- brand [server]
   (let [me @(rf/subscribe [:server-me server])
-        tokens @(rf/subscribe [:tokens server])
-        token (get-in tokens [:inUse :name])]
+        token (get-in @(rf/subscribe [:tokens]) [:inUse :name])]
     [:div.brand
      [logo/mark]
      [:span.wordmark "Claudia"]
@@ -322,6 +357,7 @@
      [:div.st-scroll
       [brand server]
       [:f> usage/plan-meters server]
+      (when-not ro [claude-subscription])
       (chats-group all-sessions?)
       [:section.st-group {:aria-label "Alerts"}
        [alerts/toggles]]

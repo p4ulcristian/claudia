@@ -199,6 +199,7 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 /* The rail's Claude subscription: the token in use's initials in a chalk circle; its menu opens beside it. */
 .rail-plan-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1.6px solid currentColor; border-radius: 50%; font: 700 12px var(--hand); letter-spacing: 0.02em; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 .rail-plan.on { color: var(--fg); }
+.rail-plan.behind .rail-plan-mark { border-style: dashed; color: var(--amber); }
 .plan-menu { width: auto; min-width: 190px; max-width: 280px; }
 .plan-menu .cm-item.on { color: var(--accent); }
 .plan-menu .cm-item.on::after { content: " ✓"; }
@@ -260,3 +261,11 @@ a.file-chip:hover { border-color: var(--accent); }
 .code-chip .add { color: var(--green); }
 .code-chip .del { color: var(--red); }
 .code-sent .diff { margin-top: 6px; }
+
+/* Settings: each server's token, and a saved token's Remove. */
+.token-servers { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.token-servers span.on { color: var(--green); }
+.token-servers span.behind { color: var(--amber); }
+.token-servers span.off { color: var(--muted); }
+.token-remove { margin-left: 8px; padding: 0 6px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; }
+.token-remove:hover { color: var(--red); border-color: var(--red); }

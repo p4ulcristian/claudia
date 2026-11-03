@@ -1,7 +1,8 @@
 (ns claudia.hub.ops
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
-  Activities (/hub/push/…), desktop presence (/hub/presence) and GitHub's webhook (/hub/github)."
+  Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…)
+  and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
             [claudia.shared.text :as text]
@@ -14,7 +15,8 @@
             [claudia.hub.presence :as presence]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
-            [claudia.hub.store :as store]))
+            [claudia.hub.store :as store]
+            [claudia.hub.tokens :as tokens]))
 
 (def ^:private max-body (* 64 1024))
 (def ^:private max-github-body (* 4 1024 1024))
@@ -295,6 +297,36 @@
     ((person-ops op) req res email arg)
     (fail res 404 "not found")))
 
+;; Claude tokens (claudia.hub.tokens) -------------------------------------------------------------
+
+(defn token-route
+  "Which Claude-token call a method and path are: [:state], [:save], [:use], [:remove name-in-path]
+  or nil."
+  [method pathname]
+  (let [[_ gone] (re-matches #"^/hub/claude-tokens/([^/]+)$" pathname)]
+    (cond
+      (and (= pathname "/hub/claude-tokens") (= method "GET")) [:state]
+      (and (= pathname "/hub/claude-token") (= method "PUT")) [:save]
+      (and (= pathname "/hub/claude-token/use") (= method "POST")) [:use]
+      (and gone (= method "DELETE")) [:remove gone]
+      :else nil)))
+
+(defn- token-call
+  "GET /hub/claude-tokens; PUT /hub/claude-token {name token}; POST /hub/claude-token/use {name};
+  DELETE /hub/claude-tokens/<name>."
+  [^js req ^js res pathname email]
+  (let [person {:email email}
+        answer (fn [[status body]] (io/send-json res status body))
+        [op raw] (token-route (.-method req) pathname)]
+    (case op
+      :state (io/send-json res 200 (tokens/state person))
+      :save (.then (with-body req #(tokens/save! person (:name %) (:token %))) answer)
+      :use (.then (with-body req #(tokens/use! person (:name %))) answer)
+      :remove (if-let [token-name (io/decode raw)]
+                (answer (tokens/remove! person token-name))
+                (fail res 400 "bad name"))
+      (fail res 404 "not found"))))
+
 ;; Entry points -----------------------------------------------------------------------------------
 
 (defn open-call?
@@ -334,6 +366,8 @@
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
+                 (str/starts-with? pathname "/hub/claude-token")
+                 (token-call req res pathname email)
                  :else (fail res 404 "not found"))))
       (.catch (fn [e]
                 (js/console.error (str "hub: " pathname ": " (.-message e)))

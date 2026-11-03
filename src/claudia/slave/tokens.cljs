@@ -1,13 +1,12 @@
 (ns claudia.slave.tokens
-  "Settings' tokens. Claude: long-term tokens saved by name (`claude setup-token`), one of them in use
-  (copied over CLAUDIA_TOKEN_FILE, which every chat reads on its next start); anyone with a profile
-  can add, replace or switch; nobody can read one back. The saved ones live in CLAUDIA_TOKENS_DIR
-  (default `<token file>.d`, as the TypeScript Claudia's src/mode.ts), the note of who switched to
-  which beside the token file (`<token file>.json`). The front writes them (on a shared server it
-  runs as the page's own user, like the TypeScript Claudia's page process): the saved tokens' folder
-  is the front's only (0700), the token in use is readable by the runners' group (0640, in a folder
-  setgid to that group). GitHub: this profile's own login, handed to gh (kept in this Linux
-  user's ~/.config/gh); git uses gh as its credential helper and commits carry the account's name."
+  "Tokens. Claude: the hub keeps the saved ones (claudia.hub.tokens, README decision 10) and writes
+  the one in use here through the front (PUT /api/claude-token/current, a call only the hub can
+  make): CLAUDIA_TOKEN_FILE, which every chat reads on its next start, and the note of whose it is
+  beside it (`<token file>.json`: name, by, at; the runner shows the name). The front writes them
+  (on a shared server it runs as the page's own user): the token is readable by the runners' group
+  (0640, in a folder setgid to that group). Nothing else is kept here. GitHub: this profile's own
+  login, handed to gh (kept in this Linux user's ~/.config/gh); git uses gh as its credential
+  helper and commits carry the account's name."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:path" :as path]
@@ -17,79 +16,46 @@
 (def ^:private env (.-env js/process))
 
 (defn- token-file [] (.-CLAUDIA_TOKEN_FILE env))
-(defn- tokens-dir []
-  (or (not-empty (.-CLAUDIA_TOKENS_DIR env))
-      (some-> (token-file) (str ".d"))))
 (defn- note-file [] (some-> (token-file) (str ".json")))
 
 (defn- read-json-file [f] (try (p/read-json (fs/readFileSync f "utf8")) (catch :default _ nil)))
 
-(defn- key-of [n] (str/replace (str/lower-case n) #"[^a-z0-9]+" "-"))
-
-(defn saved
-  "The saved tokens' names, who saved each and when; never the tokens."
+(defn current
+  "The token in use here, without the token: {:name :by :at} (nil fields when none came from the hub)."
   []
-  (->> (try (vec (fs/readdirSync (tokens-dir))) (catch :default _ []))
-       (filter #(str/ends-with? % ".json"))
-       (keep #(read-json-file (path/join (tokens-dir) %)))
-       (sort-by #(str/lower-case (str (:name %))))
-       vec))
-
-(defn state
-  "{:inUse {by at name} or nil, :tokens [{name by at}]}"
-  []
-  {:inUse (when (some-> (token-file) fs/existsSync) (read-json-file (note-file)))
-   :tokens (saved)})
-
-(defn- clean-token [raw]
-  (let [t (str/replace (str raw) #"\s+" "")]
-    (when (re-matches #"^sk-ant-[A-Za-z0-9_-]{20,}$" t) t)))
-
-(defn- clean-name [raw]
-  (let [n (str/trim (str raw))]
-    (when (re-matches #"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,23}$" n) n)))
+  (let [note (when (some-> (token-file) fs/existsSync) (read-json-file (note-file)))]
+    {:name (:name note) :by (:by note) :at (:at note)}))
 
 (defn- write-atomic! [f text mode]
   (fs/writeFileSync (str f ".new") text #js {:mode (js/parseInt mode 8)})
   (fs/renameSync (str f ".new") f))
 
-(defn use!
-  "Copies a saved token over the one in use, in one step (write beside, then rename)."
-  [raw-name by]
-  (let [n (clean-name raw-name)
-        s (some #(when (= (key-of (:name %)) (key-of (str n))) %) (saved))]
-    (cond
-      (not (token-file)) {:error "No token file is set for this runner (CLAUDIA_TOKEN_FILE)."}
-      (not s) {:error "No saved token by that name." :status 404}
-      :else
-      (try
-        (let [token (str/trim (fs/readFileSync (path/join (tokens-dir) (key-of (:name s))) "utf8"))]
-          (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
-          ;; The note first: the runners read it again when the token file changes.
-          (write-atomic! (note-file) (p/write-json {:by by :at (js/Date.now) :name (:name s)}) "644")
-          (write-atomic! (token-file) (str token "\n") "640")
-          (js/console.log (str "Claude token switched to \"" (:name s) "\" by " by))
-          (state))
-        (catch :default e {:error (str "Couldn't switch the token: " (.-message e)) :status 500})))))
+(defn current-problem
+  "What is wrong with the hub's token in use before it is written here ({:error :status?}), or nil:
+  the token text without whitespace is t."
+  [{token-name :name at :at} t file]
+  (cond
+    (not file) {:error "No token file is set here (CLAUDIA_TOKEN_FILE)." :status 501}
+    (not (re-matches #"^sk-ant-[A-Za-z0-9_-]{20,}$" t)) {:error "Not a Claude token."}
+    (not (and (string? token-name) (seq token-name) (number? at))) {:error "name and at are needed."}
+    :else nil))
 
-(defn save!
-  "Saves a token under a name (same name = replaced) and switches to it."
-  [raw-name raw-token by]
-  (let [n (clean-name raw-name)
-        t (clean-token raw-token)]
-    (cond
-      (not n) {:error "Give it a name, like Paul (letters, digits, spaces, up to 24)."}
-      (not t) {:error "That doesn't look like a Claude token (sk-ant-…). Make one with `claude setup-token`."}
-      (not (tokens-dir)) {:error "No token file is set for this runner (CLAUDIA_TOKEN_FILE)."}
-      :else
-      (try
-        (fs/mkdirSync (tokens-dir) #js {:recursive true :mode (js/parseInt "700" 8)})
-        (let [f (path/join (tokens-dir) (key-of n))]
-          (write-atomic! f (str t "\n") "600")
-          (write-atomic! (str f ".json") (p/write-json {:name n :by by :at (js/Date.now)}) "600"))
-        (js/console.log (str "Claude token \"" n "\" saved by " by))
-        (use! n by)
-        (catch :default e {:error (str "Couldn't save the token: " (.-message e))})))))
+(defn- write-files!
+  "The note first (the runners read it again when the token file changes), then the token."
+  [{token-name :name by :by at :at} t]
+  (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
+  (write-atomic! (note-file) (p/write-json {:name token-name :by by :at at}) "644")
+  (write-atomic! (token-file) (str t "\n") "640")
+  (js/console.log (str "Claude token in use: \"" token-name "\" (from the hub, switched by " by ")")))
+
+(defn write-current!
+  "The hub's token in use, written over this server's: {:name :by :at :token} -> current, or {:error}."
+  [body]
+  (let [t (str/replace (str (:token body)) #"\s+" "")]
+    (or (current-problem body t (token-file))
+        (try (write-files! body t)
+             (current)
+             (catch :default e {:error (str "Couldn't write the token: " (.-message e)) :status 500})))))
 
 ;; ---- GitHub ----
 

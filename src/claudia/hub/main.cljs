@@ -16,6 +16,7 @@
             [claudia.hub.pass :as pass]
             [claudia.hub.push :as push]
             [claudia.hub.narrate :as narrate]
+            [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
 ;; The hub's version and commit (the image writes version.json beside hub.js; elsewhere none).
@@ -88,8 +89,8 @@
     (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
     (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-    ;; The hub's own poke to the front (README, Hub operations: following main), never a page's call.
-    (= rest-path "/api/update-check") {:status 404 :error "not found"}
+    ;; The hub's own calls to the front (the update poke; the Claude token in use), never a page's.
+    (#{"/api/update-check" "/api/claude-token/current"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
@@ -203,7 +204,8 @@
   (pairing/start! data-dir)
   (narrate/start! data-dir)
   (github/start!)
-  (push/start!))
+  (push/start!)
+  (tokens/start!))
 
 (defn- exit!
   "The store closes last, once no request can reach it any more, then the process exits."

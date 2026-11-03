@@ -41,6 +41,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    and long functions that only goes down, tests, the five builds) holds it. Rules in CLAUDE.md.
    Instead of: long handlers mixing reading, deciding and writing state, and a copy of each helper
    per file.
+10. Claude tokens are kept by the hub (2026-11-03): saved once in Settings, sealed in `hub.db` under a
+    key that lives only in the gate's secrets (`HUB_TOKEN_KEY_FILE`), one in use for every server.
+    The hub writes the one in use into each server's token file (the only copy a server keeps, since
+    Claude runs there) and brings a server that was off or is new along within a minute. The rail's
+    foot shows it (initials; a dashed ring while a server is not on it yet) and switches it; the
+    Forms button left the rail (Forms stays in Settings). Instead of: each server keeping and
+    switching its own saved tokens.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

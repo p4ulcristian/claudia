@@ -76,7 +76,23 @@
      added_at INTEGER NOT NULL,
      ended_at INTEGER
    );
-   CREATE INDEX IF NOT EXISTS live_activities_device ON live_activities (device);")
+   CREATE INDEX IF NOT EXISTS live_activities_device ON live_activities (device);
+   -- A Claude subscription's long-term token, saved by name (claudia.hub.tokens): sealed with the
+   -- key in HUB_TOKEN_KEY_FILE (never in this file), who saved it and when. key = the name folded.
+   CREATE TABLE IF NOT EXISTS claude_tokens (
+     key TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     sealed TEXT NOT NULL,
+     saved_by TEXT NOT NULL,
+     saved_at INTEGER NOT NULL
+   );
+   -- The one token every server's chats run on: which, who switched to it and when.
+   CREATE TABLE IF NOT EXISTS claude_token_use (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     key TEXT NOT NULL REFERENCES claude_tokens (key),
+     used_by TEXT NOT NULL,
+     used_at INTEGER NOT NULL
+   );")
 
 (defn open!
   "Opens (and makes) dir/hub.db."
@@ -279,3 +295,33 @@
 (defn drop-activity! [id] (exec! "DELETE FROM live_activities WHERE activity = ?" id))
 
 (defn prune-activities! [before] (exec! "DELETE FROM live_activities WHERE ended_at < ?" before))
+
+;; Claude tokens ----------------------------------------------------------------------------------
+
+(defn claude-tokens
+  "The saved tokens without their sealed text: [{:key :name :saved-by :saved-at}], by name."
+  []
+  (mapv (fn [r] {:key (:key r) :name (:name r) :saved-by (:saved_by r) :saved-at (:saved_at r)})
+        (all "SELECT key, name, saved_by, saved_at FROM claude_tokens ORDER BY name COLLATE NOCASE")))
+
+(defn claude-token-sealed [token-key] (:sealed (one "SELECT sealed FROM claude_tokens WHERE key = ?" token-key)))
+
+(defn save-claude-token! [token-key token-name sealed by]
+  (exec! "INSERT INTO claude_tokens (key, name, sealed, saved_by, saved_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET name = excluded.name, sealed = excluded.sealed,
+           saved_by = excluded.saved_by, saved_at = excluded.saved_at"
+        token-key token-name sealed by (now)))
+
+(defn drop-claude-token! [token-key] (exec! "DELETE FROM claude_tokens WHERE key = ?" token-key))
+
+(defn claude-token-use
+  "{:key :name :by :at} of the token in use, or nil."
+  []
+  (when-let [r (one "SELECT u.key, t.name, u.used_by, u.used_at FROM claude_token_use u
+                     JOIN claude_tokens t ON t.key = u.key WHERE u.id = 1")]
+    {:key (:key r) :name (:name r) :by (:used_by r) :at (:used_at r)}))
+
+(defn use-claude-token! [token-key by]
+  (exec! "INSERT INTO claude_token_use (id, key, used_by, used_at) VALUES (1, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET key = excluded.key, used_by = excluded.used_by, used_at = excluded.used_at"
+        token-key by (now)))

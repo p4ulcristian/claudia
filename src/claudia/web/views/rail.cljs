@@ -1,8 +1,8 @@
 (ns claudia.web.views.rail
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): + for a new chat, the
   search, then a circle per chat with its title under it and, on the hub, its server's name; passive
-  (ash) chats last, above a chalk line. At its foot: sounds, the Claude subscription in use (a click
-  switches it; the Forms window stays in Settings), the usage rings. Circles
+  (ash) chats last, above a chalk line. At its foot: sounds, the Claude subscription every server runs on (the
+  hub keeps it; a click switches it; the Forms window stays in Settings), the usage rings. Circles
   slide to their new places when the order changes; a new one grows in."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -12,6 +12,7 @@
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.menu :as pure]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
+            [claudia.web.views.settings :as settings]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.usage :as usage]))
 
@@ -48,16 +49,9 @@
      [:path {:d "M13 7.5c1 1.4 1 3.6 0 5M15.4 5.5c2 2.5 2 6.5 0 9"}]
      [:path {:d "M13.5 8l4 4M17.5 8l-4 4"}])])
 
-(defn- switch-to!
-  "Every chat on server to the saved token n."
-  [server n]
-  (rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
-                              :method "POST" :body {:name n}
-                              :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}]))
-
 (defn- plan-menu
-  "The saved tokens of server, beside the button (box); a pick switches every chat there."
-  [{:keys [server box saved account close]}]
+  "The hub's saved tokens, beside the button (box); a pick switches every server."
+  [{:keys [box saved account close]}]
   (let [menu (h/use-ref nil)
         rc (.getBoundingClientRect ^js (.-current box))]
     (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t))
@@ -65,41 +59,41 @@
                            close)
     [:div.chat-menu.plan-menu {:ref #(set! (.-current menu) %) :role "menu"
                                :style {:left (+ (.-right rc) 8) :bottom (max 6 (- js/innerHeight (.-bottom rc)))}}
-     [:div.cm-title (str "Claude subscription · " @(rf/subscribe [:server-label server]))]
+     [:div.cm-title "Claude subscription · every server"]
      (for [n saved]
        ^{:key n}
        [:button.cm-item {:role "menuitemradio" :aria-checked (= n account) :class (when (= n account) "on")
-                         :on-click (fn []
-                                     (close)
-                                     (when (not= n account) (switch-to! server n)))}
+                         :on-click (fn [] (close) (when (not= n account) (settings/switch-token! n)))}
         (str n "'s plan")])
      [:button.cm-item.plan-add {:role "menuitem" :on-click (fn [] (close) (rf/dispatch [:ops/settings true]))}
       "Add a token in Settings"]]))
 
 (defn- plan-button
-  "Which Claude subscription the chats on the open chat's server (else the new chat's) run on: the
-  token in use's initials; a click lists the server's saved tokens to switch to."
+  "Which Claude subscription every server's chats run on (the hub keeps it): the token in use's
+  initials, a dashed ring while a server is not on it yet; a click lists the saved tokens to switch to."
   []
-  (let [open @(rf/subscribe [:open])
-        server (or (first open) @(rf/subscribe [:new-server]))
-        tokens @(rf/subscribe [:tokens server])
+  (let [tokens @(rf/subscribe [:tokens])
         account (get-in tokens [:inUse :name])
         saved (mapv :name (:tokens tokens))
+        behind (remove #(and (:ok %) (= (:current %) account)) (:servers tokens))
         [menu? set-menu] (h/use-state false)
         box (h/use-ref nil)]
-    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens server]) (set-menu false) nil) [server])
-    (when server
+    ;; Loaded now and every minute: the servers' state follows the hub's own minute.
+    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens])
+                    (let [t (js/setInterval #(rf/dispatch [:ops/load-tokens]) 60000)] #(js/clearInterval t)))
+                  [])
+    (when (:on tokens)
       [:<>
        [:button.rail-forms.rail-plan
         {:ref #(set! (.-current box) %)
-         :class (when menu? "on")
-         :data-tip (pure/plan-tip account @(rf/subscribe [:multi-server?]) @(rf/subscribe [:server-label server]) saved)
+         :class [(when menu? "on") (when (and account (seq behind)) "behind")]
+         :data-tip (pure/plan-tip account behind saved)
          :aria-label (str "Claude subscription" (when account (str ": " account)))
          :aria-haspopup "menu" :aria-expanded menu?
          :on-click #(if (> (count saved) 1) (set-menu (not menu?)) (rf/dispatch [:ops/settings true]))}
         [:span.rail-plan-mark (if account (pure/initials account) "?")]]
        (when menu?
-         [:f> plan-menu {:server server :box box :saved saved :account account :close #(set-menu false)}])])))
+         [:f> plan-menu {:box box :saved saved :account account :close #(set-menu false)}])])))
 
 (defn- rail-chat
   "A chat's circle with its title (and its server on the hub)."

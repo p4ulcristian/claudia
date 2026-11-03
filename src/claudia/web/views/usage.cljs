@@ -81,14 +81,14 @@
    [:span.m-bar [:span {:style {:width (str (min 100 (:percent context)) "%")}}]]
    [:span.m-num (str (:percent context) "%")]])
 
-(defn- account-pick [server account saved plan]
+(defn- account-pick [account saved plan]
   (cond
     (and account (> (count saved) 1))
-    [:label.pick.m-account {:title "Switch the Claude subscription for every chat here (applies on each chat's next message)"}
+    [:label.pick.m-account {:title "Switch the Claude subscription for every chat on every server (applies on each chat's next message)"}
      [:select {:value account
-               :on-change #(rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
+               :on-change #(rf/dispatch [:ops/put-now {:url "/hub/claude-token/use"
                                                        :method "POST" :body {:name (.. % -target -value)}
-                                                       :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}])}
+                                                       :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}])}
       (when-not (some #{account} saved) [:option {:value ""} plan])
       (for [n saved] ^{:key n} [:option {:value n} (str n "'s plan")])]]
     account [:span.m-account {:title "Add or switch tokens in Settings"} plan]))
@@ -106,14 +106,14 @@
   (let [limits (:limits @(rf/subscribe [:meta server]))
         oc @(rf/subscribe [:open-chat])
         context (get-in oc [:state :context])
-        tokens @(rf/subscribe [:tokens server])
+        tokens @(rf/subscribe [:tokens])
         account (get-in tokens [:inUse :name])
         plan (if account (str account "'s plan") "Plan")
         now (use-now!)]
     (when (or context (seq limits))
       [:div.meters
        (when context (context-meter context))
-       (account-pick server account (map :name (:tokens tokens)) plan)
+       (account-pick account (map :name (:tokens tokens)) plan)
        (for [l limits]
          ^{:key (:key l)} [limit-meter l plan now])])))
 

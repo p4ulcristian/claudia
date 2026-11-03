@@ -15,10 +15,12 @@
   (str/upper-case (apply str (take 2 (map first (str/split (str/trim (str person)) #"\s+"))))))
 
 (defn plan-tip
-  "The subscription button's hover text."
-  [account multi? label saved]
-  (str (if account (str account "'s Claude subscription") "Claude subscription")
-       (when multi? (str " on " label))
+  "The subscription button's hover text: the token in use on every server, the servers not on it
+  yet (behind: rows with :label and :ok), and what a click does."
+  [account behind saved]
+  (str (if account (str account "'s Claude subscription, on every server") "No Claude subscription saved yet")
+       (when (and account (seq behind))
+         (str " · not yet on " (str/join ", " (map #(str (:label %) (when-not (:ok %) " (off)")) behind))))
        (if (> (count saved) 1) " · click to switch" " · click to add a token")))
 
 (defn k-tokens

@@ -243,26 +243,27 @@
 (defn logo-url [view server folder]
   (api-url server (str "project/logo?folder=" (js/encodeURIComponent folder)) view))
 
-;; ---- Settings: tokens, GitHub ----
+;; ---- Settings: Claude tokens (kept by the hub), GitHub ----
 
 (rf/reg-event-fx
  :ops/load-settings
  (fn [{:keys [db]} [_ server]]
    (when (and server (not (read-only? db)))
      {:db (assoc db :settings-server server)
-      :fx [[:api/call {:url (api-url server "claude-tokens") :on-ok [:ops/tokens server]}]
+      :fx [[:dispatch [:ops/load-tokens]]
            [:api/call {:url (api-url server "github") :on-ok [:ops/github-user server]}]]})))
 
-;; The rail's subscription button: only the saved Claude tokens of one server.
+;; The hub's Claude tokens (claudia.hub.tokens): the one in use on every server, the saved names,
+;; what each of the person's servers runs on now.
 (rf/reg-event-fx
  :ops/load-tokens
- (fn [{:keys [db]} [_ server]]
-   (when (and server (not (read-only? db)))
-     {:fx [[:api/call {:url (api-url server "claude-tokens") :on-ok [:ops/tokens server]}]]})))
+ (fn [{:keys [db]} _]
+   (when-not (read-only? db)
+     {:fx [[:api/call {:url "/hub/claude-tokens" :on-ok [:ops/tokens]}]]})))
 
-(rf/reg-event-db :ops/tokens (fn [db [_ s t]] (assoc-in db [:tokens s] t)))
+(rf/reg-event-db :ops/tokens (fn [db [_ t]] (assoc db :tokens t)))
 (rf/reg-event-db :ops/github-user (fn [db [_ s {:keys [user]}]] (assoc-in db [:github s] (or user false))))
-(rf/reg-sub :tokens (fn [db [_ s]] (get-in db [:tokens s])))
+(rf/reg-sub :tokens (fn [db] (:tokens db)))
 (rf/reg-sub :github (fn [db [_ s]] (get-in db [:github s])))
 (rf/reg-sub :settings-server (fn [db] (or (:settings-server db) (first (events/server-names db)))))
 

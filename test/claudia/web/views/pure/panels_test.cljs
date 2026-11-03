@@ -103,7 +103,9 @@
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))
   (is (= "P" (menu/initials " Paul ")))
-  (is (= "Claude subscription · click to add a token" (menu/plan-tip nil false nil [])))
+  (is (= "No Claude subscription saved yet · click to add a token" (menu/plan-tip nil [] [])))
+  (is (= "Paul's Claude subscription, on every server · not yet on box (off) · click to switch"
+         (menu/plan-tip "Paul" [{:label "box" :ok false}] ["Paul" "Ananda"])))
   (is (= "155k" (menu/k-tokens 155000))))
 
 (deftest changes-of-the-turn
@@ -153,3 +155,11 @@
   (is (= "packed" (shell/density 100 200)))
   (is (= "" (shell/density 2 200)))
   (is (= 8 (shell/tip-left 0 50 0 500))))
+
+(deftest a-servers-token-state
+  (is (= :off (settings/sync-state {:ok false} "Paul")))
+  (is (= :on (settings/sync-state {:ok true :current "Paul"} "Paul")))
+  (is (= :behind (settings/sync-state {:ok true :current "Ananda"} "Paul")))
+  (is (= "Box not reached: down" (settings/sync-title {:label "Box" :error "down"} :off)))
+  (is (= "Box still runs on a token set by hand; the hub writes it within a minute"
+         (settings/sync-title {:label "Box"} :behind))))
