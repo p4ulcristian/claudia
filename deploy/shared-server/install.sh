@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs Claudia beta on a shared server from a built checkout (out/ and node_modules made by
-# `npm ci && npx shadow-cljs release host runner front`, here or on another machine):
+# `npm ci && npx shadow-cljs release host runner front`, here or on another machine; add
+# `web && npm run build:web-files` for the screenshots Claude gets back from each draw):
 #   sudo deploy/shared-server/install.sh <checkout> <profile>...
 # Code goes to /srv/claudia-beta (root-owned), units to /etc/systemd/system. Settings stay in
 # /etc/claudia-beta (env, profiles, profile-<p>.env), written by hand, never from the repo.

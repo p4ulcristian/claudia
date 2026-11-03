@@ -92,6 +92,16 @@ logged and the last good one kept; a broken file at start stops the hub.
 |---|---|
 | `GET /api/me` | `{ server, profile, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `viewing` = the profile looked at (read only) or null |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
+| `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
+| `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
+| `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
+
+`Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
+running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:
+`{ k: "tool", id, name, title, start, end?, error?, agent? (the lane this Agent call started), diff?: { added, removed } }`
+or `{ k: "text" | "user" | "note", id, at, text }` (text cut at 300 characters). `patch`: `{ file, created, cut,
+hunks: [{ oldStart, oldLines, newStart, newLines, lines }] }` from Claude Code's saved structuredPatch (a
+subagent's: made from the call's input), cut at 5000 lines.
 
 ## WebSocket (`/ws`): page ↔ runner
 
@@ -113,6 +123,7 @@ Page → runner:
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `seen` | `chat` | the person looked at its last turn |
+| `picture` | `chat`, `turn` | runner answers `picture` with that turn's scene (an earlier picture; read-only callers may send it) |
 
 Runner → page:
 
@@ -128,6 +139,8 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
+| `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
+| `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
 preview (start of the last reply or the open question), unseen, archived }`
@@ -146,7 +159,11 @@ preview (start of the last reply or the open question), unseen, archived }`
 - form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`), `data` (as the draw tool's description says)
 
 The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
-`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`.
+`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`. It keeps
+the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
+id made for a turn Claude started itself), sends `pictures`, and answers the draw with the text and a
+screenshot of the whole picture (`{ type: "image", data, mimeType: "image/png" }`), or the text and why
+there is none. A chat older than the history has only its last picture (turn `imported`).
 
 ## Secrets (1Password, `plan/1passwd-plan.md`)
 

@@ -34,3 +34,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 npm ci
 npx shadow-cljs release host runner front hub web
 ```
+
+## Back from the TypeScript Claudia (2026-11-03)
+
+- Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; Picture | Timeline (Alt+T); fold (Alt+P); the camera copies or saves the picture as PNG.
+- Timeline: every step of the chat and its subagents from the session files, a rail per agent, quiet stretches, Edit/Write steps with +/− opening their diff (`src/claudia/slave/timeline.cljs`, `src/claudia/web/views/timeline.cljs`).
+- Every draw answers Claude with a screenshot of the picture: playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
