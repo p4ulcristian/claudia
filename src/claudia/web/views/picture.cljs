@@ -176,10 +176,11 @@
   (there the row is at the top of the picture screen)."
   []
   (let [oc @(rf/subscribe [:open-chat])
-        ro @(rf/subscribe [:read-only?])]
+        ro @(rf/subscribe [:read-only?])
+        server (or (:server oc) (first (keys @(rf/subscribe [:servers]))))]
     [:nav.rail.right-rail {:aria-label "Forms"}
-     (when (and (:ck oc) (not ro))
-       [:f> codeforms/picture-tools oc {:rail? true}])]))
+     (when (and server (not ro))
+       [:f> codeforms/picture-tools (assoc oc :server server) {:rail? true}])]))
 
 ;; ---- the pane ----
 
@@ -202,7 +203,7 @@
        (if (= view :timeline)
          [:div.right-tl [:f> timeline/timeline-view oc]]
          [:div.right-scroll
-          (when (and phone? (:ck oc) (not ro))
+          (when (and phone? (:server oc) (not ro))
             [:f> codeforms/picture-tools oc {:rail? false}])
           [:div.stage {:class (when (:viewing? hist) "past")}
            [:f> picture-view {:scene scene :k (:ck oc) :cols cols

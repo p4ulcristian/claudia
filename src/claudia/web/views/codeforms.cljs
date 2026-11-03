@@ -94,6 +94,7 @@
    "clojure" "M6 6a2.5 2.5 0 1 0 0 .01M14 5a1.8 1.8 0 1 0 0 .01M13 14.5a2.8 2.8 0 1 0 0 .01M8.4 6.4l3.8-.9M7.6 7.8l3.4 4.6M14 6.8l-.5 4.9"
    "calls" "M3 4h6M5 4v12M5 8h5M5 12h5M5 16h5M12 8a1.6 1.6 0 1 0 0 .01M12 12a1.6 1.6 0 1 0 0 .01M12 16a1.6 1.6 0 1 0 0 .01M14 8h3M14 12h3"
    "editor" "M2 3h16v14H2zM2 6h16M5 9l-2 2 2 2M8 14l3-6M14 9l2 2-2 2"
+   "scene3d" "M10 3l6 3v8l-6 3-6-3V6zM4 6l6 3 6-3M10 9v8"
    "flow" "M2 4h4v4H2zM8 4h4v4H8zM14 4h4v4h-4zM4 12h6v4H4zM12 14h4M14 12l2 2-2 2"
    "freeform" "M4 15c2-6 4-9 6-9s1 5 3 5 2-3 3-5M5 17h10"
    "questions" "M7.5 7.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.7v.6M10 15v.2"})
@@ -320,5 +321,6 @@
              (.catch (fn [_]))))
        nil)
      [server gallery?])
-    (when (and ck info)
-      [:f> form-row ck (remove (set (:hidden info)) (:forms info)) false rail?])))
+    ;; A new chat (no chat yet on a server): the row shows, its choices wait for the chat.
+    (when info
+      [:f> form-row ck (remove (set (:hidden info)) (:forms info)) (nil? ck) rail?])))
