@@ -240,7 +240,7 @@ Runner → page:
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
-`Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
+`Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
 secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;

@@ -21,7 +21,12 @@
 
 ;; Every shape the CSS uses: var(--chalk-<name>). r = corner radius, b = ring width (none = solid).
 (def ^:private shapes
-  {"r6-15" {:r 6 :b 1.5}
+  {;; The rest of the TypeScript Claudia's set (web/chalk.ts SHAPES): the shell's and the forms'.
+   "r18-2" {:r 18 :b 2}
+   "line3-soft" {:r 1.5 :noise :soft}
+   "dot11" {:r 5.5}
+   "bar3" {:r 3}
+   "r6-15" {:r 6 :b 1.5}
    "r7-2" {:r 7 :b 2}
    "r8-15" {:r 8 :b 1.5}
    "r8-2" {:r 8 :b 2}
@@ -44,6 +49,8 @@
    "r7-15" {:r 7 :b 1.5}
    "r8-15-dash" {:r 8 :b 1.5 :dash 4}
    "c30-18" {:r 15 :b 1.8}
+   "line3" {:r 1.5 :noise :line}
+   "dot9-soft" {:r 4.5 :noise :soft}
    "c30-22" {:r 15 :b 2.2}})
 
 ;; ---- The SVG spec's turbulence (Filter Effects, feTurbulence reference code) ----
@@ -239,4 +246,17 @@
       (.setProperty style (str "--chalk-" n) (nine-slice shape)))
     (.setProperty style "--chalk-grain" (str "url(" (grain-url :edge) ")"))
     (.setProperty style "--chalk-grain-soft" (str "url(" (grain-url :soft) ")"))
-    (.setProperty style "--chalk-grain-size" (str grain-size "px"))))
+    (.setProperty style "--chalk-grain-size" (str grain-size "px"))
+    ;; The grain for SVG drawn outside the picture's graphs (charts, the git and clojure maps): SVG
+    ;; shapes take a mask by id, #chalk-grain and #chalk-grain-soft.
+    (when-not (js/document.getElementById "chalk-grain")
+      (let [defs (js/document.createElement "div")
+            one (fn [id kind]
+                  (str "<pattern id=\"" id "-tile\" patternUnits=\"userSpaceOnUse\" width=\"" grain-size "\" height=\"" grain-size "\">"
+                       "<image href=\"" (grain-url kind) "\" width=\"" grain-size "\" height=\"" grain-size "\"/></pattern>"
+                       "<mask id=\"" id "\" maskUnits=\"userSpaceOnUse\" x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\" style=\"mask-type:alpha\">"
+                       "<rect x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\" fill=\"url(#" id "-tile)\"/></mask>"))]
+        (set! (.-innerHTML defs)
+              (str "<svg class=\"chalk-defs\" aria-hidden=\"true\" style=\"position:absolute;width:0;height:0\">"
+                   (one "chalk-grain" :edge) (one "chalk-grain-soft" :soft) "</svg>"))
+        (.appendChild js/document.body (.-firstChild defs))))))

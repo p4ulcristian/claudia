@@ -199,6 +199,7 @@
             :running (boolean (:running s))
             :waiting (boolean (seq asks))
             :at (:at r)
+            :started (:created r)
             :preview (or question
                          (some #(case (:kind %)
                                   "secret" (str "Secret: " (:reason %))

@@ -1,7 +1,17 @@
 (ns claudia.web.md
   "Markdown to safe HTML: marked renders, DOMPurify cleans."
   (:require ["marked" :refer [Marked]]
-            ["dompurify" :as DOMPurify]))
+            ["dompurify" :as DOMPurify]
+            ["highlight.js/lib/common" :as hljs]
+            ["highlight.js/lib/languages/clojure" :as l-clj]
+            ["highlight.js/lib/languages/dockerfile" :as l-docker]))
+
+;; As the TypeScript Claudia did (web/md.ts): highlight.js's common languages, Clojure and Dockerfile.
+(defonce ^:private languages
+  (do (.registerLanguage hljs "clojure" (or (.-default l-clj) l-clj))
+      (.registerAliases hljs #js ["cljs" "cljc" "bb"] #js {:languageName "clojure"})
+      (.registerLanguage hljs "dockerfile" (or (.-default l-docker) l-docker))
+      true))
 
 (defn- escape [s]
   (-> (str s)
@@ -16,8 +26,16 @@
         :breaks false
         :renderer
         #js {:code (fn [^js tok]
-                     (str "<div class=\"code\"><button class=\"copy\" type=\"button\">Copy</button>"
-                          "<pre><code>" (escape (.-text tok)) "</code></pre></div>"))
+                     ;; Coloured as the TypeScript Claudia did (github-dark, claudia.css): by its
+                     ;; language when known, else guessed.
+                     (let [text (.-text tok)
+                           lang (let [l (.-lang tok)] (when (and languages (seq l) (.getLanguage hljs l)) l))
+                           html (try (.-value (if lang
+                                                (.highlight hljs text #js {:language lang :ignoreIllegals true})
+                                                (.highlightAuto hljs text)))
+                                     (catch :default _ (escape text)))]
+                       (str "<div class=\"code\"><button class=\"copy\" type=\"button\" title=\"Copy\">Copy</button>"
+                            "<pre><code class=\"hljs\">" html "</code></pre></div>")))
              :link (fn [^js tok]
                      (this-as ^js this
                               (str "<a href=\"" (escape (.-href tok)) "\" target=\"_blank\" rel=\"noreferrer\">"

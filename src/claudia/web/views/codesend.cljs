@@ -2,7 +2,9 @@
   "Code sent from an editor block, in the user's bubble: their note, then a chip per file
   (\"Sent total.ts +3 −1\") that opens the diff."
   (:require [clojure.string :as str]
+            [reagent.core :as r]
             [reagent.hooks :as h]
+            [claudia.web.md :as md]
             [claudia.web.views.git :as git]))
 
 (def ^:private sent-re
@@ -36,6 +38,6 @@
   [text]
   (if-let [{:keys [note sends]} (code-sends text)]
     [:<>
-     (when (seq note) [:div note])
+     (when (seq note) [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html note))}])
      (for [[i s] (map-indexed vector sends)] ^{:key i} [:f> chip s])]
     text))

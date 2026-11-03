@@ -4,6 +4,7 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
+            [reagent.hooks :as h]
             [claudia.web.views.diff :as diff]))
 
 (defn- short-path [p folder]
@@ -22,18 +23,6 @@
         (if (and (seq parts) (<= (+ (count out) (count (peek parts)) 1) (- max 2)))
           (recur (pop parts) (str (peek parts) "/" out))
           (str "…/" out))))))
-
-(defn- turns
-  "The chat's changes by turn, newest turn first: [[turn [change …]] …]."
-  [changes]
-  (->> changes
-       (partition-by :turn)
-       (map (fn [cs] [(:turn (first cs)) (vec cs)]))
-       reverse
-       vec))
-
-(defn- when-label [at]
-  (when at (.toLocaleTimeString (js/Date. at) js/undefined #js {:hour "2-digit" :minute "2-digit"})))
 
 (defn- file-icon []
   [:svg {:width 13 :height 13 :viewBox "0 0 16 16" :fill "none" :stroke "currentColor" :stroke-width 1.5
@@ -56,7 +45,7 @@
                   (if @whole? "Show only the changes" "Show the whole file")]])))))
 
 (defn changes-panel
-  "A turn's changed files; each opens its diff."
+  "A turn's changed files; each opens its diff. In the pill's dropdown it is always open."
   [ck changes folder label]
   (let [shown (r/atom nil)]
     (fn [ck changes folder label]
@@ -65,10 +54,10 @@
             removed (reduce + (map :removed changes))]
         [:section.panel.changes
          [:div.changes-head
-          [:b "Changes"]
-          [:span.muted.small label " · " (count changes) (if (= 1 (count changes)) " file" " files") " · "
-           [:span.plus "+" added] " " [:span.minus "−" removed]]
-          [:span.grow]
+          [:button.tasks-head {:disabled true}
+           [:b "Changes"]
+           [:span.muted.small label " · " (count changes) (if (= 1 (count changes)) " file" " files") " · "
+            [:span.plus "+" added] " " [:span.minus "−" removed]]]
           [:button.link.toggle-split {:on-click #(rf/dispatch [:changes/split (not split?)])}
            (if split? "One column" "Side by side")]]
          [:ul
@@ -84,34 +73,43 @@
               [:span.counts [:span.plus "+" (:added c)] " " [:span.minus "−" (:removed c)]]]
              (when (= @shown (:id c)) [diff-view ck c split?])])]]))))
 
+(defn- pill-view [ck state folder]
+  (let [[open set-open] (h/use-state false)
+        box (h/use-ref nil)
+        viewing @(rf/subscribe [:viewing-msg ck])
+        changes (:changes state)
+        last-user (:id (last (filter #(= "user" (:role %)) (:messages state))))
+        ;; The turn looked at: an earlier one when its picture shows, else the latest with changes.
+        turn (or viewing (:turn (peek (vec changes))))
+        cs (filterv #(= turn (:turn %)) changes)
+        label (cond viewing "Earlier turn" (= turn last-user) "This turn" :else "Last turn with changes")
+        added (reduce + (map :added cs))
+        removed (reduce + (map :removed cs))]
+    (h/use-effect (fn [] (set-open false) nil) [(str ck)])
+    (h/use-effect (fn [] (when (and open (empty? cs)) (set-open false)) nil) [open (count cs)])
+    (h/use-effect
+     (fn []
+       (when open
+         (let [down (fn [e] (when-not (some-> (.-current box) (.contains (.-target e))) (set-open false)))
+               k (fn [e] (when (= "Escape" (.-key e)) (.stopPropagation e) (set-open false)))]
+           (js/document.addEventListener "pointerdown" down)
+           (js/window.addEventListener "keydown" k true)
+           #(do (js/document.removeEventListener "pointerdown" down)
+                (js/window.removeEventListener "keydown" k true)))))
+     [open])
+    (when (seq cs)
+      [:div.act {:ref #(set! (.-current box) %)}
+       [:div.act-pill
+        [:button.act-part {:class (when open "on")
+                           :title (str "Changes · " label ": " (count cs) (if (= 1 (count cs)) " file" " files")
+                                       ", +" added " −" removed)
+                           :on-click #(set-open not)}
+         [file-icon] [:span (count cs)] [:span.plus "+" added] [:span.minus "−" removed]]]
+       (when open
+         [:div.act-pop
+          ^{:key turn} [changes-panel ck cs folder label]])])))
+
 (defn pill
-  "The header's pill for the chat's newest turn with changes (older turns from its menu)."
+  "The header's pill: the changes of the turn looked at (activity.tsx of the TypeScript Claudia)."
   [ck state folder]
-  (let [open? (r/atom false)
-        pick (r/atom nil)]
-    (fn [ck state folder]
-      (let [ts (turns (:changes state))
-            [turn cs] (or (some #(when (= @pick (first %)) %) ts) (first ts))
-            newest? (= turn (ffirst ts))]
-        (when (seq ts)
-          (let [added (reduce + (map :added cs))
-                removed (reduce + (map :removed cs))
-                label (if newest? (if (:running state) "this turn" "last turn") (str "turn at " (when-label (:at (first cs)))))]
-            [:div.act
-             [:div.act-pill
-              [:button.act-part {:class (when @open? "on")
-                                 :title (str "Changes · " label ": " (count cs) (if (= 1 (count cs)) " file" " files")
-                                             ", +" added " −" removed)
-                                 :on-click #(swap! open? not)}
-               [file-icon] [:span (count cs)] [:span.plus "+" added] [:span.minus "−" removed]]]
-             (when @open?
-               [:<>
-                [:div.menu-away {:on-click #(reset! open? false)}]
-                [:div.act-pop
-                 (when (> (count ts) 1)
-                   [:div.act-turns
-                    (for [[i [t tcs]] (map-indexed vector ts)]
-                      ^{:key t}
-                      [:button {:class (when (= t turn) "on") :on-click #(reset! pick t)}
-                       (if (zero? i) "Newest" (when-label (:at (first tcs))))])])
-                 ^{:key turn} [changes-panel ck cs folder label]]])]))))))
+  [:f> pill-view ck state folder])
