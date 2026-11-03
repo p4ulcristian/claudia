@@ -2,7 +2,7 @@
   "The phone's sideways swipes, following the finger like iOS's back swipe: on the chat, right
   slides it off over the list (which comes in from 30% to the left) and left pulls the picture in;
   on the list, left slides the open chat back over it; on the picture, right pushes it out; on
-  Settings, right goes back. Released past 40% of the width, or flicked, the move completes; else
+  Settings and an agent's view, right goes back. Released past 40% of the width, or flicked, the move completes; else
   it springs back. The page owns the gesture: it starts anywhere, except in fields, on what moves
   sideways itself (code and tables that scroll, pannable graphs, sliders, the 3D view), with two
   fingers, or on a mostly vertical move (the axis is decided on the first 10 px).
@@ -105,6 +105,12 @@
       {:surface side
        :moves (keep identity [(when (:open @rdb/app-db)
                                 (slide-over left side #(rf/dispatch [:nav/screen :chat]) #(on? "chat")))])}
+
+      ;; An agent's view lies over the chat: right goes back to the chat.
+      (and (= screen "chat") ($ ".ag-screen"))
+      {:surface ($ ".ag-screen")
+       :moves (keep identity [(slide-back ($ ".ag-screen") nil #(rf/dispatch [:agents/close (:open @rdb/app-db)])
+                                          #(not (js/document.querySelector ".ag-screen")))])}
 
       (= screen "chat")
       {:surface left
