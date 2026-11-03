@@ -10,7 +10,7 @@
    "files"
    {:label "Files"
     :when "A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter, and any code to show: open the file (file) with the lines that matter highlighted (lines) and short notes pinned to lines (notes) instead of explaining in the chat; code that isn't on disk (a proposal, a snippet) goes in sketch. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out. For files that don't exist yet (a planned layout, a sketch of a library), send sketch: alone it is a made-up tree; with root it adds planned files to the real one. Each is labelled for the user (on disk / sketch / planned), so never present made-up files as real."
-    :fields "root? (a folder: absolute, ~/..., or relative to the working folder; default the working folder), file? (the selected file, relative to root: shown open, whole, with only the folders down to it unfolded; without it the first marked file is selected), lines?: [line numbers or \"a-b\" ranges to highlight in that file; it scrolls to the first], notes?: [{ id, line, text, color? }] pinned under lines of that file, marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out. Planned files: sketch: [{ path (relative to root when root is given), code?, status? }] (folders come from the paths), title? (what a root-less sketch is); marks work the same"
+    :fields "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), file? (the selected file, relative to root: shown open, whole, with only the folders down to it unfolded; without it the first marked file is selected), lines?: [line numbers or \"a-b\" ranges to highlight in that file; it scrolls to the first], notes?: [{ id, line, text, color? }] pinned under lines of that file, marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out. Planned files: sketch: [{ path (relative to root when root is given), code?, status? }] (folders come from the paths), title? (what a root-less sketch is); marks work the same"
     :sample {:demo [{:path "src" :dir true}
                     {:path "src/orders" :dir true}
                     {:path "src/orders/total.ts" :status "M"
@@ -27,7 +27,7 @@
    {:label "Git"
     :opt-in true
     :when "A repo's history as a live commit graph, like GitGud: branches in coloured lanes (local, remote or both, ahead/behind), HEAD, tags, the uncommitted changes as a dashed node above HEAD; the user clicks a commit for its files and diff. Read live from the repo and redrawn when it changes (a commit, a checkout, an edit), so you send only the repo and what to point out. Read only: it never changes the repo."
-    :fields "repo? (a folder in the repo: absolute, ~/..., or relative to the working folder; default the working folder), branches?: [branch names to graph; default all], limit? (commits, default 100), commit? (a hash, branch, tag or \"WORKING\" to open for the user), marks?: [{ id, commit (a hash, branch, tag, \"HEAD\" or \"WORKING\"), note?, color? }] commits to point out"
+    :fields "repo? (a folder in the repo: absolute, ~/…, or relative to the working folder; default the working folder), branches?: [branch names to graph; default all], limit? (commits, default 100), commit? (a hash, branch, tag or \"WORKING\" to open for the user), marks?: [{ id, commit (a hash, branch, tag, \"HEAD\" or \"WORKING\"), note?, color? }] commits to point out"
     :sample {:demo {:head "c4"
                     :currentBranch "fix/tax"
                     :dirty {:total 2 :files [{:path "src/orders/total.ts" :status "M"} {:path "src/orders/tax.test.ts" :status "?"}]}
@@ -90,32 +90,71 @@
   "The forms a runner has only when CLAUDIA_FORMS names them."
   (set (for [[n s] specs :when (:opt-in s)] n)))
 
+;; ---- the base forms (drawn by claudia.web.views.forms): what Claude is told, the gallery's samples ----
+
+(def base
+  "pipeline ... stats and scene3d: {:label :when :fields :sample}, as the old src/forms.ts said them."
+  {"pipeline"
+   {:label "Pipeline"
+    :when "Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
+    :fields "stages: [{ id, label, status: todo|running|done|failed|skipped, note? }] in order"
+    :sample {:stages [{:id "build" :label "Build" :status "done" :note "41 s"}
+                      {:id "test" :label "Test" :status "done" :note "212 passed"}
+                      {:id "deploy" :label "Deploy" :status "running" :note "stage"}
+                      {:id "verify" :label "Verify" :status "todo"}]}}
+   "timeline"
+   {:label "Timeline"
+    :when "What happened when, or what is planned by date: an incident, a history, a schedule."
+    :fields "events: [{ id, at (a short time or date label), label, note?, status?: todo|running|done|failed|skipped, color? }] in time order"
+    :sample {:events [{:id "a" :at "09:12" :label "Alert fired" :note "p95 over 2 s" :color "red"}
+                      {:id "b" :at "09:20" :label "Rolled back" :status "done"}
+                      {:id "c" :at "09:31" :label "Root cause found" :note "N+1 query in orders"}
+                      {:id "d" :at "tomorrow" :label "Fix ships" :status "todo"}]}}
+   "compare"
+   {:label "Compare"
+    :when "Options side by side with their pros and cons, and the one picked (or recommended) marked."
+    :fields "options: [{ id, label, pros?: string[], cons?: string[], note?, picked?: boolean }]"
+    :sample {:options [{:id "pwa" :label "Home Screen app" :pros ["minutes to ship" "updates instantly"] :cons ["Safari underneath"] :picked true}
+                       {:id "native" :label "Native wrapper" :pros ["native extras later"] :cons ["hours of work" "TestFlight per update"]}]}}
+   "chart"
+   {:label "Chart"
+    :when "Numbers to see as a shape: trends, comparisons, distributions. Bar, line, area or point."
+    :fields "mark: bar|line|area|point, x: field name, y: field name, color?: field name (one series per value), title?, rows: [{ id, <x>: …, <y>: …, … }]"
+    :sample {:mark "bar" :x "hour" :y "turns"
+             :rows [{:id "0" :hour "0h" :turns 12} {:id "1" :hour "1h" :turns 19} {:id "2" :hour "2h" :turns 15}
+                    {:id "3" :hour "3h" :turns 26} {:id "4" :hour "4h" :turns 14}]}}
+   "stats"
+   {:label "Stats"
+    :when "A few numbers that matter right now, big: usage, counts, durations, a progress."
+    :fields "tiles: [{ id, label, value, note?, progress?: 0..1, color? }]"
+    :sample {:tiles [{:id "five" :label "5-hour used" :value "85%" :progress 0.85 :color "amber"}
+                     {:id "week" :label "Week used" :value "15%" :progress 0.15}
+                     {:id "reset" :label "Resets in" :value "34m"}]}}
+   "scene3d"
+   {:label "3D scene"
+    :when "Something best understood as a shape in space that the user can rotate and zoom: an architecture with layers, a mechanism, a building, a molecule, a product, a map with height. Predefined shapes placed in 3D, arrows between them, labels. Pick it when depth or a free viewpoint helps; a flat graph is better for plain boxes and arrows."
+    :fields "a picture holds one 3D scene: a new scene3d block takes the old one's place, so to show another model redraw the scene (a new id, or the same id with its parts and story replaced). parts: [{ id, shape: box|sphere|cylinder|cone|pyramid|torus|capsule|plane|ring|extrude|lathe|tube|rod|group|person, pos?: [x,y,z] (y is up, 1 unit is about a box), size?: number or [x,y,z], rot?: [x,y,z] degrees, color? (green|red|amber|blue|grey|violet or any CSS colour), label?, note?, material? (what the surface is made of, for real reflections: steel|brushed-steel|aluminium|chrome|copper|brass|iron|plastic|matte-plastic|rubber|enamel|ceramic|wood|glass; glass is see-through and never solid; a colour tints it), opacity?: 0..1, wire?: true, points? (extrude: [[x,y]…] outline pulled 1 unit deep, scale it with size; lathe: [[radius,y]…] profile spun round y; tube: [[x,y,z]…] path), parent? (a part or group id: this part's pos/rot are then relative to it and it follows it), ghost? (true: not solid), outline?: false (no ink outline), a group is an empty frame to hang parts on and turn together (a rotor and its blades), radius? (tube, rod), from?/to? ([x,y,z] ends of a rod: a cylinder between two points) , pose? (person, below) }]. A person is a real human body (rigged, clothed), standing at pos, facing +z, turned with rot [0, degrees, 0]; size is their height (default 1.75, so 1 unit is a metre around people); color tints the top, look: { skin, top, bottom, shoes, hair } any of them. pose: a name (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit (on a seat 0.46 high), sit_floor, kneel, squat, bend, lie) or { base: name, then any of: hips, chest (where the base of the neck goes: the spine bends to it), pelvis: [x,y,z] tilt degrees (x + forward, − back: lie is -90), twist: degrees, look, handL, handR, footL, footR, elbowL, elbowR, kneeL, kneeR (points an elbow or knee bends towards), toesL, toesR }, every point [x,y,z] in the person's own space (x + their left, y up, z + in front of them, metres for 1.75: hips 0.95, shoulders 1.41, head top 1.75) or, for look/hands/feet, a part id to reach for or look at (a hand on a switch: handR: 'switch'). A part with parent '<person>.<joint>' (hips, chest, head, handL, handR, footL, footR) rides on that joint, its pos in the person's axes (a mug held: parent 'anna.handR', pos [0, 0, 0.06]); arrows and cameras can point at '<person>.<joint>' too. People are not solid (not overlap-checked). arrows?: [{ id, from, to (a part id, or [x,y,z]), via?: [[x,y,z]…] (it bends through these points), flow?: true (a stream of dashes runs along it: air, current, signal), label?, color? }] (they follow their parts when these move), legend?: [{ color, label }] (colour key chips in a corner: use one colour per job, always the same: heat red, cold air blue, motion green, control violet), script?: JavaScript source for what the data can't say, run in a locked-down separate engine (no window, no network; plain JavaScript and Math only, 40 ms per frame): define build() returning { parts?, arrows? } for parts made by loops and maths, and frame(t, step) (t = seconds, step = the story's current step, 0-based, -1 when there is none) returning { [partId]: { pos?, rot?, size?, color?, opacity?, from?/to? (rod), pose? (person: set at once) } } to move parts every frame; the user gets play/pause and speed buttons; build() may also return allow), allow?: [[idA, idB]…] pairs that are meant to touch or overlap (a pin inside a rod end; an id ending in * matches every id starting so), scan?: seconds of the script the user's scan button checks (default 12). story?: [{ say?: the line spoken in this step (shown as subtitles; a narrator voice reads it aloud when the user has turned it on, it is off by default), show?: ids to bring in (part or arrow ids; a trailing * matches a prefix, like blade*), hide?: ids to take away, focus?: ids that glow while the step lasts, camera?: { frame?: ids to bring into view, target?: an id or [x,y,z], dist?, az?: degrees round, el?: degrees up }, hold?: minimum seconds, pose?: { <person id>: pose } (they glide into it), move?: seconds the glide takes (default 1.4) }] makes the scene a narrated build: parts the story shows stay hidden until their step (parts it never shows are there from the start), the user presses play and the steps run one after the other, each part fading in as it is spoken about, with pause, next, back and a dot per step; voice?: how the narrator sounds (like: a calm man), autoplay?: false keeps it waiting for the play button (a story starts by itself by default), narrate?: false turns the voice off. The default look is a chalk diagram: flat colour in bands and a thin light outline round every part; while a story step has focus, the other parts fade back and the focused ones get a thick amber outline, so name the focus in each step. The page checks that solid parts never pass through each other: parts that are translucent (opacity under 1), wire, plane, ring or ghost: true are housings and don't count; every other overlap glows red and is counted for the user, so build the model so nothing intersects (real clearances, split shafts) and list only intended overlaps in allow"
+    :sample {:parts [{:id "app" :shape "box" :pos [0 3.6 0] :size [3 0.6 2] :color "blue" :label "App"}
+                     {:id "api" :shape "box" :pos [0 1.8 0] :size [3 0.6 2] :color "green" :label "API"}
+                     {:id "db" :shape "cylinder" :pos [0 0.3 0] :size [1.8 0.6 1.8] :color "amber" :label "Postgres"}
+                     {:id "cache" :shape "sphere" :pos [4 1.8 0] :size 1.1 :color "violet" :label "Cache" :note "hot reads"}]
+             :arrows [{:id "a1" :from "app" :to "api" :label "calls"}
+                      {:id "a2" :from "api" :to "db" :label "SQL"}
+                      {:id "a3" :from "api" :to "cache" :label "reads" :color "violet"}]}}})
+
+(def order
+  "Every form in the order the old Claudia had them (src/forms.ts): the draw tool's description, the
+  gallery and the form row list them so."
+  ["pipeline" "timeline" "compare" "chart" "stats" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
+
+(defn spec-of [n] (or (get specs n) (get base n)))
+
+(defn label-of [n] (or (:label (spec-of n)) n))
+
 (defn help-line [n]
-  (let [{:keys [when fields]} (get specs n)]
+  (let [{:keys [when fields]} (spec-of n)]
     (str "- " n ": " when " Data: " fields ".")))
 
-(def base-samples
-  "Samples for the forms that are not code forms (pipeline ... stats), for the gallery."
-  {"pipeline" {:stages [{:id "build" :label "Build" :status "done" :note "41 s"}
-                        {:id "test" :label "Test" :status "done" :note "212 passed"}
-                        {:id "deploy" :label "Deploy" :status "running" :note "stage"}
-                        {:id "verify" :label "Verify" :status "todo"}]}
-   "timeline" {:events [{:id "a" :at "09:12" :label "Alert fired" :note "p95 over 2 s" :color "red"}
-                        {:id "b" :at "09:20" :label "Rolled back" :status "done"}
-                        {:id "c" :at "09:31" :label "Root cause found" :note "N+1 query in orders"}
-                        {:id "d" :at "tomorrow" :label "Fix ships" :status "todo"}]}
-   "compare" {:options [{:id "pwa" :label "Home Screen app" :pros ["minutes to ship" "updates instantly"] :cons ["Safari underneath"] :picked true}
-                        {:id "native" :label "Native wrapper" :pros ["native extras later"] :cons ["hours of work" "TestFlight per update"]}]}
-   "chart" {:mark "bar" :x "hour" :y "turns"
-            :rows [{:id "0" :hour "0h" :turns 12} {:id "1" :hour "1h" :turns 19} {:id "2" :hour "2h" :turns 15}
-                   {:id "3" :hour "3h" :turns 26} {:id "4" :hour "4h" :turns 14}]}
-   "stats" {:tiles [{:id "five" :label "5-hour used" :value "85%" :progress 0.85 :color "amber"}
-                    {:id "week" :label "Week used" :value "15%" :progress 0.15}
-                    {:id "reset" :label "Resets in" :value "34m"}]}})
+(def base-samples (into {} (for [[n s] base] [n (:sample s)])))
 
-(def base-when
-  {"pipeline" "Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job."
-   "timeline" "What happened when, or what is planned by date: an incident, a history, a schedule."
-   "compare" "Options side by side with their pros and cons, and the one picked (or recommended) marked."
-   "chart" "Numbers to see as a shape: trends, comparisons, distributions. Bar, line, area or point."
-   "stats" "A few numbers that matter right now, big: usage, counts, durations, a progress."})
+(def base-when (into {} (for [[n s] base] [n (:when s)])))

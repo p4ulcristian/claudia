@@ -52,8 +52,11 @@
                box (.getBoundingClientRect (or (.closest el ".right") js/document.body))
                rect (.getBoundingClientRect el)
                w (.-offsetWidth t)
-               x (- (+ (.-left rect) (/ (* (.-width rect) (at hover)) 100)) (/ w 2))]
-           (set! (.. t -style -left) (str (- (max (+ (.-left box) 8) (min x (- (.-right box) w 8))) (.-left rect)) "px"))))
+               x (- (+ (.-left rect) (/ (* (.-width rect) (at hover)) 100)) (/ w 2))
+               ;; The tip is fixed: placed in the page's layer (the body, moved with the keyboard).
+               l (.getBoundingClientRect js/document.body)]
+           (set! (.. t -style -left) (str (- (max (+ (.-left box) 8) (min x (- (.-right box) w 8))) (.-left l)) "px"))
+           (set! (.. t -style -top) (str (- (.-top rect) (.-offsetHeight t) 6 (.-top l)) "px"))))
        js/undefined))
     [:div.rbar-track {:class density :ref #(set! (.-current track) %)
                       :role "slider" :aria-label "Pictures" :aria-valuemin 1 :aria-valuemax n :aria-valuenow (inc index)

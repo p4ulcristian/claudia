@@ -214,6 +214,12 @@
                      ns (clojure/ns-detail root ns)
                      :else (clojure/namespaces root (q "fp"))))))))
 
+(declare hidden-forms)
+
+(defonce on-hidden
+  ;; Called when the deleted forms change (the runner lets every chat's tools follow).
+  (atom []))
+
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
   there is no such chat). on-scene: a chat's scene changed by the page (the template button)."
@@ -223,7 +229,21 @@
         q (query req)]
     (cond
       (and (= url "/api/forms") (= method "GET"))
-      (do (h/json-reply res 200 {:forms all-forms :templates (store/templates)}) true)
+      (do (h/json-reply res 200 {:forms (vec (filter (set all-forms) forms/order)) :hidden (hidden-forms) :templates (store/templates)}) true)
+
+      ;; The gallery's delete / restore of a built-in form: {hiddenForms: [names]}.
+      (and (= url "/api/prefs") (= method "PATCH"))
+      (do (if (:read-only who)
+            (h/json-reply res 403 {:error "Read only."})
+            (-> (h/read-body req 65536)
+                (.then (fn [body]
+                         (let [names (:hiddenForms (p/read-json body))
+                               names (vec (distinct (filter (set all-forms) (map str (if (sequential? names) names [])))))]
+                           (store/kv! "" "hiddenForms" (not-empty names))
+                           (doseq [f @on-hidden] (f))
+                           (h/json-reply res 200 {:hidden names}))))
+                (.catch #(h/json-reply res 400 {:error (str (.-message %))}))))
+          true)
 
       (and (= url "/api/templates") (= method "GET"))
       (do (h/json-reply res 200 (store/templates)) true)
@@ -307,7 +327,15 @@
 
 (defn off? [id kind] (= "off" (get (choices (store/settings id)) kind)))
 
-(defn- off-set [ch] (set (for [[k v] ch :when (= v "off")] k)))
+(defn hidden-forms
+  "Built-in forms the user deleted in the Forms gallery (the profile's prefs): no chat gets them."
+  []
+  (let [v (store/kv "" "hiddenForms")] (if (sequential? v) (vec (map str v)) [])))
+
+(defn- off-set
+  "A chat's switched-off kinds, and the deleted forms."
+  [ch]
+  (into (set (hidden-forms)) (for [[k v] ch :when (= v "off")] k)))
 (defn- required-kinds [ch] (vec (for [[k v] ch :when (and (= v "required") (not= k "questions"))] k)))
 
 (defn- kind-of-block [b]
@@ -318,20 +346,14 @@
         (or (some? (:html b)) (:template b)) "freeform"
         :else (if-let [k (known-block scene (:id b))] (kind-of-block k) (if (= "html" (:kind b)) "freeform" "graph"))))
 
-(def ^:private base-help
-  "The base forms' when-lines from the draw tool's description (the first sentence is enough)."
-  (into {} (for [line (str/split-lines (get-in tools/mcp [:picture :draw :description]))
-                 :let [[_ f when] (re-matches #"- (\w+): (.*)" line)] :when f]
-             [f when])))
-
-(defn- form-when [f] (or (get-in forms/specs [f :when]) (get base-help f) ""))
+(defn- form-when [f] (or (:when (forms/spec-of f)) ""))
 
 (defn- forms-now
   "The forms a chat can draw now, each with a fingerprint of how it is described."
   [ch]
   (let [off (off-set ch)]
     (into {} (for [f all-forms :when (not (off f))]
-               [f (str (hash (str (form-when f) (get-in forms/specs [f :fields]))))]))))
+               [f (str (hash (str (form-when f) (:fields (forms/spec-of f)))))]))))
 
 (defn- forms-news
   "What changed in the forms since the chat's Claude last heard (seen nil: the whole list once)."
@@ -361,7 +383,7 @@
   "What the form row now asks, in words for Claude."
   [ch]
   (let [req (required-kinds ch)
-        off (vec (off-set ch))]
+        off (vec (for [[k v] ch :when (= v "off")] k))]
     (str/join " " (remove nil?
                           [(when (seq req)
                              (str "The user made these REQUIRED in Claudia's form row: " (str/join ", " (map kind-name req))
@@ -401,15 +423,17 @@
   (let [ch (choices (store/settings id))
         off (off-set ch)
         req (filterv #(not (off %)) (required-kinds ch))
-        base (get-in tools/mcp [:picture :draw :description])
-        base (str/join "\n" (remove #(when-let [[_ f] (re-matches #"- (\w+): .*" %)] (off f)) (str/split-lines base)))
-        code (str/join "\n" (map forms/help-line (remove off code-forms)))
-        desc (str base (when (seq code) (str "\n" code))
+        whole (get-in tools/mcp [:picture :draw :description])
+        ;; The forms in the old Claudia's order, base and code forms together.
+        head (subs whole 0 (inc (str/index-of whole "\n- ")))
+        offered (set (remove off all-forms))
+        base (str head (str/join "\n" (map forms/help-line (filter offered forms/order))))
+        desc (str base
                   (when (seq req) (str "\n\nIn this chat the user made REQUIRED: " (str/join ", " req)
                                        " (green in the form row). The picture always holds at least one block of each; a change that takes the last one away is refused. Other kinds stay allowed."))
                   (when (some #{"freeform"} req) " Freeform required means: be creative, build interactive pages where they help.")
                   (when (off "freeform") "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms."))
-        enum (let [e (vec (remove off all-forms))] (if (seq e) e ["none"]))]
+        enum (let [e (vec (filter offered forms/order))] (if (seq e) e ["none"]))]
     (-> tools/mcp
         (assoc-in [:picture :draw :description] desc)
         (assoc-in [:picture :draw :inputSchema :properties :blocks :items :properties :form :enum] enum)
@@ -424,10 +448,7 @@
   [id]
   (let [off (off-set (choices (store/settings id)))]
     (str prompt "\n\nThe forms of the draw tool and their data (blocks[].form + blocks[].data):\n"
-         (str/join "\n" (for [f all-forms :when (not (off f))]
-                          (if (get forms/specs f)
-                            (forms/help-line f)
-                            (str "- " f ": " (get base-help f))))))))
+         (str/join "\n" (map forms/help-line (filter (set (remove off all-forms)) forms/order))))))
 
 (defn draw
   "One draw call on a chat's scene, through the form row and the code forms:

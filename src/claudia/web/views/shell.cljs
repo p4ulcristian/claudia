@@ -50,4 +50,7 @@
      [:main.split {:class (when folded? "folded")}
       [chat/chat-pane]
       [picture/picture-pane]]
+     ;; The right rail (desktop): this chat's forms, beside the picture.
+     [picture/right-rail]
+     [picture/gallery-host]
      [admin/dialog]]))

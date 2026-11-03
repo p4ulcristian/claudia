@@ -2,6 +2,7 @@
   "What Claude is told: the system prompt's Claudia part and the tools the runner serves (their
   descriptions and input schemas, as plain JSON Schema for the host)."
   (:require [clojure.string :as str]
+            [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]))
 
 (def system-append
@@ -50,25 +51,10 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
 (defn- s [description] {:type "string" :description description})
 (defn- strings [description] {:type "array" :items {:type "string"} :description description})
 
-(def ^:private forms-help
-  {"pipeline" ["Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
-               "stages: [{ id, label, status: todo|running|done|failed|skipped, note? }] in order"]
-   "timeline" ["What happened when, or what is planned by date: an incident, a history, a schedule."
-               "events: [{ id, at (a short time or date label), label, note?, status?: todo|running|done|failed|skipped, color? }] in time order"]
-   "compare" ["Options side by side with their pros and cons, and the one picked (or recommended) marked."
-              "options: [{ id, label, pros?: string[], cons?: string[], note?, picked?: boolean }]"]
-   "chart" ["Numbers to see as a shape: trends, comparisons, distributions. Bar, line, area or point."
-            "mark: bar|line|area|point, x: field name, y: field name, color?: field name (one series per value), title?, rows: [{ id, <x>: ..., <y>: ..., ... }]"]
-   "stats" ["A few numbers that matter right now, big: usage, counts, durations, a progress."
-            "tiles: [{ id, label, value, note?, progress?: 0..1, color? }]"]
-   "scene3d" ["Something best understood as a shape in space that the user can rotate and zoom: an architecture with layers, a mechanism, a building, a molecule, a product, a map with height. Predefined shapes placed in 3D, arrows between them, labels. Pick it when depth or a free viewpoint helps; a flat graph is better for plain boxes and arrows."
-              "a picture holds one 3D scene: a new scene3d block takes the old one's place, so to show another model redraw the scene (a new id, or the same id with its parts and story replaced). parts: [{ id, shape: box|sphere|cylinder|cone|pyramid|torus|capsule|plane|ring|extrude|lathe|tube|rod|group|person, pos?: [x,y,z] (y is up, 1 unit is about a box), size?: number or [x,y,z], rot?: [x,y,z] degrees, color? (green|red|amber|blue|grey|violet or any CSS colour), label?, note?, material? (what the surface is made of, for real reflections: steel|brushed-steel|aluminium|chrome|copper|brass|iron|plastic|matte-plastic|rubber|enamel|ceramic|wood|glass; glass is see-through and never solid; a colour tints it), opacity?: 0..1, wire?: true, points? (extrude: [[x,y]…] outline pulled 1 unit deep, scale it with size; lathe: [[radius,y]…] profile spun round y; tube: [[x,y,z]…] path), parent? (a part or group id: this part's pos/rot are then relative to it and it follows it), ghost? (true: a see-through housing: no shadow), outline?: false (no ink outline), a group is an empty frame to hang parts on and turn together (a rotor and its blades), radius? (tube, rod), from?/to? ([x,y,z] ends of a rod: a cylinder between two points) , pose? (person, below) }]. A person is a real human body (rigged, clothed), standing at pos, facing +z, turned with rot [0, degrees, 0]; size is their height (default 1.75, so 1 unit is a metre around people); color tints the top, look: { skin, top, bottom, shoes, hair } any of them. pose: a name (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit (on a seat 0.46 high), sit_floor, kneel, squat, bend, lie) or { base: name, then any of: hips, chest (where the base of the neck goes: the spine bends to it), pelvis: [x,y,z] tilt degrees (x + forward, − back: lie is -90), twist: degrees, look, handL, handR, footL, footR, elbowL, elbowR, kneeL, kneeR (points an elbow or knee bends towards), toesL, toesR }, every point [x,y,z] in the person's own space (x + their left, y up, z + in front of them, metres for 1.75: hips 0.95, shoulders 1.41, head top 1.75) or, for look/hands/feet, a part id to reach for or look at (a hand on a switch: handR: 'switch'). A part with parent '<person>.<joint>' (hips, chest, head, handL, handR, footL, footR) rides on that joint, its pos in the person's axes (a mug held: parent 'anna.handR', pos [0, 0, 0.06]); arrows and cameras can point at '<person>.<joint>' too. arrows?: [{ id, from, to (a part id, or [x,y,z]), via?: [[x,y,z]…] (it bends through these points), flow?: true (a stream of dashes runs along it: air, current, signal), label?, color? }] (they follow their parts when these move), legend?: [{ color, label }] (colour key chips in a corner: use one colour per job, always the same: heat red, cold air blue, motion green, control violet), script?: JavaScript source for what the data can't say, run in a locked-down separate engine (no window, no network; plain JavaScript and Math only, 40 ms per frame): define build() returning { parts?, arrows? } for parts made by loops and maths, and frame(t, step) (t = seconds, step = the story's current step, 0-based, -1 when there is none) returning { [partId]: { pos?, rot?, size?, color?, opacity?, from?/to? (rod), pose? (person: set at once) } } to move parts every frame; the user gets play/pause and speed buttons). story?: [{ say?: the line spoken in this step (shown as subtitles; a narrator voice reads it aloud when the user has turned it on, it is off by default), show?: ids to bring in (part or arrow ids; a trailing * matches a prefix, like blade*), hide?: ids to take away, focus?: ids that glow while the step lasts, camera?: { frame?: ids to bring into view, target?: an id or [x,y,z], dist?, az?: degrees round, el?: degrees up }, hold?: minimum seconds, pose?: { <person id>: pose } (they glide into it), move?: seconds the glide takes (default 1.4) }] makes the scene a narrated build: parts the story shows stay hidden until their step (parts it never shows are there from the start), the user presses play and the steps run one after the other, each part fading in as it is spoken about, with pause, next, back and a dot per step; voice?: how the narrator sounds (like: a calm man), autoplay?: false keeps it waiting for the play button (a story starts by itself by default), narrate?: false turns the voice off. The default look is a chalk diagram: flat colour in bands and a thin light outline round every part; while a story step has focus, the other parts fade back and the focused ones get a thick amber outline, so name the focus in each step."]})
-
 (def ^:private draw-description
   (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.\n\n"
        "Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:\n"
-       (str/join "\n" (for [f p/forms :let [[when fields] (forms-help f)]]
-                        (str "- " f ": " when " Data: " fields ".")))))
+       (str/join "\n" (map forms/help-line (filter (set p/forms) forms/order)))))
 
 (def ^:private draw-schema
   {:type "object"
@@ -100,13 +86,13 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
                      :properties {:id {:type "string"} :label {:type "string"} :color colour}}}
     :remove (strings "Ids to remove from the graph block: nodes, groups, or arrows as \"from->to\"")
     :blocks {:type "array"
-             :description "Add or change blocks by id: HTML blocks, forms, and the width/position of any block"
+             :description "Add or change blocks by id: HTML blocks, and the width/position of any block"
              :items {:type "object"
                      :required ["id"]
                      :properties {:id (s "Stable block id, reused across turns")
                                   :name (s "Short telling name shown on the block's badge, e.g. \"Deploy steps\"")
                                   :kind {:type "string" :enum ["graph" "html"]
-                                         :description "Only needed for a new graph block placed before its nodes come; html is assumed when html is given"}
+                                         :description "Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"}
                                   :form {:type "string" :enum p/forms :description "Makes this a form block of that kind"}
                                   :data {:type "object" :additionalProperties {}
                                          :description "A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"}
@@ -114,9 +100,10 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
                                   :width {:type "string" :enum ["full" "half"]
                                           :description "full (default) or half: two half blocks in a row sit side by side"}
                                   :before (s "Move or put this block before the block with this id; new blocks go last")
-                                  :html (s "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net). Claudia's colours and fonts are CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.")
+                                  :html (s "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.")
                                   :parts {:type "object" :additionalProperties {:type "string"}
-                                          :description "New inner markup for the elements marked data-part=\"<name>\" (markup only: scripts in it do not run). The page is not reloaded"}}}}
+                                          :description "New inner markup for the elements marked data-part=\"<name>\" (markup only: scripts in it do not run). The page is not reloaded"}
+                                  :height {:type "number" :description "Not used: a page is always shown at its full height"}}}}
     :removeBlocks (strings "Ids of whole blocks to remove")}})
 
 (def mcp

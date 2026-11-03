@@ -55,7 +55,7 @@ code, pre { font-family: var(--mono); }
 .phone-only { display: none !important; }
 
 /* ---------- Layout (desktop) ---------- */
-.app { --side-w: 300px; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%;
+.app { --side-w: 300px; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr) 64px; grid-template-rows: minmax(0, 1fr); height: 100%;
   padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); transition: grid-template-columns 0.24s var(--ease); }
 .app.folded { --side-w: 0px; }
 .sidebar-slot { min-width: 0; min-height: 0; overflow: hidden; display: flex; }
@@ -236,144 +236,18 @@ code, pre { font-family: var(--mono); }
 .new-on button:hover { color: var(--fg); }
 .new-on button.on { color: var(--fg); font-weight: 600; --ink: var(--accent); background: var(--panel2); }
 
-/* ---------- Picture: the board ---------- */
-.right { background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); container-type: inline-size; }
-.picture-head { display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 10px 20px 6px; }
-.picture-title { margin: 0; flex: 1; min-width: 0; font: 700 22px/1.25 var(--hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picture-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px 18px calc(40px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
-.picture-scroll > * { flex-shrink: 0; }
-.picture { display: grid; gap: 18px 16px; align-content: start; }
-.picture.blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.picture-empty { flex: 1 0 auto; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); font: 700 17px var(--hand); }
-.picture-empty .dots { display: flex; gap: 10px; align-items: center; }
-.picture-empty .dots span { width: 22px; height: 22px; border-radius: 50%; position: relative; isolation: isolate; --ring: var(--chalk-c34-18-dash); --ink: var(--line); }
-.picture-empty .dots span:nth-child(2) { width: 30px; height: 30px; }
-.picture-empty p { margin: 0; }
-
-.block { grid-column: 1 / -1; min-width: 0; border-radius: 10px; position: relative; animation: rise 0.3s ease-out; }
-.block.w-half { grid-column: span 1; }
-@container (max-width: 560px) { .block.w-half { grid-column: 1 / -1; } }
-.block-glow { position: absolute; inset: -4px; border-radius: 12px; pointer-events: none; animation: block-glow 1.2s ease-out forwards; }
-.block-head { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-height: 18px; margin-bottom: 4px; }
-/* The badge: quiet, top right of the block: its kind in the kind's chalk colour, then its name. */
-.block-badge { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; opacity: 0.6; transition: opacity 0.15s; --b-c: var(--blue); }
-.block:hover .block-badge { opacity: 0.95; }
-.block-badge b { font: 700 12.5px/1.4 var(--hand); color: var(--b-c); white-space: nowrap; }
-.block-badge.b-graph { --b-c: var(--violet); }
-.block-badge.b-freeform { --b-c: var(--amber); }
-.block-name { font: 400 12.5px var(--hand); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.block-name::before { content: "· "; }
-
-/* graph */
-.diagram { touch-action: pan-y; display: flex; justify-content: safe center; overflow: hidden; min-height: 120px; position: relative; }
-.diagram svg { flex: none; display: block; overflow: visible; user-select: none; max-width: 100%; height: auto; }
-.diagram g { transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.2, 1); }
-.c-green { --c: var(--green); --cb: var(--green-bg); }
-.c-red { --c: var(--red); --cb: var(--red-bg); }
-.c-amber { --c: var(--amber); --cb: var(--amber-bg); }
-.c-blue { --c: var(--blue); --cb: var(--blue-bg); }
-.c-grey { --c: var(--grey); --cb: var(--grey-bg); }
-.c-violet { --c: var(--violet); --cb: var(--violet-bg); }
-.node .body { fill: color-mix(in srgb, var(--c) 9%, transparent); stroke: var(--c); stroke-width: 2.3; transition: fill 0.3s, stroke 0.3s; }
-.node .label { fill: var(--fg); font: 700 15px var(--hand); }
-.node .note { fill: var(--muted); font: 400 12px var(--sans); }
-.node.fresh { animation: pop 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) both; transform-box: fill-box; }
-.node.s-todo .body { stroke-dasharray: 4 3; fill: transparent; }
-.node.s-todo .label { fill: var(--muted); }
-.node.s-active .body { stroke-width: 2.8; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 60%, transparent)); }
-.node.s-blocked .body { stroke: var(--red); stroke-dasharray: 5 3; }
-.node.s-done .body { fill: color-mix(in srgb, var(--c) 18%, transparent); }
-.badge circle { fill: var(--green); stroke: var(--bg2); stroke-width: 2; }
-.badge path { stroke: var(--on-hue); stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.badge.blocked circle { fill: var(--red); }
-.group rect { fill: color-mix(in srgb, var(--c) 5%, transparent); stroke: color-mix(in srgb, var(--c) 55%, transparent); stroke-width: 1.8; stroke-dasharray: 6 4; }
-.group text { fill: var(--c); font: 700 14px var(--hand); }
-.edge path { fill: none; stroke: color-mix(in srgb, var(--c) 80%, transparent); stroke-width: 2.1; transition: d 0.55s cubic-bezier(0.3, 0.7, 0.2, 1), stroke 0.3s; }
-.edge.fresh { animation: fade 0.5s ease-out 0.15s both; }
-.arrowhead { fill: var(--c); }
-.edge-label rect { fill: var(--board); stroke: none; }
-.edge-label text { fill: var(--muted); font: 400 12px var(--sans); }
-/* Chalk: under each shape and line, a wider copy through the fray grain: its rough edge. */
-.node .fray, .group .fray, .edge .fray { fill: none; mask: var(--chalk-mask); }
-.node .fray { stroke: var(--c); stroke-width: 3.9; }
-.node.s-todo .fray { stroke-dasharray: 4 3; }
-.node.s-blocked .fray { stroke: var(--red); stroke-dasharray: 5 3; }
-.group .fray { stroke-width: 3.4; }
-.edge .fray { stroke-width: 3.7; }
-
-/* html blocks and charts: Claude's own pages, sandboxed */
-.page-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; }
-
-/* forms */
-.chalk-box { position: relative; isolation: isolate; border-radius: 12px; background: color-mix(in srgb, var(--box, var(--line)) 10%, transparent); --ring: var(--chalk-r12-2); --ink: var(--box, var(--line)); }
-.form-view { font-size: 13.5px; }
-.f-note { color: var(--muted); font-size: 12.5px; }
-.f-tag { margin-left: 8px; font: 700 12px var(--hand); color: var(--muted); font-style: normal; }
-.st-done { --box: var(--green); --st: var(--green); }
-.st-running { --box: var(--amber); --st: var(--amber); }
-.st-failed { --box: var(--red); --st: var(--red); }
-.st-skipped { --box: var(--grey); --st: var(--muted); opacity: 0.6; }
-.st-todo { --st: var(--muted); }
-
-.f-pipeline { display: flex; align-items: center; padding: 4px 2px; }
-.f-stage { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; padding: 10px 8px; text-align: center; }
-.f-stage > * { max-width: 100%; overflow-wrap: anywhere; }
-.f-stage-mark { font: 700 18px/1 var(--hand); color: var(--st); min-height: 18px; }
-.f-stage.st-running .f-stage-mark { animation: breathe 1.4s ease-in-out infinite; }
-.f-stage-label { font: 700 16px var(--hand); }
-.f-arrow { flex: 0 0 26px; height: 2px; margin: 0 4px; position: relative; --ink: var(--line); }
-.f-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--ink); border-right: 0; }
-.f-arrow.lit { --ink: var(--green); }
-.f-pipeline.down { flex-direction: column; align-items: stretch; }
-.f-pipeline.down .f-stage { flex: none; grid-template-columns: 22px minmax(0, 1fr); justify-items: start; align-items: baseline; column-gap: 8px; padding: 8px 12px; text-align: left; }
-.f-pipeline.down .f-stage-mark { justify-self: center; }
-.f-pipeline.down .f-note { grid-column: 2; }
-.f-pipeline.down .f-arrow { flex: 0 0 14px; width: 2px; height: auto; margin: 2px 0 6px 22px; }
-.f-pipeline.down .f-arrow::after { right: auto; top: auto; left: -4px; bottom: -6px; border: 5px solid transparent; border-top: 7px solid var(--ink); border-bottom: 0; }
-
-.f-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; position: relative; }
-.f-timeline::before { left: 84px; top: 4px; bottom: 4px; width: 6px; --ink: var(--line); }
-.f-timeline li { display: grid; grid-template-columns: 74px 26px 1fr; align-items: start; }
-.f-at { text-align: right; font: 700 14px var(--hand); color: var(--muted); padding-right: 4px; }
-.f-dot { justify-self: center; margin-top: 5px; width: 12px; height: 12px; position: relative; }
-.f-dot::before { content: ""; position: absolute; inset: -5px; background: radial-gradient(circle, var(--dot, var(--st, var(--blue))) 0 6px, var(--board) 6px 9px, transparent 9px); -webkit-mask-box-image: var(--chalk-dot18); }
-.f-timeline li.st-todo .f-dot::before { background: radial-gradient(circle, transparent 0 4px, var(--muted) 4px 6px, var(--board) 6px 9px, transparent 9px); }
-.f-event { display: grid; gap: 1px; }
-.f-event b { font: 700 16px var(--hand); }
-
-.f-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.f-option { padding: 12px 14px; }
-.f-option.picked { --box: var(--green); }
-.f-option h4 { margin: 0 0 6px; font: 700 18px var(--hand); }
-.f-option.picked h4 .f-tag { color: var(--green); }
-.f-option p { margin: 0 0 6px; }
-.f-option ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.f-option li { padding-left: 18px; position: relative; }
-.f-option li::before { position: absolute; left: 0; font: 700 15px/1.3 var(--hand); }
-.f-option li.pro::before { content: "+"; color: var(--green); }
-.f-option li.con::before { content: "−"; color: var(--red); }
-
-.f-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.f-tile { --box: var(--tile, var(--line)); display: grid; gap: 4px; padding: 12px 14px; align-content: start; }
-.f-label { color: var(--muted); font-size: 12.5px; }
-.f-value { font: 700 28px/1.1 var(--hand); color: var(--tile, var(--accent)); }
-.f-bar { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; -webkit-mask-box-image: var(--chalk-bar35); -webkit-mask-box-image-outset: 2px; }
-.f-bar i { display: block; height: 100%; background: var(--tile, var(--green)); }
-.f-chart { width: 100%; min-height: 60px; }
-
 /* ---------- Chalk ----------
    Chalked things paint their colour (--ink) through a baked mask (--ring) on a ::before 2px bigger
    than the box: room for the rough edge. A box keeps its fill on itself, under the outline. */
-.rail-dot::before, .state-badge::before, .chalk-box::before, .server-mark::before, .new-on button::before, .cs-add::before, .menu-toggle::before,
-.input-row::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .picture-empty .dots span::before, .cs-fab::before, .ask-return::before {
+.rail-dot::before, .state-badge::before, .server-mark::before, .new-on button::before, .cs-add::before, .menu-toggle::before,
+.input-row::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .cs-fab::before, .ask-return::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring);
 }
 /* Chalk lines: each ::before or ::after 2px past its line on every side. */
-.sidebar::after, .left::after, .composer::before, .f-arrow::before, .f-timeline::before {
+.sidebar::after, .left::after, .composer::before {
   content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
 }
-.f-arrow::before { inset: -2px; }
 /* Without nine-slice masks (Firefox): plain outlines and lines. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
@@ -392,7 +266,6 @@ code, pre { font-family: var(--mono); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; scale: 0.6; } }
 @keyframes chalk-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
-@keyframes block-glow { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); } to { box-shadow: 0 0 0 2px transparent; } }
 
 /* ---------- Phones (under 680px): three full screens ----------
    list -> chat -> picture; the next screen slides over the one before, which waits 30% to the left. */
@@ -423,17 +296,14 @@ code, pre { font-family: var(--mono); }
     place-items: center; justify-content: center; align-items: center; color: var(--on-hue); --ring: var(--chalk-dot56); --ink: var(--accent); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
   .cs-fab svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 
-  .chat-head, .picture-head { gap: 6px; padding: 8px 12px 6px; min-height: 52px; }
+  .chat-head { gap: 6px; padding: 8px 12px 6px; min-height: 52px; }
   .app.folded .chat-head { padding-left: 12px; }
-  .chat-head h1, .picture-title { font-size: 20px; }
+  .chat-head h1 { font-size: 20px; }
   .back-btn { align-items: center; gap: 2px; flex: none; margin-left: -6px; padding: 4px 6px 4px 0; min-height: 44px; color: var(--accent); font: 700 17px var(--hand); }
   .back-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .back-btn .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px; background: var(--amber); color: #000; font: 700 11px var(--sans); }
   .pic-open { width: 44px; height: 44px; margin-right: -8px; color: var(--fg); align-items: center; justify-content: center; }
   .messages { padding: 10px 14px 18px; }
-  .picture-scroll { padding: 6px 12px calc(30px + env(safe-area-inset-bottom)); }
-  .picture.blocks { grid-template-columns: minmax(0, 1fr); }
-  .block.w-half { grid-column: 1 / -1; }
   /* iOS zooms into any field with text under 16px when it gets focus. */
   input, textarea, select { font-size: 16px !important; }
   .composer { padding: 10px 10px calc(8px + env(safe-area-inset-bottom)); }
