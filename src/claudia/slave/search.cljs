@@ -10,7 +10,10 @@
             [claudia.slave.history :as history]))
 
 (defonce ^:private db (atom nil))
-(def ^:private index-version 1)
+(def ^:private index-version
+  "Raised when said reads more of the session files: an older index is emptied and built again
+  (2: messages sent mid-turn, slash commands as typed)."
+  2)
 
 (defn open! [dir]
   (let [d (DatabaseSync. (path/join dir "search.db"))]
@@ -23,26 +26,53 @@
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
 
+(defn- command-text
+  "A slash command kept as tagged user text (src/chat.ts commandParts): \"/name args\" (\"\" for its
+  output alone), or nil when the text is no command."
+  [text]
+  (let [nm (some-> (re-find #"<command-name>([\s\S]*?)</command-name>" text) second str/trim)
+        args (some-> (re-find #"<command-args>([\s\S]*?)</command-args>" text) second str/trim)
+        out (re-find #"<local-command-std(?:out|err)>([\s\S]*?)</local-command-std(?:out|err)>" text)]
+    (when (or (seq nm) out (re-find #"<command-message>" text))
+      (if (seq nm)
+        (str (if (str/starts-with? nm "/") nm (str "/" nm)) (when (seq args) (str " " args)))
+        ""))))
+
+(defn- sent-mid-turn
+  "A message sent mid-turn: its queued_command attachment's sent uuid, or nil."
+  [^js e]
+  (let [^js a (when (= "attachment" (.-type e)) (.-attachment e))]
+    (when (and a (= "queued_command" (.-type a)) (not (.-isMeta a)) (not (.-forwardedIntent a))
+               (or (string? (.-prompt a)) (array? (.-prompt a))))
+      (if (and (string? (.-source_uuid a)) (seq (.-source_uuid a))) (.-source_uuid a) (.-uuid e)))))
+
 (defn- said
-  "The text a session line adds to the chat as the user or Claude sees it, or nil."
+  "The text a session line adds to the chat as the user or Claude sees it, or nil (src/search.ts
+  said): task notices and command output are notes, not something said."
   [line]
-  (when (or (str/includes? line "\"type\":\"user\"") (str/includes? line "\"type\":\"assistant\""))
+  (when (or (str/includes? line "\"type\":\"user\"") (str/includes? line "\"type\":\"assistant\"")
+            (str/includes? line "\"queued_command\""))
     (when-let [^js e (try (js/JSON.parse line) (catch :default _ nil))]
-      (when (and (#{"user" "assistant"} (.-type e)) (.-uuid e) (not (.-isMeta e)) (not (.-isSidechain e)))
-        (let [content (some-> e .-message .-content)
-              blocks (cond (string? content) [#js {:type "text" :text content}]
-                           (array? content) (vec content)
-                           :else [])
-              text (->> blocks
-                        (keep #(when (and (= "text" (.-type ^js %)) (string? (.-text ^js %)))
-                                 (history/strip-reminders (.-text ^js %))))
-                        (filter seq)
-                        (str/join "\n"))
-              user? (= "user" (.-type e))]
-          (when (and (seq (str/trim text))
-                     (not (and user? (history/task-notice text)))
-                     (not (and user? (str/starts-with? text "<command-"))))
-            {:uuid (.-uuid e) :role (if user? "user" "claude") :text text}))))))
+      (when (and (.-uuid e) (not (.-isMeta e)) (not (.-isSidechain e)))
+        (let [mid (sent-mid-turn e)
+              type (if mid "user" (.-type e))
+              uuid (or mid (.-uuid e))
+              content (if mid (.. e -attachment -prompt) (some-> e .-message .-content))]
+          (when (#{"user" "assistant"} type)
+            (let [blocks (cond (string? content) [#js {:type "text" :text content}]
+                               (array? content) (vec content)
+                               :else [])
+                  text (->> blocks
+                            (keep #(when (and % (= "text" (.-type ^js %)) (string? (.-text ^js %)))
+                                     (history/strip-reminders (.-text ^js %))))
+                            (filter seq)
+                            (str/join "\n"))
+                  user? (= "user" type)
+                  text (if (and user? (not (history/task-notice text)))
+                         (or (command-text text) text)
+                         text)]
+              (when (and (seq (str/trim text)) (not (and user? (history/task-notice text))))
+                {:uuid uuid :role (if user? "user" "claude") :text text}))))))))
 
 (defn update!
   "Brings one session's index up to date (all of it again when its file shrank)."
