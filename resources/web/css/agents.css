@@ -1,0 +1,185 @@
+/* Agents, changes and meters (claudia.web.views.agents, .changes, .usage, .diff): ported from the
+   TypeScript Claudia's look, in chalk. */
+
+/* The chips under the chat's title: a grid of the running ones, then +N more and ✓ N ✕ M. */
+.ag-row { display: grid; gap: 6px; padding: 0 16px 8px; min-width: 0; }
+.ag-chips { display: grid; gap: 6px; min-width: 0; }
+.ag-sum { display: flex; gap: 6px; flex-wrap: wrap; }
+.ag-pill { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 11.5px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums;
+  --ink: var(--chalk); --ring: var(--chalk-r12-2); background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.ag-pill::before, .ag-chip::before { content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
+  border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); }
+.ag-pill:hover { color: var(--fg); --ink: var(--accent); }
+.ag-pill .ok { color: var(--green); }
+.ag-pill .bad { color: var(--red); }
+
+.ag-chip { position: relative; isolation: isolate; display: grid; gap: 1px; min-width: 0; padding: 6px 10px 7px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: color-mix(in srgb, var(--panel) 75%, transparent); --ink: color-mix(in srgb, var(--amber) 55%, var(--line)); --ring: var(--chalk-r10-2); }
+.ag-chip:hover, .ag-chip:focus-visible { --ink: var(--amber); outline: none; }
+.ag-chip.completed { --ink: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.ag-chip.failed { --ink: color-mix(in srgb, var(--red) 55%, var(--line)); }
+.ag-chip.stopped { --ink: var(--line); }
+.ag-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+.ag-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ag-facts { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ag-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px/1.5 var(--mono); color: var(--muted); padding-left: 16px; }
+.ag-stop { position: absolute; right: 6px; bottom: 5px; font-size: 11px; color: var(--red); background: var(--bg2); border: 1px solid var(--red); border-radius: 6px; padding: 0 7px; opacity: 0; transition: opacity 0.12s; }
+.ag-chip:hover .ag-stop, .ag-chip:focus-within .ag-stop { opacity: 1; }
+@media (hover: none) { .ag-stop { display: none; } }
+
+/* Working: a small chalk spinner (amber); done and failed: a mark. */
+.ag-spin { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--amber) 30%, transparent); border-top-color: var(--amber); animation: ag-spin 0.9s linear infinite; }
+@keyframes ag-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ag-spin { animation: none; } }
+.ag-mark { flex: none; width: 10px; font: 700 12px/1 var(--hand); text-align: center; color: var(--green); }
+.ag-mark.failed { color: var(--red); }
+.ag-mark.stopped { color: var(--muted); }
+
+/* The agent view: over the chat in its column (the chat stays where it was underneath). */
+.left:has(> .ag-screen) { position: relative; }
+.ag-screen { position: absolute; inset: 0; z-index: 7; display: flex; flex-direction: column; min-height: 0; background: var(--bg); animation: rise 0.16s ease-out; }
+.ag-top { display: flex; align-items: center; gap: 10px; padding: 12px 16px 6px; }
+.ag-back { display: flex; align-items: center; gap: 2px; margin-left: -6px; color: var(--accent); font: 700 17px var(--hand); }
+.ag-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.ag-top .link { margin-left: auto; }
+.ag-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px 40px; display: flex; flex-direction: column; gap: 10px; }
+.ag-scroll > * { flex-shrink: 0; min-width: 0; }
+.ag-pad { padding: 8px 16px; }
+.ag-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; font: 700 20px/1.3 var(--hand); }
+.ag-name-line { flex-wrap: nowrap; align-items: baseline; }
+.ag-name-line > .ag-spin, .ag-name-line > .ag-mark { align-self: center; }
+.ag-title-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ag-state { display: flex; align-items: center; gap: 8px; }
+.ag-state .chip { font-size: 12px; }
+.ag-state .task-stop { margin-left: auto; }
+.ag-list { display: grid; gap: 8px; }
+.ag-head { display: grid; gap: 6px; }
+.ag-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 0; font-size: 13px; }
+.ag-dl dt { color: var(--muted); }
+.ag-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ag-now { margin: 0; font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-now code { font-size: 12px; }
+
+.ag-tabs { position: sticky; top: -4px; z-index: 2; display: flex; gap: 2px; padding: 4px 0; background: var(--bg); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.ag-tabs button { padding: 4px 12px; border-radius: 8px; font: 700 15px var(--hand); color: var(--muted); }
+.ag-tabs button:hover { color: var(--fg); }
+.ag-tabs button.on { color: var(--fg); background: var(--panel2); }
+.ag-body { min-width: 0; }
+.ag-prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.55 var(--mono); background: var(--bg2); border-radius: 8px; padding: 10px 12px; }
+.ag-report { font-size: 14.5px; }
+
+.ag-files { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.ag-file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ag-diff { display: grid; gap: 4px; margin: 4px 0 10px 16px; overflow-x: auto; }
+
+/* The rail: Claude's turn is over but agents still work: a dashed amber chalk ring and their count. */
+.ag-ring { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); pointer-events: none; overflow: visible;
+  fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 4.4 3.6; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.state-badge.agents { --b: var(--amber); font: 700 11px/1 var(--sans); }
+
+@media (max-width: 679px) {
+  .ag-row { padding: 0 12px 8px; }
+  .ag-screen { padding-top: 0; }
+  .ag-top { padding: 10px 12px 4px; }
+  .ag-scroll { padding: 4px 12px 40px; }
+}
+
+/* a job's progress bar under its chip's name: a chalk-edged track, a solid fill, the numbers beside it */
+.ag-bar { position: relative; display: flex; align-items: center; margin: 5px 0 4px 16px; height: 20px; border-radius: 6px; overflow: hidden; box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--amber) 70%, var(--line)); background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.ag-bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--amber); opacity: 0.8; transition: width 0.6s ease; }
+.ag-bar.completed { border-color: var(--green); }
+.ag-bar.completed .ag-bar-fill { background: var(--green); }
+.ag-bar.failed { border-color: var(--red); }
+.ag-bar.failed .ag-bar-fill { background: var(--red); }
+.ag-bar.stopped { border-color: var(--grey); }
+.ag-bar.stopped .ag-bar-fill { background: var(--grey); }
+.ag-bar-text { position: relative; flex: 1; min-width: 0; padding: 0 8px; font: 600 12px/1 var(--mono); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg); }
+
+/* Model and effort pickers in the composer's toolbar. */
+.pick { min-width: 0; flex: 0 1 auto; }
+.pick.model { max-width: 150px; }
+.pick.effort { max-width: 90px; }
+.pick select { font: 500 11.5px var(--sans); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 2px 2px 5px; width: 100%; cursor: pointer; text-overflow: ellipsis; }
+.pick select:hover, .pick select:focus { border-color: var(--line); color: var(--fg); background: var(--bg2); outline: none; }
+.pick select option { background: var(--panel); color: var(--fg); }
+
+/* The / command menu over the composer. */
+.slash-menu { position: absolute; left: 14px; right: 14px; bottom: calc(100% - 6px); list-style: none; margin: 0; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.35); z-index: 5; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.slash-menu li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 6px; padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.slash-menu li.on { background: var(--panel2); box-shadow: inset 2px 0 0 var(--accent); }
+.slash-menu b { font: 600 12.5px var(--mono); }
+.slash-menu .hint { color: var(--muted); font: 12px var(--mono); }
+.slash-menu .desc { grid-column: 1 / -1; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Usage: bars at the list's foot, rings in its header and on a rail, the context ring in the chat's header. */
+.meters { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; padding: 10px 6px 2px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); }
+.meter { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; row-gap: 1px; }
+.m-label { white-space: nowrap; }
+.m-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; -webkit-mask-box-image: var(--chalk-bar35); -webkit-mask-box-image-outset: 2px; }
+.m-bar > span { display: block; height: 100%; background: var(--green); border-radius: 3px; }
+.meter.amber .m-bar > span { background: var(--amber); }
+.meter.red .m-bar > span { background: var(--red); }
+.meter.amber .m-num { color: var(--amber); }
+.meter.red .m-num { color: var(--red); }
+.m-num { font-variant-numeric: tabular-nums; color: var(--fg); text-align: right; }
+.m-reset { grid-column: 1 / -1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-reset b { font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.limit-rings { flex: none; display: flex; gap: 12px; padding: 3px 10px 5px 4px; border-radius: 10px; }
+.limit-rings:hover { background: var(--panel); }
+.limit-rings .ring { width: 26px; height: 26px; }
+.rail-meters { display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.ring { position: relative; flex: none; width: 28px; height: 28px; display: grid; place-items: center; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; -webkit-mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.ring circle { fill: none; stroke-width: 3; }
+.r-track { stroke: var(--line); }
+.r-fill { stroke: var(--green); stroke-linecap: round; }
+.ring.amber .r-fill { stroke: var(--amber); }
+.ring.red .r-fill { stroke: var(--red); }
+.r-num { font: 700 10px var(--sans); color: var(--fg); font-variant-numeric: tabular-nums; }
+.ring.action { cursor: pointer; }
+.r-icon { opacity: 0; fill: none; stroke: var(--fg); stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; transition: opacity 0.1s; }
+.ring.action:hover .r-icon { opacity: 1; }
+.ring.action:hover .r-num { opacity: 0; }
+.ring.action:hover .r-track { stroke: color-mix(in srgb, var(--fg) 35%, var(--line)); fill: color-mix(in srgb, var(--fg) 10%, transparent); }
+.r-label { position: absolute; right: -9px; bottom: -4px; font: 700 10px/1 var(--hand); color: var(--muted); }
+.chat-head .ring { margin-right: 6px; }
+
+/* The changes pill and its list. */
+.act { position: relative; flex: none; z-index: 6; }
+.act-pill { display: flex; align-items: center; height: 28px; padding: 0 3px; border-radius: 99px; background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--line); box-shadow: 0 2px 10px rgb(0 0 0 / 0.18); font: 600 11.5px var(--sans); color: var(--muted); }
+.act-part { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; color: inherit; font: inherit; font-variant-numeric: tabular-nums; transition: background 0.12s, color 0.12s; }
+.act-part:hover, .act-part.on { background: var(--panel2); color: var(--fg); }
+.act-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 31; width: min(560px, calc(100cqw - 24px)); max-height: min(70vh, 640px); overflow: auto; border-radius: 12px; box-shadow: 0 10px 34px rgb(0 0 0 / 0.38); animation: rise 0.16s ease-out; background: var(--panel); }
+.act-pop > .panel { animation: none; }
+.act-turns { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; }
+.act-turns button { font: 700 13px var(--hand); color: var(--muted); padding: 1px 9px; border-radius: 99px; }
+.act-turns button.on { color: var(--fg); background: var(--panel2); }
+.link { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; font-size: 12.5px; }
+.chev { display: inline-block; transition: transform 0.15s; width: 8px; }
+.chev.open { transform: rotate(90deg); }
+.chip.green { color: var(--green); background: var(--green-bg); }
+.chip.red { color: var(--red); background: var(--red-bg); }
+.changes-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.toggle-split { white-space: nowrap; }
+.plus { color: var(--green); font-variant-numeric: tabular-nums; }
+.minus { color: var(--red); font-variant-numeric: tabular-nums; }
+.changes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.change-row { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; font-size: 13px; min-width: 0; padding: 2px 0; }
+.change-path { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.change .counts { font-size: 12px; white-space: nowrap; }
+
+/* Diffs: plain, for reading. */
+.diff-wrap { margin: 2px 0 8px; display: grid; gap: 6px; justify-items: start; }
+.diff { width: 100%; border-collapse: collapse; font: 12px/1.45 var(--mono); background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; table-layout: fixed; }
+.diff td { padding: 0 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; border: 0; }
+.diff .ln-col { width: 3.2em; }
+.diff .ln { color: var(--muted); text-align: right; user-select: none; opacity: 0.7; padding: 0 6px; }
+.diff .hunk td { color: var(--blue); background: var(--blue-bg); padding: 2px 8px; font-size: 11px; }
+.diff tr.del td, .diff td.del { background: color-mix(in srgb, var(--red) 13%, transparent); }
+.diff tr.add td, .diff td.add { background: color-mix(in srgb, var(--green) 13%, transparent); }
+.diff td.empty { background: color-mix(in srgb, var(--line) 35%, transparent); }
+.diff mark { color: inherit; border-radius: 2px; padding: 0 1px; }
+.diff tr.del mark, .diff td.del mark { background: color-mix(in srgb, var(--red) 40%, transparent); }
+.diff tr.add mark, .diff td.add mark { background: color-mix(in srgb, var(--green) 40%, transparent); }
+.ag-steps { display: flex; flex-direction: column; gap: 12px; font-size: 14.5px; }

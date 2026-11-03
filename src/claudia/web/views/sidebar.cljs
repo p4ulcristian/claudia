@@ -2,7 +2,9 @@
   "The chat list: every allowed server's chats in one list, newest first."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
-            [claudia.web.views.chat :as chat]))
+            [claudia.web.views.agents :as agents]
+            [claudia.web.views.chat :as chat]
+            [claudia.web.views.usage :as usage]))
 
 (def ^:private chat-colors
   #{"burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan" "sky" "blue" "indigo"
@@ -23,10 +25,12 @@
         (< age (* 6 24 3600 1000)) (.toLocaleDateString d js/undefined #js {:weekday "short"})
         :else (.toLocaleDateString d js/undefined #js {:day "numeric" :month "short"})))))
 
-(defn- state-badge [{:keys [waiting running unseen]}]
+(defn- state-badge [{:keys [waiting running unseen agents]}]
   (cond
     waiting [:span.state-badge.waiting "?"]
     running [:span.state-badge.thinking [:i] [:i] [:i]]
+    ;; The turn ended but work Claude started still runs.
+    (pos? agents) [agents/agents-ring agents]
     unseen [:span.state-badge.done "✓"]))
 
 (defn- row-view [{:keys [id server title preview waiting running unseen color off] :as row} active? multi?]
@@ -54,6 +58,7 @@
     [:aside.sidebar
      [:div.cs-head
       [:h2.cs-title "Chats"]
+      [:f> usage/limit-rings]
       [:button.cs-icon.cs-add {:title "New chat" :on-click #(rf/dispatch [:nav/new])}
        [:svg {:viewBox "0 0 24 24"} [:path {:d "M12 5v14M5 12h14"}]]]]
      [:div.cs-list
@@ -63,5 +68,6 @@
         :else (for [r rows]
                 ^{:key (str (:server r) "/" (:id r))}
                 [row-view r (= open [(:server r) (:id r)]) multi?]))]
+     [:f> usage/usage-foot]
      [:button.cs-fab.phone-only {:title "New chat" :on-click #(rf/dispatch [:nav/new])}
       [:svg {:viewBox "0 0 24 24"} [:path {:d "M12 5v14M5 12h14"}]]]]))

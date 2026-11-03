@@ -3,6 +3,7 @@
             [reagent.dom.client :as rdc]
             [claudia.web.chalk :as chalk]
             [claudia.web.events]
+            [claudia.web.extras]
             [claudia.web.fx]
             [claudia.web.md :as md]
             [claudia.web.subs]
