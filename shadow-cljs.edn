@@ -14,9 +14,17 @@
            :output-dir "out/web/js"
            :asset-path "/js"
            :module-loader true
-           ;; three.js and the 3D view load on first use (claudia.web.scene3d).
-           :modules {:main {:init-fn claudia.web.app/init}
-                     :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}}
+           ;; A dev build loads its files as script tags, not eval (the page's policy forbids eval).
+           :devtools {:loader-mode :script}
+           ;; Big libraries load on first use: three.js and the 3D view (claudia.web.scene3d), Shiki
+           ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs) and Vega
+           ;; (claudia.web.chart). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
+           ;; native import() shadow.esm/dynamic-import calls (Closure would rewrite one in the code).
+           :modules {:main {:init-fn claudia.web.app/init
+                            :prepend "var shadow_esm_import = function (url) { return import(url); };\n"}
+                     :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}
+                     :shiki {:entries [claudia.web.shiki.lib] :depends-on #{:main}}
+                     :chart {:entries [claudia.web.chart] :depends-on #{:main}}}
            ;; libsodium's and QuickJS's Node paths (fs, crypto) are never taken in a browser.
            ;; three's CommonJS build (the one picked by default) is deprecated and calls
            ;; process.emitWarning, which a browser lacks: three and three-mesh-bvh come as modules.

@@ -1,43 +1,72 @@
 (ns claudia.web.shiki
   "Code colours for the code forms (files, git diffs, clojure, calls, flow cards): Shiki, VS Code's
-  own grammars and its Dark+ theme. Loaded from the CDN the first time code is shown (like the
-  charts' Vega), each language when first needed. Lines come back as Shiki's tokens:
-  #js [#js [#js {:content :color :fontStyle}]] (fontStyle bits: 1 italic, 2 bold, 4 underline)."
+  own grammars and its Dark+ theme, built from npm into the page's own files. Shiki loads the first
+  time code is shown (the :shiki module), each language's grammar when first needed (Shiki's grammar
+  files in js/shiki-langs/, with index.json naming the file of every language name and alias).
+  Lines come back as Shiki's tokens: #js [#js [#js {:content :color :fontStyle}]] (fontStyle bits:
+  1 italic, 2 bold, 4 underline)."
   (:require [clojure.string :as str]
-            [reagent.hooks :as h]))
+            [reagent.hooks :as h]
+            [shadow.esm :as esm]
+            [shadow.loader :as loader]
+            [claudia.web.api :as api]))
 
 (def ^:private theme "dark-plus")
+
+(def ^:private langs-dir "/js/shiki-langs/")
 
 ;; Names Shiki doesn't know but files use.
 (def ^:private alias {"cljs" "clojure" "cljc" "clojure" "edn" "clojure" "bb" "clojure" "mts" "ts" "cts" "ts" "h" "c"})
 
-;; A dynamic import the compiler leaves alone.
-(def ^:private import-url (js/Function. "u" "return import(u)"))
+(defonce ^:private loaded (atom nil)) ; Promise of {:hl highlighter :index name -> grammar file}
 
-(defonce ^:private lib (atom nil))
+;; The :shiki module hands its highlighter maker over as it loads (claudia.web.shiki.lib), rather
+;; than shadow.lazy naming it here: the code views using this namespace are also in the test build,
+;; which has no modules.
+(defonce ^:private provided (atom nil))
+
+(defn provide!
+  "Called once by the :shiki module as it loads: its function making a highlighter."
+  [make-highlighter]
+  (reset! provided make-highlighter))
+
+(defn- highlighter
+  "Promise of a highlighter, the :shiki module loaded first."
+  []
+  (-> (js/Promise. (fn [ok fail] (.addCallbacks (loader/load "shiki") ok fail)))
+      (.then (fn [_] (@provided)))))
+
+(defn lang-file
+  "The grammar file (without .mjs) for a language name, in any case, one of Shiki's aliases or one of
+  `alias`; nil when Shiki has none. index: every name Shiki knows (keywords) -> its file's name."
+  [index lang]
+  (when-let [want (some-> lang str str/lower-case not-empty)]
+    (get index (keyword (get alias want want)))))
 
 (defn- load []
-  (or @lib
-      (reset! lib (-> (import-url "https://cdn.jsdelivr.net/npm/shiki@3/+esm")
-                      (.then (fn [^js m]
-                               (.then (.createHighlighter m #js {:themes #js [theme] :langs #js []})
-                                      (fn [hl] {:hl hl :known (.-bundledLanguages m)}))))
-                      (.catch (fn [e] (reset! lib nil) (throw e)))))))
+  (or @loaded
+      (reset! loaded (-> (js/Promise.all #js [(highlighter) (api/fetch-json (str langs-dir "index.json"))])
+                      (.then (fn [[hl index]] {:hl hl :index index}))
+                      (.catch (fn [e] (reset! loaded nil) (throw e)))))))
+
+(defn- load-grammar
+  "Promise that the grammar file is in the highlighter."
+  [^js hl file]
+  (if (some #{file} (array-seq (.getLoadedLanguages hl)))
+    (js/Promise.resolve nil)
+    (.then (esm/dynamic-import (str langs-dir file ".mjs"))
+           (fn [^js m] (.loadLanguage hl (.-default m))))))
 
 (defn tokens
   "Promise of the code's lines of tokens; nil when the language is unknown (shown as plain text)."
   [code lang]
-  (let [want (some-> lang str str/lower-case not-empty)]
-    (if-not want
-      (js/Promise.resolve nil)
-      (.then (load)
-             (fn [{:keys [^js hl ^js known]}]
-               (let [nm (get alias want want)]
-                 (when (js-in nm known)
-                   (.then (if (some #{nm} (array-seq (.getLoadedLanguages hl)))
-                            (js/Promise.resolve nil)
-                            (.loadLanguage hl nm))
-                          (fn [] (.codeToTokensBase hl (str code) #js {:lang nm :theme theme}))))))))))
+  (if-not (some-> lang str not-empty)
+    (js/Promise.resolve nil)
+    (.then (load)
+           (fn [{:keys [^js hl index]}]
+             (when-let [file (lang-file index lang)]
+               (.then (load-grammar hl file)
+                      (fn [] (.codeToTokensBase hl (str code) #js {:lang file :theme theme}))))))))
 
 (defn use-tokens
   "The code's tokens once Shiki has them (nil before, and for an unknown language). fresh: start

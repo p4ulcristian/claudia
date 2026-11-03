@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- The frame of a freeform block (claudia.web.views.frame): the page sends Claude's whole page by
+     postMessage and it is written in here. Served with its own policy (claudia.shared.csp): sandboxed
+     to an opaque origin, inline scripts and the CDN allowed, framed only by the page. -->
+<meta charset="utf-8">
+<script>
+addEventListener("message", function write(e) {
+  if (e.source !== parent || !e.data || typeof e.data.claudiaDoc !== "string") return;
+  removeEventListener("message", write);
+  document.open();
+  document.write(e.data.claudiaDoc);
+  document.close();
+});
+parent.postMessage({ claudiaFrame: true }, "*");
+</script>

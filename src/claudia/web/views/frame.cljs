@@ -1,9 +1,12 @@
 (ns claudia.web.views.frame
   "A page Claude wrote, in a sandboxed iframe (scripts run; no access to Claudia, its cookies or its
-  API). Claudia's colours and fonts go in as CSS variables; the frame is as tall as its page (it
-  says its height by postMessage); `parts` are swapped in by postMessage without a reload."
+  API). The frame is frame.html, a document of its own with its own policy (claudia.shared.csp):
+  it asks for the page by postMessage and writes it in. Claudia's colours and fonts go in as CSS
+  variables; the frame is as tall as its page (it says its height by postMessage); `parts` are
+  swapped in by postMessage without a reload; a new page is a new frame."
   (:require [clojure.string :as str]
-            [reagent.hooks :as h]))
+            [reagent.hooks :as h]
+            [claudia.shared.csp :as csp]))
 
 (def ^:private theme-vars
   ["--bg" "--bg2" "--panel" "--panel2" "--fg" "--muted" "--line" "--accent" "--board"
@@ -13,14 +16,6 @@
 
 (def fonts-url
   "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap")
-
-(def ^:private csp
-  (str "default-src 'none'; "
-       "script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
-       "style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-       "font-src https://fonts.gstatic.com https://cdn.jsdelivr.net data:; "
-       "img-src data: blob: https:; "
-       "connect-src https://cdn.jsdelivr.net"))
 
 ;; The page tells its height (and that it is ready for parts); Claudia sends parts.
 (def ^:private bridge
@@ -37,7 +32,6 @@ addEventListener('load',post);
   (let [cs (js/getComputedStyle js/document.documentElement)
         vars (str/join " " (for [v theme-vars] (str v ": " (str/trim (.getPropertyValue cs v)) ";")))]
     (str "<meta charset=\"utf-8\">"
-         "<meta http-equiv=\"Content-Security-Policy\" content=\"" csp "\">"
          "<link rel=\"stylesheet\" href=\"" fonts-url "\">"
          "<style>:root{" vars " color-scheme: dark;} "
          "html,body{margin:0;background:transparent;color:var(--fg);font:14px/1.5 var(--sans);} html{overflow:hidden;} "
@@ -54,31 +48,42 @@ addEventListener('load',post);
       (re-find #"(?i)<html[^>]*>" html) (str/replace-first html #"(?i)<html[^>]*>" #(str % "<head>" hd "</head>"))
       :else (str "<!doctype html><html><head>" hd "</head><body>" html "</body></html>"))))
 
+(defn- post! [^js ref msg]
+  (when-let [^js f (.-current ref)]
+    (some-> (.-contentWindow f) (.postMessage (clj->js msg) "*"))))
+
+(defn- on-message
+  "The handler of the frame's messages: it asks for the page (sent), is ready for parts (sent),
+  tells its height (set)."
+  [^js ref doc-ref send-parts set-height]
+  (fn [^js e]
+    (when-let [^js f (.-current ref)]
+      (when (identical? (.-source e) (.-contentWindow f))
+        (let [d (.-data e)
+              hgt (js/Number (some-> d .-claudiaPageHeight))]
+          (when (some-> d .-claudiaFrame) (post! ref {:claudiaDoc (.-current doc-ref)}))
+          (when (some-> d .-claudiaReady) (send-parts))
+          (when (pos? hgt) (set-height (min 20000 (max 60 hgt)))))))))
+
 (defn- frame* [{:keys [doc parts min-height title]}]
   (let [ref (h/use-ref nil)
         [height set-height] (h/use-state (or min-height 240))
         parts-ref (h/use-ref parts)
-        send-parts (fn []
-                     (when-let [^js f (.-current ref)]
-                       (when-let [p (.-current parts-ref)]
-                         (some-> (.-contentWindow f) (.postMessage #js {:claudiaParts (clj->js p)} "*")))))]
+        doc-ref (h/use-ref doc)
+        send-parts #(when-let [p (.-current parts-ref)] (post! ref {:claudiaParts p}))]
     (set! (.-current parts-ref) parts)
+    (set! (.-current doc-ref) doc)
     (h/use-effect
      (fn []
-       (let [on (fn [^js e]
-                  (when-let [^js f (.-current ref)]
-                    (when (identical? (.-source e) (.-contentWindow f))
-                      (let [d (.-data e)]
-                        (when (some-> d .-claudiaReady) (send-parts))
-                        (let [hgt (js/Number (some-> d .-claudiaPageHeight))]
-                          (when (pos? hgt) (set-height (min 20000 (max 60 hgt)))))))))]
+       (let [on (on-message ref doc-ref send-parts set-height)]
          (js/window.addEventListener "message" on)
          #(js/window.removeEventListener "message" on)))
      [])
     (h/use-effect (fn [] (send-parts) nil) [parts])
-    [:iframe.page-frame {:ref #(set! (.-current ref) %)
+    [:iframe.page-frame {:key (hash doc)
+                         :ref #(set! (.-current ref) %)
                          :sandbox "allow-scripts"
-                         :srcDoc doc
+                         :src (str "/" csp/frame-file)
                          :scrolling "no"
                          :title (or title "Page")
                          :style {:height height}}]))

@@ -18,7 +18,8 @@
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
             [claudia.web.views.shell :as shell]
-            [claudia.web.ws :as ws]))
+            [claudia.web.ws :as ws]
+            [shadow.loader :as loader]))
 
 (defonce ^:private root (atom nil))
 
@@ -49,7 +50,16 @@
   (native/start!)
   (mount!))
 
+(defn- script-tag-modules!
+  "The lazy modules (scene3d, shiki, chart) load as script tags: the module loader's default fetches
+  them and evals the text, which the page's policy forbids (claudia.shared.csp)."
+  []
+  (doto (loader/getModuleLoader)
+    (.setSourceUrlInjection false)
+    (.setUseScriptTags true)))
+
 (defn init []
+  (script-tag-modules!)
   ;; The runner's render page (screenshots of a picture) is this build in another mode.
   (if (.-claudiaRender js/window)
     (render/start!)

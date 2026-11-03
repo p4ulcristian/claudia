@@ -2,7 +2,8 @@
   "The built page, served as plain files from HUB_WEB."
   (:require ["fs" :as fs]
             ["path" :as path]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [claudia.shared.csp :as csp]))
 
 (def ^:private types
   {".html" "text/html; charset=utf-8"
@@ -64,18 +65,23 @@
         (.end res stale-js))
     (plain res 404 "Not found")))
 
-(defn- send-file [^js req ^js res file cache-control & [rel]]
+(defn- file-headers
+  "A file's response headers: its type, caching, validators and the page's security headers."
+  [rel ext cache-control etag ^js st]
+  (clj->js (merge {"content-type" (get types ext "application/octet-stream")
+                   "cache-control" cache-control
+                   "etag" etag
+                   "last-modified" (.toUTCString (.-mtime st))}
+                  (csp/headers rel))))
+
+(defn- send-file [^js req ^js res file cache-control rel]
   (fs/stat file
            (fn [err ^js st]
              (if (or err (not (.isFile st)))
                (missing res rel)
                (let [ext (str/lower-case (path/extname file))
                      etag (str "W/\"" (.toString (.-size st) 16) "-" (.toString (js/Math.floor (.-mtimeMs st)) 16) "\"")
-                     headers #js {"content-type" (get types ext "application/octet-stream")
-                                  "cache-control" cache-control
-                                  "etag" etag
-                                  "last-modified" (.toUTCString (.-mtime st))
-                                  "x-content-type-options" "nosniff"}]
+                     headers (file-headers rel ext cache-control etag st)]
                  (if (= etag (aget (.-headers req) "if-none-match"))
                    (do (.writeHead res 304 headers) (.end res))
                    (do (aset headers "content-length" (.-size st))
@@ -96,7 +102,7 @@
         (plain res 405 "Method not allowed"))
 
     (or (= pathname "/") (= pathname "/new") (= pathname "/c") (str/starts-with? pathname "/c/"))
-    (send-file req res (path/join root "index.html") "no-cache")
+    (send-file req res (path/join root "index.html") "no-cache" "index.html")
 
     :else
     (if-let [rel (relative pathname)]

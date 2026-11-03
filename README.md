@@ -49,6 +49,16 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Forms button left the rail (Forms stays in Settings). Instead of: each server keeping and
     switching its own saved tokens.
 
+11. The page runs only its own code (2026-11-03): every library it uses comes from npm at the
+    version in `package-lock.json` and is built into `out/web` (Shiki, Vega, three.js and QuickJS
+    in modules loaded on first use, Shiki's grammars as its own files); the hub sends a
+    Content-Security-Policy that allows the page's own scripts and WebAssembly only, and no framing
+    (`claudia.shared.csp`). Claude's freeform pages run in `frame.html`, a sandboxed document with its
+    own policy (inline scripts and cdn.jsdelivr.net, no Claudia API): a srcdoc frame would take on the
+    page's policy. A `shadow-cljs watch` build loads under the policy, but its live reload (a socket
+    to the shadow-cljs server) is refused: reload by hand. Instead of: importing Shiki and Vega from
+    jsdelivr by major version at run time, where a bad release would run as the signed-in person.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -100,8 +110,8 @@ Ported from the TypeScript Claudia (its decisions 17-21): the `files`, `editor` 
 always on; `git`, `clojure` and `calls` are opt-in per runner (`CLAUDIA_FORMS=git,clojure,calls`;
 clojure and calls need `clj-kondo` on the runner). Forms are described in `claudia.shared.forms`
 (the draw tool, the system prompt and the Forms gallery read it). Code is coloured by Shiki
-(VS Code's grammars and Dark+ theme, loaded from jsdelivr on first use, as the TypeScript Claudia
-did; 2026-11-03: highlight.js coloured differently); the editor is CodeMirror 6. Templates
+(VS Code's grammars and Dark+ theme; 2026-11-03: highlight.js coloured differently), built from npm
+into the page's own files and loaded on first use, each grammar when its language is first shown; the editor is CodeMirror 6. Templates
 (`save_template`, `templates`, "save as template" on a freeform badge) live in the runner's SQLite.
 Built-in forms can be deleted and restored in the Forms window (per profile; Claude's draw tool
 leaves them out). Each chat has a form row (allowed -> required -> off per kind, questions allowed <-> off) and a

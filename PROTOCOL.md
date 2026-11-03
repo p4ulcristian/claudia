@@ -86,6 +86,14 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 |---|---|
 | `GET /`, `/new` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
 | `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
+| `GET /frame.html` | the document a freeform block runs in (it asks the page for Claude's HTML by postMessage and writes it in) |
+
+Every file of the page goes with `x-content-type-options: nosniff` and a Content-Security-Policy
+(`claudia.shared.csp`): the page's own (only its own scripts and WebAssembly, no CDN, no eval;
+inline styles; fonts from Google Fonts; same-origin fetches and sockets; no framing,
+`x-frame-options: DENY`); `frame.html` has the freeform policy instead (`sandbox allow-scripts`,
+inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
+`x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
 | `GET /hub/narrate` | `{ voice: bool }`: a voice service is set up (`HUB_TTS_URL` and its token) |
 | `POST /hub/narrate` `{ text, instruction? }` | the line as speech: raw 16-bit mono PCM at 24 kHz (`audio/L16;rate=24000;channels=1`, `x-seconds`); `instruction` = a story's `voice` (one reference clip is made from it, every line is a clone of it). Clips are kept in `HUB_DATA/narration` by their text. 400 without text, 501 without a voice, 502 when the voice service fails. The service's route is `<HUB_TTS_URL>/v1/audio/speech` (form fields `text`, and `ref_audio` + `ref_text` for a cloned voice, or `instruction`) |
