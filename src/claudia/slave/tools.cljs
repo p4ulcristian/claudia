@@ -119,6 +119,10 @@ When a command needs a password or token, never ask the user to paste it into th
    {:set_folder {:description "Set the project folder you are working in (absolute, ~/..., or relative to the chat's folder). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                  :inputSchema {:type "object" :required ["path"]
                                :properties {:path (s "The project's root folder")}}}
+    :show_image {:description "Show a picture file in the chat (png, jpeg, gif or webp, up to 5 MB): a screenshot, a rendered image, a photo. The user sees it under your steps and you see it too. Use it when the user asks you to send or show an image; a diagram or explanation still goes in the picture on the right."
+                 :inputSchema {:type "object" :required ["path"]
+                               :properties {:path (s "The image file (absolute, ~/..., or relative to the working folder)")
+                                            :caption (s "A few words about it")}}}
     :run_with_secret {:description "Run one shell command that needs a secret from 1Password, without you ever seeing the secret. The user is asked in Claudia to allow it (or to paste the value); the command then runs with sh -c in the working folder, with the value in the environment variable env_name only. Every occurrence of the value in the output is replaced by [secret]. Refused if the user says no or does not answer within 10 minutes."
                       :inputSchema {:type "object" :required ["ref" "env_name" "reason" "command"]
                                     :properties {:ref (s "The 1Password reference: op://<vault>/<item>/<field>")
@@ -126,4 +130,5 @@ When a command needs a password or token, never ask the user to paste it into th
                                                  :reason (s "One line for the user: why it is needed")
                                                  :command (s "The shell command, using the variable (e.g. curl -H \"Authorization: Bearer $GITHUB_TOKEN\" ...)")}}}}})
 
-(def allowed-tools ["mcp__picture__draw" "mcp__workspace__set_folder" "mcp__workspace__run_with_secret"])
+(def allowed-tools ["mcp__picture__draw" "mcp__workspace__set_folder" "mcp__workspace__run_with_secret"
+                    "mcp__workspace__show_image"])

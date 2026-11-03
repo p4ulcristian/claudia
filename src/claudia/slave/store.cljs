@@ -11,7 +11,8 @@
 (def ^:private columns
   ;; id = the Claude Code session id; at = last activity; ended = when the last turn ended;
   ;; seen = when the person last looked at its last turn; scene = the picture as JSON.
-  [:id :title :folder :color :archived :created :at :ended :seen :preview :scene])
+  ;; prev_color = the colour a passive (ash) chat had, for when it wakes.
+  [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color])
 
 (defn open! [dir]
   (fs/mkdirSync dir #js {:recursive true})
@@ -30,6 +31,8 @@
                 preview TEXT NOT NULL DEFAULT '',
                 scene TEXT
               );")
+    (when-not (some #(= "prev_color" (.-name ^js %)) (.all (.prepare d "PRAGMA table_info(chats)")))
+      (.exec d "ALTER TABLE chats ADD COLUMN prev_color TEXT"))
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -45,7 +48,8 @@
      :at (.-at r)
      :ended (.-ended r)
      :seen (.-seen r)
-     :preview (.-preview r)}))
+     :preview (.-preview r)
+     :prev-color (.-prev_color r)}))
 
 (defn chats [] (mapv row (.all (stmt "SELECT * FROM chats ORDER BY at DESC"))))
 

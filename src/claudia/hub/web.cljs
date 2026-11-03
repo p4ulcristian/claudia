@@ -74,7 +74,7 @@
                            (.pipe stream res))))))))))
 
 (defn serve
-  "GET/HEAD of the page: `/` and `/c/…` are index.html (the page routes chats itself), anything else
+  "GET/HEAD of the page: `/`, `/new` and `/c/…` are index.html (the page routes chats itself), anything else
   a file in the web folder."
   [root ^js req ^js res pathname]
   (cond
@@ -82,7 +82,7 @@
     (do (.setHeader res "allow" "GET, HEAD")
         (plain res 405 "Method not allowed"))
 
-    (or (= pathname "/") (= pathname "/c") (str/starts-with? pathname "/c/"))
+    (or (= pathname "/") (= pathname "/new") (= pathname "/c") (str/starts-with? pathname "/c/"))
     (send-file req res (path/join root "index.html") "no-cache")
 
     :else
