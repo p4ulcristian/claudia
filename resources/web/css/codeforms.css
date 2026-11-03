@@ -339,3 +339,6 @@
 .hljs-strong { font-weight: 700; }
 .hljs-link { color: #4ec9b0; text-decoration: underline; }
 .hljs-section { font-weight: 700; }
+.code-chip .add { color: var(--green); }
+.code-chip .del { color: var(--red); }
+.code-sent .g-diff { text-align: left; font-family: var(--mono); margin-top: 4px; border-radius: 8px; background: color-mix(in oklch, var(--board) 70%, #000); }

@@ -31,11 +31,11 @@
     :sample {:demo {:head "c4"
                     :currentBranch "fix/tax"
                     :dirty {:total 2 :files [{:path "src/orders/total.ts" :status "M"} {:path "src/orders/tax.test.ts" :status "?"}]}
-                    :commits [{:hash "c4" :parents ["c2"] :author "Paul" :when "20 minutes ago" :refs [{:type "head" :name "fix/tax"}] :subject "Tax on shipping too"}
-                              {:hash "c3" :parents ["c1"] :author "Ananda" :when "5 hours ago" :refs [{:type "remote" :name "origin/shops"}] :subject "Shop list paging"}
-                              {:hash "c2" :parents ["c1" "c0"] :author "Paul" :when "yesterday" :refs [{:type "branch" :name "main"}] :subject "Merge orders: quantities"}
-                              {:hash "c0" :parents ["c1"] :author "Peter" :when "2 days ago" :refs [] :subject "Bill each coat's quantity"}
-                              {:hash "c1" :parents [] :author "Paul" :when "3 days ago" :refs [{:type "tag" :name "v1.4"}] :subject "Orders: totals"}]}
+                    :commits [{:hash "c4" :time 1000000 :parents ["c2"] :author "Paul" :when "20 minutes ago" :refs [{:type "head" :name "fix/tax"}] :subject "Tax on shipping too"}
+                              {:hash "c3" :time 983000 :parents ["c1"] :author "Ananda" :when "5 hours ago" :refs [{:type "remote" :name "origin/shops"}] :subject "Shop list paging"}
+                              {:hash "c2" :time 914000 :parents ["c1" "c0"] :author "Paul" :when "yesterday" :refs [{:type "branch" :name "main"}] :subject "Merge orders: quantities"}
+                              {:hash "c0" :time 830000 :parents ["c1"] :author "Peter" :when "2 days ago" :refs [] :subject "Bill each coat's quantity"}
+                              {:hash "c1" :time 760000 :parents [] :author "Paul" :when "3 days ago" :refs [{:type "tag" :name "v1.4"}] :subject "Orders: totals"}]}
              :marks [{:id "m" :commit "c0" :note "the quantity fix" :color "amber"}]}}
 
    "editor"

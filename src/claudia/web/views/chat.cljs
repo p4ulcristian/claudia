@@ -5,7 +5,8 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.md :as md]
-            [claudia.web.views.asks :as asks]))
+            [claudia.web.views.asks :as asks]
+            [claudia.web.views.codesend :as codesend]))
 
 (defn- icon [d]
   [:svg.ic {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d d}]])
@@ -63,7 +64,7 @@
 
 (defn- message [{:keys [role text tool summary error streaming]}]
   (case role
-    "user" [:div.msg.user [:div.bubble text]]
+    "user" [:div.msg.user [:div.bubble [codesend/bubble text]]]
     "tool" [:div.step {:class (when error "err")}
             [:span.step-dot]
             [:b (or tool "tool")]

@@ -236,13 +236,13 @@
            (sync-mark b)]])
        (when only [:button.f-copy {:type "button" :on-click on-all} "show all"])])))
 
-(defn- graph [{:keys [commits head dirty]} open-hash mark-of on-open]
+(defn- graph [{:keys [commits head dirty] :as log} open-hash mark-of on-open]
   (let [head-commit (some #(when (= (:hash %) head) %) commits)
         working (and (pos? (:total dirty 0)) head-commit)
         off (if working 1 0)
         row-of (into {} (map-indexed (fn [i c] [(:hash c) (+ i off)])) commits)
         n (+ (count commits) off)
-        times (vec (concat (when working [(/ (js/Date.now) 1000)]) (map :time commits)))
+        times (vec (concat (when working [(if (:demo? log) (:time head-commit) (/ (js/Date.now) 1000))]) (map :time commits)))
         gap (vec (map-indexed (fn [r t] (if (pos? r) (max 0 (- (times (dec r)) t)) 0)) times))
         tops (vec (reductions (fn [top r] (+ top row-h (gap-px (gap r)))) 0 (range 1 n)))
         height (if (pos? n) (+ (peek tops) row-h) 0)
@@ -314,13 +314,13 @@
                      (-> (if js/document.hidden
                            (js/Promise.resolve nil)
                            (-> (api/fetch-json (url-of {:limit limit :branches (when only (str/join "," only)) :fp (.-current fp)}))
-                               (.then (fn [j] (when-not (or @gone (:same j)) (set! (.-current fp) (:fp j)) (set-log j) (set-error nil))))
+                               (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (set! (.-current fp) (:fp j)) (set-log j)))))
                                (.catch (fn [e] (when-not @gone (set-error (.-message e)))))))
                          (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
            (ask)
            #(do (reset! gone true) (js/clearTimeout @timer)))))
      [live repo server chat limit only])
-    (let [shown (h/use-memo #(if demo (update demo :commits (fn [cs] (layout (mapv (fn [c] (update c :refs items)) (items cs))))) log) [demo log])
+    (let [shown (h/use-memo #(if demo (update (assoc demo :demo? true) :commits (fn [cs] (layout (mapv (fn [c] (update c :refs items)) (items cs))))) log) [demo log])
           branches (or (:branches shown)
                        ;; The demo names no branch list: its refs are the branches.
                        (vec (distinct (for [c (:commits shown) r (:refs c) :when (#{"head" "branch" "remote"} (:type r))]
