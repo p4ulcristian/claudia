@@ -90,20 +90,20 @@
         "A background task finished.")))
 
 (defn command-msg
-  "Claude Code keeps a slash command as user messages: the command (<command-name>, shown as the
-  user's own \"/name args\"), its output (<local-command-stdout>, a note) and a caveat (dropped).
-  {:role :text}, :drop, or nil for any other text."
+  "Claude Code keeps a slash command as tagged user text (src/chat.ts commandParts): the command
+  (<command-name> and <command-args>, shown as the user's own \"/name args\") and its output
+  (<local-command-stdout> or -stderr, a note); a caveat is dropped. [{:role :text :out?}] (empty:
+  nothing to show), or nil for any other text."
   [text]
-  (cond
-    (str/starts-with? text "<local-command-caveat>") :drop
-    (str/includes? text "<local-command-stdout>")
-    (let [out (str/trim (str (second (re-find #"<local-command-stdout>([\s\S]*?)</local-command-stdout>" text))))]
-      (if (seq out) {:role "note" :text out} :drop))
-    (str/includes? text "<command-name>")
-    (let [cmd (str/trim (str (second (re-find #"<command-name>([\s\S]*?)</command-name>" text))))
-          args (str/trim (str (second (re-find #"<command-args>([\s\S]*?)</command-args>" text))))]
-      {:role "user" :text (str/trim (str (if (str/starts-with? cmd "/") cmd (str "/" cmd)) " " args))})
-    :else nil))
+  (if (str/starts-with? text "<local-command-caveat>")
+    []
+    (let [nm (some-> (re-find #"<command-name>([\s\S]*?)</command-name>" text) second str/trim)
+          args (some-> (re-find #"<command-args>([\s\S]*?)</command-args>" text) second str/trim)
+          out (some-> (re-find #"<local-command-std(?:out|err)>([\s\S]*?)</local-command-std(?:out|err)>" text) second str/trim)]
+      (when (or (seq nm) (some? out) (re-find #"<command-message>" text))
+        (cond-> []
+          (seq nm) (conj {:role "user" :text (str (if (str/starts-with? nm "/") nm (str "/" nm)) (when (seq args) (str " " args)))})
+          (seq out) (conj {:role "note" :text out :out true}))))))
 
 (defn result-text [content]
   (cond (string? content) content
@@ -235,13 +235,13 @@
                "user"
                (if (string? content)
                  (let [text (strip-reminders content)]
-                   (let [cmd (command-msg text)]
+                   (let [notice (task-notice text)
+                         cmd (when-not notice (command-msg text))]
                      (cond
-                       (= :drop cmd) nil
-                       cmd (swap! out conj (assoc cmd :id (:uuid m) :at at))
-                       :else (if-let [notice (task-notice text)]
-                               (swap! out conj {:id (:uuid m) :role "note" :text notice :at at})
-                               (when (seq text) (swap! out conj {:id (:uuid m) :role "user" :text text :at at}))))))
+                       notice (swap! out conj {:id (:uuid m) :role "note" :text notice :at at})
+                       cmd (doseq [c cmd]
+                             (swap! out conj (-> c (dissoc :out) (assoc :id (if (:out c) (str (:uuid m) ":out") (:uuid m)) :at at))))
+                       (seq text) (swap! out conj {:id (:uuid m) :role "user" :text text :at at}))))
                  (let [texts (atom [])]
                    (doseq [b content]
                      (case (:type b)

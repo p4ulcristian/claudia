@@ -53,9 +53,9 @@
   [^js req ^js res chat n]
   (let [length (js/Number (aget (.-headers req) "content-length"))]
     (cond
-      (not (re-matches uuid-re (str chat))) (h/json-reply res 400 {:error "bad chat id"})
-      (not (seq n)) (h/json-reply res 400 {:error "name is needed"})
-      (> length max-bytes) (h/json-reply res 413 {:error "file too big (100 MB at most)"})
+      (not (re-matches uuid-re (str chat))) (h/json-reply res 400 {:error "bad request"})
+      (not (seq n)) (h/json-reply res 400 {:error "bad request"})
+      (> length max-bytes) (h/json-reply res 413 {:error "file too big"})
       :else
       (let [dir (path/join @root chat)
             _ (fs/mkdirSync dir #js {:recursive true :mode (js/parseInt "700" 8)})
@@ -71,7 +71,7 @@
         (.on req "data" (fn [chunk]
                           (when-not @done
                             (if (> (swap! size + (.-length chunk)) max-bytes)
-                              (do (fail! 413 "file too big (100 MB at most)") (.destroy req))
+                              (do (fail! 413 "file too big") (.destroy req))
                               (try (fs/writeSync fd chunk)
                                    (catch :default _ (fail! 500 "could not save the file")))))))
         (.on req "error" #(fail! 400 "the upload broke off"))
