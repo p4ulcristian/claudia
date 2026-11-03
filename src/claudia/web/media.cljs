@@ -39,43 +39,65 @@
                    (.finally #(.close bm)))))))
 
 (defn- once [^js el ok-event]
-  (js/Promise. (fn [resolve reject]
-                 (letfn [(done [] (off) (resolve nil))
-                         (fail [] (off) (reject (or (.-error el) (js/Error. "video"))))
+  (js/Promise. (fn [ok no]
+                 (letfn [(done [] (off) (ok nil))
+                         (fail [] (off) (no (or (.-error el) (js/Error. "video"))))
                          (off [] (.removeEventListener el ok-event done) (.removeEventListener el "error" fail))]
                    (.addEventListener el ok-event done)
                    (.addEventListener el "error" fail)))))
 
 (defn- at [s] (str (.toFixed s 1) " s"))
 
-(defn- video [^js f]
-  (let [src (js/URL.createObjectURL f)
-        v (js/document.createElement "video")]
+(defn frame-times
+  "When a video of seconds is drawn: at most max-frames times (one per second for short ones),
+  each in the middle of its stretch, none past the very end."
+  [seconds]
+  (let [n (max 1 (min max-frames (js/Math.ceil seconds)))]
+    (for [i (range n)] (min (/ (* seconds (+ i 0.5)) n) (max 0 (- seconds 0.05))))))
+
+(defn video-note
+  "The note before a video's frames, saying what they are."
+  [file-name seconds width height times]
+  (let [n (count times)]
+    (str "Video \"" file-name "\" (" (at seconds) ", " width "x" height "): "
+         n " frame" (when (> n 1) "s") " follow in order, taken at "
+         (str/join ", " (map at times)) ". There is no sound.")))
+
+(defn- video-element [src]
+  (let [v (js/document.createElement "video")]
     (set! (.-muted v) true)
     (set! (.-playsInline v) true)
     (set! (.-preload v) "auto")
     (set! (.-src v) src)
+    v))
+
+(defn- draw-frames
+  "Promise of the video drawn at each of times, one after the other."
+  [^js v times]
+  (reduce (fn [p t]
+            (.then p (fn [acc]
+                       (set! (.-currentTime v) t)
+                       (.then (once v "seeked")
+                              (fn [] (conj acc (draw v (.-videoWidth v) (.-videoHeight v) frame-edge 0.8)))))))
+          (js/Promise.resolve []) times))
+
+(defn- video-media [^js f ^js v]
+  (let [seconds (.-duration v)
+        times (frame-times seconds)]
+    (.then (draw-frames v times)
+           (fn [frames]
+             {:url (first frames)
+              :note (video-note (.-name f) seconds (.-videoWidth v) (.-videoHeight v) times)
+              :video seconds
+              :images (mapv (fn [u] {:media_type "image/jpeg" :data (data-of u)}) frames)}))))
+
+(defn- video [^js f]
+  (let [src (js/URL.createObjectURL f)
+        v (video-element src)]
     (-> (once v "loadeddata")
         ;; iOS Safari draws nothing from a video that has never played: start it once, silently.
         (.then #(-> (.play v) (.then (fn [] (.pause v)) (fn [_] nil))))
-        (.then (fn []
-                 (let [seconds (.-duration v)
-                       n (max 1 (min max-frames (js/Math.ceil seconds)))
-                       times (for [i (range n)] (min (/ (* seconds (+ i 0.5)) n) (max 0 (- seconds 0.05))))]
-                   (.then (reduce (fn [p t]
-                                    (.then p (fn [acc]
-                                               (set! (.-currentTime v) t)
-                                               (.then (once v "seeked")
-                                                      (fn [] (conj acc (draw v (.-videoWidth v) (.-videoHeight v) frame-edge 0.8)))))))
-                                  (js/Promise.resolve []) times)
-                          (fn [frames]
-                            (let [note (str "Video \"" (.-name f) "\" (" (at seconds) ", " (.-videoWidth v) "x" (.-videoHeight v) "): "
-                                            n " frame" (when (> n 1) "s") " follow in order, taken at "
-                                            (str/join ", " (map at times)) ". There is no sound.")]
-                              {:url (first frames)
-                               :note note
-                               :video seconds
-                               :images (mapv (fn [u] {:media_type "image/jpeg" :data (data-of u)}) frames)}))))))
+        (.then #(video-media f v))
         (.finally (fn []
                     (.removeAttribute v "src")
                     (.load v)

@@ -1,5 +1,6 @@
 (ns claudia.web.subs
-  (:require [re-frame.core :as rf]))
+  (:require [re-frame.core :as rf]
+            [claudia.web.events :as events]))
 
 (rf/reg-sub :me (fn [db] (:me db)))
 (rf/reg-sub :me-error (fn [db] (:me-error db)))
@@ -26,33 +27,35 @@
 
 (rf/reg-sub
  :new-server
- (fn [db]
-   (let [names (map :name (get-in db [:me :servers]))]
-     (if (some #{(:new-server db)} names) (:new-server db) (first names)))))
+ (fn [db] (events/default-server db)))
 
 (rf/reg-sub
  :server-label
  :<- [:server-list]
- (fn [servers [_ name]]
-   (or (:label (first (filter #(= name (:name %)) servers))) name)))
+ (fn [servers [_ server]]
+   (or (:label (first (filter #(= server (:name %)) servers))) server)))
 
 (rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
 (rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))
 
+(defn list-rows
+  "Every shown server's chats in one list, each with its :server and :off (its socket not open);
+  archived ones only in the archived list. In the order the chats were started (the TypeScript
+  Claudia's list): a new chat sits last."
+  [servers archived? hidden]
+  (->> servers
+       (remove (fn [[s]] (hidden s)))
+       (mapcat (fn [[s {:keys [rows status]}]]
+                 (map #(assoc % :server s :off (not= :open status)) (vals rows))))
+       (filter #(= archived? (boolean (:archived %))))
+       (sort-by events/list-order)))
+
 (rf/reg-sub
  :rows
- ;; Every shown server's chats in one list; archived ones only in the archived list.
  :<- [:servers]
  :<- [:archived-mode?]
  :<- [:hidden-server-set]
- (fn [[servers archived? hidden]]
-   (->> servers
-        (remove (fn [[s]] (hidden s)))
-        (mapcat (fn [[s {:keys [rows status]}]]
-                  (map #(assoc % :server s :off (not= :open status)) (vals rows))))
-        (filter #(= archived? (boolean (:archived %))))
-        ;; In the order the chats were started (the TypeScript Claudia's list): a new chat sits last.
-        (sort-by #(or (:started %) (:at %) 0)))))
+ (fn [[servers archived? hidden]] (list-rows servers archived? hidden)))
 
 (rf/reg-sub
  :row

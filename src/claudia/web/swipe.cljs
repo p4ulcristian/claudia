@@ -22,22 +22,79 @@
 
 (defn- less-motion? [] (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
 
-(defn- moves-sideways?
-  "Something under the finger moves sideways itself: a scroller with room, or an element that
-  takes horizontal moves (touch-action without pan-x)."
-  [el]
-  (loop [^js el el]
-    (if (or (nil? el) (identical? el js/document.body))
-      false
-      (let [s (js/getComputedStyle el)
-            x (.-overflowX s)
-            ta (.-touchAction s)]
-        (if (or (and (#{"auto" "scroll" "overlay"} x) (> (.-scrollWidth el) (inc (.-clientWidth el))))
-                (and ta (not= ta "auto") (not= ta "manipulation") (not (.includes ta "pan-x"))))
-          true
-          (recur (.-parentElement el)))))))
+;; ---- the decisions, on plain numbers ----
+
+(defn takes-sideways?
+  "A box (its overflow-x and touch-action styles and widths, as plain data) moves sideways itself:
+  a scroller with room, or one that takes horizontal moves (touch-action without pan-x)."
+  [{:keys [overflow-x touch-action scroll-width client-width]}]
+  (boolean
+   (or (and (#{"auto" "scroll" "overlay"} overflow-x) (> scroll-width (inc client-width)))
+       (and touch-action (not= touch-action "auto") (not= touch-action "manipulation")
+            (not (.includes touch-action "pan-x"))))))
+
+(defn pick-move
+  "The move a finger that went (dx, dy) makes: the one in its direction, when the move is mostly
+  sideways and takeable? (cancelable, and nothing native moves with it); nil otherwise."
+  [moves dx dy takeable?]
+  (when (and (>= (js/Math.abs dx) (* 1.2 (js/Math.abs dy))) takeable?)
+    (some #(when (= (js/Math.sign dx) (:dir %)) %) moves)))
+
+(defn progress
+  "How far along a move is, 0..1: the finger at x, from origin, in the move's direction dir."
+  [origin x dir width]
+  (min 1 (max 0 (/ (* (- x origin) dir) width))))
+
+(defn recent-samples
+  "The finger's positions of about the last 100 ms, now at x: at least two (the last one before
+  stays when nothing else is that recent)."
+  [samples x now]
+  (let [recent (->> (conj samples {:x x :t now})
+                    (drop-while #(> (- now (:t %)) 100))
+                    vec)]
+    (if (< (count recent) 2) (conj (vec (take-last 1 samples)) {:x x :t now}) recent)))
+
+(defn velocity
+  "The finger's speed in the move's direction, px per ms, over the samples; 0 without two times."
+  [samples dir]
+  (let [a (first samples) b (peek samples)]
+    (if (and a b (> (:t b) (:t a))) (/ (* (- (:x b) (:x a)) dir) (- (:t b) (:t a))) 0)))
+
+(defn completes?
+  "A released move completes when flicked forward, springs back when flicked back, else completes
+  past done-at."
+  [v p]
+  (cond (> v flick) true (< v (- flick)) false :else (> p done-at)))
+
+(defn animation-ms
+  "How long the rest of a move takes, from from to to over width px at the finger's speed."
+  [from to width speed]
+  (min 320 (max 120 (/ (* (js/Math.abs (- to from)) width) (max speed 0.9)))))
+
+(defn ease-out [k] (- 1 (js/Math.pow (- 1 k) 3)))
+
+(defn gesture-kind
+  "Which swipes the screen shown now has: Settings lies over the list, an agent's view over the chat."
+  [screen settings? agent?]
+  (cond
+    (and settings? (= screen "list")) :settings
+    (= screen "list") :list
+    (and (= screen "chat") agent?) :agent
+    (= screen "chat") :chat
+    (= screen "picture") :picture))
 
 ;; ---- the moves the screens make ----
+
+(defn- moves-sideways?
+  "Something under the finger moves sideways itself."
+  [el]
+  (loop [^js el el]
+    (cond
+      (or (nil? el) (identical? el js/document.body)) false
+      (let [s (js/getComputedStyle el)]
+        (takes-sideways? {:overflow-x (.-overflowX s) :touch-action (.-touchAction s)
+                          :scroll-width (.-scrollWidth el) :client-width (.-clientWidth el)})) true
+      :else (recur (.-parentElement el)))))
 
 (defn- px [x] (str "translate3d(" x "px, 0, 0)"))
 
@@ -82,143 +139,141 @@
        :commit forward :settled? settled?
        :clear #(unset! top under)})))
 
+(defn- $ [selector] (js/document.querySelector selector))
+
+(defn- on? [screen] (= screen (some-> ^js ($ ".app") .-dataset .-screen)))
+
+(defn- moves-for
+  "Where a touch may start (surface) and which moves it may make there, for a kind of screen."
+  [kind]
+  (let [side ($ ".app > .sidebar-slot")
+        left ($ ".app .split > .left")
+        right ($ ".app .split > .right")]
+    (case kind
+      :settings {:surface ($ ".st-pane")
+                 :moves [(slide-back ($ ".st-pane") ($ ".cs-pane") #(rf/dispatch [:ops/settings false])
+                                     #(not (.contains (.-classList ^js ($ ".app")) "settings-shown")))]}
+      :list {:surface side
+             :moves [(when (:open @rdb/app-db)
+                       (slide-over left side #(rf/dispatch [:nav/screen :chat]) #(on? "chat")))]}
+      :agent {:surface ($ ".ag-screen")
+              :moves [(slide-back ($ ".ag-screen") nil #(rf/dispatch [:agents/close (:open @rdb/app-db)])
+                                  #(not ($ ".ag-screen")))]}
+      :chat {:surface left
+             :moves [(slide-back left side #(rf/dispatch [:nav/list]) #(on? "list"))
+                     (slide-over right left #(rf/dispatch [:nav/screen :picture]) #(on? "picture"))]}
+      :picture {:surface right
+                :moves [(slide-back right left #(rf/dispatch [:nav/screen :chat]) #(on? "chat"))]})))
+
 (defn- gestures
   "Where a touch may start (surface) and which moves it may make there, for the screen shown now."
   []
-  (let [$ #(js/document.querySelector %)
-        ^js app ($ ".app")
-        screen (some-> app .-dataset .-screen)
-        on? #(= % (some-> ^js ($ ".app") .-dataset .-screen))
-        side ($ ".app > .sidebar-slot")
-        left ($ ".app .split > .left")
-        right ($ ".app .split > .right")
-        settings (when (some-> app .-classList (.contains "settings-shown")) ($ ".st-pane"))]
-    (cond
-      (nil? app) nil
-      ;; Settings lies over the list: right goes back to the chats under it.
-      (and settings (= screen "list"))
-      {:surface settings
-       :moves (keep identity [(slide-back settings ($ ".cs-pane") #(rf/dispatch [:ops/settings false])
-                                          #(not (.contains (.-classList ^js ($ ".app")) "settings-shown")))])}
+  (when-let [^js app ($ ".app")]
+    (let [settings? (boolean (and (.contains (.-classList app) "settings-shown") ($ ".st-pane")))
+          kind (gesture-kind (some-> app .-dataset .-screen) settings? (some? ($ ".ag-screen")))]
+      (when kind
+        (update (moves-for kind) :moves #(keep identity %))))))
 
-      (= screen "list")
-      {:surface side
-       :moves (keep identity [(when (:open @rdb/app-db)
-                                (slide-over left side #(rf/dispatch [:nav/screen :chat]) #(on? "chat")))])}
-
-      ;; An agent's view lies over the chat: right goes back to the chat.
-      (and (= screen "chat") ($ ".ag-screen"))
-      {:surface ($ ".ag-screen")
-       :moves (keep identity [(slide-back ($ ".ag-screen") nil #(rf/dispatch [:agents/close (:open @rdb/app-db)])
-                                          #(not (js/document.querySelector ".ag-screen")))])}
-
-      (= screen "chat")
-      {:surface left
-       :moves (keep identity [(slide-back left side #(rf/dispatch [:nav/list]) #(on? "list"))
-                              (slide-over right left #(rf/dispatch [:nav/screen :picture]) #(on? "picture"))])}
-
-      (= screen "picture")
-      {:surface right
-       :moves (keep identity [(slide-back right left #(rf/dispatch [:nav/screen :chat]) #(on? "chat"))])}
-
-      :else nil)))
+;; ---- following the finger ----
 
 (defonce ^:private installed (atom false))
+(defonce ^:private track (atom nil)) ; the touch followed now: {:x0 :y0 :origin :moves :g :p :samples}
+(defonce ^:private busy (atom false)) ; a move is animating to its end
+(defonce ^:private raf (atom 0))
+
+(defn- paint-soon! [g p]
+  (when-not (less-motion?)
+    (js/cancelAnimationFrame @raf)
+    (reset! raf (js/requestAnimationFrame #((:paint g) p)))))
+
+(defn- settle!
+  "After a completed move the classes take over where the paint ended, then the inline styles go
+  (at the latest after 90 frames). n: the frames waited so far."
+  [g n]
+  (if (or ((:settled? g)) (> n 90))
+    (do ((:clear g)) (reset! busy false))
+    (reset! raf (js/requestAnimationFrame #(settle! g (inc n))))))
+
+(defn- animate!
+  "The move animated from from to its end (done?) or back to its start."
+  [g from done? speed]
+  (let [to (if done? 1 0)
+        ms (animation-ms from to (:width g) speed)
+        t0 (js/performance.now)]
+    (reset! busy true)
+    (letfn [(step [now]
+              (let [k (min 1 (/ (- now t0) ms))]
+                ((:paint g) (+ from (* (- to from) (ease-out k))))
+                (cond
+                  (< k 1) (reset! raf (js/requestAnimationFrame step))
+                  (not done?) (do ((:clear g)) (reset! busy false))
+                  :else (do ((:commit g))
+                            (reset! raf (js/requestAnimationFrame #(settle! g 1)))))))]
+      (reset! raf (js/requestAnimationFrame step)))))
+
+(defn- finish! [g from done? speed]
+  (js/cancelAnimationFrame @raf)
+  (if (less-motion?)
+    (do (when done? ((:commit g))) ((:clear g)))
+    (animate! g from done? speed)))
+
+(defn- cancel! []
+  (let [tr @track]
+    (reset! track nil)
+    (when (:g tr) (finish! (:g tr) (:p tr) false 0))))
+
+(defn- on-touchstart [^js e]
+  (reset! track nil)
+  (when (and (db/phone?) (not @busy) (= 1 (.-length (.-touches e))))
+    (let [t (aget (.-touches e) 0)
+          target (when (instance? js/Element (.-target e)) (.-target e))
+          {:keys [surface moves]} (gestures)]
+      (when (and target surface (.contains surface target) (seq moves)
+                 (not (.closest target "input, textarea, select, [contenteditable], [data-no-swipe]"))
+                 (not (moves-sideways? target)))
+        (reset! track {:x0 (.-clientX t) :y0 (.-clientY t) :origin (.-clientX t) :moves moves
+                       :g nil :p 0 :samples []})))))
+
+(defn- taken
+  "The track once the finger went axis-px: with its move picked, or nil (not yet; or not ours, a
+  mostly vertical move or one a scroller already follows: then the track ends)."
+  [tr ^js e ^js t]
+  (let [dx (- (.-clientX t) (:x0 tr)) dy (- (.-clientY t) (:y0 tr))]
+    (when (>= (js/Math.hypot dx dy) axis-px)
+      (if-let [g (pick-move (:moves tr) dx dy (and (.-cancelable e) (viewport/touch-blocked?)))]
+        (assoc tr :g g :origin (.-clientX t))
+        (do (reset! track nil) nil)))))
+
+(defn- follow! [tr ^js e ^js t]
+  (when (.-cancelable e) (.preventDefault e))
+  (let [g (:g tr)
+        x (.-clientX t)
+        p (progress (:origin tr) x (:dir g) (:width g))
+        now (or (.-timeStamp e) (js/performance.now))]
+    (reset! track (assoc tr :p p :samples (recent-samples (:samples tr) x now)))
+    (paint-soon! g p)))
+
+(defn- on-touchmove [^js e]
+  (when-let [tr @track]
+    (let [t (aget (.-touches e) 0)]
+      (if (or (> (.-length (.-touches e)) 1) (not t))
+        (cancel!)
+        (when-let [moving (if (:g tr) tr (taken tr e t))]
+          (follow! moving e t))))))
+
+(defn- on-touchend [_]
+  (let [tr @track]
+    (reset! track nil)
+    (when-let [g (:g tr)]
+      (let [v (velocity (:samples tr) (:dir g))]
+        (finish! g (:p tr) (completes? v (:p tr)) (js/Math.abs v))))))
 
 (defn install!
   "Turns the swipes on (they act only while the page is phone-wide)."
   []
   (when-not @installed
     (reset! installed true)
-    (let [track (atom nil)
-          busy (atom false)
-          raf (atom 0)
-          paint-soon (fn [g p]
-                       (when-not (less-motion?)
-                         (js/cancelAnimationFrame @raf)
-                         (reset! raf (js/requestAnimationFrame #((:paint g) p)))))
-          finish (fn [g from done? speed]
-                   (js/cancelAnimationFrame @raf)
-                   (if (less-motion?)
-                     (do (when done? ((:commit g))) ((:clear g)))
-                     (let [to (if done? 1 0)
-                           ms (min 320 (max 120 (/ (* (js/Math.abs (- to from)) (:width g)) (max speed 0.9))))
-                           t0 (js/performance.now)]
-                       (reset! busy true)
-                       (letfn [(step [now]
-                                 (let [k (min 1 (/ (- now t0) ms))
-                                       e (- 1 (js/Math.pow (- 1 k) 3))]
-                                   ((:paint g) (+ from (* (- to from) e)))
-                                   (cond
-                                     (< k 1) (reset! raf (js/requestAnimationFrame step))
-                                     (not done?) (do ((:clear g)) (reset! busy false))
-                                     :else
-                                     (do ((:commit g))
-                                         ;; the classes take over where the paint ended, then the inline styles go
-                                         (let [frames (atom 0)]
-                                           (letfn [(wait [_]
-                                                     (if (or ((:settled? g)) (> (swap! frames inc) 90))
-                                                       (do ((:clear g)) (reset! busy false))
-                                                       (reset! raf (js/requestAnimationFrame wait))))]
-                                             (reset! raf (js/requestAnimationFrame wait))))))))]
-                         (reset! raf (js/requestAnimationFrame step))))))
-          cancel (fn []
-                   (let [tr @track]
-                     (reset! track nil)
-                     (when (:g tr) (finish (:g tr) (:p tr) false 0))))]
-      (js/window.addEventListener
-       "touchstart"
-       (fn [^js e]
-         (reset! track nil)
-         (when (and (db/phone?) (not @busy) (= 1 (.-length (.-touches e))))
-           (let [t (aget (.-touches e) 0)
-                 target (when (instance? js/Element (.-target e)) (.-target e))
-                 {:keys [surface moves]} (gestures)]
-             (when (and target surface (.contains surface target) (seq moves)
-                        (not (.closest target "input, textarea, select, [contenteditable], [data-no-swipe]"))
-                        (not (moves-sideways? target)))
-               (reset! track {:x0 (.-clientX t) :y0 (.-clientY t) :origin (.-clientX t) :moves moves
-                              :g nil :p 0 :samples []})))))
-       #js {:passive true})
-      (js/window.addEventListener
-       "touchmove"
-       (fn [^js e]
-         (when-let [tr @track]
-           (let [t (aget (.-touches e) 0)]
-             (if (or (> (.-length (.-touches e)) 1) (not t))
-               (cancel)
-               (let [tr (if (:g tr)
-                          tr
-                          (let [dx (- (.-clientX t) (:x0 tr)) dy (- (.-clientY t) (:y0 tr))]
-                            (cond
-                              (< (js/Math.hypot dx dy) axis-px) nil
-                              ;; mostly vertical, or a scroller already follows the finger: not ours
-                              :else (let [g (when (and (>= (js/Math.abs dx) (* 1.2 (js/Math.abs dy)))
-                                                       (.-cancelable e) (viewport/touch-blocked?))
-                                              (some #(when (= (js/Math.sign dx) (:dir %)) %) (:moves tr)))]
-                                      (if g
-                                        (assoc tr :g g :origin (.-clientX t))
-                                        (do (reset! track nil) nil))))))]
-                 (when (:g tr)
-                   (when (.-cancelable e) (.preventDefault e))
-                   (let [g (:g tr)
-                         p (min 1 (max 0 (/ (* (- (.-clientX t) (:origin tr)) (:dir g)) (:width g))))
-                         now (or (.-timeStamp e) (js/performance.now))
-                         samples (->> (conj (:samples tr) {:x (.-clientX t) :t now})
-                                      (drop-while #(and (> (- now (:t %)) 100) true))
-                                      vec)
-                         samples (if (< (count samples) 2) (conj (vec (take-last 1 (:samples tr))) {:x (.-clientX t) :t now}) samples)]
-                     (reset! track (assoc tr :p p :samples samples))
-                     (paint-soon g p))))))))
-       #js {:passive false})
-      (js/window.addEventListener
-       "touchend"
-       (fn [_]
-         (let [tr @track]
-           (reset! track nil)
-           (when-let [g (:g tr)]
-             (let [s (:samples tr) a (first s) b (peek s)
-                   v (if (and a b (> (:t b) (:t a))) (/ (* (- (:x b) (:x a)) (:dir g)) (- (:t b) (:t a))) 0)
-                   done? (cond (> v flick) true (< v (- flick)) false :else (> (:p tr) done-at))]
-               (finish g (:p tr) done? (js/Math.abs v)))))))
-      (js/window.addEventListener "touchcancel" cancel))))
+    (js/window.addEventListener "touchstart" on-touchstart #js {:passive true})
+    (js/window.addEventListener "touchmove" on-touchmove #js {:passive false})
+    (js/window.addEventListener "touchend" on-touchend)
+    (js/window.addEventListener "touchcancel" #(cancel!))))
