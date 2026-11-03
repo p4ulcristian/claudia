@@ -38,6 +38,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
 | front | `CLAUDIA_UPDATE_TRIGGER` | file `POST /api/update-check` writes (a path unit starts `deploy/update.sh`) |
 | hub | `HUB_WEB` | folder of the built page (`out/web`) |
+| hub | `HUB_TTS_URL`, `HUB_TTS_TOKEN_FILE` (or `HUB_TTS_TOKEN`) | the narrator's voice service for 3D stories and its bearer token (unset: no voice) |
 | front | `FRONT_HOST`, `FRONT_PORT` | the WireGuard address it listens on |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
 | front | `FRONT_NAME` | this server's name (`destiny`, `box`) |
@@ -84,6 +85,8 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 | `GET /`, `/new` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
 | `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
+| `GET /hub/narrate` | `{ voice: bool }`: a voice service is set up (`HUB_TTS_URL` and its token) |
+| `POST /hub/narrate` `{ text, instruction? }` | the line as speech: raw 16-bit mono PCM at 24 kHz (`audio/L16;rate=24000;channels=1`, `x-seconds`); `instruction` = a story's `voice` (one reference clip is made from it, every line is a clone of it). Clips are kept in `HUB_DATA/narration` by their text. 400 without text, 501 without a voice, 502 when the voice service fails. The service's route is `<HUB_TTS_URL>/v1/audio/speech` (form fields `text`, and `ref_audio` + `ref_text` for a cloned voice, or `instruction`) |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
 | `ANY /s/<server>/api/…` | passed to that front's `/api/…`, bodies streamed both ways (refused 403 if not in the person's list; 502 when the front is not reachable) |
 | `WS /s/<server>/ws` | passed to that front's `/ws`; the front's own refusal (status and body) reaches the page; frames pass as they are, close codes too |
@@ -237,7 +240,9 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
 (`"graph"`, `"html"`, `"form"`), `width` (`"full"`/`"half"`) and:
 - graph: `nodes: [{ id, label, shape, color, note, group, state }]`, `edges: [{ from, to, label, dashed, color }]`, `groups: [{ id, label, color }]`
 - html: `html`, `parts: { name: markup }`
-- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`), `data` (as the draw tool's description says)
+- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`, `scene3d`), `data` (as the draw tool's description says).
+  A picture holds one `scene3d` block: a new one takes the old one's place (or goes where its `before`
+  says) and every other `scene3d` block leaves; redrawing the same id keeps its place and merges its data.
 
 The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
 `edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`. It keeps
