@@ -21,17 +21,17 @@
 
 ;; ---- state: a chat's settings come with `chat` and with `settings` frames ----
 
-(defmethod events/on-frame "settings" [db server {:keys [chat settings]}]
-  {:db (assoc-in db [:chats [server chat] :settings] settings)})
+(defmethod events/on-frame "picture_settings" [db server {:keys [chat settings]}]
+  {:db (assoc-in db [:chats [server chat] :pictureSettings] settings)})
 
 (rf/reg-event-fx
  :codeforms/settings
  ;; The form row or the columns changed: shown at once, sent to the chat's runner.
  (fn [{:keys [db]} [_ [server chat :as k] change]]
-   {:db (update-in db [:chats k :settings] merge change)
-    :ws/send [server (merge {:type "settings" :chat chat} change)]}))
+   {:db (update-in db [:chats k :pictureSettings] merge change)
+    :ws/send [server (merge {:type "picture_settings" :chat chat} change)]}))
 
-(rf/reg-sub :codeforms/settings (fn [db [_ k]] (get-in db [:chats k :settings])))
+(rf/reg-sub :codeforms/settings (fn [db [_ k]] (get-in db [:chats k :pictureSettings])))
 
 ;; ---- which renderer ----
 

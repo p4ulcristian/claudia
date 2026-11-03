@@ -73,7 +73,7 @@
         scene (:scene hist)
         blocks (:blocks scene)
         asks (get-in oc [:state :asks])
-        cols (get-in oc [:state :settings :cols] 0)]
+        cols (get-in oc [:state :pictureSettings :cols] 0)]
     (if (and (:folded? fold) (not (db/phone?)))
       [rightbar/fold-edge (:unseen? fold)]
     [:section.right rightbar/mouse-props

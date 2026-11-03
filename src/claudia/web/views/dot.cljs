@@ -5,12 +5,15 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
-            [claudia.web.chatops :as ops]))
+            [claudia.web.chatops :as ops]
+            [claudia.web.views.agents :as agents]))
 
-(defn state-badge [{:keys [waiting running unseen]} read-only?]
+(defn state-badge [{:keys [waiting running unseen agents]} read-only?]
   (cond
     waiting [:span.state-badge.waiting {:title "Waiting for you"} "?"]
     running [:span.state-badge.thinking {:title "Working"} [:i] [:i] [:i]]
+    ;; The turn ended but work Claude started still runs (README decision 25 of the old Claudia).
+    (pos? agents) [agents/agents-ring agents]
     (and unseen (not read-only?)) [:span.state-badge.done {:title "Done"} "✓"]))
 
 (defn- letter [title] (str/upper-case (subs (str (if (str/blank? title) "·" title)) 0 1)))

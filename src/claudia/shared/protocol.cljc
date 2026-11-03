@@ -18,15 +18,15 @@
 
 (def page->runner
   #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "seen"
-    "picture" "older" "code_edit" "code_send" "settings"})
+    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send" "picture_settings"})
 
 (def runner->page
   #{"chats" "chat" "created" "msg" "delta" "scene" "turn" "ask" "asked" "error"
-    "pictures" "picture" "older" "settings"})
+    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older" "picture_settings"})
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."
-  #{"hello" "open" "close" "picture" "older"})
+  #{"hello" "open" "close" "agent" "agent_git" "diff" "picture" "older"})
 
 (def forms
   "The forms the draw tool offers in this version."

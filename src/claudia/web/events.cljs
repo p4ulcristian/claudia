@@ -98,7 +98,8 @@
   (let [k [server chat]
         msgs (vec (:messages f))]
     {:db (-> db
-             (assoc-in [:chats k] (-> (select-keys f [:title :folder :scene :running :asks :more :settings])
+             (assoc-in [:chats k] (-> (select-keys f [:title :folder :scene :running :asks :more
+                                                  :agents :changes :settings :model :commands :context :pictureSettings])
                                       (assoc :messages msgs :loaded true)))
              (update-in [:outbox k] (fn [ob] (reduce drop-echo (vec ob) (keep #(when (= "user" (:role %)) (:text %)) msgs)))))
      :fx [[:dispatch [:chat/check-seen]]]}))

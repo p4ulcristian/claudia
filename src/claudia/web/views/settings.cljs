@@ -5,7 +5,8 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
-            [claudia.web.chatops :as ops]))
+            [claudia.web.chatops :as ops]
+            [claudia.web.views.usage :as usage]))
 
 (defn- cap [n] (str (str/upper-case (subs n 0 1)) (subs n 1)))
 
@@ -165,14 +166,13 @@
         [:span.instance-version (or (:commit me) (str "v" (:version me)))]])]))
 
 (defn plan-bars
-  "The plan's 5-hour and week bars come from the usage meters; until a server reports them, a
-  placeholder that says so."
+  "The plan's limits as bars with when each resets; until a server reports them, a line that says so."
   [server]
   (let [tokens @(rf/subscribe [:tokens server])
         token (get-in tokens [:inUse :name])]
     [:section.st-section.st-plan
      [:h3 (if token (str token "'s plan") "Plan")]
-     [:p.muted.small "Usage bars show here once this server reports its limits."]]))
+     [:f> usage/plan-meters server]]))
 
 (defn- switch-row [on on-change label note]
   [:label.st-row.st-switch
