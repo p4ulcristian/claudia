@@ -92,9 +92,6 @@
      (when open (palette color pick))]))
 
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
-(def ^:private picture-icon
-  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-   [:rect {:x 3 :y 3.5 :width 14 :height 13 :rx 2.5}] [:circle {:cx 8 :cy 9 :r 2}] [:path {:d "M11 13.5l2-2 2.5 2.5"}]])
 
 (defn- back-to-list []
   (let [rows @(rf/subscribe [:rows])
@@ -106,17 +103,7 @@
      (when (pos? (+ waiting done))
        [:span.count {:class (when (pos? waiting) "waiting")} (+ waiting done)])]))
 
-(defn- pic-open-button [k]
-  (let [pictures @(rf/subscribe [:pictures-of k])
-        closed-at @(rf/subscribe [:pic-closed-at])
-        unseen? (> (:at (peek pictures) 0) closed-at)]
-    [:button.icon.pic-open {:class (when unseen? "unseen") :aria-label (if unseen? "New picture · show" "Show picture")
-                            :on-click #(rf/dispatch [:nav/screen :picture])}
-     picture-icon]))
-
 (rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
-(defonce ^:private loaded-at (js/Date.now))
-(rf/reg-sub :pic-closed-at (fn [db] (or (:pic-closed-at db) loaded-at)))
 
 ;; ---- the header ----
 
@@ -163,8 +150,7 @@
          [back-to-list]
          (when-not ro [:f> colour-picker ck color])
          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
-         (head-chips oc label folder)
-         [pic-open-button ck]]))))
+         (head-chips oc label folder)]))))
 
 ;; ---- messages ----
 
@@ -477,8 +463,7 @@
    [back-to-list]
    ;; A new chat's colour comes with it once it is made (the runner picks one).
    (when-not ro [:div.color-pick [:span.color-dot.none {:title "Chat colour: once the chat has started"}]])
-   [:h1 [:span.t "New chat"]]
-   [:button.icon.pic-open {:aria-label "Show picture" :on-click #(rf/dispatch [:nav/screen :picture])} picture-icon]])
+   [:h1 [:span.t "New chat"]]])
 
 (defn- pane-body [oc me me-error]
   (cond

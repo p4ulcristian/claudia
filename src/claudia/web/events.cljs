@@ -270,17 +270,10 @@
       :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
       :history/push nil})))
 
-(defn to-screen
-  "The phone's screen set to screen. Pictures drawn after the picture screen closed light its
-  button, so leaving it notes when (now)."
-  [db screen now]
-  (cond-> (assoc db :screen screen)
-    (and (= :picture (:screen db)) (not= :picture screen)) (assoc :pic-closed-at now)))
-
 (rf/reg-event-fx
  :nav/list
  (fn [{:keys [db]} _]
-   {:db (to-screen db :list (js/Date.now))}))
+   {:db (assoc db :screen :list)}))
 
 (rf/reg-event-fx
  :nav/popstate
@@ -292,7 +285,7 @@
 
 (rf/reg-event-db
  :nav/screen
- (fn [db [_ screen]] (to-screen db screen (js/Date.now))))
+ (fn [db [_ screen]] (assoc db :screen screen)))
 
 (defn toggle-sidebar
   "The drawer (desktop) opened or closed (open? nil: switched); from a rail search it only folds

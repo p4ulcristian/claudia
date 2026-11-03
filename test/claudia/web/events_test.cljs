@@ -98,10 +98,7 @@
          (ev/on-chat-screen {:sidebar? true :settings? true})))
   (is (= [["s" {:type "close" :chat "a"}] ["t" {:type "open" :chat "b"}]] (ev/switch-frames ["s" "a"] ["t" "b"])))
   (is (= [["t" {:type "open" :chat "b"}]] (ev/switch-frames nil ["t" "b"])))
-  (is (= [] (ev/switch-frames nil nil)))
-  (testing "leaving the picture screen notes when"
-    (is (= {:screen :chat :pic-closed-at 5} (ev/to-screen {:screen :picture} :chat 5)))
-    (is (= {:screen :picture} (ev/to-screen {:screen :chat} :picture 5)))))
+  (is (= [] (ev/switch-frames nil nil))))
 
 (deftest toggle-sidebar-from-the-rail-and-the-drawer
   (is (= {:sidebar? true :rail-search? false} (ev/toggle-sidebar {} nil)))
