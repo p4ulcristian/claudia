@@ -1,0 +1,10 @@
+# Check the beta branch hourly: catches a poke the hub could not deliver.
+[Unit]
+Description=Claudia beta update check
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

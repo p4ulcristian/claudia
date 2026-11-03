@@ -29,4 +29,25 @@
    :drafts {}              ; [server chat] or :new -> composer text
    :ask-state {}           ; ask id -> {:busy bool :error text}
    :seen-sent {}           ; [server chat] -> the row's :at we last sent `seen` for
-   :error nil})
+   :pictures {}            ; [server chat] -> [{:turn :title :at}], oldest first; the last is live
+   :viewing {}             ; [server chat] -> turn of the earlier picture shown (none: the live one)
+   :past-scenes {}         ; [server chat turn] -> Scene of an earlier picture, fetched once
+   :right-view (if (= "timeline" (stored "claudia.right" "picture")) :timeline :picture)
+   :view-at 0              ; when the right view last changed (a picture newer than it, behind the timeline, is new)
+   :folded-at (if (stored "claudia.folded" false) (js/Date.now) 0) ; the right half folded since (0: shown)
+   :error nil
+
+   ;; claudia.web.chatops
+   :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil
+   :hidden-servers (let [v (stored "claudia.hiddenServers" #js [])] (if (array? v) (set v) #{}))
+   :server-me {}           ; server -> its GET /api/me
+   :settings? false        ; Settings in the sidebar's place
+   :archived? false        ; the list shows archived chats
+   :all-sessions? (stored "claudia.allSessions" false)
+   :sessions {}            ; server -> ~/Work sessions that are not chats
+   :search nil             ; {:text :found {server [Found]}}
+   :attach {}              ; draft key -> [attachment]
+   :projects {}            ; [server folder] -> {:name :logo}
+   :explain {}             ; [server chat step] -> {:busy :text :error :open}
+   :menu nil               ; {:k [server chat] :x :y}: the chat menu
+   :tokens {} :github {} :github-prompt nil})

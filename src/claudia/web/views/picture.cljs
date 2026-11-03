@@ -3,8 +3,13 @@
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.views.codeforms :as codeforms]
+            [claudia.web.db :as db]
+            [claudia.web.views.forms :as forms]
             [claudia.web.views.frame :as frame]
-            [claudia.web.views.graph :as graph]))
+            [claudia.web.views.graph :as graph]
+            [claudia.web.views.rightbar :as rightbar]
+            [claudia.web.views.snapshot :as snapshot]
+            [claudia.web.views.timeline :as timeline]))
 
 (defn- kind-label [{:keys [kind form]}]
   (case kind
@@ -23,9 +28,10 @@
   "What a form needs to read and write through the open chat's server."
   [block]
   (let [{:keys [server chat]} @(rf/subscribe [:open-chat])]
-    {:server server :chat chat :block (:id block) :live (boolean (and server chat))}))
+    {:server server :chat chat :block (:id block)
+     :live (boolean (and server chat (not (:viewing? @(rf/subscribe [:picture-history])))))}))
 
-(defn- block-view
+(defn block-view
   "One block; a short glow when its content changes (not on first sight)."
   [block]
   (let [ctx (block-ctx block)
@@ -60,22 +66,32 @@
   "The picture of the open chat. on-back: the phone's way back to the chat."
   []
   (let [oc @(rf/subscribe [:open-chat])
-        scene (get-in oc [:state :scene])
+        hist @(rf/subscribe [:picture-history])
+        view @(rf/subscribe [:right-view])
+        fold @(rf/subscribe [:fold-state])
+        ;; The picture shown: the live one, or an earlier one from the history (read only).
+        scene (:scene hist)
         blocks (:blocks scene)
         asks (get-in oc [:state :asks])
         cols (get-in oc [:state :settings :cols] 0)]
-    [:section.right
+    (if (and (:folded? fold) (not (db/phone?)))
+      [rightbar/fold-edge (:unseen? fold)]
+    [:section.right rightbar/mouse-props
      [:header.picture-head
       [:button.back-btn.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
        [:svg {:viewBox "0 0 24 24"} [:path {:d "M15 5l-7 7 7 7"}]] "Chat"]
-      [:h2.picture-title (or (:title scene) "")]
-      [:f> codeforms/picture-tools oc]]
-     [:div.picture-scroll
-      (if (seq blocks)
-        [:div.picture.blocks {:class (when (pos? cols) (str "cols-" cols))}
-         (for [b blocks]
-           ^{:key (:id b)} [:f> block-view b])]
-        [empty-state])]
+      [:h2.picture-title (if (= view :timeline) "Timeline" (or (:title scene) ""))]
+      (when (= view :picture) [:f> codeforms/picture-tools oc])]
+     (if (= view :timeline)
+       [:f> timeline/timeline-view oc]
+       [:div.picture-scroll {:class (when (:viewing? hist) "past")}
+        (if (seq blocks)
+          [:div.picture.blocks {:class (when (pos? cols) (str "cols-" cols))}
+           (for [b blocks]
+             ^{:key (:id b)} [:f> block-view b])]
+          [empty-state])])
+     (when (:chat oc)
+       [rightbar/zone (when (and (= view :picture) (seq blocks)) [snapshot/button oc hist])])
      (when (seq asks)
        [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
-        "Claude asks you something"])]))
+        "Claude asks you something"])])))

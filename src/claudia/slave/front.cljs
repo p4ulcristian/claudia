@@ -45,15 +45,30 @@
 (defn- me [res {:keys [own target read-only]}]
   (h/json-reply res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
+                         :profiles (mapv :profile @profiles)
                          :viewing (when read-only (:profile target))
                          :readOnly read-only
                          :version h/version
                          :commit h/commit}))
 
+(defn- update-check
+  "The hub's poke after a push to the beta branch (README, Hub operations: following beta): writes CLAUDIA_UPDATE_TRIGGER,
+  which a path unit watches to start deploy/update.sh. Says only \"look now\": the update fetches
+  and verifies what it installs by itself."
+  [^js res]
+  (if-let [file (not-empty (.-CLAUDIA_UPDATE_TRIGGER env))]
+    (try (fs/writeFileSync file (str (.toISOString (js/Date.)) "\n"))
+         (h/json-reply res 202 {:ok true})
+         (catch :default e (h/json-reply res 500 {:error (.-message e)})))
+    (h/json-reply res 501 {:error "no update unit here"})))
+
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
     (cond
+      ;; From the hub itself (no caller): only the hub reaches this listener.
+      (= url "/api/update-check")
+      (if (= "POST" (.-method req)) (update-check res) (h/json-reply res 405 {:error "POST only"}))
       status (h/json-reply res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
       (and read-only (not= "GET" (.-method req))) (h/json-reply res 403 {:error "Read only."})
@@ -92,7 +107,9 @@
   (let [file (.-FRONT_PROFILES env)]
     (when-not (seq file) (throw (js/Error. "FRONT_PROFILES is not set.")))
     (reset! profiles (read-profiles file))
-    (let [server (http/createServer on-request)
+    (let [server (doto (http/createServer on-request)
+                   ;; Uploads take up to 100 MB: no 5-minute cap on a request.
+                   (aset "requestTimeout" 0))
           port (js/parseInt (or (.-FRONT_PORT env) "4540") 10)
           host (or (.-FRONT_HOST env) "127.0.0.1")]
       (.on server "upgrade" on-upgrade)
