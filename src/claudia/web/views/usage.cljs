@@ -174,27 +174,33 @@
 
 ;; ---- model and effort ----
 
+(rf/reg-event-db :new/settings (fn [db [_ m]] (update db :new-settings merge m)))
+(rf/reg-sub :new-settings (fn [db] (:new-settings db)))
+
 (defn pickers
-  "The chat's model and effort (applied on its next start; a live session takes them at once)."
+  "The chat's model and effort (applied on its next start; a live session takes them at once). A
+  new chat keeps them until it is made (events.cljs sends them with `created`)."
   [{:keys [ck server state pending?]}]
-  (let [meta @(rf/subscribe [:meta server])
+  (let [server (or server @(rf/subscribe [:new-server]))
+        meta @(rf/subscribe [:meta server])
         models (:models meta)
-        settings (:settings state)
+        settings (if ck (:settings state) @(rf/subscribe [:new-settings]))
+        put! (fn [m] (if ck (rf/dispatch [:chat/settings ck m]) (rf/dispatch [:new/settings m])))
         chosen (or (some #(when (= (:value %) (or (:model settings) "default")) %) models) (first models))
         efforts (:efforts chosen)
-        running (pretty-model (:model state))]
-    (when (and ck (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
+        running (pretty-model (or (not-empty (:model state)) (when-not (:model settings) (:defaultModel meta))))]
+    (when (and (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
       [:<>
        [:label.pick.model {:title (if (seq running) (str "Model: " running (when-not (:model settings) " (your default)")) "Model for this chat")}
         [:select {:value (or (:model settings) "")
-                  :on-change #(rf/dispatch [:chat/settings ck {:model (not-empty (.. % -target -value))}])}
+                  :on-change #(put! {:model (not-empty (.. % -target -value))})}
          [:option {:value ""} (if (and (not (:model settings)) (seq running)) running "Default model")]
          (for [m models :when (not= "default" (:value m))]
            ^{:key (:value m)} [:option {:value (:value m)} (:name m)])]]
        (when (seq efforts)
          [:label.pick.effort {:title (str "Effort: " (or (:effort settings) "your default"))}
           [:select {:value (or (:effort settings) "")
-                    :on-change #(rf/dispatch [:chat/settings ck {:effort (not-empty (.. % -target -value))}])}
+                    :on-change #(put! {:effort (not-empty (.. % -target -value))})}
            [:option {:value ""} "effort"]
            (for [e efforts] ^{:key e} [:option {:value e} e])]])])))
 

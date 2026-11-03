@@ -609,7 +609,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
   .menu-toggle, .divider, .backdrop, .right-rail { display: none; }
-  .app, .app.no-sidebar { display: block; position: relative; overflow: hidden; }
+  .app, .app.no-sidebar { display: block; position: relative; overflow: hidden; overflow: clip; }
   .sidebar-slot, .app:not(.no-sidebar) .sidebar-slot, .split > .left, .split > .right { position: absolute; inset: 0; width: auto; box-shadow: none; transition: transform 0.32s var(--screen-ease), visibility 0s; }
   .split { display: contents; }
   .sidebar-slot > .sidebar { width: 100%; }

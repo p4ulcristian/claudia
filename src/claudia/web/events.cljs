@@ -112,10 +112,13 @@
       {:db (cond-> (-> db
                        (update :pending-new dissoc id)
                        (assoc-in [:outbox k] [text])
-                       (update :outbox dissoc [server id]))
+                       (update :outbox dissoc [server id])
+                       (dissoc :new-settings))
              was-open? (assoc :open k))
        :history/replace (if was-open? k (fx/parse-path js/location.pathname))
-       :ws/send [server {:type "open" :chat chat}]})
+       ;; A model or effort picked before the chat was made goes with it now.
+       :ws/send-all (cond-> [[server {:type "open" :chat chat}]]
+                      (seq (:new-settings db)) (conj [server (merge {:type "settings" :chat chat} (:new-settings db))]))})
     {:db db}))
 
 (defmethod on-frame "msg" [db server {:keys [chat msg]}]
@@ -286,9 +289,15 @@
 
 (rf/reg-event-fx
  :chat/archive
+ ;; Archiving the open chat moves on to the next one in the list (or a new chat).
  (fn [{:keys [db]} [_ [s c :as k] archived]]
-   (cond-> {:ws/send [s {:type "archive" :chat c :archived archived}]}
-     (and archived (= k (:open db))) (assoc :fx [[:dispatch [:nav/new]]]))))
+   (let [next (->> (for [[srv {:keys [rows]}] (:servers db), [id r] rows
+                         :when (and (not= [srv id] k) (not (:archived r)))]
+                     (assoc r :k [srv id]))
+                   (sort-by #(or (:started %) (:at %) 0))
+                   first)]
+     (cond-> {:ws/send [s {:type "archive" :chat c :archived archived}]}
+       (and archived (= k (:open db))) (assoc :fx [(if next [:dispatch [:nav/open (:k next)]] [:dispatch [:nav/new]])])))))
 
 (defn- visible? [] (= "visible" js/document.visibilityState))
 

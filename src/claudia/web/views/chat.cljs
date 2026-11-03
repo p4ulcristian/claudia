@@ -432,7 +432,10 @@
        ^{:key (str (:ck oc))} [header oc]
        [:header.chat-head
         [back-to-list]
-        [:h1 [:span.t "New chat"]]])
+        ;; A new chat's colour comes with it once it is made (the runner picks one).
+        (when-not ro [:div.color-pick [:span.color-dot.none {:title "Chat colour: once the chat has started"}]])
+        [:h1 [:span.t "New chat"]]
+        [:button.icon.pic-open {:aria-label "Show picture" :on-click #(rf/dispatch [:nav/screen :picture])} picture-icon]])
      (when oc [:f> agents/chips oc])
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
      (cond

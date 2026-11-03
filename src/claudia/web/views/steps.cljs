@@ -7,6 +7,16 @@
             [reagent.core :as r]
             [claudia.web.md :as md]))
 
+(defn tool-label
+  "A tool's name as the chat shows it: Draw, Folder, Ask; an MCP tool without its mcp__ prefix."
+  [name]
+  (let [name (str name)]
+    (case name
+      "mcp__picture__draw" "Draw"
+      "mcp__workspace__set_folder" "Folder"
+      "AskUserQuestion" "Ask"
+      (if (str/starts-with? name "mcp__") (str/join " " (rest (str/split name #"__"))) name))))
+
 (defn blocks
   "The messages as the page shows them: runs of tool steps folded into one group; a step that showed
   a picture stands on its own, its picture after it."
@@ -45,7 +55,7 @@
        [:div.step-line
         [:button.step-row {:on-click #(swap! open not)}
          [:span.step-dot]
-         [:b (or tool "tool")]
+         [:b (tool-label (or tool "tool"))]
          [:span.step-title (or summary "")]]
         (when ck [explain-button ck id false])]
        (when ck [explain-note ck id])
@@ -62,13 +72,13 @@
     (fn [ck tools live?]
       (let [current (when live? (peek tools))
             errors (count (filter :error tools))
-            names (str/join ", " (take 4 (distinct (map #(or (:tool %) "tool") tools))))]
+            names (str/join ", " (take 4 (distinct (map #(tool-label (or (:tool %) "tool")) tools))))]
         [:div.steps {:class (when live? "busy")}
          [:div.steps-head-line
           [:button.steps-head {:on-click #(swap! open not)}
            [:span.chev {:class (when @open "open")} "›"]
            [:span (str (count tools) (if (= 1 (count tools)) " step" " steps"))]
-           [:span.muted (if current (str (:tool current) " " (:summary current)) names)]
+           [:span.muted (if current (str (tool-label (:tool current)) " " (:summary current)) names)]
            (when (pos? errors) [:span.err-count (str errors " failed")])]
           (when (and ck current (not @open))
             [:<>
