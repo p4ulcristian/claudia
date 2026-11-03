@@ -7,6 +7,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+# The machine's settings: PATH there finds node and cosign (they may live outside /usr/bin).
+EnvironmentFile=/etc/claudia-beta/env
 Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia-beta/update-requested
 StateDirectory=claudia-beta-update
 ExecStart=/bin/bash /srv/claudia-beta/deploy/update.sh --shared
