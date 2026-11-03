@@ -246,6 +246,13 @@
       :fx [[:api/call {:url (api-url server "claude-tokens") :on-ok [:ops/tokens server]}]
            [:api/call {:url (api-url server "github") :on-ok [:ops/github-user server]}]]})))
 
+;; The rail's subscription button: only the saved Claude tokens of one server.
+(rf/reg-event-fx
+ :ops/load-tokens
+ (fn [{:keys [db]} [_ server]]
+   (when (and server (not (read-only? db)))
+     {:fx [[:api/call {:url (api-url server "claude-tokens") :on-ok [:ops/tokens server]}]]})))
+
 (rf/reg-event-db :ops/tokens (fn [db [_ s t]] (assoc-in db [:tokens s] t)))
 (rf/reg-event-db :ops/github-user (fn [db [_ s {:keys [user]}]] (assoc-in db [:github s] (or user false))))
 (rf/reg-sub :tokens (fn [db [_ s]] (get-in db [:tokens s])))

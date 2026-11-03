@@ -196,6 +196,13 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .cm-item:hover { background: var(--panel2); }
 .cm-item:disabled { opacity: 0.45; }
 .cm-item:disabled:hover { background: none; }
+/* The rail's Claude subscription: the token in use's initials in a chalk circle; its menu opens beside it. */
+.rail-plan-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1.6px solid currentColor; border-radius: 50%; font: 700 12px var(--hand); letter-spacing: 0.02em; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.rail-plan.on { color: var(--fg); }
+.plan-menu { width: auto; min-width: 190px; max-width: 280px; }
+.plan-menu .cm-item.on { color: var(--accent); }
+.plan-menu .cm-item.on::after { content: " ✓"; }
+.plan-menu .plan-add { color: var(--muted); font-size: 14px; border-top: 1px dashed var(--line); border-radius: 0 0 7px 7px; margin-top: 2px; }
 .cm-error { max-width: 220px; padding: 2px 8px 4px; font-size: 12px; color: var(--red); }
 .cm-rename { margin: 2px 4px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 7px; background: var(--bg2); color: var(--fg); outline: none; }
 
