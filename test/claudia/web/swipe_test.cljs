@@ -55,3 +55,15 @@
   (is (= :chat (swipe/gesture-kind "chat" true false)))
   (is (= :picture (swipe/gesture-kind "picture" false false)))
   (is (nil? (swipe/gesture-kind nil false false))))
+
+(deftest the-wheel-as-a-finger
+  (testing "wheel deltas in px"
+    (is (= 12 (swipe/wheel-px 12 0 800)))
+    (is (= 48 (swipe/wheel-px 3 1 800)))
+    (is (= 800 (swipe/wheel-px 1 2 800))))
+  (testing "a gap over 180 ms starts a new gesture"
+    (is (true? (swipe/new-burst? nil 1000)))
+    (is (false? (swipe/new-burst? 900 1000)))
+    (is (true? (swipe/new-burst? 800 1000))))
+  (testing "scrolling right moves the finger left"
+    (is (= {:x -30 :y 5} (swipe/wheel-finger {:x 0 :y 0} 30 -5)))))

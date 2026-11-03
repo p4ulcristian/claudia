@@ -7,6 +7,12 @@
   sideways itself (code and tables that scroll, pannable graphs, sliders, the 3D view), with two
   fingers, or on a mostly vertical move (the axis is decided on the first 10 px).
 
+  A trackpad's two-finger sideways scroll (wheel events) makes the same moves in a phone-wide
+  window: the scroll is the finger, scrolling right goes the way a left swipe goes (the scroll
+  setting, natural or not, decides which way the fingers move for it, as on any wide page). A
+  burst of wheel events with no gap over burst-gap-ms is one gesture; it is released once the
+  wheel stays quiet for release-ms (the trackpad's own momentum counts as the finger).
+
   While the finger moves only inline transforms change, once a frame; at the end they are animated
   to where the screen's classes put that screen, the app steps (the same events the buttons
   dispatch), and once the classes show the end the inline styles go: nothing jumps. With reduced
@@ -19,6 +25,8 @@
 (def ^:private axis-px 10)
 (def ^:private done-at 0.4)
 (def ^:private flick 0.45) ; px per ms
+(def ^:private burst-gap-ms 180)
+(def ^:private release-ms 120)
 
 (defn- less-motion? [] (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
 
@@ -82,6 +90,24 @@
     (and (= screen "chat") agent?) :agent
     (= screen "chat") :chat
     (= screen "picture") :picture))
+
+;; ---- the wheel as a finger ----
+
+(defn wheel-px
+  "A wheel delta in px: delta-mode 0 is px, 1 lines (16 px), 2 pages (page px)."
+  [delta delta-mode page]
+  (case delta-mode 1 (* delta 16) 2 (* delta page) delta))
+
+(defn new-burst?
+  "A wheel event at now starts a new gesture when the one before (at prev, nil for none) is over
+  burst-gap-ms ago."
+  [prev now]
+  (or (nil? prev) (> (- now prev) burst-gap-ms)))
+
+(defn wheel-finger
+  "Where the wheel's finger is after a scroll by (dx, dy) px: scrolling right moves it left."
+  [{:keys [x y]} dx dy]
+  {:x (- x dx) :y (- y dy)})
 
 ;; ---- the moves the screens make ----
 
@@ -222,32 +248,36 @@
     (reset! track nil)
     (when (:g tr) (finish! (:g tr) (:p tr) false 0))))
 
+(defn- start-track
+  "The track a gesture starting at (x, y) on e's target gets, or nil when no move may start there."
+  [^js e x y]
+  (let [target (when (instance? js/Element (.-target e)) (.-target e))
+        {:keys [surface moves]} (gestures)]
+    (when (and target surface (.contains surface target) (seq moves)
+               (not (.closest target "input, textarea, select, [contenteditable], [data-no-swipe]"))
+               (not (moves-sideways? target)))
+      {:x0 x :y0 y :origin x :moves moves :g nil :p 0 :samples []})))
+
 (defn- on-touchstart [^js e]
   (reset! track nil)
   (when (and (db/phone?) (not @busy) (= 1 (.-length (.-touches e))))
-    (let [t (aget (.-touches e) 0)
-          target (when (instance? js/Element (.-target e)) (.-target e))
-          {:keys [surface moves]} (gestures)]
-      (when (and target surface (.contains surface target) (seq moves)
-                 (not (.closest target "input, textarea, select, [contenteditable], [data-no-swipe]"))
-                 (not (moves-sideways? target)))
-        (reset! track {:x0 (.-clientX t) :y0 (.-clientY t) :origin (.-clientX t) :moves moves
-                       :g nil :p 0 :samples []})))))
+    (let [t (aget (.-touches e) 0)]
+      (reset! track (start-track e (.-clientX t) (.-clientY t))))))
 
 (defn- taken
-  "The track once the finger went axis-px: with its move picked, or nil (not yet; or not ours, a
-  mostly vertical move or one a scroller already follows: then the track ends)."
-  [tr ^js e ^js t]
-  (let [dx (- (.-clientX t) (:x0 tr)) dy (- (.-clientY t) (:y0 tr))]
+  "The track once the finger (at x, y) went axis-px: with its move picked, or nil (not yet; or not
+  ours, a mostly vertical move or one a scroller already follows: then the track ends). free?:
+  nothing native moves with the gesture."
+  [tr ^js e x y free?]
+  (let [dx (- x (:x0 tr)) dy (- y (:y0 tr))]
     (when (>= (js/Math.hypot dx dy) axis-px)
-      (if-let [g (pick-move (:moves tr) dx dy (and (.-cancelable e) (viewport/touch-blocked?)))]
-        (assoc tr :g g :origin (.-clientX t))
+      (if-let [g (pick-move (:moves tr) dx dy (and (.-cancelable e) free?))]
+        (assoc tr :g g :origin x)
         (do (reset! track nil) nil)))))
 
-(defn- follow! [tr ^js e ^js t]
+(defn- follow! [tr ^js e x]
   (when (.-cancelable e) (.preventDefault e))
   (let [g (:g tr)
-        x (.-clientX t)
         p (progress (:origin tr) x (:dir g) (:width g))
         now (or (.-timeStamp e) (js/performance.now))]
     (reset! track (assoc tr :p p :samples (recent-samples (:samples tr) x now)))
@@ -258,22 +288,67 @@
     (let [t (aget (.-touches e) 0)]
       (if (or (> (.-length (.-touches e)) 1) (not t))
         (cancel!)
-        (when-let [moving (if (:g tr) tr (taken tr e t))]
-          (follow! moving e t))))))
+        (when-let [moving (if (:g tr) tr (taken tr e (.-clientX t) (.-clientY t) (viewport/touch-blocked?)))]
+          (follow! moving e (.-clientX t)))))))
 
-(defn- on-touchend [_]
+(defn- release! []
   (let [tr @track]
     (reset! track nil)
     (when-let [g (:g tr)]
       (let [v (velocity (:samples tr) (:dir g))]
         (finish! g (:p tr) (completes? v (:p tr)) (js/Math.abs v))))))
 
+(defn- on-touchend [_]
+  (when-not (:wheel @track) (release!)))
+
+;; ---- the trackpad ----
+
+(defonce ^:private wheel (atom {:prev nil :ours? false :timer nil})) ; the wheel burst going on now
+
+(defn- wheel-start
+  "A new burst: a track at the finger's start (0, 0), when the screen shown has a move there."
+  [^js e]
+  (when (and (db/phone?) (not @busy) (not (.-ctrlKey e)) (not (:g @track)))
+    (some-> (start-track e 0 0) (assoc :wheel {:x 0 :y 0}))))
+
+(defn- wheel-move!
+  "The burst's track follows the wheel's finger, as a touch does."
+  [tr ^js e]
+  (let [page js/innerWidth
+        f (wheel-finger (:wheel tr) (wheel-px (.-deltaX e) (.-deltaMode e) page)
+                        (wheel-px (.-deltaY e) (.-deltaMode e) page))
+        tr (assoc tr :wheel f)]
+    (if (:g tr)
+      (follow! tr e (:x f))
+      (do (reset! track tr)
+          (some-> (taken tr e (:x f) (:y f) true) (follow! e (:x f)))))))
+
+(defn- swallow!
+  "A burst whose move ended (or is animating) keeps its sideways tail from scrolling anything."
+  [^js e]
+  (when (and (.-cancelable e) (> (js/Math.abs (.-deltaX e)) (js/Math.abs (.-deltaY e))))
+    (.preventDefault e)))
+
+(defn- on-wheel [^js e]
+  (let [now (js/performance.now)
+        {:keys [prev ours? timer]} @wheel
+        fresh? (new-burst? prev now)
+        tr (if fresh? (wheel-start e) (when (:wheel @track) @track))]
+    (js/clearTimeout timer)
+    (cond
+      tr (wheel-move! tr e)
+      (and ours? (not fresh?)) (swallow! e))
+    (reset! wheel {:prev now
+                   :ours? (boolean (or (:g @track) (and ours? (not fresh?))))
+                   :timer (js/setTimeout #(when (:wheel @track) (release!)) release-ms)})))
+
 (defn install!
-  "Turns the swipes on (they act only while the page is phone-wide)."
+  "Turns the swipes and trackpad swipes on (they act only while the page is phone-wide)."
   []
   (when-not @installed
     (reset! installed true)
     (js/window.addEventListener "touchstart" on-touchstart #js {:passive true})
     (js/window.addEventListener "touchmove" on-touchmove #js {:passive false})
     (js/window.addEventListener "touchend" on-touchend)
-    (js/window.addEventListener "touchcancel" #(cancel!))))
+    (js/window.addEventListener "touchcancel" #(cancel!))
+    (js/window.addEventListener "wheel" on-wheel #js {:passive false})))

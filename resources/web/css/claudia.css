@@ -482,7 +482,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* ---------- Phones (under 680px) ----------
    Three full screens, list -> chat -> picture: the next one slides over the one before, which waits
    30% to the left under it (claudia.web.swipe follows the finger). */
-.back-to-list, .pic-open { display: none; }
+.back-to-list { display: none; }
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
   .menu-toggle, .divider, .backdrop, .right-rail { display: none; }
@@ -503,14 +503,11 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .back-to-list svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .back-to-list .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--on-hue); font: 700 11px var(--sans); }
   .back-to-list .count.waiting { background: var(--amber); color: #000; }
-  /* The header: Chats, colour, title and the picture button on one line; the pill on a second line. */
+  /* The header: Chats, colour and title on one line; the pill on a second line. */
   .chat-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
   .chat-head h1 { flex: 1 1 0; min-width: 0; }
   .chat-head .act { order: 5; flex-basis: 100%; margin-left: 0; }
   .chat-head .act-pill { width: fit-content; }
-  .pic-open { display: grid; flex: none; width: 36px; height: 36px; margin-right: -6px; }
-  .pic-open svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .pic-open.unseen { color: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); animation: breathe 1.6s ease-in-out infinite; }
   /* iOS zooms into any field with text under 16px when it gets focus. */
   input, textarea, select { font-size: 16px !important; }
   .composer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
