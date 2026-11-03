@@ -8,7 +8,11 @@
             ["path" :as path]
             [clojure.string :as str]
             [claudia.hub.config :as config]
+            [claudia.hub.github :as github]
+            [claudia.hub.ops :as ops]
+            [claudia.hub.pairing :as pairing]
             [claudia.hub.pass :as pass]
+            [claudia.hub.push :as push]
             [claudia.hub.web :as web]))
 
 (defn- env [k default]
@@ -103,21 +107,35 @@
       (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
       :else {:server server :target (str rest-path q) :email email :view view})))
 
+(defn- admin-group?
+  "The login's groups (X-Auth-Request-Groups, set by the gate's login like the email) hold
+  HUB_ADMIN_GROUP: an admin, also when not in the store yet (the first admin of a fresh hub)."
+  [req]
+  (let [group (env "HUB_ADMIN_GROUP" nil)]
+    (boolean (and group
+                  (some #{group} (map str/trim (str/split (or (header req "x-auth-request-groups") "") #",")))))))
+
 (defn- hub-api [^js req ^js res pathname]
   (let [[_ state-of] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/state$" pathname)
         email (caller req)
-        person (some-> email config/person)]
+        group-admin (admin-group? req)
+        person (or (some-> email config/person)
+                   (when (and email group-admin) {:email email :name email :admin true :servers []}))
+        admin? (boolean (or (:admin person) group-admin))
+        own? (or (= pathname "/hub/me") state-of)]
     (cond
-      (not (or (= pathname "/hub/me") state-of)) (send-json res 404 {:error "not found"})
-      (not= "GET" (.-method req)) (do (.setHeader res "allow" "GET") (send-json res 405 {:error "GET only"}))
+      (ops/open-call? pathname) (ops/open-call req res pathname)
+      (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (send-json res 405 {:error "GET only"}))
       (not email) (send-json res 401 {:error "not signed in"})
       (cross-site? req) (send-json res 403 {:error "cross-site request"})
       (not person) (send-json res 403 {:error "you have no access to Claudia here"})
+      (not own?) (ops/call req res pathname email admin?)
 
       (= pathname "/hub/me")
       (send-json res 200 {:email (:email person)
                           :name (:name person)
-                          :admin (:admin person)
+                          :admin admin?
+                          :push (push/on?)
                           :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
       :else
@@ -156,16 +174,17 @@
   (let [host (env "HUB_HOST" "127.0.0.1")
         port (js/parseInt (env "HUB_PORT" "4590"))
         web-root (env "HUB_WEB" "out/web")
-        config-file (env "HUB_CONFIG" nil)]
-    (when-not config-file
-      (js/console.error "HUB_CONFIG: the path of hub.json is not set")
-      (js/process.exit 1))
+        config-file (env "HUB_CONFIG" nil)
+        data-dir (env "HUB_DATA" (path/join (env "XDG_DATA_HOME" (path/join (env "HOME" "/tmp") ".local/share")) "claudia-beta-hub"))]
     (when-not (fs/existsSync (path/join web-root "index.html"))
       (js/console.warn (str "hub: " web-root "/index.html is missing: the page is not built")))
-    (try (config/start! config-file)
+    (try (config/start! data-dir config-file)
          (catch :default e
-           (js/console.error (str "hub.json (" config-file "): " (.-message e)))
+           (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
            (js/process.exit 1)))
+    (pairing/start! data-dir)
+    (github/start!)
+    (push/start!)
     (let [^js server (http/createServer (partial on-request web-root))
           beat (pass/heartbeat!)
           stopping (atom false)
@@ -173,7 +192,8 @@
                  (when-not @stopping
                    (reset! stopping true)
                    (js/console.log (str "hub: " sig ", stopping"))
-                   (config/stop! config-file)
+                   (push/stop!)
+                   (config/stop!)
                    (js/clearInterval beat)
                    (pass/close-all!)
                    (.close server #(js/process.exit 0))
