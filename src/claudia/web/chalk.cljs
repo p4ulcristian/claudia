@@ -21,7 +21,12 @@
 
 ;; Every shape the CSS uses: var(--chalk-<name>). r = corner radius, b = ring width (none = solid).
 (def ^:private shapes
-  {"r6-15" {:r 6 :b 1.5}
+  {;; The rest of the TypeScript Claudia's set (web/chalk.ts SHAPES): the shell's and the forms'.
+   "r18-2" {:r 18 :b 2}
+   "line3-soft" {:r 1.5 :noise :soft}
+   "dot11" {:r 5.5}
+   "bar3" {:r 3}
+   "r6-15" {:r 6 :b 1.5}
    "r7-2" {:r 7 :b 2}
    "r8-15" {:r 8 :b 1.5}
    "r8-2" {:r 8 :b 2}
@@ -44,14 +49,9 @@
    "r7-15" {:r 7 :b 1.5}
    "r8-15-dash" {:r 8 :b 1.5 :dash 4}
    "c30-18" {:r 15 :b 1.8}
-   "c30-22" {:r 15 :b 2.2}
-   ;; The rest of the TypeScript Claudia's set (web/chalk.ts SHAPES).
-   "r18-2" {:r 18 :b 2}
    "line3" {:r 1.5 :noise :line}
-   "line3-soft" {:r 1.5 :noise :soft}
    "dot9-soft" {:r 4.5 :noise :soft}
-   "dot11" {:r 5.5}
-   "bar3" {:r 3}})
+   "c30-22" {:r 15 :b 2.2}})
 
 ;; ---- The SVG spec's turbulence (Filter Effects, feTurbulence reference code) ----
 

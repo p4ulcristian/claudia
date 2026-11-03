@@ -2,8 +2,16 @@
   "Markdown to safe HTML: marked renders, DOMPurify cleans."
   (:require ["marked" :refer [Marked]]
             ["dompurify" :as DOMPurify]
-            ["highlight.js/lib/core" :as hljs]
-            [claudia.web.hl :as hl]))
+            ["highlight.js/lib/common" :as hljs]
+            ["highlight.js/lib/languages/clojure" :as l-clj]
+            ["highlight.js/lib/languages/dockerfile" :as l-docker]))
+
+;; As the TypeScript Claudia did (web/md.ts): highlight.js's common languages, Clojure and Dockerfile.
+(defonce ^:private languages
+  (do (.registerLanguage hljs "clojure" (or (.-default l-clj) l-clj))
+      (.registerAliases hljs #js ["cljs" "cljc" "bb"] #js {:languageName "clojure"})
+      (.registerLanguage hljs "dockerfile" (or (.-default l-docker) l-docker))
+      true))
 
 (defn- escape [s]
   (-> (str s)
@@ -21,7 +29,7 @@
                      ;; Coloured as the TypeScript Claudia did (github-dark, claudia.css): by its
                      ;; language when known, else guessed.
                      (let [text (.-text tok)
-                           lang (hl/lang-of (.-lang tok))
+                           lang (let [l (.-lang tok)] (when (and languages (seq l) (.getLanguage hljs l)) l))
                            html (try (.-value (if lang
                                                 (.highlight hljs text #js {:language lang :ignoreIllegals true})
                                                 (.highlightAuto hljs text)))
