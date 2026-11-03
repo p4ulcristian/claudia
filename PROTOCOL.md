@@ -98,7 +98,8 @@ files are served without either check (they hold no data). The hub listens on `H
 (default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
-`/s/<server>/api/update-check` and `/s/<server>/api/claude-token/current` are refused (404): only
+`/s/<server>/api/update-check`, `/s/<server>/api/claude-token/current` and
+`/s/<server>/api/claude-token/limits` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -125,7 +126,7 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
 | `DELETE /hub/push/live/:activity` | person | the app saw it end |
 | `POST /hub/presence` `{ page (8-64 chars), active }` | person | 204; alerts are held while any page said active within 45 s |
-| `GET /hub/claude-tokens` | person | `{ on, inUse: { name, by, at } \| null, tokens: [{ name, by, at }], servers: [{ name, label, ok, current, error }] }`: never a token; `servers` = the caller's, with the name each runs on now (`ok` false: not reached) |
+| `GET /hub/claude-tokens` | person | `{ on, inUse: { name, by, at } \| null, tokens: [{ name, by, at, limits, heardAt }], servers: [{ name, label, ok, current, error }] }`: never a token; `servers` = the caller's, with the name each runs on now (`ok` false: not reached) |
 | `PUT /hub/claude-token` `{ name, token }` | person | the same shape: sealed and saved under the name (same name = replaced), in use on every server; 503 when `on` is false |
 | `POST /hub/claude-token/use` `{ name }` | person | the same shape: in use on every server; 404 no such name |
 | `DELETE /hub/claude-tokens/:name` | person | the same shape; 409 for the one in use |
@@ -135,6 +136,9 @@ Claude tokens (README decision 10): one in use for every server. The hub seals e
 `HUB_TOKEN_KEY_FILE`, and brings every server along: `GET /api/claude-token/current` on its front,
 then `PUT` with the token when the name or `at` differ; after each save or switch (the answer waits
 up to 6 s for it) and every minute, so a server that was off, new or reinstalled follows by itself.
+The same minute it reads each front's `GET /api/claude-token/limits` and keeps, per saved token, the
+newest limits heard (`claude_token_limits`); `GET /hub/claude-tokens` gives each saved token its
+`limits: [Limit]` and `heardAt` (ms, or null): the page's popup of every token's limits.
 
 The hub watches each server for each person with a phone over that front's `/ws` (as the person,
 `hello`, then every `chats`). A push alert: `{ aps: { alert: { title: "Claudia", body: "New message" },
@@ -151,6 +155,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `POST /api/update-check` | answered by the front, no caller needed (only the hub reaches it): writes `CLAUDIA_UPDATE_TRIGGER`, 202; 501 when unset |
 | `GET /api/claude-token/current` | the front, the hub only: `{ name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
 | `PUT /api/claude-token/current` `{ name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
+| `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
 | `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
@@ -243,7 +248,7 @@ Runner → page:
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
 | `settings` | `chat`, `settings: { model, effort }`, `model?` (the model the session runs), `commands?` (its slash command names) |
-| `meta` | `limits: [Limit]`, `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (whose token, from Settings, or null); sent after `chats` on `hello` and on every change |
+| `meta` | `limits: [Limit]`, `limitsAt` (ms, when they were heard, or null), `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (whose token, from Settings, or null); sent after `chats` on `hello` and on every change |
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 | `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |

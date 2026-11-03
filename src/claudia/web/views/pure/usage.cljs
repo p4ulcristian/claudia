@@ -52,6 +52,44 @@
                     (str (:label l) " " (:percent l) "%"
                          (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now))))))))
 
+(defn freshness
+  "How old a heard time is, for its hover: \"now\", \"10 min ago\", \"3 h ago\", \"2 days ago\";
+  \"not heard yet\" without one, \"at a time not kept\" for 0 (heard before times were kept)."
+  [at now]
+  (cond
+    (not (number? at)) "not heard yet"
+    (zero? at) "at a time not kept"
+    :else
+    (let [m (js/Math.floor (/ (max 0 (- now at)) 60000))
+          hh (quot m 60) d (quot hh 24)]
+      (cond (< m 1) "now"
+            (< m 60) (str m " min ago")
+            (< hh 24) (str hh " h ago")
+            :else (str d (if (= 1 d) " day" " days") " ago")))))
+
+(defn limit-of
+  "The Limit with key k among limits, or nil."
+  [limits k]
+  (some #(when (= k (:key %)) %) limits))
+
+(defn reset-since?
+  "Whether the limit's window has reset since it was heard (its percent no longer holds)."
+  [l now]
+  (boolean (and (:resetsAt l) (<= (:resetsAt l) now))))
+
+(defn token-rows
+  "The popup's rows, one per saved token (the hub's, with what it last heard): name, in use, its
+  5-hour and week Limits and when they were heard. The token in use takes the page's own limits
+  (live: {:limits :at}) when they were heard later than the hub's."
+  [tokens in-use live]
+  (vec (for [t tokens
+             :let [use? (= (:name t) in-use)
+                   live? (and use? (seq (:limits live)) (> (or (:at live) 0) (or (:heardAt t) 0)))
+                   limits (if live? (:limits live) (:limits t))]]
+         {:name (:name t) :in-use use?
+          :five (limit-of limits "five_hour") :week (limit-of limits "seven_day")
+          :heard-at (if live? (:at live) (:heardAt t))})))
+
 (defn commands-of
   "The chat's slash commands: its own (the SDK's init) with the descriptions the probe read, else the
   probe's list."

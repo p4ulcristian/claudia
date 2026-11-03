@@ -163,3 +163,28 @@
   (is (= "Box not reached: down" (settings/sync-title {:label "Box" :error "down"} :off)))
   (is (= "Box still runs on a token set by hand; the hub writes it within a minute"
          (settings/sync-title {:label "Box"} :behind))))
+
+(deftest freshness-says-how-old
+  (is (= "not heard yet" (usage/freshness nil 0)))
+  (is (= "at a time not kept" (usage/freshness 0 5)))
+  (is (= "now" (usage/freshness 1000 30000)))
+  (is (= "10 min ago" (usage/freshness 1 (+ 1 (* 10 60000)))))
+  (is (= "3 h ago" (usage/freshness 1 (+ 1 (* 3 3600000)))))
+  (is (= "1 day ago" (usage/freshness 1 (+ 1 (* 25 3600000)))))
+  (is (= "2 days ago" (usage/freshness 1 (+ 1 (* 50 3600000))))))
+
+(deftest a-window-past-its-reset-no-longer-holds
+  (is (usage/reset-since? {:resetsAt 5} 5))
+  (is (not (usage/reset-since? {:resetsAt 6} 5)))
+  (is (not (usage/reset-since? {} 5))))
+
+(deftest token-rows-take-the-newer-of-hub-and-page
+  (let [week #(hash-map :key "seven_day" :percent %)
+        tokens [{:name "Ana" :limits [(week 40)] :heardAt 10}
+                {:name "Paul" :limits [(week 31) {:key "five_hour" :percent 2}] :heardAt 7}
+                {:name "New" :limits [] :heardAt nil}]]
+    (is (= [{:name "Ana" :in-use true :five nil :week (week 74) :heard-at 20}
+            {:name "Paul" :in-use false :five {:key "five_hour" :percent 2} :week (week 31) :heard-at 7}
+            {:name "New" :in-use false :five nil :week nil :heard-at nil}]
+           (usage/token-rows tokens "Ana" {:limits [(week 74)] :at 20})))
+    (is (= (week 40) (:week (first (usage/token-rows tokens "Ana" {:limits [(week 74)] :at 5})))))))

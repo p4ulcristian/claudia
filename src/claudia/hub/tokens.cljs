@@ -4,7 +4,9 @@
   which is never in hub.db), and one of them in use on every server. The hub writes the one in use
   into each server's token file through its front (PUT /api/claude-token/current, a call only the
   hub makes): at once after a save or a switch, and every minute for a server that missed it (off,
-  new, reinstalled). Anyone signed in may save, switch or remove one; nobody can read one back.
+  new, reinstalled). The same minute it collects each server's last heard usage limits per token
+  (GET /api/claude-token/limits, by a hash of the token) and keeps the newest for each saved token,
+  for the page's popup of every token's limits. Anyone signed in may save, switch or remove one; nobody can read one back.
   Without a key file the hub keeps no tokens and leaves the servers' token files alone."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
@@ -12,6 +14,7 @@
             [clojure.string :as str]
             [claudia.hub.config :as config]
             [claudia.hub.store :as store]
+            [claudia.node.crypto :refer [token-hash]]
             [claudia.node.env :refer [env]]
             [claudia.shared.protocol :as protocol]))
 
@@ -143,12 +146,38 @@
       (.then #(swap! synced assoc (:name server) (sync-record % (js/Date.now))))
       (.catch (fn [e] (swap! synced assoc (:name server) {:ok false :error (.-message e) :checked (js/Date.now)})))))
 
+(defn heard-rows
+  "A server's kept limits ({token hash {:limits :at}}) as [key limits at] of saved tokens, by
+  key-of (token hash -> saved token's key); entries without limits are left out, a time kept before
+  runners kept times is 0 (any heard later wins)."
+  [key-of heard]
+  (vec (for [[h {:keys [limits at]}] heard
+             :let [k (key-of (name h))]
+             :when (and k (seq limits))]
+         [k limits (if (number? at) at 0)])))
+
+(defn- hash->key
+  "Each saved token's hash -> its key."
+  []
+  (into {} (for [{k :key} (store/claude-tokens)]
+             [(token-hash (unseal @key-bytes k (store/claude-token-sealed k))) k])))
+
+(defn- collect-limits!
+  "Promise: the server's last heard limits per token kept, when newer than the hub's."
+  [server]
+  (-> (front-call server "GET" "/api/claude-token/limits" nil)
+      (.then (fn [[status body]]
+               (when (= 200 status)
+                 (doseq [[k limits at] (heard-rows (hash->key) (:tokens body))]
+                   (store/heard-claude-token-limits! k limits at)))))
+      (.catch (fn [e] (js/console.error (str "tokens: limits from " (:name server) ": " (.-message e)))))))
+
 (defonce ^:private running (atom nil))
 (defonce ^:private again (atom false))
 
 (defn- sync-all []
   (if-let [in-use (when (on?) (store/claude-token-use))]
-    (js/Promise.all (into-array (map #(sync-server! % in-use) (config/all-servers))))
+    (js/Promise.all (into-array (mapcat (fn [s] [(sync-server! s in-use) (collect-limits! s)]) (config/all-servers))))
     (js/Promise.resolve nil)))
 
 (defn sync!
@@ -167,12 +196,18 @@
 ;; ---- what the page sees and does ----
 
 (defn state-of
-  "For the page: whether tokens are kept here, the one in use, the saved ones (names only), and
-  each of the person's servers: what it runs on now (synced: server name -> record)."
-  [on in-use saved servers synced-now]
+  "For the page: whether tokens are kept here, the one in use, the saved ones (names, with their
+  last heard limits: limits = key -> {:limits :heard-at}), and each of the person's servers: what it
+  runs on now (synced: server name -> record)."
+  [on in-use saved limits servers synced-now]
   {:on on
    :inUse (when in-use (select-keys in-use [:name :by :at]))
-   :tokens (if on (mapv (fn [t] {:name (:name t) :by (:saved-by t) :at (:saved-at t)}) saved) [])
+   :tokens (if on
+             (mapv (fn [t] {:name (:name t) :by (:saved-by t) :at (:saved-at t)
+                            :limits (get-in limits [(:key t) :limits] [])
+                            :heardAt (get-in limits [(:key t) :heard-at])})
+                   saved)
+             [])
    :servers (vec (for [s servers
                        :let [st (get synced-now (:name s))]]
                    {:name (:name s) :label (:label s)
@@ -183,7 +218,7 @@
   [person]
   (let [on (on?)]
     (state-of on (when on (store/claude-token-use)) (when on (store/claude-tokens))
-              (config/servers-of person) @synced)))
+              (when on (store/claude-token-limits)) (config/servers-of person) @synced)))
 
 (defn- settled
   "Promise of the state once the servers were brought along, or after 6 s (an off server must not
@@ -203,6 +238,7 @@
       (js/Promise.resolve refusal)
       (let [k (fold n)]
         (store/transaction! #(do (store/save-claude-token! k n (seal @key-bytes k t) (:email person))
+                                 (store/forget-claude-token-limits! k)
                                  (store/use-claude-token! k (:email person))))
         (js/console.log (str "tokens: \"" n "\" saved and in use, by " (:email person)))
         (.then (settled person) (fn [s] [200 s]))))))

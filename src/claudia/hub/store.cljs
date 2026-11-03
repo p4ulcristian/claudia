@@ -4,7 +4,8 @@
   over WireGuard, and for push the phones, what each person was told, and Live Activities."
   (:require ["node:sqlite" :refer [DatabaseSync]]
             ["node:fs" :as fs]
-            ["node:path" :as path]))
+            ["node:path" :as path]
+            [claudia.shared.protocol :as protocol]))
 
 (defonce ^:private db (atom nil))
 
@@ -92,6 +93,12 @@
      key TEXT NOT NULL REFERENCES claude_tokens (key),
      used_by TEXT NOT NULL,
      used_at INTEGER NOT NULL
+   );
+   -- A saved token's last usage limits as a server's chats heard them (JSON [Limit]) and when.
+   CREATE TABLE IF NOT EXISTS claude_token_limits (
+     key TEXT PRIMARY KEY REFERENCES claude_tokens (key) ON DELETE CASCADE,
+     limits TEXT NOT NULL,
+     heard_at INTEGER NOT NULL
    );")
 
 (defn open!
@@ -313,6 +320,22 @@
         token-key token-name sealed by (now)))
 
 (defn drop-claude-token! [token-key] (exec! "DELETE FROM claude_tokens WHERE key = ?" token-key))
+
+(defn claude-token-limits
+  "Every saved token's last limits: {key {:limits [Limit] :heard-at ms}}."
+  []
+  (into {} (for [r (all "SELECT key, limits, heard_at FROM claude_token_limits")]
+             [(:key r) {:limits (protocol/read-json (:limits r)) :heard-at (:heard_at r)}])))
+
+(defn heard-claude-token-limits!
+  "A token's limits heard at heard-at, kept when newer than what is kept."
+  [token-key limits heard-at]
+  (exec! "INSERT INTO claude_token_limits (key, limits, heard_at) VALUES (?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET limits = excluded.limits, heard_at = excluded.heard_at
+           WHERE excluded.heard_at > claude_token_limits.heard_at"
+        token-key (protocol/write-json limits) heard-at))
+
+(defn forget-claude-token-limits! [token-key] (exec! "DELETE FROM claude_token_limits WHERE key = ?" token-key))
 
 (defn claude-token-use
   "{:key :name :by :at} of the token in use, or nil."

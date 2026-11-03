@@ -89,8 +89,8 @@
     (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
     (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-    ;; The hub's own calls to the front (the update poke; the Claude token in use), never a page's.
-    (#{"/api/update-check" "/api/claude-token/current"} rest-path) {:status 404 :error "not found"}
+    ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits), never a page's.
+    (#{"/api/update-check" "/api/claude-token/current" "/api/claude-token/limits"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}

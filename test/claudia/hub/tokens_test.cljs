@@ -44,10 +44,22 @@
 
 (deftest the-page-sees-names-never-tokens
   (let [s (tokens/state-of true {:key "paul" :name "Paul" :by "a@b" :at 5}
-                           [{:key "paul" :name "Paul" :saved-by "a@b" :saved-at 3}]
+                           [{:key "paul" :name "Paul" :saved-by "a@b" :saved-at 3}
+                            {:key "ana" :name "Ana" :saved-by "a@b" :saved-at 4}]
+                           {"paul" {:limits [{:key "seven_day" :percent 31}] :heard-at 7}}
                            [{:name "box" :label "Box"}]
                            {"box" {:ok true :name "Paul"}})]
     (is (= {:name "Paul" :by "a@b" :at 5} (:inUse s)))
-    (is (= [{:name "Paul" :by "a@b" :at 3}] (:tokens s)))
+    (is (= [{:name "Paul" :by "a@b" :at 3 :limits [{:key "seven_day" :percent 31}] :heardAt 7}
+            {:name "Ana" :by "a@b" :at 4 :limits [] :heardAt nil}]
+           (:tokens s)))
     (is (= [{:name "box" :label "Box" :ok true :current "Paul" :error nil}] (:servers s))))
-  (is (= [] (:tokens (tokens/state-of false nil nil [] {})))))
+  (is (= [] (:tokens (tokens/state-of false nil nil nil [] {})))))
+
+(deftest a-servers-limits-go-to-saved-tokens-only
+  (let [heard {:h1 {:limits [{:key "seven_day" :percent 40}] :at 9}
+               :h2 {:limits [{:key "seven_day" :percent 5}] :at 8}
+               :h3 {:limits [] :at 8}
+               :h4 {:limits [{:key "five_hour" :percent 1}] :at nil}}]
+    (is (= [["paul" [{:key "seven_day" :percent 40}] 9] ["ana" [{:key "five_hour" :percent 1}] 0]]
+           (tokens/heard-rows {"h1" "paul" "h3" "ana" "h4" "ana"} heard)))))

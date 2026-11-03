@@ -1,7 +1,7 @@
 (ns claudia.slave.api
   "The runner's HTTP calls beyond /api/me and the vault read (PROTOCOL.md, \"Runner HTTP: chat
   operations\"): the delegate API another program on this machine uses (Eye on Rainbow's Gus),
-  uploads, search, fork, explain, the working folder's project, all ~/Work sessions, the chat
+  uploads, search, fork, explain, the limits kept per token (the front collects them for the hub), the working folder's project, all ~/Work sessions, the chat
   menu's changes, and Settings' tokens."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             [claudia.node.http :as io]
@@ -12,6 +12,7 @@
             [claudia.slave.explain :as explain]
             [claudia.slave.fork :as fork]
             [claudia.slave.history :as history]
+            [claudia.slave.meta :as meta]
             [claudia.slave.projects :as projects]
             [claudia.slave.search :as search]
             [claudia.slave.store :as store]
@@ -266,6 +267,7 @@
   "[method [\"api\" name] parts] -> operation, for /api/<name>[/...]."
   {["POST" ["api" "delegate"] 2] :delegate
    ["GET" ["api" "search"] 2] :search
+   ["GET" ["api" "limits"] 2] :limits
    ["GET" ["api" "sessions"] 2] :sessions
    ["GET" ["api" "project"] 2] :project
    ["GET" ["api" "project"] 3] :project-logo
@@ -309,6 +311,7 @@
       :delegate (reply (delegate req))
       :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (= "1" (.get q "archived"))))})
       :sessions (reply (sessions))
+      :limits (io/send-json res 200 {:tokens (meta/heard)})
       :project (io/send-json res 200 (project-info (.get q "folder")))
       :project-logo (project-logo res (.get q "folder") (nth parts 2))
       :prefs (io/send-json res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here))

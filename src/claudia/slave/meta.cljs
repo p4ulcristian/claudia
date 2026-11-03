@@ -1,9 +1,10 @@
 (ns claudia.slave.meta
   "What every chat of the profile shares: the plan's usage limits (5-hour, week) from the SDK's
-  rate_limit_event, kept per token (a hash of it, never the token); the models with their effort
+  rate_limit_event, kept per token (a hash of it, never the token) with when they were heard (the
+  hub collects them for its popup of every token's limits); the models with their effort
   levels and the slash commands, read once by a short Claude Code process that sends no message."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
-            [claudia.node.crypto :refer [sha256-hex]]
+            [claudia.node.crypto :as crypto]
             ["node:fs" :as fs]
             [claudia.node.env :as env]
             [claudia.shared.text :as text]
@@ -12,16 +13,13 @@
 (def ^:private labels
   {"five_hour" "5-hour" "seven_day" "Week" "seven_day_opus" "Week, Opus" "seven_day_sonnet" "Week, Sonnet"})
 
-;; {:limits [{:key :label :percent :resetsAt}] :models [{:value :name :efforts}]
+;; {:limits [{:key :label :percent :resetsAt}] :limitsAt (ms, when heard) :models [{:value :name :efforts}]
 ;;  :commands [{:name :description :hint}] :account (token hash)}
 (defonce state (atom {:limits [] :models [] :commands [] :account nil}))
 ;; Set by the runner: (fn [meta]) when it changed.
 (defonce on-change (atom (fn [_])))
 
-(defn token-key
-  "The token's name in the store: the start of its SHA-256, never the token."
-  [token]
-  (subs (sha256-hex (str token)) 0 16))
+(def token-key crypto/token-hash)
 
 (defn- publish! [m]
   (let [before @state
@@ -33,12 +31,34 @@
   [k]
   (str "limits:" k))
 
+(defn kept
+  "A token's kept value as {:limits :at}: at = when they were heard (ms), nil for a value kept
+  before times were (a bare vector of Limits)."
+  [v]
+  (if (map? v) {:limits (vec (:limits v)) :at (:at v)} {:limits (vec v) :at nil}))
+
+(defn- kept-of [k] (kept (store/kv "" (limits-key k))))
+
+(defn- keep-limits!
+  "Keeps a token's limits as heard now; the meta's :limits and :limitsAt as kept."
+  [k limits]
+  (let [v {:limits limits :at (js/Date.now)}]
+    (store/kv! "" (limits-key k) v)
+    {:limits limits :limitsAt (:at v)}))
+
+(defn heard
+  "Every token's kept limits: {token key {:limits :at}}."
+  []
+  (into {} (for [[kv-key v] (store/kv-prefixed "" "limits:")]
+             [(subs kv-key (count "limits:")) (kept v)])))
+
 (defn use-token!
   "The token chats run on now: its last limits show until the next rate_limit_event."
   [token]
   (let [k (token-key token)]
     (when (not= k (:account @state))
-      (publish! {:account k :limits (or (store/kv "" (limits-key k)) [])}))))
+      (let [v (kept-of k)]
+        (publish! {:account k :limits (:limits v) :limitsAt (:at v)})))))
 
 (defn percent
   "A utilization as a whole percent (a fraction up to 1, else already a percent)."
@@ -76,10 +96,9 @@
   (let [k (token-key token)
         fresh (event-limits info)]
     (when (seq fresh)
-      (let [merged (merge-limits (or (store/kv "" (limits-key k)) []) fresh)]
-        (store/kv! "" (limits-key k) merged)
-        (when (= k (:account @state)) (publish! {:limits merged}))
-        (when (nil? (:account @state)) (publish! {:account k :limits merged}))))))
+      (let [m (keep-limits! k (merge-limits (:limits (kept-of k)) fresh))]
+        (when (= k (:account @state)) (publish! m))
+        (when (nil? (:account @state)) (publish! (assoc m :account k)))))))
 
 (defonce ^:private probing (atom false))
 
@@ -132,9 +151,8 @@
       (.then (fn [u]
                (let [u (js->clj u :keywordize-keys true)]
                  (when (and k (:rate_limits_available u))
-                   (let [limits (limits-from (:rate_limits u))]
-                     (store/kv! "" (limits-key k) limits)
-                     (when (= k (:account @state)) (publish! {:limits limits})))))))
+                   (let [m (keep-limits! k (limits-from (:rate_limits u)))]
+                     (when (= k (:account @state)) (publish! m)))))))
       (.catch (fn [_] nil))))
 
 (defn probe!
@@ -160,10 +178,10 @@
          (catch :default _ nil))))
 
 (defn frame
-  "The meta frame (src/meta.ts Meta): limits, models, commands, the default model, and the token
+  "The meta frame (src/meta.ts Meta): limits (and when they were heard), models, commands, the default model, and the token
   in use (its name as a hash, and whose it is)."
   []
-  (assoc (select-keys @state [:limits :models :commands :defaultModel])
+  (assoc (select-keys @state [:limits :limitsAt :models :commands :defaultModel])
          :type "meta"
          :account (some->> (:account @state) (str "token-"))
          :accountLabel (account-label)))

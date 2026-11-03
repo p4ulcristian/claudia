@@ -1,11 +1,13 @@
 (ns claudia.web.views.usage
   "Meters and the model: the plan's 5-hour and week usage as two small rings in the chat list's
-  header (and on the folded rail), bars with their reset countdown at the list's foot, the open
+  header (and on the folded rail), a click on them opening every saved token's limits (the hub's,
+  how fresh on hover), bars with their reset countdown at the list's foot, the open
   chat's context use as a ring in its header (a click runs /compact), the model and effort pickers in
   the composer, and the / command menu."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.pure.usage :as pure]))
 
 (def ^:private k-tokens pure/k-tokens)
@@ -50,19 +52,75 @@
      [:span.r-num percent]
      [:span.r-label short-label]]))
 
+(defn- pop-meter
+  "One window of a token in the popup: bar, percent and when it resets; \"reset since\" once that
+  time has passed (the percent no longer holds)."
+  [label l now]
+  (let [gone? (pure/reset-since? l now)
+        p (if (and l (not gone?)) (:percent l) 0)]
+    [:div.lp-meter {:class (level p)}
+     [:span.m-label label]
+     [:span.m-bar [:span {:style {:width (str (min 100 p) "%")}}]]
+     [:span.m-num (cond (nil? l) "–" gone? "0%" :else (str p "%"))]
+     [:span.lp-reset
+      (cond (nil? l) "not heard yet"
+            gone? (str "reset since " (reset-label (:resetsAt l)))
+            (:resetsAt l) [:<> "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])]]))
+
+(defn- pop-row [{token-name :name :keys [in-use five week heard-at]} now]
+  [:div.lp-row {:class (when in-use "on") :data-tip (str "Heard " (pure/freshness heard-at now))}
+   [:div.lp-name token-name (when in-use [:span.lp-use "in use"])]
+   [pop-meter "Week" week now]
+   [pop-meter "5-hour" five now]])
+
+(defn- pop-place
+  "Where the popup opens by the rings in box: below them (the list's header) or beside them (the rail)."
+  [^js box beside?]
+  (let [rc (.getBoundingClientRect box)]
+    (if beside?
+      {:left (+ (.-right rc) 8) :bottom (max 6 (- js/innerHeight (.-bottom rc)))}
+      {:left (max 6 (.-left rc)) :top (+ (.-bottom rc) 6)})))
+
+(defn- pop-rows
+  "The popup's rows: every saved token, else the plan the chats run on (no tokens kept by the hub)."
+  [tokens live]
+  (or (not-empty (pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) live))
+      [{:name "Plan" :in-use true :heard-at (:at live)
+        :five (pure/limit-of (:limits live) "five_hour") :week (pure/limit-of (:limits live) "seven_day")}]))
+
+(defn limits-popup
+  "Every saved token's week and 5-hour use (what the hub last heard; the token in use as fresh as
+  the page has it), by the rings in box; hover a token for how fresh its numbers are."
+  [{:keys [box beside? close]}]
+  (let [menu (h/use-ref nil)
+        now (use-now!)
+        rows (pop-rows @(rf/subscribe [:tokens]) @(rf/subscribe [:live-limits]))]
+    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
+    (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t)) (some-> (.-current box) (.contains t))))
+                           close)
+    [:div.chat-menu.limits-pop {:ref #(set! (.-current menu) %) :role "dialog" :aria-label "Usage of every token"
+                                :style (pop-place (.-current box) beside?)}
+     [:div.cm-title "Usage · every token"]
+     (for [r rows] ^{:key (:name r)} [pop-row r now])
+     [:button.cm-item.plan-add {:on-click (fn [] (close) (rf/dispatch [:ops/settings true]))} "Tokens in Settings"]]))
+
 (defn limit-rings
-  "The list header's two rings (5-hour, week): one button that opens what they summarise (the plan
-  bars with their reset times, in Settings)."
+  "The list header's two rings (5-hour, week): one button that opens every token's limits."
   []
   (let [limits @(rf/subscribe [:limits])
         now (use-now!)
         shown (pure/two limits)
-        tip (pure/limits-tip shown now)]
+        [open? set-open] (h/use-state false)
+        box (h/use-ref nil)]
     (when (seq shown)
-      [:button.limit-rings
-       {:aria-label (str "Usage: " (str/join ", " (map #(str (:label %) " " (:percent %) "%") shown)))
-        :on-click #(rf/dispatch [:ops/settings true])}
-       (for [l shown] ^{:key (:key l)} [ring {:short (short-name (:key l) (:label l)) :percent (:percent l) :tip tip}])])))
+      [:<>
+       [:button.limit-rings
+        {:ref #(set! (.-current box) %) :data-tip (when-not open? (pure/limits-tip shown now))
+         :aria-label (str "Usage: " (str/join ", " (map #(str (:label %) " " (:percent %) "%") shown)))
+         :aria-haspopup "dialog" :aria-expanded open?
+         :on-click #(set-open (not open?))}
+        (for [l shown] ^{:key (:key l)} [ring {:short (short-name (:key l) (:label l)) :percent (:percent l)}])]
+       (when open? [:f> limits-popup {:box box :close #(set-open false)}])])))
 
 (defn- meter [{:keys [label percent title]} & children]
   (into [:div.meter {:class (level percent) :title title}
@@ -119,22 +177,31 @@
 
 (declare context-ring)
 
+(defn- rail-limit-tip [l now]
+  (str (:label l) " " (:percent l) "%"
+       (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)) " (" (reset-label (:resetsAt l)) ")"))))
+
 (defn rail-meters
   "The same meters on the rail (a folded list): the open chat's context (a click compacts), then a
-  ring per limit, the details in the hover text."
+  ring per limit, the details in the hover text; a click on a limit opens every token's limits."
   []
   (let [limits @(rf/subscribe [:limits])
         oc @(rf/subscribe [:open-chat])
         ro @(rf/subscribe [:read-only?])
-        now (use-now!)]
+        now (use-now!)
+        [open? set-open] (h/use-state false)
+        box (h/use-ref nil)]
     (when (or (seq limits) (get-in oc [:state :context]))
       [:div.rail-meters
        (when oc [context-ring (cond-> oc ro (assoc :pending? true))])
-       (for [l limits]
-         ^{:key (:key l)}
-         [ring {:short (short-name (:key l) (:label l)) :percent (:percent l)
-                :tip (str (:label l) " " (:percent l) "%"
-                          (when (:resetsAt l) (str " · in " (countdown (- (:resetsAt l) now)) " (" (reset-label (:resetsAt l)) ")")))}])])))
+       (when (seq limits)
+        [:button.rail-limits {:ref #(set! (.-current box) %) :aria-label "Usage of every token"
+                             :aria-haspopup "dialog" :aria-expanded open? :on-click #(set-open (not open?))}
+        (for [l limits]
+          ^{:key (:key l)}
+          [ring {:short (short-name (:key l) (:label l)) :percent (:percent l)
+                 :tip (when-not open? (rail-limit-tip l now))}])])
+       (when open? [:f> limits-popup {:box box :beside? true :close #(set-open false)}])])))
 
 (defn context-ring
   "The open chat's context use; a click compacts it (not while a turn runs)."
