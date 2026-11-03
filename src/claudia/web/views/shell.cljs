@@ -3,6 +3,7 @@
   full screens, list -> chat -> picture, one shown at a time."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.admin :as admin]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.sidebar :as sidebar]))
@@ -34,4 +35,5 @@
      [:div.sidebar-slot [sidebar/sidebar]]
      [:main.split
       [chat/chat-pane]
-      [picture/picture-pane]]]))
+      [picture/picture-pane]]
+     [admin/dialog]]))
