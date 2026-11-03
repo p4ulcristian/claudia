@@ -75,7 +75,7 @@
             chromium (.-chromium (js/require "playwright-core"))
             ;; Software GL: a server has no GPU for a headless browser.
             args #js ["--use-gl=angle" "--use-angle=swiftshader" "--enable-unsafe-swiftshader"]
-            own (some #(when (fs/existsSync %) %) (cons (.-CLAUDIA_CHROME env) chromes))
+            own (some #(when (and (seq %) (fs/existsSync %)) %) (cons (.-CLAUDIA_CHROME env) chromes))
             b (-> (.launch chromium #js {:args args})
                   ;; Playwright's own browser is not installed here: a system Chrome or Chromium.
                   (.catch (fn [e]
