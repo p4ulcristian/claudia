@@ -14,6 +14,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.meta :as meta]
             [claudia.slave.projects :as projects]
+            [claudia.slave.reach :as reach]
             [claudia.slave.search :as search]
             [claudia.slave.store :as store]
             [claudia.slave.tasks :as tasks]
@@ -239,12 +240,21 @@
   (for [r (store/chats) :when (= archived (boolean (:archived r)))]
     {:id (:id r) :title (:title r) :file (history/session-file chats/cwd (:id r))}))
 
-(defn- project-info [folder]
-  (let [found (projects/project-of folder chats/cwd)]
+(defn- reachable-project
+  "The folder's project when this caller may read the folder, its logo left out when the logo may
+  not be read (a view: both inside the work folder, no dot part); nil otherwise."
+  [folder view?]
+  (when (reach/reach? chats/cwd folder view?)
+    (when-let [found (projects/project-of folder chats/cwd)]
+      (cond-> found
+        (and (:logo found) (not (reach/reach? chats/cwd (:logo found) view?))) (assoc :logo nil)))))
+
+(defn- project-info [folder view?]
+  (let [found (reachable-project folder view?)]
     (if found {:name (:name found) :logo (boolean (:logo found))} {:name nil :logo false})))
 
-(defn- project-logo [^js res folder part]
-  (if-let [logo (and (= "logo" part) (:logo (projects/project-of folder chats/cwd)))]
+(defn- project-logo [^js res folder part view?]
+  (if-let [logo (and (= "logo" part) (:logo (reachable-project folder view?)))]
     (do (.writeHead res 200 #js {"content-type" (projects/logo-type logo)
                                  "cache-control" "private, max-age=600"
                                  "x-content-type-options" "nosniff"
@@ -302,8 +312,9 @@
                 (get chat-routes [method (nth parts 3 nil)])))))
 
 (defn- operate
-  "Runs operation op for the call ({:req :res :q (query) :parts}); reply answers a promise."
-  [op {:keys [^js req ^js res ^js q parts]}]
+  "Runs operation op for the call ({:req :res :q (query) :parts :view? (a read-only view)}); reply
+  answers a promise."
+  [op {:keys [^js req ^js res ^js q parts view?]}]
   (let [reply #(reply-promise res %)
         [_ _ id _ a b] parts]
     (case op
@@ -312,8 +323,8 @@
       :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (= "1" (.get q "archived"))))})
       :sessions (reply (sessions))
       :limits (io/send-json res 200 {:tokens (meta/heard)})
-      :project (io/send-json res 200 (project-info (.get q "folder")))
-      :project-logo (project-logo res (.get q "folder") (nth parts 2))
+      :project (io/send-json res 200 (project-info (.get q "folder") view?))
+      :project-logo (project-logo res (.get q "folder") (nth parts 2) view?)
       :prefs (io/send-json res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here))
       :set-prefs (reply (set-prefs req))
       :github (reply (.then (tokens/github-user) (fn [u] {:user u})))
@@ -336,5 +347,5 @@
   (let [[path qs] (str/split (.-url req) #"\?" 2)
         parts (mapv js/decodeURIComponent (rest (str/split path #"/")))]
     (if-let [op (route (.-method req) parts read-only)]
-      (do (operate op {:req req :res res :q (js/URLSearchParams. (or qs "")) :parts parts}) true)
+      (do (operate op {:req req :res res :q (js/URLSearchParams. (or qs "")) :parts parts :view? read-only}) true)
       false)))
