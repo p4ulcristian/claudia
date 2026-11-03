@@ -34,7 +34,8 @@
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
-        draft-key (if (and open (not (contains? pending (second open)))) open :new)]
+        draft-key (if (and open (not (contains? pending (second open)))) open :new)
+        folded? (:folded? @(rf/subscribe [:fold-state]))]
     (chat-colour! color)
     [:div.app {:class (when-not sidebar? "folded") :data-screen (name screen)}
      [:button.menu-toggle {:title (if sidebar? "Hide chats" "Show chats")
@@ -46,7 +47,7 @@
      [chatmenu/chat-menu]
      [settings/github-prompt]
      [:f> attach/drop-zone draft-key (not ro)]
-     [:main.split
+     [:main.split {:class (when folded? "folded")}
       [chat/chat-pane]
       [picture/picture-pane]]
      [admin/dialog]]))

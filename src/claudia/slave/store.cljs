@@ -30,6 +30,15 @@
                 seen INTEGER NOT NULL DEFAULT 0,
                 preview TEXT NOT NULL DEFAULT '',
                 scene TEXT
+              );
+              -- One row per turn that changed the picture: turn = the user message the turn answers
+              -- (or an id made for a turn Claude started itself); at = when it first drew.
+              CREATE TABLE IF NOT EXISTS pictures (
+                chat TEXT NOT NULL,
+                turn TEXT NOT NULL,
+                scene TEXT NOT NULL,
+                at INTEGER NOT NULL,
+                PRIMARY KEY (chat, turn)
               );")
     (when-not (some #(= "prev_color" (.-name ^js %)) (.all (.prepare d "PRAGMA table_info(chats)")))
       (.exec d "ALTER TABLE chats ADD COLUMN prev_color TEXT"))
@@ -76,3 +85,21 @@
 
 (defn save-scene! [id scene]
   (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json scene) id))
+
+(defn save-picture!
+  "The picture as a turn left it (so far): one row per chat and turn, its first time kept."
+  [id turn scene at]
+  (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?)
+               ON CONFLICT (chat, turn) DO UPDATE SET scene = excluded.scene")
+        id turn (p/write-json scene) at))
+
+(defn pictures
+  "The chat's pictures without their scenes, oldest first: [{:turn :title :at}]."
+  [id]
+  (mapv (fn [^js r] {:turn (.-turn r) :title (or (.-title r) "") :at (.-at r)})
+        (.all (stmt "SELECT turn, json_extract(scene, '$.title') AS title, at FROM pictures
+                     WHERE chat = ? ORDER BY at, rowid") id)))
+
+(defn picture [id turn]
+  (some-> ^js (.get (stmt "SELECT scene FROM pictures WHERE chat = ? AND turn = ?") id turn)
+          .-scene p/read-json))

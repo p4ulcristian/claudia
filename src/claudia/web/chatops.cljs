@@ -94,7 +94,7 @@
          next (cond (hidden server) (disj hidden server)
                     (<= (count shown) 1) hidden
                     :else (conj hidden server))]
-     {:db (assoc db :hidden-servers next) :store ["claudia.hiddenServers" (vec next)]})))
+     {:db (assoc db :hidden-servers next) :store ["claudia.hiddenServers" (clj->js (vec next))]})))
 
 (rf/reg-sub :view (fn [db] (:view db)))
 (rf/reg-sub :read-only? (fn [db] (read-only? db)))
