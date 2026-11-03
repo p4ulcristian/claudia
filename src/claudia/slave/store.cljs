@@ -51,7 +51,16 @@
                 skipped TEXT,
                 at INTEGER NOT NULL
               );
-              CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, id);")
+              CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, id);
+              -- One row per turn that changed the picture: turn = the user message the turn answers
+              -- (or an id made for a turn Claude started itself); at = when it first drew.
+              CREATE TABLE IF NOT EXISTS pictures (
+                chat TEXT NOT NULL,
+                turn TEXT NOT NULL,
+                scene TEXT NOT NULL,
+                at INTEGER NOT NULL,
+                PRIMARY KEY (chat, turn)
+              );")
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -135,3 +144,20 @@
   [chat id]
   (when-let [^js r (.get (stmt "SELECT before, after, skipped FROM changes WHERE chat = ? AND id = ?") chat id)]
     {:before (.-before r) :after (.-after r) :skipped (.-skipped r)}))
+(defn save-picture!
+  "The picture as a turn left it (so far): one row per chat and turn, its first time kept."
+  [id turn scene at]
+  (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?)
+               ON CONFLICT (chat, turn) DO UPDATE SET scene = excluded.scene")
+        id turn (p/write-json scene) at))
+
+(defn pictures
+  "The chat's pictures without their scenes, oldest first: [{:turn :title :at}]."
+  [id]
+  (mapv (fn [^js r] {:turn (.-turn r) :title (or (.-title r) "") :at (.-at r)})
+        (.all (stmt "SELECT turn, json_extract(scene, '$.title') AS title, at FROM pictures
+                     WHERE chat = ? ORDER BY at, rowid") id)))
+
+(defn picture [id turn]
+  (some-> ^js (.get (stmt "SELECT scene FROM pictures WHERE chat = ? AND turn = ?") id turn)
+          .-scene p/read-json))

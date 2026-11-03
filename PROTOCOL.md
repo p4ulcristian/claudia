@@ -29,7 +29,14 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | Program | Variable | What |
 |---|---|---|
 | hub | `HUB_HOST`, `HUB_PORT` | where it listens (Caddy in front) |
-| hub | `HUB_CONFIG` | path of `hub.json` (below) |
+| hub | `HUB_CONFIG` | path of `hub.json` (below), imported once into an empty store |
+| hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-beta-hub`) |
+| hub | `HUB_ADMIN_GROUP` | a login group (`X-Auth-Request-Groups`) whose members are admins (optional) |
+| hub | `HUB_WG_POOL`, `HUB_SERVER_PORT` | addresses paired servers get (`10.0.0.100-10.0.0.199`; unset: no pairing), their front's port (4540) |
+| hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
+| hub | `HUB_APNS_KEY_FILE`, `HUB_APNS_KEY_ID`, `HUB_APNS_TEAM_ID` | the APNs key (.p8) and its ids; `HUB_APNS_DRY_RUN=1` logs pushes instead |
+| hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
+| front | `CLAUDIA_UPDATE_TRIGGER` | file `POST /api/update-check` writes (a path unit starts `deploy/update.sh`) |
 | hub | `HUB_WEB` | folder of the built page (`out/web`) |
 | front | `FRONT_HOST`, `FRONT_PORT` | the WireGuard address it listens on |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
@@ -81,18 +88,62 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 | `ANY /s/<server>/api/…` | passed to that front's `/api/…`, bodies streamed both ways (refused 403 if not in the person's list; 502 when the front is not reachable) |
 | `WS /s/<server>/ws` | passed to that front's `/ws`; the front's own refusal (status and body) reaches the page; frames pass as they are, close codes too |
 
-No `X-Auth-Request-Email` → 401 `{ error }`; an email not in `hub.json` → 403 `{ error }`. The page's
+No `X-Auth-Request-Email` → 401 `{ error }`; an email not in the store → 403 `{ error }`. The page's
 files are served without either check (they hold no data). The hub listens on `HUB_HOST`
 (default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
-has no default. `hub.json` is read again when it changes (checked every 2 s); a broken change is
-logged and the last good one kept; a broken file at start stops the hub.
+has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
+imported only into an empty store (a broken file then stops the hub) and never read again.
+`/s/<server>/api/update-check` is refused (404): only the hub pokes a front.
+
+## Hub operations
+
+Signed-in calls refuse cross-site requests like `/hub/me`. `/hub/me` also answers `push` (bool:
+pushes are on). Every admin call answers the whole admin state
+`{ servers: [{ name, label, address, pairing: { server, publicKey, ip, createdAt, fetchedAt } | null, peerUp }],
+people: [{ email, name, admin }], access: [{ email, server }], pairing: { available } }`.
+
+| Call | Who | Answer |
+|---|---|---|
+| `GET /hub/admin` | admin | the admin state |
+| `PUT /hub/admin/servers/:name` `{ label?, address? }` | admin | adds or changes a server (address `host:port`) |
+| `DELETE /hub/admin/servers/:name` | admin | removes it (and its peer request) |
+| `POST /hub/admin/people` `{ email, name?, admin? }` | admin | adds a person |
+| `PUT /hub/admin/people/:email` `{ name?, admin? }` | admin | changes a person |
+| `DELETE /hub/admin/people/:email` | admin | removes them and their ticks |
+| `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
+| `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
+| `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
+| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/beta` pokes every front; a successful `beta-release.yml` run on beta writes its commit to `HUB_UPDATE_REQUEST` and pokes again; anything else ignored (202). 401 bad signature, 503 no secret |
+| `POST /hub/push/devices` `{ token (hex), env: development\|production, topic (bundle id), key (base64 of 32 bytes), liveStartToken? }` | person | `{ ok, push }` |
+| `DELETE /hub/push/devices/:token` | person | their own phone only |
+| `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
+| `DELETE /hub/push/live/:activity` | person | the app saw it end |
+| `POST /hub/presence` `{ page (8-64 chars), active }` | person | 204; alerts are held while any page said active within 45 s |
+
+The hub watches each server for each person with a phone over that front's `/ws` (as the person,
+`hello`, then every `chats`). A push alert: `{ aps: { alert: { title: "Claudia", body: "New message" },
+mutable-content: 1, badge, thread-id: "<server>/<chat>", interruption-level }, enc, url: "/c/<server>/<chat>",
+server, chat, kind: finished|ask|permission }`, `enc` = base64 of nonce (12) ‖ AES-256-GCM ciphertext
+of `{ title, body }` ‖ tag (16). Live Activity attributes type: `ClaudiaSummaryAttributes`, content
+state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title, server, chat, since, kind }`.
 
 ## Front / runner HTTP (`/api/…`)
 
 | Call | Answer |
 |---|---|
 | `GET /api/me` | `{ server, profile, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `viewing` = the profile looked at (read only) or null |
+| `POST /api/update-check` | answered by the front, no caller needed (only the hub reaches it): writes `CLAUDIA_UPDATE_TRIGGER`, 202; 501 when unset |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
+| `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
+| `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
+| `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
+
+`Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
+running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:
+`{ k: "tool", id, name, title, start, end?, error?, agent? (the lane this Agent call started), diff?: { added, removed } }`
+or `{ k: "text" | "user" | "note", id, at, text }` (text cut at 300 characters). `patch`: `{ file, created, cut,
+hunks: [{ oldStart, oldLines, newStart, newLines, lines }] }` from Claude Code's saved structuredPatch (a
+subagent's: made from the call's input), cut at 5000 lines.
 
 ## WebSocket (`/ws`): page ↔ runner
 
@@ -119,6 +170,7 @@ Page → runner:
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
 | `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 | `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
+| `picture` | `chat`, `turn` | runner answers `picture` with that turn's scene (an earlier picture; read-only callers may send it) |
 
 Runner → page:
 
@@ -142,10 +194,13 @@ Runner → page:
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 | `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |
+| `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
+| `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
-preview (start of the last reply or the open question), unseen, archived, agents }`; `agents` = how many
-agents and background shells Claude started still run (`unseen` stays false while any does).
+preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
+ended, 0 = never), asks: [{ id, kind: "question" | "secret", text (the question, or the secret's reason) }], agents }`;
+`agents` = how many agents and background shells Claude started still run (`unseen` stays false while any does).
 
 The `chat` frame also carries `agents`, `changes` (the chat's newest 500), `settings`, `model`,
 `commands` and `context`.
@@ -179,7 +234,11 @@ folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "
 - form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`), `data` (as the draw tool's description says)
 
 The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
-`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`.
+`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`. It keeps
+the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
+id made for a turn Claude started itself), sends `pictures`, and answers the draw with the text and a
+screenshot of the whole picture (`{ type: "image", data, mimeType: "image/png" }`), or the text and why
+there is none. A chat older than the history has only its last picture (turn `imported`).
 
 ## Secrets (1Password, `plan/1passwd-plan.md`)
 

@@ -12,6 +12,8 @@
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.meta :as meta]
+            [claudia.slave.pictures :as pictures]
+            [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]
@@ -35,6 +37,7 @@
 ;;   :asks {ask id -> {:ask (as the page gets it) :resolve :input :keys :secret :timer}}
 ;;   :turn (this turn's Msgs, by arrival) :partial (the assistant text being streamed)
 ;;   :mid (the API message streaming) :stream-counts :final-counts :idle (timer)
+;;   :turn-id (the user message uuid this turn answers: its picture's name in the history)
 (defonce state (atom {}))
 
 ;; Set by the runner: where events go.
@@ -70,10 +73,15 @@
           :waiting (boolean (seq asks))
           :at (:at r)
           :preview (or question (some #(when (= "secret" (:kind %)) (str "Secret: " (:reason %))) asks) (:preview r))
-          ;; Work Claude started still runs: not done yet (README decision 25).
+;; Work Claude started still runs: not done yet (README decision 25).
           :agents agents
           :unseen (and (zero? agents) (> (:ended r) (:seen r)))
-          :archived (:archived r)})))
+          :archived (:archived r)
+          ;; For the hub's phone alerts: when the last turn ended, and the open asks.
+          :ended (:ended r)
+          :asks (vec (for [a asks]
+                       {:id (:id a) :kind (:kind a)
+                        :text (if (= "secret" (:kind a)) (:reason a) (get-in a [:questions 0 :question]))}))})))
 
 (defn- note-msg!
   "A new or changed Msg of this turn: kept (so a chat opened mid-turn has it) and sent."
@@ -86,7 +94,7 @@
                     (conj (if (> (count t) 400) (subvec t 1) t) msg)))))
   (emit! id {:type "msg" :msg msg}))
 
-(declare arm-idle!)
+(declare arm-idle! turn-id!)
 
 (defn- arm-idle! [id]
   (some-> (:idle (st id)) js/clearTimeout)
@@ -105,8 +113,7 @@
   (when (not= running (boolean (:running (st id))))
     (swap-chat! id assoc :running running)
     (when running
-      (changes/begin-turn! id (or (:turn-id (st id)) (str (random-uuid))) (:folder (store/chat id)))
-      (swap-chat! id dissoc :turn-id))
+      (changes/begin-turn! id (turn-id! id) (:folder (store/chat id))))
     (store/update! id {:at (now)})
     (emit! id {:type "turn" :running running})
     (changed!))
@@ -200,17 +207,34 @@
 
 (defn- text-result [text] {:content [{:type "text" :text text}]})
 
-(defn- current-scene [id]
+(defn current-scene [id]
   (or (:scene (st id)) (store/scene id) scene/empty-scene))
 
+(defn- turn-id!
+  "This turn's name in the picture history; a turn Claude started itself gets one made."
+  [id]
+  (or (:turn-id (st id))
+      (let [t (str (random-uuid))] (swap-chat! id assoc :turn-id t) t)))
+
 (defn- draw [id input]
-  (let [{s :scene error :error} (scene/apply-draw (current-scene id) input)]
+  (let [prev (current-scene id)
+        {s :scene error :error} (scene/apply-draw prev input)]
     (if error
       (refusal error)
       (do (swap-chat! id assoc :scene s)
           (store/save-scene! id s)
+          (pictures/record! id (turn-id! id) prev s)
           (emit! id {:type "scene" :scene s})
-          (text-result (str "Picture updated. " (scene/describe s)))))))
+          (emit! id {:type "pictures" :pictures (pictures/listing id)})
+          ;; A screenshot of the picture as it looks now, so Claude sees its own drawing; one that
+          ;; fails is said in the text, never the draw's failure.
+          (let [text (str "Picture updated. " (scene/describe s))]
+            (-> (render/screenshot s (:color (store/chat id)))
+                (.then (fn [{:keys [^js png error]}]
+                         (if png
+                           {:content [{:type "text" :text text}
+                                      {:type "image" :data (.toString png "base64") :mimeType "image/png"}]}
+                           (text-result (str text "\n\n(No screenshot of the picture: " error ")")))))))))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [resolve]
@@ -372,7 +396,7 @@
                   (or (some->> (:errors m) seq (str/join "\n")) (:subtype m))))]
     (store/update! id (cond-> {:ended (now)} ok (assoc :preview (plain-start (:result m)))))
     (drop-asks! id true "The turn ended.")
-    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}))
+    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}) :turn-id nil)
     (when error (emit! id {:type "error" :text error}))
     (set-running! id false)
     (changed!)

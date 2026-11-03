@@ -14,9 +14,12 @@
        (catch :default _ nil)))
 
 (def commit
-  (try (str/trim (str (cp/execFileSync "git" #js ["-C" checkout "rev-parse" "--short" "HEAD"]
-                                       #js {:stdio #js ["ignore" "pipe" "ignore"]})))
-       (catch :default _ nil)))
+  ;; A release folder carries commit.txt (written by the release workflow); a checkout asks git.
+  (or (try (some-> (fs/readFileSync (path/join checkout "commit.txt") "utf8") str/trim not-empty (subs 0 7))
+           (catch :default _ nil))
+      (try (str/trim (str (cp/execFileSync "git" #js ["-C" checkout "rev-parse" "--short" "HEAD"]
+                                           #js {:stdio #js ["ignore" "pipe" "ignore"]})))
+           (catch :default _ nil))))
 
 (defn read-body
   "Promise of a request's body as text (up to max bytes; more is refused)."

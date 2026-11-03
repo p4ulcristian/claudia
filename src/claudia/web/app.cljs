@@ -1,11 +1,16 @@
 (ns claudia.web.app
   (:require [re-frame.core :as rf]
+            [claudia.web.admin]
+            [claudia.web.native :as native]
+            [claudia.web.presence :as presence]
             [reagent.dom.client :as rdc]
             [claudia.web.chalk :as chalk]
             [claudia.web.events]
             [claudia.web.extras]
             [claudia.web.fx]
             [claudia.web.md :as md]
+            [claudia.web.pictures :as pictures]
+            [claudia.web.render :as render]
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
             [claudia.web.views.shell :as shell]
@@ -21,10 +26,11 @@
 
 (defn ^:dev/after-load reload! [] (mount!))
 
-(defn init []
+(defn- start-app! []
   (chalk/bake-all!)
   (viewport/install!)
   (md/install-copy!)
+  (pictures/install-keys!)
   (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
   (js/document.addEventListener
    "visibilitychange"
@@ -32,4 +38,12 @@
       (ws/wake!)
       (rf/dispatch [:chat/check-seen])))
   (rf/dispatch-sync [:init])
+  (presence/start!)
+  (native/start!)
   (mount!))
+
+(defn init []
+  ;; The runner's render page (screenshots of a picture) is this build in another mode.
+  (if (.-claudiaRender js/window)
+    (render/start!)
+    (start-app!)))

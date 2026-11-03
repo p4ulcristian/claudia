@@ -2,9 +2,10 @@
   "The chat list: every allowed server's chats in one list, newest first."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
+            [claudia.web.admin :as admin]
             [claudia.web.views.agents :as agents]
-            [claudia.web.views.chat :as chat]
-            [claudia.web.views.usage :as usage]))
+            [claudia.web.views.usage :as usage]
+            [claudia.web.views.chat :as chat]))
 
 (def ^:private chat-colors
   #{"burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan" "sky" "blue" "indigo"
@@ -69,5 +70,6 @@
                 ^{:key (str (:server r) "/" (:id r))}
                 [row-view r (= open [(:server r) (:id r)]) multi?]))]
      [:f> usage/usage-foot]
+     [admin/links]
      [:button.cs-fab.phone-only {:title "New chat" :on-click #(rf/dispatch [:nav/new])}
       [:svg {:viewBox "0 0 24 24"} [:path {:d "M12 5v14M5 12h14"}]]]]))
