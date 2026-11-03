@@ -417,6 +417,18 @@
                   {:type "string" :description "Draw a saved template (by name) in this freeform block; fill it through parts"})
         (update :picture merge tools))))
 
+(defn prompt-for
+  "The system prompt's code forms part for a chat: the lines above, then every form it may draw
+  with its data. Claude Code cuts long tool descriptions, so the forms' data is said here in full
+  too (a change of the form row restarts the session between turns, so this follows it)."
+  [id]
+  (let [off (off-set (choices (store/settings id)))]
+    (str prompt "\n\nThe forms of the draw tool and their data (blocks[].form + blocks[].data):\n"
+         (str/join "\n" (for [f all-forms :when (not (off f))]
+                          (if (get forms/specs f)
+                            (forms/help-line f)
+                            (str "- " f ": " (get base-help f))))))))
+
 (defn draw
   "One draw call on a chat's scene, through the form row and the code forms:
   {:scene :text} (the text for Claude) or {:error text}."

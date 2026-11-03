@@ -418,7 +418,7 @@
              ;; Read on every start, so a new token takes effect with the next session.
              :env (assoc (into {} (for [k (js-keys env)] [k (aget env k)])) "CLAUDE_CODE_OAUTH_TOKEN" (token))
              (if resume? :resume :sessionId) id
-             :systemPrompt {:type "preset" :preset "claude_code" :append (str tools/system-append "\n\n" codeforms/prompt)}
+             :systemPrompt {:type "preset" :preset "claude_code" :append (str tools/system-append "\n\n" (codeforms/prompt-for id))}
              :allowedTools (into tools/allowed-tools codeforms/tool-names)
              :permissionMode "bypassPermissions"
              :allowDangerouslySkipPermissions true

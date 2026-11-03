@@ -59,6 +59,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   folder (a git checkout is never replaced): first install with
   `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-beta-update.path` and `.timer`.
 
+## Code forms and templates (2026-11-03)
+
+Ported from the TypeScript Claudia (its decisions 17-21): the `files`, `editor` and `flow` forms are
+always on; `git`, `clojure` and `calls` are opt-in per runner (`CLAUDIA_FORMS=git,clojure,calls`;
+clojure and calls need `clj-kondo` on the runner). Forms are described in `claudia.shared.forms`
+(the draw tool, the system prompt and the Forms gallery read it). Code is coloured by highlight.js
+in VS Code's Dark+ colours (lighter than Shiki, same look); the editor is CodeMirror 6. Templates
+(`save_template`, `templates`, "save as template" on a freeform badge) live in the runner's SQLite.
+Each chat has a form row (allowed -> required -> off per kind, questions allowed <-> off) and a
+column count (auto, 1, 2, 3) for its picture. Claude Code cuts long tool descriptions, so the forms'
+data is also in the system prompt.
+
 ## Build
 
 ```

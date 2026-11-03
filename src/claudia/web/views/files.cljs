@@ -280,5 +280,8 @@
          [:button.f-tool {:type "button" :disabled (not (or (> (count open) 1) (seq files))) :on-click #(do (set-open #{""}) (close-all))} "collapse all"]
          (when live
            [:button.f-tool {:type "button" :on-click #(do (set-tick inc) (doseq [f (vals files) :when (:mtime f)] (load (:path f))))} "refresh"])]]
-       (into [:div.f-tree {:ref #(set! (.-current tree-ref) %)}] (if (and live (not chat)) [[:p.f-note "Open this chat to browse its files."]] @rows))
+       (into [:div.f-tree {:ref #(set! (.-current tree-ref) %)}] (if (and live (not chat)) [[:p.f-note (str "Shown to the user live from disk (not readable here): " root
+                                                                                                                               (when opened0 (str "; open: " opened0))
+                                                                                                                               (when (seq (code/items (:lines data))) (str ", lines " (str/join ", " (code/items (:lines data)))))
+                                                                                                                               (when (seq (code/items (:notes data))) (str ", " (count (code/items (:notes data))) " notes")))]] @rows))
        (when big [:f> image-big big #(set-big nil)])])))
