@@ -93,8 +93,192 @@
 (def ^:private remote (.define Annotation))
 (def ^:private save-ms 300)
 
-(defn- file-list [v] (if (sequential? v) (filterv #(string? (:id %)) v) []))
-(defn- shown [f] (or (:edit f) (:code f) ""))
+
+(defn file-list [v] (if (sequential? v) (filterv #(string? (:id %)) v) []))
+(defn shown [f] (or (:edit f) (:code f) ""))
+
+(defn sync-plan
+  "How a file's editor follows the picture. synced: what the picture last had {:v :text}; f: the
+  picture's file now; local: the editor's text. Claude's new code (a new v) replaces the text (undo
+  brings back what was typed); another page's typing only when nothing typed here waits to be
+  saved. {:replace :change (the text must change) :text (what the picture has, as kept)}."
+  [synced f local]
+  (let [text (shown f)
+        v (or (:v f) 0)
+        replace? (if (not= (:v synced) v) true (and (not= text (:text synced)) (= local (:text synced))))]
+    {:replace replace?
+     :change (and replace? (not= local text))
+     :text (if (or replace? (= local text)) text (:text synced))}))
+
+;; ---- the editors, kept per file in one mutable store (CodeMirror's states are objects) ----
+
+(defn- new-mem []
+  #js {:states (js/Map.) :synced (js/Map.) :langs (js/Map.) :timers (js/Map.)
+       :access (Compartment.) :live nil :send nil})
+
+(defn- access-of [on] #js [(.of (.-readOnly EditorState) (not on)) (.of (.-editable EditorView) on)])
+
+(defn- doc-of
+  "File id's text: from the view when it is the open one, else from its kept state."
+  [^js m view id]
+  (let [^js st (if (and (= id (.. m -live -openId)) (.-current view))
+                 (.-state (.-current view))
+                 (.get (.-states m) id))]
+    (if st (.toString (.-doc st)) "")))
+
+(defn- clear-timer! [^js m id]
+  (some-> (.get (.-timers m) id) js/clearTimeout)
+  (.delete (.-timers m) id))
+
+(defn- save!
+  "File id's typing into the picture (code_edit), when it changed since the picture last had it."
+  [^js m view id]
+  (clear-timer! m id)
+  (let [^js s (.get (.-synced m) id)
+        ^js l (.-live m)
+        text (doc-of m view id)]
+    (when (and s (.-editable l) (not= text (.-text s)))
+      (set! (.-text s) text)
+      (ws/send! (.-server l) {:type "code_edit" :chat (.-chat l) :block (.-block l) :file id :text text :base (.-v s)}))))
+
+(defn- on-update
+  "Typing (not a change from the picture) saves the file save-ms after the last key."
+  [^js m view id set-tick]
+  (fn [^js u]
+    (when (and (.-docChanged u) (not (every? #(.annotation ^js % remote) (array-seq (.-transactions u)))))
+      (some-> (.get (.-timers m) id) js/clearTimeout)
+      (.set (.-timers m) id (js/setTimeout #(save! m view id) save-ms))
+      (set-tick inc))))
+
+(defn- make-state [^js m view set-tick editable f]
+  (let [lang (Compartment.)
+        id (:id f)]
+    (.set (.-langs m) id lang)
+    (.create EditorState
+             #js {:doc (shown f)
+                  :extensions
+                  #js [(lineNumbers) (highlightActiveLineGutter) (highlightActiveLine) (drawSelection) (history)
+                       (indentOnInput) (bracketMatching) (closeBrackets) (highlightSelectionMatches)
+                       (syntaxHighlighting dark-plus) (.of lang (lang-of f)) theme (.-lineWrapping EditorView)
+                       (.of (.-access m) (access-of editable))
+                       (.of keymap (.concat #js [#js {:key "Mod-Enter" :run (fn [] ((.-send m)) true)}]
+                                            closeBracketsKeymap defaultKeymap searchKeymap historyKeymap #js [indentWithTab]))
+                       (.of (.-updateListener EditorView) (on-update m view id set-tick))]})))
+
+(defn- update-state!
+  "Applies spec to file id: through the view when it is open, else to its kept state."
+  [^js m view open-id id spec]
+  (if (and (= id open-id) (.-current view))
+    (.dispatch ^js (.-current view) spec)
+    (.set (.-states m) id (.-state (.update ^js (.get (.-states m) id) spec)))))
+
+(defn- sync-file!
+  "Brings file f's editor up to the picture, without losing typing not saved yet."
+  [^js m view open-id f ^js s]
+  (let [id (:id f) lk (lang-key f)
+        local (doc-of m view id)
+        {:keys [change text]} (sync-plan {:v (.-v s) :text (.-text s)} f local)
+        effects (if (not= lk (.-lang s)) #js [(.reconfigure ^js (.get (.-langs m) id) (lang-of f))] #js [])]
+    (when (not= (.-v s) (or (:v f) 0)) (clear-timer! m id))
+    (when (or change (pos? (.-length effects)))
+      (update-state! m view open-id id (clj->js (cond-> {:effects effects :annotations (.of remote true)}
+                                                  change (assoc :changes {:from 0 :to (count local) :insert (shown f)})))))
+    (.set (.-synced m) id #js {:v (or (:v f) 0) :text text :lang lk})))
+
+(defn- sync-files!
+  "The picture changed: files gone are dropped, new ones get an editor, the rest follow it."
+  [^js m view set-tick editable files open-id]
+  (let [ids (set (map :id files))]
+    (doseq [id (vec (es6-iterator-seq (.keys (.-states m)))) :when (not (ids id))]
+      (.delete (.-states m) id) (.delete (.-synced m) id) (.delete (.-langs m) id))
+    (doseq [f files :let [^js s (.get (.-synced m) (:id f))]]
+      (if-not s
+        (do (.set (.-states m) (:id f) (make-state m view set-tick editable f))
+            (.set (.-synced m) (:id f) #js {:v (or (:v f) 0) :text (shown f) :lang (lang-key f)}))
+        (sync-file! m view open-id f s)))
+    (set-tick inc)))
+
+(defn- set-editable!
+  "Every file's editor made writable or read only."
+  [^js m view editable open-id]
+  (let [spec #js {:effects (.reconfigure (.-access m) (access-of editable))}]
+    (doseq [id (vec (es6-iterator-seq (.keys (.-states m))))
+            :when (not (and (= id open-id) (.-current view)))]
+      (.set (.-states m) id (.-state (.update ^js (.get (.-states m) id) spec))))
+    (some-> ^js (.-current view) (.dispatch spec))))
+
+(defn- show-file!
+  "One view; a tab switch swaps in that file's state."
+  [^js m view host open-id]
+  (when-let [el (.-current host)]
+    (when-let [state (and open-id (.get (.-states m) open-id))]
+      (if-not (.-current view)
+        (set! (.-current view)
+              (EditorView. #js {:state state :parent el
+                                :dispatchTransactions (fn [trs ^js v]
+                                                        (.update v trs)
+                                                        (.set (.-states m) (.. m -live -openId) (.-state v)))}))
+        (when-not (identical? (.-state (.-current view)) state) (.setState ^js (.-current view) state))))))
+
+(defn- close!
+  "Leaving: pending saves go out, the view goes."
+  [^js m view]
+  (doseq [id (vec (es6-iterator-seq (.keys (.-timers m))))] (save! m view id))
+  (some-> (.-current view) .destroy)
+  (set! (.-current view) nil))
+
+(defn- use-editors
+  "The CodeMirror side: per file its editor state (undo kept across tabs), what the picture last had
+  (Claude's version v and the text), its language compartment and a pending save. Returns the store."
+  [{:keys [editable files open-id server chat block]} host view set-tick]
+  (let [mem (h/use-ref nil)
+        _ (when-not (.-current mem) (set! (.-current mem) (new-mem)))
+        ^js m (.-current mem)
+        files-key (pr-str (map (juxt :id :v :edit :code lang-key) files))]
+    (set! (.-live m) #js {:editable editable :openId open-id :server server :chat chat :block block})
+    ;; The picture changed: bring each file's editor up to it, without losing typing not saved yet.
+    (h/use-effect (fn [] (sync-files! m view set-tick editable files open-id) nil) [files-key])
+    ;; Editable only on the live picture of the user's own chat.
+    (h/use-effect (fn [] (set-editable! m view editable open-id) nil) [editable])
+    (h/use-effect (fn [] (show-file! m view host open-id) nil) [open-id files-key])
+    (h/use-effect (fn [] #(close! m view)) [])
+    m))
+
+;; ---- the form ----
+
+(defn- tabs [files open-id changed pick]
+  [:div.ed-tabs {:role "tablist"}
+   (for [f files]
+     ^{:key (:id f)}
+     [:button {:type "button" :role "tab" :aria-selected (= (:id f) open-id) :class (when (= (:id f) open-id) "on")
+               :on-click #(pick (:id f)) :title (when (changed (:id f)) "Changed: not sent yet")}
+      (or (:name f) (:id f)) (when (changed (:id f)) [:span.ed-dot {:aria-label "changed"}])])])
+
+(defn- send-bar [note set-note changed do-send]
+  [:div.ed-send
+   [:input {:value note
+            :on-change #(set-note (.. % -target -value))
+            :on-key-down #(when (and (= "Enter" (.-key %)) (not (.-shiftKey %))) (.preventDefault %) (do-send))
+            :placeholder (if (seq changed) "A note for Claude (optional)" "Edit the code, then send it to Claude")}]
+   [:button.primary {:type "button" :disabled (empty? changed) :on-click do-send :title "Send your edits to Claude (Ctrl+Enter in the code)"}
+    (str "Send" (when (> (count changed) 1) (str " " (count changed) " files")))]])
+
+(defn- changed-ids
+  "The files whose editor differs from Claude's code."
+  [^js m view files]
+  (set (for [f files :when (and (.has (.-states m) (:id f)) (not= (doc-of m view (:id f)) (or (:code f) "")))] (:id f))))
+
+(defn- send-edits!
+  "Send: every file's typing saved, then Claude is told (code_send) with the note."
+  [m view server chat block files note set-note]
+  (doseq [f files] (save! m view (:id f)))
+  (ws/send! server {:type "code_send" :chat chat :block block :note note})
+  (set-note ""))
+
+(defn- keep-open-state!
+  "Before a tab switch: the open file's state kept from the view."
+  [^js m view open-id]
+  (when (and (.-current view) open-id) (.set (.-states m) open-id (.-state (.-current view)))))
 
 (defn editor-form
   "ctx: {:server :chat :block :live} (live: the open chat's own picture, writable)."
@@ -107,137 +291,19 @@
         [_ set-tick] (h/use-state 0)
         host (h/use-ref nil)
         view (h/use-ref nil)
-        ;; Per file: its editor state (undo kept across tabs), what the picture last had (Claude's
-        ;; version v and the text), its language compartment and a pending save.
-        mem (h/use-ref nil)
-        _ (when-not (.-current mem)
-            (set! (.-current mem) #js {:states (js/Map.) :synced (js/Map.) :langs (js/Map.) :timers (js/Map.)
-                                       :access (Compartment.) :live nil :send nil}))
-        ^js m (.-current mem)
-        access-of (fn [on] #js [(.of (.-readOnly EditorState) (not on)) (.of (.-editable EditorView) on)])
-        _ (set! (.-live m) #js {:editable editable :openId open-id :server server :chat chat :block block})
-        doc-of (fn [id] (let [^js st (if (and (= id (.. m -live -openId)) (.-current view))
-                                       (.-state (.-current view))
-                                       (.get (.-states m) id))]
-                          (if st (.toString (.-doc st)) "")))
-        save (fn [id]
-               (some-> (.get (.-timers m) id) js/clearTimeout)
-               (.delete (.-timers m) id)
-               (let [^js s (.get (.-synced m) id)
-                     ^js l (.-live m)
-                     text (doc-of id)]
-                 (when (and s (.-editable l) (not= text (.-text s)))
-                   (set! (.-text s) text)
-                   (ws/send! (.-server l) {:type "code_edit" :chat (.-chat l) :block (.-block l) :file id :text text :base (.-v s)}))))
-        make (fn [f]
-               (let [lang (Compartment.)
-                     id (:id f)]
-                 (.set (.-langs m) id lang)
-                 (.create EditorState
-                          #js {:doc (shown f)
-                               :extensions
-                               #js [(lineNumbers) (highlightActiveLineGutter) (highlightActiveLine) (drawSelection) (history)
-                                    (indentOnInput) (bracketMatching) (closeBrackets) (highlightSelectionMatches)
-                                    (syntaxHighlighting dark-plus) (.of lang (lang-of f)) theme (.-lineWrapping EditorView)
-                                    (.of (.-access m) (access-of editable))
-                                    (.of keymap (.concat #js [#js {:key "Mod-Enter" :run (fn [] ((.-send m)) true)}]
-                                                         closeBracketsKeymap defaultKeymap searchKeymap historyKeymap #js [indentWithTab]))
-                                    (.of (.-updateListener EditorView)
-                                         (fn [^js u]
-                                           (when (and (.-docChanged u) (not (every? #(.annotation ^js % remote) (array-seq (.-transactions u)))))
-                                             (some-> (.get (.-timers m) id) js/clearTimeout)
-                                             (.set (.-timers m) id (js/setTimeout #(save id) save-ms))
-                                             (set-tick inc))))]})))
-        files-key (pr-str (map (juxt :id :v :edit :code lang-key) files))]
-    (h/use-effect (fn [] (when (string? (:open data)) (set-open (:open data))) nil) [(:open data)])
-    ;; The picture changed: bring each file's editor up to it, without losing typing not saved yet.
-    (h/use-effect
-     (fn []
-       (let [ids (set (map :id files))]
-         (doseq [id (vec (es6-iterator-seq (.keys (.-states m)))) :when (not (ids id))]
-           (.delete (.-states m) id) (.delete (.-synced m) id) (.delete (.-langs m) id))
-         (doseq [f files
-                 :let [id (:id f) text (shown f) v (or (:v f) 0) lk (lang-key f)
-                       ^js s (.get (.-synced m) id)]]
-           (if-not s
-             (do (.set (.-states m) id (make f))
-                 (.set (.-synced m) id #js {:v v :text text :lang lk}))
-             (let [local (doc-of id)
-                   ;; Claude's new code replaces the text (undo brings back what was typed); another
-                   ;; page's typing only when nothing typed here waits to be saved.
-                   replace? (if (not= (.-v s) v) true (and (not= text (.-text s)) (= local (.-text s))))
-                   _ (when (not= (.-v s) v) (some-> (.get (.-timers m) id) js/clearTimeout) (.delete (.-timers m) id))
-                   effects (if (not= lk (.-lang s)) #js [(.reconfigure ^js (.get (.-langs m) id) (lang-of f))] #js [])
-                   change? (and replace? (not= local text))]
-               (when (or change? (pos? (.-length effects)))
-                 (let [spec (cond-> {:effects effects :annotations (.of remote true)}
-                              change? (assoc :changes {:from 0 :to (count local) :insert text}))
-                       spec (clj->js spec)]
-                   (if (and (= id open-id) (.-current view))
-                     (.dispatch (.-current view) spec)
-                     (.set (.-states m) id (.-state (.update ^js (.get (.-states m) id) spec))))))
-               (.set (.-synced m) id #js {:v v :text (if (or replace? (= local text)) text (.-text s)) :lang lk}))))
-         (set-tick inc))
-       nil)
-     [files-key])
-    ;; Editable only on the live picture of the user's own chat.
-    (h/use-effect
-     (fn []
-       (let [spec #js {:effects (.reconfigure (.-access m) (access-of editable))}]
-         (doseq [id (vec (es6-iterator-seq (.keys (.-states m))))
-                 :when (not (and (= id open-id) (.-current view)))]
-           (.set (.-states m) id (.-state (.update ^js (.get (.-states m) id) spec))))
-         (some-> (.-current view) (.dispatch spec)))
-       nil)
-     [editable])
-    ;; One view; a tab switch swaps in that file's state.
-    (h/use-effect
-     (fn []
-       (when-let [el (.-current host)]
-         (when-let [state (and open-id (.get (.-states m) open-id))]
-           (if-not (.-current view)
-             (set! (.-current view)
-                   (EditorView. #js {:state state :parent el
-                                     :dispatchTransactions (fn [trs ^js v]
-                                                             (.update v trs)
-                                                             (.set (.-states m) (.. m -live -openId) (.-state v)))}))
-             (when-not (identical? (.-state (.-current view)) state) (.setState (.-current view) state)))))
-       nil)
-     [open-id files-key])
-    (h/use-effect
-     (fn [] #(do (doseq [id (vec (es6-iterator-seq (.keys (.-timers m))))] (save id))
-                 (some-> (.-current view) .destroy)
-                 (set! (.-current view) nil)))
-     [])
-    (let [changed (set (for [f files :when (and (.has (.-states m) (:id f)) (not= (doc-of (:id f)) (or (:code f) "")))] (:id f)))
-          do-send (fn []
-                    (when (and editable (seq changed))
-                      (doseq [f files] (save (:id f)))
-                      (ws/send! server {:type "code_send" :chat chat :block block :note note})
-                      (set-note "")))
-          pick (fn [id]
-                 (when (and (.-current view) open-id) (.set (.-states m) open-id (.-state (.-current view))))
-                 (set-open id))]
-      (set! (.-send m) do-send)
-      (if (empty? files)
-        [:p.f-note "No files in this editor yet."]
-        [:div.f-editor
-         (when (seq (:note data)) [:p.ed-note (:note data)])
-         [:div.f-code
-          [:div.f-code-head.ed-head
-           [:div.ed-tabs {:role "tablist"}
-            (for [f files]
-              ^{:key (:id f)}
-              [:button {:type "button" :role "tab" :aria-selected (= (:id f) open-id) :class (when (= (:id f) open-id) "on")
-                        :on-click #(pick (:id f)) :title (when (changed (:id f)) "Changed: not sent yet")}
-               (or (:name f) (:id f)) (when (changed (:id f)) [:span.ed-dot {:aria-label "changed"}])])]
-           (when-not editable [:span.f-lang (if live "open this chat to edit" "read only")])]
-          [:div.ed-host {:ref #(set! (.-current host) %)}]]
-         (when editable
-           [:div.ed-send
-            [:input {:value note
-                     :on-change #(set-note (.. % -target -value))
-                     :on-key-down #(when (and (= "Enter" (.-key %)) (not (.-shiftKey %))) (.preventDefault %) (do-send))
-                     :placeholder (if (seq changed) "A note for Claude (optional)" "Edit the code, then send it to Claude")}]
-            [:button.primary {:type "button" :disabled (empty? changed) :on-click do-send :title "Send your edits to Claude (Ctrl+Enter in the code)"}
-             (str "Send" (when (> (count changed) 1) (str " " (count changed) " files")))]])]))))
+        _ (h/use-effect (fn [] (when (string? (:open data)) (set-open (:open data))) nil) [(:open data)])
+        m (use-editors {:editable editable :files files :open-id open-id :server server :chat chat :block block} host view set-tick)
+        changed (changed-ids m view files)
+        do-send #(when (and editable (seq changed)) (send-edits! m view server chat block files note set-note))
+        pick (fn [id] (keep-open-state! m view open-id) (set-open id))]
+    (set! (.-send m) do-send)
+    (if (empty? files)
+      [:p.f-note "No files in this editor yet."]
+      [:div.f-editor
+       (when (seq (:note data)) [:p.ed-note (:note data)])
+       [:div.f-code
+        [:div.f-code-head.ed-head
+         (tabs files open-id changed pick)
+         (when-not editable [:span.f-lang (if live "open this chat to edit" "read only")])]
+        [:div.ed-host {:ref #(set! (.-current host) %)}]]
+       (when editable (send-bar note set-note changed do-send))])))

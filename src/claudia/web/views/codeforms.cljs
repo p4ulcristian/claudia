@@ -128,6 +128,72 @@
     (into [:svg {:viewBox "0 0 20 14" :aria-hidden true}]
           (for [i (range n)] ^{:key i} [:rect {:x (+ 2 (* i (+ w 2))) :y 2 :width w :height 10 :rx 1.5}]))))
 
+(defn choices-of
+  "The chat's state per form, by form name: \"allowed\" | \"required\" | \"off\" (allowed when absent)."
+  [settings]
+  (into {} (for [[f v] (:forms settings)] [(if (keyword? f) (name f) (str f)) v])))
+
+(defn shown-forms
+  "The rail's circles in order: graph, the forms this server has, freeform, questions."
+  [hidden]
+  (concat ["graph"] (remove #(or (hidden %) (tool? %)) forms/order) ["freeform" "questions"]))
+
+(defn cycled
+  "The chat's choices after a click on form f."
+  [choice f]
+  (let [to (next-state f (get choice f "allowed"))]
+    (if to (assoc choice f to) (dissoc choice f))))
+
+(defn peek-top
+  "The sample's top in the rail (px from the rail's top), kept inside the window: the rail's top at
+  top, the window's bottom at bottom, the sample h tall and wanted at want."
+  [top bottom want h]
+  (max (- 8 top) (min want (- bottom 8 top h))))
+
+(defn- peek-hint [f]
+  (cond (= f "questions") "click: allowed ↔ off · this chat only"
+        (tool? f) "the chat's folder, live · Claude may draw it too"
+        :else "click: allowed → required → off · this chat only"))
+
+(defn- form-dot [f state on-cycle show]
+  ^{:key f}
+  [:button.form-dot {:type "button" :class [(when (tool? f) "tool") state]
+                     :on-click #(on-cycle f)
+                     :on-mouse-enter #(show f (.-currentTarget %))
+                     :on-focus #(show f (.-currentTarget %))
+                     :aria-label (str (label-of f) ": " (say f state))
+                     :aria-pressed (when (tool? f) (= state "required"))}
+   [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d (get glyphs f)}]]])
+
+(defn- col-picker [k cols]
+  [:div.col-pick {:role "radiogroup" :aria-label "Columns"}
+   (for [n [0 1 2 3]]
+     ^{:key n}
+     [:button.col-btn {:type "button" :class [(str "c" n) (when (= cols n) "on")] :role "radio" :aria-checked (= cols n)
+                       :on-click #(rf/dispatch [:codeforms/settings k {:cols n}])
+                       :title (if (pos? n) (str n " column" (when (> n 1) "s")) "Claude's layout")}
+      (if (pos? n) [col-glyph n] "auto")])])
+
+(defn- peek-card [f state peek-box]
+  [:div.form-peek {:ref #(set! (.-current peek-box) %)}
+   [:div.form-peek-head [:b (label-of f)] [:span.form-peek-state {:class state} (say f state)]]
+   [:p (when-of f)]
+   (when-not (extra f)
+     [:div.form-peek-sample [form-view f (forms/sample f) {}]])
+   [:p.form-peek-hint (peek-hint f)]])
+
+(defn- use-peek-place
+  "In the rail the sample never runs off the bottom of the window."
+  [rail box peek-box want]
+  (h/use-layout-effect
+   (fn []
+     (let [el (.-current peek-box) b (.-current box)]
+       (when (and rail el b)
+         (let [top (.-top (.getBoundingClientRect b))
+               bottom (or (some-> js/window.visualViewport .-height) js/innerHeight)]
+           (set! (.. el -style -top) (str (peek-top top bottom want (.-offsetHeight el)) "px")))))
+     nil)))
+
 (defn form-row
   "The open chat's forms: one chalk circle per form (hover shows its sample; a click goes allowed ->
   required -> off for this chat) and the picture's columns. k: the chat's [server chat]; hidden:
@@ -135,62 +201,26 @@
   opens to its left, level with the circle), else a row over the picture (phones)."
   [k hidden rail]
   (let [settings @(rf/subscribe [:codeforms/settings k])
-        choice (into {} (for [[f v] (:forms settings)] [(if (keyword? f) (name f) (str f)) v]))
-        cols (or (:cols settings) 0)
-        [peek set-peek] (h/use-state nil)
-        [peek-top set-peek-top] (h/use-state 0)
+        choice (choices-of settings)
+        [peeked set-peeked] (h/use-state nil)
+        [want set-want] (h/use-state 0)
         box (h/use-ref nil)
         peek-box (h/use-ref nil)
         hidden (set hidden)
         show (fn [f ^js el]
-               (set-peek f)
+               (set-peeked f)
                (when (and rail (.-current box))
-                 (set-peek-top (- (.-top (.getBoundingClientRect el)) (.-top (.getBoundingClientRect (.-current box)))))))
-        shown (concat ["graph"] (remove #(or (hidden %) (tool? %)) forms/order) ["freeform" "questions"])
-        tools (remove hidden tool-forms)
-        cycle (fn [f]
-                (let [to (next-state f (get choice f "allowed"))]
-                  (rf/dispatch [:codeforms/settings k {:forms (if to (assoc choice f to) (dissoc choice f))}])))
-        dot (fn [f]
-              (let [state (get choice f "allowed")]
-                ^{:key f}
-                [:button.form-dot {:type "button" :class [(when (tool? f) "tool") state]
-                                   :on-click #(cycle f)
-                                   :on-mouse-enter #(show f (.-currentTarget %))
-                                   :on-focus #(show f (.-currentTarget %))
-                                   :aria-label (str (label-of f) ": " (say f state))
-                                   :aria-pressed (when (tool? f) (= state "required"))}
-                 [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d (get glyphs f)}]]]))]
-    ;; In the rail the sample never runs off the bottom of the window.
-    (h/use-layout-effect
-     (fn []
-       (let [el (.-current peek-box) b (.-current box)]
-         (when (and rail el b)
-           (let [top (.-top (.getBoundingClientRect b))
-                 bottom (or (some-> js/window.visualViewport .-height) js/innerHeight)]
-             (set! (.. el -style -top) (str (max (- 8 top) (min peek-top (- bottom 8 top (.-offsetHeight el)))) "px")))))
-       nil))
-    [:div {:class (if rail "form-rail" "form-row") :ref #(set! (.-current box) %) :on-mouse-leave #(set-peek nil)}
-     (into [:div.form-dots] (map dot shown))
+                 (set-want (- (.-top (.getBoundingClientRect el)) (.-top (.getBoundingClientRect (.-current box)))))))
+        on-cycle #(rf/dispatch [:codeforms/settings k {:forms (cycled choice %)}])
+        dot #(form-dot % (get choice % "allowed") on-cycle show)
+        tools (remove hidden tool-forms)]
+    (use-peek-place rail box peek-box want)
+    [:div {:class (if rail "form-rail" "form-row") :ref #(set! (.-current box) %) :on-mouse-leave #(set-peeked nil)}
+     (into [:div.form-dots] (map dot (shown-forms hidden)))
      (when (seq tools) (into [:div.form-tools] (map dot tools)))
      ;; Columns for this chat's picture; only the counts that fit the pane show (container queries).
-     [:div.col-pick {:role "radiogroup" :aria-label "Columns"}
-      (for [n [0 1 2 3]]
-        ^{:key n}
-        [:button.col-btn {:type "button" :class [(str "c" n) (when (= cols n) "on")] :role "radio" :aria-checked (= cols n)
-                          :on-click #(rf/dispatch [:codeforms/settings k {:cols n}])
-                          :title (if (pos? n) (str n " column" (when (> n 1) "s")) "Claude's layout")}
-         (if (pos? n) [col-glyph n] "auto")])]
-     (when peek
-       (let [state (get choice peek "allowed")]
-         [:div.form-peek {:ref #(set! (.-current peek-box) %)}
-          [:div.form-peek-head [:b (label-of peek)] [:span.form-peek-state {:class state} (say peek state)]]
-          [:p (when-of peek)]
-          (when-not (extra peek)
-            [:div.form-peek-sample [form-view peek (forms/sample peek) {}]])
-          [:p.form-peek-hint (cond (= peek "questions") "click: allowed ↔ off · this chat only"
-                                   (tool? peek) "the chat's folder, live · Claude may draw it too"
-                                   :else "click: allowed → required → off · this chat only")]]))]))
+     (col-picker k (or (:cols settings) 0))
+     (when peeked (peek-card peeked (get choice peeked "allowed") peek-box))]))
 
 ;; ---- what a server has: its forms, the ones deleted, its templates (GET /api/forms) ----
 
@@ -230,33 +260,99 @@
    (when tpl-name [:span.block-name tpl-name])])
 
 ;; n: the entry's number in the window, so it can be named in a chat ("#7 and #12 look the same").
-(defn- entry [{:keys [n badge deleted on-delete on-restore] when-line :when} body]
+(defn- entry [{:keys [n deleted on-delete on-restore] badge-el :badge when-line :when} body]
   [:section.g-entry {:class (when deleted "deleted")}
    [:div.block-head
-    [:span.g-num (str "#" n)] badge
+    [:span.g-num (str "#" n)] badge-el
     (when on-delete [:button.tpl-delete {:type "button" :on-click on-delete} "delete"])
     (when on-restore [:button.tpl-delete.restore {:type "button" :on-click on-restore} "restore"])]
    (when when-line [:p.g-when when-line])
    [:div.g-sample body]])
 
-(defn- confirm-delete
-  "Asked before a form or template goes: a chalk card over the window; Escape or a click outside keeps it."
-  [{:keys [kind name]} on-yes on-no]
+(defn- use-key
+  "Calls (on-key e) on every keydown while mounted (capture: before the page's own handlers)."
+  [on-key capture deps]
   (h/use-effect
    (fn []
-     (let [k (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (on-no)))]
-       (js/window.addEventListener "keydown" k true)
-       #(js/window.removeEventListener "keydown" k true)))
-   [on-yes on-no])
+     (js/window.addEventListener "keydown" on-key capture)
+     #(js/window.removeEventListener "keydown" on-key capture))
+   deps))
+
+(defn- confirm-delete
+  "Asked before a form or template goes: a chalk card over the window; Escape or a click outside keeps it."
+  [{:keys [kind] nm :name} on-yes on-no]
+  (use-key (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (on-no))) true [on-yes on-no])
   [:div.confirm-backdrop {:on-click (fn [e] (.stopPropagation e) (on-no))}
    [:div.confirm-card {:role "alertdialog" :aria-modal true :aria-label (str "Delete " kind) :on-click #(.stopPropagation %)}
     [:h3 (str "Delete this " kind "?")]
     (if (= kind "template")
-      [:p [:b name] " goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
-      [:p "Claude stops getting the " [:b name] " form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time."])
+      [:p [:b nm] " goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
+      [:p "Claude stops getting the " [:b nm] " form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time."])
     [:div.confirm-actions
      [:button.confirm-no {:type "button" :auto-focus true :on-click on-no} "Keep it"]
      [:button.confirm-yes {:type "button" :on-click on-yes} "Delete"]]]])
+
+(defn not-here-of
+  "The forms this server doesn't have: as it says, else the opt-in forms it doesn't list."
+  [info]
+  (set (or (:notHere info)
+           (when (:forms info) (remove (set (:forms info)) (filter forms/opt-in forms/order)))
+           (filter forms/opt-in forms/order))))
+
+(defn- set-hidden!
+  "The forms deleted in the Forms window: shown at once, saved on the server, then read again."
+  [server info hidden]
+  (rf/dispatch [:codeforms/info server (assoc info :hidden hidden)])
+  (-> (api/fetch-json (api/url server "forms" nil)
+                      {:method "PATCH" :headers {"content-type" "application/json" "accept" "application/json"}
+                       :body (js/JSON.stringify (clj->js {:hidden hidden}))})
+      (.finally #(load-info! server))))
+
+(defn- remove-template! [server nm]
+  (-> (api/fetch-json (api/url server (str "templates/" (js/encodeURIComponent nm)) nil) {:method "DELETE"})
+      (.finally #(load-info! server))))
+
+(defn- gallery-head [close]
+  [:header
+   [:h2 "Forms"]
+   [:p.muted "What Claude can draw on the right. Ask for one by its name, or for changes to a block by the name on its badge."]
+   [:button.icon {:type "button" :on-click close :title "Close (Esc)"} "×"]])
+
+(defn- form-entries [fs hidden on-hide set-deleting]
+  [:div.g-list
+   [entry {:n 1 :badge [badge "graph" "graph"] :when "Things and how they connect: circles, boxes, arrows, groups. The default."}
+    [:f> graph/graph-view sample-graph]]
+   (for [[i f] (map-indexed vector fs)
+         :let [gone (some #{f} hidden)]]
+     ^{:key f}
+     [entry {:n (+ i 2) :badge [badge f (str/lower-case (or (forms/label f) f))] :when (forms/when-line f)
+             :deleted gone
+             :on-delete (when-not gone #(set-deleting {:kind "form" :name f}))
+             :on-restore (when gone #(on-hide (vec (remove #{f} hidden))))}
+      [form-view f (forms/sample f) {}]])
+   [entry {:n (+ 2 (count fs)) :badge [badge "freeform" "freeform"] :when "Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge."}
+    [:f> frame/page-frame sample-freeform nil]]])
+
+(defn- template-entries [info n0 set-deleting]
+  (let [templates (:templates info)]
+    (cond
+      (nil? info) [:p.muted "Loading…"]
+      (empty? templates) [:p.muted "None yet. Use \"save as template\" on a freeform block, or ask Claude to save one."]
+      :else
+      [:div.g-list
+       (for [[i t] (map-indexed vector templates)]
+         ^{:key (:name t)}
+         [entry {:n (+ n0 1 i) :badge [badge "template" "template" (:name t)] :when (not-empty (:description t))
+                 :on-delete #(set-deleting {:kind "template" :name (:name t)})}
+          [:f> frame/page-frame (:html t) (:parts t)]])])))
+
+(defn- confirm-yes
+  "Yes on the card: a template is deleted on the server, a form hidden."
+  [server hidden on-hide deleting set-deleting]
+  (fn []
+    (if (= "template" (:kind deleting))
+      (do (set-deleting nil) (remove-template! server (:name deleting)))
+      (do (on-hide (conj hidden (:name deleting))) (set-deleting nil)))))
 
 (defn gallery
   "Every kind of block Claude can draw, each on sample data with its when-line, and the templates
@@ -266,66 +362,18 @@
   (let [info @(rf/subscribe [:codeforms/info server])
         [deleting set-deleting] (h/use-state nil) ; {:kind "form"|"template" :name}
         hidden (vec (:hidden info))
-        not-here (set (or (:notHere info)
-                          (when (:forms info) (remove (set (:forms info)) (filter forms/opt-in forms/order)))
-                          (filter forms/opt-in forms/order)))
-        set-hidden! (fn [next]
-                      (rf/dispatch [:codeforms/info server (assoc info :hidden next)])
-                      (-> (api/fetch-json (api/url server "forms" nil)
-                                          {:method "PATCH" :headers {"content-type" "application/json" "accept" "application/json"}
-                                           :body (js/JSON.stringify (clj->js {:hidden next}))})
-                          (.finally #(load-info! server))))
-        remove-template! (fn [nm]
-                           (set-deleting nil)
-                           (-> (api/fetch-json (api/url server (str "templates/" (js/encodeURIComponent nm)) nil) {:method "DELETE"})
-                               (.finally #(load-info! server))))]
+        on-hide #(set-hidden! server info %)
+        fs (remove (not-here-of info) forms/order)]
     (h/use-effect (fn [] (load-info! server) nil) [server])
-    (h/use-effect
-     (fn []
-       (let [k (fn [e] (when (= "Escape" (.-key e)) (close)))]
-         (js/window.addEventListener "keydown" k)
-         #(js/window.removeEventListener "keydown" k)))
-     [close])
-    (let [fs (remove not-here forms/order)
-          templates (:templates info)
-          n0 (+ 2 (count fs))]
-      [:div.gallery-backdrop {:on-click close}
-       [:div.gallery.right-scroll {:role "dialog" :aria-label "Forms" :on-click #(.stopPropagation %)}
-        [:header
-         [:h2 "Forms"]
-         [:p.muted "What Claude can draw on the right. Ask for one by its name, or for changes to a block by the name on its badge."]
-         [:button.icon {:type "button" :on-click close :title "Close (Esc)"} "×"]]
-        [:div.g-list
-         [entry {:n 1 :badge [badge "graph" "graph"] :when "Things and how they connect: circles, boxes, arrows, groups. The default."}
-          [:f> graph/graph-view sample-graph]]
-         (for [[i f] (map-indexed vector fs)
-               :let [gone (some #{f} hidden)]]
-           ^{:key f}
-           [entry {:n (+ i 2) :badge [badge f (str/lower-case (or (forms/label f) f))] :when (forms/when-line f)
-                   :deleted gone
-                   :on-delete (when-not gone #(set-deleting {:kind "form" :name f}))
-                   :on-restore (when gone #(set-hidden! (vec (remove #{f} hidden))))}
-            [form-view f (forms/sample f) {}]])
-         [entry {:n n0 :badge [badge "freeform" "freeform"] :when "Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge."}
-          [:f> frame/page-frame sample-freeform nil]]]
-        [:h3.g-section "Templates"]
-        (cond
-          (nil? info) [:p.muted "Loading…"]
-          (empty? templates) [:p.muted "None yet. Use \"save as template\" on a freeform block, or ask Claude to save one."]
-          :else
-          [:div.g-list
-           (for [[i t] (map-indexed vector templates)]
-             ^{:key (:name t)}
-             [entry {:n (+ n0 1 i) :badge [badge "template" "template" (:name t)] :when (not-empty (:description t))
-                     :on-delete #(set-deleting {:kind "template" :name (:name t)})}
-              [:f> frame/page-frame (:html t) (:parts t)]])])]
-       (when deleting
-         [:f> confirm-delete deleting
-          (fn []
-            (if (= "template" (:kind deleting))
-              (remove-template! (:name deleting))
-              (do (set-hidden! (conj hidden (:name deleting))) (set-deleting nil))))
-          #(set-deleting nil)])])))
+    (use-key (fn [e] (when (= "Escape" (.-key e)) (close))) false [close])
+    [:div.gallery-backdrop {:on-click close}
+     [:div.gallery.right-scroll {:role "dialog" :aria-label "Forms" :on-click #(.stopPropagation %)}
+      (gallery-head close)
+      (form-entries fs hidden on-hide set-deleting)
+      [:h3.g-section "Templates"]
+      (template-entries info (+ 2 (count fs)) set-deleting)]
+     (when deleting
+       [:f> confirm-delete deleting (confirm-yes server hidden on-hide deleting set-deleting) #(set-deleting nil)])]))
 
 ;; ---- where the form row goes ----
 
