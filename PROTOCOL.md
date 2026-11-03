@@ -42,6 +42,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`) |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
+| runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_EOR_URL`, `CLAUDIA_EOR_TOKEN_FILE` (default `~/.config/eor/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Eye on Rainbow (`POST <url>/api/worktrees/touches`) |
 | host | `HOST_SOCKET` | unix socket it listens on |
 
 `hub.json`:
@@ -113,6 +114,10 @@ Page → runner:
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `seen` | `chat` | the person looked at its last turn |
+| `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
+| `settings` | `chat`, `model?`, `effort?` (null = the person's default) | the chat's model and effort: kept, used on its next start, and given to a live session at once |
+| `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
+| `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 
 Runner → page:
 
@@ -128,9 +133,35 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
+| `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
+| `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
+| `context` | `chat`, `context: Context` |
+| `settings` | `chat`, `settings: { model, effort }`, `model?` (the model the session runs), `commands?` (its slash command names) |
+| `meta` | `limits: [Limit]`, `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`; sent after `chats` on `hello` and on every change |
+| `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
+| `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
-preview (start of the last reply or the open question), unseen, archived }`
+preview (start of the last reply or the open question), unseen, archived, agents }`; `agents` = how many
+agents and background shells Claude started still run (`unseen` stays false while any does).
+
+The `chat` frame also carries `agents`, `changes` (the chat's newest 500), `settings`, `model`,
+`commands` and `context`.
+
+`Agent` (a subagent or a background shell; an agent's own shells and agents are part of it, counted in
+`children`): `{ id, kind: "agent" | "shell", name, status: "running" | "completed" | "failed" | "stopped",
+start, end, tools, tokens, step (what it is on: "Edit src/x.cljs", "$ npm test"), task (id to stop it,
+while it runs), type, background, model, active, children, progress: { done, total, label } | null }`,
+running ones first. `progress` is the last `##progress <done>/<total> <label>` line of a shell's output
+(`bin/claudia-progress` prints them; it is on the PATH of every chat's commands).
+
+`Change` (one file Claude changed in one turn, from its Edit/Write calls and a git snapshot of the chat's
+folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "added" | "deleted" |
+"modified", skipped (why no text is kept: "binary file", "too large to show") | null, at }`.
+
+`Context`: `{ used, max, percent, model }` (the chat's context window, read after each turn).
+`Limit`: `{ key: "five_hour" | "seven_day" | …, label, percent, resetsAt (ms) | null }`, from the SDK's
+`rate_limit_event`, kept per Claude token (by a hash of it).
 
 `Msg`: `{ id, role: "user" | "assistant" | "tool" | "note", text?, at }`; a tool step has
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
@@ -171,7 +202,10 @@ Runner → host: `{ op: "start", id, spec }` with spec = `{ options, mcp, hooks 
 query options without callbacks, `mcp` = the tool list (`{ server: { tool: { description, inputSchema
 (JSON Schema) } } }`), `hooks` = `{ <HookEvent>: [{ matcher? }] }`;
 `{ op: "send", id, text, uuid? }` (uuid: the user message's id, kept in the session file),
-`{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`.
+`{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`,
+`{ op: "control", id, req, method, args }` (a call on the chat's query: `stopTask`, `setModel`,
+`applyFlagSettings`, `getContextUsage`, `supportedCommands`, `supportedModels`), answered by
+`{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
 `{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
