@@ -7,6 +7,8 @@
             [reagent.hooks :as h]
             [claudia.shared.forms :as forms]
             [claudia.web.api :as api]
+            [claudia.web.views.calls :as calls]
+            [claudia.web.views.clojure :as clojure]
             [claudia.web.views.editor :as editor]
             [claudia.web.views.files :as files]
             [claudia.web.views.flow :as flow]
@@ -39,6 +41,8 @@
   (case form
     "files" [:div.form-view.form-files [:f> files/files-form data ctx]]
     "git" [:div.form-view.form-git [:f> git/git-form data ctx]]
+    "clojure" [:div.form-view.form-clojure [:f> clojure/clojure-form data ctx]]
+    "calls" [:div.form-view.form-calls [:f> calls/calls-form data ctx]]
     "editor" [:div.form-view.form-editor [:f> editor/editor-form data ctx]]
     "flow" [:div.form-view.form-flow [:f> flow/flow-form data]]
     [base-forms/form-view form data]))
@@ -77,6 +81,8 @@
    "stats" "M4 14l3-3 3 2 5-6M4 16h12"
    "files" "M3 5.5h5l1.5 1.5H17v8.5H3zM6 10h8M6 13h5"
    "git" "M7 4v12M7 5.2a1.6 1.6 0 1 0 0 .01M7 15a1.6 1.6 0 1 0 0 .01M14 6.5a1.6 1.6 0 1 0 0 .01M14 8.2c0 3-7 2.5-7 5"
+   "clojure" "M6 6a2.5 2.5 0 1 0 0 .01M14 5a1.8 1.8 0 1 0 0 .01M13 14.5a2.8 2.8 0 1 0 0 .01M8.4 6.4l3.8-.9M7.6 7.8l3.4 4.6M14 6.8l-.5 4.9"
+   "calls" "M3 4h6M5 4v12M5 8h5M5 12h5M5 16h5M12 8a1.6 1.6 0 1 0 0 .01M12 12a1.6 1.6 0 1 0 0 .01M12 16a1.6 1.6 0 1 0 0 .01M14 8h3M14 12h3"
    "editor" "M2 3h16v14H2zM2 6h16M5 9l-2 2 2 2M8 14l3-6M14 9l2 2-2 2"
    "flow" "M2 4h4v4H2zM8 4h4v4H8zM14 4h4v4h-4zM4 12h6v4H4zM12 14h4M14 12l2 2-2 2"
    "freeform" "M4 15c2-6 4-9 6-9s1 5 3 5 2-3 3-5M5 17h10"
@@ -89,7 +95,7 @@
 
 ;; The user's own tools: a click shows one in the picture for the chat's folder (required) or takes
 ;; it away (allowed). Never off: Claude may always draw them too.
-(def ^:private tool-forms #{"files" "git"})
+(def ^:private tool-forms #{"files" "git" "clojure"})
 
 (defn- label-of [f] (or (get-in extra [f :label]) (get-in forms/specs [f :label]) (str/capitalize f)))
 (defn- when-of [f] (or (get-in extra [f :when]) (get-in forms/specs [f :when]) (get forms/base-when f) ""))
