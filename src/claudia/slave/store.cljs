@@ -190,6 +190,13 @@
   (let [^js r (.get (stmt "SELECT value FROM kv WHERE chat = ? AND key = ?") chat-id k)]
     (some-> r .-value p/read-json)))
 
+(defn kv-prefixed
+  "Every [key value] kept for chat whose key starts with prefix."
+  [chat-id prefix]
+  (vec (for [^js r (.all (stmt "SELECT key, value FROM kv WHERE chat = ? AND substr(key, 1, length(?)) = ?")
+                         chat-id prefix prefix)]
+         [(.-key r) (p/read-json (.-value r))])))
+
 (defn kv! [chat-id k v]
   (if (nil? v)
     (.run (stmt "DELETE FROM kv WHERE chat = ? AND key = ?") chat-id k)

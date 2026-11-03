@@ -114,3 +114,9 @@
     (is (= "Not a Claude token." (:error (tokens/current-problem {:name "Paul" :at 1} "x" "/f"))))
     (is (= "name and at are needed." (:error (tokens/current-problem {:name "" :at 1} t "/f"))))
     (is (nil? (tokens/current-problem {:name "Paul" :at 1} t "/f")))))
+
+(deftest the-front-keeps-the-newest-limits-per-token
+  (is (= {"a" {:limits [2] :at 9} "b" {:limits [3] :at nil}}
+         (front/newest-heard [{"a" {:limits [1] :at 4} "b" {:limits [3] :at nil}}
+                              {"a" {:limits [2] :at 9}}
+                              {"a" {:limits [0] :at 1}}]))))

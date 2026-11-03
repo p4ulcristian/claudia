@@ -28,6 +28,11 @@
          (meta/merge-limits [{:key "seven_day" :percent 1} {:key "five_hour" :percent 9}]
                             [{:key "five_hour" :percent 2}]))))
 
+(deftest kept-limits-carry-when-they-were-heard
+  (is (= {:limits [{:key "seven_day"}] :at 5} (meta/kept {:limits [{:key "seven_day"}] :at 5})))
+  (is (= {:limits [{:key "seven_day"}] :at nil} (meta/kept [{:key "seven_day"}])))
+  (is (= {:limits [] :at nil} (meta/kept nil))))
+
 (deftest limits-from-the-usage-call
   (is (= [{:key "five_hour" :label "5-hour" :percent 40 :resetsAt 0}
           {:key "model:Opus" :label "Week, Opus" :percent 5 :resetsAt nil}]

@@ -6,6 +6,7 @@
             ["node:net" :as net]
             ["node:fs" :as fs]
             [clojure.string :as str]
+            [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
             [claudia.slave.tokens :as tokens]))
 
@@ -85,6 +86,40 @@
     "PUT" (.then (io/read-json req 65536) #(token-answer res (tokens/write-current! %)))
     (io/send-json res 405 {:error "GET or PUT"})))
 
+(defn newest-heard
+  "The runners' kept limits ({token key {:limits :at}} each) as one map, the newest per token."
+  [answers]
+  (reduce (fn [m [k v]]
+            (if (or (not (contains? m k)) (> (or (:at v) 0) (or (:at (get m k)) 0))) (assoc m k v) m))
+          {} (mapcat seq answers)))
+
+(defn- runner-limits
+  "Promise of one runner's kept limits ({token key {:limits :at}}), {} when it doesn't answer (2 s)."
+  [{:keys [profile socket]}]
+  (js/Promise.
+   (fn [done]
+     (let [on-answer (fn [^js up]
+                       (let [chunks #js []]
+                         (.on up "data" #(.push chunks %))
+                         (.on up "end" #(done (or (try (:tokens (p/read-json (.toString (js/Buffer.concat chunks) "utf8")))
+                                                       (catch :default _ nil))
+                                                  {})))))
+           ^js up (http/request #js {:socketPath socket :method "GET" :path "/api/limits" :timeout 2000
+                                     :headers #js {"X-Claudia-Profile" profile}}
+                                on-answer)]
+       (.on up "timeout" #(.destroy up))
+       (.on up "error" (fn [_] (done {})))
+       (.end up)))))
+
+(defn- token-limits
+  "The hub's own call (README decision 10): every profile's kept limits per token (a hash of it,
+  never the token), the newest of each, for the hub's popup of every token's limits."
+  [^js req ^js res]
+  (if (= "GET" (.-method req))
+    (.then (js/Promise.all (into-array (map runner-limits (map first (vals (group-by :socket @profiles))))))
+           #(io/send-json res 200 {:tokens (newest-heard (map (fn [m] (update-keys m name)) %))}))
+    (io/send-json res 405 {:error "GET only"})))
+
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
@@ -93,6 +128,7 @@
       (= url "/api/update-check")
       (if (= "POST" (.-method req)) (update-check res) (io/send-json res 405 {:error "POST only"}))
       (= url "/api/claude-token/current") (token-current req res)
+      (= url "/api/claude-token/limits") (token-limits req res)
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})

@@ -197,3 +197,21 @@
 .patch .p-hunk { color: var(--blue); }
 .patch .p-add { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .patch .p-del { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+
+/* Every saved token's limits, from a click on the usage rings (header: below them; rail: beside them). */
+.rail-limits { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 2px; border-radius: 10px; }
+.rail-limits:hover, .rail-limits[aria-expanded="true"], .limit-rings[aria-expanded="true"] { background: var(--panel); }
+.limits-pop { width: 270px; gap: 4px; }
+.lp-row { display: grid; grid-template-columns: auto 1fr auto; gap: 3px 8px; align-items: center; padding: 6px 6px 7px; border-radius: 8px; font-size: 12px; color: var(--muted); }
+.lp-row:hover { background: var(--panel2); }
+.lp-row + .lp-row { border-top: 1px dashed var(--line); border-radius: 0 0 8px 8px; }
+.lp-name { grid-column: 1 / -1; font: 700 15px var(--hand); color: var(--fg); }
+.lp-row.on .lp-name { color: var(--accent); }
+.lp-use { margin-left: 6px; font: 400 11px var(--sans); color: var(--muted); }
+.lp-meter { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; row-gap: 1px; }
+.lp-meter.amber .m-bar > span { background: var(--amber); }
+.lp-meter.red .m-bar > span { background: var(--red); }
+.lp-meter.amber .m-num { color: var(--amber); }
+.lp-meter.red .m-num { color: var(--red); }
+.lp-reset { grid-column: 2 / -1; font-size: 11px; }
+.lp-reset b { font-weight: 600; color: var(--fg); }

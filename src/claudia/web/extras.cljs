@@ -26,7 +26,7 @@
                             commands (assoc :commands commands))))})
 
 (defmethod events/on-frame "meta" [db server f]
-  {:db (assoc-in db [:meta server] (select-keys f [:limits :models :commands]))})
+  {:db (assoc-in db [:meta server] (select-keys f [:limits :limitsAt :models :commands]))})
 
 (defmethod events/on-frame "agent" [db server {:keys [chat agent] :as f}]
   {:db (assoc-in db [:agent-detail [server chat agent]] (dissoc f :type :chat :agent))})
@@ -119,15 +119,19 @@
 
 (rf/reg-sub :meta (fn [db [_ server]] (get-in db [:meta server])))
 
-(rf/reg-sub
- :limits
- ;; The plan's limits: the open chat's server's, else the first server's that has some.
- (fn [db]
-   (let [[s] (:open db)]
-     (or (not-empty (get-in db [:meta s :limits]))
-         (some (fn [server] (not-empty (get-in db [:meta (:name server) :limits])))
-               (get-in db [:me :servers]))
-         []))))
+(defn limits-meta
+  "The meta whose limits the page shows: the open chat's server's, else the first server's that has
+  some, or nil."
+  [db]
+  (let [[s] (:open db)
+        with-limits #(let [m (get-in db [:meta %])] (when (seq (:limits m)) m))]
+    (or (with-limits s) (some #(with-limits (:name %)) (get-in db [:me :servers])))))
+
+;; The plan's limits (the token in use's), as limits-meta picks them.
+(rf/reg-sub :limits (fn [db] (or (:limits (limits-meta db)) [])))
+
+;; The same with when they were heard ({:limits :at}), for the popup of every token's limits.
+(rf/reg-sub :live-limits (fn [db] (when-let [m (limits-meta db)] {:limits (:limits m) :at (:limitsAt m)})))
 
 (rf/reg-sub :agent-view (fn [db [_ k]] (get-in db [:agent-view k])))
 (rf/reg-sub :agent-detail (fn [db [_ k id]] (get-in db [:agent-detail (conj (vec k) id)])))
