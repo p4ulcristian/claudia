@@ -40,7 +40,7 @@ jobs:
       ((github.event.workflow_run.event == 'pull_request' &&
         github.event.workflow_run.pull_requests[0].base.ref == 'main') ||
        (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main'))
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: read     # the check run's artifact
       contents: write   # the release
