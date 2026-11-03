@@ -1,12 +1,4 @@
 {
-  "src/claudia/slave/chats.cljs": {"shadowed":20,"long":["on-sdk","rows","snapshot"]},
-  "src/claudia/slave/fork.cljs": {"shadowed":1,"long":["fork!"]},
-  "src/claudia/slave/history.cljs": {"shadowed":1,"long":["load","with-earlier-chains"]},
-  "src/claudia/slave/meta.cljs": {"shadowed":0,"long":["probe!"]},
-  "src/claudia/slave/search.cljs": {"shadowed":2,"long":["search"]},
-  "src/claudia/slave/store.cljs": {"shadowed":11,"long":["open!"]},
-  "src/claudia/slave/tasks.cljs": {"shadowed":4,"long":["on-system!","read-agent"]},
-  "src/claudia/slave/timeline.cljs": {"shadowed":4,"long":["detail","read-on","take-line","timeline"]},
   "src/claudia/web/scene3d/engine.cljs": {"shadowed":3,"long":["build-parts","make-arrow","start!"]},
   "src/claudia/web/scene3d/overlap.cljs": {"shadowed":0,"long":["make-checker"]},
   "src/claudia/web/scene3d/person.cljs": {"shadowed":10,"long":["make"]},

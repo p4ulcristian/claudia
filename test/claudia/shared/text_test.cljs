@@ -16,3 +16,7 @@
 
 (deftest one-line-folds-whitespace
   (is (= "a b c" (text/one-line "  a\n\tb   c \n"))))
+
+(deftest error-text-says-the-message
+  (is (= "boom" (text/error-text (js/Error. "boom"))))
+  (is (= "plain" (text/error-text "plain"))))
