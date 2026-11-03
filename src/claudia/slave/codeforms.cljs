@@ -13,6 +13,7 @@
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
             [claudia.slave.git :as git]
+            [claudia.slave.reach :as reach]
             [claudia.slave.scene :as scene]
             [claudia.slave.store :as store]
             [claudia.slave.tools :as tools]))
@@ -198,34 +199,43 @@
   [[scene past] f k ok?]
   (or (ok? (drawn [scene] f k)) (ok? (drawn @past f k))))
 
-(defn- root-ok?
-  "A drawn root, a folder inside one, or one above it up to the home folder (the form's path can be
+(defn root-ok?
+  "A drawn root, a folder inside one, or one above it up to the work folder (the form's path can be
   clicked to go up)."
-  [roots root]
-  (let [home (os/homedir)]
-    (some #(or (= % root)
-               (str/starts-with? root (str % "/"))
-               (and (str/starts-with? % (str root "/")) (or (= root home) (str/starts-with? root (str home "/")))))
-          roots)))
+  [roots root work]
+  (some #(or (= % root)
+             (str/starts-with? root (str % "/"))
+             (and (str/starts-with? % (str root "/")) (reach/within? work root)))
+        roots))
 
 (defn- query [^js req]
   (let [u (js/URL. (.-url req) "http://x")]
     (fn [k] (.get (.-searchParams u) k))))
 
-(defn- files-read [^js res scenes q]
+(defn- files-refusal
+  "Why this caller may not read root and rel inside it (reach/reach-refusal), or nil."
+  [{:keys [work view?]} root rel]
+  (or (reach/reach-refusal work root view?)
+      (if-let [full (files/inside root rel)] (reach/reach-refusal work full view?) "outside the folder")))
+
+(defn- send-image [^js res full]
+  (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname full)) 1) "application/octet-stream")
+                           "cache-control" "max-age=60"
+                           "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
+  (.pipe (fs/createReadStream full) res))
+
+(defn- files-read [^js res scenes q {:keys [work view?] :as caller}]
   (let [root (or (q "root") "")
         rel (or (q "path") "")]
     (cond
-      (not (drawn? scenes "files" :root #(root-ok? % root))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
+      (not (drawn? scenes "files" :root #(root-ok? % root work))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
+      (files-refusal caller root rel) (io/send-json res 403 {:error (files-refusal caller root rel)})
       (= "1" (q "read")) (io/send-json res 200 (files/read-text root rel (some-> (q "since") js/Number)))
       (= "1" (q "image")) (if-let [full (files/image-file root rel)]
-                            (do (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname full)) 1) "application/octet-stream")
-                                                         "cache-control" "max-age=60"
-                                                         "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
-                                (.pipe (fs/createReadStream full) res))
+                            (send-image res full)
                             (io/send-json res 404 {:error "not an image"}))
       :else (if-let [entries (files/list-dir root rel)]
-              (io/send-json res 200 {:entries entries})
+              (io/send-json res 200 {:entries (reach/shown-entries entries view?)})
               (io/send-json res 404 {:error "no such folder"})))))
 
 (defn- reply-promise
@@ -235,14 +245,26 @@
       (.then #(io/send-json res 200 %))
       (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))
 
-(defn- repo-read [^js res scenes q]
+(defn- repo-refusal
+  "Why this caller may not read the repo and, given, the file in it (relative to the repo), or nil."
+  [{:keys [work view?]} repo file]
+  (or (reach/reach-refusal work repo view?)
+      (when file (reach/reach-refusal work (path/resolve repo file) view?))))
+
+(defn- repo-answer
+  "Promise of the git form's read; a view's commit details leave out paths with a dot part."
+  [repo q view?]
+  (if-let [rev (q "commit")]
+    (cond-> (git/commit-detail repo rev (q "file")) view? (.then git/drop-hidden))
+    (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")})))
+
+(defn- repo-read [^js res scenes q {:keys [view?] :as caller}]
   (let [repo (or (q "repo") "")]
     (cond
       (not (turned-on "git")) (io/send-json res 404 {:error "no git form here"})
       (not (drawn? scenes "git" :repo #(contains? % repo))) (io/send-json res 403 {:error "not a repo of this chat's pictures"})
-      :else (reply-promise res (if-let [rev (q "commit")]
-                                 (git/commit-detail repo rev (q "file"))
-                                 (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")}))))))
+      (repo-refusal caller repo (q "file")) (io/send-json res 403 {:error (repo-refusal caller repo (q "file"))})
+      :else (reply-promise res (repo-answer repo q view?)))))
 
 (defn int-or
   "Text as a whole number, or fallback when it is not one."
@@ -266,11 +288,18 @@
           space (clojure/ns-detail root space)
           :else (clojure/namespaces root (q "fp")))))
 
-(defn- clojure-read [^js res scenes q form]
+(defn sql-id-hidden?
+  "True when a calls form's var is a .sql file id (\"file:<path>\") whose path has a dot part."
+  [v]
+  (boolean (and (string? v) (str/starts-with? v "file:") (reach/hidden? (subs v 5)))))
+
+(defn- clojure-read [^js res scenes q form {:keys [work view?]}]
   (let [root (or (q "root") "")]
     (cond
       (not (turned-on form)) (io/send-json res 404 {:error (str "no " form " form here")})
       (not (drawn? scenes form :root #(contains? % root))) (io/send-json res 403 {:error "not a project of this chat's pictures"})
+      (reach/reach-refusal work root view?) (io/send-json res 403 {:error (reach/reach-refusal work root view?)})
+      (and view? (sql-id-hidden? (q "var"))) (io/send-json res 403 {:error "a dot path, hidden in a read-only view"})
       (= form "calls") (reply-promise res (calls-answer root q))
       :else (reply-promise res (clojure-answer root q)))))
 
@@ -314,16 +343,17 @@
 (defn- chat-call
   "A code-form call on chat: its reads are allowed inside what this chat drew, now or in an earlier
   picture."
-  [^js req ^js res who scene-of {:keys [chat sub block]}]
+  [^js req ^js res who {:keys [scene-of work]} {:keys [chat sub block]}]
   (let [scene (scene-of chat)
         scenes [scene (delay (store/picture-scenes chat))]
-        q (query req)]
+        q (query req)
+        caller {:work work :view? (boolean (:read-only who))}]
     (if (nil? scene)
       (io/send-json res 404 {:error "No such chat."})
       (case (chat-read (.-method req) sub block)
-        :files (files-read res scenes q)
-        :repo (repo-read res scenes q)
-        :clojure (clojure-read res scenes q sub)
+        :files (files-read res scenes q caller)
+        :repo (repo-read res scenes q caller)
+        :clojure (clojure-read res scenes q sub caller)
         :save-block (if (:read-only who)
                       (io/send-json res 403 {:error "Read only."})
                       (save-block! req res scene block))
@@ -340,8 +370,8 @@
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
   there is no such chat); tools-changed!: every chat's draw tool changed (a form deleted or
-  restored in the Forms window)."
-  [^js req ^js res url who {:keys [scene-of tools-changed!]}]
+  restored in the Forms window); work: the work folder every read stays in."
+  [^js req ^js res url who {:keys [tools-changed!] :as opts}]
   (let [{:keys [op] :as r} (form-route (.-method req) url)
         read-only (:read-only who)]
     (case op
@@ -351,7 +381,7 @@
       :delete-template (if read-only
                          (io/send-json res 403 {:error "Read only."})
                          (do (store/delete-template! (js/decodeURIComponent (:template r))) (io/send-json res 200 {:ok true})))
-      :chat (chat-call req res who scene-of r)
+      :chat (chat-call req res who opts r)
       nil nil)
     (some? op)))
 

@@ -189,8 +189,8 @@ e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. 
 | `GET /api/search?q=&archived=1?` | `{ found: [{ id, hits: [{ uuid, role: "user"\|"claude", snippet }], count, title (bool: every word is in the title) }] }`; the words are prefixes, all needed; `\u0001…\u0002` marks them in a snippet. An SQLite FTS5 index (`search.db`), read on from each session file |
 | `GET /api/sessions` | `{ sessions: [{ id, title, at }] }`: Claude Code sessions of `CLAUDIA_CWD` that are not chats here |
 | `POST /api/sessions/:id/adopt` | `{ id }`: that session becomes a chat here |
-| `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`) |
-| `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo) |
+| `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`); `{ name: null, logo: false }` for a folder the caller may not read (below: "Reads stay in the work folder") |
+| `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo), when the caller may read it |
 | `GET /api/prefs` | `{ chatColors: "each" \| "none", hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
 | `PATCH /api/prefs` `{ chatColors?, hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login |
@@ -374,7 +374,7 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 | `GET /api/templates` | `[Template]`: `{ name, html, parts, description }` |
 | `DELETE /api/templates/<name>` | `{ ok }` (not for a view) |
 | `POST /api/chats/<id>/blocks/<block>/template` `{ name, description? }` | `{ ok, text }`: the freeform block kept as a template (not for a view) |
-| `GET /api/chats/<id>/files?root&path` | `{ entries: [{ name, dir, status?, changed?, lines? }] }`: a folder of a files block's `root` (or inside it, or above it up to the home folder) |
+| `GET /api/chats/<id>/files?root&path` | `{ entries: [{ name, dir, status?, changed?, lines? }] }`: a folder of a files block's `root` (or inside it, or above it up to the work folder) |
 | `…/files?root&path&read=1&since?` | `{ text, mtime }`, `{ same: true }` while the mtime is `since`, or `{ error }` |
 | `…/files?root&path&image=1` | the image itself (up to 25 MB) |
 | `GET /api/chats/<id>/git?repo&limit?&branches?&fp?` | `{ fp, commits, head, currentBranch, detached, dirty, branches, more }`, or `{ same: true }` while `fp` is the repo's; only a `repo` a git block of the chat's picture names; 404 without `git` in `CLAUDIA_FORMS` |
@@ -386,3 +386,11 @@ block (`auto-files`, `auto-git`, the chat's folder) on the picture. The form row
 Claude once, in a `<system-reminder>` after the text of the next message (with the forms news). `templates` and `save_template` are
 tools of the `picture` server; a block `{ id, template: "<name>", parts? }` is drawn from the template.
 A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
+
+Reads stay in the work folder (`claudia.slave.reach`): every disk read above (files, git, clojure,
+calls, the project and its logo) is refused (403 `{ error }`) unless its folder and its path, with
+`..` resolved and every symlink followed, are inside `CLAUDIA_CWD` (with symlinks followed): never
+the home folder or above. A read-only view is also refused any path with a part below the work
+folder starting with a dot (`.git`, `.env`, `.config`…): a files folder lists no dot names, a git
+commit's or the working tree's files and diff leave dot paths out, a calls `file:` id with a dot
+part is refused.

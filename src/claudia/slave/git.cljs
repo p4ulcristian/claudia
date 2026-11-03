@@ -7,7 +7,8 @@
             ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.git-layout :as layout]
-            [claudia.slave.files :as slave-files]))
+            [claudia.slave.files :as slave-files]
+            [claudia.slave.reach :as reach]))
 
 (defn- locale< [a b] (.localeCompare (str a) (str b)))
 
@@ -249,6 +250,24 @@
                                                         (fn [d] (if (seq d) (str acc (when (and (seq acc) (not (str/ends-with? acc "\n"))) "\n") d) acc))))))
                                     (js/Promise.resolve diff) untracked)))
                    (.then #(finish info files %))))))))
+
+(defn- section-hidden?
+  "True when a diff section (from its \"diff --git\" line) names a path with a part starting with a
+  dot; any word of its header or ---/+++ lines counts, so a doubtful section is left out too."
+  [section]
+  (let [heads (re-seq #"(?m)^(?:diff --git |--- |\+\+\+ |Binary files )(.*)$" section)]
+    (boolean (some #(re-find #"(^|[ /])\.[^ /]" (second %)) heads))))
+
+(defn drop-hidden
+  "A commit detail (or a file's {:diff}) without the paths a read-only view may not see: files and
+  diff sections of a path with a part starting with a dot (.env, .github/…); stats counted again."
+  [{:keys [files diff] :as detail}]
+  (let [shown (filterv #(not (or (reach/hidden? (:path %)) (some-> (:oldPath %) reach/hidden?))) files)
+        sections (str/split (str diff) #"(?m)^(?=diff --git )")]
+    (cond-> (assoc detail :diff (str/join (remove section-hidden? sections)))
+      files (assoc :files shown
+                   :stats {:files (count shown) :additions (reduce + (map :additions shown))
+                           :deletions (reduce + (map :deletions shown))}))))
 
 (defn commit-detail
   "{:meta :files :diff :stats} for a commit (or \"WORKING\"); with file, {:diff} of that one file."

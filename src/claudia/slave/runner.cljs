@@ -256,7 +256,7 @@
                                  :version h/version :commit h/commit})
       :secret-read (secret-read req res who)
       nil (cond
-            (codeforms/handle req res url who {:scene-of chats/scene-of
+            (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil
             (api/handle req res who) nil
             :else (io/send-json res 404 {:error "Not found."})))))
