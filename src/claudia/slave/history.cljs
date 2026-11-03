@@ -146,36 +146,84 @@
   (path/join (or (.. js/process -env -CLAUDE_CONFIG_DIR) (path/join (os/homedir) ".claude"))
              "projects" (str/replace cwd #"[^a-zA-Z0-9]" "-") (str id ".jsonl")))
 
-(defn- timestamps
-  "uuid -> ms, from the session file (the SDK's session messages carry no time)."
+(defn- file-entries
+  "The session file's entries as JS objects (none when there is no file yet)."
   [cwd id]
   (-> (fsp/readFile (session-file cwd id) "utf8")
-      (.then (fn [text]
-               (reduce (fn [m line]
-                         (try (let [^js e (js/JSON.parse line)]
-                                (if (and (.-uuid e) (.-timestamp e))
-                                  (assoc m (.-uuid e) (js/Date.parse (.-timestamp e)))
-                                  m))
-                              (catch :default _ m)))
-                       {} (str/split-lines text))))
-      (.catch (fn [_] {}))))
+      (.then (fn [text] (vec (keep #(when (seq %) (try (js/JSON.parse %) (catch :default _ nil))) (str/split-lines text)))))
+      (.catch (fn [_] []))))
+
+(defn- sent-mid-turn
+  "A message sent while a turn ran is saved as a queued_command attachment holding the sent uuid as
+  source_uuid (src/chat.ts sentMidTurn): that uuid, or nil."
+  [^js e]
+  (let [^js a (when (and e (= "attachment" (.-type e))) (.-attachment e))]
+    (when (and a (= "queued_command" (.-type a)) (not (.-isMeta a)) (not (.-forwardedIntent a))
+               (or (string? (.-prompt a)) (array? (.-prompt a))))
+      (if (and (string? (.-source_uuid a)) (seq (.-source_uuid a))) (.-source_uuid a) (.-uuid e)))))
+
+(defn- jget [o k] (when o (unchecked-get o k)))
+
+(defn with-earlier-chains
+  "A compaction starts a new chain in the session file and the SDK returns only the last one (src/chat.ts
+  withEarlierChains): the chains before it are read from the file, oldest first, so the whole chat
+  shows; each compaction becomes {:type \"compacted\" :uuid :compacted pre-tokens} in place of its
+  summary message. msgs: the SDK's messages (data); entries: the file's (JS)."
+  [msgs entries]
+  (if (or (empty? msgs) (not (some #(= "compact_boundary" (jget % "subtype")) entries)))
+    msgs
+    (let [by-uuid (into {} (keep (fn [e] (when (jget e "uuid") [(jget e "uuid") e]))) entries)
+          root-of (fn [uuid] (loop [e (get by-uuid uuid) n 0]
+                               (if (and e (jget e "parentUuid") (< n 1000000))
+                                 (recur (get by-uuid (jget e "parentUuid")) (inc n))
+                                 e)))
+          summaries (set (keep (fn [e] (when (jget e "isCompactSummary") (jget e "uuid"))) entries))
+          note (fn [b] {:type "compacted" :uuid (jget b "uuid") :parent_tool_use_id nil
+                            :compacted (or (jget (jget b "compactMetadata") "preTokens") 0)})
+          as-msg (fn [e] {:type (jget e "type") :uuid (jget e "uuid") :parent_tool_use_id nil
+                              :message (js->clj (jget e "message") :keywordize-keys true)})]
+      (loop [out (vec (remove #(summaries (:uuid %)) msgs))
+             boundary (root-of (:uuid (first msgs)))
+             seen #{}]
+        (if (and boundary (= "compact_boundary" (jget boundary "subtype")) (jget boundary "logicalParentUuid")
+                 (not (seen (jget boundary "uuid"))))
+          (let [[chain root] (loop [e (get by-uuid (jget boundary "logicalParentUuid")) root nil acc ()]
+                               (if-not e
+                                 [acc root]
+                                 (recur (when (jget e "parentUuid") (get by-uuid (jget e "parentUuid")))
+                                        e
+                                        (cond
+                                          (and (#{"user" "assistant"} (jget e "type")) (not (jget e "isSidechain")) (not (jget e "isMeta"))
+                                               (not (jget e "isCompactSummary")) (jget e "message"))
+                                          (cons (as-msg e) acc)
+                                          (and (not (jget e "isSidechain")) (sent-mid-turn e))
+                                          (cons {:type "user" :uuid (sent-mid-turn e) :parent_tool_use_id nil
+                                                 :message {:role "user" :content (js->clj (jget (jget e "attachment") "prompt") :keywordize-keys true)}}
+                                                acc)
+                                          :else acc))))]
+            (recur (into (into (vec chain) [(note boundary)]) out) root (conj seen (jget boundary "uuid"))))
+          out)))))
 
 (defn load
   "Promise of the chat's Msgs, oldest first."
   [cwd id folder]
-  (-> (js/Promise.all #js [(sdk/getSessionMessages id #js {:dir cwd}) (timestamps cwd id)])
+  (-> (js/Promise.all #js [(sdk/getSessionMessages id #js {:dir cwd}) (file-entries cwd id)])
       (.then
-       (fn [[msgs times]]
-         (let [counts (atom {})
+       (fn [[msgs entries]]
+         (let [times (into {} (keep (fn [^js e] (when (and (.-uuid e) (.-timestamp e)) [(.-uuid e) (js/Date.parse (.-timestamp e))]))) entries)
+               counts (atom {})
                out (atom [])
                tools (atom {})   ; tool_use id -> index in out
                asked (atom {})]  ; AskUserQuestion tool_use id -> questions
-           (doseq [m (js->clj msgs :keywordize-keys true)
+           (doseq [m (with-earlier-chains (js->clj msgs :keywordize-keys true) entries)
                    :when (nil? (:parent_tool_use_id m))
                    :let [at (get times (:uuid m) 0)
                          message (:message m)
                          content (:content message)]]
              (case (:type m)
+               "compacted"
+               (swap! out conj {:id (:uuid m) :role "note" :at at
+                                :text (str "Context compacted (" (js/Math.round (/ (:compacted m) 1000)) "k tokens before).")})
                "assistant"
                (doseq [msg (assistant-msgs message counts at folder)]
                  (when (= "tool" (:role msg))

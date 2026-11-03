@@ -593,6 +593,14 @@
           "CLAUDE_CODE_OAUTH_TOKEN" t
           "PATH" (str bin-dir ":" (.-PATH env)))))
 
+(defonce ^:private probe-timer (atom nil))
+
+(defn probe-soon!
+  "A turn ended or Claude Code reported a rate-limit change: read the exact numbers again soon."
+  [ms]
+  (some-> @probe-timer js/clearTimeout)
+  (reset! probe-timer (js/setTimeout #(try (meta/probe! cwd (run-env)) (catch :default _ nil)) ms)))
+
 (defonce ^:private agent-timers (atom {}))
 
 (defn- emit-agents!
@@ -701,10 +709,11 @@
   a new system prompt after its turn."
   []
   (doseq [[id s] @state :when (:live s)]
-    (swap-tools! id)
     (when (not= (prompt-version) (:prompt (store/kv id "session")))
       (swap-chat! id assoc :stale true)
-      (restart-if-stale! id))))
+      (restart-if-stale! id))
+    ;; (still live: its turn or work runs; the tools now, the prompt after it)
+    (swap-tools! id)))
 
 (defn init!
   "Called once by the runner: agent lists follow their tasks, running agents' steps and shells'
@@ -718,6 +727,7 @@
   (refresh-titles!)
   (try (meta/probe! cwd (run-env))
        (catch :default e (js/console.error "meta:" (message e))))
+
   ;; Someone switched the token in Settings: the new plan's limits show now (runner.ts watch).
   (when-let [f (not-empty (.-CLAUDIA_TOKEN_FILE env))]
     (try (fs/watch (path/dirname f)
@@ -767,6 +777,7 @@
     (changed!)
     (read-context! id)
     (refresh-title! id)
+    (probe-soon! 8000)
     (-> (changes/finish! id)
         (.then (fn [rows] (when (seq rows) (emit! id {:type "changes" :changes rows})))))))
 
@@ -852,8 +863,9 @@
                                 ;; A foreground agent's answer is its tool result, not a notice.
                                 (tasks/background? id (:task_id m)))
                        (note-msg! id {:id (str "task-" (:task_id m) "-" (now)) :role "note" :text (:summary m) :at (now)}))))
-      "rate_limit_event" (try (meta/note-limits! (token) (:rate_limit_info m))
-                              (catch :default _ nil))
+      "rate_limit_event" (do (try (meta/note-limits! (token) (:rate_limit_info m))
+                                  (catch :default _ nil))
+                             (probe-soon! 4000))
       nil)))
 
 (defn- ended! [id error]

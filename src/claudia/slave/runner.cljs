@@ -227,6 +227,8 @@
        (fn []
          (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
          (chats/init!)
+         ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
+         (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
          (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
                server (http/createServer on-request)]
            (.on wss "connection" on-socket)

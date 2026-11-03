@@ -60,15 +60,31 @@
 
 (defonce ^:private probing (atom false))
 
+(defn- limits-from
+  "The plan usage call's rate_limits as Limits (src/meta.ts limitsFrom)."
+  [rl]
+  (vec (concat
+        (for [[k label] labels
+              :let [v (get rl (keyword k))]
+              :when (number? (:utilization v))]
+          {:key k :label label :percent (percent (:utilization v))
+           :resetsAt (some-> (:resets_at v) js/Date.parse)})
+        (for [m (:model_scoped rl)
+              :when (and (number? (:utilization m)) (pos? (:utilization m)))]
+          {:key (str "model:" (:display_name m)) :label (str "Week, " (:display_name m))
+           :percent (percent (:utilization m)) :resetsAt (some-> (:resets_at m) js/Date.parse)}))))
+
 (defn probe!
-  "Models and slash commands, from a Claude Code process that never gets a message."
+  "Models, slash commands and the plan's usage (src/meta.ts probe), from a Claude Code process that
+  never gets a message. token: the one in use (its usage, when the plan reports it)."
   [cwd env]
   (when-not @probing
     (reset! probing true)
     (let [never #js {}
           _ (aset never js/Symbol.asyncIterator
                   (fn [] #js {:next (fn [] (js/Promise. (fn [_])))}))
-          ^js q (sdk/query #js {:prompt never :options #js {:cwd cwd :persistSession false :env (clj->js env)}})]
+          ^js q (sdk/query #js {:prompt never :options #js {:cwd cwd :persistSession false :env (clj->js env)}})
+          k (some-> (get env "CLAUDE_CODE_OAUTH_TOKEN") token-key)]
       (-> (js/Promise.all #js [(.supportedModels q) (.supportedCommands q)])
           (.then (fn [[models commands]]
                    (publish!
@@ -77,7 +93,16 @@
                                      :efforts (vec (or (.-supportedEffortLevels m) []))}))
                      :commands (vec (sort-by :name (for [^js c commands]
                                                      {:name (.-name c) :description (.-description c)
-                                                      :hint (.-argumentHint c)})))})))
+                                                      :hint (.-argumentHint c)})))})
+                   ;; Marked experimental by the SDK; the rate_limit_event path keeps working without it.
+                   (-> (js/Promise.resolve (.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET q #js {:skipBehaviors true}))
+                       (.then (fn [u]
+                                (let [u (js->clj u :keywordize-keys true)]
+                                  (when (and k (:rate_limits_available u))
+                                    (let [limits (limits-from (:rate_limits u))]
+                                      (store/kv! "" (str "limits:" k) limits)
+                                      (when (= k (:account @state)) (publish! {:limits limits})))))))
+                       (.catch (fn [_] nil)))))
           (.catch (fn [e] (js/console.error "meta probe:" (str (or (.-message e) e)))))
           (.finally (fn [] (.close q) (reset! probing false)))))))
 
