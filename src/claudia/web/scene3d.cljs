@@ -13,10 +13,11 @@
   "data: the form's data; block: the block's id."
   [data block]
   (let [oc @(rf/subscribe [:open-chat])
+        ro @(rf/subscribe [:read-only?])
         ok @loaded]
     (cond
       (= ok :ready) [@lazy-view {:data data :block block :chat (:chat oc)
-                            :live? (boolean (and (:chat oc) (not (:pending? oc))))}]
+                            :live? (boolean (and (:chat oc) (not (:pending? oc)) (not ro)))}]
       (string? ok) [:p.f-note (str "The 3D view did not load: " ok)]
       :else (do (when-not ok
                   (reset! loaded :loading)
