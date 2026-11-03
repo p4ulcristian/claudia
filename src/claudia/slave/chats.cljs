@@ -11,6 +11,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.pictures :as pictures]
+            [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]
@@ -187,7 +188,7 @@
 
 (defn- text-result [text] {:content [{:type "text" :text text}]})
 
-(defn- current-scene [id]
+(defn current-scene [id]
   (or (:scene (st id)) (store/scene id) scene/empty-scene))
 
 (defn- turn-id!
@@ -206,7 +207,15 @@
           (pictures/record! id (turn-id! id) prev s)
           (emit! id {:type "scene" :scene s})
           (emit! id {:type "pictures" :pictures (pictures/listing id)})
-          (text-result (str "Picture updated. " (scene/describe s)))))))
+          ;; A screenshot of the picture as it looks now, so Claude sees its own drawing; one that
+          ;; fails is said in the text, never the draw's failure.
+          (let [text (str "Picture updated. " (scene/describe s))]
+            (-> (render/screenshot s (:color (store/chat id)))
+                (.then (fn [{:keys [^js png error]}]
+                         (if png
+                           {:content [{:type "text" :text text}
+                                      {:type "image" :data (.toString png "base64") :mimeType "image/png"}]}
+                           (text-result (str text "\n\n(No screenshot of the picture: " error ")")))))))))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [resolve]

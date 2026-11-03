@@ -12,6 +12,7 @@
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
             [claudia.slave.pictures :as pictures]
+            [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]))
 
@@ -87,10 +88,34 @@
                                (.then (fn [value] (h/json-reply res 200 {:sealed (secret/seal value pubkey)})))))))))
           (.catch (fn [e] (h/json-reply res 502 {:error (str (or (.-message e) e))})))))))
 
+(defn- query-param [^js req k]
+  (.get (.-searchParams (js/URL. (.-url req) "http://runner")) k))
+
+(defn- picture-png
+  "GET /api/chats/:id/picture.png?turn=: the live picture (or the turn's) as a PNG."
+  [^js req ^js res id]
+  (let [turn (query-param req "turn")
+        scene (if (seq turn) (pictures/one id turn) (chats/current-scene id))]
+    (if-not (seq (:blocks scene))
+      (h/json-reply res 404 {:error "No such picture."})
+      (-> (render/screenshot scene (:color (store/chat id)))
+          (.then (fn [{:keys [^js png error]}]
+                   (if png
+                     (do (.writeHead res 200 #js {"content-type" "image/png" "cache-control" "no-store"
+                                                  "content-length" (.-length png)})
+                         (.end res png))
+                     (h/json-reply res 503 {:error error}))))))))
+
 (defn- on-request [^js req ^js res]
   (let [who (caller req)
-        url (first (str/split (.-url req) #"\?"))]
+        url (first (str/split (.-url req) #"\?"))
+        [_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)
+        chat-id (some-> chat-id js/decodeURIComponent)]
     (cond
+      (and chat-id (= "GET" (.-method req)) (not (known? chat-id)))
+      (h/json-reply res 404 {:error "No such chat."})
+      (and chat-id (= sub "picture.png") (= "GET" (.-method req)))
+      (picture-png req res chat-id)
       (and (= url "/api/me") (= "GET" (.-method req)))
       (h/json-reply res 200 {:server nil :profile (:profile who) :viewing nil :readOnly (:read-only who)
                              :version h/version :commit h/commit})

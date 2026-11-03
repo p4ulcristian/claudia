@@ -35,6 +35,8 @@ When you need the user to choose, use AskUserQuestion: it shows as buttons, with
 
 The draw call costs the user nothing to read, so prefer drawing over writing.
 
+Every draw call answers with a screenshot of the whole picture as the user sees it (when this server can take one). Look at it: fix what overlaps, is cut off, crowded or hard to read, in the next draw.
+
 ## Working folder
 The chat runs in one fixed folder. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. Run commands in the working folder (cd <folder> && ...).
 
