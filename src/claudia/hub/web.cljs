@@ -25,13 +25,14 @@
    ".woff2" "font/woff2"
    ".ttf" "font/ttf"
    ".otf" "font/otf"
-   ".wasm" "application/wasm"})
+   ".wasm" "application/wasm"
+   ".glb" "model/gltf-binary"})
 
 (def ^:private kept
   "Fonts and images: no build step renames them (no hashed names in v1), but they change rarely,
   so a week in the browser's cache is fine. Everything else is checked again on every load
   (cheap: the ETag answers 304), so a page update is seen at once."
-  #{".woff" ".woff2" ".ttf" ".otf" ".svg" ".png" ".jpg" ".jpeg" ".gif" ".webp" ".avif" ".ico"})
+  #{".woff" ".woff2" ".ttf" ".otf" ".svg" ".png" ".jpg" ".jpeg" ".gif" ".webp" ".avif" ".ico" ".glb"})
 
 (defn- plain [^js res status text]
   (.writeHead res status #js {"content-type" "text/plain; charset=utf-8"

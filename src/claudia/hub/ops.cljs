@@ -2,7 +2,8 @@
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence) and GitHub's webhook (/hub/github)."
-  (:require [clojure.string :as str]
+  (:require [claudia.hub.narrate :as narrate]
+            [clojure.string :as str]
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
@@ -260,6 +261,7 @@
                  (if admin? (admin-call req res pathname) (send-json res 403 {:error "admins only"}))
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
+                 (= pathname "/hub/narrate") (narrate/call req res)
                  :else (send-json res 404 {:error "not found"}))))
       (.catch (fn [e]
                 (js/console.error (str "hub: " pathname ": " (.-message e)))

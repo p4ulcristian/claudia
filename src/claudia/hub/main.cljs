@@ -13,6 +13,7 @@
             [claudia.hub.pairing :as pairing]
             [claudia.hub.pass :as pass]
             [claudia.hub.push :as push]
+            [claudia.hub.narrate :as narrate]
             [claudia.hub.web :as web]))
 
 (defn- env [k default]
@@ -185,6 +186,7 @@
            (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
            (js/process.exit 1)))
     (pairing/start! data-dir)
+    (narrate/start! data-dir)
     (github/start!)
     (push/start!)
     (let [^js server (http/createServer (partial on-request web-root))
