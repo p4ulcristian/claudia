@@ -205,6 +205,12 @@
   (github/start!)
   (push/start!))
 
+(defn- exit!
+  "The store closes last, once no request can reach it any more, then the process exits."
+  []
+  (config/stop!)
+  (js/process.exit 0))
+
 (defn- stopper
   "The stop for a signal, once: everything closes, then the process exits."
   [^js server beat]
@@ -214,13 +220,12 @@
         (reset! stopping true)
         (js/console.log (str "hub: " sig ", stopping"))
         (push/stop!)
-        (config/stop!)
         (js/clearInterval beat)
         (pass/close-all!)
-        (.close server #(js/process.exit 0))
+        (.close server exit!)
         (.closeIdleConnections server)
         ;; Requests still streaming get a few seconds, then everything is cut.
-        (.unref (js/setTimeout #(do (.closeAllConnections server) (js/process.exit 0)) 3000))))))
+        (.unref (js/setTimeout #(do (.closeAllConnections server) (exit!)) 3000))))))
 
 (defn- listen! [^js server {:keys [host port web-root]} stop]
   ;; Caddy keeps its connections to the hub open for 2 minutes between requests; the hub must
