@@ -56,8 +56,8 @@ name=claudia-beta-slave-$want.tar.gz
 base="https://github.com/$repo/releases/download/beta-${want:0:7}"
 tmp=$(mktemp -d "$work/release.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-if ! curl -fsSL --max-time 600 -o "$tmp/$name" "$base/$name" ||
-	! curl -fsSL --max-time 60 -o "$tmp/$name.sigstore.json" "$base/$name.sigstore.json"; then
+if ! curl -fsL --max-time 600 -o "$tmp/$name" "$base/$name" ||
+	! curl -fsL --max-time 60 -o "$tmp/$name.sigstore.json" "$base/$name.sigstore.json"; then
 	echo "no signed release for ${want:0:7} yet: the next poke installs it"
 	exit 0
 fi
