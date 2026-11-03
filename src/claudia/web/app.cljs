@@ -1,5 +1,8 @@
 (ns claudia.web.app
   (:require [re-frame.core :as rf]
+            [claudia.web.admin]
+            [claudia.web.native :as native]
+            [claudia.web.presence :as presence]
             [reagent.dom.client :as rdc]
             [claudia.web.chalk :as chalk]
             [claudia.web.events]
@@ -31,4 +34,6 @@
       (ws/wake!)
       (rf/dispatch [:chat/check-seen])))
   (rf/dispatch-sync [:init])
+  (presence/start!)
+  (native/start!)
   (mount!))
