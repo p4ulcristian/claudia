@@ -79,3 +79,40 @@ Old = branch main (aeb57a1), files under `web/` and `src/`. Beta = this branch.
 
 ## Draw tool description (src/prompt.ts, src/forms.ts)
 - [~] Forms in the old order; scene3d's data word for word (allow, scan, people not solid, the overlap check); html "e.g. Chart.js or D3", "are set as CSS variables"; kind "html or template"; blocks "HTML blocks, and the width/position of any block"; template and height fields.
+
+## After (2026-11-03)
+Compared by screenshots (headless Chrome, 1440x900 and 390x844 @2x) against the old Claudia on
+:4510 and, for the board itself, the old render page (web/render.html served by bun) against beta's
+render mode with the same scene: graph (groups, every shape, state and colour, dashed and labelled
+arrows, notes), pipeline, timeline, stats, compare, chart, freeform. The two renders are pixel
+identical except the chart's bars (the chalk grain lands at another offset).
+
+- [x] No header: the board starts at the top; the title shows in the scrubber's tip.
+- [x] `.right-scroll` > `.stage` (18 18 110), `.stage.past` violet ring.
+- [x] Empty state (dashed circles, sans text).
+- [x] Canvas grid, half blocks, columns; blocks appear without `rise`.
+- [x] Glow per change, a ring on a changed node, `hot` on a changed arrow. Beta has no `changed`
+      list on the wire: the page diffs each new scene against the one before (same chat), so a
+      draw that sends a node unchanged doesn't ring it (the old one did).
+- [x] Badge: name · kind, form label lower case, template green, when-line tooltip, .55 / .9.
+- [x] Save as template (the code forms branch's version, same behaviour).
+- [x] Kept files block ("kept ✕", "kept · close ✕", dashed outline when gone).
+- [x] Pictures from before blocks: graph + cards.
+- [x] Graph: old variant choice, available size, pan / Ctrl+wheel / pinch zoom / double-click reset,
+      `.zoom-layer`, active stroke 2.6, layout only on change.
+- [x] Freeform frames: 240 start, 60 minimum, height transition.
+- [x] Forms: pipeline arrowhead grain, timeline tag line, stats stretch, chart in the page with the
+      grain mask (#chalk-grain / #chalk-grain-soft now baked into the page by chalk/bake-all!), data-item.
+- [x] Gallery, form row, right rail: the code forms branch built the same (merged here); the right
+      rail sits in the design branch's grid column, its contents codeforms/form-rail.
+- [x] Bar: the old chalk outlines, fold pushed right, fixed tip; the snapshot camera stays (beta).
+- [x] Timeline: "Timeline" head with its line, links, hover/open colours, Explain this step
+      (through the chat's `:ops/explain`; a sub-agent's step may not be found by the runner).
+- [x] Folded edge: chalk line, accent on hover and when a new picture came.
+- [x] Phone: picture screen without a header, the form row on top, the bar under it, › closes it.
+- [x] Render page: the picture alone in a `.stage`, no title.
+- [x] scene3d: the gallery samples render identically (frame, labels, arrows, Diagram / reset view).
+- [x] Draw tool: forms in the old order, scene3d's data word for word, html / kind / blocks
+      descriptions, `height` field.
+- [ ] The fold's slide (useFoldMotion): not done. The split's columns are the design branch's
+      inline grid; the fold switches at once.
