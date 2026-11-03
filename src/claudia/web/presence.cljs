@@ -25,9 +25,15 @@
                                      :headers #js {"content-type" "application/json"} :body (body on)})
       (.catch (fn [_] nil))))
 
+(defn say?
+  "Whether to tell the hub now: being active changed since it was last said (said), or the page is
+  still active and the heartbeat is due (last said at, now)."
+  [on said-before said-at now]
+  (or (not= on said-before) (and on (>= (- now said-at) p/heartbeat-ms))))
+
 (defn- tick! []
   (let [on (active?)]
-    (when (or (not= on @said) (and on (>= (- (js/Date.now) @at) p/heartbeat-ms)))
+    (when (say? on @said @at (js/Date.now))
       (say! on))))
 
 (defn start!

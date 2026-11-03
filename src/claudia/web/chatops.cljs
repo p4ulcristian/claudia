@@ -5,6 +5,7 @@
   (:require [re-frame.core :as rf]
             [clojure.string :as str]
             [claudia.shared.protocol :as protocol]
+            [claudia.web.api :as api]
             [claudia.web.db :as db]
             [claudia.web.events :as events]
             [claudia.web.media :as media]))
@@ -17,25 +18,13 @@
   (let [u (str "/s/" (js/encodeURIComponent server) "/api/" p)]
     (if view (str u (if (str/includes? u "?") "&" "?") "view=" (js/encodeURIComponent view)) u)))
 
-(defn- call [method url body]
-  (-> (js/fetch url (clj->js (cond-> {:method method :credentials "same-origin"
-                                      :headers {"accept" "application/json" "content-type" "application/json"}}
-                               body (assoc :body (protocol/write-json body)))))
-      (.then (fn [^js r]
-               (.then (.text r)
-                      (fn [t]
-                        (let [b (when-not (str/blank? t) (try (protocol/read-json t) (catch :default _ nil)))]
-                          (if (.-ok r) b (throw (js/Error. (or (:error b) (str "HTTP " (.-status r)))))))))))))
-
 (rf/reg-fx
  :api/call
  ;; {:method :url :body :on-ok [event ...] :on-fail [event ...]}: the answer (or the error text) is conj'd.
  (fn [{:keys [method url body on-ok on-fail]}]
-   (-> (call (or method "GET") url body)
+   (-> (api/call-json (or method "GET") url body)
        (.then #(when on-ok (rf/dispatch (conj on-ok %))))
        (.catch #(when on-fail (rf/dispatch (conj on-fail (.-message %))))))))
-
-(defn- server-names [db] (mapv :name (get-in db [:me :servers])))
 
 (defn read-only? [db] (some? (:view db)))
 
@@ -45,30 +34,38 @@
  :ops/me-loaded
  ;; After /hub/me: each server's own /api/me (its profiles, version, commit) and GitHub login.
  (fn [{:keys [db]} _]
-   {:fx (vec (for [s (server-names db)]
+   {:fx (vec (for [s (events/server-names db)]
                [:api/call {:url (api-url s "me") :on-ok [:ops/server-me s] :on-fail [:ops/server-me s nil]}]))}))
 
-(defn- view-servers
+(defn view-servers
   "The servers whose sockets are open for a view: all for your own chats; for another profile's,
   the servers that have that profile."
   [db view]
   (if view
-    (filterv #(some #{view} (get-in db [:server-me % :profiles])) (server-names db))
-    (server-names db)))
+    (filterv #(some #{view} (get-in db [:server-me % :profiles])) (events/server-names db))
+    (events/server-names db)))
+
+(defn view-due?
+  "A stored view connects once every server said whether it has that profile."
+  [db]
+  (boolean (and (:view db)
+                (not (:view-connected db))
+                (every? #(get-in db [:server-me %]) (events/server-names db)))))
+
+(defn connect-view
+  "The view's servers connecting (db), and the sockets to open again."
+  [db]
+  (let [servers (view-servers db (:view db))]
+    {:db (assoc db :view-connected true :servers (events/connecting-servers servers))
+     :ws/reconnect {:view (:view db) :servers servers}}))
 
 (rf/reg-event-fx
  :ops/server-me
  (fn [{:keys [db]} [_ server me]]
-   (let [db (assoc-in db [:server-me server] (or me {:failed true}))
-         all? (every? #(get-in db [:server-me %]) (server-names db))
-         view (:view db)]
+   (let [db (assoc-in db [:server-me server] (or me {:failed true}))]
      (cond-> {:db db}
-       ;; A stored view connects once every server said whether it has that profile.
-       (and view all? (not (:view-connected db)))
-       (merge {:db (assoc db :view-connected true
-                          :servers (into {} (map (fn [n] [n {:status :connecting :rows {}}])) (view-servers db view)))
-               :ws/reconnect {:view view :servers (view-servers db view)}})
-       (and me (not view) (:profile me))
+       (view-due? db) (merge (connect-view db))
+       (and me (not (:view db)) (:profile me))
        (assoc :api/call {:url (api-url server "github") :on-ok [:ops/github server (:profile me)]})))))
 
 (rf/reg-event-fx
@@ -79,21 +76,25 @@
      {:db (-> db
               (assoc :view view :view-connected true :open nil :screen :list :chats {} :search nil
                      :archived? false :settings? false)
-              (assoc :servers (into {} (map (fn [n] [n {:status :connecting :rows {}}])) servers)))
+              (assoc :servers (events/connecting-servers servers)))
       :store ["claudia.view" view]
       :history/push nil
       :ws/reconnect {:view view :servers servers}})))
 
+(defn tick-server
+  "The hidden servers once server is ticked: a hidden one shows again, a shown one leaves the list,
+  except the last one shown."
+  [hidden servers server]
+  (let [hidden (set hidden)]
+    (cond (hidden server) (disj hidden server)
+          (<= (count (remove hidden servers)) 1) hidden
+          :else (conj hidden server))))
+
 (rf/reg-event-fx
  :ops/tick-server
- ;; A server ticked off leaves the list; the last ticked one stays.
  (fn [{:keys [db]} [_ server]]
-   (let [hidden (set (:hidden-servers db))
-         shown (remove hidden (keys (:servers db)))
-         next (cond (hidden server) (disj hidden server)
-                    (<= (count shown) 1) hidden
-                    :else (conj hidden server))]
-     {:db (assoc db :hidden-servers next) :store ["claudia.hiddenServers" (clj->js (vec next))]})))
+   (let [hidden (tick-server (:hidden-servers db) (keys (:servers db)) server)]
+     {:db (assoc db :hidden-servers hidden) :store ["claudia.hiddenServers" (clj->js (vec hidden))]})))
 
 (rf/reg-sub :view (fn [db] (:view db)))
 (rf/reg-sub :read-only? (fn [db] (read-only? db)))
@@ -101,12 +102,14 @@
 (rf/reg-sub :server-me (fn [db [_ s]] (get-in db [:server-me s])))
 (rf/reg-sub :server-mes (fn [db] (:server-me db)))
 
-(rf/reg-sub
- :people
- ;; Every other profile on the servers you use (the title menu's "<person>'s chats").
- (fn [db]
-   (let [own (set (keep :profile (vals (:server-me db))))]
-     (->> (vals (:server-me db)) (mapcat :profiles) (remove own) distinct sort vec))))
+(defn people
+  "Every other profile on the servers you use (the title menu's \"<person>'s chats\"), from each
+  server's /api/me."
+  [server-me]
+  (let [own (set (keep :profile (vals server-me)))]
+    (->> (vals server-me) (mapcat :profiles) (remove own) distinct sort vec)))
+
+(rf/reg-sub :people (fn [db] (people (:server-me db))))
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
@@ -155,6 +158,11 @@
    {:db (assoc-in db [:search :text] text)
     :ops/search-later text}))
 
+(defn search-path
+  "The runner's search for text, among the archived chats when archived?."
+  [text archived?]
+  (str "search?q=" (js/encodeURIComponent text) (when archived? "&archived=1")))
+
 (rf/reg-event-fx
  :ops/search-now
  (fn [{:keys [db]} [_ text]]
@@ -162,7 +170,7 @@
      {:db (assoc-in db [:search :found] nil)}
      {:db (assoc-in db [:search :found] {})
       :fx (vec (for [s (keys (:servers db))]
-                 [:api/call {:url (api-url s (str "search?q=" (js/encodeURIComponent text) (when (:archived? db) "&archived=1")) (:view db))
+                 [:api/call {:url (api-url s (search-path text (:archived? db)) (:view db))
                              :on-ok [:ops/found s text]}]))})))
 
 (rf/reg-event-db
@@ -256,17 +264,23 @@
 (rf/reg-event-db :ops/github-user (fn [db [_ s {:keys [user]}]] (assoc-in db [:github s] (or user false))))
 (rf/reg-sub :tokens (fn [db [_ s]] (get-in db [:tokens s])))
 (rf/reg-sub :github (fn [db [_ s]] (get-in db [:github s])))
-(rf/reg-sub :settings-server (fn [db] (or (:settings-server db) (first (server-names db)))))
+(rf/reg-sub :settings-server (fn [db] (or (:settings-server db) (first (events/server-names db)))))
 
 (defn github-later-key [server profile] (str "claudia.github-later." server "." profile))
 
+(defn github-known
+  "server's GitHub login (user) noted. A profile without one is asked once per browser and server
+  (later?: \"Later\" was clicked here, which hides it), one prompt at a time."
+  [db server profile user later?]
+  (cond-> (assoc-in db [:github server] (or user false))
+    (and (not user) (not later?) (not (:github-prompt db)))
+    (assoc :github-prompt {:server server :profile profile})))
+
 (rf/reg-event-db
  :ops/github
- ;; A profile without a GitHub login is asked once per browser and server ("Later" hides it here).
  (fn [db [_ server profile {:keys [user]}]]
-   (cond-> (assoc-in db [:github server] (or user false))
-     (and (not user) (not (js/localStorage.getItem (github-later-key server profile))) (not (:github-prompt db)))
-     (assoc :github-prompt {:server server :profile profile}))))
+   (github-known db server profile user
+                 (boolean (and (not user) (js/localStorage.getItem (github-later-key server profile)))))))
 
 (rf/reg-event-db :ops/github-prompt (fn [db [_ v]] (assoc db :github-prompt v)))
 (rf/reg-sub :github-prompt (fn [db] (:github-prompt db)))
@@ -275,13 +289,11 @@
  :ops/put
  ;; {:url :method :body :on-done (fn [ok error])}
  (fn [{:keys [url method body on-done]}]
-   (-> (call (or method "PUT") url body)
+   (-> (api/call-json (or method "PUT") url body)
        (.then #(on-done % nil))
        (.catch #(on-done nil (.-message %))))))
 
 ;; ---- attachments ----
-
-(defn- new-uuid [] (if (exists? js/crypto.randomUUID) (js/crypto.randomUUID) (str (random-uuid))))
 
 (defn- upload-target
   "[server chat-folder-id] for files added to a draft: the open chat's, or a new chat's own id."
@@ -290,51 +302,78 @@
     draft-key
     [(events/default-server db) (or (:new-upload-id db) "")]))
 
+(defn with-upload-id
+  "A new chat's draft gets its own id for uploads (id) the first time files are added to it."
+  [db draft-key id]
+  (if (and (not (vector? draft-key)) (not (:new-upload-id db))) (assoc db :new-upload-id id) db))
+
 (rf/reg-event-fx
  :ops/attach
  ;; Files added to the composer (picker, paste, drop); files: a JS array of File.
  (fn [{:keys [db]} [_ draft-key files]]
-   (let [db (if (and (not (vector? draft-key)) (not (:new-upload-id db))) (assoc db :new-upload-id (new-uuid)) db)
+   (let [db (with-upload-id db draft-key (events/new-uuid))
          [server chat] (upload-target db draft-key)
-         items (vec (for [f files] {:id (new-uuid) :name (.-name ^js f) :size (.-size ^js f) :busy true}))]
+         items (vec (for [f files] {:id (events/new-uuid) :name (.-name ^js f) :size (.-size ^js f) :busy true}))]
      {:db (update-in db [:attach draft-key] (fnil into []) items)
       :ops/read-files {:draft-key draft-key :server server :chat chat
                        :pairs (mapv vector items files)}})))
 
+(def ^:private upload-max (* 100 1024 1024))
+
+(defn upload-path
+  "Where a file named file-name is uploaded, for a chat (its folder id)."
+  [chat file-name]
+  (str "chats/" chat "/uploads?name=" (js/encodeURIComponent file-name)))
+
+(defn upload-answer
+  "What an upload's answer (its HTTP status, its body as data or nil) makes of its attachment."
+  [status body]
+  (if (and (<= 200 status 299) (:path body))
+    {:kind "file" :file body :busy false}
+    {:error (or (:error body) (str "Upload failed (HTTP " status ")"))}))
+
+(defn- upload!
+  "Sends f to url; each step (progress, the answer, a failure) calls (done m)."
+  [url ^js f done]
+  (let [xhr (js/XMLHttpRequest.)]
+    (.open xhr "POST" url)
+    (.setRequestHeader xhr "content-type" (or (not-empty (.-type f)) "application/octet-stream"))
+    (set! (.. xhr -upload -onprogress)
+          (fn [e] (when (.-lengthComputable e) (done {:progress (/ (.-loaded e) (.-total e))}))))
+    (set! (.-onload xhr)
+          #(done (upload-answer (.-status xhr)
+                                (try (protocol/read-json (.-responseText xhr)) (catch :default _ nil)))))
+    (set! (.-onerror xhr) #(done {:error "Upload failed: no connection."}))
+    (.send xhr f)))
+
+(defn- read-file!
+  "A photo or video becomes images; anything else up to 100 MB is uploaded as a file."
+  [{:keys [server chat]} ^js f done]
+  (-> (media/read-media f)
+      (.then (fn [m]
+               (cond
+                 m (done (assoc m :kind "media"))
+                 (> (.-size f) upload-max) (done {:error "Over 100 MB: too big to send."})
+                 :else (upload! (api-url server (upload-path chat (.-name f))) f done))))))
+
 (rf/reg-fx
  :ops/read-files
- (fn [{:keys [draft-key server chat pairs]}]
+ (fn [{:keys [draft-key pairs] :as target}]
    (doseq [[{:keys [id]} ^js f] pairs]
-     (-> (media/read-media f)
-         (.then (fn [m]
-                  (if m
-                    (rf/dispatch [:ops/attached draft-key id (assoc m :kind "media")])
-                    (if (> (.-size f) (* 100 1024 1024))
-                      (rf/dispatch [:ops/attached draft-key id {:error "Over 100 MB: too big to send."}])
-                      (let [xhr (js/XMLHttpRequest.)]
-                        (.open xhr "POST" (api-url server (str "chats/" chat "/uploads?name=" (js/encodeURIComponent (.-name f)))))
-                        (.setRequestHeader xhr "content-type" (or (not-empty (.-type f)) "application/octet-stream"))
-                        (set! (.. xhr -upload -onprogress)
-                              (fn [e] (when (.-lengthComputable e)
-                                        (rf/dispatch [:ops/attached draft-key id {:progress (/ (.-loaded e) (.-total e))}]))))
-                        (set! (.-onload xhr)
-                              (fn []
-                                (let [b (try (protocol/read-json (.-responseText xhr)) (catch :default _ nil))]
-                                  (rf/dispatch [:ops/attached draft-key id
-                                                (if (and (<= 200 (.-status xhr) 299) (:path b))
-                                                  {:kind "file" :file b :busy false}
-                                                  {:error (or (:error b) (str "Upload failed (HTTP " (.-status xhr) ")"))})]))))
-                        (set! (.-onerror xhr) #(rf/dispatch [:ops/attached draft-key id {:error "Upload failed: no connection."}]))
-                        (.send xhr f))))))))))
+     (read-file! target f #(rf/dispatch [:ops/attached draft-key id %])))))
+
+(defn attached
+  "The attachments with item id updated by m; once read (a kind) or failed (an error) it is no
+  longer busy."
+  [items id m]
+  (mapv #(if (= id (:id %))
+           (cond-> (merge % m) (or (:kind m) (:error m)) (assoc :busy false))
+           %)
+        items))
 
 (rf/reg-event-db
  :ops/attached
- (fn [db [_ draft-key id m]]
-   (update-in db [:attach draft-key]
-              (fn [items] (mapv #(if (= id (:id %))
-                                   (cond-> (merge % m) (or (:kind m) (:error m)) (assoc :busy false))
-                                   %)
-                                items)))))
+ (fn [db [_ draft-key id m]] (update-in db [:attach draft-key] attached id m)))
 
 (rf/reg-event-db
  :ops/unattach
@@ -353,10 +392,13 @@
        {:db (assoc-in db [:chats k :loading-older] true)
         :ws/send [s {:type "older" :chat c :before first-id}]}))))
 
+(defn with-older
+  "A chat's state with an older page (the messages before the id before) in front, when the chat
+  still starts there."
+  [st messages more before]
+  (if (= before (:id (first (:messages st))))
+    (assoc st :messages (into (vec messages) (:messages st)) :more more :loading-older false)
+    (assoc st :loading-older false)))
+
 (defmethod events/on-frame "older" [db server {:keys [chat messages more before]}]
-  (let [k [server chat]]
-    {:db (update-in db [:chats k]
-                    (fn [st]
-                      (if (= before (:id (first (:messages st))))
-                        (assoc st :messages (into (vec messages) (:messages st)) :more more :loading-older false)
-                        (assoc st :loading-older false))))}))
+  {:db (update-in db [:chats [server chat]] with-older messages more before)})

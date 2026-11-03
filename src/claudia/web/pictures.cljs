@@ -80,6 +80,13 @@
 
 (rf/reg-sub :right-view (fn [db] (:right-view db)))
 
+(defn drew-nothing?
+  "The chat's last turn ended without drawing: its last user message is newer than the newest picture."
+  [pictures state]
+  (let [asked (some #(when (= "user" (:role %)) (:at %)) (rseq (vec (:messages state))))]
+    (boolean (and (seq pictures) (not (:running state)) asked
+                  (> asked (:at (peek pictures) 0))))))
+
 (rf/reg-sub
  :picture-history
  ;; What the bar and the picture need: the list, which one is shown, and its scene.
@@ -92,11 +99,7 @@
          past (when viewing (get-in db [:past-scenes [s c viewing]]))]
      {:pictures pictures
       :index i
-      ;; The last turn ended without drawing: its last user message is newer than the newest picture.
-      :unchanged? (let [state (get-in db [:chats k])
-                        asked (some #(when (= "user" (:role %)) (:at %)) (rseq (vec (:messages state))))]
-                    (boolean (and (seq pictures) (not (:running state)) asked
-                                  (> asked (:at (peek pictures) 0)))))
+      :unchanged? (drew-nothing? pictures (get-in db [:chats k]))
       :viewing? (boolean viewing)
       :loading? (boolean (and viewing (nil? past)))
       :scene (or past live)
@@ -123,20 +126,27 @@
     (or (#{"input" "textarea" "select"} tag)
         (some-> el .-isContentEditable))))
 
+(defn key-event
+  "The event a key press (as plain data) dispatches, or nil. typing? and picture? are asked only for
+  the arrows (a field has the focus; the picture is the right half's view)."
+  [{:keys [alt ctrl cmd shift code k]} typing-now? picture-now?]
+  (let [alt-only? (and alt (not ctrl) (not cmd))]
+    (cond
+      (and alt-only? (= "KeyT" code)) [:right/view nil]
+      (and alt-only? (= "KeyP" code)) [:right/fold]
+      (and (#{"ArrowLeft" "ArrowRight"} k)
+           (not (or alt ctrl cmd shift))
+           (not (typing-now?))
+           (picture-now?))
+      [:picture/step (if (= "ArrowLeft" k) -1 1)])))
+
 (defn- on-key [^js e]
-  (cond
-    (and (.-altKey e) (not (.-ctrlKey e)) (not (.-metaKey e)) (= "KeyT" (.-code e)))
-    (do (.preventDefault e) (rf/dispatch [:right/view nil]))
-
-    (and (.-altKey e) (not (.-ctrlKey e)) (not (.-metaKey e)) (= "KeyP" (.-code e)))
-    (do (.preventDefault e) (rf/dispatch [:right/fold]))
-
-    (and (#{"ArrowLeft" "ArrowRight"} (.-key e))
-         (not (or (.-altKey e) (.-ctrlKey e) (.-metaKey e) (.-shiftKey e)))
-         (not (typing?))
-         (= :picture @(rf/subscribe [:right-view])))
-    (do (.preventDefault e)
-        (rf/dispatch [:picture/step (if (= "ArrowLeft" (.-key e)) -1 1)]))))
+  (when-let [ev (key-event {:alt (.-altKey e) :ctrl (.-ctrlKey e) :cmd (.-metaKey e) :shift (.-shiftKey e)
+                            :code (.-code e) :k (.-key e)}
+                           typing?
+                           #(= :picture @(rf/subscribe [:right-view])))]
+    (.preventDefault e)
+    (rf/dispatch ev)))
 
 (defonce ^:private installed (atom false))
 

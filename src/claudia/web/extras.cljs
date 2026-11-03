@@ -125,7 +125,7 @@
  (fn [db]
    (let [[s] (:open db)]
      (or (not-empty (get-in db [:meta s :limits]))
-         (some (fn [{:keys [name]}] (not-empty (get-in db [:meta name :limits])))
+         (some (fn [server] (not-empty (get-in db [:meta (:name server) :limits])))
                (get-in db [:me :servers]))
          []))))
 

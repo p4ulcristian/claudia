@@ -117,10 +117,10 @@
 
 (defn- changes
   "The chats that finished or started waiting between two states of app-db."
-  [old new]
-  (let [before (into {} (rows-of old))]
-    (for [[k row] (rows-of new)
-          :let [was (get before k)]
+  [before after]
+  (let [was-rows (into {} (rows-of before))]
+    (for [[k row] (rows-of after)
+          :let [was (get was-rows k)]
           :when was
           :let [kind (cond (and (:waiting row) (not (:waiting was))) :waiting
                            (and (:running was) (not (:running row)) (not (:waiting row))) :done)]
@@ -136,10 +136,10 @@
     (doseq [ev ["pointerdown" "keydown"]]
       (js/window.addEventListener ev #(when (and @ctx (= "suspended" (.-state ^js @ctx))) (.resume ^js @ctx)) #js {:capture true}))
     (add-watch rdb/app-db ::alerts
-               (fn [_ _ old new]
+               (fn [_ _ before after]
                  (when (and (or (:sounds @on) (:popups @on))
-                            (not (identical? (:servers old) (:servers new))))
-                   (doseq [[kind [s id :as k] row] (changes old new)
-                           :when (or (not= k (:open new)) (not (js/document.hasFocus)))]
+                            (not (identical? (:servers before) (:servers after))))
+                   (doseq [[kind [s id :as k] row] (changes before after)
+                           :when (or (not= k (:open after)) (not (js/document.hasFocus)))]
                      (when (:sounds @on) (play! kind (:color row)))
                      (when (:popups @on) (popup! kind s (assoc row :id id)))))))))
