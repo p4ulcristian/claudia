@@ -444,7 +444,9 @@
                      (tasks/on-system! id m)
                      ;; A background task ended: its notice, as the session file keeps it.
                      (when (and (= "task_notification" (:subtype m)) (not (:ambient m)) (not (:skip_transcript m))
-                                (seq (:summary m)))
+                                (seq (:summary m))
+                                ;; An agent's own shells and agents are part of it: their notices are its.
+                                (not (tasks/child? id (:task_id m))))
                        (note-msg! id {:id (str "task-" (:task_id m) "-" (now)) :role "note" :text (:summary m) :at (now)}))))
       "rate_limit_event" (try (meta/note-limits! (token) (:rate_limit_info m))
                               (catch :default _ nil))

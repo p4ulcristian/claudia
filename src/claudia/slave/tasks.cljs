@@ -409,3 +409,8 @@
   "Chats with a running task."
   []
   (for [[chat m] @tasks :when (some #(= "running" (:status %)) (vals m))] chat))
+
+(defn child?
+  "A task some agent of the chat started (not Claude in the chat itself)."
+  [chat id]
+  (some? (get-in @tasks [chat id :parent])))
