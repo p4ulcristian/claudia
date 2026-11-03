@@ -9,10 +9,11 @@
   \"<public key> <address>\", applied by the gate's root helper, which answers in HUB_APPLIED_DIR
   (gate.json = the gate's side of the tunnel, <server>.applied = that peer is up). The server polls
   POST /hub/enroll with its secret and gets its address and the gate's details once the peer is up."
-  (:require ["node:crypto" :as crypto]
+  (:require [claudia.node.crypto :refer [sha256-hex]]
             [claudia.node.env :refer [env]]
             ["node:fs" :as fs]
             ["node:path" :as path]
+            [claudia.shared.text :as text]
             [clojure.string :as str]
             [claudia.hub.config :as config]
             [claudia.hub.store :as store]
@@ -57,9 +58,7 @@
     (when (and (= 4 (count parts)) (= "claudia-pair" (first parts)))
       (let [[_ host public-key secret] parts]
         (when (and (re-matches wg-key public-key) (re-matches secret-re secret))
-          {:host (subs host 0 (min 64 (count host))) :public-key public-key :secret secret})))))
-
-(defn- sha256 [s] (-> (crypto/createHash "sha256") (.update s) (.digest "hex")))
+          {:host (text/cut host 64 "") :public-key public-key :secret secret})))))
 
 (defn suggest-name
   "The host name a key carries, as a server name."
@@ -67,7 +66,7 @@
   (let [n (-> (str/lower-case host)
               (str/replace #"[^a-z0-9-]+" "-")
               (str/replace #"^[^a-z]+" ""))]
-    (if (str/blank? n) "server" (subs n 0 (min 31 (count n))))))
+    (if (str/blank? n) "server" (text/cut n 31 ""))))
 
 (defn- free-ip []
   (let [{:keys [prefix from to]} (pool)
@@ -88,18 +87,18 @@
 
 (defn pair!
   "Adds the server and asks the gate for its peer; throws with a message the admin reads."
-  [{:keys [public-key secret]} name label]
-  (when-not (re-matches config/server-name name)
+  [{:keys [public-key secret]} server-name label]
+  (when-not (re-matches config/server-name server-name)
     (throw (js/Error. "A server name: lower-case letters, digits and dashes, starting with a letter.")))
-  (when (store/server name)
-    (throw (js/Error. (str "There is already a server called " name "."))))
+  (when (store/server server-name)
+    (throw (js/Error. (str "There is already a server called " server-name "."))))
   (when (some #(= public-key (:publicKey %)) (store/pairings))
     (throw (js/Error. "This key was already used.")))
   (let [ip (free-ip)]
-    (store/add-paired! {:name name :label label :address (str ip ":" (server-port))}
-                       {:public-key public-key :ip ip :secret-hash (sha256 secret)})
-    (write-peer! name public-key ip)
-    {:name name :ip ip}))
+    (store/add-paired! {:name server-name :label label :address (str ip ":" (server-port))}
+                       {:public-key public-key :ip ip :secret-hash (sha256-hex secret)})
+    (write-peer! server-name public-key ip)
+    {:name server-name :ip ip}))
 
 (defn applied? [server]
   (fs/existsSync (path/join (:applied @dirs) (str server ".applied"))))
@@ -115,7 +114,7 @@
   [secret]
   (if-not (and (string? secret) (re-matches secret-re secret))
     [400 {:error "secret"}]
-    (if-let [p (store/pairing-by-secret (sha256 secret))]
+    (if-let [p (store/pairing-by-secret (sha256-hex secret))]
       (let [gate (gate-wg)]
         (if-not (and gate (applied? (:server p)))
           [202 {:waiting "the gate is adding the peer"}]

@@ -33,14 +33,14 @@
 
 (defn- post
   "One request on the session -> Promise of {:status :body} (status 0: no answer)."
-  [^js session token topic body auth {:keys [type priority]}]
+  [^js session token topic body auth {push-type :type priority :priority}]
   (js/Promise.
-   (fn [resolve reject]
+   (fn [done fail]
      (let [^js req (.request session #js {":method" "POST"
                                           ":path" (str "/3/device/" token)
                                           "authorization" (str "bearer " auth)
                                           "apns-topic" topic
-                                          "apns-push-type" type
+                                          "apns-push-type" push-type
                                           "apns-priority" (str priority)
                                           "content-type" "application/json"})
            status (atom 0)
@@ -48,13 +48,72 @@
        (.setEncoding req "utf8")
        (.on req "response" (fn [h] (reset! status (js/Number (aget h ":status")))))
        (.on req "data" (fn [c] (swap! text str c)))
-       (.on req "end" #(resolve {:status @status :body @text}))
-       (.on req "close" #(resolve {:status @status :body @text}))
-       (.on req "error" reject)
+       (.on req "end" #(done {:status @status :body @text}))
+       (.on req "close" #(done {:status @status :body @text}))
+       (.on req "error" fail)
        (.setTimeout req request-ms #(.close req))
        (.end req body)))))
 
 (def alert {:type "alert" :priority 10})
+
+(defn reason-of
+  "The reason in an APNs answer's body (JSON {reason}), or \"\"."
+  [body]
+  (try (str (or (.-reason (js/JSON.parse body)) "")) (catch :default _ "")))
+
+(defn answer-of
+  "An APNs answer's status and reason -> {:status :ok|:gone|:retry|:failed :detail}; :renew true when
+  Apple refused the JWT (a new one is made next time)."
+  [status reason]
+  (let [detail (str/trim (str status " " reason))]
+    (cond
+      (= status 200) {:status :ok}
+      (or (= status 410) (#{"BadDeviceToken" "Unregistered"} reason)) {:status :gone :detail detail}
+      (and (= status 403) (re-find #"ProviderToken" reason))
+      {:status (if (= reason "ExpiredProviderToken") :retry :failed) :detail detail :renew true}
+      (or (= status 429) (>= status 500) (= status 0)) {:status :retry :detail detail}
+      :else {:status :failed :detail detail})))
+
+(defn- bearer
+  "Promise of the JWT: the kept one while under jwt-ms old, else a new one (kept in jwt)."
+  [jwt signing-key key-id team-id]
+  (let [{:keys [token at]} @jwt]
+    (if (and token (< (- (js/Date.now) at) jwt-ms))
+      (js/Promise.resolve token)
+      (-> (jose/SignJWT. #js {})
+          (.setProtectedHeader #js {:alg "ES256" :kid key-id})
+          (.setIssuer team-id)
+          (.setIssuedAt)
+          (.sign signing-key)
+          (.then (fn [t] (reset! jwt {:token t :at (js/Date.now)}) t))))))
+
+(defn- session
+  "The HTTP/2 connection to an APNs address, kept open (Apple asks for that) in sessions."
+  [sessions origin]
+  (let [^js have (get @sessions origin)]
+    (if (and have (not (.-closed have)) (not (.-destroyed have)))
+      have
+      (let [^js s (http2/connect origin)]
+        (.on s "error" #(js/console.error (str "push: APNs connection: " (.-message %))))
+        (.on s "goaway" #(.close s))
+        (.on s "close" #(when (identical? (get @sessions origin) s) (swap! sessions dissoc origin)))
+        (.setTimeout s (* 30 60000) #(.close s))
+        (swap! sessions assoc origin s)
+        s))))
+
+(defn- sender
+  "The send function over one signing key, its JWT and its connections."
+  [signing-key key-id team-id]
+  (let [jwt (atom {:token nil :at 0})
+        sessions (atom {})]
+    (fn send [{:keys [token env topic]} payload & [kind]]
+      (-> (bearer jwt signing-key key-id team-id)
+          (.then #(post (session sessions (get apple env)) token topic (js/JSON.stringify (clj->js payload)) % (or kind alert)))
+          (.then (fn [{:keys [status body]}]
+                   (let [a (answer-of status (reason-of body))]
+                     (when (:renew a) (reset! jwt {:token nil :at 0}))
+                     (dissoc a :renew))))
+          (.catch (fn [e] {:status :retry :detail (.-message e)}))))))
 
 (defn create
   "Reads the key now (a bad key file stops push at the start) -> Promise of a send function:
@@ -62,55 +121,14 @@
   {:token :env :topic}."
   [{:keys [key-file key-id team-id]}]
   (-> (jose/importPKCS8 (fs/readFileSync key-file "utf8") "ES256")
-      (.then
-       (fn [key]
-         (let [jwt (atom {:token nil :at 0})
-               sessions (atom {})
-               bearer (fn []
-                        (let [{:keys [token at]} @jwt]
-                          (if (and token (< (- (js/Date.now) at) jwt-ms))
-                            (js/Promise.resolve token)
-                            (-> (jose/SignJWT. #js {})
-                                (.setProtectedHeader #js {:alg "ES256" :kid key-id})
-                                (.setIssuer team-id)
-                                (.setIssuedAt)
-                                (.sign key)
-                                (.then (fn [t] (reset! jwt {:token t :at (js/Date.now)}) t))))))
-               ;; One HTTP/2 connection per APNs address, kept open (Apple asks for that).
-               session (fn [origin]
-                         (let [^js have (get @sessions origin)]
-                           (if (and have (not (.-closed have)) (not (.-destroyed have)))
-                             have
-                             (let [^js s (http2/connect origin)]
-                               (.on s "error" #(js/console.error (str "push: APNs connection: " (.-message %))))
-                               (.on s "goaway" #(.close s))
-                               (.on s "close" #(when (identical? (get @sessions origin) s) (swap! sessions dissoc origin)))
-                               (.setTimeout s (* 30 60000) #(.close s))
-                               (swap! sessions assoc origin s)
-                               s))))]
-           (fn send [{:keys [token env topic]} payload & [kind]]
-             (-> (bearer)
-                 (.then #(post (session (get apple env)) token topic (js/JSON.stringify (clj->js payload)) % (or kind alert)))
-                 (.then
-                  (fn [{:keys [status body]}]
-                    (let [reason (try (str (or (.-reason (js/JSON.parse body)) "")) (catch :default _ ""))
-                          detail (str/trim (str status " " reason))]
-                      (cond
-                        (= status 200) {:status :ok}
-                        (or (= status 410) (#{"BadDeviceToken" "Unregistered"} reason)) {:status :gone :detail detail}
-                        (and (= status 403) (re-find #"ProviderToken" reason))
-                        (do (reset! jwt {:token nil :at 0})
-                            {:status (if (= reason "ExpiredProviderToken") :retry :failed) :detail detail})
-                        (or (= status 429) (>= status 500) (= status 0)) {:status :retry :detail detail}
-                        :else {:status :failed :detail detail}))))
-                 (.catch (fn [e] {:status :retry :detail (.-message e)})))))))))
+      (.then #(sender % key-id team-id))))
 
 (defn dry-run
   "Pushes written to the log instead of sent. Titles show as their length only: no chat text in logs."
   [{:keys [token env topic]} payload & [kind]]
-  (let [{:keys [type priority]} (or kind alert)
+  (let [{push-type :type priority :priority} (or kind alert)
         shown (js/JSON.stringify (clj->js payload)
                                  (fn [k v] (if (and (= k "title") (string? v) (not= v "Claudia"))
                                              (str "‹" (count v) " chars›") v)))]
-    (js/console.log (str "push (dry run, " type " p" priority ") to " (short-token token) " (" env ", " topic "): " shown))
+    (js/console.log (str "push (dry run, " push-type " p" priority ") to " (short-token token) " (" env ", " topic "): " shown))
     (js/Promise.resolve {:status :dry})))

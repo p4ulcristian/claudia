@@ -4,6 +4,7 @@
   Activities (/hub/push/…), desktop presence (/hub/presence) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
+            [claudia.shared.text :as text]
             [clojure.string :as str]
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
@@ -18,10 +19,10 @@
 (def ^:private max-body (* 64 1024))
 (def ^:private max-github-body (* 4 1024 1024))
 
-(defn- text
-  "A string field, trimmed and cut, or \"\"."
-  ([v] (text v 200))
-  ([v max] (if (string? v) (let [t (str/trim v)] (subs t 0 (min max (count t)))) "")))
+(defn field
+  "A string field, trimmed and cut to n characters (200 when not given), or \"\"."
+  ([v] (field v 200))
+  ([v n] (if (string? v) (text/cut (str/trim v) n "") "")))
 
 (def ^:private address-re #"^[A-Za-z0-9.-]+:\d{1,5}$|^\[[0-9A-Fa-f:.]+\]:\d{1,5}$")
 (def ^:private device-token #"^[0-9a-f]{64,200}$")
@@ -29,6 +30,14 @@
 (def ^:private live-token #"^[0-9a-f]{32,512}$")
 (def ^:private activity-re #"^[A-Za-z0-9-]{1,100}$")
 (def ^:private page-re #"^[A-Za-z0-9-]{8,64}$")
+
+(defn- fail [^js res status message]
+  (io/send-json res status {:error message}))
+
+(defn- with-body
+  "Reads the request's JSON body, then (f body) -> Promise."
+  [^js req f]
+  (.then (io/read-json req max-body) f))
 
 ;; Admin ------------------------------------------------------------------------------------------
 
@@ -50,156 +59,241 @@
   (push/sync!)
   (io/send-json res 200 (admin-state)))
 
-(defn- admin-call [^js req ^js res pathname]
-  (let [method (.-method req)
-        [_ server-name] (re-matches #"^/hub/admin/servers/([^/]+)$" pathname)
+(defn admin-route
+  "Which admin operation a call is: [op] or [op name-from-the-path], else nil. The server name or
+  email in the path is decoded (a badly encoded one throws)."
+  [method pathname]
+  (let [[_ server-name] (re-matches #"^/hub/admin/servers/([^/]+)$" pathname)
         [_ person-email] (re-matches #"^/hub/admin/people/([^/]+)$" pathname)
         server-name (some-> server-name js/decodeURIComponent)
-        person-email (some-> person-email js/decodeURIComponent str/lower-case)
-        fail #(io/send-json res %1 {:error %2})]
+        person-email (some-> person-email js/decodeURIComponent str/lower-case)]
     (cond
-      (and (= pathname "/hub/admin") (= method "GET")) (io/send-json res 200 (admin-state))
+      (and (= pathname "/hub/admin") (= method "GET")) [:state]
+      (and server-name (= method "PUT")) [:save-server server-name]
+      (and server-name (= method "DELETE")) [:drop-server server-name]
+      (and (= pathname "/hub/admin/people") (= method "POST")) [:add-person]
+      (and person-email (= method "PUT")) [:save-person person-email]
+      (and person-email (= method "DELETE")) [:drop-person person-email]
+      (and (= pathname "/hub/admin/access") (= method "PUT")) [:set-access]
+      (and (= pathname "/hub/admin/pair") (= method "POST")) [:pair]
+      :else nil)))
 
-      (and server-name (= method "PUT"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (let [old (store/server server-name)
-                     label (or (not-empty (text (:label b) 40)) (:label old) server-name)
-                     address (or (not-empty (text (:address b) 100)) (:address old) "")]
-                 (cond
-                   (not (re-matches config/server-name server-name))
-                   (fail 400 "A server name: lower-case letters, digits and dashes, starting with a letter.")
-                   (not (and (re-matches address-re address) (config/host-port address)))
-                   (fail 400 "Address: host:port, e.g. 10.0.0.2:4540.")
-                   :else (do (store/save-server! {:name server-name :label label :address address})
-                             (changed! res))))))
+(defn server-entry
+  "The server a Servers page edit makes: the body's label and address, else the old ones."
+  [server-name old b]
+  {:name server-name
+   :label (or (not-empty (field (:label b) 40)) (:label old) server-name)
+   :address (or (not-empty (field (:address b) 100)) (:address old) "")})
 
-      (and server-name (= method "DELETE"))
-      (do (pairing/drop-peer! server-name)
-          (store/drop-server! server-name)
-          (changed! res))
+(defn server-problem
+  "What is wrong with a server to save, or nil."
+  [{server-name :name address :address}]
+  (cond
+    (not (re-matches config/server-name server-name))
+    "A server name: lower-case letters, digits and dashes, starting with a letter."
+    (not (and (re-matches address-re address) (config/host-port address)))
+    "Address: host:port, e.g. 10.0.0.2:4540."
+    :else nil))
 
-      (and (= pathname "/hub/admin/people") (= method "POST"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (let [email (str/lower-case (text (:email b)))]
-                 (if-not (re-matches config/email-re email)
-                   (fail 400 "That isn't an email address.")
-                   (do (store/save-person! {:email email :name (not-empty (text (:name b) 80))
-                                            :admin (when (boolean? (:admin b)) (:admin b))})
-                       (changed! res))))))
+(defn- save-server [req res server-name]
+  (with-body req
+    (fn [b]
+      (let [s (server-entry server-name (store/server server-name) b)]
+        (if-let [problem (server-problem s)]
+          (fail res 400 problem)
+          (do (store/save-server! s) (changed! res)))))))
 
-      (and person-email (= method "PUT"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (if-not (store/person person-email)
-                 (fail 404 "No such person.")
-                 (do (store/save-person! {:email person-email
-                                          :name (when (string? (:name b)) (text (:name b) 80))
-                                          :admin (when (boolean? (:admin b)) (:admin b))})
-                     (changed! res)))))
+(defn- drop-server [_ res server-name]
+  (pairing/drop-peer! server-name)
+  (store/drop-server! server-name)
+  (changed! res))
 
-      (and person-email (= method "DELETE"))
-      (do (store/drop-person! person-email) (changed! res))
+(defn- admin-flag [b] (when (boolean? (:admin b)) (:admin b)))
 
-      (and (= pathname "/hub/admin/access") (= method "PUT"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (let [email (str/lower-case (text (:email b)))
-                     server (text (:server b))]
-                 (if-not (and (store/person email) (store/server server))
-                   (fail 400 "No such person or server.")
-                   (do (store/set-access! email server (true? (:granted b)))
-                       (changed! res))))))
+(defn- add-person [req res _]
+  (with-body req
+    (fn [b]
+      (let [email (str/lower-case (field (:email b)))]
+        (if-not (re-matches config/email-re email)
+          (fail res 400 "That isn't an email address.")
+          (do (store/save-person! {:email email :name (not-empty (field (:name b) 80)) :admin (admin-flag b)})
+              (changed! res)))))))
 
-      (and (= pathname "/hub/admin/pair") (= method "POST"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (let [key (pairing/parse-key (text (:key b) 400))]
-                 (cond
-                   (not (pairing/available?))
-                   (fail 409 "Pairing is unavailable on this hub (no HUB_WG_POOL).")
-                   (not key)
-                   (fail 400 "That isn't a pairing key (claudia-pair:…). Run deploy/pair.sh on the server to get one.")
-                   :else
-                   (try (pairing/pair! key
-                                       (or (not-empty (text (:name b) 31)) (pairing/suggest-name (:host key)))
-                                       (or (not-empty (text (:label b) 40)) (:host key)))
-                        (changed! res)
-                        (catch :default e (fail 409 (.-message e))))))))
+(defn- save-person [req res email]
+  (with-body req
+    (fn [b]
+      (if-not (store/person email)
+        (fail res 404 "No such person.")
+        (do (store/save-person! {:email email
+                                 :name (when (string? (:name b)) (field (:name b) 80))
+                                 :admin (admin-flag b)})
+            (changed! res))))))
 
-      :else (fail 404 "not found"))))
+(defn- drop-person [_ res email]
+  (store/drop-person! email)
+  (changed! res))
+
+(defn- set-access [req res _]
+  (with-body req
+    (fn [b]
+      (let [email (str/lower-case (field (:email b)))
+            server-name (field (:server b))]
+        (if-not (and (store/person email) (store/server server-name))
+          (fail res 400 "No such person or server.")
+          (do (store/set-access! email server-name (true? (:granted b)))
+              (changed! res)))))))
+
+(defn pair-names
+  "The name and label a pairing gets: the body's, else from the host the key carries."
+  [pair-key b]
+  [(or (not-empty (field (:name b) 31)) (pairing/suggest-name (:host pair-key)))
+   (or (not-empty (field (:label b) 40)) (:host pair-key))])
+
+(defn- pair [req res _]
+  (with-body req
+    (fn [b]
+      (let [pair-key (pairing/parse-key (field (:key b) 400))]
+        (cond
+          (not (pairing/available?))
+          (fail res 409 "Pairing is unavailable on this hub (no HUB_WG_POOL).")
+          (not pair-key)
+          (fail res 400 "That isn't a pairing key (claudia-pair:…). Run deploy/pair.sh on the server to get one.")
+          :else
+          (try (let [[pair-name label] (pair-names pair-key b)]
+                 (pairing/pair! pair-key pair-name label))
+               (changed! res)
+               (catch :default e (fail res 409 (.-message e)))))))))
+
+(def ^:private admin-ops
+  {:state (fn [_ res _] (io/send-json res 200 (admin-state)))
+   :save-server save-server
+   :drop-server drop-server
+   :add-person add-person
+   :save-person save-person
+   :drop-person drop-person
+   :set-access set-access
+   :pair pair})
+
+(defn- admin-call [^js req ^js res pathname]
+  (if-let [[op arg] (admin-route (.-method req) pathname)]
+    ((admin-ops op) req res arg)
+    (fail res 404 "not found")))
 
 ;; Phones -----------------------------------------------------------------------------------------
 
-(defn- register-device [^js req ^js res email]
-  (.then (io/read-json req max-body)
-         (fn [b]
-           (let [token (str/lower-case (text (:token b)))
-                 env (text (:env b))
-                 topic (text (:topic b) 155)
-                 key (seal/device-key (:key b))
-                 live-start (when (some? (:liveStartToken b)) (str/lower-case (text (:liveStartToken b) 600)))]
-             (cond
-               (not (re-matches device-token token)) (io/send-json res 400 {:error "token: an APNs device token in hex"})
-               (not (#{"development" "production"} env)) (io/send-json res 400 {:error "env: development or production"})
-               (not (re-matches topic-re topic)) (io/send-json res 400 {:error "topic: the app's bundle id"})
-               (not key) (io/send-json res 400 {:error "key: base64 of 32 random bytes"})
-               (and live-start (not (re-matches live-token live-start)))
-               (io/send-json res 400 {:error "liveStartToken: ActivityKit's push-to-start token in hex"})
-               :else
-               (do (store/save-device! {:token token :email email :env env :topic topic :key key :live-start live-start})
-                   (js/console.log (str "push: phone " (apns/short-token token) " (" env (when live-start ", Live Activity")
-                                        ") registered for " email))
-                   (push/sync!)
-                   (push/changed! email)
-                   (io/send-json res 200 {:ok true :push (push/on?)})))))))
+(defn device-entry
+  "The phone a registration body describes, for this person."
+  [b email]
+  {:token (str/lower-case (field (:token b)))
+   :email email
+   :env (field (:env b))
+   :topic (field (:topic b) 155)
+   :key (seal/device-key (:key b))
+   :live-start (when (some? (:liveStartToken b)) (str/lower-case (field (:liveStartToken b) 600)))})
 
-(defn- report-live [^js req ^js res email]
-  (.then (io/read-json req max-body)
-         (fn [b]
-           (let [device (str/lower-case (text (:device b)))
-                 id (text (:activity b) 100)
-                 token (str/lower-case (text (:token b) 600))]
-             (cond
-               (not (re-matches activity-re id)) (io/send-json res 400 {:error "activity: the activity's id"})
-               (not (re-matches live-token token)) (io/send-json res 400 {:error "token: the activity's update token in hex"})
-               (not (some #(= device (:token %)) (store/devices email))) (io/send-json res 404 {:error "no such phone of yours"})
-               :else
-               (do (store/save-activity! id device token)
-                   (let [a (store/activity id)]
-                     (cond
-                       (not= device (:device a)) (io/send-json res 409 {:error "that activity is another phone's"})
-                       (:ended-at a) (io/send-json res 200 {:ok true :ended true})
-                       :else (do (live/changed! email) (io/send-json res 200 {:ok true :ended false}))))))))))
+(defn device-problem
+  "What is wrong with a phone to register, or nil."
+  [{:keys [token env topic live-start] device-key :key}]
+  (cond
+    (not (re-matches device-token token)) "token: an APNs device token in hex"
+    (not (#{"development" "production"} env)) "env: development or production"
+    (not (re-matches topic-re topic)) "topic: the app's bundle id"
+    (not device-key) "key: base64 of 32 random bytes"
+    (and live-start (not (re-matches live-token live-start)))
+    "liveStartToken: ActivityKit's push-to-start token in hex"
+    :else nil))
+
+(defn- register-device [req res email]
+  (with-body req
+    (fn [b]
+      (let [{:keys [token env live-start] :as d} (device-entry b email)]
+        (if-let [problem (device-problem d)]
+          (fail res 400 problem)
+          (do (store/save-device! d)
+              (js/console.log (str "push: phone " (apns/short-token token) " (" env (when live-start ", Live Activity")
+                                   ") registered for " email))
+              (push/sync!)
+              (push/changed! email)
+              (io/send-json res 200 {:ok true :push (push/on?)})))))))
+
+(defn live-report
+  "A Live Activity report's body as {:device :id :token}."
+  [b]
+  {:device (str/lower-case (field (:device b)))
+   :id (field (:activity b) 100)
+   :token (str/lower-case (field (:token b) 600))})
+
+(defn live-report-problem
+  "What is wrong with a Live Activity report by its shape, or nil."
+  [{:keys [id token]}]
+  (cond
+    (not (re-matches activity-re id)) "activity: the activity's id"
+    (not (re-matches live-token token)) "token: the activity's update token in hex"
+    :else nil))
+
+(defn- live-saved [res email device a]
+  (cond
+    (not= device (:device a)) (fail res 409 "that activity is another phone's")
+    (:ended-at a) (io/send-json res 200 {:ok true :ended true})
+    :else (do (live/changed! email) (io/send-json res 200 {:ok true :ended false}))))
+
+(defn- report-live [req res email]
+  (with-body req
+    (fn [b]
+      (let [{:keys [device id token] :as r} (live-report b)]
+        (if-let [problem (live-report-problem r)]
+          (fail res 400 problem)
+          (if-not (some #(= device (:token %)) (store/devices email))
+            (fail res 404 "no such phone of yours")
+            (do (store/save-activity! id device token)
+                (live-saved res email device (store/activity id)))))))))
+
+(defn- drop-device [_ res email token]
+  (if (store/drop-device! (str/lower-case (js/decodeURIComponent token)) email)
+    (do (push/sync!) (io/send-json res 200 {:ok true}))
+    (fail res 404 "no such phone of yours")))
+
+(defn- end-live [_ res email activity]
+  (let [a (store/activity (js/decodeURIComponent activity))]
+    (if (and a (= email (:email a)))
+      (do (live/ended! email a) (io/send-json res 200 {:ok true}))
+      (fail res 404 "no such activity of yours"))))
+
+(defn- beat [req res email _]
+  (with-body req
+    (fn [b]
+      (let [page (field (:page b) 64)]
+        (if-not (re-matches page-re page)
+          (fail res 400 "page: the page's id")
+          (do (presence/beat! email page (true? (:active b)))
+              (io/no-content res)))))))
+
+(defn person-route
+  "Which of a person's own calls this is: [op] or [op id-from-the-path] (still encoded), else nil."
+  [method pathname]
+  (let [[_ token] (re-matches #"^/hub/push/devices/([^/]+)$" pathname)
+        [_ activity] (re-matches #"^/hub/push/live/([^/]+)$" pathname)]
+    (cond
+      (and (= pathname "/hub/push/devices") (= method "POST")) [:register]
+      (and token (= method "DELETE")) [:drop-device token]
+      (and (= pathname "/hub/push/live") (= method "POST")) [:report-live]
+      (and activity (= method "DELETE")) [:end-live activity]
+      (and (= pathname "/hub/presence") (= method "POST")) [:presence]
+      :else nil)))
+
+(def ^:private person-ops
+  {:register (fn [req res email _] (register-device req res email))
+   :drop-device drop-device
+   :report-live (fn [req res email _] (report-live req res email))
+   :end-live end-live
+   :presence beat})
 
 (defn- person-call
   "Calls any signed-in person makes about themselves (phones, Live Activities, presence)."
   [^js req ^js res pathname email]
-  (let [method (.-method req)
-        [_ token] (re-matches #"^/hub/push/devices/([^/]+)$" pathname)
-        [_ activity] (re-matches #"^/hub/push/live/([^/]+)$" pathname)]
-    (cond
-      (and (= pathname "/hub/push/devices") (= method "POST")) (register-device req res email)
-      (and token (= method "DELETE"))
-      (if (store/drop-device! (str/lower-case (js/decodeURIComponent token)) email)
-        (do (push/sync!) (io/send-json res 200 {:ok true}))
-        (io/send-json res 404 {:error "no such phone of yours"}))
-      (and (= pathname "/hub/push/live") (= method "POST")) (report-live req res email)
-      (and activity (= method "DELETE"))
-      (let [a (store/activity (js/decodeURIComponent activity))]
-        (if (and a (= email (:email a)))
-          (do (live/ended! email a) (io/send-json res 200 {:ok true}))
-          (io/send-json res 404 {:error "no such activity of yours"})))
-      (and (= pathname "/hub/presence") (= method "POST"))
-      (.then (io/read-json req max-body)
-             (fn [b]
-               (let [page (text (:page b) 64)]
-                 (if-not (re-matches page-re page)
-                   (io/send-json res 400 {:error "page: the page's id"})
-                   (do (presence/beat! email page (true? (:active b)))
-                       (io/no-content res))))))
-      :else (io/send-json res 404 {:error "not found"}))))
+  (if-let [[op arg] (person-route (.-method req) pathname)]
+    ((person-ops op) req res email arg)
+    (fail res 404 "not found")))
 
 ;; Entry points -----------------------------------------------------------------------------------
 
@@ -208,21 +302,25 @@
   [pathname]
   (#{"/hub/enroll" "/hub/github"} pathname))
 
+(defn- github-delivery [^js req ^js res]
+  (.then (io/read-bytes req max-github-body)
+         (fn [body]
+           (let [h (.-headers req)
+                 status (github/handle body {"x-hub-signature-256" (aget h "x-hub-signature-256")
+                                             "x-github-event" (aget h "x-github-event")})]
+             (.writeHead res status #js {"cache-control" "no-store"})
+             (.end res)))))
+
+(defn- enroll [req res]
+  (with-body req
+    (fn [b] (let [[status body] (pairing/enroll (:secret b))] (io/send-json res status body)))))
+
 (defn open-call
   [^js req ^js res pathname]
   (if (not= "POST" (.-method req))
-    (do (.setHeader res "allow" "POST") (io/send-json res 405 {:error "POST only"}))
-    (-> (if (= pathname "/hub/github")
-          (.then (io/read-bytes req max-github-body)
-                 (fn [body]
-                   (let [h (.-headers req)
-                         status (github/handle body {"x-hub-signature-256" (aget h "x-hub-signature-256")
-                                                     "x-github-event" (aget h "x-github-event")})]
-                     (.writeHead res status #js {"cache-control" "no-store"})
-                     (.end res))))
-          (.then (io/read-json req max-body)
-                 (fn [b] (let [[status body] (pairing/enroll (:secret b))] (io/send-json res status body)))))
-        (.catch (fn [e] (when-not (.-headersSent res) (io/send-json res 400 {:error (.-message e)})))))))
+    (do (.setHeader res "allow" "POST") (fail res 405 "POST only"))
+    (-> (if (= pathname "/hub/github") (github-delivery req res) (enroll req res))
+        (.catch (fn [e] (when-not (.-headersSent res) (fail res 400 (.-message e))))))))
 
 (defn call
   "A signed-in caller's /hub/… call other than /hub/me and server state: admin? decides the admin
@@ -232,11 +330,11 @@
       (.then (fn []
                (cond
                  (str/starts-with? pathname "/hub/admin")
-                 (if admin? (admin-call req res pathname) (io/send-json res 403 {:error "admins only"}))
+                 (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
-                 :else (io/send-json res 404 {:error "not found"}))))
+                 :else (fail res 404 "not found"))))
       (.catch (fn [e]
                 (js/console.error (str "hub: " pathname ": " (.-message e)))
-                (when-not (.-headersSent res) (io/send-json res 500 {:error (.-message e)}))))))
+                (when-not (.-headersSent res) (fail res 500 (.-message e)))))))

@@ -25,24 +25,24 @@
       [(or v6 host) port])))
 
 (defn- read-server [s]
-  (let [{:keys [name label address]} s]
-    (when-not (and (string? name) (re-matches server-name name))
-      (fail "servers: name " (pr-str name) " must be lower-case letters, digits and dashes, starting with a letter"))
+  (let [{s-name :name label :label address :address} s]
+    (when-not (and (string? s-name) (re-matches server-name s-name))
+      (fail "servers: name " (pr-str s-name) " must be lower-case letters, digits and dashes, starting with a letter"))
     (when-not (host-port address)
-      (fail "servers: " name ": address must be host:port"))
-    {:name name
-     :label (if (and (string? label) (not (str/blank? label))) label name)
+      (fail "servers: " s-name ": address must be host:port"))
+    {:name s-name
+     :label (if (and (string? label) (not (str/blank? label))) label s-name)
      :address address}))
 
 (defn- read-person [known p]
-  (let [{:keys [email name admin servers]} p
+  (let [{:keys [email admin servers] p-name :name} p
         email (when (string? email) (str/lower-case (str/trim email)))]
     (when-not (and email (re-matches email-re email))
       (fail "people: " (pr-str (:email p)) " is not an email address"))
     (doseq [s servers :when (not (known s))]
       (js/console.warn (str "hub.json: a person lists server " (pr-str s) ", which is not in servers; ignored")))
     {:email email
-     :name (if (and (string? name) (not (str/blank? name))) name "")
+     :name (if (and (string? p-name) (not (str/blank? p-name))) p-name "")
      :admin (true? admin)
      :servers (->> servers (filter known) distinct vec)}))
 
@@ -106,13 +106,13 @@
 
 (defn server-of
   "The server called `name` when this person may use it, else nil."
-  [p name]
-  (when (store/may? (:email p) name)
-    (with-address (store/server name))))
+  [p s-name]
+  (when (store/may? (:email p) s-name)
+    (with-address (store/server s-name))))
 
 (defn server
   "Any server by name (the hub's own calls: push, pokes)."
-  [name]
-  (with-address (store/server name)))
+  [s-name]
+  (with-address (store/server s-name)))
 
 (defn all-servers [] (mapv with-address (store/servers)))

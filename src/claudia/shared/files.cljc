@@ -14,8 +14,8 @@
 (defn- unattr [s]
   (-> (str s) (str/replace "&quot;" "\"") (str/replace "&lt;" "<") (str/replace "&gt;" ">") (str/replace "&amp;" "&")))
 
-(defn tag [{:keys [path name size type]}]
-  (str "<claudia-file path=\"" (attr path) "\" name=\"" (attr name) "\" size=\"" size "\" type=\"" (attr type)
+(defn tag [{:keys [path size] file-name :name file-type :type}]
+  (str "<claudia-file path=\"" (attr path) "\" name=\"" (attr file-name) "\" size=\"" size "\" type=\"" (attr file-type)
        "\">The user attached this file; it is saved at the path.</claudia-file>"))
 
 (defn with-files

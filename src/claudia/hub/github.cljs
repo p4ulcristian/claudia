@@ -30,10 +30,10 @@
 
 (defn signed?
   "The body's HMAC-SHA256 under the secret equals the header's (constant time)."
-  [key ^js body header]
+  [secret-key ^js body header]
   (boolean
-   (when (and key (string? header) (str/starts-with? header "sha256="))
-     (let [want (-> (crypto/createHmac "sha256" key) (.update body) (.digest))
+   (when (and secret-key (string? header) (str/starts-with? header "sha256="))
+     (let [want (-> (crypto/createHmac "sha256" secret-key) (.update body) (.digest))
            got (js/Buffer.from (subs header 7) "hex")]
        (and (= (.-length got) (.-length want)) (crypto/timingSafeEqual got want))))))
 
@@ -56,6 +56,32 @@
         (js/console.log (str "github: hub image signed for " (subs commit 0 7) "; hub update asked")))
     (js/console.log "github: hub image signed; HUB_UPDATE_REQUEST not set, so no update asked")))
 
+(defn main-push?
+  "A delivery for a push to the main branch."
+  [event d]
+  (and (= event "push") (= (:ref d) (str "refs/heads/" branch))))
+
+(defn release-done?
+  "A delivery for a release run on main that succeeded, with the commit it ran on."
+  [event d]
+  (let [run (:workflow_run d)]
+    (boolean
+     (and (= event "workflow_run") (= (:action d) "completed")
+          (= "success" (:conclusion run)) (= branch (:head_branch run))
+          (= workflow (:path run))
+          (re-matches #"^[0-9a-f]{40}$" (str (:head_sha run)))))))
+
+(defn- poke-all! []
+  (doseq [s (config/all-servers)] (poke! s)))
+
+(defn- act! [event d]
+  (when (main-push? event d) (poke-all!))
+  (when (release-done? event d)
+    (request-hub-update! (get-in d [:workflow_run :head_sha]))
+    ;; The slave release is published now: the servers look again (the poke on the push came
+    ;; before it existed).
+    (poke-all!)))
+
 (defn handle
   "One delivery -> status. body: the raw bytes (Buffer)."
   [^js body headers]
@@ -64,21 +90,8 @@
       (not @secret) 503
       (not (signed? @secret body (get headers "x-hub-signature-256"))) 401
       :else
-      (let [d (try (protocol/read-json (.toString body "utf8")) (catch :default _ ::bad))
-            event (get headers "x-github-event")
-            run (:workflow_run d)]
+      (let [d (try (protocol/read-json (.toString body "utf8")) (catch :default _ ::bad))]
         (cond
           (= d ::bad) 400
           (not= repo (get-in d [:repository :full_name])) 204
-          :else
-          (do (when (and (= event "push") (= (:ref d) (str "refs/heads/" branch)))
-                (doseq [s (config/all-servers)] (poke! s)))
-              (when (and (= event "workflow_run") (= (:action d) "completed")
-                         (= "success" (:conclusion run)) (= branch (:head_branch run))
-                         (= workflow (:path run))
-                         (re-matches #"^[0-9a-f]{40}$" (str (:head_sha run))))
-                (request-hub-update! (:head_sha run))
-                ;; The slave release is published now: the servers look again (the poke on the
-                ;; push came before it existed).
-                (doseq [s (config/all-servers)] (poke! s)))
-              202))))))
+          :else (do (act! (get headers "x-github-event") d) 202))))))
