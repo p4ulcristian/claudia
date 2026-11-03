@@ -48,6 +48,12 @@
                           (pos? (.-scrollLeft el)))))]
           (if ok true (recur (.-parentElement el))))))))
 
+(defonce ^:private blocked
+  ;; The current touch may move nothing native (decided on its first move): a swipe may take it.
+  (atom false))
+
+(defn touch-blocked? [] @blocked)
+
 (defn install! []
   (when-let [vv js/window.visualViewport]
     (.addEventListener vv "resize" fit)
@@ -55,7 +61,7 @@
     (js/window.addEventListener "scroll" fit)
     (fit))
   ;; Decided on a touch's first move: later moves can't be cancelled once a scroll started.
-  (let [start (atom nil) blocked (atom false)]
+  (let [start (atom nil)]
     (js/window.addEventListener
      "touchstart"
      (fn [^js e]

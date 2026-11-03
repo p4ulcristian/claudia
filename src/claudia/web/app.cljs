@@ -1,6 +1,9 @@
 (ns claudia.web.app
   (:require [re-frame.core :as rf]
             [claudia.web.admin]
+            [claudia.web.alerts :as alerts]
+            [claudia.web.swipe :as swipe]
+            [claudia.web.tip :as tip]
             [claudia.web.native :as native]
             [claudia.web.presence :as presence]
             [reagent.dom.client :as rdc]
@@ -26,6 +29,9 @@
 (defn init []
   (chalk/bake-all!)
   (viewport/install!)
+  (swipe/install!)
+  (tip/install!)
+  (alerts/install!)
   (md/install-copy!)
   (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
   (js/document.addEventListener
