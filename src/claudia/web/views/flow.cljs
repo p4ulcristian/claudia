@@ -4,6 +4,7 @@
   it is at; a caption says what happens. Back / next (or left/right while it has focus), and several
   ways through (scenarios) to switch between."
   (:require [clojure.string :as str]
+            [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.hl :as hl]
             [claudia.web.views.code :as code]))
@@ -23,7 +24,7 @@
              [:pre (map-indexed (fn [i l]
                                   ^{:key i}
                                   [:span {:class (when (and from (<= nl-before i (+ nl-before nl-in))) "new")}
-                                   [:span {:dangerouslySetInnerHTML {:__html l}}]
+                                   [:span {:dangerouslySetInnerHTML (r/unsafe-html l)}]
                                    (when (< i (dec (count html))) "\n")])
                                 html)])
       from [:pre (subs text 0 from) [:span.new fresh] (subs text (+ from (count fresh)))]

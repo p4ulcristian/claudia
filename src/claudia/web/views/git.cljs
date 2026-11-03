@@ -3,6 +3,7 @@
   (claudia.slave.git) and asked again every few seconds with the graph's fingerprint, so it redraws
   when the repo changes. A click on a commit opens its files and diff beside the graph. Read only."
   (:require [clojure.string :as str]
+            [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
             [claudia.web.hl :as hl]
@@ -127,7 +128,7 @@
                                (cond
                                  (not (seq (:text r))) [:code " "]
                                  (:words r) (into [:code] (marked-text (:text r) (:words r)))
-                                 (nth coloured k nil) [:code {:dangerouslySetInnerHTML {:__html (nth coloured k)}}]
+                                 (nth coloured k nil) [:code {:dangerouslySetInnerHTML (r/unsafe-html (nth coloured k))}]
                                  :else [:code (:text r)])])
                         (inc k)]))
                    [[] 0] (map-indexed vector rows))))))

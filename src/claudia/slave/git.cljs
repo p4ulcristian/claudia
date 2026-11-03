@@ -206,11 +206,18 @@
                 (git root ["ls-files" "--others" "--exclude-standard"] true)
                 (git root ["diff" "HEAD" "--no-color" "--no-prefix" "--patch" "-M"] true))
            (fn [[ns nst untracked diff]]
-             (let [counts (numstat ns)
-                   files (into (mapv #(merge % (get counts (:path %) {:binary false :additions 0 :deletions 0})) (name-status nst))
-                               (for [f (str/split-lines untracked) :when (seq f)]
-                                 {:path f :oldPath nil :status "?" :binary false :additions 0 :deletions 0}))]
-               (finish {:hash "WORKING" :when "now" :subject "Uncommitted changes" :body "" :parents []} files diff))))
+             ;; Untracked files are additions: each one's patch against /dev/null (git exits 1 on it).
+             (let [new-files (vec (take 200 (filter seq (str/split-lines untracked))))]
+               (.then (apply all (map #(git root ["diff" "--no-index" "--no-color" "--no-prefix" "/dev/null" %] true) new-files))
+                      (fn [patches]
+                        (let [counts (numstat ns)
+                              files (into (mapv #(merge % (get counts (:path %) {:binary false :additions 0 :deletions 0})) (name-status nst))
+                                          (map (fn [f d] {:path f :oldPath nil :status "?" :binary (str/includes? d "Binary files")
+                                                          :additions (count (filter #(and (str/starts-with? % "+") (not (str/starts-with? % "+++"))) (str/split-lines d)))
+                                                          :deletions 0})
+                                               new-files patches))]
+                          (finish {:hash "WORKING" :when "now" :subject "Uncommitted changes" :body "" :parents []} files
+                                  (str/join (cons diff (map #(if (and (seq diff) (not (str/ends-with? diff "\n"))) (str "\n" %) %) patches))))))))))
     :else
     (.then (git root ["rev-parse" "--verify" "--end-of-options" (str rev "^{commit}")])
            (fn [full]

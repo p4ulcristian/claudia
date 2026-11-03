@@ -3,6 +3,7 @@
   lines, long code folded around what matters, copy. Used by the files form (a file opened) and the
   git form (a diff)."
   (:require [clojure.string :as str]
+            [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.hl :as hl]))
 
@@ -81,7 +82,7 @@
                                  [:span.num (or (:n r) "")]
                                  [:span.sign (if (= "-" (:sign r)) "−" (:sign r))]
                                  (if html
-                                   [:code {:dangerouslySetInnerHTML {:__html (if (seq html) html " ")}}]
+                                   [:code {:dangerouslySetInnerHTML (r/unsafe-html (if (seq html) html " "))}]
                                    [:code (if (seq (:text r)) (:text r) " ")])])
                                (into (for [nt (when (:n r) (get notes (:n r)))]
                                        ^{:key (str "n" (:id nt))}
