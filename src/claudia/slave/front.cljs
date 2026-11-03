@@ -71,40 +71,19 @@
          (catch :default e (io/send-json res 500 {:error (.-message e)})))
     (io/send-json res 501 {:error "no update unit here"})))
 
-(def ^:private token-urls #{"/api/claude-tokens" "/api/claude-token" "/api/claude-token/use"})
-
-(defn token-op
-  "Which Settings token call url and method are: nil (not one), :read-only, :state, :save, :use or
-  :not-allowed."
-  [url method read-only]
-  (cond
-    (not (token-urls url)) nil
-    read-only :read-only
-    (and (= url "/api/claude-tokens") (= method "GET")) :state
-    (and (= url "/api/claude-token") (= method "PUT")) :save
-    (and (= url "/api/claude-token/use") (= method "POST")) :use
-    :else :not-allowed))
-
-(defn- answer-token [^js res v]
+(defn- token-answer [^js res v]
   (if (:error v)
     (io/send-json res (or (:status v) 400) (dissoc v :status))
     (io/send-json res 200 v)))
 
-(defn- token-call
-  "Settings' Claude tokens, answered here, not by a runner: the front writes them (on a shared server
-  it is the page's own user, as the TypeScript Claudia's page process was; runners only read the token
-  in use). by = the caller's email. True when it was one of them."
-  [^js req ^js res url {:keys [own read-only]} email]
-  (let [who (or (not-empty email) (:profile own))
-        op (token-op url (.-method req) read-only)]
-    (case op
-      nil nil
-      :read-only (io/send-json res 403 {:error "Read only."})
-      :state (io/send-json res 200 (tokens/state))
-      :save (.then (io/read-json req 65536) #(answer-token res (tokens/save! (:name %) (:token %) who)))
-      :use (.then (io/read-json req 65536) #(answer-token res (tokens/use! (:name %) who)))
-      :not-allowed (io/send-json res 405 {:error "Not allowed."}))
-    (some? op)))
+(defn- token-current
+  "The hub's own calls about the Claude token in use here (README decision 10): GET what it is (no
+  token), PUT the one the hub keeps in use. No caller: only the hub reaches this listener."
+  [^js req ^js res]
+  (case (.-method req)
+    "GET" (io/send-json res 200 (tokens/current))
+    "PUT" (.then (io/read-json req 65536) #(token-answer res (tokens/write-current! %)))
+    (io/send-json res 405 {:error "GET or PUT"})))
 
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
@@ -113,9 +92,9 @@
       ;; From the hub itself (no caller): only the hub reaches this listener.
       (= url "/api/update-check")
       (if (= "POST" (.-method req)) (update-check res) (io/send-json res 405 {:error "POST only"}))
+      (= url "/api/claude-token/current") (token-current req res)
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
-      (token-call req res url r (caller-email (.-headers req))) nil
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       :else
       (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))

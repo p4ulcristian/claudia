@@ -38,6 +38,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
 | front | `CLAUDIA_UPDATE_TRIGGER` | file `POST /api/update-check` writes (a path unit starts `deploy/update.sh`) |
 | hub | `HUB_WEB` | folder of the built page (`out/web`) |
+| hub | `HUB_TOKEN_KEY_FILE` | base64 of the 32-byte key the saved Claude tokens are sealed with (never in `hub.db`); unset: the hub keeps no tokens and leaves the servers' token files alone |
 | hub | `HUB_TTS_URL`, `HUB_TTS_TOKEN_FILE` (or `HUB_TTS_TOKEN`) | the narrator's voice service for 3D stories and its bearer token (unset: no voice) |
 | front | `FRONT_HOST`, `FRONT_PORT` | the WireGuard address it listens on |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
@@ -47,8 +48,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `RUNNER_DATA` | folder for `claudia.db` and uploads |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
-| runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`): the front writes it (Settings), runners read it on every session start |
-| front | `CLAUDIA_TOKENS_DIR` | the Claude tokens saved by name in Settings (default `<token file>.d`, the front's only); who switched to which is `<token file>.json` |
+| runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ name, by, at }` |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
@@ -98,7 +98,8 @@ files are served without either check (they hold no data). The hub listens on `H
 (default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
-`/s/<server>/api/update-check` is refused (404): only the hub pokes a front.
+`/s/<server>/api/update-check` and `/s/<server>/api/claude-token/current` are refused (404): only
+the hub makes those calls on a front.
 
 ## Hub operations
 
@@ -124,6 +125,16 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
 | `DELETE /hub/push/live/:activity` | person | the app saw it end |
 | `POST /hub/presence` `{ page (8-64 chars), active }` | person | 204; alerts are held while any page said active within 45 s |
+| `GET /hub/claude-tokens` | person | `{ on, inUse: { name, by, at } \| null, tokens: [{ name, by, at }], servers: [{ name, label, ok, current, error }] }`: never a token; `servers` = the caller's, with the name each runs on now (`ok` false: not reached) |
+| `PUT /hub/claude-token` `{ name, token }` | person | the same shape: sealed and saved under the name (same name = replaced), in use on every server; 503 when `on` is false |
+| `POST /hub/claude-token/use` `{ name }` | person | the same shape: in use on every server; 404 no such name |
+| `DELETE /hub/claude-tokens/:name` | person | the same shape; 409 for the one in use |
+
+Claude tokens (README decision 10): one in use for every server. The hub seals each saved token
+(AES-256-GCM, the folded name as AAD, base64 of nonce (12) ‖ ciphertext ‖ tag (16)) under
+`HUB_TOKEN_KEY_FILE`, and brings every server along: `GET /api/claude-token/current` on its front,
+then `PUT` with the token when the name or `at` differ; after each save or switch (the answer waits
+up to 6 s for it) and every minute, so a server that was off, new or reinstalled follows by itself.
 
 The hub watches each server for each person with a phone over that front's `/ws` (as the person,
 `hello`, then every `chats`). A push alert: `{ aps: { alert: { title: "Claudia", body: "New message" },
@@ -138,6 +149,8 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 |---|---|
 | `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
 | `POST /api/update-check` | answered by the front, no caller needed (only the hub reaches it): writes `CLAUDIA_UPDATE_TRIGGER`, 202; 501 when unset |
+| `GET /api/claude-token/current` | the front, the hub only: `{ name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
+| `PUT /api/claude-token/current` `{ name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
 | `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
@@ -173,9 +186,6 @@ e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. 
 | `POST /api/sessions/:id/adopt` | `{ id }`: that session becomes a chat here |
 | `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`) |
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo) |
-| `GET /api/claude-tokens` | answered by the front (not for a view): `{ inUse: { name, by, at } \| null, tokens: [{ name, by, at }] }`: never a token |
-| `PUT /api/claude-token` `{ name, token }` | the front: the same shape: saved under the name (same name = replaced) and switched to; `by` = the caller's email |
-| `POST /api/claude-token/use` `{ name }` | the front: the same shape: the saved token copied over `CLAUDIA_TOKEN_FILE` (an idle session starts again on it with its next message) |
 | `GET /api/prefs` | `{ chatColors: "each" \| "none", hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
 | `PATCH /api/prefs` `{ chatColors?, hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login |

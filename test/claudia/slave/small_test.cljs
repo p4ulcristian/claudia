@@ -95,16 +95,10 @@
     (is (= {:own (first ps) :target (second ps) :read-only true} (front/route-of ps "ann@x.org" "bob")))
     (is (= {:own (first ps) :target (first ps) :read-only false} (front/route-of ps "ann@x.org" "ann")))))
 
-(deftest front-headers-and-token-calls
+(deftest front-headers
   (is (= [["Host" "h"] ["X-Claudia-Profile" "bob"] ["X-Claudia-Read-Only" "1"]]
          (front/runner-headers #js ["Host" "h" "X-Claudia-Email" "e"] {:target {:profile "bob"} :read-only true})))
-  (is (= "GET /ws HTTP/1.1\r\nA: 1\r\n\r\n" (front/request-head "GET" "/ws" [["A" "1"]])))
-  (is (nil? (front/token-op "/api/me" "GET" false)))
-  (is (= :read-only (front/token-op "/api/claude-tokens" "GET" true)))
-  (is (= :state (front/token-op "/api/claude-tokens" "GET" false)))
-  (is (= :save (front/token-op "/api/claude-token" "PUT" false)))
-  (is (= :use (front/token-op "/api/claude-token/use" "POST" false)))
-  (is (= :not-allowed (front/token-op "/api/claude-token" "GET" false))))
+  (is (= "GET /ws HTTP/1.1\r\nA: 1\r\n\r\n" (front/request-head "GET" "/ws" [["A" "1"]]))))
 
 (deftest render-serves-only-assets
   (is (= "/w/js/main.js" (render/asset-path "/w" "/js/main.js")))
@@ -113,3 +107,10 @@
   (is (= 120 (render/shot-height 10)))
   (is (= 3200 (render/shot-height 99999)))
   (is (= 700 (render/shot-height 700))))
+
+(deftest the-hubs-token-is-checked-before-it-is-written
+  (let [t (str "sk-ant-oat01-" (apply str (repeat 30 "a")))]
+    (is (= 501 (:status (tokens/current-problem {:name "Paul" :at 1} t nil))))
+    (is (= "Not a Claude token." (:error (tokens/current-problem {:name "Paul" :at 1} "x" "/f"))))
+    (is (= "name and at are needed." (:error (tokens/current-problem {:name "" :at 1} t "/f"))))
+    (is (nil? (tokens/current-problem {:name "Paul" :at 1} t "/f")))))
