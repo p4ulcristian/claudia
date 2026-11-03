@@ -47,10 +47,17 @@
 
 (defn- chat-id? [id] (and (string? id) (re-matches #"^[A-Za-z0-9-]{1,100}$" id)))
 
+(defn- working?
+  "Claude's turn runs, or work it left running after the turn does (subagents, background shells)."
+  [r]
+  (or (boolean (:running r)) (pos? (or (:agents r) 0))))
+
 (defn notices-of
-  "The events a server's list holds for its person now. since: when they got their first phone (a turn
-  that ended before that is not news to it). A Row's `asks` are its open asks ({id kind text}), its
-  `ended` when its last turn ended."
+  "The events a server's list holds for its person now (the TypeScript Claudia's src/hub/push.ts
+  noticesOf). since: when they got their first phone (a turn that ended before that is not news to
+  it). A Row's `asks` are its open asks ({id kind text}); `lastTurn` how its last turn ended
+  ({id ago stopped failed reply}). Not told: a turn the person stopped, one whose agents still work
+  (told once the last ends), one they have seen since it ended."
   [server rows since now]
   (vec
    (for [r rows
@@ -58,16 +65,17 @@
          :let [title (cut (or (not-empty (str (:title r))) "Chat") 80)
                base {:server server :chat (:id r) :title title}
                asks (for [a (:asks r)]
-                      (if (= "secret" (:kind a))
-                        (assoc base :kind "permission" :event (str "ask:" (:id a))
-                               :body (cut (str "Needs your permission: " (or (:text a) "a secret")) 180))
+                      (if (= "question" (:kind a))
                         (assoc base :kind "ask" :event (str "ask:" (:id a))
-                               :body (cut (or (not-empty (str (:text a))) "Has a question") 300))))
-               ended (:ended r)
-               finished (when (and (number? ended) (pos? ended) (not (:running r)) (empty? (:asks r))
-                                   (:unseen r) (< (- now ended) fresh-ms) (>= ended since))
-                          (assoc base :kind "finished" :event (str "turn:" ended)
-                                 :body (cut (or (not-empty (str (:preview r))) "Finished") 200)))]
+                               :body (cut (or (not-empty (str (:text a))) "Has a question") 300))
+                        (assoc base :kind "permission" :event (str "ask:" (:id a))
+                               :body (cut (str "Needs your permission: " (or (not-empty (str (:text a))) "a secret")) 180))))
+               t (:lastTurn r)
+               finished (when (and (map? t) (string? (:id t)) (not (:stopped t)) (not (working? r))
+                                   (not (false? (:unseen r))) (number? (:ago t)) (< (:ago t) fresh-ms)
+                                   (>= (- now (:ago t)) since))
+                          (assoc base :kind "finished" :event (str "turn:" (:id t))
+                                 :body (if (:failed t) "Ended with an error" (cut (or (not-empty (str (:reply t))) "Finished") 200))))]
          n (cond-> (vec asks) finished (conj finished))]
      n)))
 
@@ -90,11 +98,15 @@
 ;; The summary: badge and Live Activity ------------------------------------------------------------
 
 (defn- steady-since
-  "When this chat started running or waiting, as first seen (seconds)."
-  [keep k now]
+  "When this chat started running or waiting (seconds), from the server's ago, kept steady across
+  lists (an ago moves by a list's delay): the one seen before while within 10 s of it."
+  [keep k ago now]
   (vswap! keep conj k)
-  (or (get @steady k)
-      (let [at (js/Math.floor (/ now 1000))] (swap! steady assoc k at) at)))
+  (let [at (js/Math.floor (/ (- now (max 0 (or ago 0))) 1000))
+        had (get @steady k)]
+    (if (and had (<= (js/Math.abs (- had at)) 10))
+      had
+      (do (swap! steady assoc k at) at))))
 
 (defn summary-of
   "Every chat of the person's that runs or waits on them, and how many finished unseen, across the
@@ -111,14 +123,17 @@
                     (let [base {:title (or (not-empty (str (:title r))) "Chat") :server server :chat (:id r)}
                           k (str email "\n" server "/" (:id r))]
                       (cond
+                        ;; (an archived chat is out of the person's list)
+                        (:archived r) out
                         (or (seq (:asks r)) (:waiting r))
                         (update out :waiting conj
                                 (assoc base
                                        :kind (if (some #(= "question" (:kind %)) (:asks r)) "ask" "permission")
-                                       :since (steady-since keep (str k "\nwait:" (str/join "," (map :id (:asks r)))) now)))
-                        (:running r)
-                        (update out :running conj (assoc base :kind nil :since (steady-since keep (str k "\nrun") now)))
-                        (and (:unseen r) (not (:archived r))) (update out :done inc)
+                                       :since (steady-since keep (str k "\nwait:" (str/join "," (map :id (:asks r))))
+                                                            (reduce max 0 (keep :ago (:asks r))) now)))
+                        (working? r)
+                        (update out :running conj (assoc base :kind nil :since (steady-since keep (str k "\nrun") (:runningFor r) now)))
+                        (:unseen r) (update out :done inc)
                         :else out)))
                   out rows)))
              {:running [] :waiting [] :done 0}
@@ -137,7 +152,7 @@
       (every? #(:reported @%) (filter #(= email (:email @%)) (vals @watchers)))))
 
 (defn- gone-device! [d detail]
-  (js/console.log (str "push: APNs says " (apns/short-token (:token d)) " is gone (" detail "); dropped"))
+  (js/console.log (str "push: APNs says " (apns/short-token (:token d)) " (" (:email d) ") is gone (" detail "); dropped"))
   (store/forget-device! (:token d)))
 
 (declare schedule-badge!)
@@ -209,7 +224,7 @@
     (boolean
      (and (store/may? email (:server n)) r
           (if (= "finished" (:kind n))
-            (and (= (:event n) (str "turn:" (:ended r))) (not (:running r)) (:unseen r))
+            (and (= (:event n) (str "turn:" (get-in r [:lastTurn :id]))) (not (working? r)) (not (false? (:unseen r))))
             (some #(= (:event n) (str "ask:" (:id %))) (:asks r)))))))
 
 (defn- release!

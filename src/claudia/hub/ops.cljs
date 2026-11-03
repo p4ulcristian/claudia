@@ -176,7 +176,7 @@
                :else
                (do (store/save-device! {:token token :email email :env env :topic topic :key key :live-start live-start})
                    (js/console.log (str "push: phone " (apns/short-token token) " (" env (when live-start ", Live Activity")
-                                        ") registered for a person"))
+                                        ") registered for " email))
                    (push/sync!)
                    (push/changed! email)
                    (send-json res 200 {:ok true :push (push/on?)})))))))
