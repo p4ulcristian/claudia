@@ -1,7 +1,8 @@
 (ns claudia.web.views.rail
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): + for a new chat, the
   search, then a circle per chat with its title under it and, on the hub, its server's name; passive
-  (ash) chats last, above a chalk line. At its foot: sounds, the forms, the usage rings. Circles
+  (ash) chats last, above a chalk line. At its foot: sounds, the Claude subscription in use (a click
+  switches it; the Forms window stays in Settings), the usage rings. Circles
   slide to their new places when the order changes; a new one grows in."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -45,9 +46,73 @@
      [:path {:d "M13 7.5c1 1.4 1 3.6 0 5M15.4 5.5c2 2.5 2 6.5 0 9"}]
      [:path {:d "M13.5 8l4 4M17.5 8l-4 4"}])])
 
-(def forms-icon
-  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-   [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]])
+(defn- initials
+  "\"Paul\" -> \"P\", \"Ananda Mishung\" -> \"AM\"."
+  [name]
+  (str/upper-case (apply str (take 2 (map first (str/split (str/trim (str name)) #"\s+"))))))
+
+(defn- plan-menu
+  "The saved tokens of server, beside the button (box); a pick switches every chat there."
+  [{:keys [server box saved account close]}]
+  (let [menu (h/use-ref nil)
+        rc (.getBoundingClientRect ^js (.-current box))]
+    (h/use-effect
+     (fn []
+       (let [away (fn [e] (when-not (or (some-> (.-current menu) (.contains (.-target e)))
+                                        (some-> (.-current box) (.contains (.-target e))))
+                            (close)))
+             esc (fn [e] (when (= "Escape" (.-key e)) (close)))]
+         (js/window.addEventListener "pointerdown" away true)
+         (js/window.addEventListener "keydown" esc)
+         (js/window.addEventListener "blur" close)
+         #(do (js/window.removeEventListener "pointerdown" away true)
+              (js/window.removeEventListener "keydown" esc)
+              (js/window.removeEventListener "blur" close))))
+     [])
+    [:div.chat-menu.plan-menu {:ref #(set! (.-current menu) %) :role "menu"
+                               :style {:left (+ (.-right rc) 8) :bottom (max 6 (- js/innerHeight (.-bottom rc)))}}
+     [:div.cm-title (str "Claude subscription · " @(rf/subscribe [:server-label server]))]
+     (for [n saved]
+       ^{:key n}
+       [:button.cm-item {:role "menuitemradio" :aria-checked (= n account) :class (when (= n account) "on")
+                         :on-click (fn []
+                                     (close)
+                                     (when (not= n account)
+                                       (rf/dispatch [:ops/put-now {:url (str "/s/" (js/encodeURIComponent server) "/api/claude-token/use")
+                                                                   :method "POST" :body {:name n}
+                                                                   :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens server ok])))}])))}
+        (str n "'s plan")])
+     [:button.cm-item.plan-add {:role "menuitem" :on-click (fn [] (close) (rf/dispatch [:ops/settings true]))}
+      "Add a token in Settings"]]))
+
+(defn- plan-button
+  "Which Claude subscription the chats on the open chat's server (else the new chat's) run on: the
+  token in use's initials; a click lists the server's saved tokens to switch to."
+  []
+  (let [open @(rf/subscribe [:open])
+        server (or (first open) @(rf/subscribe [:new-server]))
+        tokens @(rf/subscribe [:tokens server])
+        account (get-in tokens [:inUse :name])
+        saved (mapv :name (:tokens tokens))
+        multi? @(rf/subscribe [:multi-server?])
+        label @(rf/subscribe [:server-label server])
+        [menu? set-menu] (h/use-state false)
+        box (h/use-ref nil)]
+    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens server]) (set-menu false) nil) [server])
+    (when server
+      [:<>
+       [:button.rail-forms.rail-plan
+        {:ref #(set! (.-current box) %)
+         :class (when menu? "on")
+         :data-tip (str (if account (str account "'s Claude subscription") "Claude subscription")
+                        (when multi? (str " on " label))
+                        (if (> (count saved) 1) " · click to switch" " · click to add a token"))
+         :aria-label (str "Claude subscription" (when account (str ": " account)))
+         :aria-haspopup "menu" :aria-expanded menu?
+         :on-click #(if (> (count saved) 1) (set-menu (not menu?)) (rf/dispatch [:ops/settings true]))}
+        [:span.rail-plan-mark (if account (initials account) "?")]]
+       (when menu?
+         [:f> plan-menu {:server server :box box :saved saved :account account :close #(set-menu false)}])])))
 
 (defn rail []
   (let [rows @(rf/subscribe [:rows])
@@ -96,7 +161,5 @@
                                      :aria-label "Sounds" :aria-pressed (boolean sounds?)
                                      :on-click #(alerts/set-sounds! (not sounds?))}
       [speaker sounds?]]
-     [:button.rail-forms {:data-tip "Forms: everything Claude can draw, and your templates" :aria-label "Forms"
-                          :on-click #(rf/dispatch [:gallery/open true])}
-      forms-icon]
+     (when-not ro [:f> plan-button])
      [:f> usage/rail-meters]]))
