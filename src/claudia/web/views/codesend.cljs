@@ -23,15 +23,15 @@
       (when (seq sends)
         {:note (str/trim (str/replace text sent-re "")) :sends sends}))))
 
-(defn- chip [{:keys [name added removed diff]}]
+(defn- chip [{:keys [added removed diff] nm :name}]
   (let [[open set-open] (h/use-state false)]
     [:div.code-sent
      [:button.code-chip {:type "button" :class (when open "on") :on-click #(set-open not)
                          :title (if open "Hide the diff" "Show what you changed")}
-      [:span.code-chip-name (str "Sent " name)]
+      [:span.code-chip-name (str "Sent " nm)]
       [:span.add (str "+" added)]
       [:span.del (str "−" removed)]]
-     (when open [:f> git/diff-view diff name])]))
+     (when open [:f> git/diff-view diff nm])]))
 
 (defn bubble
   "A user message's content: plain text, or the note and a chip per sent file."
