@@ -67,6 +67,17 @@
           was (assoc blocks was b)
           :else (conj rest-blocks b))))
 
+(defn- scene3d? [b] (and (= "form" (:kind b)) (= "scene3d" (:form b))))
+
+(defn- place-scene3d
+  "A picture holds one 3D scene: a new one takes the old one's place (unless it says where to go),
+  and every other scene3d block leaves."
+  [blocks b old? before]
+  (let [at (when (and (not old?) (not before)) (first (keep-indexed #(when (scene3d? %2) %1) blocks)))]
+    (if at
+      (filterv #(or (= (:id %) (:id b)) (not (scene3d? %))) (assoc blocks at b))
+      (place (filterv #(or (= (:id %) (:id b)) (not (scene3d? %))) blocks) b before))))
+
 (defn- draw-block [blocks {:keys [id form kind width name html parts data removeItems before]}]
   (let [old (some #(when (= (:id %) id) %) blocks)
         form-name (or form (when (= "form" (:kind old)) (:form old)))
@@ -89,7 +100,9 @@
                         (when (some? html) {:html html})
                         ;; New HTML starts from its own markup; parts sent with it still apply.
                         {:parts (merge (if fresh {} (:parts h)) parts)})))]
-    (place blocks next before)))
+    (if (scene3d? next)
+      (place-scene3d blocks next (some? old) before)
+      (place blocks next before))))
 
 (defn apply-draw
   "The scene after one draw call, or {:error text} when the call asks for something this version lacks."

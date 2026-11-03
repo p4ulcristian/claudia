@@ -2,6 +2,7 @@
   "The predefined forms, drawn in the board's chalk: pipeline, timeline, compare, chart, stats.
   Data shapes as the draw tool describes them (PROTOCOL.md)."
   (:require [reagent.hooks :as h]
+            [claudia.web.scene3d :as scene3d]
             [claudia.web.views.frame :as frame]))
 
 (def ^:private colors #{"green" "red" "amber" "blue" "grey" "violet"})
@@ -71,7 +72,7 @@
         [:span.f-bar [:i {:style {:width (str (* 100 (max 0 (min 1 (:progress t)))) "%")}}]])
       (when (:note t) [:span.f-note (:note t)])])])
 
-(defn form-view [form data]
+(defn form-view [form data & [block-id]]
   [:div.form-view {:class (str "form-" form)}
    (case form
      "pipeline" [:f> pipeline data]
@@ -79,4 +80,5 @@
      "compare" [compare-form data]
      "chart" [:div.f-chart [:f> frame/chart-frame data]]
      "stats" [stats data]
+     "scene3d" [scene3d/scene3d-form data block-id]
      [:p.f-note (str "Unknown form \"" form "\".")])])

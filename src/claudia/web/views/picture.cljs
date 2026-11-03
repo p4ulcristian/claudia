@@ -38,7 +38,7 @@
      [:div.block-head [badge block]]
      (case (:kind block)
        "graph" [:f> graph/graph-view block]
-       "form" [forms/form-view (:form block) (:data block)]
+       "form" [forms/form-view (:form block) (:data block) (:id block)]
        "html" [:f> frame/page-frame (:html block) (:parts block)]
        [:p.f-note (str "Unknown block kind \"" (:kind block) "\".")])]))
 
