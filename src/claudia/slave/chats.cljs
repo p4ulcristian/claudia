@@ -10,6 +10,7 @@
             [clojure.string :as str]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
+            [claudia.slave.pictures :as pictures]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]
@@ -31,6 +32,7 @@
 ;;   :asks {ask id -> {:ask (as the page gets it) :resolve :input :keys :secret :timer}}
 ;;   :turn (this turn's Msgs, by arrival) :partial (the assistant text being streamed)
 ;;   :mid (the API message streaming) :stream-counts :final-counts :idle (timer)
+;;   :turn-id (the user message uuid this turn answers: its picture's name in the history)
 (defonce state (atom {}))
 
 ;; Set by the runner: where events go.
@@ -188,13 +190,22 @@
 (defn- current-scene [id]
   (or (:scene (st id)) (store/scene id) scene/empty-scene))
 
+(defn- turn-id!
+  "This turn's name in the picture history; a turn Claude started itself gets one made."
+  [id]
+  (or (:turn-id (st id))
+      (let [t (str (random-uuid))] (swap-chat! id assoc :turn-id t) t)))
+
 (defn- draw [id input]
-  (let [{s :scene error :error} (scene/apply-draw (current-scene id) input)]
+  (let [prev (current-scene id)
+        {s :scene error :error} (scene/apply-draw prev input)]
     (if error
       (refusal error)
       (do (swap-chat! id assoc :scene s)
           (store/save-scene! id s)
+          (pictures/record! id (turn-id! id) prev s)
           (emit! id {:type "scene" :scene s})
+          (emit! id {:type "pictures" :pictures (pictures/listing id)})
           (text-result (str "Picture updated. " (scene/describe s)))))))
 
 (defn- sh-out [cmd args]
@@ -257,7 +268,7 @@
                   (or (some->> (:errors m) seq (str/join "\n")) (:subtype m))))]
     (store/update! id (cond-> {:ended (now)} ok (assoc :preview (plain-start (:result m)))))
     (drop-asks! id true "The turn ended.")
-    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}))
+    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}) :turn-id nil)
     (when error (emit! id {:type "error" :text error}))
     (set-running! id false)
     (changed!)))
@@ -366,7 +377,7 @@
   (-> (ensure-session! id)
       (.then (fn []
                (let [uuid (str (random-uuid))]
-                 (when-not (:running (st id)) (swap-chat! id assoc :turn []))
+                 (when-not (:running (st id)) (swap-chat! id assoc :turn [] :turn-id uuid))
                  (note-msg! id {:id uuid :role "user" :text text :at (now)})
                  (hostlink/send! {:op "send" :id id :text text :uuid uuid})
                  (set-running! id true))))

@@ -5,6 +5,7 @@
             [claudia.web.events]
             [claudia.web.fx]
             [claudia.web.md :as md]
+            [claudia.web.pictures :as pictures]
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
             [claudia.web.views.shell :as shell]
@@ -24,6 +25,7 @@
   (chalk/bake-all!)
   (viewport/install!)
   (md/install-copy!)
+  (pictures/install-keys!)
   (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
   (js/document.addEventListener
    "visibilitychange"

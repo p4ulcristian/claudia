@@ -11,6 +11,7 @@
             [claudia.slave.chats :as chats]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
+            [claudia.slave.pictures :as pictures]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]))
 
@@ -49,7 +50,11 @@
       :else
       (case type
         "open" (-> (chats/snapshot chat)
-                   (.then (fn [frame] (send! c frame) (swap! (:open c) conj chat))))
+                   (.then (fn [frame]
+                            (send! c frame)
+                            (send! c {:type "pictures" :chat chat :pictures (pictures/listing chat)})
+                            (swap! (:open c) conj chat))))
+        "picture" (send! c {:type "picture" :chat chat :turn (:turn f) :scene (pictures/one chat (str (:turn f)))})
         "close" (swap! (:open c) disj chat)
         "send" (when (seq (:text f)) (chats/send-text! chat (:text f)))
         "stop" (chats/stop! chat)
