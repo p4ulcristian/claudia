@@ -115,7 +115,6 @@
      {;; A question unfolds the right half while it is open.
       :folded? (and (pos? folded-at) (not asks))
       :unseen? (> newest folded-at)
-      :fold-disabled? (boolean asks)
       :picture-behind? (and (= :timeline (:right-view db)) (> newest (:view-at db)))})))
 
 ;; ---- keys: ← → step through the pictures, Alt+T switches the view, Alt+P folds ----

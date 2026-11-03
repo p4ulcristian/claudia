@@ -172,7 +172,7 @@
 
 /* ---------- Chalk for the parts above and below ----------
    The colour (--ink) through a baked mask (--ring) on a ::before 2px bigger than the box. */
-.chalk-box::before, .explain-note::before, .rbar::before, .view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before {
+.chalk-box::before, .explain-note::before, .rbar::before, .view-switch::before, .view-switch button.on::before, .rbar-chip::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -182,15 +182,15 @@
 }
 .edge-line::before, .f-arrow::before { inset: -2px; }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.rbar, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip {
+.rbar, .view-switch, .view-switch button.on, .rbar-chip {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
   --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
 
-/* ---------- The bar over the bottom of the right half ---------- */
-/* It floats over the bottom of the picture and shows only while the mouse is near it. */
-.rbar-zone { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 5; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; }
-.rbar-zone.show, .rbar-zone.pinned, .rbar-zone:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+/* ---------- The right half's bars: the view switch on top, the stepper under the picture ---------- */
+/* Both always shown, in the flow: nothing covers the picture. */
+.rtop { flex: none; display: flex; justify-content: flex-end; padding: 8px 12px 2px; }
+.rbar-zone { flex: none; padding: 6px 12px 10px; }
 .rbar { container-type: inline-size; display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 10px 0 10px; border-radius: 12px; min-width: 0; backdrop-filter: blur(6px);
   --ring: var(--chalk-r12-2); --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
 .view-switch { display: flex; flex: none; padding: 2px; gap: 2px; border-radius: 9px; --chalk-bg: var(--bg); --ring: var(--chalk-r9-2); }
@@ -199,11 +199,9 @@
 .view-switch button:hover:not(.on) { color: var(--fg); }
 .view-switch .fold-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
 .rbar-nav { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
-.rbar-step, .rbar-fold, .rbar-snap { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-size: 18px; line-height: 1; color: var(--muted); }
-.rbar-step:hover:not(:disabled), .rbar-fold:hover:not(:disabled), .rbar-snap:hover:not(:disabled) { background: var(--panel); color: var(--fg); }
-.rbar-step:disabled, .rbar-fold:disabled { opacity: 0.3; cursor: default; }
-.rbar-fold { margin-left: auto; --ring: var(--chalk-r7-2); }
-.rbar-fold:hover:not(:disabled) { --chalk-bg: var(--panel); }
+.rbar-step, .rbar-snap { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-size: 18px; line-height: 1; color: var(--muted); }
+.rbar-step:hover:not(:disabled), .rbar-snap:hover:not(:disabled) { background: var(--panel); color: var(--fg); }
+.rbar-step:disabled { opacity: 0.3; cursor: default; }
 .rbar-track-empty { flex: 1; }
 .rbar-track { position: relative; flex: 1; min-width: 32px; height: 28px; cursor: pointer; touch-action: none; margin: 0 6px; }
 .rbar-rail, .rbar-fill { position: absolute; left: 0; top: 50%; height: 2px; margin-top: -1px; border-radius: 1px; pointer-events: none; }
@@ -215,20 +213,12 @@
 .rbar-tick.hover { transform: scale(1.35); opacity: 1; }
 .rbar-tick.on, .rbar-track.dense .rbar-tick.on { width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 0; border-radius: 50%; opacity: 1; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); z-index: 1; }
 .rbar-tip { position: fixed; left: -9999px; top: 0; max-width: min(320px, 90vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 9px; border-radius: 7px; background: var(--panel2); border: 1px solid var(--line); box-shadow: 0 4px 14px rgb(0 0 0 / 0.3); font-size: 12px; pointer-events: none; z-index: 5; }
-.rbar-count { flex: none; min-width: 44px; text-align: center; font: 12px var(--mono); font-variant-numeric: tabular-nums; }
 .rbar-chip { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 11.5px var(--sans); white-space: nowrap; --ring: var(--chalk-r12-2); }
 .rbar-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-.rbar-chip.live { color: var(--green); --chalk-c: color-mix(in srgb, var(--green) 55%, transparent); --chalk-bg: var(--green-bg); }
-.rbar-chip.live .rbar-chip-dot { animation: breathe 2s ease-in-out infinite; }
 /* The bar is hidden until the mouse comes near (not on phones): its dots rest meanwhile. */
-@media (min-width: 680px) { .rbar-zone:not(.show, .pinned, :focus-within) :is(.rbar-chip-dot, .fold-dot) { animation: none; } }
-.rbar-chip.live.still { color: var(--muted); --chalk-c: var(--line); --chalk-bg: var(--grey-bg); }
-.rbar-chip.live.still .rbar-chip-dot { animation: none; }
 .rbar-chip.past { color: var(--violet); --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
 .rbar-chip.past:hover { --chalk-bg: color-mix(in srgb, var(--violet) 26%, var(--violet-bg)); }
-@container (max-width: 520px) { .rbar-count { display: none; } }
 @container (max-width: 430px) { .rbar-chip { padding: 0 8px; } .rbar-chip-text { display: none; } }
-@container (max-width: 400px) { .rbar-step { display: none; } }
 @container (max-width: 300px) { .view-switch button { padding: 0 7px; } }
 /* The snapshot camera: a PNG of the picture shown, copied or saved. */
 .rbar-snap { position: relative; }
@@ -338,8 +328,7 @@
 @media (max-width: 679px) {
   .rail.right-rail { display: none; }
   .split > .right { background: var(--bg); }
-  /* No hover on a phone: the bar sits at the bottom of the picture; its fold button closes it. */
-  .rbar-zone { position: static; opacity: 1; transform: none; pointer-events: auto; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
+  .rbar-zone { padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
   .tl-detail { margin-left: 14px; }
 }
 

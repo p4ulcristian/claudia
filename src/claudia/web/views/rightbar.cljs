@@ -1,12 +1,10 @@
 (ns claudia.web.views.rightbar
-  "The bar over the bottom of the right half (shown while the mouse is near it, kept while an earlier
-  picture is shown, always on a phone): Picture | Timeline, for pictures a scrubber over every
-  picture of the chat with ‹ › and n/m, the live chip or Back to live, the snapshot camera, and the
-  fold (Alt+P; on a phone: back to the chat)."
+  "The right half's bars, always shown: Picture | Timeline at the top right; under the picture a
+  scrubber over every picture of the chat with ‹ ›, Back to live while an earlier picture is shown,
+  and the snapshot camera. The fold has no button: Alt+P (its edge unfolds it)."
   (:require [re-frame.core :as rf]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.shell :as pure]
-            [reagent.core :as r]
             [reagent.hooks :as h]))
 
 (defn- clock [t]
@@ -80,7 +78,7 @@
        [:span.rbar-tip {:ref #(set! (.-current tip) %)}
         [:b (inc hover)] " " (if (seq (:title p)) (:title p) "Untitled") " " [:span.muted (clock (:at p))]])]))
 
-(defn- stepper [{:keys [pictures index viewing? loading? unchanged?]}]
+(defn- stepper [{:keys [pictures index viewing? loading?]}]
   (let [n (count pictures)]
     [:div.rbar-nav
      [:button.rbar-step {:disabled (<= index 0) :title "Previous picture (←)" :aria-label "Previous picture"
@@ -88,44 +86,24 @@
      (if (> n 1) [:f> scrubber pictures index] [:span.rbar-track-empty])
      [:button.rbar-step {:disabled (>= index (dec n)) :title "Next picture (→)" :aria-label "Next picture"
                          :on-click #(rf/dispatch [:picture/step 1])} "›"]
-     [:span.rbar-count (inc index) [:span.muted "/" n]]
-     (if viewing?
+     (when viewing?
        [:button.rbar-chip.past {:on-click #(rf/dispatch [:picture/live]) :title "Back to the live picture"}
-        [:span.rbar-chip-dot] [:span.rbar-chip-text (if loading? "Loading…" "Back to live")]]
-       [:span.rbar-chip.live {:class (when unchanged? "still")
-                              :title (if unchanged? "The live picture; the last turn didn't change it" "The live picture")}
-        [:span.rbar-chip-dot] [:span.rbar-chip-text (if unchanged? "Live · unchanged" "Live")]])]))
+        [:span.rbar-chip-dot] [:span.rbar-chip-text (if loading? "Loading…" "Back to live")]])]))
+
+(defn top
+  "The row over the right half: Picture | Timeline at its right."
+  []
+  (let [view @(rf/subscribe [:right-view])
+        {:keys [picture-behind?]} @(rf/subscribe [:fold-state])]
+    [:div.rtop [view-switch view picture-behind?]]))
 
 (defn bar
-  "extra: more buttons before the fold (the snapshot camera)."
+  "The bar under the picture; extra: more buttons at its end (the snapshot camera)."
   [extra]
-  (let [view @(rf/subscribe [:right-view])
-        hist @(rf/subscribe [:picture-history])
-        {:keys [picture-behind? fold-disabled?]} @(rf/subscribe [:fold-state])]
-    [:footer.rbar
-     [view-switch view picture-behind?]
-     (if (and (= view :picture) (seq (:pictures hist)))
-       [stepper hist]
-       [:span.grow])
-     extra
-     [:button.rbar-fold {:disabled fold-disabled?
-                         :title "Hide the right half (Alt+P)" :aria-label "Hide the right half"
-                         :on-click #(rf/dispatch [:right/fold])}
-      "›"]]))
-
-(defonce ^:private near (r/atom false))
-
-(def mouse-props
-  "For the right half's element: whether the mouse is within 96 px of its bottom (the bar shows)."
-  {:on-mouse-move (fn [^js e]
-                    (let [v (> (.-clientY e) (- (.-bottom (.getBoundingClientRect (.-currentTarget e))) 96))]
-                      (when (not= v @near) (reset! near v))))
-   :on-mouse-leave #(reset! near false)})
-
-(defn zone [extra]
-  (let [viewing? (:viewing? @(rf/subscribe [:picture-history]))]
-    [:div.rbar-zone {:class [(when @near "show") (when viewing? "pinned")]}
-     [bar extra]]))
+  [:footer.rbar-zone
+   [:div.rbar
+    [stepper @(rf/subscribe [:picture-history])]
+    extra]])
 
 (defn fold-edge
   "The folded right half: a thin chalk edge; it glows when a new picture came meanwhile."
