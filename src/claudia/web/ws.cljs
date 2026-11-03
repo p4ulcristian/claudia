@@ -6,9 +6,15 @@
 
 (defonce ^:private sockets (atom {})) ; server -> {:sock WebSocket :tries n :timer id}
 
+(defonce view
+  ;; Whose chats the sockets show: nil = the person's own, else a profile name (read only; the hub
+  ;; turns ?view= into X-Claudia-View).
+  (atom nil))
+
 (defn- url [server]
   (str (if (= "https:" js/location.protocol) "wss://" "ws://")
-       js/location.host "/s/" (js/encodeURIComponent server) "/ws"))
+       js/location.host "/s/" (js/encodeURIComponent server) "/ws"
+       (when @view (str "?view=" (js/encodeURIComponent @view)))))
 
 (declare connect!)
 
@@ -53,6 +59,16 @@
     (when (or (nil? sock) (>= (.-readyState sock) 2))
       (swap! sockets assoc-in [server :tries] 0)
       (connect! server))))
+
+(defn reconnect!
+  "Every socket closed, then these servers' opened again (whose chats changed)."
+  [servers]
+  (doseq [[_ {:keys [^js sock timer]}] (first (reset-vals! sockets {}))]
+    (when timer (js/clearTimeout timer))
+    (when sock (set! (.-onclose sock) nil) (.close sock)))
+  (doseq [s servers] (connect! s)))
+
+(rf/reg-fx :ws/reconnect (fn [{v :view :keys [servers]}] (reset! view v) (reconnect! servers)))
 
 (rf/reg-fx :ws/connect (fn [servers] (doseq [s servers] (connect! s))))
 

@@ -4,8 +4,11 @@
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
+            [claudia.shared.files :as files]
+            [claudia.web.chatops :as ops]
             [claudia.web.md :as md]
-            [claudia.web.views.asks :as asks]))
+            [claudia.web.views.asks :as asks]
+            [claudia.web.views.attach :as attach]))
 
 (defn- icon [d]
   [:svg.ic {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d d}]])
@@ -21,9 +24,18 @@
 
 ;; ---- header ----
 
+(defn- folder-chip
+  "The chat's working folder: its project's logo and name; the full path on hover."
+  [server folder]
+  (let [project @(rf/subscribe [:project server folder])
+        view @(rf/subscribe [:view])]
+    (when (nil? project) (rf/dispatch [:ops/project server folder]))
+    [:span.folder-chip {:title folder}
+     (when (:logo project) [:img.folder-logo {:src (ops/logo-url view server folder) :alt ""}])
+     [:span (or (:name project) (last (str/split folder #"/")))]]))
+
 (defn- header [{:keys [ck server chat pending? row state status]}]
-  (let [menu? (r/atom false)
-        editing (r/atom nil)]
+  (let [editing (r/atom nil)]
     (fn [{:keys [ck server chat pending? row state status]}]
       (let [title (or (:title row) (:title state) (when pending? "New chat") "Chat")
             multi? @(rf/subscribe [:multi-server?])
@@ -47,27 +59,42 @@
            [:h1 {:title title} title])
          (when (and multi? server) [server-mark server])
          (when (and server (not= :open status)) [:span.offline "offline"])
-         (when (and chat (not pending?))
+         (when-let [folder (or (:folder row) (:folder state))] [folder-chip server folder])
+         (when (and chat (not pending?) (not @(rf/subscribe [:read-only?])))
            [:div.menu-box
-            [:button.icon {:title "Chat menu" :on-click #(swap! menu? not)} "⋯"]
-            (when @menu?
-              [:<>
-               [:div.menu-away {:on-click #(reset! menu? false)}]
-               [:div.menu
-                [:button {:on-click #(do (reset! menu? false) (reset! editing title))} "Rename"]
-                [:button {:on-click #(do (reset! menu? false) (rf/dispatch [:chat/archive ck true]))} "Archive"]]])])
+            [:button.icon {:title "Chat menu"
+                           :on-click (fn [e]
+                                       (let [rc (.getBoundingClientRect (.-currentTarget e))]
+                                         (rf/dispatch [:ops/menu {:k ck :x (- (.-right rc) 220) :y (+ (.-bottom rc) 4)}])))}
+             "⋯"]])
          [:button.icon.pic-open.phone-only {:title "Picture" :on-click #(rf/dispatch [:nav/screen :picture])}
           (icon picture-icon)]]))))
 
 ;; ---- messages ----
 
-(defn- message [{:keys [role text tool summary error streaming]}]
+(defn- explain-line [ck id]
+  (when-let [{:keys [busy text error open]} @(rf/subscribe [:explain (conj ck id)])]
+    (when open
+      [:div.explain {:class (when error "err")}
+       (cond busy "Explaining…" error error :else text)])))
+
+(defn- message [ck {:keys [id role text tool summary error streaming images image]}]
   (case role
-    "user" [:div.msg.user [:div.bubble text]]
-    "tool" [:div.step {:class (when error "err")}
-            [:span.step-dot]
-            [:b (or tool "tool")]
-            [:span.step-title (or summary "")]]
+    "user" (let [{t :text sent :files} (files/split-files text)
+                 [server chat] ck]
+             [:div.msg.user
+              (when (and images (pos? images)) [attach/sent-images server chat id images])
+              (when (seq t) [:div.bubble t])
+              (when (seq sent) [attach/file-chips server chat sent])])
+    "tool" [:<>
+            [:div.step {:class (when error "err")}
+             [:span.step-dot]
+             [:b (or tool "tool")]
+             [:span.step-title (or summary "")]
+             [:button.step-explain {:title "Explain this step in plain words"
+                                    :on-click #(rf/dispatch [:ops/explain ck id])} "?"]]
+            (when image [attach/shown-image (first ck) (second ck) id])
+            [explain-line ck id]]
     "note" [:div.msg.note text]
     [:div.msg.claude {:class (when streaming "streaming")}
      [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]]))
@@ -77,7 +104,18 @@
         stuck (h/use-ref true)
         msgs (:messages state)
         running (:running state)
-        last-len (count (:text (peek msgs)))]
+        last-len (count (:text (peek msgs)))
+        first-id (:id (first msgs))
+        anchor (h/use-ref nil)]
+    ;; Older messages came in above: keep what was on screen where it was.
+    (h/use-layout-effect
+     (fn []
+       (when-let [el (.-current box)]
+         (let [[was-ck was-first was-height] (.-current anchor)]
+           (when (and was-first (= was-ck ck) (not= was-first first-id) (not (.-current stuck)))
+             (set! (.-scrollTop el) (+ (.-scrollTop el) (- (.-scrollHeight el) was-height)))))
+         (set! (.-current anchor) [ck first-id (.-scrollHeight el)]))
+       nil))
     ;; Follow the bottom while the person is there; leave them be once they scrolled up.
     (h/use-layout-effect
      (fn []
@@ -89,11 +127,16 @@
     [:div.messages {:ref #(set! (.-current box) %)
                     :on-scroll (fn [e]
                                  (let [el (.-target e)]
+                                   (set! (.-current anchor) [ck first-id (.-scrollHeight el)])
+                                   (when (and (< (.-scrollTop el) 200) (:more state))
+                                     (rf/dispatch [:ops/older ck]))
                                    (set! (.-current stuck)
                                          (< (- (.-scrollHeight el) (.-scrollTop el) (.-clientHeight el)) 40))))}
      (when (and (not pending?) (not (:loaded state)))
        [:div.loading.muted "Loading…"])
-     (for [m msgs] ^{:key (:id m)} [message m])
+     (when (:more state)
+       [:div.loading.muted (if (:loading-older state) "Loading older messages…" "")])
+     (for [m msgs] ^{:key (:id m)} [message ck m])
      (for [[i t] (map-indexed vector outbox)]
        ^{:key (str "out" i)} [:div.msg.user.queued [:div.bubble t] [:span.queued-tag "sending"]])
      (when (or running pending?)
@@ -107,6 +150,7 @@
 (defn- composer [{:keys [draft-key running can-stop placeholder]}]
   (let [ref (h/use-ref nil)
         text @(rf/subscribe [:draft draft-key])
+        attached @(rf/subscribe [:attach draft-key])
         send! #(rf/dispatch [:composer/send text])]
     (h/use-layout-effect
      (fn []
@@ -116,8 +160,10 @@
        nil)
      [text])
     [:div.composer
+     [attach/chips draft-key]
      [:div.input-row
       [:textarea {:ref #(set! (.-current ref) %)
+                  :on-paste #(attach/on-paste draft-key %)
                   :rows 1
                   :value text
                   :placeholder placeholder
@@ -128,10 +174,12 @@
                                    (.preventDefault e)
                                    (send!)))}]
       [:div.toolbar
+       [:f> attach/paperclip draft-key]
        [:span.grow]
        (when (and running can-stop)
          [:button.stop {:on-click #(rf/dispatch [:chat/stop])} "Stop"])
-       [:button.primary {:disabled (str/blank? text) :on-click send!} "Send"]]]]))
+       [:button.primary {:disabled (or (and (str/blank? text) (empty? attached)) (some :busy attached))
+                         :on-click send!} "Send"]]]]))
 
 ;; ---- the new chat ----
 
@@ -168,7 +216,9 @@
        (empty? (:servers me)) [:div.messages [:div.hello [:h2 "No servers"] [:p.muted "You have no server to chat on yet."]]]
        oc [:f> messages-view oc]
        :else [new-chat])
-     (when (and me (seq (:servers me)))
+     (when @(rf/subscribe [:read-only?])
+       [:div.read-only-note [:span "Read only: "] (str (or @(rf/subscribe [:view]) "") "'s chat")])
+     (when (and me (seq (:servers me)) (not @(rf/subscribe [:read-only?])))
        [:f> composer {:draft-key (if oc (:ck oc) :new)
                       :running (get-in oc [:state :running])
                       :can-stop (and oc (not (:pending? oc)))

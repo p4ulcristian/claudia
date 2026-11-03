@@ -34,15 +34,21 @@
  (fn [servers [_ name]]
    (or (:label (first (filter #(= name (:name %)) servers))) name)))
 
+(rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
+(rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))
+
 (rf/reg-sub
  :rows
- ;; Every server's chats in one list, newest first; archived ones hidden.
+ ;; Every shown server's chats in one list, newest first; archived ones only in the archived list.
  :<- [:servers]
- (fn [servers]
+ :<- [:archived-mode?]
+ :<- [:hidden-server-set]
+ (fn [[servers archived? hidden]]
    (->> servers
+        (remove (fn [[s]] (hidden s)))
         (mapcat (fn [[s {:keys [rows status]}]]
                   (map #(assoc % :server s :off (not= :open status)) (vals rows))))
-        (remove :archived)
+        (filter #(= archived? (boolean (:archived %))))
         (sort-by #(- (or (:at %) 0))))))
 
 (rf/reg-sub

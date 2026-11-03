@@ -29,4 +29,18 @@
    :drafts {}              ; [server chat] or :new -> composer text
    :ask-state {}           ; ask id -> {:busy bool :error text}
    :seen-sent {}           ; [server chat] -> the row's :at we last sent `seen` for
-   :error nil})
+   :error nil
+   ;; claudia.web.chatops
+   :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil
+   :hidden-servers (set (stored "claudia.hiddenServers" []))
+   :server-me {}           ; server -> its GET /api/me
+   :settings? false        ; Settings in the sidebar's place
+   :archived? false        ; the list shows archived chats
+   :all-sessions? (stored "claudia.allSessions" false)
+   :sessions {}            ; server -> ~/Work sessions that are not chats
+   :search nil             ; {:text :found {server [Found]}}
+   :attach {}              ; draft key -> [attachment]
+   :projects {}            ; [server folder] -> {:name :logo}
+   :explain {}             ; [server chat step] -> {:busy :text :error :open}
+   :menu nil               ; {:k [server chat] :x :y}: the chat menu
+   :tokens {} :github {} :github-prompt nil})

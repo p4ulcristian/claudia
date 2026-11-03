@@ -8,9 +8,10 @@
   (:require ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.shared.files :as files]
             [claudia.slave.http :as h]))
 
-(def max-bytes "The largest file the runner takes." (* 100 1024 1024))
+(def max-bytes files/max-bytes)
 
 (defonce ^:private root (atom nil))
 
@@ -96,10 +97,6 @@
 
 ;; ---- the tags ----
 
-(defn- attr [s]
-  (-> (str s) (str/replace "&" "&amp;") (str/replace "\"" "&quot;")
-      (str/replace "<" "&lt;") (str/replace ">" "&gt;") (str/replace "\n" " ")))
-
 (defn own-files
   "The files a message names that really are this profile's saved files (sizes read from disk)."
   [files]
@@ -111,12 +108,4 @@
          {:path p :name (path/basename p) :size (.-size (fs/statSync p))
           :type (let [t (:type f)] (if (and (string? t) (< (count t) 200) (seq t)) t "application/octet-stream"))})))
 
-(defn with-files
-  "The user's text with one <claudia-file> tag per file after it."
-  [text files]
-  (if (empty? files)
-    text
-    (str/join "\n\n" (filter seq (cons text (for [{:keys [path name size type]} files]
-                                              (str "<claudia-file path=\"" (attr path) "\" name=\"" (attr name)
-                                                   "\" size=\"" size "\" type=\"" (attr type)
-                                                   "\">The user attached this file; it is saved at the path.</claudia-file>")))))))
+(def with-files "The user's text with one <claudia-file> tag per file after it." files/with-files)

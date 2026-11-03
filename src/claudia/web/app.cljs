@@ -2,6 +2,7 @@
   (:require [re-frame.core :as rf]
             [reagent.dom.client :as rdc]
             [claudia.web.chalk :as chalk]
+            [claudia.web.chatops]
             [claudia.web.events]
             [claudia.web.fx]
             [claudia.web.md :as md]

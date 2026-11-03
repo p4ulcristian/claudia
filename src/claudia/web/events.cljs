@@ -1,6 +1,7 @@
 (ns claudia.web.events
   (:require [re-frame.core :as rf]
             [clojure.string :as str]
+            [claudia.shared.files :as files]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]))
 
@@ -27,7 +28,7 @@
 
 (defn- server-names [db] (mapv :name (get-in db [:me :servers])))
 
-(defn- default-server [db]
+(defn default-server [db]
   (let [names (server-names db)]
     (if (some #{(:new-server db)} names) (:new-server db) (first names))))
 
@@ -39,8 +40,15 @@
 (rf/reg-event-fx
  :init
  (fn [_ _]
-   (let [open (fx/parse-path js/location.pathname)]
-     {:db (assoc db/initial :open open :screen (if open :chat :list))
+   (let [open (fx/parse-path js/location.pathname)
+         ;; /new?text=…: a new chat of your own with the text in the box, not sent (decision 15 of
+         ;; the TypeScript Claudia: a link that sent it would let any link drive someone's Claude).
+         new-text (when (= "/new" js/location.pathname)
+                    (or (.get (js/URLSearchParams. js/location.search) "text") ""))]
+     (when new-text (js/history.replaceState nil "" "/"))
+     {:db (cond-> (assoc db/initial :open open :screen (if open :chat :list))
+            new-text (-> (assoc :view nil :screen :chat) (assoc-in [:drafts :new] new-text)))
+      :fx (if new-text [[:store ["claudia.view" nil]]] [])
       :http/get {:url "/hub/me" :on-ok [:me/loaded] :on-fail [:me/failed]}})))
 
 (rf/reg-event-fx
@@ -49,8 +57,10 @@
    (let [names (mapv :name (:servers me))]
      {:db (-> db
               (assoc :me me :me-error nil)
-              (assoc :servers (into {} (map (fn [n] [n {:status :connecting :rows {}}])) names)))
-      :ws/connect names})))
+              (assoc :servers (into {} (map (fn [n] [n {:status :connecting :rows {}}])) (if (:view db) [] names))))
+      ;; Another profile's chats (a stored view) connect once each server said it has that profile.
+      :ws/connect (if (:view db) [] names)
+      :fx [[:dispatch [:ops/me-loaded]]]})))
 
 (rf/reg-event-db
  :me/failed
@@ -88,7 +98,7 @@
   (let [k [server chat]
         msgs (vec (:messages f))]
     {:db (-> db
-             (assoc-in [:chats k] (-> (select-keys f [:title :folder :scene :running :asks])
+             (assoc-in [:chats k] (-> (select-keys f [:title :folder :scene :running :asks :more])
                                       (assoc :messages msgs :loaded true)))
              (update-in [:outbox k] (fn [ob] (reduce drop-echo (vec ob) (keep #(when (= "user" (:role %)) (:text %)) msgs)))))
      :fx [[:dispatch [:chat/check-seen]]]}))
@@ -202,15 +212,27 @@
 (rf/reg-event-fx
  :composer/send
  (fn [{:keys [db]} [_ text]]
-   (let [text (str/trim (or text ""))
-         [server chat :as k] (:open db)]
+   (let [[server chat :as k] (:open db)
+         draft-key (if chat k :new)
+         ;; Attachments: files (uploaded, named by <claudia-file> tags after the text) and images.
+         attach (get-in db [:attach draft-key])
+         sent-files (keep :file attach)
+         images (vec (mapcat :images attach))
+         notes (keep :note attach)
+         typed (str/trim (or text ""))
+         text (files/with-files (str/join "\n\n" (filter seq (concat notes [typed]))) sent-files)
+         extra (cond-> {}
+                 (seq sent-files) (assoc :files (vec sent-files))
+                 (seq images) (assoc :images images))]
      (cond
-       (str/blank? text) {}
+       (and (str/blank? text) (empty? images)) {}
+       (some :busy attach) {}
+       (:view db) {}
        ;; A new chat still on its way: the text waits in the composer until `created`.
        (contains? (:pending-new db) chat) {}
        chat
-       {:db (-> db (update-in [:outbox k] (fnil conj []) text) (assoc-in [:drafts k] ""))
-        :ws/send [server {:type "send" :chat chat :text text}]}
+       {:db (-> db (update-in [:outbox k] (fnil conj []) text) (assoc-in [:drafts k] "") (update :attach dissoc k))
+        :ws/send [server (merge {:type "send" :chat chat :text text} extra)]}
        :else
        (let [server (default-server db)
              id (uuid-v4)]
@@ -220,9 +242,11 @@
                     (assoc :open [server id])
                     (assoc-in [:outbox [server id]] [text])
                     (assoc-in [:drafts :new] "")
+                    (update :attach dissoc :new)
+                    (dissoc :new-upload-id)
                     (assoc :new-server server))
             :store ["claudia.newServer" server]
-            :ws/send [server {:type "new" :id id :text text}]}))))))
+            :ws/send [server (merge {:type "new" :id id :text text} extra)]}))))))
 
 (defn- on-open-chat [db f]
   (let [[server chat] (:open db)]
