@@ -8,6 +8,7 @@
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
             [claudia.slave.chats :as chats]
+            [claudia.slave.codeforms :as codeforms]
             [claudia.slave.explain :as explain]
             [claudia.slave.fork :as fork]
             [claudia.slave.history :as history]
@@ -15,6 +16,7 @@
             [claudia.slave.projects :as projects]
             [claudia.slave.search :as search]
             [claudia.slave.store :as store]
+            [claudia.slave.tasks :as tasks]
             [claudia.slave.tokens :as tokens]
             [claudia.slave.uploads :as uploads]))
 
@@ -40,10 +42,7 @@
       (.catch (fn [e] (when-not (.-headersSent res)
                         (h/json-reply res 500 {:error (str (or (.-message e) e))}))))))
 
-(defn least-used-colour []
-  (let [used (frequencies (keep :color (remove :archived (store/chats))))
-        least (apply min (map #(get used % 0) chats/chat-colors))]
-    (rand-nth (filter #(= least (get used % 0)) chats/chat-colors))))
+(defn least-used-colour [] (chats/least-used-colour))
 
 ;; ---- the delegate API (decision 16 of the TypeScript Claudia) ----
 
@@ -61,6 +60,7 @@
                  (cond (not text) {:error "text: 1 to 20000 characters"}
                        (not (known? id)) {:error "no such chat" :status 404}
                        :else (do (store/update! id {:archived false})
+                                 (chats/wake! id)
                                  (chats/send-text! id text)
                                  (changed!)
                                  {:ok true})))))))
@@ -77,32 +77,32 @@
                                  {:ok true :answered (count open)})))))))
 
 (defn- state-of
-  "How a chat stands, for whoever started it from outside: working, waiting on a question, its last
-  answer (the text after the last message sent), and the newest step, tool count and start of this
-  turn for a progress line."
+  "How a chat stands, for whoever started it from outside (runner.ts /api/chats/:id/state): working,
+  waiting on a question, its last answer (the text after the last message sent), and the newest step
+  (\"<tool>: <title>\" or the start of what it said), tool count and start of this turn for a
+  progress line, and how many agents it left working."
   [id]
   (if-not (known? id)
     (js/Promise.resolve {:known false :running false :waiting false :asks [] :last "" :step "" :steps 0 :since nil :agents 0})
     (-> (chats/snapshot id)
-        (.then (fn [{:keys [messages running asks]}]
+        (.then (fn [{:keys [messages running asks since]}]
                  (let [msgs (vec messages)
                        last-user (or (last (keep-indexed #(when (= "user" (:role %2)) %1) msgs)) -1)
                        turn (subvec msgs (inc last-user))
                        newest (peek turn)
-                       started (:at (get msgs last-user))]
+                       cut #(subs % 0 (min 160 (count %)))]
                    {:known true
                     :running (boolean running)
                     :waiting (boolean (seq asks))
-                    :asks (vec asks)
+                    :asks (vec (for [a asks :when (= "question" (:kind a))] (select-keys a [:id :questions])))
                     :last (str/join "\n\n" (keep #(when (= "assistant" (:role %)) (:text %)) turn))
-                    :step (let [s (case (:role newest)
-                                    "tool" (str (:tool newest) ": " (:summary newest))
-                                    "assistant" (first (str/split-lines (str (:text newest))))
-                                    "")]
-                            (subs s 0 (min 160 (count s))))
+                    :step (case (:role newest)
+                            "tool" (cut (str (or (:label newest) (:tool newest)) ": " (or (:title newest) (:summary newest))))
+                            "assistant" (cut (first (str/split-lines (str (:text newest)))))
+                            "")
                     :steps (count (filter #(= "tool" (:role %)) turn))
-                    :since (when (and running started (pos? started)) (.toISOString (js/Date. started)))
-                    :agents 0}))))))
+                    :since (when (and running since) (.toISOString (js/Date. since)))
+                    :agents (tasks/working id)}))))))
 
 ;; ---- all ~/Work sessions ----
 
@@ -173,8 +173,8 @@
         parts (mapv js/decodeURIComponent (rest (str/split path #"/")))
         reply #(reply-promise res %)]
     (if (and read-only (or (not= "GET" method)
-                           ;; Settings' tokens and logins are the profile's own business.
-                           (#{"claude-tokens" "github"} (second parts))))
+                           ;; Settings' logins are the profile's own business.
+                           (#{"github"} (second parts))))
       (do (h/json-reply res 403 {:error "Read only."}) true)
       (condp = [method (vec (take 2 parts)) (count parts)]
         ["POST" ["api" "delegate"] 2] (do (reply (delegate req)) true)
@@ -197,12 +197,16 @@
                 (.pipe (fs/createReadStream logo) res))
             (h/json-reply res 404 {:error "No logo."}))
           true)
-        ["GET" ["api" "claude-tokens"] 2] (do (h/json-reply res 200 (tokens/state)) true)
-        ["PUT" ["api" "claude-token"] 2]
-        (do (reply (-> (body-json req) (.then #(tokens/save! (:name %) (:token %) who))))
+        ;; The profile's preferences (runner.ts /api/prefs): chatColors, the forms deleted in the Forms
+        ;; window (they leave Claude's draw tool), and the opt-in forms this runner doesn't have.
+        ["GET" ["api" "prefs"] 2] (do (h/json-reply res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here)) true)
+        ["PATCH" ["api" "prefs"] 2]
+        (do (reply (-> (body-json req)
+                       (.then (fn [b]
+                                (let [out (codeforms/set-prefs! b)]
+                                  (when (contains? b :hiddenForms) (chats/prefs-changed!))
+                                  (assoc out :notHere codeforms/not-here))))))
             true)
-        ["POST" ["api" "claude-token"] 3]
-        (do (reply (-> (body-json req) (.then #(tokens/use! (:name %) who)))) true)
         ["GET" ["api" "github"] 2] (do (reply (.then (tokens/github-user) (fn [u] {:user u}))) true)
         ["PUT" ["api" "github"] 2] (do (reply (-> (body-json req) (.then #(tokens/set-github-token! (:token %))))) true)
         ["POST" ["api" "sessions"] 4] (do (reply (adopt (nth parts 2))) true)
@@ -224,7 +228,7 @@
                            (-> (body-json req)
                                (.then #(fork/fork! chats/cwd id (when (string? (:at %)) (not-empty (:at %)))
                                                    (boolean (:running (get @chats/state id))) (least-used-colour)))
-                               (.then (fn [fid] (changed!) {:id fid}))
+                               (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
                                (.catch (fn [e] {:error (.-message e) :status 409})))))
                   true)
               ["POST" "explain"]
@@ -236,21 +240,23 @@
                                               token (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
                                           (cond (not (string? step)) {:error "step: a tool call's id"}
                                                 (not (seq token)) {:error "No Claude token on this runner." :status 503}
-                                                :else (.then (explain/explain chats/cwd id step token) (fn [t] {:text t})))))))))
+                                                :else (.then (explain/explain chats/cwd id step token
+                                                                              (some #(when (= step (:id %)) %) (:turn (get @chats/state id))))
+                                                             (fn [t] {:text t})))))))))
                   true)
               ["PATCH" nil]
               (do (reply (-> (body-json req)
                              (.then (fn [{:keys [title archived color]}]
                                       (if-not (known? id)
                                         {:error "no such chat" :status 404}
-                                        (do (store/update! id (cond-> {}
-                                                                (and (string? title) (seq (str/trim title))) (assoc :title (subs (str/trim title) 0 (min 200 (count (str/trim title)))))
+                                        (do (when (string? title) (chats/rename! id title))
+                                            (store/update! id (cond-> {}
                                                                 (boolean? archived) (assoc :archived archived)
                                                                 (and (string? color) (some #{color} chats/chat-colors)) (assoc :color color)
                                                                 ;; passive: grey, remembering the colour it had
                                                                 (= color "ash") (assoc :color "ash" :prev_color (let [c (:color (store/chat id))] (if (= c "ash") (:prev-color (store/chat id)) c)))
                                                                 ;; awake again: the colour it had, else a fresh one
-                                                                (= color "wake") (assoc :color (or (:prev-color (store/chat id)) (least-used-colour)))))
+                                                                (= color "wake") (assoc :color (or (:prev-color (store/chat id)) (chats/least-used-colour id)) :prev_color nil)))
                                             (changed!)
                                             {:ok true}))))))
                   true)

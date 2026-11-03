@@ -22,7 +22,9 @@
 
 (def runner->page
   #{"chats" "chat" "created" "msg" "delta" "scene" "turn" "ask" "asked" "error"
-    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older" "picture_settings"})
+    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older" "picture_settings"
+    ;; The working line's note (Thinking, Retrying…, Compacting); no note: plain working.
+    "status"})
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."

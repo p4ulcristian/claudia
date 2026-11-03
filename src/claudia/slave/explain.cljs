@@ -52,7 +52,8 @@ No code, no lists, no headings; name a file or command only when it helps. Every
                         (reduce (fn [a ^js b]
                                   (cond
                                     (and (= "tool_use" (.-type b)) (= step (.-id b)))
-                                    (assoc a :name (.-name b) :input (js/JSON.stringify (.-input b) nil 1)
+                                    (assoc a :name (.-name b) :input (js/JSON.stringify (.-input b) nil 2)
+                                           :title (history/tool-title (.-name b) (js->clj (.-input b) :keywordize-keys true))
                                            :at (js/Date.parse (.-timestamp e)))
                                     (and (= "text" (.-type b)) (not (:name a))) (assoc a :before (.-text b))
                                     :else a))
@@ -64,11 +65,17 @@ No code, no lists, no headings; name a file or command only when it helps. Every
     (clj->js (assoc (into {} (for [k (js-keys env)] [k (aget env k)])) "CLAUDE_CODE_OAUTH_TOKEN" token))))
 
 (defn explain
-  "Promise of the plain-words text for one step of a chat."
-  [cwd chat step token]
+  "Promise of the plain-words text for one step of a chat. live: the step's Msg of the running turn,
+  for a step the session file doesn't hold yet."
+  [cwd chat step token live]
   (-> (step-of cwd chat step)
+      (.catch (fn [_] nil))
       (.then
        (fn [s]
+         (let [s (or s (when live
+                         {:name (:tool live) :title (:title live) :input (:detail live) :at (:at live)
+                          :result (get-in live [:result :text]) :error (boolean (get-in live [:result :error]))
+                          :finished (some? (:result live))}))]
          (when-not s (throw (js/Error. "That step isn't saved in the chat yet.")))
          (let [running (not (:finished s))
                seconds (when (and running (:at s)) (js/Math.round (/ (- (js/Date.now) (:at s)) 1000)))
@@ -76,7 +83,7 @@ No code, no lists, no headings; name a file or command only when it helps. Every
                                 (filter seq
                                         [(when (seq (:asked s)) (str "What they asked:\n" (cut (:asked s) 1500)))
                                          (when (seq (:before s)) (str "What the agent said just before this step:\n" (cut (:before s) 1000)))
-                                         (str "The step: " (:name s) "\nIts input:\n" (cut (:input s) 4000))
+                                         (str "The step: " (history/tool-label (:name s)) " " (:title s) "\nIts input:\n" (cut (:input s) 4000))
                                          (if running
                                            (str "It is still running" (when seconds (str ", for " seconds " seconds so far")) ".")
                                            (str "Its output" (when (:error s) " (it failed)") ":\n"
@@ -112,4 +119,4 @@ No code, no lists, no headings; name a file or command only when it helps. Every
                             (let [t (or (not-empty (str/trim @text)) "No explanation came back.")]
                               (when k
                                 (swap! done (fn [d] (assoc (if (> (count d) 500) {} d) k t))))
-                              t)))))))))))
+                              t))))))))))))

@@ -37,6 +37,8 @@
                             (fn []
                               (when (contains? @waiting n)
                                 (swap! waiting dissoc n)
+                                ;; The runner takes the ask's card away.
+                                (send! #js {:ev "cancel" :rpc n :id id})
                                 (reject (js/Error. "aborted"))))
                             #js {:once true}))
        (send! ev)))))
@@ -137,7 +139,8 @@
                       :hooks (hooks id (.-hooks spec))
                       :canUseTool (fn [name input ^js opts]
                                     (rpc id "canUseTool"
-                                         #js {:name name :input input :toolUseID (.-toolUseID opts)}
+                                         #js {:name name :input input :toolUseID (.-toolUseID opts)
+                                              :title (.-title opts) :description (.-description opts)}
                                          (.-signal opts)))
                       :stderr (fn [s] (js/console.error (str "[" (subs id 0 8) "] " (.trimEnd s))))})
         s (assoc box
@@ -148,7 +151,14 @@
     (pump id s)))
 
 (def ^:private control-methods
-  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels"})
+  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels" "setMcp"})
+
+(defn- set-mcp
+  "Replaces a live session's tools with the runner's new ones: a server under the same name is kept
+  as it was, so all come off first, then the new ones go on."
+  [id ^js q ^js defs]
+  (-> (.setMcpServers q #js {})
+      (.then (fn [off] (.then (.setMcpServers q (mcp-servers id defs)) (fn [on] #js {:off off :on on}))))))
 
 (defn- session-list []
   (into-array (for [[id {:keys [busy]}] @sessions] #js {:id id :busy @busy})))
@@ -188,7 +198,9 @@
                       answer #(send! (js/Object.assign #js {:ev "control" :req req} %))]
                   (if-not (and s (contains? control-methods method))
                     (answer #js {:error (if s (str "no control method " method) "no session")})
-                    (-> (js/Promise.resolve (.apply (aget (:q s) method) (:q s) (or (.-args msg) #js [])))
+                    (-> (js/Promise.resolve (if (= method "setMcp")
+                                              (set-mcp id (:q s) (aget (or (.-args msg) #js []) 0))
+                                              (.apply (aget (:q s) method) (:q s) (or (.-args msg) #js []))))
                         (.then (fn [v] (answer #js {:value (if (undefined? v) nil v)}))
                                (fn [e] (answer #js {:error (message e)}))))))
       (js/console.error "host: unknown op" (.-op msg)))))

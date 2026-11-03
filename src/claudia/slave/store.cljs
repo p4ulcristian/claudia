@@ -12,7 +12,11 @@
   ;; id = the Claude Code session id; at = last activity; ended = when the last turn ended;
   ;; seen = when the person last looked at its last turn; scene = the picture as JSON.
   ;; prev_color = the colour a passive (ash) chat had, for when it wakes.
-  [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color])
+  ;; How the last turn ended (the TypeScript Claudia's last_turns, for the hub's pushes and badge):
+  ;; last_turn = the result's uuid, stopped / failed, reply = the start of Claude's reply (only when
+  ;; it succeeded); ended is that turn's time, moved to when the work it left running settled.
+  [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
+   :last_turn :stopped :failed :reply])
 
 (defn open! [dir]
   (fs/mkdirSync dir #js {:recursive true})
@@ -75,8 +79,14 @@
                 at INTEGER NOT NULL,
                 PRIMARY KEY (chat, turn)
               );")
-    (when-not (some #(= "prev_color" (.-name ^js %)) (.all (.prepare d "PRAGMA table_info(chats)")))
-      (.exec d "ALTER TABLE chats ADD COLUMN prev_color TEXT"))
+    (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
+      (doseq [[c sql] [["prev_color" "prev_color TEXT"]
+                       ["last_turn" "last_turn TEXT"]
+                       ["stopped" "stopped INTEGER NOT NULL DEFAULT 0"]
+                       ["failed" "failed INTEGER NOT NULL DEFAULT 0"]
+                       ["reply" "reply TEXT NOT NULL DEFAULT ''"]]
+              :when (not (have c))]
+        (.exec d (str "ALTER TABLE chats ADD COLUMN " sql))))
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -93,7 +103,11 @@
      :ended (.-ended r)
      :seen (.-seen r)
      :preview (.-preview r)
-     :prev-color (.-prev_color r)}))
+     :prev-color (.-prev_color r)
+     :last-turn (.-last_turn r)
+     :stopped (= 1 (.-stopped r))
+     :failed (= 1 (.-failed r))
+     :reply (or (.-reply r) "")}))
 
 (defn chats [] (mapv row (.all (stmt "SELECT * FROM chats ORDER BY at DESC"))))
 
@@ -209,3 +223,24 @@
 (defn picture [id turn]
   (some-> ^js (.get (stmt "SELECT scene FROM pictures WHERE chat = ? AND turn = ?") id turn)
           .-scene p/read-json))
+
+(defn copy-turns!
+  "A fork takes along the pictures and file changes of the turns it keeps (src/db.ts copyTurns):
+  turns maps each kept turn's uuid in the chat `from` to its uuid in the fork `to`."
+  [from to turns]
+  (.exec ^js @db "BEGIN")
+  (try
+    (doseq [^js r (.all (stmt "SELECT turn, scene, at FROM pictures WHERE chat = ? ORDER BY at, rowid") from)
+            :let [t (get turns (.-turn r))]
+            :when t]
+      (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?)
+                   ON CONFLICT (chat, turn) DO UPDATE SET scene = excluded.scene")
+            to t (.-scene r) (.-at r)))
+    (doseq [^js r (.all (stmt "SELECT * FROM changes WHERE chat = ? ORDER BY id") from)
+            :let [t (get turns (.-turn r))]
+            :when t]
+      (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            to t (.-path r) (.-before r) (.-after r) (.-added r) (.-removed r) (.-status r) (.-skipped r) (.-at r)))
+    (.exec ^js @db "COMMIT")
+    (catch :default e (.exec ^js @db "ROLLBACK") (throw e))))

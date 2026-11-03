@@ -90,12 +90,16 @@
         "send" (let [files (uploads/own-files (:files f))
                      images (sent-images f)]
                  (when (or (seq (:text f)) (seq files) (seq images))
-                   (chats/send-text! chat (uploads/with-files (str (:text f)) files) images)))
+                   ;; Writing to an archived chat brings it back; to a passive one wakes it.
+                   (store/update! chat {:archived false})
+                   (chats/wake! chat)
+                   (chats/send-text! chat (uploads/with-files (str (:text f)) files) images)
+                   (chats-changed)))
         "stop" (chats/stop! chat)
         "answer" (chats/answer! chat (:ask f) (:answers f))
         "secret" (chats/secret! chat (:ask f) (:sealed f) who)
         "deny" (chats/deny! chat (:ask f) who)
-        "rename" (do (store/update! chat {:title (str/trim (str (:title f)))}) (chats-changed))
+        "rename" (chats/rename! chat (:title f))
         "archive" (do (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
         "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))
         "stop_task" (chats/stop-task! chat (str (:task f)))
@@ -110,7 +114,11 @@
         "code_edit" (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat))
         "code_send" (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
                       (chats/set-scene! chat scene)
-                      (when (seq text) (chats/send-text! chat text)))
+                      (when (seq text)
+                        (store/update! chat {:archived false})
+                        (chats/wake! chat)
+                        (chats/send-text! chat text)
+                        (chats-changed)))
         ;; The form row and the columns of this chat's picture.
         "picture_settings" (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
                      (when scene (chats/set-scene! chat scene))

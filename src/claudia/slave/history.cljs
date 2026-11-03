@@ -48,6 +48,37 @@
         (str/join " " (rest (str/split tool #"__")))
         tool))))
 
+;; The TypeScript Claudia's one-line step (src/chat.ts toolLabel, toolTitle): sent with each tool Msg
+;; as label and title beside beta's summary, with the call's input (detail) and its result.
+
+(defn cut-to
+  "s cut to n characters with an ellipsis (newlines kept)."
+  [s n]
+  (let [s (str s)] (if (> (count s) n) (str (subs s 0 (dec n)) "…") s)))
+
+(defn tool-label [tool]
+  (case tool
+    "mcp__picture__draw" "Draw"
+    "mcp__workspace__set_folder" "Folder"
+    "AskUserQuestion" "Ask"
+    (if (str/starts-with? (str tool) "mcp__") (str/join " " (rest (str/split tool #"__"))) tool)))
+
+(defn tool-title [tool input]
+  (let [i (or input {})
+        base #(last (str/split (str %) #"/"))]
+    (case tool
+      "Bash" (cut-to (or (not-empty (:description i)) (:command i) "") 90)
+      ("Read" "Write" "Edit" "NotebookEdit") (base (or (:file_path i) (:notebook_path i)))
+      ("Grep" "Glob") (cut-to (or (:pattern i) "") 80)
+      "WebFetch" (cut-to (or (:url i) "") 80)
+      "WebSearch" (cut-to (or (:query i) "") 80)
+      ("Agent" "Task") (cut-to (or (:description i) "") 80)
+      "TodoWrite" (str (count (:todos i)) " todos")
+      "mcp__picture__draw" (if (seq (:title i)) (str "picture: " (:title i)) "picture")
+      "mcp__workspace__set_folder" (str/replace (str (:path i)) (os/homedir) "~")
+      "AskUserQuestion" (str/join ", " (map :header (:questions i)))
+      "")))
+
 (defn strip-reminders [s]
   (str/trim (str/replace (str s) #"<system-reminder>[\s\S]*?</system-reminder>" "")))
 
@@ -103,7 +134,9 @@
                              (when (seq (str/trim (str (:text b))))
                                {:id (str mid ":" n) :role "assistant" :text (:text b) :at at}))
                     "tool_use" (cond-> {:id (:id b) :role "tool" :tool (:name b)
-                                        :summary (tool-summary (:name b) (:input b) folder) :at at}
+                                        :summary (tool-summary (:name b) (:input b) folder) :at at
+                                        :label (tool-label (:name b)) :title (tool-title (:name b) (:input b))
+                                        :detail (cut-to (js/JSON.stringify (clj->js (:input b)) nil 2) 4000)}
                                  ;; the page shows the image from GET /api/chats/:id/shown/<this id>
                                  (= "mcp__workspace__show_image" (:name b)) (assoc :image true))
                     nil)))
@@ -165,8 +198,10 @@
                    (doseq [b content]
                      (case (:type b)
                        "tool_result"
-                       (do (when-let [i (and (:is_error b) (get @tools (:tool_use_id b)))]
-                             (swap! out assoc-in [i :error] true))
+                       (do (when-let [i (get @tools (:tool_use_id b))]
+                             (swap! out update i assoc :result {:error (boolean (:is_error b))
+                                                                :text (cut-to (result-text (:content b)) 4000)})
+                             (when (:is_error b) (swap! out assoc-in [i :error] true)))
                            (when-let [qs (and (not (:is_error b)) (get @asked (:tool_use_id b)))]
                              ;; The result reads: ... "question"="answer" ...
                              (let [answers (into {} (for [[_ q a] (re-seq #"\"((?:[^\"\\\\]|\\\\.)*)\"=\"((?:[^\"\\\\]|\\\\.)*)\"" (result-text (:content b)))]
