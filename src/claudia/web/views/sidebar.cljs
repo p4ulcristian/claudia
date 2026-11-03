@@ -50,7 +50,7 @@
         (into [:<>] (map-indexed (fn [i p] (if (odd? i) ^{:key i} [:mark p] p)) (.split (str text) re)))))))
 
 (defn- row-view
-  [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click]
+  [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click tag]
                                                 :or {line2? true}}]
   (let [k [server id]
         [kind text] (when line2? (pure/second-line row))]
@@ -64,6 +64,7 @@
        [:span.t (or title-view title)]
        (when read-only? [settings/lock-icon])
        (when multi? [chat/server-mark server])
+       (when tag [:span.cs-tag tag])
        [:span.when (or when-text (ago (:at row)))]]
       (when line2? [:span.cs-l2 {:class kind} (if (str/blank? text) " " text)])]]))
 
@@ -74,24 +75,27 @@
          (map-indexed (fn [i part] (if (odd? i) ^{:key i} [:mark part] part))
                       (str/split (str (:snippet h)) #"[\u0001\u0002]")))])
 
-(defn- found-chat [r f multi? ro search-text]
+(defn- found-chat [r f {:keys [multi? ro search-text tag-archived?]}]
   (let [k [(:server r) (:id r)]]
     [:div.found {:style {"--chat" (chat-color-var (:color r))}}
-     [row-view r {:multi? multi? :read-only? ro :line2? false
+     [row-view r {:multi? multi? :read-only? ro :line2? false :tag (when (and tag-archived? (:archived r)) "archived")
                   :title-view (if (:title f) [marked-title (:title r) search-text] (:title r))
                   :when-text (if (pos? (:count f)) (pure/hits-label (:count f)) (ago (:at r)))
                   :on-click #(rf/dispatch [:nav/open k])}]
      (for [h (:hits f)]
        ^{:key (:uuid h)} [found-hit k h])]))
 
-(defn- found-list [found rows-by multi? ro search-text]
+(defn- found-list
+  "The search's chats with their hits; an archived one is tagged when the list mixes them (not the
+  archived list)."
+  [found rows-by {:keys [archived?] :as m} search-text]
   (let [hits (for [[server fs] found, f fs :let [r (rows-by [server (:id f)])] :when r] [r f])]
     (if (and (empty? hits) (seq found))
       [:p.muted.small.cs-empty "Nothing said matches."]
       [:<>
        (for [[r f] hits]
          ^{:key (str (:server r) "/" (:id r))}
-         [found-chat r f multi? ro search-text])])))
+         [found-chat r f {:multi? (:multi? m) :ro (:ro m) :search-text search-text :tag-archived? (not archived?)}])])))
 
 (defn- sessions-list [sessions]
   (when (seq (mapcat val sessions))
@@ -182,6 +186,7 @@
         {:keys [archived? all-sessions?]} @(rf/subscribe [:list-mode])
         {:keys [text found]} @(rf/subscribe [:search])
         rows-by (into {} (map (juxt (juxt :server :id) identity)) rows)
+        every-row (into {} (map (juxt (juxt :server :id) identity)) @(rf/subscribe [:all-rows]))
         q (pure/search-key text)
         search-ref (h/use-ref nil)
         m {:shown (pure/by-title rows q) :open open :multi? @(rf/subscribe [:multi-server?]) :ro ro :q q :archived? archived?
@@ -195,7 +200,7 @@
       [off-notes]
       (cond
         (nil? @(rf/subscribe [:me])) nil
-        found [found-list found rows-by (:multi? m) ro text]
+        found [found-list found every-row m text]
         :else (chat-rows m))
       (when-not found [sessions-list (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))])]
      (when (and (not ro) phone?)

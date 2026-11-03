@@ -131,6 +131,12 @@
                               (< (count (:hits c)) 3)
                               (update :hits conj (select-keys hit [:uuid :role :snippet])))))))
 
+(defn in-scope?
+  "Whether a chat archived? (true/false) is searched for the call's archived parameter: \"all\"
+  every chat, \"1\" the archived ones, anything else (none) the chats not archived."
+  [param archived?]
+  (case param "all" true "1" (boolean archived?) (not archived?)))
+
 (defn title-holds?
   "Whether a title holds every word."
   [title ws]

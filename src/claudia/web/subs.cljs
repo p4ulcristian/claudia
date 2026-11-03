@@ -40,14 +40,14 @@
 
 (defn list-rows
   "Every shown server's chats in one list, each with its :server and :off (its socket not open);
-  archived ones only in the archived list. In the order the chats were started (the TypeScript
+  archived ones only in the archived list (archived? true), every chat for archived? :any. In the order the chats were started (the TypeScript
   Claudia's list): a new chat sits last."
   [servers archived? hidden]
   (->> servers
        (remove (fn [[s]] (hidden s)))
        (mapcat (fn [[s {:keys [rows status]}]]
                  (map #(assoc % :server s :off (not= :open status)) (vals rows))))
-       (filter #(= archived? (boolean (:archived %))))
+       (filter #(or (= :any archived?) (= archived? (boolean (:archived %)))))
        (sort-by events/list-order)))
 
 (rf/reg-sub
@@ -56,6 +56,12 @@
  :<- [:archived-mode?]
  :<- [:hidden-server-set]
  (fn [[servers archived? hidden]] (list-rows servers archived? hidden)))
+
+(rf/reg-sub
+ :all-rows
+ :<- [:servers]
+ :<- [:hidden-server-set]
+ (fn [[servers hidden]] (list-rows servers :any hidden)))
 
 (rf/reg-sub
  :row

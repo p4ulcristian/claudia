@@ -236,8 +236,8 @@
 
 ;; ---- the other calls ----
 
-(defn- search-rows [archived]
-  (for [r (store/chats) :when (= archived (boolean (:archived r)))]
+(defn- search-rows [param]
+  (for [r (store/chats) :when (search/in-scope? param (:archived r))]
     {:id (:id r) :title (:title r) :file (history/session-file chats/cwd (:id r))}))
 
 (defn- reachable-project
@@ -320,7 +320,7 @@
     (case op
       :read-only (io/send-json res 403 {:error "Read only."})
       :delegate (reply (delegate req))
-      :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (= "1" (.get q "archived"))))})
+      :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (.get q "archived")))})
       :sessions (reply (sessions))
       :limits (io/send-json res 200 {:tokens (meta/heard)})
       :project (io/send-json res 200 (project-info (.get q "folder") view?))
