@@ -152,7 +152,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | Call | Answer |
 |---|---|
 | `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
-| `POST /api/update-check` | answered by the front, no caller needed (only the hub reaches it): writes `CLAUDIA_UPDATE_TRIGGER`, 202; 501 when unset |
+| `POST /api/update-check` `{ main?, stage? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`main <commit>`, `stage <tree>`, else `check <time>`), 202; 501 when unset |
 | `GET /api/claude-token/current` | the front, the hub only: `{ name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
 | `PUT /api/claude-token/current` `{ name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |

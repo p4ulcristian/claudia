@@ -1,7 +1,7 @@
-# Only what the hub's image is built from.
+# Only what the hub's image is put together from.
 *
-!package.json
-!package-lock.json
-!shadow-cljs.edn
-!src
-!resources
+!out/hub.js
+!out/web
+!version.json
+!node_modules/ws
+!node_modules/jose

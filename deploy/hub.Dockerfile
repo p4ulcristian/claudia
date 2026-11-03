@@ -1,39 +1,20 @@
 # syntax=docker/dockerfile:1
-# Claudia's hub, for the gate (under 1 GB of RAM): built here, run as plain Node with only the
-# compiled hub, the built page and the npm packages the hub loads at run time (ws, jose).
+# Claudia's hub, for the gate (under 1 GB of RAM): plain Node with only the compiled hub, the built
+# page and the npm packages the hub loads at run time (ws, jose). Nothing is compiled or run here:
+# the image is put together by COPY from a bundle check.yml built (out/, production node_modules,
+# version.json), so .github/workflows/stage.yml can make it without running the bundle's code (it
+# refuses a Dockerfile with RUN). By hand, from a built checkout:
+#   npm ci && npm run build && echo '{"version":"dev","tree":"dev"}' > version.json
 #   docker build -f deploy/hub.Dockerfile -t claudia-hub .
 #   docker run --read-only -p 127.0.0.1:4590:4590 -v /var/lib/claudia-hub:/data claudia-hub
 # /data (writable, owned by the hub's uid) holds the store (hub.db) and the peer requests; a
-# hub.json there is imported once into an empty store. Built and signed by
-# .github/workflows/release.yml.
-
-# shadow-cljs needs Java to compile; the JRE comes from Temurin, Node from the official image.
-FROM eclipse-temurin:25-jre AS java
-
-FROM node:24-trixie-slim AS build
-COPY --from=java /opt/java/openjdk /opt/java/openjdk
-ENV JAVA_HOME=/opt/java/openjdk PATH=/opt/java/openjdk/bin:$PATH
-WORKDIR /src
-COPY package.json package-lock.json ./
-# No install scripts: nothing the hub or the build uses needs one.
-RUN npm ci --ignore-scripts --no-audit --no-fund
-COPY shadow-cljs.edn ./
-COPY src src
-COPY resources resources
-RUN --mount=type=cache,target=/root/.m2 \
-    npx shadow-cljs release hub web && npm run build:web-files
-# What /hub/me says the hub is: package.json's version and the commit the image was built from.
-ARG COMMIT=unknown
-RUN mkdir -p /app/node_modules \
- && node -e "require('fs').writeFileSync('/app/version.json', JSON.stringify({version: require('./package.json').version, commit: process.argv[1].slice(0, 7)}))" "$COMMIT" \
- && cp out/hub.js /app/ \
- && cp -r node_modules/ws node_modules/jose /app/node_modules/ \
- && cp -r out/web /web \
- && cd /app && node -e "require('ws'); require('jose')"
+# hub.json there is imported once into an empty store. The gate passes the commit as HUB_COMMIT.
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot
-COPY --from=build /app /app
-COPY --from=build /web /web
+COPY out/hub.js version.json /app/
+COPY node_modules/ws /app/node_modules/ws
+COPY node_modules/jose /app/node_modules/jose
+COPY out/web /web
 WORKDIR /app
 ENV NODE_ENV=production HUB_HOST=0.0.0.0 HUB_PORT=4590 HUB_WEB=/web HUB_DATA=/data HUB_CONFIG=/data/hub.json
 EXPOSE 4590
