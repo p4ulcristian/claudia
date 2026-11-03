@@ -155,7 +155,7 @@
 (defn- agent-view [ck id info]
   (let [[tab set-tab] (h/use-state "steps")
         d @(rf/subscribe [:agent-detail ck id])
-        a (or info (:agent d))
+        a (when (or info (:info d)) (merge (:info d) (into {} (remove (comp nil? val)) info)))
         live (running? a)
         shell? (= "shell" (:kind a))]
     (use-tick! live)

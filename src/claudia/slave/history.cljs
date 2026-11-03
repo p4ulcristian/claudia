@@ -57,6 +57,22 @@
     (or (some-> (re-find #"<summary>([\s\S]*?)</summary>" text) second str/trim)
         "A background task finished.")))
 
+(defn command-msg
+  "Claude Code keeps a slash command as user messages: the command (<command-name>, shown as the
+  user's own \"/name args\"), its output (<local-command-stdout>, a note) and a caveat (dropped).
+  {:role :text}, :drop, or nil for any other text."
+  [text]
+  (cond
+    (str/starts-with? text "<local-command-caveat>") :drop
+    (str/includes? text "<local-command-stdout>")
+    (let [out (str/trim (str (second (re-find #"<local-command-stdout>([\s\S]*?)</local-command-stdout>" text))))]
+      (if (seq out) {:role "note" :text out} :drop))
+    (str/includes? text "<command-name>")
+    (let [cmd (str/trim (str (second (re-find #"<command-name>([\s\S]*?)</command-name>" text))))
+          args (str/trim (str (second (re-find #"<command-args>([\s\S]*?)</command-args>" text))))]
+      {:role "user" :text (str/trim (str (if (str/starts-with? cmd "/") cmd (str "/" cmd)) " " args))})
+    :else nil))
+
 (defn result-text [content]
   (cond (string? content) content
         (sequential? content) (str/join "\n" (for [b content]
@@ -135,9 +151,13 @@
                "user"
                (if (string? content)
                  (let [text (strip-reminders content)]
-                   (if-let [notice (task-notice text)]
-                     (swap! out conj {:id (:uuid m) :role "note" :text notice :at at})
-                     (when (seq text) (swap! out conj {:id (:uuid m) :role "user" :text text :at at}))))
+                   (let [cmd (command-msg text)]
+                     (cond
+                       (= :drop cmd) nil
+                       cmd (swap! out conj (assoc cmd :id (:uuid m) :at at))
+                       :else (if-let [notice (task-notice text)]
+                               (swap! out conj {:id (:uuid m) :role "note" :text notice :at at})
+                               (when (seq text) (swap! out conj {:id (:uuid m) :role "user" :text text :at at}))))))
                  (let [texts (atom [])]
                    (doseq [b content]
                      (case (:type b)

@@ -441,7 +441,11 @@
                  (when (#{"warning" "notice"} (:level m))
                    (note-msg! id {:id (or (:uuid m) (str "info-" (now))) :role "note" :text (str (:content m)) :at (now)}))
                  (do (tasks/load! id true)
-                     (tasks/on-system! id m)))
+                     (tasks/on-system! id m)
+                     ;; A background task ended: its notice, as the session file keeps it.
+                     (when (and (= "task_notification" (:subtype m)) (not (:ambient m)) (not (:skip_transcript m))
+                                (seq (:summary m)))
+                       (note-msg! id {:id (str "task-" (:task_id m) "-" (now)) :role "note" :text (:summary m) :at (now)}))))
       "rate_limit_event" (try (meta/note-limits! (token) (:rate_limit_info m))
                               (catch :default _ nil))
       nil)))

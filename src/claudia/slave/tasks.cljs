@@ -116,11 +116,16 @@
   (case (:subtype m)
     "task_started"
     (do (swap! tasks assoc-in [chat (:task_id m)]
+               (merge
+                ;; What its call said (kept with the task, so it outlives this runner).
+                (when-let [{:keys [input]} (get-in @calls [chat (:tool_use_id m)])]
+                  {:call-name (:description input) :command (:command input) :model (:model input)
+                   :prompt (:prompt input)})
                {:id (:task_id m) :use (:tool_use_id m) :name (or (not-empty (:description m)) "Agent")
                 :type (or (:subagent_type m) (:task_type m) "task") :status "running"
                 :background (boolean (:is_backgrounded m)) :start (now) :active (now)
                 :parent (:parent_task_id m) :ambient (boolean (or (:ambient m) (:skip_transcript m)))
-                :prompt (:prompt m)})
+                :prompt (or (:prompt m) (get-in @calls [chat (:tool_use_id m) :input :prompt]))}))
         (changed! chat) true)
     "background_tasks_changed"
     ;; The whole live set: a running background task missing from it has ended.
@@ -279,13 +284,15 @@
                       kids (count (filter #(and (not= (:id %) (:id t)) (= "running" (:status %))
                                                 (= (:id t) (:id (top-of % by-id))))
                                           shown))]
-                  {:id (:id t) :kind (if shell "shell" "agent") :name (:name t) :status (:status t)
+                  {:id (:id t) :kind (if shell "shell" "agent")
+                   ;; The Agent or Bash call's own description first: task_progress renames it by what it does now.
+                   :name (or (not-empty (get-in call [:input :description])) (not-empty (:call-name t)) (:name t)) :status (:status t)
                    :start (:start t) :end (:end t) :tools (or (:tools t) 0) :tokens (:tokens t)
                    :step (if shell
-                           (some->> (get-in call [:input :command]) str/split-lines first (str "$ "))
+                           (some->> (or (get-in call [:input :command]) (:command t)) str/split-lines first (str "$ "))
                            (or (:step t) (:last-tool t)))
                    :task (when running (:id t)) :type (:type t) :background (boolean (:background t))
-                   :model (get-in call [:input :model]) :active (or (:active t) (:start t))
+                   :model (or (get-in call [:input :model]) (:model t)) :active (or (:active t) (:start t))
                    :children kids :progress (:progress t)})))
          (sort-by (fn [a] [(if (= "running" (:status a)) 0 1)
                            (- (if (= "running" (:status a)) (:active a) (or (:end a) (:active a))))]))
@@ -377,7 +384,7 @@
       (.catch (fn [_] nil))))
 
 (defn detail
-  "Promise of one agent's view: {:agent (as in the list) :steps :files :prompt :report :output}."
+  "Promise of one agent's view: {:info (as in the list) :steps :files :prompt :report :output}."
   [cwd chat folder id]
   (let [t (get-in @tasks [chat id])
         info (some #(when (= id (:id %)) %) (agents cwd chat folder))
@@ -385,14 +392,14 @@
     (cond
       (nil? t) (js/Promise.resolve {:error "No such agent in this chat."})
       (shell? t)
-      (js/Promise.resolve {:agent info
-                           :command (get-in call [:input :command])
+      (js/Promise.resolve {:info info
+                           :command (or (get-in call [:input :command]) (:command t))
                            :output (tail (output-file chat t) 65536)})
       :else
       (let [file (agent-file cwd chat t)]
         (-> (if file (read-agent file folder) (js/Promise.resolve nil))
             (.then (fn [r]
-                     {:agent (cond-> info (and (:model r) (not (:model info))) (assoc :model (:model r)))
+                     {:info (cond-> info (and (:model r) (not (:model info))) (assoc :model (:model r)))
                       :steps (:steps r [])
                       :files (:files r [])
                       :prompt (or (get-in call [:input :prompt]) (:prompt t) (:prompt r))
