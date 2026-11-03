@@ -1,10 +1,4 @@
 {
-  "src/claudia/web/scene3d/engine.cljs": {"shadowed":3,"long":["build-parts","make-arrow","start!"]},
-  "src/claudia/web/scene3d/overlap.cljs": {"shadowed":0,"long":["make-checker"]},
-  "src/claudia/web/scene3d/person.cljs": {"shadowed":10,"long":["make"]},
-  "src/claudia/web/scene3d/view.cljs": {"shadowed":1,"long":["scene3d"]},
-  "src/claudia/web/scene3d/vm.cljs": {"shadowed":1,"long":["load-script"]},
-  "src/claudia/web/scene3d/voice.cljs": {"shadowed":0,"long":["make"]},
   "src/claudia/web/views/agents.cljs": {"shadowed":0,"long":["agent-view","branch-section","chips"]},
   "src/claudia/web/views/asks.cljs": {"shadowed":1,"long":["question-card","secret-card"]},
   "src/claudia/web/views/attach.cljs": {"shadowed":2,"long":["chips","drop-zone"]},
