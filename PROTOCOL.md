@@ -224,7 +224,7 @@ Runner → page:
 | `delta` | `chat`, `id`, `text` (streamed text appended to message `id`) |
 | `scene` | `chat`, `scene: Scene` (the whole picture; it is small), `changed` (ids the draw changed: nodes, arrows `from->to`, blocks, `block:part`, `block:item`), `turn` (the picture's turn) |
 | `status` | `chat`, `running`, `note?` (`Thinking`, `Retrying…`, `Compacting`; none: plain working) |
-| `turn` | `chat`, `running` (bool) |
+| `turn` | `chat`, `running` (bool), `stopped` (when a turn ended: the person stopped it) |
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
@@ -233,7 +233,7 @@ Runner → page:
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
 | `settings` | `chat`, `settings: { model, effort }`, `model?` (the model the session runs), `commands?` (its slash command names) |
-| `meta` | `limits: [Limit]`, `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`; sent after `chats` on `hello` and on every change |
+| `meta` | `limits: [Limit]`, `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (whose token, from Settings, or null); sent after `chats` on `hello` and on every change |
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 | `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |

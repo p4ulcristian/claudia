@@ -94,6 +94,12 @@
                      :commands (vec (sort-by :name (for [^js c commands]
                                                      {:name (.-name c) :description (.-description c)
                                                       :hint (.-argumentHint c)})))})
+                   ;; The model a new chat gets when none is picked (the user's settings), e.g.
+                   ;; claude-opus-5-5[1m]: the picker's label for "default".
+                   (js/Promise.all
+                    #js [(-> (js/Promise.resolve (.getContextUsage q #js {:detail "summary"}))
+                       (.then (fn [^js c] (when (seq (some-> c .-model)) (publish! {:defaultModel (.-model c)}))))
+                       (.catch (fn [_] nil)))
                    ;; Marked experimental by the SDK; the rate_limit_event path keeps working without it.
                    (-> (js/Promise.resolve (.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET q #js {:skipBehaviors true}))
                        (.then (fn [u]
@@ -102,8 +108,23 @@
                                     (let [limits (limits-from (:rate_limits u))]
                                       (store/kv! "" (str "limits:" k) limits)
                                       (when (= k (:account @state)) (publish! {:limits limits})))))))
-                       (.catch (fn [_] nil)))))
+                       (.catch (fn [_] nil)))])))
           (.catch (fn [e] (js/console.error "meta probe:" (str (or (.-message e) e)))))
           (.finally (fn [] (.close q) (reset! probing false)))))))
 
-(defn frame [] (assoc (select-keys @state [:limits :models :commands]) :type "meta"))
+(defn- account-label
+  "Whose token is in use (the saved token's name from Settings, src/account.ts label), or nil."
+  []
+  (let [f (.. js/process -env -CLAUDIA_TOKEN_FILE)]
+    (when (seq f)
+      (try (not-empty (:name (js->clj (js/JSON.parse (.readFileSync (js/require "node:fs") (str f ".json") "utf8")) :keywordize-keys true)))
+           (catch :default _ nil)))))
+
+(defn frame
+  "The meta frame (src/meta.ts Meta): limits, models, commands, the default model, and the token
+  in use (its name as a hash, and whose it is)."
+  []
+  (assoc (select-keys @state [:limits :models :commands :defaultModel])
+         :type "meta"
+         :account (some->> (:account @state) (str "token-"))
+         :accountLabel (account-label)))

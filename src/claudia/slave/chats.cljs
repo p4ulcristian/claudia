@@ -288,7 +288,9 @@
       (unsettle! id)
       (changes/begin-turn! id (turn-id! id) (:folder (store/chat id))))
     (store/update! id {:at (now)})
-    (emit! id {:type "turn" :running running})
+    ;; stopped: the turn the person stopped (the page says "Stopped.").
+    (emit! id (cond-> {:type "turn" :running running}
+                (not running) (assoc :stopped (boolean (:stopping (st id))))))
     (changed!))
   (arm-idle! id)
   (when-not running (restart-if-stale! id)))
@@ -769,11 +771,12 @@
                                :stopped stopped :failed (boolean (and (not stopped) error)) :reply reply}
                         ok (assoc :preview reply)))
     (drop-asks! id true "The turn ended.")
-    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}))
+    (swap-chat! id assoc :partial nil :stream-counts {} :final-counts (atom {}))
     (when (and error (not stopped)) (emit! id {:type "error" :text error}))
     ;; A turn that ended took in everything sent during it (a send not taken in starts the next).
     (doseq [[uuid msg] (:unsaved (st id)) :when (:queued msg)] (take-in! id uuid "started"))
     (set-running! id false)
+    (swap-chat! id assoc :stopping false)
     (changed!)
     (read-context! id)
     (refresh-title! id)
