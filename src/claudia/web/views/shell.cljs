@@ -7,6 +7,7 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.picture :as picture]
@@ -52,5 +53,5 @@
       [picture/picture-pane]]
      ;; The right rail (desktop): this chat's forms, beside the picture.
      [picture/right-rail]
-     [picture/gallery-host]
-     [admin/dialog]]))
+     [admin/dialog]
+     [codeforms/gallery-host]]))

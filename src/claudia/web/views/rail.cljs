@@ -34,7 +34,7 @@
          [:span.rail-name title]
          (when multi? [:span.rail-server @(rf/subscribe [:server-label server])])])]
      [:button.rail-forms {:title "Forms: everything Claude can draw, and your templates" :aria-label "Forms"
-                          :on-click #(rf/dispatch [:forms/gallery true])}
+                          :on-click #(rf/dispatch [:codeforms/gallery nil])}
       [:svg {:viewBox "0 0 20 20" :aria-hidden true}
        [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}]
        [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]]

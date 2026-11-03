@@ -127,7 +127,7 @@
   (when r
     {:name (.-name r) :html (.-html r) :parts (p/read-json (.-parts r)) :description (.-description r)}))
 
-(defn templates [] (mapv template-row (.all (stmt "SELECT * FROM templates ORDER BY at DESC"))))
+(defn templates [] (mapv template-row (.all (stmt "SELECT * FROM templates ORDER BY name COLLATE NOCASE"))))
 
 (defn template [name] (template-row (.get (stmt "SELECT * FROM templates WHERE name = ?") name)))
 
@@ -205,6 +205,11 @@
   (mapv (fn [^js r] {:turn (.-turn r) :title (or (.-title r) "") :at (.-at r)})
         (.all (stmt "SELECT turn, json_extract(scene, '$.title') AS title, at FROM pictures
                      WHERE chat = ? ORDER BY at, rowid") id)))
+
+(defn picture-scenes
+  "Every earlier picture of the chat (its scenes)."
+  [id]
+  (mapv (fn [^js r] (p/read-json (.-scene r))) (.all (stmt "SELECT scene FROM pictures WHERE chat = ?") id)))
 
 (defn picture [id turn]
   (some-> ^js (.get (stmt "SELECT scene FROM pictures WHERE chat = ? AND turn = ?") id turn)

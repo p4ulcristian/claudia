@@ -179,7 +179,11 @@
                                                                    m names)))
                                                  m by)))
                                {} (:uses i))]
-             {:used (vec (for [u (sort-by (juxt :ns (comp - :count) :name) (vals found))]
+             {:used (vec (for [u (sort (fn [a b] (let [c (.localeCompare (:ns a) (:ns b))]
+                                                      (cond (not (zero? c)) c
+                                                            (not= (:count a) (:count b)) (- (:count b) (:count a))
+                                                            :else (.localeCompare (:name a) (:name b)))))
+                                     (vals found))]
                            (update u :from #(vec (sort %)))))}))))
 
 ;; ---- the calls form ----
@@ -192,12 +196,18 @@
         cs (filter #(and (defs (:from %)) (defs (:to %))) (:calls i))]
     {:defs defs
      :out (into {} (for [[k l] (group-by :from cs)] [k (vec (sort-by (juxt :row :col) l))]))
-     :inc (group-by :to cs)}))
+     :inc (group-by :to cs)
+     ;; Read once per index: files' lines, each var's .sql links, who names each .sql file.
+     :lines (atom {}) :sql (atom {}) :sql-in (atom nil)}))
 
 (defonce ^:private derived (atom {}))
 (defn- derive-of [i]
   (or (get @derived [(:root i) (:fp i)])
       (let [d (derive* i)] (reset! derived {[(:root i) (:fp i)] d}) d)))
+
+(defn- file-lines [d file]
+  (or (get @(:lines d) file)
+      (let [l (lines-of file)] (swap! (:lines d) assoc file l) l)))
 
 (defn- rel [root f] (if (str/starts-with? f (str root "/")) (subs f (inc (count root))) f))
 
@@ -208,12 +218,20 @@
 
 (def ^:private tokens-re #"(\"(?:\\.|[^\"\\])*\")|(;[^\n]*)|(?<![\w:])(:[A-Za-z_*!?<>=+\-][\w\-?!.*<>=+]*)(?![\w/:])")
 
+(declare sql-of*)
+
 (defn- sql-of
   "The .sql files a var names by a plain keyword whose name (- as _) is a file in its folder."
   [d root id]
+  (if-let [had (get @(:sql d) id)]
+    had
+    (let [found (sql-of* d root id)] (swap! (:sql d) assoc id found) found)))
+
+(defn- sql-of* [d root id]
   (if-let [def (get-in d [:defs id])]
     (let [dir (path/dirname (:file def))
-          lines (subvec (lines-of (:file def)) (dec (get-in def [:v :row])) (min (count (lines-of (:file def))) (get-in def [:v :endRow])))
+          all (file-lines d (:file def))
+          lines (subvec all (dec (get-in def [:v :row])) (min (count all) (get-in def [:v :endRow])))
           code (str/join "\n" lines)
           starts (vec (reductions (fn [s l] (+ s (count l) 1)) 0 lines))
           re (js/RegExp. (.-source tokens-re) "g")]
@@ -233,11 +251,13 @@
     []))
 
 (defn- sql-callers [d root]
-  (let [has-sql (memoize (fn [dir] (try (boolean (some #(str/ends-with? % ".sql") (fs/readdirSync dir))) (catch :default _ false))))]
-    (reduce (fn [m def]
-              (if-not (has-sql (path/dirname (:file def))) m
-                      (reduce (fn [m s] (update m (:to s) (fnil conj []) {:from (:id def) :at (:at s)})) m (sql-of d root (:id def)))))
-            {} (vals (:defs d)))))
+  (or @(:sql-in d)
+      (let [has-sql (memoize (fn [dir] (try (boolean (some #(str/ends-with? % ".sql") (fs/readdirSync dir))) (catch :default _ false))))]
+        (reset! (:sql-in d)
+                (reduce (fn [m def]
+                          (if-not (has-sql (path/dirname (:file def))) m
+                                  (reduce (fn [m s] (update m (:to s) (fnil conj []) {:from (:id def) :at (:at s)})) m (sql-of d root (:id def)))))
+                        {} (vals (:defs d)))))))
 
 (defn- resolve-id [d root s]
   (let [s (str/trim (str s))]
@@ -265,7 +285,7 @@
 
 (defn- first-doc [d root id]
   (if (str/starts-with? id "file:")
-    (let [first-line (first (lines-of (path/join root (subs id 5))))]
+    (let [first-line (first (file-lines d (path/join root (subs id 5))))]
       (when (str/starts-with? (str first-line) "--") (str/replace first-line #"^--\s*" "")))
     (some-> (get-in d [:defs id :v :doc]) (str/split #"\n") first str/trim not-empty)))
 
@@ -285,7 +305,7 @@
                  me (brief d root id)
                  def (get-in d [:defs id])
                  abs (or (:file def) (path/join root (:file me)))
-                 all (lines-of abs)
+                 all (file-lines d abs)
                  lines (if def (subvec all (dec (get-in def [:v :row])) (min (count all) (get-in def [:v :endRow])))
                            (if (= "" (peek all)) (pop all) all))
                  callees (reduce (fn [m c] (update m (:to c) #(update (or % (assoc (brief d root (:to c)) :doc (first-doc d root (:to c)) :at []))
@@ -296,7 +316,7 @@
                                      (let [row (or (get-in c [:at :row]) (:row c))]
                                        (update m (:from c) #(let [e (or % (assoc (brief d root (:from c)) :lines []))]
                                                               (if (some (fn [l] (= (:row l) row)) (:lines e)) e
-                                                                  (update e :lines conj {:row row :text (str/trim (str (nth (lines-of (:file from)) (dec row) "")))})))))
+                                                                  (update e :lines conj {:row row :text (str/trim (str (nth (file-lines d (:file from)) (dec row) "")))})))))
                                      m))
                                  {} (callers-of d root id))]
              (merge me
@@ -304,7 +324,7 @@
                      :varKind (get-in def [:v :kind]) :args (get-in def [:v :args] []) :doc (if def (get-in def [:v :doc]) (first-doc d root id))
                      :code (str/join "\n" lines)
                      :callees (vec (vals callees))
-                     :callers (vec (sort-by :id (vals callers)))})))))
+                     :callers (vec (sort #(.localeCompare (:id %1) (:id %2)) (vals callers)))})))))
 
 (def ^:private per-step 30)
 

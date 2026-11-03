@@ -155,32 +155,13 @@
 
       :else [empty-state])))
 
-;; ---- the Forms gallery (opened from the rail and Settings) ----
-
-(rf/reg-event-db :forms/gallery (fn [db [_ open?]] (assoc db :forms-gallery open?)))
-(rf/reg-sub :forms/gallery (fn [db] (:forms-gallery db)))
-
-(defn gallery-host
-  "The Forms gallery over the app while it is open."
-  []
-  (let [open? @(rf/subscribe [:forms/gallery])
-        oc @(rf/subscribe [:open-chat])
-        server (or (:server oc) (first (keys @(rf/subscribe [:servers]))))]
-    (when (and open? server)
-      [:f> codeforms/gallery server #(rf/dispatch [:forms/gallery false])])))
-
 ;; ---- the right rail (desktop): this chat's forms ----
 
 (defn right-rail
-  "The rail beside the picture, mirroring the chats rail: the form row in a column. Not on phones
-  (there the row is at the top of the picture screen)."
+  "The rail beside the picture, mirroring the chats rail: the form row in a column (its contents:
+  claudia.web.views.codeforms/form-rail; nothing on phones, where the row tops the picture)."
   []
-  (let [oc @(rf/subscribe [:open-chat])
-        ro @(rf/subscribe [:read-only?])
-        server (or (:server oc) (first (keys @(rf/subscribe [:servers]))))]
-    [:nav.rail.right-rail {:aria-label "Forms"}
-     (when (and server (not ro))
-       [:f> codeforms/picture-tools (assoc oc :server server) {:rail? true}])]))
+  [:nav.rail.right-rail {:aria-label "Forms"} [:f> codeforms/form-rail]])
 
 ;; ---- the pane ----
 
@@ -204,7 +185,7 @@
          [:div.right-tl [:f> timeline/timeline-view oc]]
          [:div.right-scroll
           (when (and phone? (:server oc) (not ro))
-            [:f> codeforms/picture-tools oc {:rail? false}])
+            [:f> codeforms/picture-tools oc])
           [:div.stage {:class (when (:viewing? hist) "past")}
            [:f> picture-view {:scene scene :k (:ck oc) :cols cols
                               :live? (and (not (:viewing? hist)) (not ro))}]]])

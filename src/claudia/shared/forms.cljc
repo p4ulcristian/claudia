@@ -1,11 +1,16 @@
 (ns claudia.shared.forms
-  "The code forms (files, editor, flow, git): what Claude is told about each (when to use it, its
-  data in one line, for the draw tool's description) and the sample the Forms gallery shows. Shared:
-  the runner builds the draw tool from it, the page the gallery. Opt-in forms exist only on runners
-  that name them in CLAUDIA_FORMS (claudia.slave.codeforms).")
+  "The code forms (files, git, clojure, calls, editor, flow): what Claude is told about each (when
+  to use it, its data in one line, for the draw tool's description) and the sample the Forms gallery
+  shows; and, for the gallery, the other forms' label, when-line and sample. Shared: the runner
+  builds the draw tool from it, the page the gallery. Opt-in forms exist only on runners that name
+  them in CLAUDIA_FORMS (claudia.slave.codeforms).")
+
+(def order
+  "Every form, in the order the gallery and the form row show them."
+  ["pipeline" "timeline" "compare" "chart" "stats" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
 
 (def specs
-  "form name -> {:label :when :fields :sample :opt-in}, in the order the gallery shows them."
+  "code form name -> {:label :when :fields :sample :opt-in}, in the gallery's order."
   (array-map
    "files"
    {:label "Files"
@@ -13,14 +18,10 @@
     :fields "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), file? (the selected file, relative to root: shown open, whole, with only the folders down to it unfolded; without it the first marked file is selected), lines?: [line numbers or \"a-b\" ranges to highlight in that file; it scrolls to the first], notes?: [{ id, line, text, color? }] pinned under lines of that file, marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out. Planned files: sketch: [{ path (relative to root when root is given), code?, status? }] (folders come from the paths), title? (what a root-less sketch is); marks work the same"
     :sample {:demo [{:path "src" :dir true}
                     {:path "src/orders" :dir true}
-                    {:path "src/orders/total.ts" :status "M"
-                     :code "export function total(lines: Line[]): number {\n  return lines.reduce((sum, l) => sum + l.qty * l.unitCents, 0);\n}\n"}
+                    {:path "src/orders/total.ts" :status "M"}
                     {:path "src/orders/total.test.ts" :status "U"}
                     {:path "src/shops.ts"}
                     {:path "README.md"}]
-             :file "src/orders/total.ts"
-             :lines ["2"]
-             :notes [{:id "n" :line 2 :text "cancelled lines still count" :color "amber"}]
              :marks [{:id "t" :path "src/orders/total.ts" :note "the fix" :color "amber"}]}}
 
    "git"
@@ -30,12 +31,49 @@
     :fields "repo? (a folder in the repo: absolute, ~/…, or relative to the working folder; default the working folder), branches?: [branch names to graph; default all], limit? (commits, default 100), commit? (a hash, branch, tag or \"WORKING\" to open for the user), marks?: [{ id, commit (a hash, branch, tag, \"HEAD\" or \"WORKING\"), note?, color? }] commits to point out"
     :sample {:demo {:head "c4"
                     :currentBranch "fix/tax"
-                    :dirty {:total 2 :files [{:path "src/orders/total.ts" :status "M"} {:path "src/orders/tax.test.ts" :status "?"}]}
-                    :commits [{:hash "c4" :time 1000000 :parents ["c2"] :author "Paul" :when "20 minutes ago" :refs [{:type "head" :name "fix/tax"}] :subject "Tax on shipping too"}
-                              {:hash "c3" :time 983000 :parents ["c1"] :author "Ananda" :when "5 hours ago" :refs [{:type "remote" :name "origin/shops"}] :subject "Shop list paging"}
-                              {:hash "c2" :time 914000 :parents ["c1" "c0"] :author "Paul" :when "yesterday" :refs [{:type "branch" :name "main"}] :subject "Merge orders: quantities"}
-                              {:hash "c0" :time 830000 :parents ["c1"] :author "Peter" :when "2 days ago" :refs [] :subject "Bill each coat's quantity"}
-                              {:hash "c1" :time 760000 :parents [] :author "Paul" :when "3 days ago" :refs [{:type "tag" :name "v1.4"}] :subject "Orders: totals"}]}
+                    :dirty {:total 2
+                            :staged 0
+                            :unstaged 1
+                            :untracked 1
+                            :files [{:path "src/orders/total.ts" :status "M"} {:path "src/orders/tax.test.ts" :status "?"}]}
+                    :branches [{:name "fix/tax" :kind "local" :local true :current true}
+                               {:name "main" :kind "both" :local true :tracked true :ahead 0 :behind 0}
+                               {:name "origin/shops" :kind "remote" :local false}]
+                    :commits [{:hash "c4"
+                               :parents ["c2"]
+                               :author "Paul"
+                               :when "20 minutes ago"
+                               :time 1000000
+                               :refs [{:type "head" :name "fix/tax"}]
+                               :subject "Tax on shipping too"}
+                              {:hash "c3"
+                               :parents ["c1"]
+                               :author "Ananda"
+                               :when "5 hours ago"
+                               :time 983000
+                               :refs [{:type "remote" :name "origin/shops"}]
+                               :subject "Shop list paging"}
+                              {:hash "c2"
+                               :parents ["c1" "c0"]
+                               :author "Paul"
+                               :when "yesterday"
+                               :time 914000
+                               :refs [{:type "branch" :name "main" :tracked true :ahead 0 :behind 0}]
+                               :subject "Merge orders: quantities"}
+                              {:hash "c0"
+                               :parents ["c1"]
+                               :author "Peter"
+                               :when "2 days ago"
+                               :time 830000
+                               :refs []
+                               :subject "Bill each coat's quantity"}
+                              {:hash "c1"
+                               :parents []
+                               :author "Paul"
+                               :when "3 days ago"
+                               :time 760000
+                               :refs [{:type "tag" :name "v1.4"}]
+                               :subject "Orders: totals"}]}
              :marks [{:id "m" :commit "c0" :note "the quantity fix" :color "amber"}]}}
 
    "clojure"
@@ -43,23 +81,96 @@
     :opt-in true
     :when "A Clojure project's namespaces as a map the user clicks through: bubbles for namespaces (or for prefixes, which open into their namespaces), arrows for :require, laid out in layers from entry points to leaves, across or down by the map's shape (an arrow going back is a circle, drawn red); a click on a namespace lists its vars with their arglists and docs, a click on a var shows its source, a click on an arrow lists the functions it uses. Read live with clj-kondo, so you send only the project and what to open or point out."
     :fields "root? (the project folder: absolute, ~/…, or relative to the working folder; default the working folder), at? (a namespace prefix to open the map in, like \"features.orders\"), open? (a namespace, ns/var, or \"a -> b\" for the arrow between two bubbles of the map, to pick for the user), direction?: across|down (default: picked by the map's shape, deep maps run down), marks?: [{ id, ns, var?, note?, color? }] namespaces or vars to point out"
-    :sample {:demo {:namespaces [{:name "ir.server" :vars 2 :requires ["ir.routes" "ir.db"]} {:name "ir.routes" :vars 2 :requires ["ir.orders.api" "ir.shops"]} {:name "ir.orders.api" :vars 3 :requires ["ir.orders.total" "ir.db"]} {:name "ir.orders.total" :vars 3 :requires ["ir.orders.tax" "ir.money"]} {:name "ir.orders.tax" :vars 2 :requires ["ir.money"]} {:name "ir.shops" :vars 2 :requires ["ir.db"]} {:name "ir.db" :vars 2 :requires []} {:name "ir.money" :vars 2 :requires []}] :uses {"ir.server" {"ir.routes" ["app"] "ir.db" ["pool"]} "ir.routes" {"ir.orders.api" ["checkout" "hand-over"] "ir.shops" ["shop" "list-shops"]} "ir.orders.api" {"ir.orders.total" ["total"] "ir.db" ["q" "tx"]} "ir.orders.total" {"ir.orders.tax" ["rate"] "ir.money" ["round"]} "ir.orders.tax" {"ir.money" ["cents"]} "ir.shops" {"ir.db" ["q"]}} :vars {"ir.orders.total" {:doc "An order's total: every coat, shipping and tax." :external ["clojure.string"] :vars [{:name "line-price" :args ["[line]"] :private true :kind "fn" :row 3 :code "(defn- line-price [line]\n  (* (:qty line) (:unit-cents line)))"} {:name "shipping" :args ["[order]"] :kind "fn" :row 6 :code "(defn shipping [order]\n  (if (:pickup? order) 0 1500))"} {:name "total" :args ["[order]" "[order opts]"] :doc "Sum of every coat, shipping and tax." :kind "fn" :row 9 :code "(defn total\n  \"Sum of every coat, shipping and tax.\"\n  ([order] (total order {}))\n  ([order {:keys [state]}]\n   (let [net (+ (reduce + (map line-price (:lines order)))\n                (shipping order))]\n     (+ net (money/round (* net (tax/rate state)))))))"}]}}} :at "ir" :open "ir.orders.total/total" :marks [{:id "t" :ns "ir.orders.tax" :note "shipping taxed too" :color "amber"}]}}
+    :sample {:demo {:namespaces [{:name "ir.server" :vars 2 :requires ["ir.routes" "ir.db"]}
+                                 {:name "ir.routes" :vars 2 :requires ["ir.orders.api" "ir.shops"]}
+                                 {:name "ir.orders.api" :vars 3 :requires ["ir.orders.total" "ir.db"]}
+                                 {:name "ir.orders.total" :vars 3 :requires ["ir.orders.tax" "ir.money"]}
+                                 {:name "ir.orders.tax" :vars 2 :requires ["ir.money"]}
+                                 {:name "ir.shops" :vars 2 :requires ["ir.db"]}
+                                 {:name "ir.db" :vars 2 :requires []}
+                                 {:name "ir.money" :vars 2 :requires []}]
+                    :uses {"ir.server" {"ir.routes" ["app"] "ir.db" ["pool"]}
+                           "ir.routes" {"ir.orders.api" ["checkout" "hand-over"] "ir.shops" ["shop" "list-shops"]}
+                           "ir.orders.api" {"ir.orders.total" ["total"] "ir.db" ["q" "tx"]}
+                           "ir.orders.total" {"ir.orders.tax" ["rate"] "ir.money" ["round"]}
+                           "ir.orders.tax" {"ir.money" ["cents"]}
+                           "ir.shops" {"ir.db" ["q"]}}
+                    :vars {"ir.orders.total" {:doc "An order's total: every coat, shipping and tax."
+                                              :external ["clojure.string"]
+                                              :vars [{:name "line-price"
+                                                      :args ["[line]"]
+                                                      :private true
+                                                      :kind "fn"
+                                                      :row 3
+                                                      :code "(defn- line-price [line]\n  (* (:qty line) (:unit-cents line)))"}
+                                                     {:name "shipping"
+                                                      :args ["[order]"]
+                                                      :kind "fn"
+                                                      :row 6
+                                                      :code "(defn shipping [order]\n  (if (:pickup? order) 0 1500))"}
+                                                     {:name "total"
+                                                      :args ["[order]" "[order opts]"]
+                                                      :doc "Sum of every coat, shipping and tax."
+                                                      :kind "fn"
+                                                      :row 9
+                                                      :code "(defn total\n  \"Sum of every coat, shipping and tax.\"\n  ([order] (total order {}))\n  ([order {:keys [state]}]\n   (let [net (+ (reduce + (map line-price (:lines order)))\n                (shipping order))]\n     (+ net (money/round (* net (tax/rate state)))))))"}]}}}
+             :at "ir"
+             :open "ir.orders.total/total"
+             :marks [{:id "t" :ns "ir.orders.tax" :note "shipping taxed too" :color "amber"}]}}
 
    "calls"
    {:label "Calls"
     :opt-in true
     :when "A Clojure project's function calls around one var: what calls what, and what that code is. Three tabs: Unfold (the var's source; each call to a project var is a link that opens that var's code nested under the calling line), Neighbours (the var in the middle, its callers on the left with the calling line, its callees on the right with their doc line; click to move), Map (columns by steps away, up to callers and down to callees, boxes coloured by folder, arrows for calls). Calls to .sql files named by a keyword (Iron Rainbow's sql/q) link to the file. Read live with clj-kondo, so you send only the project and the var. Pick it to show how code flows through functions; clojure for how namespaces depend on each other; files for one file's lines."
     :fields "root? (the project folder: absolute, ~/…, or relative to the working folder; default the working folder), open (the start var, \"ns/var\", required; the end of a namespace is enough when only one matches, like \"state-gate/check\"), view?: unfold|neighbours|map (the tab shown, default unfold), up?, down? (the map's steps of callers and callees, default 2 and 3), marks?: [{ id, var (\"ns/var\"), line? (a row of its file), note?, color? }] vars or lines to point out (shown on the code and in the map)"
-    :sample {:demo {"features.common.payments.charge.backend.state-gate/check" {:file "features/common/payments/charge/backend/state_gate.clj" :row 75 :code "(defn check\n  \"refusal for a charge to `workspace-ids` from a customer in `customer-state`,\n   read from the database and today's date.\"\n  [pool workspace-ids customer-state]\n  (refusal {:shops          (shop-states pool workspace-ids)\n            :customer-state customer-state\n            :today          (today-iso)}))" :calls ["features.common.payments.charge.backend.state-gate/refusal" "features.common.payments.charge.backend.state-gate/shop-states" "features.common.payments.charge.backend.state-gate/today-iso"]} "features.common.payments.charge.backend.state-gate/refusal" {:file "features/common/payments/charge/backend/state_gate.clj" :row 35 :code "(defn refusal\n  \"Why this charge may not happen, or nil when it may. Pure.\"\n  [{:keys [shops customer-state today]}]\n  (let [code     (some-> customer-state str/trim not-empty us-states/resolve-code)\n        customer (when (rules/blocked? code today) code)\n        shop     (some (fn [{:keys [state override?]}]\n                         (when (and (not override?) (rules/blocked? state today))\n                           (us-states/resolve-code state)))\n                       shops)]\n    (cond\n      customer {:error-code \"state-not-available\" :side :customer :state customer}\n      shop     {:error-code \"state-not-available\" :side :shop :state shop})))" :calls ["utils.us-states/resolve-code" "features.common.payments.state-rules/blocked?"]} "features.common.payments.charge.backend.state-gate/shop-states" {:file "features/common/payments/charge/backend/state_gate.clj" :row 23 :code "(defn shop-states\n  \"[{:workspace-id :state :override?}] for the given workspace ids.\"\n  [pool workspace-ids]\n  (mapv (fn [row]\n          {:workspace-id (str (:workspace/id row))\n           :state        (:business-info/facility-state-code row)\n           :override?    (true? (:partnership/state-payments-override row))})\n        (sql/q pool :payment-states {:workspace-ids workspace-ids})))" :calls ["file:features/common/payments/charge/backend/payment_states.sql"]} "features.common.payments.charge.backend.state-gate/today-iso" {:file "features/common/payments/charge/backend/state_gate.clj" :row 15 :code "(defn today-iso\n  \"Today in US Eastern time, as yyyy-mm-dd: the date a state's law takes effect.\"\n  []\n  (str (LocalDate/now (ZoneId/of \"America/New_York\"))))"} "file:features/common/payments/charge/backend/payment_states.sql" {:file "features/common/payments/charge/backend/payment_states.sql" :row 1 :code "-- Each shop's facility state and its Labs state-payments override (#384).\nSELECT w.:workspace/id,\n       pf.shop_profile__facility_state_code AS business_info__facility_state_code\nFROM workspaces w\nLEFT JOIN shop_profiles pf ON pf.:shop-profile/workspace-id = w.:workspace/id\nWHERE w.:workspace/id = ANY(:workspace-ids::uuid[])"} "features.common.payments.charge.backend.intent/priced-payment-intent" {:file "features/common/payments/charge/backend/intent.clj" :row 159 :code "(defn priced-payment-intent\n  \"The PaymentIntent for a cart, priced on the server.\"\n  [pool {:keys [workspace-id address] :as params}]\n  (if-let [blocked (state-gate/check pool [workspace-id] (:state address))]\n    {:status 400 :body blocked}\n    (create-intent pool params)))" :calls ["features.common.payments.charge.backend.state-gate/check"]} "utils.us-states/resolve-code" {:file "utils/us_states.cljc" :row 92 :code "(defn resolve-code\n  \"The 2-letter code for a state given as its code or its full name, or nil.\"\n  [state]\n  (when (string? state)\n    (or (normalize-code state)\n        (get lower-name->code (-> state str/trim str/lower-case)))))"} "features.common.payments.state-rules/blocked?" {:file "features/common/payments/state_rules.cljc" :row 32 :code "(defn blocked?\n  \"True when card payments are off for `state` on `today`.\"\n  [state today]\n  (let [s (code state)]\n    (boolean\n     (when s\n       (or (contains? always-blocked s)\n           (when-let [until (get blocked-until s)]\n             (neg? (compare (str today) until))))))))"}} :open "features.common.payments.charge.backend.state-gate/check" :marks [{:id "m" :var "features.common.payments.charge.backend.state-gate/shop-states" :line 30 :note "one query for every shop" :color "amber"}]}}
+    :sample {:demo {"features.common.payments.charge.backend.state-gate/check" {:file "features/common/payments/charge/backend/state_gate.clj"
+                                                                                :row 75
+                                                                                :code "(defn check\n  \"refusal for a charge to `workspace-ids` from a customer in `customer-state`,\n   read from the database and today's date.\"\n  [pool workspace-ids customer-state]\n  (refusal {:shops          (shop-states pool workspace-ids)\n            :customer-state customer-state\n            :today          (today-iso)}))"
+                                                                                :calls ["features.common.payments.charge.backend.state-gate/refusal"
+                                                                                        "features.common.payments.charge.backend.state-gate/shop-states"
+                                                                                        "features.common.payments.charge.backend.state-gate/today-iso"]}
+                    "features.common.payments.charge.backend.state-gate/refusal" {:file "features/common/payments/charge/backend/state_gate.clj"
+                                                                                  :row 35
+                                                                                  :code "(defn refusal\n  \"Why this charge may not happen, or nil when it may. Pure.\"\n  [{:keys [shops customer-state today]}]\n  (let [code     (some-> customer-state str/trim not-empty us-states/resolve-code)\n        customer (when (rules/blocked? code today) code)\n        shop     (some (fn [{:keys [state override?]}]\n                         (when (and (not override?) (rules/blocked? state today))\n                           (us-states/resolve-code state)))\n                       shops)]\n    (cond\n      customer {:error-code \"state-not-available\" :side :customer :state customer}\n      shop     {:error-code \"state-not-available\" :side :shop :state shop})))"
+                                                                                  :calls ["utils.us-states/resolve-code"
+                                                                                          "features.common.payments.state-rules/blocked?"]}
+                    "features.common.payments.charge.backend.state-gate/shop-states" {:file "features/common/payments/charge/backend/state_gate.clj"
+                                                                                      :row 23
+                                                                                      :code "(defn shop-states\n  \"[{:workspace-id :state :override?}] for the given workspace ids.\"\n  [pool workspace-ids]\n  (mapv (fn [row]\n          {:workspace-id (str (:workspace/id row))\n           :state        (:business-info/facility-state-code row)\n           :override?    (true? (:partnership/state-payments-override row))})\n        (sql/q pool :payment-states {:workspace-ids workspace-ids})))"
+                                                                                      :calls ["file:features/common/payments/charge/backend/payment_states.sql"]}
+                    "features.common.payments.charge.backend.state-gate/today-iso" {:file "features/common/payments/charge/backend/state_gate.clj"
+                                                                                    :row 15
+                                                                                    :code "(defn today-iso\n  \"Today in US Eastern time, as yyyy-mm-dd: the date a state's law takes effect.\"\n  []\n  (str (LocalDate/now (ZoneId/of \"America/New_York\"))))"}
+                    "file:features/common/payments/charge/backend/payment_states.sql" {:file "features/common/payments/charge/backend/payment_states.sql"
+                                                                                       :row 1
+                                                                                       :code "-- Each shop's facility state and its Labs state-payments override (#384).\nSELECT w.:workspace/id,\n       pf.shop_profile__facility_state_code AS business_info__facility_state_code\nFROM workspaces w\nLEFT JOIN shop_profiles pf ON pf.:shop-profile/workspace-id = w.:workspace/id\nWHERE w.:workspace/id = ANY(:workspace-ids::uuid[])"}
+                    "features.common.payments.charge.backend.intent/priced-payment-intent" {:file "features/common/payments/charge/backend/intent.clj"
+                                                                                            :row 159
+                                                                                            :code "(defn priced-payment-intent\n  \"The PaymentIntent for a cart, priced on the server.\"\n  [pool {:keys [workspace-id address] :as params}]\n  (if-let [blocked (state-gate/check pool [workspace-id] (:state address))]\n    {:status 400 :body blocked}\n    (create-intent pool params)))"
+                                                                                            :calls ["features.common.payments.charge.backend.state-gate/check"]}
+                    "utils.us-states/resolve-code" {:file "utils/us_states.cljc"
+                                                    :row 92
+                                                    :code "(defn resolve-code\n  \"The 2-letter code for a state given as its code or its full name, or nil.\"\n  [state]\n  (when (string? state)\n    (or (normalize-code state)\n        (get lower-name->code (-> state str/trim str/lower-case)))))"}
+                    "features.common.payments.state-rules/blocked?" {:file "features/common/payments/state_rules.cljc"
+                                                                     :row 32
+                                                                     :code "(defn blocked?\n  \"True when card payments are off for `state` on `today`.\"\n  [state today]\n  (let [s (code state)]\n    (boolean\n     (when s\n       (or (contains? always-blocked s)\n           (when-let [until (get blocked-until s)]\n             (neg? (compare (str today) until))))))))"}}
+             :open "features.common.payments.charge.backend.state-gate/check"
+             :marks [{:id "m"
+                      :var "features.common.payments.charge.backend.state-gate/shop-states"
+                      :line 30
+                      :note "one query for every shop"
+                      :color "amber"}]}}
 
    "editor"
    {:label "Editor"
     :when "Code you and the user both edit: an example for them to change, an exercise, a draft to finish, a snippet to try. One tab per file, a real editor; the user types in it and presses Send, which hands you a <claudia-code> message with their diff against your version and their full code. While the user has unsent edits in a file, draw refuses new code for that file and gives you their code: merge your change into it and draw again with seen set to the revision it names. Pick it when the user should write or change code; files for code on disk to read."
     :fields "files: [{ id, name (a file name: its extension picks the language), lang? (when the name has none), code, seen? (the user's edit revision your code merges, after a refusal) }] tabs in order, open? (the file id shown), note? (one line over the editor: what to try)"
     :sample {:note "Make total() skip cancelled lines."
-             :files [{:id "total" :name "total.ts"
+             :files [{:id "total"
+                      :name "total.ts"
                       :code "type Line = { qty: number; unitCents: number; cancelled?: boolean };\n\nexport function total(lines: Line[]): number {\n  return lines.reduce((sum, l) => sum + l.qty * l.unitCents, 0);\n}\n"}
-                     {:id "test" :name "total.test.ts"
+                     {:id "test"
+                      :name "total.test.ts"
                       :code "import { expect, test } from \"bun:test\";\nimport { total } from \"./total\";\n\ntest(\"two coats\", () => {\n  expect(total([{ qty: 2, unitCents: 1500 }])).toBe(3000);\n});\n"}]}}
 
    "flow"
@@ -70,19 +181,48 @@
                         {:id "api" :label "API" :note "checks" :steps [{:id "who" :label "who?"} {:id "may" :label "may they?"}]}
                         {:id "db" :label "Postgres" :note "the data"}]
              :lanes [{:id "req" :label "the request"} {:id "work" :label "work + replies"}]
-             :scenarios
-             [{:id "ok" :label "Anna (her shop)"
-               :frames [{:caption "The screen asks to hand order 42 over." :cards [{:lane "req" :at "browser" :title "request" :body "POST /orders/42/hand" :color "grey"}]}
-                        {:caption "The API reads the cookie: Anna is asking." :on ["who"] :cards [{:lane "req" :at "who" :title "request" :body "order 42\nperson: Anna" :new "person: Anna" :color "violet"}]}
-                        {:caption "Is order 42 in her shop? A SELECT goes to Postgres." :on ["may"]
-                         :cards [{:lane "req" :at "may" :title "request (waiting)" :body "order 42\nperson: Anna" :color "violet" :dim true}
-                                 {:lane "work" :at "db" :title "SQL" :body "SELECT shop_id FROM orders\nWHERE id = 42" :lang "sql" :color "amber"}]}
-                        {:caption "Shop 7: hers. The order is handed over." :on ["may"] :cards [{:lane "req" :at "may" :title "answer" :body "status: handed" :color "green"}]}
-                        {:caption "The screen shows \"handed\"." :leave ["may" "who"] :cards [{:lane "req" :at "browser" :title "done" :body "status: handed" :color "green"}]}]}
-              {:id "no" :label "Bob (not his)"
-               :frames [{:caption "Bob asks to hand order 42 over." :cards [{:lane "req" :at "browser" :title "request" :body "POST /orders/42/hand" :color "grey"}]}
-                        {:caption "The cookie says Bob; order 42 is in shop 7, not his." :on ["may"] :cards [{:lane "req" :at "may" :title "answer" :body "status: not found" :color "red"}]}
-                        {:caption "Bob sees \"not found\". Nothing changed." :leave ["may" "who"] :cards [{:lane "req" :at "browser" :title "done" :body "status: not found" :color "red"}]}]}]}}))
+             :scenarios [{:id "ok"
+                          :label "Anna (her shop)"
+                          :frames [{:caption "The screen asks to hand order 42 over."
+                                    :cards [{:lane "req" :at "browser" :title "request" :body "POST /orders/42/hand" :color "grey"}]}
+                                   {:caption "The API reads the cookie: Anna is asking."
+                                    :on ["who"]
+                                    :cards [{:lane "req"
+                                             :at "who"
+                                             :title "request"
+                                             :body "order 42\nperson: Anna"
+                                             :new "person: Anna"
+                                             :color "violet"}]}
+                                   {:caption "Is order 42 in her shop? A SELECT goes to Postgres."
+                                    :on ["may"]
+                                    :cards [{:lane "req"
+                                             :at "may"
+                                             :title "request (waiting)"
+                                             :body "order 42\nperson: Anna"
+                                             :color "violet"
+                                             :dim true}
+                                            {:lane "work"
+                                             :at "db"
+                                             :title "SQL"
+                                             :body "SELECT shop_id FROM orders\nWHERE id = 42"
+                                             :lang "sql"
+                                             :color "amber"}]}
+                                   {:caption "Shop 7: hers. The order is handed over."
+                                    :on ["may"]
+                                    :cards [{:lane "req" :at "may" :title "answer" :body "status: handed" :color "green"}]}
+                                   {:caption "The screen shows \"handed\"."
+                                    :leave ["may" "who"]
+                                    :cards [{:lane "req" :at "browser" :title "done" :body "status: handed" :color "green"}]}]}
+                         {:id "no"
+                          :label "Bob (not his)"
+                          :frames [{:caption "Bob asks to hand order 42 over."
+                                    :cards [{:lane "req" :at "browser" :title "request" :body "POST /orders/42/hand" :color "grey"}]}
+                                   {:caption "The cookie says Bob; order 42 is in shop 7, not his."
+                                    :on ["may"]
+                                    :cards [{:lane "req" :at "may" :title "answer" :body "status: not found" :color "red"}]}
+                                   {:caption "Bob sees \"not found\". Nothing changed."
+                                    :leave ["may" "who"]
+                                    :cards [{:lane "req" :at "browser" :title "done" :body "status: not found" :color "red"}]}]}]}}))
 
 (def names (vec (keys specs)))
 
@@ -90,50 +230,50 @@
   "The forms a runner has only when CLAUDIA_FORMS names them."
   (set (for [[n s] specs :when (:opt-in s)] n)))
 
-;; ---- the base forms (drawn by claudia.web.views.forms): what Claude is told, the gallery's samples ----
+(defn help-line [n]
+  (let [{:keys [when fields]} (get specs n)]
+    (str "- " n ": " when " Data: " fields ".")))
 
 (def base
-  "pipeline ... stats and scene3d: {:label :when :fields :sample}, as the old src/forms.ts said them."
-  {"pipeline"
-   {:label "Pipeline"
+  "The forms that are not code forms, for the gallery and the form row: {:label :when :sample}."
+  {
+   "pipeline" {:label "Pipeline"
     :when "Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
-    :fields "stages: [{ id, label, status: todo|running|done|failed|skipped, note? }] in order"
     :sample {:stages [{:id "build" :label "Build" :status "done" :note "41 s"}
                       {:id "test" :label "Test" :status "done" :note "212 passed"}
                       {:id "deploy" :label "Deploy" :status "running" :note "stage"}
                       {:id "verify" :label "Verify" :status "todo"}]}}
-   "timeline"
-   {:label "Timeline"
+   "timeline" {:label "Timeline"
     :when "What happened when, or what is planned by date: an incident, a history, a schedule."
-    :fields "events: [{ id, at (a short time or date label), label, note?, status?: todo|running|done|failed|skipped, color? }] in time order"
     :sample {:events [{:id "a" :at "09:12" :label "Alert fired" :note "p95 over 2 s" :color "red"}
                       {:id "b" :at "09:20" :label "Rolled back" :status "done"}
                       {:id "c" :at "09:31" :label "Root cause found" :note "N+1 query in orders"}
                       {:id "d" :at "tomorrow" :label "Fix ships" :status "todo"}]}}
-   "compare"
-   {:label "Compare"
+   "compare" {:label "Compare"
     :when "Options side by side with their pros and cons, and the one picked (or recommended) marked."
-    :fields "options: [{ id, label, pros?: string[], cons?: string[], note?, picked?: boolean }]"
-    :sample {:options [{:id "pwa" :label "Home Screen app" :pros ["minutes to ship" "updates instantly"] :cons ["Safari underneath"] :picked true}
+    :sample {:options [{:id "pwa"
+                        :label "Home Screen app"
+                        :pros ["minutes to ship" "updates instantly"]
+                        :cons ["Safari underneath"]
+                        :picked true}
                        {:id "native" :label "Native wrapper" :pros ["native extras later"] :cons ["hours of work" "TestFlight per update"]}]}}
-   "chart"
-   {:label "Chart"
+   "chart" {:label "Chart"
     :when "Numbers to see as a shape: trends, comparisons, distributions. Bar, line, area or point."
-    :fields "mark: bar|line|area|point, x: field name, y: field name, color?: field name (one series per value), title?, rows: [{ id, <x>: …, <y>: …, … }]"
-    :sample {:mark "bar" :x "hour" :y "turns"
-             :rows [{:id "0" :hour "0h" :turns 12} {:id "1" :hour "1h" :turns 19} {:id "2" :hour "2h" :turns 15}
-                    {:id "3" :hour "3h" :turns 26} {:id "4" :hour "4h" :turns 14}]}}
-   "stats"
-   {:label "Stats"
+    :sample {:mark "bar"
+             :x "hour"
+             :y "turns"
+             :rows [{:id "0" :hour "0h" :turns 12}
+                    {:id "1" :hour "1h" :turns 19}
+                    {:id "2" :hour "2h" :turns 15}
+                    {:id "3" :hour "3h" :turns 26}
+                    {:id "4" :hour "4h" :turns 14}]}}
+   "stats" {:label "Stats"
     :when "A few numbers that matter right now, big: usage, counts, durations, a progress."
-    :fields "tiles: [{ id, label, value, note?, progress?: 0..1, color? }]"
     :sample {:tiles [{:id "five" :label "5-hour used" :value "85%" :progress 0.85 :color "amber"}
                      {:id "week" :label "Week used" :value "15%" :progress 0.15}
                      {:id "reset" :label "Resets in" :value "34m"}]}}
-   "scene3d"
-   {:label "3D scene"
+   "scene3d" {:label "3D scene"
     :when "Something best understood as a shape in space that the user can rotate and zoom: an architecture with layers, a mechanism, a building, a molecule, a product, a map with height. Predefined shapes placed in 3D, arrows between them, labels. Pick it when depth or a free viewpoint helps; a flat graph is better for plain boxes and arrows."
-    :fields "a picture holds one 3D scene: a new scene3d block takes the old one's place, so to show another model redraw the scene (a new id, or the same id with its parts and story replaced). parts: [{ id, shape: box|sphere|cylinder|cone|pyramid|torus|capsule|plane|ring|extrude|lathe|tube|rod|group|person, pos?: [x,y,z] (y is up, 1 unit is about a box), size?: number or [x,y,z], rot?: [x,y,z] degrees, color? (green|red|amber|blue|grey|violet or any CSS colour), label?, note?, material? (what the surface is made of, for real reflections: steel|brushed-steel|aluminium|chrome|copper|brass|iron|plastic|matte-plastic|rubber|enamel|ceramic|wood|glass; glass is see-through and never solid; a colour tints it), opacity?: 0..1, wire?: true, points? (extrude: [[x,y]…] outline pulled 1 unit deep, scale it with size; lathe: [[radius,y]…] profile spun round y; tube: [[x,y,z]…] path), parent? (a part or group id: this part's pos/rot are then relative to it and it follows it), ghost? (true: not solid), outline?: false (no ink outline), a group is an empty frame to hang parts on and turn together (a rotor and its blades), radius? (tube, rod), from?/to? ([x,y,z] ends of a rod: a cylinder between two points) , pose? (person, below) }]. A person is a real human body (rigged, clothed), standing at pos, facing +z, turned with rot [0, degrees, 0]; size is their height (default 1.75, so 1 unit is a metre around people); color tints the top, look: { skin, top, bottom, shoes, hair } any of them. pose: a name (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit (on a seat 0.46 high), sit_floor, kneel, squat, bend, lie) or { base: name, then any of: hips, chest (where the base of the neck goes: the spine bends to it), pelvis: [x,y,z] tilt degrees (x + forward, − back: lie is -90), twist: degrees, look, handL, handR, footL, footR, elbowL, elbowR, kneeL, kneeR (points an elbow or knee bends towards), toesL, toesR }, every point [x,y,z] in the person's own space (x + their left, y up, z + in front of them, metres for 1.75: hips 0.95, shoulders 1.41, head top 1.75) or, for look/hands/feet, a part id to reach for or look at (a hand on a switch: handR: 'switch'). A part with parent '<person>.<joint>' (hips, chest, head, handL, handR, footL, footR) rides on that joint, its pos in the person's axes (a mug held: parent 'anna.handR', pos [0, 0, 0.06]); arrows and cameras can point at '<person>.<joint>' too. People are not solid (not overlap-checked). arrows?: [{ id, from, to (a part id, or [x,y,z]), via?: [[x,y,z]…] (it bends through these points), flow?: true (a stream of dashes runs along it: air, current, signal), label?, color? }] (they follow their parts when these move), legend?: [{ color, label }] (colour key chips in a corner: use one colour per job, always the same: heat red, cold air blue, motion green, control violet), script?: JavaScript source for what the data can't say, run in a locked-down separate engine (no window, no network; plain JavaScript and Math only, 40 ms per frame): define build() returning { parts?, arrows? } for parts made by loops and maths, and frame(t, step) (t = seconds, step = the story's current step, 0-based, -1 when there is none) returning { [partId]: { pos?, rot?, size?, color?, opacity?, from?/to? (rod), pose? (person: set at once) } } to move parts every frame; the user gets play/pause and speed buttons; build() may also return allow), allow?: [[idA, idB]…] pairs that are meant to touch or overlap (a pin inside a rod end; an id ending in * matches every id starting so), scan?: seconds of the script the user's scan button checks (default 12). story?: [{ say?: the line spoken in this step (shown as subtitles; a narrator voice reads it aloud when the user has turned it on, it is off by default), show?: ids to bring in (part or arrow ids; a trailing * matches a prefix, like blade*), hide?: ids to take away, focus?: ids that glow while the step lasts, camera?: { frame?: ids to bring into view, target?: an id or [x,y,z], dist?, az?: degrees round, el?: degrees up }, hold?: minimum seconds, pose?: { <person id>: pose } (they glide into it), move?: seconds the glide takes (default 1.4) }] makes the scene a narrated build: parts the story shows stay hidden until their step (parts it never shows are there from the start), the user presses play and the steps run one after the other, each part fading in as it is spoken about, with pause, next, back and a dot per step; voice?: how the narrator sounds (like: a calm man), autoplay?: false keeps it waiting for the play button (a story starts by itself by default), narrate?: false turns the voice off. The default look is a chalk diagram: flat colour in bands and a thin light outline round every part; while a story step has focus, the other parts fade back and the focused ones get a thick amber outline, so name the focus in each step. The page checks that solid parts never pass through each other: parts that are translucent (opacity under 1), wire, plane, ring or ghost: true are housings and don't count; every other overlap glows red and is counted for the user, so build the model so nothing intersects (real clearances, split shafts) and list only intended overlaps in allow"
     :sample {:parts [{:id "app" :shape "box" :pos [0 3.6 0] :size [3 0.6 2] :color "blue" :label "App"}
                      {:id "api" :shape "box" :pos [0 1.8 0] :size [3 0.6 2] :color "green" :label "API"}
                      {:id "db" :shape "cylinder" :pos [0 0.3 0] :size [1.8 0.6 1.8] :color "amber" :label "Postgres"}
@@ -142,19 +282,6 @@
                       {:id "a2" :from "api" :to "db" :label "SQL"}
                       {:id "a3" :from "api" :to "cache" :label "reads" :color "violet"}]}}})
 
-(def order
-  "Every form in the order the old Claudia had them (src/forms.ts): the draw tool's description, the
-  gallery and the form row list them so."
-  ["pipeline" "timeline" "compare" "chart" "stats" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
-
-(defn spec-of [n] (or (get specs n) (get base n)))
-
-(defn label-of [n] (or (:label (spec-of n)) n))
-
-(defn help-line [n]
-  (let [{:keys [when fields]} (spec-of n)]
-    (str "- " n ": " when " Data: " fields ".")))
-
-(def base-samples (into {} (for [[n s] base] [n (:sample s)])))
-
-(def base-when (into {} (for [[n s] base] [n (:when s)])))
+(defn label [n] (or (get-in specs [n :label]) (get-in base [n :label])))
+(defn when-line [n] (or (get-in specs [n :when]) (get-in base [n :when])))
+(defn sample [n] (or (get-in specs [n :sample]) (get-in base [n :sample])))

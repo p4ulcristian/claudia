@@ -9,6 +9,7 @@
             [claudia.web.api :as api]
             [claudia.web.views.calls :as calls]
             [claudia.web.views.clojure :as clojure]
+            [claudia.web.views.code :as code]
             [claudia.web.views.editor :as editor]
             [claudia.web.views.files :as files]
             [claudia.web.views.flow :as flow]
@@ -16,8 +17,7 @@
             [claudia.web.views.frame :as frame]
             [claudia.web.views.git :as git]
             [claudia.web.views.graph :as graph]
-            [claudia.web.events :as events]
-            [claudia.web.ws :as ws]))
+            [claudia.web.events :as events]))
 
 ;; ---- state: a chat's settings come with `chat` and with `settings` frames ----
 
@@ -45,39 +45,39 @@
     "calls" [:div.form-view.form-calls [:f> calls/calls-form data ctx]]
     "editor" [:div.form-view.form-editor [:f> editor/editor-form data ctx]]
     "flow" [:div.form-view.form-flow [:f> flow/flow-form data]]
+    ;; "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
+    "code" [:div.form-view.form-code [:f> code/code-view data]]
     [base-forms/form-view form data (:block ctx)]))
 
 ;; ---- "save as template" on a freeform block's badge ----
 
 (defn template-save
-  "Keep a freeform block as a named template (Claude can draw it again and change it by name): a
-  button shown on hover, then a name field (Enter saves, Escape leaves), then the server's answer."
+  "The badge's button: a name field (the block's name to start with), then the block is kept as a
+  template on the chat's server. block: the block, or its id."
   [server chat block]
-  (let [[nm set-name] (h/use-state nil)   ; nil: the button; a string: the field
+  (let [{:keys [id] :as b} (if (map? block) block {:id block})
+        [nm set-nm] (h/use-state nil) ; nil: the button; a string: naming
         [note set-note] (h/use-state nil)
         save (fn []
-               (let [n (str/trim (or nm ""))]
-                 (if (str/blank? n)
-                   (set-name nil)
-                   (-> (api/post-json (api/url server (str "chats/" (js/encodeURIComponent chat) "/blocks/" (js/encodeURIComponent (:id block)) "/template") nil)
+               (let [n (str/trim (str nm))]
+                 (if-not (seq n)
+                   (set-nm nil)
+                   (-> (api/post-json (api/url server (str "chats/" (js/encodeURIComponent chat) "/blocks/" (js/encodeURIComponent id) "/template") nil)
                                       {:name n})
-                       (.catch (fn [_] {:text "Couldn't save the template."}))
-                       (.then (fn [r] (set-name nil) (set-note (:text r))))))))]
+                       (.then (fn [r] (set-nm nil) (set-note (:text r))))
+                       (.catch (fn [_] (set-nm nil) (set-note "Couldn't save the template.")))))))]
     (h/use-effect
-     (fn []
-       (when note
-         (let [t (js/setTimeout #(set-note nil) 3500)]
-           #(js/clearTimeout t))))
+     (fn [] (when note (let [t (js/setTimeout #(set-note nil) 3500)] #(js/clearTimeout t))))
      [note])
     (cond
       note [:span.tpl-note note]
       (nil? nm) [:button.tpl-save {:type "button" :title "Save as a template Claude can reuse and change by name"
-                                   :on-click #(set-name (or (not-empty (:name block)) (:template block) (:id block)))}
+                                   :on-click #(set-nm (or (:name b) (when (= "html" (:kind b)) (:template b)) id))}
                  "save as template"]
       :else [:span.tpl-form
              [:input {:auto-focus true :value nm :placeholder "Template name"
-                      :on-change #(set-name (.. % -target -value))
-                      :on-key-down #(case (.-key %) "Enter" (save) "Escape" (set-name nil) nil)}]
+                      :on-change #(set-nm (.. % -target -value))
+                      :on-key-down #(case (.-key %) "Enter" (save) "Escape" (set-nm nil) nil)}]
              [:button {:type "button" :on-click save} "save"]])))
 
 ;; ---- the form row ----
@@ -99,28 +99,28 @@
    "freeform" "M4 15c2-6 4-9 6-9s1 5 3 5 2-3 3-5M5 17h10"
    "questions" "M7.5 7.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.7v.6M10 15v.2"})
 
+;; The non-form circles: label and text.
 (def ^:private extra
   {"graph" {:label "Graph" :when "Circles, boxes and arrows: how things connect."}
-   "freeform" {:label "Freeform" :when "Claude's own page: interactive, playful, made for this one thing. Required: Claude gets creative where it helps. Off: only graphs and forms."}
-   "questions" {:label "Questions" :when "Claude asking you with buttons (the full-window choices). Off: it decides itself and says in a line what it chose."}})
+   "questions" {:label "Questions" :when "Claude asking you with buttons (the full-window choices). Off: it decides itself and says in a line what it chose."}
+   "freeform" {:label "Freeform" :when "Claude's own page: interactive, playful, made for this one thing. Required: Claude gets creative where it helps. Off: only graphs and forms."}})
 
-;; The user's own tools, in blue under the forms: a click shows one in the picture for the chat's
-;; folder (required) or takes it away (allowed). Never off: Claude may always draw them too.
+;; The user's own tools, at the foot of the rail in blue: a click shows one in the picture for the
+;; chat's folder (required) or takes it away again (allowed). Never off: Claude may always draw them too.
 (def ^:private tool-forms ["files" "git" "clojure"])
 (def ^:private tool? (set tool-forms))
 
-(defn- label-of [f] (or (get-in extra [f :label]) (forms/label-of f)))
-(defn- when-of [f] (or (get-in extra [f :when]) (:when (forms/spec-of f)) ""))
-(defn- sample-of [f] (:sample (forms/spec-of f)))
+(defn- label-of [f] (or (get-in extra [f :label]) (forms/label f) f))
+(defn- when-of [f] (or (get-in extra [f :when]) (forms/when-line f) ""))
 
-(defn- say [f state]
-  (cond (= f "questions") (if (= state "off") "off: Claude decides itself" "allowed: Claude may ask you")
-        (tool? f) (case state "required" "in the picture: click to take it away" "off" "off: click to show it in the picture" "yours: click to show it in the picture")
-        :else (case state "required" "required: always in the picture" "off" "off: Claude can't draw it" "allowed: Claude may draw it")))
+(def ^:private say-form {"allowed" "allowed: Claude may draw it" "required" "required: always in the picture" "off" "off: Claude can't draw it"})
+(def ^:private say-q {"allowed" "allowed: Claude may ask you" "off" "off: Claude decides itself"})
+(def ^:private say-t {"allowed" "yours: click to show it in the picture" "required" "in the picture: click to take it away" "off" "off: click to show it in the picture"})
+(defn- say [f state] (get (cond (= f "questions") say-q (tool? f) say-t :else say-form) state))
 
 (defn- next-state [f now]
   (cond (tool? f) (when-not (= now "required") "required")
-        (= f "questions") (when-not (= now "off") "off")
+        (= f "questions") (case now "allowed" "off" nil)
         :else (case now "allowed" "required" "required" "off" nil)))
 
 (defn- col-glyph [n]
@@ -129,56 +129,55 @@
           (for [i (range n)] ^{:key i} [:rect {:x (+ 2 (* i (+ w 2))) :y 2 :width w :height 10 :rx 1.5}]))))
 
 (defn form-row
-  "One chalk circle per form (hover shows its sample; a click goes allowed -> required -> off for this
-  chat; the user's tools: in the picture or not), and the picture's columns. available: the forms its
-  server has, deleted ones left out. rail?: a column in the right rail; the sample opens to its
-  left, level with the circle, inside the window."
-  [k available read-only rail?]
+  "The open chat's forms: one chalk circle per form (hover shows its sample; a click goes allowed ->
+  required -> off for this chat) and the picture's columns. k: the chat's [server chat]; hidden:
+  forms the user deleted or this server doesn't have; rail: a column in the right rail (the sample
+  opens to its left, level with the circle), else a row over the picture (phones)."
+  [k hidden rail]
   (let [settings @(rf/subscribe [:codeforms/settings k])
-        choice (into {} (for [[f v] (or (:forms settings) {})] [(if (keyword? f) (name f) (str f)) v]))
+        choice (into {} (for [[f v] (:forms settings)] [(if (keyword? f) (name f) (str f)) v]))
         cols (or (:cols settings) 0)
         [peek set-peek] (h/use-state nil)
         [peek-top set-peek-top] (h/use-state 0)
         box (h/use-ref nil)
         peek-box (h/use-ref nil)
-        avail (set available)
-        shown (concat ["graph"] (filter #(and (avail %) (not (tool? %))) forms/order) ["freeform" "questions"])
-        tools (filter avail tool-forms)
+        hidden (set hidden)
         show (fn [f ^js el]
                (set-peek f)
-               (when-let [^js b (and rail? (.-current box))]
-                 (set-peek-top (- (.-top (.getBoundingClientRect el)) (.-top (.getBoundingClientRect b))))))
+               (when (and rail (.-current box))
+                 (set-peek-top (- (.-top (.getBoundingClientRect el)) (.-top (.getBoundingClientRect (.-current box)))))))
+        shown (concat ["graph"] (remove #(or (hidden %) (tool? %)) forms/order) ["freeform" "questions"])
+        tools (remove hidden tool-forms)
         cycle (fn [f]
                 (let [to (next-state f (get choice f "allowed"))]
                   (rf/dispatch [:codeforms/settings k {:forms (if to (assoc choice f to) (dissoc choice f))}])))
         dot (fn [f]
               (let [state (get choice f "allowed")]
                 ^{:key f}
-                [:button.form-dot {:type "button" :class [(when (tool? f) "tool") state] :disabled read-only
+                [:button.form-dot {:type "button" :class [(when (tool? f) "tool") state]
                                    :on-click #(cycle f)
                                    :on-mouse-enter #(show f (.-currentTarget %))
                                    :on-focus #(show f (.-currentTarget %))
                                    :aria-label (str (label-of f) ": " (say f state))
                                    :aria-pressed (when (tool? f) (= state "required"))}
-                 [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d (get glyphs f "M4 4h12v12H4z")}]]]))]
-    ;; In the rail the sample never runs off the window.
+                 [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d (get glyphs f)}]]]))]
+    ;; In the rail the sample never runs off the bottom of the window.
     (h/use-layout-effect
      (fn []
-       (when-let [^js el (and rail? (.-current peek-box))]
-         (when-let [^js b (.-current box)]
+       (let [el (.-current peek-box) b (.-current box)]
+         (when (and rail el b)
            (let [top (.-top (.getBoundingClientRect b))
-                 l (.getBoundingClientRect js/document.body)]
-             (set! (.. el -style -top)
-                   (str (max (- (+ (.-top l) 8) top) (min peek-top (- (.-bottom l) 8 top (.-offsetHeight el)))) "px")))))
-       js/undefined))
-    [:div {:class (if rail? "form-rail" "form-row") :ref #(set! (.-current box) %) :on-mouse-leave #(set-peek nil)}
+                 bottom (or (some-> js/window.visualViewport .-height) js/innerHeight)]
+             (set! (.. el -style -top) (str (max (- 8 top) (min peek-top (- bottom 8 top (.-offsetHeight el)))) "px")))))
+       nil))
+    [:div {:class (if rail "form-rail" "form-row") :ref #(set! (.-current box) %) :on-mouse-leave #(set-peek nil)}
      (into [:div.form-dots] (map dot shown))
      (when (seq tools) (into [:div.form-tools] (map dot tools)))
      ;; Columns for this chat's picture; only the counts that fit the pane show (container queries).
      [:div.col-pick {:role "radiogroup" :aria-label "Columns"}
       (for [n [0 1 2 3]]
         ^{:key n}
-        [:button.col-btn {:type "button" :class [(str "c" n) (when (= cols n) "on")] :role "radio" :aria-checked (= cols n) :disabled read-only
+        [:button.col-btn {:type "button" :class [(str "c" n) (when (= cols n) "on")] :role "radio" :aria-checked (= cols n)
                           :on-click #(rf/dispatch [:codeforms/settings k {:cols n}])
                           :title (if (pos? n) (str n " column" (when (> n 1) "s")) "Claude's layout")}
          (if (pos? n) [col-glyph n] "auto")])]
@@ -187,13 +186,41 @@
          [:div.form-peek {:ref #(set! (.-current peek-box) %)}
           [:div.form-peek-head [:b (label-of peek)] [:span.form-peek-state {:class state} (say peek state)]]
           [:p (when-of peek)]
-          (when-let [s (and (not (extra peek)) (sample-of peek))]
-            [:div.form-peek-sample [form-view peek s {}]])
+          (when-not (extra peek)
+            [:div.form-peek-sample [form-view peek (forms/sample peek) {}]])
           [:p.form-peek-hint (cond (= peek "questions") "click: allowed ↔ off · this chat only"
                                    (tool? peek) "the chat's folder, live · Claude may draw it too"
                                    :else "click: allowed → required → off · this chat only")]]))]))
 
+;; ---- what a server has: its forms, the ones deleted, its templates (GET /api/forms) ----
+
+(rf/reg-event-db
+ :codeforms/info
+ (fn [db [_ server info]] (assoc-in db [:codeforms :info server] info)))
+
+(rf/reg-sub :codeforms/info (fn [db [_ server]] (get-in db [:codeforms :info server])))
+
+(defn- load-info! [server]
+  (-> (api/fetch-json (api/url server "forms" nil))
+      (.then #(rf/dispatch [:codeforms/info server %]))
+      (.catch (fn [_]))))
+
+(defn- off-here
+  "The forms a server leaves out: deleted in the Forms window, or not on this runner."
+  [info]
+  (into (set (:hidden info)) (:notHere info)))
+
 ;; ---- the Forms gallery ----
+
+(rf/reg-event-db
+ :codeforms/gallery
+ ;; Opens the Forms window for a server (nil: the open chat's, else the first), or closes it (false).
+ (fn [db [_ server]]
+   (if (false? server)
+     (assoc-in db [:codeforms :gallery] nil)
+     (assoc-in db [:codeforms :gallery] (or server (first (:open db)) (first (keys (:servers db))))))))
+
+(rf/reg-sub :codeforms/gallery (fn [db] (get-in db [:codeforms :gallery])))
 
 (def ^:private sample-graph
   {:id "graph" :kind "graph"
@@ -205,17 +232,21 @@
 (def ^:private sample-freeform
   "<div style=\"display:flex;gap:10px;align-items:center\"><span style=\"font:700 20px var(--hand)\">Anything else</span><input type=\"range\" min=\"0\" max=\"10\" value=\"6\"><span style=\"color:var(--muted)\">sliders, mockups, a table, code…</span></div>")
 
-(defn- entry
-  "One kind in the gallery. n: its number in the window, so it can be named in a chat (\"#7 and #12
-  look the same\")."
-  [{:keys [n block when-text deleted? on-delete on-restore]} body]
-  [:section.g-entry {:class (when deleted? "deleted")}
+(defn- badge
+  "An entry's badge, as the picture's: the kind (a form by its label), a template by its name."
+  [kind label tpl-name]
+  [:span.block-badge {:class (str "b-" kind) :title (when-not (#{"graph" "freeform" "template"} kind) (forms/when-line kind))}
+   [:b label]
+   (when tpl-name [:span.block-name tpl-name])])
+
+;; n: the entry's number in the window, so it can be named in a chat ("#7 and #12 look the same").
+(defn- entry [{:keys [n badge deleted on-delete on-restore] when-line :when} body]
+  [:section.g-entry {:class (when deleted "deleted")}
    [:div.block-head
-    [:span.g-num (str "#" n)]
-    [base-forms/badge block]
+    [:span.g-num (str "#" n)] badge
     (when on-delete [:button.tpl-delete {:type "button" :on-click on-delete} "delete"])
     (when on-restore [:button.tpl-delete.restore {:type "button" :on-click on-restore} "restore"])]
-   (when (seq when-text) [:p.g-when when-text])
+   (when when-line [:p.g-when when-line])
    [:div.g-sample body]])
 
 (defn- confirm-delete
@@ -223,10 +254,10 @@
   [{:keys [kind name]} on-yes on-no]
   (h/use-effect
    (fn []
-     (let [k (fn [^js e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (on-no)))]
+     (let [k (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (on-no)))]
        (js/window.addEventListener "keydown" k true)
        #(js/window.removeEventListener "keydown" k true)))
-   [])
+   [on-yes on-no])
   [:div.confirm-backdrop {:on-click (fn [e] (.stopPropagation e) (on-no))}
    [:div.confirm-card {:role "alertdialog" :aria-modal true :aria-label (str "Delete " kind) :on-click #(.stopPropagation %)}
     [:h3 (str "Delete this " kind "?")]
@@ -238,30 +269,34 @@
      [:button.confirm-yes {:type "button" :on-click on-yes} "Delete"]]]])
 
 (defn gallery
-  "Every kind of block Claude can draw, each on sample data with its when-line (built-in forms can
-  be deleted and restored), and the templates saved on this server. Escape or a click outside
-  closes it."
+  "Every kind of block Claude can draw, each on sample data with its when-line, and the templates
+  saved on this server. A built-in form can be deleted (Claude no longer gets it) and restored.
+  Escape or a click outside closes it."
   [server close]
-  (let [[info set-info] (h/use-state nil)
+  (let [info @(rf/subscribe [:codeforms/info server])
         [deleting set-deleting] (h/use-state nil) ; {:kind "form"|"template" :name}
-        load (fn [] (-> (api/fetch-json (api/url server "forms" nil))
-                        (.then set-info)
-                        (.catch (fn [_] (set-info {:forms (vec (remove forms/opt-in forms/order)) :hidden [] :templates []})))))
-        set-hidden (fn [names]
-                     (set-info #(assoc % :hidden names))
-                     (-> (api/fetch-json (api/url server "prefs" nil)
-                                         {:method "PATCH" :headers {"content-type" "application/json"}
-                                          :body (js/JSON.stringify (clj->js {:hiddenForms names}))})
-                         (.catch (fn [_]))))]
-    (h/use-effect (fn [] (load) nil) [server])
+        hidden (vec (:hidden info))
+        not-here (set (or (:notHere info)
+                          (when (:forms info) (remove (set (:forms info)) (filter forms/opt-in forms/order)))
+                          (filter forms/opt-in forms/order)))
+        set-hidden! (fn [next]
+                      (rf/dispatch [:codeforms/info server (assoc info :hidden next)])
+                      (-> (api/fetch-json (api/url server "forms" nil)
+                                          {:method "PATCH" :headers {"content-type" "application/json" "accept" "application/json"}
+                                           :body (js/JSON.stringify (clj->js {:hidden next}))})
+                          (.finally #(load-info! server))))
+        remove-template! (fn [nm]
+                           (set-deleting nil)
+                           (-> (api/fetch-json (api/url server (str "templates/" (js/encodeURIComponent nm)) nil) {:method "DELETE"})
+                               (.finally #(load-info! server))))]
+    (h/use-effect (fn [] (load-info! server) nil) [server])
     (h/use-effect
      (fn []
        (let [k (fn [e] (when (= "Escape" (.-key e)) (close)))]
          (js/window.addEventListener "keydown" k)
          #(js/window.removeEventListener "keydown" k)))
      [close])
-    (let [fs (vec (filter (set (:forms info)) forms/order))
-          hidden (set (:hidden info))
+    (let [fs (remove not-here forms/order)
           templates (:templates info)
           n0 (+ 2 (count fs))]
       [:div.gallery-backdrop {:on-click close}
@@ -271,18 +306,17 @@
          [:p.muted "What Claude can draw on the right. Ask for one by its name, or for changes to a block by the name on its badge."]
          [:button.icon {:type "button" :on-click close :title "Close (Esc)"} "×"]]
         [:div.g-list
-         [entry {:n 1 :block {:id "graph" :kind "graph" :name ""}
-                 :when-text "Things and how they connect: circles, boxes, arrows, groups. The default."}
+         [entry {:n 1 :badge [badge "graph" "graph"] :when "Things and how they connect: circles, boxes, arrows, groups. The default."}
           [:f> graph/graph-view sample-graph]]
          (for [[i f] (map-indexed vector fs)
-               :let [gone? (hidden f)]]
+               :let [gone (some #{f} hidden)]]
            ^{:key f}
-           [entry {:n (+ i 2) :block {:id f :kind "form" :form f} :when-text (when-of f) :deleted? gone?
-                   :on-delete (when-not gone? #(set-deleting {:kind "form" :name f}))
-                   :on-restore (when gone? #(set-hidden (vec (remove #{f} hidden))))}
-            [form-view f (sample-of f) {}]])
-         [entry {:n n0 :block {:id "freeform" :kind "html"}
-                 :when-text "Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge."}
+           [entry {:n (+ i 2) :badge [badge f (str/lower-case (or (forms/label f) f))] :when (forms/when-line f)
+                   :deleted gone
+                   :on-delete (when-not gone #(set-deleting {:kind "form" :name f}))
+                   :on-restore (when gone #(set-hidden! (vec (remove #{f} hidden))))}
+            [form-view f (forms/sample f) {}]])
+         [entry {:n n0 :badge [badge "freeform" "freeform"] :when "Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge."}
           [:f> frame/page-frame sample-freeform nil]]]
         [:h3.g-section "Templates"]
         (cond
@@ -292,35 +326,55 @@
           [:div.g-list
            (for [[i t] (map-indexed vector templates)]
              ^{:key (:name t)}
-             [entry {:n (+ n0 1 i) :block {:id (:name t) :kind "html" :template (:name t)} :when-text (:description t)
+             [entry {:n (+ n0 1 i) :badge [badge "template" "template" (:name t)] :when (not-empty (:description t))
                      :on-delete #(set-deleting {:kind "template" :name (:name t)})}
               [:f> frame/page-frame (:html t) (:parts t)]])])]
        (when deleting
          [:f> confirm-delete deleting
           (fn []
             (if (= "template" (:kind deleting))
-              (-> (api/fetch-json (api/url server (str "templates/" (js/encodeURIComponent (:name deleting))) nil) {:method "DELETE"})
-                  (.finally load))
-              (set-hidden (vec (conj hidden (:name deleting)))))
-            (set-deleting nil))
+              (remove-template! (:name deleting))
+              (do (set-hidden! (conj hidden (:name deleting))) (set-deleting nil))))
           #(set-deleting nil)])])))
 
-;; ---- the form row's place: the right rail (desktop) or the top of the picture (phone) ----
+(defn gallery-host
+  "The Forms window when it is open ([:codeforms/gallery server] opens it). Mounted once, in the app."
+  []
+  (let [server @(rf/subscribe [:codeforms/gallery])]
+    (when server [:f> gallery server #(rf/dispatch [:codeforms/gallery false])])))
+
+;; ---- where the form row goes ----
+
+(defn- use-phone []
+  (let [mq (h/use-memo #(js/window.matchMedia "(max-width: 679px)") [])
+        [phone set-phone] (h/use-state (.-matches mq))]
+    (h/use-effect
+     (fn [] (let [f #(set-phone (.-matches mq))] (.addEventListener mq "change" f) #(.removeEventListener mq "change" f)))
+     [])
+    phone))
+
+(defn- use-info [server]
+  (let [info @(rf/subscribe [:codeforms/info server])]
+    (h/use-effect (fn [] (when (and server (not info)) (load-info! server)) nil) [server])
+    info))
+
+(defn form-rail
+  "The right rail's contents on a desktop (the rail mirrors the chats rail): the open chat's forms.
+  Nothing on phones (their row is in the picture) and nothing for a read-only viewer."
+  []
+  (let [{:keys [server ck]} @(rf/subscribe [:open-chat])
+        ro @(rf/subscribe [:read-only?])
+        phone (use-phone)
+        info (use-info server)]
+    (when (and ck info (not ro) (not phone))
+      [:f> form-row ck (off-here info) true])))
 
 (defn picture-tools
-  "The open chat's form row; rail?: in the right rail."
-  [{:keys [server ck]} {:keys [rail?]}]
-  (let [[info set-info] (h/use-state nil)
-        ;; Read again when the gallery closes: a form may have been deleted or restored there.
-        gallery? @(rf/subscribe [:forms/gallery])]
-    (h/use-effect
-     (fn []
-       (when server
-         (-> (api/fetch-json (api/url server "forms" nil))
-             (.then set-info)
-             (.catch (fn [_]))))
-       nil)
-     [server gallery?])
-    ;; A new chat (no chat yet on a server): the row shows, its choices wait for the chat.
-    (when info
-      [:f> form-row ck (remove (set (:hidden info)) (:forms info)) (nil? ck) rail?])))
+  "Over the picture of the open chat: on phones, the form row (desktops have it in the right rail)."
+  [{:keys [server ck]}]
+  (let [ro @(rf/subscribe [:read-only?])
+        phone (use-phone)
+        info (use-info server)]
+    [:<>
+     (when server [:button.forms-btn {:type "button" :on-click #(rf/dispatch [:codeforms/gallery server]) :title "Every form Claude can draw, and the saved templates"} "Forms"])
+     (when (and ck info (not ro) phone) [:f> form-row ck (off-here info) false])]))

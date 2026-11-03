@@ -16,9 +16,9 @@
                    form? (:form block)
                    (:template block) "template"
                    :else "freeform")
-        label (if form? (str/lower-case (forms/label-of (:form block))) kind)
+        label (if form? (str/lower-case (or (forms/label (:form block)) (:form block))) kind)
         nm (or (not-empty (:name block)) (when html? (:template block)))]
-    [:span.block-badge {:class (str "b-" kind) :title (when form? (:when (forms/spec-of (:form block))))}
+    [:span.block-badge {:class (str "b-" kind) :title (when form? (forms/when-line (:form block)))}
      [:b label]
      (when nm [:span.block-name nm])]))
 

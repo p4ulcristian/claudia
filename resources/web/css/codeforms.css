@@ -54,7 +54,7 @@
 .f-ln.del code { opacity: 0.7; }
 .f-ln.hot { background: color-mix(in srgb, var(--amber) 16%, transparent); }
 .f-ln.hot .num { color: var(--amber); font-weight: 700; }
-.f-ln.hot::before { left: 1px; top: 1px; bottom: 1px; width: 7px; --ink: var(--amber); -webkit-mask-box-image: var(--chalk-line2); }
+.f-ln.hot::before { left: 1px; top: 1px; bottom: 1px; width: 7px; --ink: var(--amber); -webkit-mask-box-image: var(--chalk-line3); }
 .f-fold { display: block; width: 100%; margin: 2px 0; padding: 1px 0 1px calc(5.6ch + 20px); text-align: left; font: 700 13.5px var(--hand); color: var(--muted); background: color-mix(in srgb, var(--line) 22%, transparent); }
 .f-fold:hover { color: var(--fg); background: color-mix(in srgb, var(--line) 40%, transparent); }
 .f-code-err { margin: 6px 14px 0; color: var(--red); }
@@ -93,7 +93,7 @@
 .g-branch.current { border-color: var(--green); }
 .g-branch.off { opacity: 0.45; }
 .g-branch .k { color: var(--muted); font-family: var(--sans); }
-.g-branch i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid; -webkit-mask-box-image: var(--chalk-dot18); -webkit-mask-box-image-outset: 2px; }
+.g-branch i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid; -webkit-mask-box-image: var(--chalk-dot9-soft); -webkit-mask-box-image-outset: 2px; }
 .g-sep { width: 1.5px; height: 16px; margin: 0 4px; background: var(--line); }
 .g-sync { margin-left: 4px; font: 700 11px var(--sans); }
 .g-sync.ok { color: var(--green); } .g-sync.drift { color: var(--amber); } .g-sync.gone { color: var(--red); } .g-sync.only { color: var(--muted); font-weight: 400; }
@@ -202,6 +202,12 @@
 /* In the gallery the kind is the heading: left, and larger. */
 .g-entry .block-head { justify-content: flex-start; }
 .g-entry .block-badge b { font-size: 17px; }
+.g-entry .block-badge { opacity: 0.9; }
+.g-entry .block-badge b { order: 2; }
+.g-entry .block-name { order: 1; }
+.g-entry .block-name::before { content: none; }
+.g-entry .block-name::after { content: " ·"; }
+.block-badge.b-template { --b-c: var(--green); }
 .g-num { order: -2; font: 700 15px var(--hand); color: var(--accent); margin-right: 8px; }
 /* Template delete: always shown, asked in a chalk card. */
 .tpl-delete { order: -1; margin-left: auto; font: 700 13px var(--hand); color: var(--muted); padding: 0 8px; border-radius: 6px; }
@@ -316,24 +322,9 @@
 .form-tools { display: flex; gap: 10px; }
 .gallery .g-sample .form-view { width: 100%; }
 
-/* Syntax colours (highlight.js classes, claudia.web.hl): VS Code's Dark+. */
-.hljs-keyword, .hljs-literal, .hljs-symbol, .hljs-name, .hljs-selector-tag, .hljs-tag { color: #569cd6; }
-.hljs-built_in, .hljs-type, .hljs-title.class_, .hljs-class .hljs-title { color: #4ec9b0; }
-.hljs-string, .hljs-meta .hljs-string, .hljs-addition { color: #ce9178; }
-.hljs-number { color: #b5cea8; }
-.hljs-regexp { color: #d16969; }
-.hljs-comment, .hljs-quote { color: #6a9955; }
-.hljs-title, .hljs-title.function_, .hljs-function .hljs-title, .hljs-section { color: #dcdcaa; }
-.hljs-variable, .hljs-attr, .hljs-attribute, .hljs-property, .hljs-params, .hljs-template-variable { color: #9cdcfe; }
-.hljs-meta, .hljs-meta .hljs-keyword { color: #9b9b9b; }
-.hljs-selector-class, .hljs-selector-id { color: #d7ba7d; }
-.hljs-deletion { color: #f44747; }
-.hljs-emphasis { font-style: italic; }
-.hljs-strong { font-weight: 700; }
-.hljs-link { color: #4ec9b0; text-decoration: underline; }
-.hljs-section { font-weight: 700; }
 .code-chip .add { color: var(--green); }
 .code-chip .del { color: var(--red); }
+.code-sent .diff { margin-top: 6px; }
 .code-sent .g-diff { text-align: left; font-family: var(--mono); margin-top: 4px; border-radius: 8px; background: color-mix(in oklch, var(--board) 70%, #000); }
 
 /* The clojure and calls forms. */

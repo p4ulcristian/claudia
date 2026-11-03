@@ -191,7 +191,8 @@
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
-      (codeforms/handle req res url who chats/scene-of) nil
+      (codeforms/handle req res url who {:scene-of chats/scene-of
+                                         :tools-changed! #(doseq [id (keys @chats/state)] (chats/tools-changed! id))}) nil
       (api/handle req res who) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 
@@ -211,8 +212,6 @@
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
-  ;; A form deleted or restored in the gallery: every chat's tools follow (between turns).
-  (reset! codeforms/on-hidden [#(doseq [id (keys @chats/state)] (chats/tools-changed! id))])
   (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
