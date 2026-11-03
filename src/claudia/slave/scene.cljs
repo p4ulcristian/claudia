@@ -92,10 +92,12 @@
     (place blocks next before)))
 
 (defn apply-draw
-  "The scene after one draw call, or {:error text} when the call asks for something this version lacks."
-  [scene {:keys [title clear graph nodes edges groups remove blocks removeBlocks] :as input}]
-  (if-let [bad (some #(when (and (:form %) (not (some #{(:form %)} p/forms))) (:form %)) blocks)]
-    {:error (str "No form \"" bad "\" here. Forms: " (apply str (interpose ", " p/forms)) ".")}
+  "The scene after one draw call, or {:error text} when the call asks for something this version
+  lacks. forms: the forms on offer (default the base ones)."
+  ([scene input] (apply-draw scene input p/forms))
+  ([scene {:keys [title clear graph nodes edges groups remove blocks removeBlocks] :as input} forms]
+  (if-let [bad (some #(when (and (:form %) (not (some #{(:form %)} forms))) (:form %)) blocks)]
+    {:error (str "No form \"" bad "\" here. Forms: " (apply str (interpose ", " forms)) ".")}
     (let [base (if clear empty-scene scene)
           bs (reduce draw-block (vec (:blocks base)) blocks)
           bs (if (or (seq nodes) (seq edges) (seq groups) (seq remove))
@@ -108,7 +110,7 @@
       {:scene {:title (or title (:title base) "")
                :blocks (filterv #(and (not (gone (:id %)))
                                       (or (not= "graph" (:kind %)) (seq (:nodes %))))
-                                bs)}})))
+                                bs)}}))))
 
 (defn describe
   "What the draw tool tells Claude back: \"2 blocks: flow (graph, 5 nodes, 4 arrows), steps (pipeline)\"."

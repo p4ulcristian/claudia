@@ -17,10 +17,11 @@
      :clj  (throw (ex-info "write-json is ClojureScript only" {}))))
 
 (def page->runner
-  #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "seen"})
+  #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "seen"
+    "code_edit" "code_send" "settings"})
 
 (def runner->page
-  #{"chats" "chat" "created" "msg" "delta" "scene" "turn" "ask" "asked" "error"})
+  #{"chats" "chat" "created" "msg" "delta" "scene" "turn" "ask" "asked" "error" "settings"})
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."

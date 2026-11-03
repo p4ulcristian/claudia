@@ -9,6 +9,7 @@
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
             [claudia.slave.chats :as chats]
+            [claudia.slave.codeforms :as codeforms]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
             [claudia.slave.secret :as secret]
@@ -58,7 +59,17 @@
         "deny" (chats/deny! chat (:ask f) who)
         "rename" (do (store/update! chat {:title (str/trim (str (:title f)))}) (chats-changed))
         "archive" (do (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
-        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))))))
+        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))
+        ;; The editor form: the user's typing saved into the picture, and its Send.
+        "code_edit" (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat))
+        "code_send" (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
+                      (chats/set-scene! chat scene)
+                      (when (seq text) (chats/send-text! chat text)))
+        ;; The form row and the columns of this chat's picture.
+        "settings" (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
+                     (when scene (chats/set-scene! chat scene))
+                     (when (some? (:forms f)) (chats/tools-changed! chat))
+                     (emit chat {:type "settings" :chat chat :settings settings}))))))
 
 (defn- caller [^js req]
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
@@ -91,6 +102,7 @@
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
+      (codeforms/handle req res url who chats/scene-of) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 
 (defn- on-socket [^js ws ^js req]

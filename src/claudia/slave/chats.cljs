@@ -8,6 +8,7 @@
             ["node:path" :as path]
             ["node:child_process" :as cp]
             [clojure.string :as str]
+            [claudia.slave.codeforms :as codeforms]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.scene :as scene]
@@ -89,7 +90,21 @@
                                    (swap-chat! id assoc :live false)))
                                idle-ms))))
 
+(defn- close-for-tools!
+  "A chat whose tools changed (the form row) lets its Claude Code process go between turns; the next
+  message resumes it with the new tools."
+  [id]
+  (when (and (:live (st id)) (not (:running (st id))))
+    (hostlink/send! {:op "close" :id id})
+    (swap-chat! id assoc :live false :stale-tools false)))
+
+(defn tools-changed! [id]
+  (swap-chat! id assoc :stale-tools true)
+  (close-for-tools! id))
+
 (defn- set-running! [id running]
+  (when (and (not running) (:stale-tools (st id)))
+    (js/setTimeout #(close-for-tools! id) 0))
   (when (not= running (boolean (:running (st id))))
     (swap-chat! id assoc :running running)
     (store/update! id {:at (now)})
@@ -188,14 +203,26 @@
 (defn- current-scene [id]
   (or (:scene (st id)) (store/scene id) scene/empty-scene))
 
+(defn set-scene!
+  "A chat's picture changed (by Claude's draw or the page: the editor, the form row): kept, saved, sent."
+  [id s]
+  (swap-chat! id assoc :scene s)
+  (store/save-scene! id s)
+  (emit! id {:type "scene" :scene s}))
+
+(defn chat-folder [id] (or (:folder (store/chat id)) cwd))
+
+(defn scene-of
+  "A chat's current picture, or nil when there is no such chat."
+  [id]
+  (when (store/chat id) (current-scene id)))
+
 (defn- draw [id input]
-  (let [{s :scene error :error} (scene/apply-draw (current-scene id) input)]
+  (let [{s :scene error :error text :text} (codeforms/draw id (current-scene id) input (chat-folder id))]
     (if error
       (refusal error)
-      (do (swap-chat! id assoc :scene s)
-          (store/save-scene! id s)
-          (emit! id {:type "scene" :scene s})
-          (text-result (str "Picture updated. " (scene/describe s)))))))
+      (do (set-scene! id s)
+          (text-result text)))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [resolve]
@@ -224,6 +251,8 @@
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
+    ["picture" "templates"] (text-result (codeforms/template-list))
+    ["picture" "save_template"] (text-result (codeforms/save-template! (current-scene id) args))
     ["workspace" "set_folder"] (set-folder id (:path args))
     ["workspace" "run_with_secret"] (secret-ask id args)
     (refusal (str "No tool " server "/" tool "."))))
@@ -231,12 +260,15 @@
 (defn- can-use
   "Every tool may run (bypass mode still asks for a few); AskUserQuestion becomes a question ask."
   [id {:keys [name input toolUseID]}]
-  (if (= name "AskUserQuestion")
+  (cond
+    (and (= name "AskUserQuestion") (codeforms/off? id "questions"))
+    {:behavior "deny" :message "The user switched questions off in Claudia's form row for this chat: decide yourself and say in one line what you chose."}
+    (= name "AskUserQuestion")
     (js/Promise.
      (fn [resolve]
        (add-ask! id {:ask {:id (or toolUseID (str (random-uuid))) :kind "question" :questions (:questions input)}
                      :input input :resolve resolve})))
-    {:behavior "allow" :updatedInput input}))
+    :else {:behavior "allow" :updatedInput input}))
 
 (defn- on-rpc [{:keys [rpc id kind args]}]
   (-> (js/Promise.resolve)
@@ -345,12 +377,12 @@
              ;; Read on every start, so a new token takes effect with the next session.
              :env (assoc (into {} (for [k (js-keys env)] [k (aget env k)])) "CLAUDE_CODE_OAUTH_TOKEN" (token))
              (if resume? :resume :sessionId) id
-             :systemPrompt {:type "preset" :preset "claude_code" :append tools/system-append}
-             :allowedTools tools/allowed-tools
+             :systemPrompt {:type "preset" :preset "claude_code" :append (str tools/system-append "\n\n" codeforms/prompt)}
+             :allowedTools (into tools/allowed-tools codeforms/tool-names)
              :permissionMode "bypassPermissions"
              :allowDangerouslySkipPermissions true
              :includePartialMessages true}
-   :mcp tools/mcp
+   :mcp (codeforms/mcp-for id)
    :hooks {}})
 
 (defn- ensure-session! [id]
@@ -359,6 +391,7 @@
     (-> (sdk/getSessionInfo id #js {:dir cwd})
         (.catch (fn [_] nil))
         (.then (fn [info]
+                 (codeforms/note-after-start! id)
                  (hostlink/send! {:op "start" :id id :spec (start-spec id (some? info))})
                  (swap-chat! id assoc :live true :final-counts (atom {})))))))
 
@@ -368,7 +401,7 @@
                (let [uuid (str (random-uuid))]
                  (when-not (:running (st id)) (swap-chat! id assoc :turn []))
                  (note-msg! id {:id uuid :role "user" :text text :at (now)})
-                 (hostlink/send! {:op "send" :id id :text text :uuid uuid})
+                 (hostlink/send! {:op "send" :id id :text (codeforms/take-note! id text) :uuid uuid})
                  (set-running! id true))))
       (.catch (fn [e] (emit! id {:type "error" :text (message e)})))))
 
@@ -410,4 +443,5 @@
                     :messages (if partial (mapv #(if (= (:id %) (:id partial)) partial %) msgs) msgs)
                     :scene (current-scene id)
                     :running (boolean (:running s))
-                    :asks (vec (map :ask (vals (:asks s))))}))))))
+                    :asks (vec (map :ask (vals (:asks s))))
+                    :settings (codeforms/chat-settings id)}))))))
