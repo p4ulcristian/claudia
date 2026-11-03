@@ -147,7 +147,7 @@ button.cs-title:hover { background: var(--panel); }
 .prompt-actions button { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--panel2); }
 
 /* ---------- the chat's working folder ---------- */
-.folder-chip { flex: 0 1 auto; min-width: 0; max-width: 160px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line);
+.folder-chip { flex: none; max-width: 150px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line);
   font: 600 11.5px var(--sans); color: var(--muted); white-space: nowrap; }
 .folder-chip span { overflow: hidden; text-overflow: ellipsis; }
 .folder-logo { width: 14px; height: 14px; object-fit: contain; border-radius: 3px; flex: none; }

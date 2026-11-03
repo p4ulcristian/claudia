@@ -172,7 +172,9 @@
         q (js/URLSearchParams. (or qs ""))
         parts (mapv js/decodeURIComponent (rest (str/split path #"/")))
         reply #(reply-promise res %)]
-    (if (and read-only (not= "GET" method))
+    (if (and read-only (or (not= "GET" method)
+                           ;; Settings' tokens and logins are the profile's own business.
+                           (#{"claude-tokens" "github"} (second parts))))
       (do (h/json-reply res 403 {:error "Read only."}) true)
       (condp = [method (vec (take 2 parts)) (count parts)]
         ["POST" ["api" "delegate"] 2] (do (reply (delegate req)) true)

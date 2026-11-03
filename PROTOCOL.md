@@ -81,7 +81,7 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 
 | Call | Answer |
 |---|---|
-| `GET /` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
+| `GET /`, `/new` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
 | `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
