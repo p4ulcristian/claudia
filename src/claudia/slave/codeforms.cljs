@@ -7,7 +7,6 @@
             ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
-            [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
@@ -24,17 +23,42 @@
   "Opt-in forms this runner has: CLAUDIA_FORMS=git,clojure,calls."
   (set (remove str/blank? (str/split (or (.-CLAUDIA_FORMS env) "") #"[\s,]+"))))
 
-(def code-forms
-  "The code forms this runner offers, in order."
-  (vec (filter #(or (not (forms/opt-in %)) (turned-on %)) forms/names)))
+(def opt-in
+  "Forms only runners that name them in CLAUDIA_FORMS have (the TypeScript Claudia's optIn)."
+  #{"git" "clojure" "calls"})
 
 (def all-forms
-  "Every form the draw tool offers here: the base forms, then the code forms."
-  (vec (distinct (concat p/forms code-forms))))
+  "Every form this runner has, in the draw tool's order (src/forms.ts FORM_NAMES): opt-in ones only
+  when CLAUDIA_FORMS names them."
+  (vec (filter #(or (not (opt-in %)) (turned-on %)) (keys tools/form-help))))
 
-(def draw-help
-  "The code forms' lines for the draw tool's description."
-  (str/join "\n" (map forms/help-line code-forms)))
+(def not-here
+  "Opt-in forms this runner doesn't have (/api/prefs notHere)."
+  (vec (filter #(and (opt-in %) (not (turned-on %))) (keys tools/form-help))))
+
+;; ---- the profile's preferences (/api/prefs) ----------------------------------------------------
+
+(defn prefs
+  "{:chatColors \"each\"|\"none\" :hiddenForms [forms the user deleted in the Forms window]}."
+  []
+  (let [p (store/kv "" "prefs")]
+    {:chatColors (if (= "none" (:chatColors p)) "none" "each")
+     :hiddenForms (vec (filter string? (:hiddenForms p)))}))
+
+(defn set-prefs!
+  "Changes the given preferences; returns them all."
+  [next]
+  (let [p (prefs)]
+    (store/kv! "" "prefs"
+               (cond-> p
+                 (#{"each" "none"} (:chatColors next)) (assoc :chatColors (:chatColors next))
+                 (sequential? (:hiddenForms next)) (assoc :hiddenForms (vec (filter string? (:hiddenForms next))))))
+    (prefs)))
+
+(defn hidden-forms
+  "Forms Claude doesn't get here: the ones the user deleted and the opt-in ones not on this runner."
+  []
+  (into (set (:hiddenForms (prefs))) not-here))
 
 ;; ---- before a draw ----------------------------------------------------------------------------
 
@@ -49,31 +73,38 @@
 
 (defn- with-root
   "A files/git block's folder made absolute (relative to the chat's folder), so the page can read
-  inside it. k = :root or :repo. Left out on a block that has one, it stays."
+  inside it. k = :root or :repo. Left out on a block that has one, it stays. Claudia's own block
+  (auto-files) is the user's live folder: a root left out or null keeps the one it has."
   [scene folder b k]
   (let [given (get-in b [:data k])
+        given (when (string? given) given)
         known (known-block scene (:id b))]
     (cond
+      (and (= "auto-files" (:id b)) (= k :root) (nil? given))
+      (assoc-in b [:data k] (if (and (= "form" (:kind known)) (string? (get-in known [:data :root])))
+                              (get-in known [:data :root])
+                              folder))
       (get-in b [:data :demo]) b
-      (and (nil? given) (or (= "form" (:kind known)) (sequential? (get-in b [:data :sketch])))) b
+      (and (nil? given) (or (= "form" (:kind known)) (and (= k :root) (sequential? (get-in b [:data :sketch]))))) b
       :else (assoc-in b [:data k] (path/resolve folder (home-path (or given ".")))))))
 
 (defn prepare
-  "A draw call's input made ready for claudia.slave.scene/apply-draw: templates filled in, roots
-  made absolute, editor code guarded. Returns {:input :notes [text for Claude]}."
+  "A draw call's input made ready for claudia.slave.scene/apply-draw (src/chat.ts draw): templates
+  filled in (the block keeps the template's name), roots made absolute, editor code guarded.
+  Returns {:input :missing [template names not found] :notes [editor refusals for Claude]}."
   [scene input folder]
   (let [notes (atom [])
+        missing (atom [])
         blocks
         (vec
          (keep
           (fn [b]
             (let [b (if (and (:template b) (nil? (:html b)))
                       (if-let [t (store/template (str (:template b)))]
-                        (-> b (assoc :html (:html t) :parts (merge (:parts t) (:parts b)))
-                            (update :name #(or % (:name t))) (dissoc :template))
-                        (do (swap! notes conj (str "No template named \"" (:template b) "\" (see the templates tool)."))
-                            nil))
-                      (dissoc b :template))]
+                        (-> b (assoc :template (:name t) :html (:html t) :parts (merge (:parts t) (:parts b)))
+                            (update :name #(or % (:name t))))
+                        (do (swap! missing conj (str (:template b))) nil))
+                      b)]
               (when b
                 (case (form-of scene b)
                   "files" (with-root scene folder b :root)
@@ -88,15 +119,8 @@
                   b))))
           (:blocks input)))]
     {:input (cond-> input (seq (:blocks input)) (assoc :blocks blocks))
+     :missing @missing
      :notes @notes}))
-
-(defn result-notes
-  "The draw tool's extra lines for Claude."
-  [notes]
-  (when (seq notes)
-    (let [{kept true other false} (group-by #(str/starts-with? % "Editor block") notes)]
-      (str (when (seq other) (str " " (str/join " " other)))
-           (when (seq kept) (str "\n\nNot drawn, kept for the user:\n" (str/join "\n\n" kept)))))))
 
 ;; ---- templates -------------------------------------------------------------------------------
 
@@ -223,7 +247,7 @@
         q (query req)]
     (cond
       (and (= url "/api/forms") (= method "GET"))
-      (do (h/json-reply res 200 {:forms all-forms :templates (store/templates)}) true)
+      (do (h/json-reply res 200 {:forms all-forms :hidden (:hiddenForms (prefs)) :templates (store/templates)}) true)
 
       (and (= url "/api/templates") (= method "GET"))
       (do (h/json-reply res 200 (store/templates)) true)
@@ -318,26 +342,18 @@
         (or (some? (:html b)) (:template b)) "freeform"
         :else (if-let [k (known-block scene (:id b))] (kind-of-block k) (if (= "html" (:kind b)) "freeform" "graph"))))
 
-(def ^:private base-help
-  "The base forms' when-lines from the draw tool's description (the first sentence is enough)."
-  (into {} (for [line (str/split-lines (get-in tools/mcp [:picture :draw :description]))
-                 :let [[_ f when] (re-matches #"- (\w+): (.*)" line)] :when f]
-             [f when])))
-
-(defn- form-when [f] (or (get-in forms/specs [f :when]) (get base-help f) ""))
-
 (defn- forms-now
-  "The forms a chat can draw now, each with a fingerprint of how it is described."
+  "The forms a chat can draw now (src/chat.ts formsNow), in the draw tool's order, each with a
+  fingerprint of how it is described: compared with what the chat's Claude last saw."
   [ch]
-  (let [off (off-set ch)]
-    (into {} (for [f all-forms :when (not (off f))]
-               [f (str (hash (str (form-when f) (get-in forms/specs [f :fields]))))]))))
+  (let [off (into (hidden-forms) (off-set ch))]
+    (apply array-map (mapcat (fn [f] [f (tools/fingerprint f)]) (remove off all-forms)))))
 
 (defn- forms-news
   "What changed in the forms since the chat's Claude last heard (seen nil: the whole list once)."
   [seen now]
   (let [seen (when seen (into {} (for [[k v] seen] [(if (keyword? k) (subs (str k) 1) (str k)) v])))
-        line #(str % " (" (first (str/split (form-when %) #"(?<=\.)\s")) ")")]
+        line #(str % " (" (tools/first-sentence %) ")")]
     (if-not seen
       (str "Claudia's forms (blocks[].form) you can draw now: " (str/join "; " (map line (keys now)))
            ". Each one's data is in the draw tool's description; use them rather than hand-made HTML when they fit.")
@@ -349,6 +365,22 @@
                                       (when (seq added) (str "New: " (str/join "; " (map line added)) "."))
                                       (when (seq changed) (str "Changed (read their data again in the draw tool's description): " (str/join ", " changed) "."))
                                       (when (seq gone) (str "Gone (draw refuses them): " (str/join ", " gone) "."))])))))))
+
+(defn see-forms!
+  "The chat's Claude hears of the forms as they stand now: the news since it last did (or nil), and
+  they are kept as what it saw (src/chat.ts seeForms)."
+  [id]
+  (let [st (store/settings id)
+        now (forms-now (choices st))
+        news (forms-news (:forms-seen st) now)]
+    (store/save-settings! id (assoc st :forms-seen now))
+    news))
+
+(defn forms-seen-now!
+  "A session starts: its tools are the forms as they stand, so it knows them (no news)."
+  [id]
+  (let [st (store/settings id)]
+    (store/save-settings! id (assoc st :forms-seen (forms-now (choices st))))))
 
 (defn- kind-name [f]
   (case f
@@ -375,17 +407,9 @@
 ;; chat id -> the form row note waiting for the next message (said once, hidden from the chat).
 (defonce pending-notes (atom {}))
 
-(defn take-note!
-  "The text to send to Claude for a typed message: the form row's note first, as a reminder."
-  [id text]
-  (if-let [n (get @pending-notes id)]
-    (do (swap! pending-notes dissoc id)
-        (str "<system-reminder>" n "</system-reminder>\n" text))
-    text))
-
 (defonce ^:private noted (atom #{}))
 
-(defn note-after-start!
+(defn- note-after-start!
   "After a runner start, choices made in the form row are said again with the first message."
   [id]
   (when-not (@noted id)
@@ -394,70 +418,69 @@
       (when (and (seq ch) (not (contains? @pending-notes id)))
         (swap! pending-notes assoc id (forms-note ch))))))
 
+(defn take-note!
+  "The text to send to Claude for a typed message (src/chat.ts send): the forms news (live? true: a
+  session already ran with the old tools) and the form row's note go with it as a reminder after
+  the text, said once and hidden from the chat."
+  [id text live?]
+  (note-after-start! id)
+  (let [news (when live? (see-forms! id))
+        row (get @pending-notes id)
+        note (not-empty (str/join " " (remove str/blank? [news row])))]
+    (swap! pending-notes dissoc id)
+    (if note (str text "\n\n<system-reminder>" note "</system-reminder>") text)))
+
+(defn- offered
+  "The forms a chat's draw tool offers: this runner's, less the deleted ones and the row's off ones."
+  [ch]
+  (let [off (into (hidden-forms) (off-set ch))]
+    (vec (remove off all-forms))))
+
 (defn mcp-for
-  "The tools for a chat: the draw tool's description and form list follow its form row; the
-  picture server gets the template tools."
+  "The tools for a chat (src/chat.ts tools): the draw tool's forms and description follow its form row."
   [id]
-  (let [ch (choices (store/settings id))
-        off (off-set ch)
-        req (filterv #(not (off %)) (required-kinds ch))
-        base (get-in tools/mcp [:picture :draw :description])
-        base (str/join "\n" (remove #(when-let [[_ f] (re-matches #"- (\w+): .*" %)] (off f)) (str/split-lines base)))
-        code (str/join "\n" (map forms/help-line (remove off code-forms)))
-        desc (str base (when (seq code) (str "\n" code))
-                  (when (seq req) (str "\n\nIn this chat the user made REQUIRED: " (str/join ", " req)
-                                       " (green in the form row). The picture always holds at least one block of each; a change that takes the last one away is refused. Other kinds stay allowed."))
-                  (when (some #{"freeform"} req) " Freeform required means: be creative, build interactive pages where they help.")
-                  (when (off "freeform") "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms."))
-        enum (let [e (vec (remove off all-forms))] (if (seq e) e ["none"]))]
-    (-> tools/mcp
-        (assoc-in [:picture :draw :description] desc)
-        (assoc-in [:picture :draw :inputSchema :properties :blocks :items :properties :form :enum] enum)
-        (assoc-in [:picture :draw :inputSchema :properties :blocks :items :properties :template]
-                  {:type "string" :description "Draw a saved template (by name) in this freeform block; fill it through parts"})
-        (update :picture merge tools))))
+  (let [ch (choices (store/settings id))]
+    {:picture (tools/picture-mcp (offered ch) (required-kinds ch) (contains? (off-set ch) "freeform"))
+     :workspace tools/workspace-mcp}))
 
 (defn prompt-for
-  "The system prompt's code forms part for a chat: the lines above, then every form it may draw
-  with its data. Claude Code cuts long tool descriptions, so the forms' data is said here in full
-  too (a change of the form row restarts the session between turns, so this follows it)."
-  [id]
-  (let [off (off-set (choices (store/settings id)))]
-    (str prompt "\n\nThe forms of the draw tool and their data (blocks[].form + blocks[].data):\n"
-         (str/join "\n" (for [f all-forms :when (not (off f))]
-                          (if (get forms/specs f)
-                            (forms/help-line f)
-                            (str "- " f ": " (get base-help f))))))))
+  "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then (beta) every form this runner
+  offers with its data, since Claude Code cuts long tool descriptions. Not per chat: a change of the
+  form row reaches Claude through the tools and a reminder, without a new prompt."
+  []
+  (str tools/system-append "\n\n" (tools/forms-prompt (vec (remove (hidden-forms) all-forms)))))
 
 (defn draw
-  "One draw call on a chat's scene, through the form row and the code forms:
-  {:scene :text} (the text for Claude) or {:error text}."
+  "One draw call on a chat's scene, through the form row and the code forms (src/chat.ts draw):
+  {:scene :changed :text} (the text for Claude) or {:error text}."
   [id scene input folder]
   (let [st (store/settings id)
         ch (choices st)
-        off (off-set ch)
-        {input :input notes :notes} (prepare scene input folder)
+        hidden (into (hidden-forms) (off-set ch))
+        {input :input notes :notes missing :missing} (prepare scene input folder)
         refused (atom [])
         blocks (filterv (fn [b]
+                          ;; A block only moved, renamed or resized is no new drawing.
                           (let [touches (or (:form b) (:data b) (some? (:html b)) (:template b) (:parts b) (:kind b))
                                 k (kind-of-call scene b)]
-                            (if (and touches (off k)) (do (swap! refused conj k) false) true)))
+                            (if (and touches (hidden k)) (do (swap! refused conj k) false) true)))
                         (:blocks input))
         input (cond-> (assoc input :blocks blocks)
-                (and (off "graph") (or (seq (:nodes input)) (seq (:edges input)) (seq (:groups input))))
+                (and (hidden "graph") (or (seq (:nodes input)) (seq (:edges input)) (seq (:groups input))))
                 (-> (dissoc :nodes :edges :groups) (#(do (swap! refused conj "graph") %))))
-        {s :scene error :error} (scene/apply-draw scene input all-forms)]
+        {s :scene changed :changed error :error} (scene/apply-draw scene input all-forms)]
     (if error
       {:error error}
       (let [;; Claudia's block of a required auto form is the user's: Claude's clear or removeBlocks
-            ;; doesn't take it off.
+            ;; doesn't take it off (its last copy comes back, last).
             back (for [[f {:keys [k] nm :name}] auto-forms
                        :let [bid (str "auto-" f)]
-                       :when (and (= "required" (ch f)) (not (off f)) (some #{f} all-forms)
+                       :when (and (= "required" (ch f)) (not (hidden f)) (some #{f} all-forms)
                                   (not (some #(= (:id %) bid) (:blocks s))))]
                    (or (known-block scene bid) {:id bid :kind "form" :form f :name nm :data {k folder}}))
             s (update s :blocks into back)
-            req (filterv #(not (off %)) (required-kinds ch))
+            changed (into (vec changed) (map :id back))
+            req (filterv #(not (hidden %)) (required-kinds ch))
             had (set (map kind-of-block (:blocks scene)))
             has (set (map kind-of-block (:blocks s)))
             lost (filterv #(and (had %) (not (has %))) req)
@@ -465,15 +488,15 @@
         (if (seq lost)
           {:error (str "Not drawn: this change takes the last " (str/join ", " lost) " block out of the picture, and the user made "
                        (if (> (count lost) 1) "those" "that") " required in this chat (form row). Keep one, or put a new one in the same call.")}
-          (let [now (forms-now ch)
-                news (forms-news (:forms-seen st) now)]
-            (store/save-settings! id (assoc st :forms-seen now))
+          (let [news (see-forms! id)]
             {:scene s
-             :text (str "Picture updated. " (scene/describe s)
+             :changed changed
+             :text (str "Picture updated: " (scene/describe s)
                         (when news (str "\n\n" news))
-                        (when (seq @refused) (str " Not drawn: " (str/join ", " (distinct @refused)) ": switched off by the user; use another kind."))
-                        (when (seq absent) (str " Still missing, required by the user in this chat: " (str/join ", " absent) "; add " (if (> (count absent) 1) "them" "it") "."))
-                        (result-notes notes))}))))))
+                        (when (seq missing) (str ". No template named " (str/join ", " (map #(str "\"" % "\"") missing)) " (see the templates tool)."))
+                        (when (seq @refused) (str ". Not drawn: " (str/join ", " (distinct @refused)) ": switched off by the user; use another kind"))
+                        (when (seq absent) (str ". Still missing, required by the user in this chat: " (str/join ", " absent) "; add " (if (> (count absent) 1) "them" "it") "."))
+                        (when (seq notes) (str "\n\nNot drawn, kept for the user:\n" (str/join "\n\n" notes))))}))))))
 
 (defn set-settings
   "The page changed a chat's form row or columns: {:settings (for the page) :scene (new, or nil)}.
