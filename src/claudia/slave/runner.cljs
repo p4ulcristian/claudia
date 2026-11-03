@@ -14,7 +14,8 @@
             [claudia.slave.pictures :as pictures]
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
-            [claudia.slave.store :as store]))
+            [claudia.slave.store :as store]
+            [claudia.slave.timeline :as timeline]))
 
 (def ^:private env (.-env js/process))
 (def socket-path (or (.-RUNNER_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-beta-runner.sock")))
@@ -106,6 +107,22 @@
                          (.end res png))
                      (h/json-reply res 503 {:error error}))))))))
 
+(defn- timeline-reply
+  "GET /api/chats/:id/timeline?v= (same version: {same, now}) and /timeline/:lane/:step."
+  [^js req ^js res id sub]
+  (let [fail #(h/json-reply res 500 {:error (str (or (.-message %) %))})]
+    (if (= sub "timeline")
+      (-> (timeline/timeline chats/cwd id (boolean (:running (get @chats/state id))))
+          (.then (fn [^js t]
+                   (cond (nil? t) (h/json-reply res 404 {:error "No session file yet."})
+                         (= (.-v t) (query-param req "v")) (h/json-reply res 200 {:same true :now (.-now t)})
+                         :else (h/json-reply res 200 t))))
+          (.catch fail))
+      (let [[_ lane step] (re-matches #"timeline/([^/]+)/([^/]+)" sub)]
+        (-> (timeline/detail chats/cwd id (js/decodeURIComponent lane) (js/decodeURIComponent step))
+            (.then #(if % (h/json-reply res 200 %) (h/json-reply res 404 {:error "No such step."})))
+            (.catch fail))))))
+
 (defn- on-request [^js req ^js res]
   (let [who (caller req)
         url (first (str/split (.-url req) #"\?"))
@@ -116,6 +133,8 @@
       (h/json-reply res 404 {:error "No such chat."})
       (and chat-id (= sub "picture.png") (= "GET" (.-method req)))
       (picture-png req res chat-id)
+      (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" (.-method req)))
+      (timeline-reply req res chat-id sub)
       (and (= url "/api/me") (= "GET" (.-method req)))
       (h/json-reply res 200 {:server nil :profile (:profile who) :viewing nil :readOnly (:read-only who)
                              :version h/version :commit h/commit})
