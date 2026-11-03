@@ -403,7 +403,7 @@ code, pre { font-family: var(--mono); }
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .new-on button::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
-.view-switch::before, .view-switch button.on::before, .rbar-fold::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
+.view-switch::before, .view-switch button.on::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -415,7 +415,7 @@ code, pre { font-family: var(--mono); }
 /* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-fold, .rbar-chip, .act-pill {
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-chip, .act-pill {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
   --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
@@ -433,10 +433,7 @@ code, pre { font-family: var(--mono); }
 .prompt-actions button.primary { --chalk-c: var(--accent); }
 .view-switch { --chalk-bg: var(--bg); --ring: var(--chalk-r9-2); }
 .view-switch button.on { --chalk-bg: var(--panel2); --ring: var(--chalk-r7-2); }
-.rbar-fold { --ring: var(--chalk-r7-2); }
 .rbar-chip { --ring: var(--chalk-r12-2); }
-.rbar-chip.live { --chalk-c: color-mix(in srgb, var(--green) 55%, transparent); --chalk-bg: var(--green-bg); }
-.rbar-chip.live.still { --chalk-c: var(--line); --chalk-bg: var(--grey-bg); }
 .rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
 .act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
 .rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }

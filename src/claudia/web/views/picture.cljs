@@ -1,6 +1,6 @@
 (ns claudia.web.views.picture
   "The right half: the open chat's picture, a canvas of blocks top to bottom (two half blocks side by
-  side), or the timeline; the bar over its bottom; the folded edge. No title on the board: the title
+  side), or the timeline; the view switch over it and the stepper under the picture; the folded edge. No title on the board: the title
   names a picture only in the bar's scrubber. Desktop: the form row is the right rail beside it
   (right-rail); phone: a row at the top of the picture screen."
   (:require [clojure.string :as str]
@@ -152,7 +152,8 @@
         cols (get-in oc [:state :pictureSettings :cols] 0)]
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
-      [:section.right rightbar/mouse-props
+      [:section.right
+       (when (:chat oc) [rightbar/top])
        (if (= view :timeline)
          [:div.right-tl [:f> timeline/timeline-view oc]]
          [:div.right-scroll
@@ -161,8 +162,8 @@
           [:div.stage {:class (when (:viewing? hist) "past")}
            [:f> picture-view {:scene scene :k (:ck oc) :cols cols
                               :live? (and (not (:viewing? hist)) (not ro))}]]])
-       (when (:chat oc)
-         [rightbar/zone (when (and (= view :picture) (seq (:blocks scene))) [snapshot/button oc hist])])
+       (when (and (:chat oc) (= view :picture))
+         [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
        (when (seq asks)
          [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
           "Claude asks you something"])])))
