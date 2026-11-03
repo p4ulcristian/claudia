@@ -28,6 +28,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 6. Runs beside the old Claudia at its own address until the switch.
 7. Secrets from 1Password, never stored on a server: [plan/1passwd-plan.md](plan/1passwd-plan.md).
 
+8. Back from the TypeScript Claudia (2026-11-03): agent chips under the chat's title (subagents and
+   background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
+   `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
+   (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
+   compacts), the model and effort per chat, and the `/` command menu. Edits inside Eye on Rainbow's
+   worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_EOR_URL` are set.
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

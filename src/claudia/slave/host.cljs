@@ -147,6 +147,9 @@
     (swap! sessions assoc id s)
     (pump id s)))
 
+(def ^:private control-methods
+  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels"})
+
 (defn- session-list []
   (into-array (for [[id {:keys [busy]}] @sessions] #js {:id id :busy @busy})))
 
@@ -178,6 +181,16 @@
                   (reject (js/Error. (.-error msg)))
                   (resolve (.-value msg))))
       "list" (send! #js {:ev "sessions" :list (session-list)})
+      ;; A call on the chat's query object (stop a task, read the context use, change the model):
+      ;; answered with ev "control" and the same req.
+      "control" (let [req (.-req msg)
+                      method (.-method msg)
+                      answer #(send! (js/Object.assign #js {:ev "control" :req req} %))]
+                  (if-not (and s (contains? control-methods method))
+                    (answer #js {:error (if s (str "no control method " method) "no session")})
+                    (-> (js/Promise.resolve (.apply (aget (:q s) method) (:q s) (or (.-args msg) #js [])))
+                        (.then (fn [v] (answer #js {:value (if (undefined? v) nil v)}))
+                               (fn [e] (answer #js {:error (message e)}))))))
       (js/console.error "host: unknown op" (.-op msg)))))
 
 (defn- connected

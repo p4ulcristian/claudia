@@ -5,7 +5,8 @@
   (:require [re-frame.core :as rf]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
-            [claudia.web.views.sidebar :as sidebar]))
+            [claudia.web.views.sidebar :as sidebar]
+            [claudia.web.views.usage :as usage]))
 
 (defn rail []
   (let [rows @(rf/subscribe [:rows])
@@ -31,4 +32,5 @@
                             :on-context-menu #(chatmenu/open-at! k %)}
          [dot/chat-dot r]
          [:span.rail-name title]
-         (when multi? [:span.rail-server @(rf/subscribe [:server-label server])])])]]))
+         (when multi? [:span.rail-server @(rf/subscribe [:server-label server])])])]
+     [:f> usage/rail-meters]]))

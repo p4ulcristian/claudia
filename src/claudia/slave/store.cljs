@@ -31,6 +31,28 @@
                 preview TEXT NOT NULL DEFAULT '',
                 scene TEXT
               );
+              -- Small per-chat values as JSON (chat '' = the profile's own): settings, tasks, limits.
+              CREATE TABLE IF NOT EXISTS kv (
+                chat TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (chat, key)
+              );
+              -- Files Claude changed, one row per file per turn, with the text before and after.
+              CREATE TABLE IF NOT EXISTS changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat TEXT NOT NULL,
+                turn TEXT NOT NULL,
+                path TEXT NOT NULL,
+                before TEXT,
+                after TEXT,
+                added INTEGER NOT NULL,
+                removed INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                skipped TEXT,
+                at INTEGER NOT NULL
+              );
+              CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, id);
               -- One row per turn that changed the picture: turn = the user message the turn answers
               -- (or an id made for a turn Claude started itself); at = when it first drew.
               CREATE TABLE IF NOT EXISTS pictures (
@@ -86,6 +108,46 @@
 (defn save-scene! [id scene]
   (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json scene) id))
 
+;; kv ---------------------------------------------------------------------------------------------
+
+(defn kv
+  "The value kept under [chat key] (ClojureScript data), or nil."
+  [chat k]
+  (let [^js r (.get (stmt "SELECT value FROM kv WHERE chat = ? AND key = ?") chat k)]
+    (some-> r .-value p/read-json)))
+
+(defn kv! [chat k v]
+  (if (nil? v)
+    (.run (stmt "DELETE FROM kv WHERE chat = ? AND key = ?") chat k)
+    (.run (stmt "INSERT INTO kv (chat, key, value) VALUES (?, ?, ?)
+                 ON CONFLICT (chat, key) DO UPDATE SET value = excluded.value")
+          chat k (p/write-json v))))
+
+;; changes ----------------------------------------------------------------------------------------
+
+(defn- change-row [^js r]
+  {:id (.-id r) :turn (.-turn r) :path (.-path r) :added (.-added r) :removed (.-removed r)
+   :status (.-status r) :skipped (.-skipped r) :at (.-at r)})
+
+(defn add-change!
+  "One changed file of a turn; returns its row (without the texts)."
+  [chat {:keys [turn path before after added removed status skipped at]}]
+  (let [^js r (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                    chat turn path before after added removed status skipped at)]
+    (change-row (.get (stmt "SELECT * FROM changes WHERE id = ?") (.-lastInsertRowid r)))))
+
+(defn changes
+  "The chat's changes, oldest first (the newest 500)."
+  [chat]
+  (vec (reverse (map change-row (.all (stmt "SELECT id, turn, path, added, removed, status, skipped, at FROM changes
+                                             WHERE chat = ? ORDER BY id DESC LIMIT 500") chat)))))
+
+(defn change-texts
+  "{:before :after} of one change of the chat, or nil."
+  [chat id]
+  (when-let [^js r (.get (stmt "SELECT before, after, skipped FROM changes WHERE chat = ? AND id = ?") chat id)]
+    {:before (.-before r) :after (.-after r) :skipped (.-skipped r)}))
 (defn save-picture!
   "The picture as a turn left it (so far): one row per chat and turn, its first time kept."
   [id turn scene at]

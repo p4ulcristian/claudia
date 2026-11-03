@@ -5,7 +5,8 @@
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
-            [claudia.web.views.settings :as settings]))
+            [claudia.web.views.settings :as settings]
+            [claudia.web.views.usage :as usage]))
 
 (def ^:private chat-colors
   #{"burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan" "sky" "blue" "indigo"
@@ -89,6 +90,7 @@
     [:aside.sidebar
      [:div.cs-head
       [settings/title-menu]
+      [:f> usage/limit-rings]
       [settings/gear-button]
       (when-not ro
         [:button.cs-icon.cs-add {:title "New chat" :on-click #(rf/dispatch [:nav/new])}

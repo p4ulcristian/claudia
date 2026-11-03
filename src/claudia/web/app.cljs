@@ -10,6 +10,7 @@
             [claudia.web.chalk :as chalk]
             [claudia.web.chatops]
             [claudia.web.events]
+            [claudia.web.extras]
             [claudia.web.fx]
             [claudia.web.md :as md]
             [claudia.web.pictures :as pictures]

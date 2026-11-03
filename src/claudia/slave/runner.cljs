@@ -9,12 +9,14 @@
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
             [claudia.slave.api :as api]
+            [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
             [claudia.slave.history :as history]
             [claudia.slave.search :as search]
             [claudia.slave.uploads :as uploads]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
+            [claudia.slave.meta :as meta]
             [claudia.slave.pictures :as pictures]
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
@@ -57,7 +59,9 @@
     (cond
       (not (contains? p/page->runner type)) (send! c {:type "error" :text (str "Unknown frame " type ".")})
       (and (:read-only c) (not (contains? p/read-only-ok type))) (send! c {:type "error" :chat chat :text "Read only."})
-      (= type "hello") (do (reset! (:hello c) true) (send! c {:type "chats" :chats (chats/rows)}))
+      (= type "hello") (do (reset! (:hello c) true)
+                           (send! c {:type "chats" :chats (chats/rows)})
+                           (send! c (meta/frame)))
       (= type "new") (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
                                                (:folder f) (sent-images f))]
                        (swap! (:open c) conj id)
@@ -92,7 +96,15 @@
         "deny" (chats/deny! chat (:ask f) who)
         "rename" (do (store/update! chat {:title (str/trim (str (:title f)))}) (chats-changed))
         "archive" (do (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
-        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))))))
+        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))
+        "stop_task" (chats/stop-task! chat (str (:task f)))
+        "settings" (chats/set-settings! chat (select-keys f [:model :effort]))
+        "agent" (-> (chats/agent-detail chat (str (:agent f)))
+                    (.then (fn [d] (send! c (merge {:type "agent" :chat chat :agent (:agent f)} d)))))
+        "agent_git" (-> (chats/agent-git chat (str (:agent f)) (str (:rev f)))
+                        (.then (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
+        "diff" (send! c (merge {:type "diff" :chat chat :change (:change f)}
+                               (or (chats/change-texts chat (:change f)) {:error "No such change."})))))))
 
 (defn- caller [^js req]
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
@@ -186,10 +198,14 @@
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
+  (reset! changes/data-dir data-dir)
+  (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
+                                   (doseq [c @conns :when @(:hello c)] (send! c frame)))))
   (-> secret/ready
       (.then
        (fn []
          (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
+         (chats/init!)
          (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
                server (http/createServer on-request)]
            (.on wss "connection" on-socket)

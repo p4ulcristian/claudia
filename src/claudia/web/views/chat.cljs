@@ -7,8 +7,11 @@
             [claudia.shared.files :as files]
             [claudia.web.chatops :as ops]
             [claudia.web.md :as md]
+            [claudia.web.views.agents :as agents]
             [claudia.web.views.asks :as asks]
-            [claudia.web.views.attach :as attach]))
+            [claudia.web.views.attach :as attach]
+            [claudia.web.views.changes :as changes]
+            [claudia.web.views.usage :as usage]))
 
 (defn- icon [d]
   [:svg.ic {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d d}]])
@@ -60,6 +63,8 @@
          (when (and multi? server) [server-mark server])
          (when (and server (not= :open status)) [:span.offline "offline"])
          (when-let [folder (or (:folder row) (:folder state))] [folder-chip server folder])
+         (when (and chat (not pending?)) [changes/pill ck state (or (:folder row) (:folder state))])
+         (when chat [usage/context-ring {:ck ck :state state :pending? (or pending? @(rf/subscribe [:read-only?]))}])
          (when (and chat (not pending?) (not @(rf/subscribe [:read-only?])))
            [:div.menu-box
             [:button.icon {:title "Chat menu"
@@ -147,9 +152,12 @@
 
 ;; ---- composer ----
 
-(defn- composer [{:keys [draft-key running can-stop placeholder]}]
+(defn- composer [{:keys [draft-key running can-stop placeholder oc]}]
   (let [ref (h/use-ref nil)
         text @(rf/subscribe [:draft draft-key])
+        meta @(rf/subscribe [:meta (or (:server oc) @(rf/subscribe [:new-server]))])
+        items (usage/matches text oc meta)
+        pick (min @(rf/subscribe [:slash-pick]) (max 0 (dec (count items))))
         attached @(rf/subscribe [:attach draft-key])
         send! #(rf/dispatch [:composer/send text])]
     (h/use-layout-effect
@@ -160,6 +168,7 @@
        nil)
      [text])
     [:div.composer
+     [usage/slash-menu draft-key items pick]
      [attach/chips draft-key]
      [:div.input-row
       [:textarea {:ref #(set! (.-current ref) %)
@@ -169,12 +178,14 @@
                   :placeholder placeholder
                   :on-change #(rf/dispatch-sync [:draft/set draft-key (.. % -target -value)])
                   :on-key-down (fn [e]
-                                 (when (and (= "Enter" (.-key e)) (not (.-shiftKey e))
+                                 (when (and (not (usage/slash-key! e draft-key items pick))
+                                            (= "Enter" (.-key e)) (not (.-shiftKey e))
                                             (not (.. e -nativeEvent -isComposing)))
                                    (.preventDefault e)
                                    (send!)))}]
       [:div.toolbar
        [:f> attach/paperclip draft-key]
+       [usage/pickers oc]
        [:span.grow]
        (when (and running can-stop)
          [:button.stop {:on-click #(rf/dispatch [:chat/stop])} "Stop"])
@@ -209,6 +220,7 @@
        [:header.chat-head
         [:button.back-btn.phone-only {:on-click #(rf/dispatch [:nav/list])} (icon back-icon) "Chats"]
         [:h1 "New chat"]])
+     (when oc [:f> agents/chips oc])
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
      (cond
        me-error [:div.messages [:div.hello [:h2 "Can't reach Claudia"] [:p.muted me-error]]]
@@ -223,4 +235,7 @@
        [:f> composer {:draft-key (if oc (:ck oc) :new)
                       :running (get-in oc [:state :running])
                       :can-stop (and oc (not (:pending? oc)))
-                      :placeholder (if oc "Reply…" "Start a chat…")}])]))
+                      :placeholder (if oc "Reply…" "Start a chat…")
+                      :oc oc}])
+     (when-let [aid (and oc @(rf/subscribe [:agent-view (:ck oc)]))]
+       [agents/screen oc aid])]))
