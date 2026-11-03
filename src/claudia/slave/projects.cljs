@@ -2,13 +2,13 @@
   "A chat's project, from its working folder: the name the folder chip shows, and the project's own
   logo when it has one (a favicon, app icon or logo file in the repo)."
   (:require ["node:fs" :as fs]
+            [claudia.node.fs :refer [dir?]]
             ["node:path" :as path]
             [clojure.string :as str]))
 
 (def ^:private rescan-ms (* 10 60 1000))
 (defonce ^:private by-folder (atom {}))
 
-(defn- dir? [p] (try (.isDirectory (fs/statSync p)) (catch :default _ false)))
 (defn- there? [p] (fs/existsSync p))
 
 (defn- root-of

@@ -13,11 +13,14 @@
   GET /hub/narrate -> {voice: bool}; POST /hub/narrate {text, instruction?} -> the PCM
   (audio/L16;rate=24000;channels=1, x-seconds), or {error} (501 without a voice)."
   (:require ["crypto" :as crypto]
+            [claudia.node.http :as io]
+            [claudia.node.env :refer [env]]
             ["fs/promises" :as fsp]
             ["path" :as path]
             [clojure.string :as str]))
 
 (def ^:private max-chars 1200)
+(def ^:private max-body (* 64 1024))
 (def ^:private bytes-per-second (* 24000 2))
 (def ^:private reference-text
   "Hello. I am going to walk you through this one part at a time. Take your time, and ask me about anything you see.")
@@ -28,8 +31,6 @@
 (defonce ^:private pending (atom {}))
 
 (defn start! [data-dir] (reset! cache-dir (path/join data-dir "narration")))
-
-(defn- env [k] (let [v (aget js/process.env k)] (when-not (str/blank? v) v)))
 
 (defn- config
   "A promise of {:url :token} or nil."
@@ -116,37 +117,26 @@
           (swap! pending assoc key p)
           p))))
 
-(defn- send-json [^js res status data]
-  (.writeHead res status #js {"content-type" "application/json; charset=utf-8" "cache-control" "no-store"})
-  (.end res (js/JSON.stringify (clj->js data))))
-
-(defn- read-json [^js req]
-  (js/Promise.
-   (fn [ok _]
-     (let [chunks #js []]
-       (.on req "data" #(.push chunks %))
-       (.on req "end" #(ok (try (js/JSON.parse (.toString (js/Buffer.concat chunks) "utf8")) (catch :default _ nil))))
-       (.on req "error" #(ok nil))))))
-
 (defn call
   "GET or POST /hub/narrate for a signed-in caller."
   [^js req ^js res]
   (case (.-method req)
-    "GET" (.then (config) #(send-json res 200 {:voice (boolean %)}))
-    "POST" (-> (js/Promise.all #js [(config) (read-json req)])
-               (.then (fn [[c ^js body]]
-                        (let [text (when (and body (string? (.-text body))) (str/trim (.-text body)))
+    "GET" (.then (config) #(io/send-json res 200 {:voice (boolean %)}))
+    "POST" (-> (js/Promise.all #js [(config) (io/read-json req max-body)])
+               (.then (fn [[c body]]
+                        (let [text (when (string? (:text body)) (str/trim (:text body)))
                               text (when text (subs text 0 (min max-chars (count text))))
-                              instruction (when (and body (string? (.-instruction body))) (.-instruction body))]
+                              instruction (when (string? (:instruction body)) (:instruction body))]
                           (cond
-                            (str/blank? text) (send-json res 400 {:error "text to say"})
-                            (not c) (send-json res 501 {:error "no voice set up on this hub (HUB_TTS_URL, HUB_TTS_TOKEN_FILE)"})
+                            (str/blank? text) (io/send-json res 400 {:error "text to say"})
+                            (not c) (io/send-json res 501 {:error "no voice set up on this hub (HUB_TTS_URL, HUB_TTS_TOKEN_FILE)"})
                             :else (-> (narrate c text instruction)
                                       (.then (fn [^js pcm]
                                                (.writeHead res 200 #js {"content-type" "audio/L16;rate=24000;channels=1"
                                                                         "x-seconds" (.toFixed (/ (.-length pcm) bytes-per-second) 3)
                                                                         "cache-control" "private, max-age=86400"})
                                                (.end res pcm)))
-                                      (.catch (fn [e] (send-json res 502 {:error (.-message e)})))))))))
+                                      (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))))
+               (.catch (fn [e] (when-not (.-headersSent res) (io/send-json res 400 {:error (.-message e)})))))
     (do (.setHeader res "allow" "GET, POST")
-        (send-json res 405 {:error "GET or POST"}))))
+        (io/send-json res 405 {:error "GET or POST"}))))

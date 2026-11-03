@@ -2,10 +2,10 @@
   "This server's front: believes the hub's X-Claudia-Email (only the hub can reach it: firewall), picks
   the caller's profile, and passes HTTP and WebSocket on to that profile's runner socket. No page."
   (:require ["node:http" :as http]
+            [claudia.node.http :as io]
             ["node:net" :as net]
             ["node:fs" :as fs]
             [clojure.string :as str]
-            [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
             [claudia.slave.tokens :as tokens]))
 
@@ -45,7 +45,7 @@
             (when read-only [["X-Claudia-Read-Only" "1"]]))))
 
 (defn- me [res {:keys [own target read-only]}]
-  (h/json-reply res 200 {:server (.-FRONT_NAME env)
+  (io/send-json res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
                          :profiles (mapv :profile @profiles)
                          :viewing (when read-only (:profile target))
@@ -60,9 +60,9 @@
   [^js res]
   (if-let [file (not-empty (.-CLAUDIA_UPDATE_TRIGGER env))]
     (try (fs/writeFileSync file (str (.toISOString (js/Date.)) "\n"))
-         (h/json-reply res 202 {:ok true})
-         (catch :default e (h/json-reply res 500 {:error (.-message e)})))
-    (h/json-reply res 501 {:error "no update unit here"})))
+         (io/send-json res 202 {:ok true})
+         (catch :default e (io/send-json res 500 {:error (.-message e)})))
+    (io/send-json res 501 {:error "no update unit here"})))
 
 (defn- token-call
   "Settings' Claude tokens, answered here, not by a runner: the front writes them (on a shared server
@@ -70,20 +70,20 @@
   in use). by = the caller's email. True when it was one of them."
   [^js req ^js res url {:keys [own read-only]} email]
   (let [method (.-method req)
-        body #(-> (h/read-body req 65536) (.then (fn [t] (or (try (p/read-json t) (catch :default _ nil)) {}))))
+        body #(io/read-json req 65536)
         answer (fn [v] (if (:error v)
-                         (h/json-reply res (or (:status v) 400) (dissoc v :status))
-                         (h/json-reply res 200 v)))
+                         (io/send-json res (or (:status v) 400) (dissoc v :status))
+                         (io/send-json res 200 v)))
         who (or (not-empty email) (:profile own))]
     (cond
       (not (#{"/api/claude-tokens" "/api/claude-token" "/api/claude-token/use"} url)) nil
-      read-only (do (h/json-reply res 403 {:error "Read only."}) true)
-      (and (= url "/api/claude-tokens") (= method "GET")) (do (h/json-reply res 200 (tokens/state)) true)
+      read-only (do (io/send-json res 403 {:error "Read only."}) true)
+      (and (= url "/api/claude-tokens") (= method "GET")) (do (io/send-json res 200 (tokens/state)) true)
       (and (= url "/api/claude-token") (= method "PUT"))
       (do (-> (body) (.then #(answer (tokens/save! (:name %) (:token %) who)))) true)
       (and (= url "/api/claude-token/use") (= method "POST"))
       (do (-> (body) (.then #(answer (tokens/use! (:name %) who)))) true)
-      :else (do (h/json-reply res 405 {:error "Not allowed."}) true))))
+      :else (do (io/send-json res 405 {:error "Not allowed."}) true))))
 
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
@@ -91,11 +91,11 @@
     (cond
       ;; From the hub itself (no caller): only the hub reaches this listener.
       (= url "/api/update-check")
-      (if (= "POST" (.-method req)) (update-check res) (h/json-reply res 405 {:error "POST only"}))
-      status (h/json-reply res status {:error error})
+      (if (= "POST" (.-method req)) (update-check res) (io/send-json res 405 {:error "POST only"}))
+      status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
       (token-call req res url r (some-> (aget (.-headers req) "x-claudia-email") str/trim str/lower-case)) nil
-      (and read-only (not= "GET" (.-method req))) (h/json-reply res 403 {:error "Read only."})
+      (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       :else
       (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))
             up (http/request #js {:socketPath (:socket target) :method (.-method req) :path (.-url req) :headers headers}
@@ -105,7 +105,7 @@
         (.on up "error" (fn [_]
                           (if (.-headersSent res)
                             (.destroy res)
-                            (h/json-reply res 502 {:error "The runner is not answering."}))))
+                            (io/send-json res 502 {:error "The runner is not answering."}))))
         (.pipe req up)))))
 
 (defn- on-upgrade

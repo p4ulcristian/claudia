@@ -3,7 +3,7 @@
   patches (one commit, or the whole change since it branched, uncommitted work too while the folder
   is there). Git only reads here."
   (:require ["node:child_process" :as cp]
-            ["node:fs" :as fs]
+            [claudia.node.fs :refer [dir?]]
             [clojure.string :as str]))
 
 (def ^:private hash-re #"^[0-9a-f]{40}$")
@@ -17,8 +17,6 @@
                   #js {:maxBuffer (* 16 1024 1024) :timeout 30000
                        :env (js/Object.assign #js {} (.-env js/process) #js {:GIT_OPTIONAL_LOCKS "0"})}
                   (fn [err stdout] (resolve (if err "" (str stdout))))))))
-
-(defn- dir? [p] (try (.isDirectory (fs/statSync p)) (catch :default _ false)))
 
 (defn branch-work
   "Promise of {:root :branch :base :commits [{:hash :subject :when}] :worktree (folder still there)}, or nil."

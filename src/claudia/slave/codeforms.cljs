@@ -4,6 +4,7 @@
   filled in, roots made absolute, the editor's guard), the page's reads (/api/chats/:id/files, /git,
   /api/forms, /api/templates) and the editor's frames (code_edit, code_send)."
   (:require ["node:fs" :as fs]
+            [claudia.node.http :as io]
             ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
@@ -12,7 +13,6 @@
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
             [claudia.slave.git :as git]
-            [claudia.slave.http :as h]
             [claudia.slave.scene :as scene]
             [claudia.slave.store :as store]
             [claudia.slave.tools :as tools]))
@@ -207,35 +207,35 @@
   (let [root (or (q "root") "")
         rel (or (q "path") "")]
     (cond
-      (not (drawn? scenes "files" :root #(root-ok? % root))) (h/json-reply res 403 {:error "not a folder of this chat's pictures"})
-      (= "1" (q "read")) (h/json-reply res 200 (files/read-text root rel (some-> (q "since") js/Number)))
+      (not (drawn? scenes "files" :root #(root-ok? % root))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
+      (= "1" (q "read")) (io/send-json res 200 (files/read-text root rel (some-> (q "since") js/Number)))
       (= "1" (q "image")) (if-let [abs (files/image-file root rel)]
                             (do (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname abs)) 1) "application/octet-stream")
                                                          "cache-control" "max-age=60"
                                                          "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
                                 (.pipe (fs/createReadStream abs) res))
-                            (h/json-reply res 404 {:error "not an image"}))
+                            (io/send-json res 404 {:error "not an image"}))
       :else (if-let [entries (files/list-dir root rel)]
-              (h/json-reply res 200 {:entries entries})
-              (h/json-reply res 404 {:error "no such folder"})))))
+              (io/send-json res 200 {:entries entries})
+              (io/send-json res 404 {:error "no such folder"})))))
 
 (defn- git-read [^js res scenes q]
   (let [repo (or (q "repo") "")]
     (cond
-      (not (turned-on "git")) (h/json-reply res 404 {:error "no git form here"})
-      (not (drawn? scenes "git" :repo #(contains? % repo))) (h/json-reply res 403 {:error "not a repo of this chat's pictures"})
+      (not (turned-on "git")) (io/send-json res 404 {:error "no git form here"})
+      (not (drawn? scenes "git" :repo #(contains? % repo))) (io/send-json res 403 {:error "not a repo of this chat's pictures"})
       :else (-> (if-let [rev (q "commit")]
                   (git/commit-detail repo rev (q "file"))
                   (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")}))
-                (.then #(h/json-reply res 200 %))
-                (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))))
+                (.then #(io/send-json res 200 %))
+                (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))))
 
 (defn- clojure-read [^js res scenes q form]
   (let [root (or (q "root") "")
-        reply (fn [p] (-> p (.then #(h/json-reply res 200 %)) (.catch #(h/json-reply res 500 {:error (str (or (.-message %) %))}))))]
+        reply (fn [p] (-> p (.then #(io/send-json res 200 %)) (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))]
     (cond
-      (not (turned-on form)) (h/json-reply res 404 {:error (str "no " form " form here")})
-      (not (drawn? scenes form :root #(contains? % root))) (h/json-reply res 403 {:error "not a project of this chat's pictures"})
+      (not (turned-on form)) (io/send-json res 404 {:error (str "no " form " form here")})
+      (not (drawn? scenes form :root #(contains? % root))) (io/send-json res 403 {:error "not a project of this chat's pictures"})
       (= form "calls")
       (reply (let [v (q "var")]
                (cond (nil? v) (clojure/calls-fp root (q "fp"))
@@ -259,29 +259,29 @@
         q (query req)]
     (cond
       (and (= url "/api/forms") (= method "GET"))
-      (do (h/json-reply res 200 {:forms all-forms :hidden (deleted-forms) :notHere not-here :templates (store/templates)}) true)
+      (do (io/send-json res 200 {:forms all-forms :hidden (deleted-forms) :notHere not-here :templates (store/templates)}) true)
 
       ;; A form deleted or restored in the Forms window: every chat gets the new draw tool.
       (and (= url "/api/forms") (= method "PATCH"))
       (do (if (:read-only who)
-            (h/json-reply res 403 {:error "Read only."})
-            (-> (h/read-body req 65536)
+            (io/send-json res 403 {:error "Read only."})
+            (-> (io/read-text req 65536)
                 (.then (fn [body]
                          (let [{:keys [hidden]} (p/read-json body)]
                            (set-prefs! {:hiddenForms (if (sequential? hidden) hidden [])})
                            (when tools-changed! (tools-changed!))
-                           (h/json-reply res 200 {:hidden (deleted-forms)}))))
-                (.catch #(h/json-reply res 400 {:error (str (.-message %))}))))
+                           (io/send-json res 200 {:hidden (deleted-forms)}))))
+                (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
           true)
 
       (and (= url "/api/templates") (= method "GET"))
-      (do (h/json-reply res 200 (store/templates)) true)
+      (do (io/send-json res 200 (store/templates)) true)
 
       (and (str/starts-with? url "/api/templates/") (= method "DELETE"))
       (do (if (:read-only who)
-            (h/json-reply res 403 {:error "Read only."})
+            (io/send-json res 403 {:error "Read only."})
             (do (store/delete-template! (js/decodeURIComponent (subs url (count "/api/templates/"))))
-                (h/json-reply res 200 {:ok true})))
+                (io/send-json res 200 {:ok true})))
           true)
 
       chat
@@ -289,20 +289,20 @@
             ;; Reads are allowed inside what this chat drew, now or in an earlier picture.
             scenes [scene (delay (store/picture-scenes chat))]]
         (cond
-          (nil? scene) (h/json-reply res 404 {:error "No such chat."})
+          (nil? scene) (io/send-json res 404 {:error "No such chat."})
           (and (= sub "files") (= method "GET")) (files-read res scenes q)
           (and (= sub "git") (= method "GET")) (git-read res scenes q)
           (and (#{"clojure" "calls"} sub) (= method "GET")) (clojure-read res scenes q sub)
           (and block (= method "POST"))
           (if (:read-only who)
-            (h/json-reply res 403 {:error "Read only."})
-            (-> (h/read-body req 65536)
+            (io/send-json res 403 {:error "Read only."})
+            (-> (io/read-text req 65536)
                 (.then (fn [body]
                          (let [{:keys [name description]} (p/read-json body)
                                text (save-template! scene {:name name :description description :block (js/decodeURIComponent block)})]
-                           (h/json-reply res 200 {:ok (boolean (re-find #"^(Saved|Updated)" text)) :text text}))))
-                (.catch #(h/json-reply res 400 {:error (str (.-message %))}))))
-          :else (h/json-reply res 404 {:error "Not found."}))
+                           (io/send-json res 200 {:ok (boolean (re-find #"^(Saved|Updated)" text)) :text text}))))
+                (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
+          :else (io/send-json res 404 {:error "Not found."}))
         true)
 
       :else false)))

@@ -4,6 +4,8 @@
   is calling. Caddy logs people in and sets X-Auth-Request-Email; the hub believes it and nothing
   else from the browser."
   (:require ["fs" :as fs]
+            [claudia.node.http :as io]
+            [claudia.node.env :refer [env]]
             ["http" :as http]
             ["path" :as path]
             [clojure.string :as str]
@@ -21,17 +23,8 @@
   (try (js->clj (js/JSON.parse (fs/readFileSync (path/join js/__dirname "version.json") "utf8")) :keywordize-keys true)
        (catch :default _ {:version nil :commit nil})))
 
-(defn- env [k default]
-  (let [v (aget js/process.env k)]
-    (if (str/blank? v) default v)))
-
 (defn- header [^js req k]
   (aget (.-headers req) k))
-
-(defn- send-json [^js res status data]
-  (.writeHead res status #js {"content-type" "application/json; charset=utf-8"
-                              "cache-control" "no-store"})
-  (.end res (js/JSON.stringify (clj->js data))))
 
 (defn- caller
   "The signed-in email (lower case) from Caddy's X-Auth-Request-Email, or nil."
@@ -133,14 +126,14 @@
         own? (or (= pathname "/hub/me") state-of)]
     (cond
       (ops/open-call? pathname) (ops/open-call req res pathname)
-      (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (send-json res 405 {:error "GET only"}))
-      (not email) (send-json res 401 {:error "not signed in"})
-      (cross-site? req) (send-json res 403 {:error "cross-site request"})
-      (not person) (send-json res 403 {:error "you have no access to Claudia here"})
+      (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
+      (not email) (io/send-json res 401 {:error "not signed in"})
+      (cross-site? req) (io/send-json res 403 {:error "cross-site request"})
+      (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
       (not own?) (ops/call req res pathname email admin?)
 
       (= pathname "/hub/me")
-      (send-json res 200 {:email (:email person)
+      (io/send-json res 200 {:email (:email person)
                           :name (:name person)
                           :admin admin?
                           :push (push/on?)
@@ -150,8 +143,8 @@
 
       :else
       (if-let [server (config/server-of person state-of)]
-        (pass/up? server email #(send-json res 200 {:up %}))
-        (send-json res 403 {:error (str "no access to " state-of)})))))
+        (pass/up? server email #(io/send-json res 200 {:up %}))
+        (io/send-json res 403 {:error (str "no access to " state-of)})))))
 
 (defn- on-request [web-root ^js req ^js res]
   (let [[pathname query] (split-url (.-url req))]
@@ -159,7 +152,7 @@
       (str/starts-with? pathname "/s/")
       (let [{:keys [status error server target email view]} (to-server req pathname query false)]
         (if status
-          (send-json res status {:error error})
+          (io/send-json res status {:error error})
           (pass/http! req res server target email view)))
 
       (str/starts-with? pathname "/hub/")

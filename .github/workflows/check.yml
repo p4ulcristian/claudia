@@ -1,0 +1,67 @@
+# The PR check (CLAUDE.md, "How the code is written"): on every pull request and push to main,
+# - lint: clj-kondo over src and test, failing on any error (.clj-kondo/config.edn);
+# - ratchet: shadowed names and functions over 30 lines may only go down (bin/ratchet.mjs);
+# - test: the test build (test/, namespaces ending in -test) on Node;
+# - build: all five release builds.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KONDO_VERSION: 2026.05.25
+  KONDO_SHA256: ba8742f90555332852a3f63260611ca75cc7ba4e2b6dfe601bf5011bb9402b45
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      # Every action is pinned to a commit SHA, not a tag: tags can be moved.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # shadow-cljs compiles on the JVM.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: clj-kondo (pinned, checksum verified)
+        run: |
+          zip="clj-kondo-${KONDO_VERSION}-linux-static-amd64.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$zip" "https://github.com/clj-kondo/clj-kondo/releases/download/v${KONDO_VERSION}/$zip"
+          echo "${KONDO_SHA256}  $RUNNER_TEMP/$zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/$zip" -d "$RUNNER_TEMP/kondo"
+          echo "$RUNNER_TEMP/kondo" >> "$GITHUB_PATH"
+
+      - name: Lint
+        run: clj-kondo --lint src test --fail-level error
+
+      - name: Ratchet
+        run: node bin/ratchet.mjs
+
+      - name: Install
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
+      - name: Build (host runner front hub web)
+        run: |
+          npx shadow-cljs release host runner front hub web
+          npm run build:web-files

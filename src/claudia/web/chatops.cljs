@@ -7,8 +7,7 @@
             [claudia.shared.protocol :as protocol]
             [claudia.web.db :as db]
             [claudia.web.events :as events]
-            [claudia.web.media :as media]
-            [claudia.web.ws :as ws]))
+            [claudia.web.media :as media]))
 
 ;; ---- HTTP to one server's runner ----
 

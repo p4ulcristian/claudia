@@ -4,6 +4,7 @@
   it is one bubble that opens on click. A namespace lists its vars below the map, a var opens its
   source, an arrow lists the functions that cross it. Read live through the runner (clj-kondo)."
   (:require [clojure.string :as str]
+            [claudia.web.hooks :as hooks]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
             [claudia.web.shiki :as shiki]
@@ -209,7 +210,9 @@
         live (and (not demo) (seq root) chat)
         url-of (fn [q] (api/url server (str "chats/" (js/encodeURIComponent chat) "/clojure") (merge {:root root} q)))
         [all set-all] (h/use-state nil)
-        [error set-error] (h/use-state nil)
+        ;; The namespaces, asked again every poll-ms while the page is seen; {same} until a file changes.
+        error (hooks/use-poll {:on? live :ms poll-ms :url-of #(url-of {:fp %}) :on-answer #(set-all (:namespaces %))}
+                              [live root server chat (some? demo)])
         [at set-at] (h/use-state (if (string? (:at data)) (:at data) ""))
         [pick set-pick] (h/use-state nil)
         [var-pick set-var-pick] (h/use-state nil)
@@ -228,10 +231,10 @@
         frame-req (h/use-ref 0)
         rest-timer (h/use-ref nil)
         dragged (h/use-ref false)
-        [box-w set-box-w] (h/use-state 0)
         [bounds set-bounds] (h/use-state nil)
         box (h/use-ref nil)
         mapbox (h/use-ref nil)
+        box-w (hooks/use-width mapbox [(some? all)])
         svg-ref (h/use-ref nil)
         drawn (h/use-ref nil)
         pan (h/use-ref nil)
@@ -269,28 +272,8 @@
          (js/document.addEventListener "fullscreenchange" on)
          #(js/document.removeEventListener "fullscreenchange" on)))
      [])
-    (h/use-effect
-     (fn []
-       (when-let [el (.-current mapbox)]
-         (let [ro (js/ResizeObserver. #(set-box-w (.-clientWidth el)))]
-           (.observe ro el)
-           #(.disconnect ro))))
-     [(some? all)])
-    ;; The namespaces, asked again every poll-ms while the page is seen; {same} until a file changes.
-    (h/use-effect
-     (fn []
-       (cond
-         demo (do (set-all (vec (items (:namespaces demo)))) nil)
-         live (let [gone (atom false) timer (atom nil) fp (atom nil)
-                    ask (fn ask []
-                          (-> (if js/document.hidden (js/Promise.resolve nil)
-                                  (-> (api/fetch-json (url-of {:fp @fp}))
-                                      (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (reset! fp (:fp j)) (set-all (:namespaces j))))))
-                                      (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
-                              (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
-                (ask)
-                #(do (reset! gone true) (js/clearTimeout @timer)))))
-     [live root server chat (some? demo)])
+    (h/use-effect (fn [] (when demo (set-all (vec (items (:namespaces demo))))) nil)
+                  [live root server chat (some? demo)])
     (let [view (h/use-memo
                 (fn []
                   (when all

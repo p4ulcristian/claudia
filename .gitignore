@@ -5,3 +5,4 @@ out
 .nrepl-port
 *.db
 .env*
+.clj-kondo/.cache

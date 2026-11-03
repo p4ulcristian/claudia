@@ -4,6 +4,7 @@
   label or address, remove), and the access grid (person × server: a tick = their own profile there).
   A dialog over the page; every call answers the whole new state."
   (:require [clojure.string :as str]
+            [claudia.web.format :as format]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [claudia.shared.protocol :as protocol]))
@@ -59,16 +60,13 @@
 (defn- call! [method path & [body on-ok]]
   (rf/dispatch [:admin/call method path body on-ok]))
 
-(defn- when-text [at]
-  (when at (.toLocaleString (js/Date. at) js/undefined #js {:dateStyle "medium" :timeStyle "short"})))
-
 (defn- pairing-note [{:keys [pairing peerUp]}]
   (cond
     (not pairing) ["on WireGuard" "Added by its address (already a WireGuard peer)"]
-    (:fetchedAt pairing) ["fetched" (str "Paired " (when-text (:createdAt pairing)) "; the server fetched its address "
-                                         (when-text (:fetchedAt pairing)) " (" (:ip pairing) ")")]
+    (:fetchedAt pairing) ["fetched" (str "Paired " (format/when-text (:createdAt pairing)) "; the server fetched its address "
+                                         (format/when-text (:fetchedAt pairing)) " (" (:ip pairing) ")")]
     peerUp ["peer up" (str "The WireGuard peer is up (" (:ip pairing) "); waiting for the server to fetch its address")]
-    :else ["waiting for peer" (str "Paired " (when-text (:createdAt pairing)) "; the WireGuard peer isn't added yet")]))
+    :else ["waiting for peer" (str "Paired " (format/when-text (:createdAt pairing)) "; the WireGuard peer isn't added yet")]))
 
 (defn- server-row [s]
   (let [label (r/atom (:label s))

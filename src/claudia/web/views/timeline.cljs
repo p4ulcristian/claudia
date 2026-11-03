@@ -4,11 +4,11 @@
   reused by a later agent); quiet stretches get a divider with their length; a filter shows one
   agent and the agents it started. A step opens in full under itself: Edit and Write steps as their
   diff. Read from the runner (GET /api/chats/:id/timeline), every 2 s while the chat runs."
-  (:require [clojure.string :as str]
+  (:require [claudia.web.format :as format]
+            [claudia.web.api :as api]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
-            [claudia.shared.protocol :as protocol]
             [claudia.web.md :as md]))
 
 (def ^:private rail 14)        ; px per rail
@@ -41,19 +41,9 @@
     #"Agent|Task|SendMessage|Workflow" "agent"
     "other"))
 
-(defn- tilde [p]
-  (str/replace (str p) #"^/home/[^/]+/" "~/"))
-
-(defn- api [{:keys [server chat]} & parts]
+(defn- timeline-url [{:keys [server chat]} & parts]
   (str "/s/" (js/encodeURIComponent server) "/api/chats/" (js/encodeURIComponent chat) "/timeline"
        (apply str (map #(str "/" (js/encodeURIComponent %)) parts))))
-
-(defn- get-json [url]
-  (-> (js/fetch url #js {:credentials "same-origin" :headers #js {:accept "application/json"}})
-      (.then (fn [^js res]
-               (-> (.text res)
-                   (.then (fn [t] {:status (.-status res) :ok (.-ok res)
-                                   :body (when (seq t) (try (protocol/read-json t) (catch :default _ nil)))})))))))
 
 ;; ---- a step in full ----
 
@@ -103,7 +93,7 @@
        (let [dead (atom false)]
          (set-d nil)
          (set-failed false)
-         (-> (get-json (api oc (:id lane) (:id e)))
+         (-> (api/fetch-answer (timeline-url oc (:id lane) (:id e)))
              (.then (fn [{:keys [ok body]}]
                       (when-not @dead (if ok (set-d body) (set-failed true)))))
              (.catch #(when-not @dead (set-failed true))))
@@ -118,7 +108,7 @@
        (:patch d)
        (let [{:keys [patch]} d]
          [:<>
-          [:h4 (if (:created patch) "New file" "Diff") [:span.tl-file (tilde (:file patch))]]
+          [:h4 (if (:created patch) "New file" "Diff") [:span.tl-file (format/tilde (:file patch))]]
           (if (seq (:hunks patch)) [patch-diff (:hunks patch)] [:p.muted.small "No lines changed."])
           (when (:cut patch) [:p.muted.small "Cut at 5000 lines."])
           [:details.tl-raw
@@ -235,7 +225,7 @@
      (fn []
        (let [dead (atom false)
              load (fn []
-                    (-> (get-json (str (api oc) "?v=" (js/encodeURIComponent (.-current v))))
+                    (-> (api/fetch-answer (str (timeline-url oc) "?v=" (js/encodeURIComponent (.-current v))))
                         (.then (fn [{:keys [status ok body]}]
                                  (when-not @dead
                                    (cond (= 404 status) (set-missing true)

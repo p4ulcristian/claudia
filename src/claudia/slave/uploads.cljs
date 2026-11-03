@@ -6,10 +6,10 @@
   its chat: its messages point at it. <chat> is the id the page used when it added the file (a new
   chat's own uuid, before the runner names the chat)."
   (:require ["node:fs" :as fs]
+            [claudia.node.http :as io]
             ["node:path" :as path]
             [clojure.string :as str]
-            [claudia.shared.files :as files]
-            [claudia.slave.http :as h]))
+            [claudia.shared.files :as files]))
 
 (def max-bytes files/max-bytes)
 
@@ -53,9 +53,9 @@
   [^js req ^js res chat n]
   (let [length (js/Number (aget (.-headers req) "content-length"))]
     (cond
-      (not (re-matches uuid-re (str chat))) (h/json-reply res 400 {:error "bad request"})
-      (not (seq n)) (h/json-reply res 400 {:error "bad request"})
-      (> length max-bytes) (h/json-reply res 413 {:error "file too big"})
+      (not (re-matches uuid-re (str chat))) (io/send-json res 400 {:error "bad request"})
+      (not (seq n)) (io/send-json res 400 {:error "bad request"})
+      (> length max-bytes) (io/send-json res 413 {:error "file too big"})
       :else
       (let [dir (path/join @root chat)
             _ (fs/mkdirSync dir #js {:recursive true :mode (js/parseInt "700" 8)})
@@ -67,7 +67,7 @@
                       (reset! done true)
                       (try (fs/closeSync fd) (catch :default _))
                       (try (fs/unlinkSync p) (catch :default _))
-                      (when-not (.-headersSent res) (h/json-reply res status {:error msg}))))]
+                      (when-not (.-headersSent res) (io/send-json res status {:error msg}))))]
         (.on req "data" (fn [chunk]
                           (when-not @done
                             (if (> (swap! size + (.-length chunk)) max-bytes)
@@ -80,7 +80,7 @@
                          (when-not @done
                            (reset! done true)
                            (fs/closeSync fd)
-                           (h/json-reply res 200 {:path p :name (path/basename p) :size @size
+                           (io/send-json res 200 {:path p :name (path/basename p) :size @size
                                                   :type (or (not-empty (aget (.-headers req) "content-type"))
                                                             "application/octet-stream")}))))))))
 
@@ -93,7 +93,7 @@
                                  "x-content-type-options" "nosniff"
                                  "cache-control" "private, max-age=86400"})
         (.pipe (fs/createReadStream p) res))
-    (h/json-reply res 404 {:error "No such file."})))
+    (io/send-json res 404 {:error "No such file."})))
 
 ;; ---- the tags ----
 

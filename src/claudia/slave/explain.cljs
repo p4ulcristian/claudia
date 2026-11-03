@@ -3,6 +3,7 @@
   it runs, what it waits on. It sees only that step and the request around it (read from the chat's
   session file); the chat, its context and Claude's turn are not touched. Answers are kept per step."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
+            [claudia.shared.text :as text]
             ["node:crypto" :as crypto]
             ["node:fs/promises" :as fsp]
             [clojure.string :as str]
@@ -14,8 +15,6 @@ Answer in 2 or 3 short, plain English sentences: what this step does, and why it
 If it is still running: say what it is waiting on and whether taking this long is normal for this kind of step.
 If it failed: say what went wrong in plain words.
 No code, no lists, no headings; name a file or command only when it helps. Every claim must follow from the step as given; don't guess beyond it.")
-
-(defn- cut [s n] (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) "\n…(cut)") s)))
 
 (defonce ^:private done (atom {}))
 
@@ -81,13 +80,13 @@ No code, no lists, no headings; name a file or command only when it helps. Every
                seconds (when (and running (:at s)) (js/Math.round (/ (- (js/Date.now) (:at s)) 1000)))
                prompt (str/join "\n\n"
                                 (filter seq
-                                        [(when (seq (:asked s)) (str "What they asked:\n" (cut (:asked s) 1500)))
-                                         (when (seq (:before s)) (str "What the agent said just before this step:\n" (cut (:before s) 1000)))
-                                         (str "The step: " (history/tool-label (:name s)) " " (:title s) "\nIts input:\n" (cut (:input s) 4000))
+                                        [(when (seq (:asked s)) (str "What they asked:\n" (text/cut (:asked s) 1500 "\n…(cut)")))
+                                         (when (seq (:before s)) (str "What the agent said just before this step:\n" (text/cut (:before s) 1000 "\n…(cut)")))
+                                         (str "The step: " (history/tool-label (:name s)) " " (:title s) "\nIts input:\n" (text/cut (:input s) 4000 "\n…(cut)"))
                                          (if running
                                            (str "It is still running" (when seconds (str ", for " seconds " seconds so far")) ".")
                                            (str "Its output" (when (:error s) " (it failed)") ":\n"
-                                                (or (not-empty (cut (:result s) 4000)) "(none)")))]))
+                                                (or (not-empty (text/cut (:result s) 4000 "\n…(cut)")) "(none)")))]))
                ;; A finished step's answer stays the same; a running one is asked again each time.
                k (when-not running (.digest (.update (crypto/createHash "sha256") prompt) "hex"))]
            (if-let [hit (and k (get @done k))]

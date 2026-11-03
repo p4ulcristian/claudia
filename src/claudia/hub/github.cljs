@@ -9,13 +9,12 @@
     release exists only now).
   Everything else (other branches, other workflows, other events) is answered 202 and ignored."
   (:require ["node:crypto" :as crypto]
+            [claudia.node.env :refer [env]]
             ["node:fs" :as fs]
             ["node:http" :as http]
             [clojure.string :as str]
             [claudia.hub.config :as config]
             [claudia.shared.protocol :as protocol]))
-
-(defn- env [k default] (let [v (aget js/process.env k)] (if (str/blank? v) default (str/trim v))))
 
 (def branch "main")
 (def workflow ".github/workflows/release.yml")

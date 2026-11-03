@@ -1,0 +1,6 @@
+;; Claudia's lint rules (CLAUDE.md, "How the code is written"). The PR check fails on any error;
+;; bin/ratchet.mjs counts the shadowed names and long functions, which may only go down.
+{:linters {:shadowed-var {:level :warning}
+           :unused-namespace {:level :error}
+           :unresolved-symbol {:level :error}}
+ :lint-as {reagent.core/with-let clojure.core/let}}

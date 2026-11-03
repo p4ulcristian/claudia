@@ -4,6 +4,7 @@
   chat, and read for the page: the agent list (chips), one agent's view (steps, files, prompt,
   report, a shell's output), and progress bars from a shell's `##progress done/total label` lines."
   (:require ["node:fs" :as fs]
+            [claudia.shared.text :as text]
             ["node:fs/promises" :as fsp]
             ["node:os" :as os]
             ["node:path" :as path]
@@ -341,8 +342,6 @@
     "MultiEdit" (vec (for [e (:edits input)] {:before (str (:old_string e)) :after (str (:new_string e))}))
     nil))
 
-(defn- cut [s n] (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) "\n…") s)))
-
 (defn- read-agent
   "Steps (Msgs), files (edits by file), prompt and the last thing it said, from its own file."
   [file folder]
@@ -386,7 +385,7 @@
                                     (update :added + (reduce + (map first counted)))
                                     (update :removed + (reduce + (map second counted)))
                                     (update :edits into (for [{:keys [before after]} edits]
-                                                          {:name (:name b) :before (cut before 20000) :after (cut after 20000)})))))))
+                                                          {:name (:name b) :before (text/cut before 20000 "\n…") :after (text/cut after 20000 "\n…")})))))))
                    (doseq [msg (history/assistant-msgs (:message e) counts (or (some-> (:timestamp e) js/Date.parse) 0) folder)]
                      (when (= "tool" (:role msg)) (swap! tools assoc (:id msg) (count @steps)))
                      (when (= "assistant" (:role msg)) (reset! said (:text msg)))

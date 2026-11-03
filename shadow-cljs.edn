@@ -1,6 +1,7 @@
 ;; Five builds from one source tree: the master (hub), the slave's three processes (front, runner,
-;; host) and the page (web). Node builds run on plain Node (node:sqlite needs 22.13+).
-{:source-paths ["src"]
+;; host) and the page (web), plus the tests (test/, every namespace ending in -test, run on Node).
+;; Node builds run on plain Node (node:sqlite needs 22.13+).
+{:source-paths ["src" "test"]
  :dependencies [[reagent/reagent "2.0.1"]
                 [re-frame/re-frame "1.4.7"]]
  :builds
@@ -8,6 +9,7 @@
   :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
+  :test   {:target :node-test :output-to "out/test.js" :ns-regexp "-test$"}
   :web    {:target :browser
            :output-dir "out/web/js"
            :asset-path "/js"

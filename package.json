@@ -6,7 +6,9 @@
   "scripts": {
     "build": "shadow-cljs release host runner front hub web && npm run build:web-files",
     "build:web-files": "node -e \"const fs=require('fs');if(!fs.existsSync('resources/web/index.html')){console.error('resources/web/index.html is missing: the page has nothing to load');process.exit(1)}fs.cpSync('resources/web','out/web',{recursive:true})\"",
-    "watch": "shadow-cljs watch web"
+    "watch": "shadow-cljs watch web",
+    "test": "shadow-cljs compile test && node out/test.js",
+    "ratchet": "node bin/ratchet.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.316",
