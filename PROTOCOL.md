@@ -47,8 +47,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `RUNNER_DATA` | folder for `claudia.db` and uploads |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
-| runner | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`) |
-| runner | `CLAUDIA_TOKENS_DIR` | the Claude tokens saved by name in Settings (default `claude-tokens` beside the token file); who switched to which is `<token file>.json` |
+| runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`): the front writes it (Settings), runners read it on every session start |
+| front | `CLAUDIA_TOKENS_DIR` | the Claude tokens saved by name in Settings (default `<token file>.d`, the front's only); who switched to which is `<token file>.json` |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
@@ -158,7 +158,7 @@ e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. 
 | Call | Answer |
 |---|---|
 | `POST /api/delegate` `{ text }` (1 to 20000 characters) | `{ id }`: a new chat of this profile with the text sent, in its list like any other |
-| `GET /api/chats/:id/state` | `{ known, running, waiting, asks: [Ask], last (the replies after the last user message), step (the newest step: "<tool>: <summary>" or the start of the newest reply, ≤ 160 characters), steps (tool calls this turn), since (ISO time the running turn started, or null), agents }` |
+| `GET /api/chats/:id/state` | `{ known, running, waiting, asks: [{ id, questions }] (open questions), last (the replies after the last user message), step (the newest step: "<label>: <title>" or the first line of the newest reply, ≤ 160 characters), steps (tool calls this turn), since (ISO time the running turn started, or null), agents (agents and background shells still working) }` |
 | `POST /api/chats/:id/send` `{ text }` | `{ ok }`: a message into the chat (queued if a turn runs; unarchives it); 404 for no such chat |
 | `POST /api/chats/:id/answer` `{ text }` | `{ ok, answered }`: the text answers every open question (as if typed into "Other"); 409 when none is open |
 | `POST /api/chats/:id/uploads?name=<file name>` (body: the file, up to 100 MB) | `{ path, name, size, type }`: saved as `uploads/<id>/<name>` in `RUNNER_DATA` (`-2` before the extension when taken). `:id` is the id the page used: a new chat's own uuid before `created` |
@@ -167,15 +167,17 @@ e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. 
 | `GET /api/chats/:id/shown/:step` | the image a `show_image` step (its tool-use id) showed |
 | `POST /api/chats/:id/fork` `{ at? }` | `{ id }`: a new chat holding this one up to the end of the turn of user message `at` (default: the last finished turn); same folder, picture copied, a colour of its own; 409 with `{ error }` when it can't |
 | `POST /api/chats/:id/explain` `{ step }` (a tool-use id) | `{ text }`: Haiku's 2-3 plain sentences on what that step does (or waits on) |
-| `PATCH /api/chats/:id` `{ title?, archived?, color? }` | `{ ok }`; `color`: one of the chat colours, `"ash"` (passive: remembers the colour it had) or `"wake"` (back to that colour, else a fresh one) |
+| `PATCH /api/chats/:id` `{ title?, archived?, color? }` | `{ ok }`; `title` (≤ 200) is the session's own custom title (`renameSession`); `color`: one of the chat colours, `"ash"` (passive: remembers the colour it had) or `"wake"` (back to that colour, else a fresh one) |
 | `GET /api/search?q=&archived=1?` | `{ found: [{ id, hits: [{ uuid, role: "user"\|"claude", snippet }], count, title (bool: every word is in the title) }] }`; the words are prefixes, all needed; `\u0001…\u0002` marks them in a snippet. An SQLite FTS5 index (`search.db`), read on from each session file |
 | `GET /api/sessions` | `{ sessions: [{ id, title, at }] }`: Claude Code sessions of `CLAUDIA_CWD` that are not chats here |
 | `POST /api/sessions/:id/adopt` | `{ id }`: that session becomes a chat here |
 | `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`) |
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo) |
-| `GET /api/claude-tokens` | `{ inUse: { name, by, at } \| null, tokens: [{ name, by, at }] }`: never a token |
-| `PUT /api/claude-token` `{ name, token }` | the same shape: saved under the name (same name = replaced) and switched to |
-| `POST /api/claude-token/use` `{ name }` | the same shape: the saved token copied over `CLAUDIA_TOKEN_FILE` (every chat's next start reads it) |
+| `GET /api/claude-tokens` | answered by the front (not for a view): `{ inUse: { name, by, at } \| null, tokens: [{ name, by, at }] }`: never a token |
+| `PUT /api/claude-token` `{ name, token }` | the front: the same shape: saved under the name (same name = replaced) and switched to; `by` = the caller's email |
+| `POST /api/claude-token/use` `{ name }` | the front: the same shape: the saved token copied over `CLAUDIA_TOKEN_FILE` (an idle session starts again on it with its next message) |
+| `GET /api/prefs` | `{ chatColors: "each" \| "none", hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
+| `PATCH /api/prefs` `{ chatColors?, hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set |
 
@@ -194,9 +196,9 @@ Page → runner:
 | `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
-| `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion |
+| `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |
 | `secret` | `chat`, `ask`, `sealed` | the sealed secret for a `run_with_secret` ask |
-| `deny` | `chat`, `ask` | refuses a secret ask |
+| `deny` | `chat`, `ask` | refuses a secret or permit ask |
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `seen` | `chat` | the person looked at its last turn |
@@ -218,9 +220,10 @@ Runner → page:
 | `chat` | `chat`, `title`, `folder`, `messages: [Msg]` (the newest 120), `more` (bool: older ones exist), `scene: Scene`, `running`, `asks: [Ask]` |
 | `older` | `chat`, `before`, `messages: [Msg]` (up to 120 before `before`), `more` |
 | `created` | `chat`, `id` (the page's uuid, to match) |
-| `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`) |
+| `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`; `gone: true`: a queued message Claude Code dropped) |
 | `delta` | `chat`, `id`, `text` (streamed text appended to message `id`) |
-| `scene` | `chat`, `scene: Scene` (the whole picture; it is small) |
+| `scene` | `chat`, `scene: Scene` (the whole picture; it is small), `changed` (ids the draw changed: nodes, arrows `from->to`, blocks, `block:part`, `block:item`), `turn` (the picture's turn) |
+| `status` | `chat`, `running`, `note?` (`Thinking`, `Retrying…`, `Compacting`; none: plain working) |
 | `turn` | `chat`, `running` (bool) |
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
@@ -239,8 +242,17 @@ Runner → page:
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
-ended, 0 = never), asks: [{ id, kind: "question" | "secret", text (the question, or the secret's reason) }], agents }`;
-`agents` = how many agents and background shells Claude started still run (`unseen` stays false while any does).
+ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
+secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;
+`agents` = how many agents and background shells Claude started still run. `lastTurn` = `{ id (the
+result's uuid), ago, stopped, failed, reply (the start of the reply, plain text; "" unless it
+succeeded) }` or null; `runningFor` = ms since the turn began while the chat works (its turn or its
+agents), else null. After the last agent ends the chat is `settling` for 5 s (30 s once a turn's init
+came: a turn of Claude's own usually follows); then `ended` moves to that moment. `unseen` = the
+last turn ended (not stopped) after the person last looked, nothing works and it is not settling.
+`title` = the session's custom title, else Claude Code's summary, else the first prompt (with
+`<claudia-file>` tags: the text before them, else the first file's name), else "New chat"; before
+the session file exists, the first message's first line (≤ 120) or its first file's name.
 
 The `chat` frame also carries `agents`, `changes` (the chat's newest 500), `settings`, `model`,
 `commands` and `context`.
@@ -262,8 +274,12 @@ folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "
 
 `Msg`: `{ id, role: "user" | "assistant" | "tool" | "note", text?, at }`; a tool step has
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
-A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`); a
-`show_image` step has `image: true` (`GET /api/chats/:chat/shown/<id>`).
+A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`) and
+`queued: true` while Claude Code hasn't taken it in (sent during a turn; the `msg` without it, or
+the turn's end, says it was); a `show_image` step has `image: true` (`GET /api/chats/:chat/shown/<id>`).
+A tool step also has the TypeScript Claudia's `label` (`Draw`, `Folder`, `Ask`, `Bash`, `workspace
+show_image`), `title` (one line: `picture: <title>`, a file's name, a command's description),
+`detail` (its input as JSON, ≤ 4000) and `result?` (`{ error, text ≤ 4000 }`).
 
 Attachments: `files` = `[{ path, name, size, type }]` as uploads answered them (the runner keeps
 only its own saved files) and goes as one `<claudia-file path name size type>` tag per file after
@@ -273,6 +289,9 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
 `Ask`:
 - `{ id, kind: "question", questions: [{ question, header, multiSelect, options: [{ label, description }] }] }`
 - `{ id, kind: "secret", ref, reason, account, vault (server name), pubkey (base64), expires }`
+- `{ id, kind: "permit", tool, title, description, detail }`: a tool waiting for the person's OK
+  (ExitPlanMode: the plan); every other tool is allowed without asking (each logged as
+  `[<chat id 8>] auto-allowed <tool>: <input ≤ 300>`)
 
 `Scene`: `{ title, blocks: [Block] }` in order, top to bottom. A `Block` has `id`, `name`, `kind`
 (`"graph"`, `"html"`, `"form"`), `width` (`"full"`/`"half"`) and:
@@ -315,15 +334,16 @@ query options without callbacks, `mcp` = the tool list (`{ server: { tool: { des
 images: `[{ media_type, data }]`, image blocks before the text),
 `{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`,
 `{ op: "control", id, req, method, args }` (a call on the chat's query: `stopTask`, `setModel`,
-`applyFlagSettings`, `getContextUsage`, `supportedCommands`, `supportedModels`), answered by
-`{ ev: "control", req, value | error }`.
+`applyFlagSettings`, `getContextUsage`, `supportedCommands`, `supportedModels`, and `setMcp` with
+`[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
 `{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
-on every runner connect so it can take running chats back).
+on every runner connect so it can take running chats back), `{ ev: "cancel", rpc, id }` (the SDK
+aborted that rpc: its ask goes).
 
 rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool result (`{ content, isError? }`);
-`hook` `{ event, index, input }` → value = the hook's output; `canUseTool` `{ name, input, toolUseID }`
+`hook` `{ event, index, input }` → value = the hook's output; `canUseTool` `{ name, input, toolUseID, title?, description? }`
 → value = a permission result (`{ behavior: "allow", updatedInput }` or `{ behavior: "deny", message }`).
 Only the newest runner connection is listened to. Right after `sessions` on a connect, the host sends
 every rpc still unanswered again (a runner that restarted asks the person again); the runner sends
@@ -335,7 +355,7 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 
 | Call | Answer |
 |---|---|
-| `GET /api/forms` | `{ forms: [names this runner offers], templates: [Template] }` |
+| `GET /api/forms` | `{ forms: [names this runner offers, in the draw tool's order], hidden: [the ones deleted in the Forms window], templates: [Template] }` |
 | `GET /api/templates` | `[Template]`: `{ name, html, parts, description }` |
 | `DELETE /api/templates/<name>` | `{ ok }` (not for a view) |
 | `POST /api/chats/<id>/blocks/<block>/template` `{ name, description? }` | `{ ok, text }`: the freeform block kept as a template (not for a view) |
