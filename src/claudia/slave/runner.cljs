@@ -67,6 +67,8 @@
         "settings" (chats/set-settings! chat (select-keys f [:model :effort]))
         "agent" (-> (chats/agent-detail chat (str (:agent f)))
                     (.then (fn [d] (send! c (merge {:type "agent" :chat chat :agent (:agent f)} d)))))
+        "agent_git" (-> (chats/agent-git chat (str (:agent f)) (str (:rev f)))
+                        (.then (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
         "diff" (send! c (merge {:type "diff" :chat chat :change (:change f)}
                                (or (chats/change-texts chat (:change f)) {:error "No such change."})))))))
 

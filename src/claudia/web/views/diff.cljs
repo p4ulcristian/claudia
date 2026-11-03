@@ -100,3 +100,15 @@
       :else [unified hs])))
 
 (defn line-total [text] (if (str/blank? text) 0 (count (str/split-lines text))))
+
+(defn patch-view
+  "Git's patch text, its lines coloured: files, hunks, added and removed."
+  [text]
+  [:pre.patch
+   (for [[i line] (map-indexed vector (str/split-lines (str text)))]
+     ^{:key i}
+     [:span {:class (cond (re-find #"^(diff --git|index |--- |\+\+\+ )" line) "p-file"
+                          (str/starts-with? line "@@") "p-hunk"
+                          (str/starts-with? line "+") "p-add"
+                          (str/starts-with? line "-") "p-del")}
+      line "\n"])])

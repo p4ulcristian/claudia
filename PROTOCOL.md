@@ -118,6 +118,7 @@ Page → runner:
 | `settings` | `chat`, `model?`, `effort?` (null = the person's default) | the chat's model and effort: kept, used on its next start, and given to a live session at once |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
 | `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
+| `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
 
 Runner → page:
 
@@ -138,8 +139,9 @@ Runner → page:
 | `context` | `chat`, `context: Context` |
 | `settings` | `chat`, `settings: { model, effort }`, `model?` (the model the session runs), `commands?` (its slash command names) |
 | `meta` | `limits: [Limit]`, `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`; sent after `chats` on `hello` and on every change |
-| `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
+| `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
+| `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
 preview (start of the last reply or the open question), unseen, archived, agents }`; `agents` = how many

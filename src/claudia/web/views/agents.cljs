@@ -152,6 +152,38 @@
             [:span.muted.small (if (= "Write" (:name e)) "Written whole" (:name e))]
             [diff/diff-table (:before e) (:after e) false false]]))])))
 
+(defn- branch-section
+  "An agent in a worktree of its own: its branch, the commits on it and the whole change since it
+  branched, each opening its patch."
+  [ck id wt g]
+  (let [rev (r/atom nil)]
+    (fn [ck id wt g]
+      (let [p (when @rev @(rf/subscribe [:agent-git ck id @rev]))
+            pick! (fn [x] (if (= @rev x) (reset! rev nil) (do (reset! rev x) (rf/dispatch [:agents/git ck id x]))))]
+        [:section.ag-git
+         [:h3 "Branch " [:code (:branch wt)]]
+         (if-not g
+           [:p.muted.small "The branch is gone."]
+           [:<>
+            (when-not (:worktree g) [:p.muted.small "Its worktree folder is gone; the branch is read from the repo."])
+            [:ul.ag-commits
+             [:li [:button.ag-commit {:class (when (= @rev "BRANCHED") "on") :disabled (not (:base g))
+                                      :on-click #(pick! "BRANCHED")}
+                   [:b "All of it since it branched"]
+                   [:span.muted.small (if (:base g)
+                                        (str "from " (subs (:base g) 0 8) (when (:worktree g) ", uncommitted work too"))
+                                        "where it branched isn't known")]]]
+             (for [c (:commits g)]
+               ^{:key (:hash c)}
+               [:li [:button.ag-commit {:class (when (= @rev (:hash c)) "on") :on-click #(pick! (:hash c))}
+                     [:code.h (subs (:hash c) 0 8)] [:span.ag-subj (:subject c)] [:span.muted.small (:when c)]]])
+             (when (empty? (:commits g)) [:li.muted.small "No commits on the branch yet."])]
+            (when @rev
+              (cond (nil? p) [:p.muted.small "Loading…"]
+                    (:error p) [:p.muted.small (:error p)]
+                    (str/blank? (:patch p)) [:p.muted.small "No changes."]
+                    :else [diff/patch-view (:patch p)]))])]))))
+
 (defn- agent-view [ck id info]
   (let [[tab set-tab] (h/use-state "steps")
         d @(rf/subscribe [:agent-detail ck id])
@@ -179,7 +211,10 @@
                            (when-not shell? ["Tools" (str (:tools a))])
                            (when (:tokens a) ["Tokens" (tokens (:tokens a))])
                            (when (:model a) ["Model" (:model a)])
-                           ["Kind" (if shell? "background shell" (str (:type a) (when (:background a) " · background")))]])]
+                           ["Kind" (if shell? "background shell" (str (:type a) (when (:background a) " · background")))]
+                           (when-let [wt (:worktree d)]
+                             ["Worktree" (str (:branch wt) (when-let [g (:git d)]
+                                                             (let [n (count (:commits g))] (str " · " n (if (= 1 n) " commit" " commits")))))])])]
         [:div.ag-scroll
          [:div.ag-head
           [:h2.ag-title.ag-name-line [status-mark a] [:span.ag-title-text (:name a)]]
@@ -202,10 +237,13 @@
                                [:p.muted.small "No output yet."])
                       (seq (:steps d)) [:div.ag-steps (for [m (:steps d)] ^{:key (:id m)} [step-view m])]
                       :else [:p.muted.small "Its steps show once its file is written."])
-            "files" (cond
-                      (nil? d) [:p.muted.small "Loading…"]
-                      (seq (:files d)) [:ul.ag-file-list (for [f (:files d)] ^{:key (:path f)} [file-row f])]
-                      :else [:p.muted.small (str "No Edit or Write calls" (when live " yet") ".")])
+            "files" (if (nil? d)
+                      [:p.muted.small "Loading…"]
+                      [:div.ag-files
+                       (if (seq (:files d))
+                         [:ul.ag-file-list (for [f (:files d)] ^{:key (:path f)} [file-row f])]
+                         [:p.muted.small (str "No Edit or Write calls" (when live " yet") ".")])
+                       (when (:worktree d) [branch-section ck id (:worktree d) (:git d)])])
             "prompt" (let [p (if shell? (:command d) (:prompt d))]
                        (cond (nil? d) [:p.muted.small "Loading…"]
                              (seq p) [:pre.ag-prompt p]

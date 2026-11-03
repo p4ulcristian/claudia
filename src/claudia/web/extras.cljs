@@ -34,6 +34,9 @@
 (defmethod events/on-frame "diff" [db server {:keys [chat change] :as f}]
   {:db (assoc-in db [:diffs [server chat change]] (select-keys f [:before :after :skipped :error]))})
 
+(defmethod events/on-frame "agent_git" [db server {:keys [chat agent rev] :as f}]
+  {:db (assoc-in db [:agent-git [server chat agent rev]] (select-keys f [:patch :error]))})
+
 ;; ---- agents ----
 
 (rf/reg-event-fx
@@ -68,6 +71,11 @@
  :agents/fetch
  (fn [_ [_ [s c] id]]
    (when (seq id) {:ws/send [s {:type "agent" :chat c :agent id}]})))
+
+(rf/reg-event-fx
+ :agents/git
+ (fn [_ [_ [s c] id rev]]
+   {:ws/send [s {:type "agent_git" :chat c :agent id :rev rev}]}))
 
 (rf/reg-event-fx
  :agents/stop
@@ -123,6 +131,7 @@
 
 (rf/reg-sub :agent-view (fn [db [_ k]] (get-in db [:agent-view k])))
 (rf/reg-sub :agent-detail (fn [db [_ k id]] (get-in db [:agent-detail (conj (vec k) id)])))
+(rf/reg-sub :agent-git (fn [db [_ k id rev]] (get-in db [:agent-git (conj (vec k) id rev)])))
 (rf/reg-sub :diff (fn [db [_ k change]] (get-in db [:diffs (conj (vec k) change)])))
 (rf/reg-sub :diff-split (fn [db] (boolean (:diff-split db (try (= "true" (js/localStorage.getItem "claudia.diffSplit")) (catch :default _ false))))))
 (rf/reg-sub :slash-pick (fn [db] (or (:slash-pick db) 0)))

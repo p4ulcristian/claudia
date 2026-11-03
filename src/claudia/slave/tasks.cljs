@@ -9,6 +9,7 @@
             ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.slave.agentgit :as agentgit]
             [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
             [claudia.slave.store :as store]))
@@ -213,6 +214,18 @@
                     (path/join dir (str/replace f #"\.meta\.json$" ".jsonl"))))))
             (try (vec (fs/readdirSync dir)) (catch :default _ []))))))
 
+(defn- agent-meta
+  "The subagent's .meta.json beside its transcript (agent type, worktree), or nil."
+  [file]
+  (when file
+    (try (p/read-json (fs/readFileSync (str/replace file #"\.jsonl$" ".meta.json") "utf8"))
+         (catch :default _ nil))))
+
+(defn- worktree-of [cwd chat t]
+  (let [m (agent-meta (agent-file cwd chat t))]
+    (when (and (:worktreePath m) (:worktreeBranch m))
+      {:path (:worktreePath m) :branch (:worktreeBranch m)})))
+
 (defonce ^:private output-files (atom {}))
 
 (defn- output-file
@@ -396,14 +409,29 @@
                            :command (or (get-in call [:input :command]) (:command t))
                            :output (tail (output-file chat t) 65536)})
       :else
-      (let [file (agent-file cwd chat t)]
-        (-> (if file (read-agent file folder) (js/Promise.resolve nil))
-            (.then (fn [r]
+      (let [file (agent-file cwd chat t)
+            wt (worktree-of cwd chat t)]
+        (-> (js/Promise.all #js [(if file (read-agent file (or (:path wt) folder)) (js/Promise.resolve nil))
+                                 (if wt (agentgit/branch-work (:path wt) (:branch wt)) (js/Promise.resolve nil))])
+            (.then (fn [[r work]]
                      {:info (cond-> info (and (:model r) (not (:model info))) (assoc :model (:model r)))
                       :steps (:steps r [])
                       :files (:files r [])
                       :prompt (or (get-in call [:input :prompt]) (:prompt t) (:prompt r))
-                      :report (when-not (= "running" (:status t)) (or (:said r) (:summary t)))})))))))
+                      :report (when-not (= "running" (:status t)) (or (:said r) (:summary t)))
+                      :worktree wt
+                      :git (when work (select-keys work [:branch :base :commits :worktree]))})))))))
+
+(defn agent-git
+  "Promise of {:patch} for one agent's worktree branch: rev = a commit of it or \"BRANCHED\"."
+  [cwd chat id rev]
+  (let [t (get-in @tasks [chat id])
+        wt (when t (worktree-of cwd chat t))]
+    (if-not wt
+      (js/Promise.resolve {:error "This agent has no worktree."})
+      (-> (agentgit/branch-work (:path wt) (:branch wt))
+          (.then (fn [work] (if work (agentgit/patch work rev) nil)))
+          (.then (fn [text] (if text {:patch text} {:error "No such commit on its branch."})))))))
 
 (defn chats-running
   "Chats with a running task."
@@ -414,3 +442,8 @@
   "A task some agent of the chat started (not Claude in the chat itself)."
   [chat id]
   (some? (get-in @tasks [chat id :parent])))
+
+(defn background?
+  "A task Claude put in the background (its end comes as a notice)."
+  [chat id]
+  (boolean (get-in @tasks [chat id :background])))
