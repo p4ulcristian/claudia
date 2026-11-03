@@ -3,6 +3,7 @@
   is written into the project). One analysis per root is kept, shared by both forms, and redone when
   a source file changes (the fingerprint); one clj-kondo run per root at a time."
   (:require ["node:fs" :as fs]
+            [claudia.node.fs :refer [dir?]]
             ["node:path" :as path]
             ["node:child_process" :as cp]
             ["node:crypto" :as crypto]
@@ -12,8 +13,6 @@
 (def ^:private skip #{"node_modules" "target" ".git" ".cpcache" ".shadow-cljs" "out" ".clj-kondo"})
 
 (defn- file-exists? [p] (fs/existsSync p))
-(defn- dir? [p] (try (.isDirectory (fs/statSync p)) (catch :default _ false)))
-
 (defn- config-paths
   "The folders with code: deps.edn / bb.edn :paths, shadow-cljs.edn and project.clj :source-paths."
   [dir]

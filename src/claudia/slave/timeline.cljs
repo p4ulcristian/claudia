@@ -6,6 +6,7 @@
   place in the file when it is opened. Served as GET /api/chats/:id/timeline and
   /api/chats/:id/timeline/:lane/:step (PROTOCOL.md)."
   (:require ["node:fs/promises" :as fsp]
+            [claudia.shared.text :as text]
             ["node:path" :as path]
             ["diff" :as jsdiff]
             [clojure.string :as str]
@@ -17,7 +18,6 @@
 (def ^:private chunk-size (* 4 1024 1024))
 (def ^:private max-files 64)
 
-(defn- cut [s n] (if (> (count s) n) (str (subs s 0 (dec n)) "…") s))
 (defn- ms [t] (if (string? t) (js/Date.parse t) js/NaN))
 
 (def ^:private edit-call #{"Write" "Edit" "MultiEdit" "NotebookEdit"})
@@ -128,7 +128,7 @@
                 (case (.-type b)
                   "text" (when (seq (str/trim (str (.-text b))))
                            (let [id (str (.-uuid d) ":" n)]
-                             (.push (.-events p) #js {:k "text" :id id :at at :text (cut (str/trim (.-text b)) preview)})
+                             (.push (.-events p) #js {:k "text" :id id :at at :text (text/fit (str/trim (.-text b)) preview)})
                              (loc! p id "use" loc)))
                   "tool_use" (when-not (.has (.-tools p) (.-id b))
                                (let [input (js->clj (.-input b) :keywordize-keys true)
@@ -160,11 +160,11 @@
                   (cond
                     (not (seq text)) nil
                     (history/task-notice text)
-                    (.push (.-events p) #js {:k "note" :id (.-uuid d) :at at :text (cut (history/task-notice text) preview)})
+                    (.push (.-events p) #js {:k "note" :id (.-uuid d) :at at :text (text/fit (history/task-notice text) preview)})
                     ;; Slash-command bookkeeping and similar tagged lines are not something anyone wrote.
                     (re-find #"^<[a-z-]+>" text) nil
                     :else
-                    (do (.push (.-events p) #js {:k "user" :id (.-uuid d) :at at :text (cut text preview)})
+                    (do (.push (.-events p) #js {:k "user" :id (.-uuid d) :at at :text (text/fit text preview)})
                         (loc! p (.-uuid d) "use" loc))))))))))))
 
 (defonce ^:private cache (atom {})) ; path -> {:p Parsed :used ms}
@@ -355,11 +355,11 @@
                                      output (when r (history/result-text (js->clj (some-> b .-content) :keywordize-keys true)))
                                      patch (when (and r (.-diff tool))
                                              (or (patch-of (.-toolUseResult r)) (input-patch (str (.-name use)) (.-input use))))]
-                                 {:k "tool" :name (.-name tool) :input (cut input full)
-                                  :output (when output (cut output full)) :error (boolean (some-> b .-is_error))
+                                 {:k "tool" :name (.-name tool) :input (text/fit input full)
+                                  :output (when output (text/fit output full)) :error (boolean (some-> b .-is_error))
                                   :truncated (or (> (count input) full) (> (count output) full))
                                   :patch patch})
                                (let [text (if (= "assistant" (.-type line))
                                             (str (some-> (aget content (js/Number (last (str/split step #":")))) .-text))
                                             (history/strip-reminders (text-of content)))]
-                                 {:k "text" :text (cut text full) :truncated (> (count text) full)}))))))))))))))))
+                                 {:k "text" :text (text/fit text full) :truncated (> (count text) full)}))))))))))))))))

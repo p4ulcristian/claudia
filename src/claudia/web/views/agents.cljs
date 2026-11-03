@@ -5,6 +5,7 @@
   Files / Prompt / Report; a shell: Output / Command). Stop on hover. The rail's third state (turn
   ended, agents still working) is agents-ring."
   (:require [clojure.string :as str]
+            [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
@@ -83,19 +84,11 @@
   "The running ones (as many as fit: up to four on a desktop, two on a phone), +N more, ✓ N ✕ M."
   [{:keys [ck state]}]
   (let [box (h/use-ref nil)
-        [width set-width] (h/use-state 0)
         agents (:agents state)
+        width (hooks/use-width box [(boolean (seq agents))])
         running (filter #(and (running? %) (or (= "agent" (:kind %)) (:background %))) agents)
         phone? (< js/window.innerWidth 680)]
     (use-tick! (boolean (seq running)))
-    (h/use-layout-effect
-     (fn []
-       (when-let [el (.-current box)]
-         (let [ro (js/ResizeObserver. #(set-width (.-clientWidth el)))]
-           (.observe ro el)
-           (set-width (.-clientWidth el))
-           #(.disconnect ro))))
-     [(boolean (seq agents))])
     (when (seq agents)
       (let [finished (remove running? agents)
             failed (count (filter #(= "failed" (:status %)) finished))

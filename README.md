@@ -34,6 +34,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Eye on Rainbow's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_EOR_URL` are set.
+
+9. The code is small pure functions (2026-11-03, after a local `keep` shadowing `clojure.core/keep`
+   crashed the hub on every start): data in, data out, at most 30 lines each, effects at the edges,
+   one shared copy of every helper, no shadowed names. A PR check (lint, a ratchet on shadowed names
+   and long functions that only goes down, tests, the five builds) holds it. Rules in CLAUDE.md.
+   Instead of: long handlers mixing reading, deciding and writing state, and a copy of each helper
+   per file.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

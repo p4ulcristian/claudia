@@ -10,6 +10,7 @@
   (gate.json = the gate's side of the tunnel, <server>.applied = that peer is up). The server polls
   POST /hub/enroll with its secret and gets its address and the gate's details once the peer is up."
   (:require ["node:crypto" :as crypto]
+            [claudia.node.env :refer [env]]
             ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
@@ -18,8 +19,6 @@
             [claudia.shared.protocol :as protocol]))
 
 (defonce ^:private dirs (atom nil))
-
-(defn- env [k] (let [v (aget js/process.env k)] (when-not (str/blank? v) (str/trim v))))
 
 (defn start!
   "The folders, from the environment (defaults under the hub's data folder)."

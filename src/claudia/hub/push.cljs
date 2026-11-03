@@ -11,6 +11,7 @@
   servers), and a change of that count alone goes as a badge-only push. While the person works at a
   desktop page alerts are held; when they leave, only what still matters goes, the newest per chat."
   (:require ["ws" :refer [WebSocket]]
+            [claudia.shared.text :as text]
             [clojure.string :as str]
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
@@ -41,10 +42,6 @@
 
 (defn on? [] (some? @sender))
 
-(defn- cut [s max]
-  (let [one (vec (str/trim (str/replace (str s) #"\s+" " ")))]
-    (if (> (count one) max) (str (apply str (take (dec max) one)) "…") (apply str one))))
-
 (defn- chat-id? [id] (and (string? id) (re-matches #"^[A-Za-z0-9-]{1,100}$" id)))
 
 (defn- working?
@@ -62,20 +59,20 @@
   (vec
    (for [r rows
          :when (and (chat-id? (:id r)) (not (:archived r)))
-         :let [title (cut (or (not-empty (str (:title r))) "Chat") 80)
+         :let [title (text/fit (text/one-line (or (not-empty (str (:title r))) "Chat")) 80)
                base {:server server :chat (:id r) :title title}
                asks (for [a (:asks r)]
                       (if (= "question" (:kind a))
                         (assoc base :kind "ask" :event (str "ask:" (:id a))
-                               :body (cut (or (not-empty (str (:text a))) "Has a question") 300))
+                               :body (text/fit (text/one-line (or (not-empty (str (:text a))) "Has a question")) 300))
                         (assoc base :kind "permission" :event (str "ask:" (:id a))
-                               :body (cut (str "Needs your permission: " (or (not-empty (str (:text a))) "a secret")) 180))))
+                               :body (text/fit (text/one-line (str "Needs your permission: " (or (not-empty (str (:text a))) "a secret"))) 180))))
                t (:lastTurn r)
                finished (when (and (map? t) (string? (:id t)) (not (:stopped t)) (not (working? r))
                                    (not (false? (:unseen r))) (number? (:ago t)) (< (:ago t) fresh-ms)
                                    (>= (- now (:ago t)) since))
                           (assoc base :kind "finished" :event (str "turn:" (:id t))
-                                 :body (if (:failed t) "Ended with an error" (cut (or (not-empty (str (:reply t))) "Finished") 200))))]
+                                 :body (if (:failed t) "Ended with an error" (text/fit (text/one-line (or (not-empty (str (:reply t))) "Finished")) 200))))]
          n (cond-> (vec asks) finished (conj finished))]
      n)))
 

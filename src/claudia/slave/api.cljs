@@ -4,15 +4,14 @@
   uploads, search, fork, explain, the working folder's project, all ~/Work sessions, the chat
   menu's changes, and Settings' tokens."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
+            [claudia.node.http :as io]
             ["node:fs" :as fs]
             [clojure.string :as str]
-            [claudia.shared.protocol :as p]
             [claudia.slave.chats :as chats]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.explain :as explain]
             [claudia.slave.fork :as fork]
             [claudia.slave.history :as history]
-            [claudia.slave.http :as h]
             [claudia.slave.projects :as projects]
             [claudia.slave.search :as search]
             [claudia.slave.store :as store]
@@ -24,11 +23,7 @@
 
 (defn- known? [id] (and (string? id) (some? (store/chat id))))
 
-(defn- body-json
-  "Promise of the request's JSON body as data ({} when empty or broken)."
-  [req]
-  (-> (h/read-body req (* 1024 1024))
-      (.then (fn [t] (or (try (p/read-json t) (catch :default _ nil)) {})))))
+(def ^:private max-body (* 1024 1024))
 
 (defn- text-of [body]
   (let [t (:text body)] (when (string? t) (let [t (str/trim t)] (when (<= 1 (count t) 20000) t)))))
@@ -37,24 +32,24 @@
   (-> pr
       (.then (fn [v] (when-not (.-headersSent res)
                        (if (and (map? v) (:error v))
-                         (h/json-reply res (or (:status v) 400) (dissoc v :status))
-                         (h/json-reply res 200 v)))))
+                         (io/send-json res (or (:status v) 400) (dissoc v :status))
+                         (io/send-json res 200 v)))))
       (.catch (fn [e] (when-not (.-headersSent res)
-                        (h/json-reply res 500 {:error (str (or (.-message e) e))}))))))
+                        (io/send-json res 500 {:error (str (or (.-message e) e))}))))))
 
 (defn least-used-colour [] (chats/least-used-colour))
 
 ;; ---- the delegate API (decision 16 of the TypeScript Claudia) ----
 
 (defn- delegate [req]
-  (-> (body-json req)
+  (-> (io/read-json req max-body)
       (.then (fn [b]
                (if-let [text (text-of b)]
                  {:id (chats/new-chat! text nil)}
                  {:error "text: 1 to 20000 characters"})))))
 
 (defn- send-to [req id]
-  (-> (body-json req)
+  (-> (io/read-json req max-body)
       (.then (fn [b]
                (let [text (text-of b)]
                  (cond (not text) {:error "text: 1 to 20000 characters"}
@@ -66,7 +61,7 @@
                                  {:ok true})))))))
 
 (defn- answer [req id]
-  (-> (body-json req)
+  (-> (io/read-json req max-body)
       (.then (fn [b]
                (let [text (text-of b)
                      open (->> (vals (:asks (get @chats/state id))) (map :ask) (filter #(= "question" (:kind %))))]
@@ -140,7 +135,7 @@
                                  "cache-control" "private, max-age=86400"
                                  "x-content-type-options" "nosniff"})
         (.end res (js/Buffer.from (.. im -source -data) "base64")))
-    (h/json-reply res 404 {:error "No such image."})))
+    (io/send-json res 404 {:error "No such image."})))
 
 (defn- find-image
   "Promise of the n-th image block of the user entry `uuid`, or of the tool result for tool use `tool`."
@@ -175,18 +170,18 @@
     (if (and read-only (or (not= "GET" method)
                            ;; Settings' logins are the profile's own business.
                            (#{"github"} (second parts))))
-      (do (h/json-reply res 403 {:error "Read only."}) true)
+      (do (io/send-json res 403 {:error "Read only."}) true)
       (condp = [method (vec (take 2 parts)) (count parts)]
         ["POST" ["api" "delegate"] 2] (do (reply (delegate req)) true)
         ["GET" ["api" "search"] 2]
         (let [arch (= "1" (.get q "archived"))
               rows (for [r (store/chats) :when (= arch (boolean (:archived r)))]
                      {:id (:id r) :title (:title r) :file (history/session-file chats/cwd (:id r))})]
-          (h/json-reply res 200 {:found (search/search (or (.get q "q") "") rows)}) true)
+          (io/send-json res 200 {:found (search/search (or (.get q "q") "") rows)}) true)
         ["GET" ["api" "sessions"] 2] (do (reply (sessions)) true)
         ["GET" ["api" "project"] 2]
         (let [pr (projects/project-of (.get q "folder") chats/cwd)]
-          (h/json-reply res 200 (if pr {:name (:name pr) :logo (boolean (:logo pr))} {:name nil :logo false})) true)
+          (io/send-json res 200 (if pr {:name (:name pr) :logo (boolean (:logo pr))} {:name nil :logo false})) true)
         ["GET" ["api" "project"] 3]
         (let [pr (projects/project-of (.get q "folder") chats/cwd)]
           (if-let [logo (and (= "logo" (nth parts 2)) (:logo pr))]
@@ -195,20 +190,20 @@
                                          "x-content-type-options" "nosniff"
                                          "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
                 (.pipe (fs/createReadStream logo) res))
-            (h/json-reply res 404 {:error "No logo."}))
+            (io/send-json res 404 {:error "No logo."}))
           true)
         ;; The profile's preferences (runner.ts /api/prefs): chatColors, the forms deleted in the Forms
         ;; window (they leave Claude's draw tool), and the opt-in forms this runner doesn't have.
-        ["GET" ["api" "prefs"] 2] (do (h/json-reply res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here)) true)
+        ["GET" ["api" "prefs"] 2] (do (io/send-json res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here)) true)
         ["PATCH" ["api" "prefs"] 2]
-        (do (reply (-> (body-json req)
+        (do (reply (-> (io/read-json req max-body)
                        (.then (fn [b]
                                 (let [out (codeforms/set-prefs! b)]
                                   (when (contains? b :hiddenForms) (chats/prefs-changed!))
                                   (assoc out :notHere codeforms/not-here))))))
             true)
         ["GET" ["api" "github"] 2] (do (reply (.then (tokens/github-user) (fn [u] {:user u}))) true)
-        ["PUT" ["api" "github"] 2] (do (reply (-> (body-json req) (.then #(tokens/set-github-token! (:token %))))) true)
+        ["PUT" ["api" "github"] 2] (do (reply (-> (io/read-json req max-body) (.then #(tokens/set-github-token! (:token %))))) true)
         ["POST" ["api" "sessions"] 4] (do (reply (adopt (nth parts 2))) true)
         ;; /api/chats/:id/...
         (if (and (= ["api" "chats"] (vec (take 2 parts))) (>= (count parts) 3))
@@ -225,7 +220,7 @@
               ["POST" "fork"]
               (do (reply (if-not (known? id)
                            (js/Promise.resolve {:error "no such chat" :status 404})
-                           (-> (body-json req)
+                           (-> (io/read-json req max-body)
                                (.then #(fork/fork! chats/cwd id (when (string? (:at %)) (not-empty (:at %)))
                                                    (boolean (:running (get @chats/state id))) (least-used-colour)))
                                (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
@@ -234,7 +229,7 @@
               ["POST" "explain"]
               (do (reply (if-not (known? id)
                            (js/Promise.resolve {:error "no such chat" :status 404})
-                           (-> (body-json req)
+                           (-> (io/read-json req max-body)
                                (.then (fn [{:keys [step]}]
                                         (let [f (.-CLAUDIA_TOKEN_FILE (.-env js/process))
                                               token (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
@@ -245,7 +240,7 @@
                                                              (fn [t] {:text t})))))))))
                   true)
               ["PATCH" nil]
-              (do (reply (-> (body-json req)
+              (do (reply (-> (io/read-json req max-body)
                              (.then (fn [{:keys [title archived color]}]
                                       (if-not (known? id)
                                         {:error "no such chat" :status 404}

@@ -3,6 +3,7 @@
   (claudia.slave.git) and asked again every few seconds with the graph's fingerprint, so it redraws
   when the repo changes. A click on a commit opens its files and diff beside the graph. Read only."
   (:require [clojure.string :as str]
+            [claudia.web.hooks :as hooks]
             [reagent.hooks :as h]
             [claudia.shared.git-layout :as layout]
             [claudia.web.api :as api]
@@ -291,30 +292,16 @@
         repo (if (string? (:repo data)) (:repo data) "")
         live (and (not demo) (seq repo) chat)
         [log set-log] (h/use-state nil)
-        [error set-error] (h/use-state nil)
         [only set-only] (h/use-state (when (sequential? (:branches data)) (mapv str (:branches data))))
         [limit set-limit] (h/use-state (if (pos? (:limit data 0)) (:limit data) 100))
         [open set-open] (h/use-state (when (string? (:commit data)) (:commit data)))
-        fp (h/use-ref nil)
-        url-of (fn [q] (api/url server (str "chats/" (js/encodeURIComponent chat) "/git") (merge {:repo repo} q)))]
+        url-of (fn [q] (api/url server (str "chats/" (js/encodeURIComponent chat) "/git") (merge {:repo repo} q)))
+        error (hooks/use-poll {:on? live :ms poll-ms :on-answer set-log
+                               :url-of #(url-of {:limit limit :branches (when only (str/join "," only)) :fp %})}
+                              [live repo server chat limit only])]
     (h/use-effect (fn [] (when (sequential? (:branches data)) (set-only (mapv str (:branches data)))) nil) [(:branches data)])
     (h/use-effect (fn [] (when (pos? (:limit data 0)) (set-limit (:limit data))) nil) [(:limit data)])
     (h/use-effect (fn [] (when (string? (:commit data)) (set-open (:commit data))) nil) [(:commit data)])
-    (h/use-effect
-     (fn []
-       (when live
-         (set! (.-current fp) nil)
-         (let [gone (atom false) timer (atom nil)
-               ask (fn ask []
-                     (-> (if js/document.hidden
-                           (js/Promise.resolve nil)
-                           (-> (api/fetch-json (url-of {:limit limit :branches (when only (str/join "," only)) :fp (.-current fp)}))
-                               (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (set! (.-current fp) (:fp j)) (set-log j)))))
-                               (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
-                         (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
-           (ask)
-           #(do (reset! gone true) (js/clearTimeout @timer)))))
-     [live repo server chat limit only])
     (let [shown (h/use-memo #(if demo (update (assoc demo :demo? true) :commits (fn [cs] (layout/layout-graph (mapv (fn [c] (update c :refs items)) (items cs))))) log) [demo log])
           branches (or (:branches shown)
                        ;; The demo names no branch list: its refs are the branches.

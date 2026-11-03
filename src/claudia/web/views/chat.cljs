@@ -3,6 +3,7 @@
   the title that renames itself, server and folder, the changes pill), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
+            [claudia.web.format :as format]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
@@ -47,8 +48,6 @@
         :fx [[:dispatch [:picture/pick idx]]]}))))
 
 ;; ---- small parts ----
-
-(defn- tilde [p] (str/replace (str p) #"^/home/[^/]+" "~"))
 
 (defn clip
   "Long paths keep their end, where the file and project names are."
@@ -166,7 +165,7 @@
          (when (and multi? server (or row (seq (:messages state))))
            [:span.folder-chip.server-chip {:title (str "On " label)} label])
          (when (seq folder)
-           [:span.folder-chip {:title (str "Working folder: " folder)} (clip (tilde folder) 28)])
+           [:span.folder-chip {:title (str "Working folder: " folder)} (clip (format/tilde folder) 28)])
          (when (and chat (not pending?)) [changes/pill ck state folder])
          (cond (= :closed status) [:span.offline (str label " is off")]
                (not= :open status) [:span.offline "reconnecting…"])

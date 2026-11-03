@@ -3,6 +3,7 @@
   chats, all ~/Work sessions, sounds and desktop popups, the instance chip, the plan, each server's Claude tokens and GitHub
   login) and the GitHub prompt for a profile without a login."
   (:require [clojure.string :as str]
+            [claudia.web.format :as format]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
@@ -12,9 +13,6 @@
             [claudia.web.views.usage :as usage]))
 
 (defn- cap [n] (str (str/upper-case (subs n 0 1)) (subs n 1)))
-
-(defn- when-text [at]
-  (when at (.toLocaleString (js/Date. at) js/undefined #js {:dateStyle "medium" :timeStyle "short"})))
 
 ;; ---- the title menu ----
 
@@ -164,7 +162,7 @@
        (cond (nil? tokens) "Checking…"
              (nil? (:inUse tokens)) "None in use from Settings yet."
              (not in-use) (str "In use: a token without a name, set by " (get-in tokens [:inUse :by]) ".")
-             :else [:<> "Switched to " [:b in-use] " by " (get-in tokens [:inUse :by]) ", " (when-text (get-in tokens [:inUse :at])) "."])
+             :else [:<> "Switched to " [:b in-use] " by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."])
        " A switch applies to every chat on its next message."]
       (when (seq (:tokens tokens))
         [:div.choice
@@ -174,7 +172,7 @@
             [:input {:type "radio" :name (str "claudeToken-" server) :checked (= (:name t) in-use)
                      :on-change #(put! "POST" "claude-token/use" {:name (:name t)}
                                        (fn [ok] (rf/dispatch [:ops/tokens server ok])) nil)}]
-            (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (when-text (:at t)))]])])
+            (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]])])
       [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches to it."]
       [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
                    :save (fn [token nm done]

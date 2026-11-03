@@ -1,7 +1,7 @@
 (ns claudia.web.fx
   "Effects that leave the page: HTTP, the address bar, local storage, sealing secrets."
   (:require [re-frame.core :as rf]
-            [clojure.string :as str]
+            [claudia.web.api :as api]
             [claudia.shared.protocol :as protocol]
             [claudia.web.db :as db]
             [claudia.web.secret :as secret]
@@ -35,24 +35,10 @@
 
 ;; ---- HTTP (same origin; the gate's login cookie goes along) ----
 
-(defn- fetch-json [url opts]
-  (-> (js/fetch url (clj->js (merge {:credentials "same-origin"
-                                     :headers {"accept" "application/json"}}
-                                    opts)))
-      (.then (fn [^js r]
-               (-> (.text r)
-                   (.then (fn [t]
-                            (let [body (when-not (str/blank? t)
-                                         (try (protocol/read-json t) (catch :default _ nil)))]
-                              (if (.-ok r)
-                                body
-                                (throw (ex-info (or (:error body) (str "HTTP " (.-status r)))
-                                                {:status (.-status r)})))))))))))
-
 (rf/reg-fx
  :http/get
  (fn [{:keys [url on-ok on-fail]}]
-   (-> (fetch-json url {})
+   (-> (api/fetch-json url {})
        (.then #(rf/dispatch (conj on-ok %)))
        (.catch #(rf/dispatch (conj on-fail (ex-message %)))))))
 
@@ -67,7 +53,7 @@
  :secret/read
  ;; Allow: the person's vault server reads 1Password and seals the value to the ask's key.
  (fn [{:keys [server chat ask]}]
-   (-> (fetch-json (str "/s/" (js/encodeURIComponent (:vault ask)) "/api/secret/read")
+   (-> (api/fetch-json (str "/s/" (js/encodeURIComponent (:vault ask)) "/api/secret/read")
                    {:method "POST"
                     :headers {"content-type" "application/json" "accept" "application/json"}
                     :body (protocol/write-json {:ref (:ref ask) :pubkey (:pubkey ask) :request (:id ask)})})

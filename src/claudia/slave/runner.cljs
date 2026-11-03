@@ -2,6 +2,7 @@
   "One profile's runner: HTTP + WebSocket on a unix socket (the front passes the page's calls on),
   the chats, and the SQLite store. Restarting it keeps running chats: the host holds them."
   (:require ["node:http" :as http]
+            [claudia.node.http :as io]
             ["node:fs" :as fs]
             ["node:path" :as path]
             ["node:os" :as os]
@@ -135,18 +136,18 @@
   [req res {:keys [read-only] who :profile}]
   (let [account (.-CLAUDIA_OP_ACCOUNT env)]
     (cond
-      read-only (h/json-reply res 403 {:error "Read only."})
-      (not (seq account)) (h/json-reply res 503 {:error "No 1Password account set for this profile (CLAUDIA_OP_ACCOUNT)."})
+      read-only (io/send-json res 403 {:error "Read only."})
+      (not (seq account)) (io/send-json res 503 {:error "No 1Password account set for this profile (CLAUDIA_OP_ACCOUNT)."})
       :else
-      (-> (h/read-body req 65536)
+      (-> (io/read-text req 65536)
           (.then (fn [body]
                    (let [{:keys [ref pubkey request]} (p/read-json body)]
                      (if-not (and (string? ref) (str/starts-with? ref "op://") (string? pubkey))
-                       (h/json-reply res 400 {:error "ref must start with op:// and pubkey is needed."})
+                       (io/send-json res 400 {:error "ref must start with op:// and pubkey is needed."})
                        (do (js/console.log (str "vault read " ref " for request " request " by " who))
                            (-> (secret/op-read account ref)
-                               (.then (fn [value] (h/json-reply res 200 {:sealed (secret/seal value pubkey)})))))))))
-          (.catch (fn [e] (h/json-reply res 502 {:error (str (or (.-message e) e))})))))))
+                               (.then (fn [value] (io/send-json res 200 {:sealed (secret/seal value pubkey)})))))))))
+          (.catch (fn [e] (io/send-json res 502 {:error (str (or (.-message e) e))})))))))
 
 (defn- query-param [^js req k]
   (.get (.-searchParams (js/URL. (.-url req) "http://runner")) k))
@@ -157,29 +158,29 @@
   (let [turn (query-param req "turn")
         scene (if (seq turn) (pictures/one id turn) (chats/current-scene id))]
     (if-not (seq (:blocks scene))
-      (h/json-reply res 404 {:error "No such picture."})
+      (io/send-json res 404 {:error "No such picture."})
       (-> (render/screenshot scene (:color (store/chat id)))
           (.then (fn [{:keys [^js png error]}]
                    (if png
                      (do (.writeHead res 200 #js {"content-type" "image/png" "cache-control" "no-store"
                                                   "content-length" (.-length png)})
                          (.end res png))
-                     (h/json-reply res 503 {:error error}))))))))
+                     (io/send-json res 503 {:error error}))))))))
 
 (defn- timeline-reply
   "GET /api/chats/:id/timeline?v= (same version: {same, now}) and /timeline/:lane/:step."
   [^js req ^js res id sub]
-  (let [fail #(h/json-reply res 500 {:error (str (or (.-message %) %))})]
+  (let [fail #(io/send-json res 500 {:error (str (or (.-message %) %))})]
     (if (= sub "timeline")
       (-> (timeline/timeline chats/cwd id (boolean (:running (get @chats/state id))))
           (.then (fn [^js t]
-                   (cond (nil? t) (h/json-reply res 404 {:error "No session file yet."})
-                         (= (.-v t) (query-param req "v")) (h/json-reply res 200 {:same true :now (.-now t)})
-                         :else (h/json-reply res 200 t))))
+                   (cond (nil? t) (io/send-json res 404 {:error "No session file yet."})
+                         (= (.-v t) (query-param req "v")) (io/send-json res 200 {:same true :now (.-now t)})
+                         :else (io/send-json res 200 t))))
           (.catch fail))
       (let [[_ lane step] (re-matches #"timeline/([^/]+)/([^/]+)" sub)]
         (-> (timeline/detail chats/cwd id (js/decodeURIComponent lane) (js/decodeURIComponent step))
-            (.then #(if % (h/json-reply res 200 %) (h/json-reply res 404 {:error "No such step."})))
+            (.then #(if % (io/send-json res 200 %) (io/send-json res 404 {:error "No such step."})))
             (.catch fail))))))
 
 (defn- on-request [^js req ^js res]
@@ -189,20 +190,20 @@
         chat-id (some-> chat-id js/decodeURIComponent)]
     (cond
       (and chat-id (= "GET" (.-method req)) (not (known? chat-id)))
-      (h/json-reply res 404 {:error "No such chat."})
+      (io/send-json res 404 {:error "No such chat."})
       (and chat-id (= sub "picture.png") (= "GET" (.-method req)))
       (picture-png req res chat-id)
       (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" (.-method req)))
       (timeline-reply req res chat-id sub)
       (and (= url "/api/me") (= "GET" (.-method req)))
-      (h/json-reply res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
+      (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
       (codeforms/handle req res url who {:scene-of chats/scene-of
                                          :tools-changed! chats/prefs-changed!}) nil
       (api/handle req res who) nil
-      :else (h/json-reply res 404 {:error "Not found."}))))
+      :else (io/send-json res 404 {:error "Not found."}))))
 
 (defn- on-socket [^js ws ^js req]
   (let [c (merge (caller req) {:ws ws :hello (atom false) :open (atom #{})})]

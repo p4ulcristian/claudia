@@ -5,6 +5,7 @@
   columns by steps away, boxes coloured by folder, arrows for calls. Read live through the runner
   (the clojure form's clj-kondo index); what is shown is read again when the project changes."
   (:require [clojure.string :as str]
+            [claudia.web.hooks :as hooks]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
             [claudia.web.shiki :as shiki]
@@ -391,7 +392,9 @@
         live (and (not demo) (seq root) chat)
         url-of (fn [q] (api/url server (str "chats/" (js/encodeURIComponent chat) "/calls") (merge {:root root} q)))
         [fp set-fp] (h/use-state nil)
-        [error set-error] (h/use-state nil)
+        ;; A new source (an empty cache) whenever the project's fingerprint changes.
+        error (hooks/use-poll {:on? live :ms poll-ms :url-of #(url-of {:fp %}) :on-answer #(set-fp (:fp %))}
+                              [live root server chat])
         [view set-view] (h/use-state (view-of (:view data)))
         [root-var set-root-var] (h/use-state open)
         [up set-up] (h/use-state (depth (:up data) 2))
@@ -400,20 +403,6 @@
     (h/use-effect (fn [] (set-root-var open) nil) [open])
     (h/use-effect (fn [] (set-up (depth (:up data) 2)) nil) [(:up data)])
     (h/use-effect (fn [] (set-down (depth (:down data) 3)) nil) [(:down data)])
-    ;; A new source (an empty cache) whenever the project's fingerprint changes.
-    (h/use-effect
-     (fn []
-       (when live
-         (let [gone (atom false) timer (atom nil) known (atom nil)
-               ask (fn ask []
-                     (-> (if js/document.hidden (js/Promise.resolve nil)
-                             (-> (api/fetch-json (url-of {:fp @known}))
-                                 (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (reset! known (:fp j)) (set-fp (:fp j))))))
-                                 (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
-                         (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
-           (ask)
-           #(do (reset! gone true) (js/clearTimeout @timer)))))
-     [live root server chat])
     (let [src (h/use-memo #(cond demo (demo-source demo) (and live fp) (live-source url-of)) [(some? demo) live root fp])
           marks (filterv #(string? (:var %)) (items (:marks data)))]
       (cond

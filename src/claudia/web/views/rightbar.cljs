@@ -4,6 +4,7 @@
   picture of the chat with ‹ › and n/m, the live chip or Back to live, the snapshot camera, and the
   fold (Alt+P; on a phone: back to the chat)."
   (:require [re-frame.core :as rf]
+            [claudia.web.hooks :as hooks]
             [reagent.core :as r]
             [reagent.hooks :as h]))
 
@@ -28,7 +29,7 @@
   (let [track (h/use-ref nil)
         tip (h/use-ref nil)
         [hover set-hover] (h/use-state nil)
-        [width set-width] (h/use-state 0)
+        width (hooks/use-width track [])
         n (count pictures)
         at (fn [i] (if (= n 1) 100 (* 100 (/ i (dec n)))))
         nearest (fn [x]
@@ -37,13 +38,6 @@
                     (js/Math.round (* f (dec n)))))
         gap (if (> n 1) (/ width (dec n)) width)
         density (cond (>= gap 14) "" (>= gap 4) "dense" :else "packed")]
-    (h/use-layout-effect
-     (fn []
-       (let [el (.-current track)
-             ro (js/ResizeObserver. #(set-width (.-clientWidth el)))]
-         (.observe ro el)
-         #(.disconnect ro)))
-     [])
     ;; The hover label sits over its mark but never leaves the right half.
     (h/use-layout-effect
      (fn []
