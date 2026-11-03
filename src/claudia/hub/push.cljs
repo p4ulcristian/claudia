@@ -100,8 +100,8 @@
 (defn- steady-since
   "When this chat started running or waiting (seconds), from the server's ago, kept steady across
   lists (an ago moves by a list's delay): the one seen before while within 10 s of it."
-  [keep k ago now]
-  (vswap! keep conj k)
+  [seen k ago now]
+  (vswap! seen conj k)
   (let [at (js/Math.floor (/ (- now (max 0 (or ago 0))) 1000))
         had (get @steady k)]
     (if (and had (<= (js/Math.abs (- had at)) 10))
@@ -113,7 +113,7 @@
   servers the grid lets them use."
   [email]
   (let [now (js/Date.now)
-        keep (volatile! #{})
+        seen (volatile! #{})
         out (reduce
              (fn [out [server rows]]
                (if-not (store/may? email server)
@@ -129,17 +129,17 @@
                         (update out :waiting conj
                                 (assoc base
                                        :kind (if (some #(= "question" (:kind %)) (:asks r)) "ask" "permission")
-                                       :since (steady-since keep (str k "\nwait:" (str/join "," (map :id (:asks r))))
+                                       :since (steady-since seen (str k "\nwait:" (str/join "," (map :id (:asks r))))
                                                             (reduce max 0 (keep :ago (:asks r))) now)))
                         (working? r)
-                        (update out :running conj (assoc base :kind nil :since (steady-since keep (str k "\nrun") (:runningFor r) now)))
+                        (update out :running conj (assoc base :kind nil :since (steady-since seen (str k "\nrun") (:runningFor r) now)))
                         (:unseen r) (update out :done inc)
                         :else out)))
                   out rows)))
              {:running [] :waiting [] :done 0}
              (get @lists email))]
     (swap! steady (fn [m] (into {} (remove #(and (str/starts-with? (key %) (str email "\n"))
-                                                 (not (@keep (key %))))) m)))
+                                                 (not (@seen (key %))))) m)))
     (-> out
         (update :waiting #(vec (sort-by :since %)))
         (update :running #(vec (sort-by :since %))))))
