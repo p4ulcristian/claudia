@@ -1,0 +1,12 @@
+# Start claudia-beta-update when the hub pokes this server's front (the front, user claudia, writes
+# the file into its own /var/lib/claudia-beta; update.sh removes it first, so a poke during a run
+# starts another).
+[Unit]
+Description=Claudia beta update on the hub's poke
+
+[Path]
+PathExists=/var/lib/claudia-beta/update-requested
+Unit=claudia-beta-update.service
+
+[Install]
+WantedBy=paths.target

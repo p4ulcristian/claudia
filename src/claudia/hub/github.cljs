@@ -5,7 +5,9 @@
   sooner: each one fetches and checks what it runs by itself (README decision 11).
   - push to beta: every server is poked (POST /api/update-check on its front).
   - a beta-release run on beta succeeded: the gate's root helper is asked to update the hub, by
-    writing the run's commit into HUB_UPDATE_REQUEST."
+    writing the run's commit into HUB_UPDATE_REQUEST, and every server is poked again (its slave
+    release exists only now).
+  Everything else (other branches, other workflows, other events) is answered 202 and ignored."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
             ["node:http" :as http]
@@ -76,5 +78,8 @@
                          (= "success" (:conclusion run)) (= branch (:head_branch run))
                          (= workflow (:path run))
                          (re-matches #"^[0-9a-f]{40}$" (str (:head_sha run))))
-                (request-hub-update! (:head_sha run)))
+                (request-hub-update! (:head_sha run))
+                ;; The slave release is published now: the servers look again (the poke on the
+                ;; push came before it existed).
+                (doseq [s (config/all-servers)] (poke! s)))
               202))))))

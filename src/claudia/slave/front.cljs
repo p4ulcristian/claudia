@@ -50,10 +50,24 @@
                          :version h/version
                          :commit h/commit}))
 
+(defn- update-check
+  "The hub's poke after a push to the beta branch (README decision 11): writes CLAUDIA_UPDATE_TRIGGER,
+  which a path unit watches to start deploy/update.sh. Says only \"look now\": the update fetches
+  and verifies what it installs by itself."
+  [^js res]
+  (if-let [file (not-empty (.-CLAUDIA_UPDATE_TRIGGER env))]
+    (try (fs/writeFileSync file (str (.toISOString (js/Date.)) "\n"))
+         (h/json-reply res 202 {:ok true})
+         (catch :default e (h/json-reply res 500 {:error (.-message e)})))
+    (h/json-reply res 501 {:error "no update unit here"})))
+
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
     (cond
+      ;; From the hub itself (no caller): only the hub reaches this listener.
+      (= url "/api/update-check")
+      (if (= "POST" (.-method req)) (update-check res) (h/json-reply res 405 {:error "POST only"}))
       status (h/json-reply res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
       (and read-only (not= "GET" (.-method req))) (h/json-reply res 403 {:error "Read only."})
