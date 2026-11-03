@@ -47,6 +47,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token (`sk-ant-oat…`) |
+| runner | `CLAUDIA_TOKENS_DIR` | the Claude tokens saved by name in Settings (default `claude-tokens` beside the token file); who switched to which is `<token file>.json` |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (`destiny`) |
 | host | `HOST_SOCKET` | unix socket it listens on |
@@ -80,7 +81,7 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 
 | Call | Answer |
 |---|---|
-| `GET /` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
+| `GET /`, `/new` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
 | `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
@@ -130,9 +131,48 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 
 | Call | Answer |
 |---|---|
-| `GET /api/me` | `{ server, profile, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `viewing` = the profile looked at (read only) or null |
+| `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
 | `POST /api/update-check` | answered by the front, no caller needed (only the hub reaches it): writes `CLAUDIA_UPDATE_TRIGGER`, 202; 501 when unset |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
+| `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
+| `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
+| `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
+
+`Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
+running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:
+`{ k: "tool", id, name, title, start, end?, error?, agent? (the lane this Agent call started), diff?: { added, removed } }`
+or `{ k: "text" | "user" | "note", id, at, text }` (text cut at 300 characters). `patch`: `{ file, created, cut,
+hunks: [{ oldStart, oldLines, newStart, newLines, lines }] }` from Claude Code's saved structuredPatch (a
+subagent's: made from the call's input), cut at 5000 lines.
+
+## Runner HTTP: chat operations (`/api/…`)
+
+Answered by the runner (through the front, or straight on its socket by a program the socket lets in,
+e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. `:id` = a chat id.
+
+| Call | Answer |
+|---|---|
+| `POST /api/delegate` `{ text }` (1 to 20000 characters) | `{ id }`: a new chat of this profile with the text sent, in its list like any other |
+| `GET /api/chats/:id/state` | `{ known, running, waiting, asks: [Ask], last (the replies after the last user message), step (the newest step: "<tool>: <summary>" or the start of the newest reply, ≤ 160 characters), steps (tool calls this turn), since (ISO time the running turn started, or null), agents }` |
+| `POST /api/chats/:id/send` `{ text }` | `{ ok }`: a message into the chat (queued if a turn runs; unarchives it); 404 for no such chat |
+| `POST /api/chats/:id/answer` `{ text }` | `{ ok, answered }`: the text answers every open question (as if typed into "Other"); 409 when none is open |
+| `POST /api/chats/:id/uploads?name=<file name>` (body: the file, up to 100 MB) | `{ path, name, size, type }`: saved as `uploads/<id>/<name>` in `RUNNER_DATA` (`-2` before the extension when taken). `:id` is the id the page used: a new chat's own uuid before `created` |
+| `GET /api/chats/:id/uploads/:name` | the file, as a download |
+| `GET /api/chats/:id/sent/:msg/:n` | the n-th image the user message `msg` sent (from the session file) |
+| `GET /api/chats/:id/shown/:step` | the image a `show_image` step (its tool-use id) showed |
+| `POST /api/chats/:id/fork` `{ at? }` | `{ id }`: a new chat holding this one up to the end of the turn of user message `at` (default: the last finished turn); same folder, picture copied, a colour of its own; 409 with `{ error }` when it can't |
+| `POST /api/chats/:id/explain` `{ step }` (a tool-use id) | `{ text }`: Haiku's 2-3 plain sentences on what that step does (or waits on) |
+| `PATCH /api/chats/:id` `{ title?, archived?, color? }` | `{ ok }`; `color`: one of the chat colours, `"ash"` (passive: remembers the colour it had) or `"wake"` (back to that colour, else a fresh one) |
+| `GET /api/search?q=&archived=1?` | `{ found: [{ id, hits: [{ uuid, role: "user"\|"claude", snippet }], count, title (bool: every word is in the title) }] }`; the words are prefixes, all needed; `\u0001…\u0002` marks them in a snippet. An SQLite FTS5 index (`search.db`), read on from each session file |
+| `GET /api/sessions` | `{ sessions: [{ id, title, at }] }`: Claude Code sessions of `CLAUDIA_CWD` that are not chats here |
+| `POST /api/sessions/:id/adopt` | `{ id }`: that session becomes a chat here |
+| `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`) |
+| `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo) |
+| `GET /api/claude-tokens` | `{ inUse: { name, by, at } \| null, tokens: [{ name, by, at }] }`: never a token |
+| `PUT /api/claude-token` `{ name, token }` | the same shape: saved under the name (same name = replaced) and switched to |
+| `POST /api/claude-token/use` `{ name }` | the same shape: the saved token copied over `CLAUDIA_TOKEN_FILE` (every chat's next start reads it) |
+| `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login |
+| `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set |
 
 ## WebSocket (`/ws`): page ↔ runner
 
@@ -145,8 +185,9 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made) | starts a chat with that first message; runner answers `created { chat, id }` then events |
-| `send` | `chat`, `text` | a message into the chat (queued if a turn runs) |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?` | starts a chat with that first message; runner answers `created { chat, id }` then events |
+| `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
+| `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion |
 | `secret` | `chat`, `ask`, `sealed` | the sealed secret for a `run_with_secret` ask |
@@ -154,13 +195,15 @@ Page → runner:
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `seen` | `chat` | the person looked at its last turn |
+| `picture` | `chat`, `turn` | runner answers `picture` with that turn's scene (an earlier picture; read-only callers may send it) |
 
 Runner → page:
 
 | type | fields |
 |---|---|
 | `chats` | `chats: [Row]`, sent on `hello` and on every change of any row |
-| `chat` | `chat`, `title`, `folder`, `messages: [Msg]`, `scene: Scene`, `running`, `asks: [Ask]` |
+| `chat` | `chat`, `title`, `folder`, `messages: [Msg]` (the newest 120), `more` (bool: older ones exist), `scene: Scene`, `running`, `asks: [Ask]` |
+| `older` | `chat`, `before`, `messages: [Msg]` (up to 120 before `before`), `more` |
 | `created` | `chat`, `id` (the page's uuid, to match) |
 | `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`) |
 | `delta` | `chat`, `id`, `text` (streamed text appended to message `id`) |
@@ -169,6 +212,8 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
+| `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
+| `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
@@ -176,6 +221,13 @@ ended, 0 = never), asks: [{ id, kind: "question" | "secret", text (the question,
 
 `Msg`: `{ id, role: "user" | "assistant" | "tool" | "note", text?, at }`; a tool step has
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
+A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`); a
+`show_image` step has `image: true` (`GET /api/chats/:chat/shown/<id>`).
+
+Attachments: `files` = `[{ path, name, size, type }]` as uploads answered them (the runner keeps
+only its own saved files) and goes as one `<claudia-file path name size type>` tag per file after
+the text (`claudia.shared.files`); `images` = `[{ media_type, data (base64) }]` (JPEG, PNG, GIF,
+WebP; photos and video frames, at most 40), sent before the text. The read-only `older` is allowed.
 
 `Ask`:
 - `{ id, kind: "question", questions: [{ question, header, multiSelect, options: [{ label, description }] }] }`
@@ -188,7 +240,11 @@ ended, 0 = never), asks: [{ id, kind: "question" | "secret", text (the question,
 - form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`), `data` (as the draw tool's description says)
 
 The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
-`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`.
+`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`. It keeps
+the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
+id made for a turn Claude started itself), sends `pictures`, and answers the draw with the text and a
+screenshot of the whole picture (`{ type: "image", data, mimeType: "image/png" }`), or the text and why
+there is none. A chat older than the history has only its last picture (turn `imported`).
 
 ## Secrets (1Password, `plan/1passwd-plan.md`)
 
@@ -212,7 +268,8 @@ The runner applies each `draw` call (same input as the draw tool: `title`, `clea
 Runner → host: `{ op: "start", id, spec }` with spec = `{ options, mcp, hooks }`: `options` = SDK
 query options without callbacks, `mcp` = the tool list (`{ server: { tool: { description, inputSchema
 (JSON Schema) } } }`), `hooks` = `{ <HookEvent>: [{ matcher? }] }`;
-`{ op: "send", id, text, uuid? }` (uuid: the user message's id, kept in the session file),
+`{ op: "send", id, text, uuid?, images? }` (uuid: the user message's id, kept in the session file;
+images: `[{ media_type, data }]`, image blocks before the text),
 `{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,

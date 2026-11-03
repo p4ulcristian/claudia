@@ -10,6 +10,8 @@
             [clojure.string :as str]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
+            [claudia.slave.pictures :as pictures]
+            [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]
@@ -31,6 +33,7 @@
 ;;   :asks {ask id -> {:ask (as the page gets it) :resolve :input :keys :secret :timer}}
 ;;   :turn (this turn's Msgs, by arrival) :partial (the assistant text being streamed)
 ;;   :mid (the API message streaming) :stream-counts :final-counts :idle (timer)
+;;   :turn-id (the user message uuid this turn answers: its picture's name in the history)
 (defonce state (atom {}))
 
 ;; Set by the runner: where events go.
@@ -190,17 +193,34 @@
 
 (defn- text-result [text] {:content [{:type "text" :text text}]})
 
-(defn- current-scene [id]
+(defn current-scene [id]
   (or (:scene (st id)) (store/scene id) scene/empty-scene))
 
+(defn- turn-id!
+  "This turn's name in the picture history; a turn Claude started itself gets one made."
+  [id]
+  (or (:turn-id (st id))
+      (let [t (str (random-uuid))] (swap-chat! id assoc :turn-id t) t)))
+
 (defn- draw [id input]
-  (let [{s :scene error :error} (scene/apply-draw (current-scene id) input)]
+  (let [prev (current-scene id)
+        {s :scene error :error} (scene/apply-draw prev input)]
     (if error
       (refusal error)
       (do (swap-chat! id assoc :scene s)
           (store/save-scene! id s)
+          (pictures/record! id (turn-id! id) prev s)
           (emit! id {:type "scene" :scene s})
-          (text-result (str "Picture updated. " (scene/describe s)))))))
+          (emit! id {:type "pictures" :pictures (pictures/listing id)})
+          ;; A screenshot of the picture as it looks now, so Claude sees its own drawing; one that
+          ;; fails is said in the text, never the draw's failure.
+          (let [text (str "Picture updated. " (scene/describe s))]
+            (-> (render/screenshot s (:color (store/chat id)))
+                (.then (fn [{:keys [^js png error]}]
+                         (if png
+                           {:content [{:type "text" :text text}
+                                      {:type "image" :data (.toString png "base64") :mimeType "image/png"}]}
+                           (text-result (str text "\n\n(No screenshot of the picture: " error ")")))))))))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [resolve]
@@ -226,11 +246,27 @@
                                (if status (str/join "\n" (take 40 (str/split-lines status))) "(not a git repository)")
                                "\n</git-status>"))))))))))
 
+(def ^:private image-types {".png" "image/png" ".jpg" "image/jpeg" ".jpeg" "image/jpeg" ".gif" "image/gif" ".webp" "image/webp"})
+
+(defn- show-image
+  "An image file into the chat: the tool result carries it (the page shows it under the step, from
+  the session file) and Claude sees it too."
+  [id {p :path caption :caption}]
+  (let [abs (path/resolve (or (:folder (store/chat id)) cwd) (str/replace (str p) #"^~(?=/|$)" (os/homedir)))
+        type (get image-types (str/lower-case (path/extname abs)))
+        size (try (.-size (fs/statSync abs)) (catch :default _ nil))]
+    (cond (not size) (refusal (str "No file at " abs "."))
+          (not type) (refusal "Only png, jpeg, gif or webp files can be shown.")
+          (> size (* 5 1024 1024)) (refusal "The image is over 5 MB.")
+          :else {:content [{:type "image" :data (.toString (fs/readFileSync abs) "base64") :mimeType type}
+                           {:type "text" :text (str "Shown in the chat" (when (seq caption) (str ": " caption)) ".")}]})))
+
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
     ["workspace" "set_folder"] (set-folder id (:path args))
     ["workspace" "run_with_secret"] (secret-ask id args)
+    ["workspace" "show_image"] (show-image id args)
     (refusal (str "No tool " server "/" tool "."))))
 
 (defn- can-use
@@ -262,7 +298,7 @@
                   (or (some->> (:errors m) seq (str/join "\n")) (:subtype m))))]
     (store/update! id (cond-> {:ended (now)} ok (assoc :preview (plain-start (:result m)))))
     (drop-asks! id true "The turn ended.")
-    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}))
+    (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}) :turn-id nil)
     (when error (emit! id {:type "error" :text error}))
     (set-running! id false)
     (changed!)))
@@ -367,19 +403,23 @@
                  (hostlink/send! {:op "start" :id id :spec (start-spec id (some? info))})
                  (swap-chat! id assoc :live true :final-counts (atom {})))))))
 
-(defn send-text! [id text]
+(defn send-text!
+  "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames)."
+  [id text & [images]]
   (-> (ensure-session! id)
       (.then (fn []
                (let [uuid (str (random-uuid))]
-                 (when-not (:running (st id)) (swap-chat! id assoc :turn []))
-                 (note-msg! id {:id uuid :role "user" :text text :at (now)})
-                 (hostlink/send! {:op "send" :id id :text text :uuid uuid})
+                 (when-not (:running (st id)) (swap-chat! id assoc :turn [] :turn-id uuid))
+                 (note-msg! id (cond-> {:id uuid :role "user" :text text :at (now)}
+                                 (seq images) (assoc :images (count images))))
+                 (hostlink/send! (cond-> {:op "send" :id id :text text :uuid uuid}
+                                   (seq images) (assoc :images images)))
                  (set-running! id true))))
       (.catch (fn [e] (emit! id {:type "error" :text (message e)})))))
 
 (defn new-chat!
   "Starts a chat with its first message; returns its id (the Claude Code session id)."
-  [text folder]
+  [text folder & [images]]
   (let [id (str (random-uuid))
         used (frequencies (keep :color (store/chats)))
         least (apply min (map #(get used % 0) chat-colors))
@@ -389,7 +429,7 @@
                  :folder (when (seq folder) folder)
                  :color (rand-nth (filter #(= least (get used % 0)) chat-colors))})
     (changed!)
-    (send-text! id text)
+    (send-text! id text images)
     id))
 
 (defn stop! [id]

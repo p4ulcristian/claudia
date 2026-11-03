@@ -8,11 +8,18 @@
             ["ws" :refer [WebSocketServer]]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.slave.api :as api]
             [claudia.slave.chats :as chats]
+            [claudia.slave.history :as history]
+            [claudia.slave.search :as search]
+            [claudia.slave.uploads :as uploads]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
+            [claudia.slave.pictures :as pictures]
+            [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
-            [claudia.slave.store :as store]))
+            [claudia.slave.store :as store]
+            [claudia.slave.timeline :as timeline]))
 
 (def ^:private env (.-env js/process))
 (def socket-path (or (.-RUNNER_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-beta-runner.sock")))
@@ -36,22 +43,49 @@
 
 (defn- known? [id] (and (string? id) (some? (store/chat id))))
 
+(def ^:private page-size "Messages per page of a chat's history." 120)
+
+(defn- sent-images
+  "A frame's photos and video frames as the host sends them: [{media_type data}] (at most 40)."
+  [f]
+  (vec (for [i (take 40 (when (sequential? (:images f)) (:images f)))
+             :when (and (re-matches #"image/(jpeg|png|gif|webp)" (str (:media_type i))) (string? (:data i)))]
+         {:media_type (:media_type i) :data (:data i)})))
+
 (defn- on-frame [c {:keys [type chat] :as f}]
   (let [who (:profile c)]
     (cond
       (not (contains? p/page->runner type)) (send! c {:type "error" :text (str "Unknown frame " type ".")})
       (and (:read-only c) (not (contains? p/read-only-ok type))) (send! c {:type "error" :chat chat :text "Read only."})
       (= type "hello") (do (reset! (:hello c) true) (send! c {:type "chats" :chats (chats/rows)}))
-      (= type "new") (let [id (chats/new-chat! (str (:text f)) (:folder f))]
+      (= type "new") (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
+                                               (:folder f) (sent-images f))]
                        (swap! (:open c) conj id)
                        (send! c {:type "created" :chat id :id (:id f)}))
       (not (known? chat)) (send! c {:type "error" :chat chat :text "No such chat."})
       :else
       (case type
+        ;; A chat opens with its newest page; older pages come with `older` as the page scrolls up.
         "open" (-> (chats/snapshot chat)
-                   (.then (fn [frame] (send! c frame) (swap! (:open c) conj chat))))
+                   (.then (fn [frame]
+                            (let [ms (:messages frame)
+                                  n (count ms)]
+                              (send! c (assoc frame :messages (subvec ms (max 0 (- n page-size))) :more (> n page-size))))
+                            (send! c {:type "pictures" :chat chat :pictures (pictures/listing chat)})
+                            (swap! (:open c) conj chat))))
+        "picture" (send! c {:type "picture" :chat chat :turn (:turn f) :scene (pictures/one chat (str (:turn f)))})
+        "older" (-> (chats/snapshot chat)
+                    (.then (fn [frame]
+                             (let [ms (:messages frame)
+                                   end (or (first (keep-indexed #(when (= (:before f) (:id %2)) %1) ms)) 0)]
+                               (send! c {:type "older" :chat chat :before (:before f)
+                                         :messages (subvec ms (max 0 (- end page-size)) end)
+                                         :more (> end page-size)})))))
         "close" (swap! (:open c) disj chat)
-        "send" (when (seq (:text f)) (chats/send-text! chat (:text f)))
+        "send" (let [files (uploads/own-files (:files f))
+                     images (sent-images f)]
+                 (when (or (seq (:text f)) (seq files) (seq images))
+                   (chats/send-text! chat (uploads/with-files (str (:text f)) files) images)))
         "stop" (chats/stop! chat)
         "answer" (chats/answer! chat (:ask f) (:answers f))
         "secret" (chats/secret! chat (:ask f) (:sealed f) who)
@@ -82,15 +116,58 @@
                                (.then (fn [value] (h/json-reply res 200 {:sealed (secret/seal value pubkey)})))))))))
           (.catch (fn [e] (h/json-reply res 502 {:error (str (or (.-message e) e))})))))))
 
+(defn- query-param [^js req k]
+  (.get (.-searchParams (js/URL. (.-url req) "http://runner")) k))
+
+(defn- picture-png
+  "GET /api/chats/:id/picture.png?turn=: the live picture (or the turn's) as a PNG."
+  [^js req ^js res id]
+  (let [turn (query-param req "turn")
+        scene (if (seq turn) (pictures/one id turn) (chats/current-scene id))]
+    (if-not (seq (:blocks scene))
+      (h/json-reply res 404 {:error "No such picture."})
+      (-> (render/screenshot scene (:color (store/chat id)))
+          (.then (fn [{:keys [^js png error]}]
+                   (if png
+                     (do (.writeHead res 200 #js {"content-type" "image/png" "cache-control" "no-store"
+                                                  "content-length" (.-length png)})
+                         (.end res png))
+                     (h/json-reply res 503 {:error error}))))))))
+
+(defn- timeline-reply
+  "GET /api/chats/:id/timeline?v= (same version: {same, now}) and /timeline/:lane/:step."
+  [^js req ^js res id sub]
+  (let [fail #(h/json-reply res 500 {:error (str (or (.-message %) %))})]
+    (if (= sub "timeline")
+      (-> (timeline/timeline chats/cwd id (boolean (:running (get @chats/state id))))
+          (.then (fn [^js t]
+                   (cond (nil? t) (h/json-reply res 404 {:error "No session file yet."})
+                         (= (.-v t) (query-param req "v")) (h/json-reply res 200 {:same true :now (.-now t)})
+                         :else (h/json-reply res 200 t))))
+          (.catch fail))
+      (let [[_ lane step] (re-matches #"timeline/([^/]+)/([^/]+)" sub)]
+        (-> (timeline/detail chats/cwd id (js/decodeURIComponent lane) (js/decodeURIComponent step))
+            (.then #(if % (h/json-reply res 200 %) (h/json-reply res 404 {:error "No such step."})))
+            (.catch fail))))))
+
 (defn- on-request [^js req ^js res]
   (let [who (caller req)
-        url (first (str/split (.-url req) #"\?"))]
+        url (first (str/split (.-url req) #"\?"))
+        [_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)
+        chat-id (some-> chat-id js/decodeURIComponent)]
     (cond
+      (and chat-id (= "GET" (.-method req)) (not (known? chat-id)))
+      (h/json-reply res 404 {:error "No such chat."})
+      (and chat-id (= sub "picture.png") (= "GET" (.-method req)))
+      (picture-png req res chat-id)
+      (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" (.-method req)))
+      (timeline-reply req res chat-id sub)
       (and (= url "/api/me") (= "GET" (.-method req)))
-      (h/json-reply res 200 {:server nil :profile (:profile who) :viewing nil :readOnly (:read-only who)
+      (h/json-reply res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                              :version h/version :commit h/commit})
       (and (= url "/api/secret/read") (= "POST" (.-method req)))
       (secret-read req res who)
+      (api/handle req res who) nil
       :else (h/json-reply res 404 {:error "Not found."}))))
 
 (defn- on-socket [^js ws ^js req]
@@ -104,14 +181,20 @@
 
 (defn main [& _]
   (store/open! data-dir)
+  (uploads/set-root! data-dir)
+  (search/open! data-dir)
+  ;; The search index catches up with every chat in the background, newest first.
+  (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
   (-> secret/ready
       (.then
        (fn []
          (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
-         (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 16 1024 1024)})
+         (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
                server (http/createServer on-request)]
            (.on wss "connection" on-socket)
+           ;; Uploads take up to 100 MB: no 5-minute cap on a request.
+           (set! (.-requestTimeout server) 0)
            (.on server "upgrade"
                 (fn [req sock head]
                   (if (str/starts-with? (.-url req) "/ws")

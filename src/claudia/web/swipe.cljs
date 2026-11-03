@@ -95,10 +95,10 @@
         settings ($ ".st-pane")]
     (cond
       (nil? app) nil
-      ;; Settings lies over the list: right goes back to the chats.
+      ;; Settings takes the list's place: right goes back to the chats.
       (and settings (= screen "list"))
       {:surface settings
-       :moves (keep identity [(slide-back settings ($ ".sidebar") #(rf/dispatch [:ops/settings false])
+       :moves (keep identity [(slide-back settings nil #(rf/dispatch [:ops/settings false])
                                           #(not (js/document.querySelector ".st-pane")))])}
 
       (= screen "list")
