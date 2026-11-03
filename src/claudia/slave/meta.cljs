@@ -3,7 +3,7 @@
   rate_limit_event, kept per token (a hash of it, never the token); the models with their effort
   levels and the slash commands, read once by a short Claude Code process that sends no message."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
-            ["node:crypto" :as crypto]
+            [claudia.node.crypto :refer [sha256-hex]]
             ["node:fs" :as fs]
             [claudia.node.env :as env]
             [claudia.shared.text :as text]
@@ -21,7 +21,7 @@
 (defn token-key
   "The token's name in the store: the start of its SHA-256, never the token."
   [token]
-  (-> (crypto/createHash "sha256") (.update (str token)) (.digest "hex") (subs 0 16)))
+  (subs (sha256-hex (str token)) 0 16))
 
 (defn- publish! [m]
   (let [before @state

@@ -3,8 +3,8 @@
   it runs, what it waits on. It sees only that step and the request around it (read from the chat's
   session file); the chat, its context and Claude's turn are not touched. Answers are kept per step."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
+            [claudia.node.crypto :refer [sha256-hex]]
             [claudia.shared.text :as text]
-            ["node:crypto" :as crypto]
             ["node:fs/promises" :as fsp]
             [clojure.string :as str]
             [claudia.slave.history :as history]))
@@ -141,7 +141,7 @@ No code, no lists, no headings; name a file or command only when it helps. Every
            (when-not s (throw (js/Error. "That step isn't saved in the chat yet.")))
            (let [prompt (prompt-of s (js/Date.now))
                  ;; A finished step's answer stays the same; a running one is asked again each time.
-                 k (when (:finished s) (.digest (.update (crypto/createHash "sha256") prompt) "hex"))]
+                 k (when (:finished s) (sha256-hex prompt))]
              (if-let [hit (and k (get @done k))]
                hit
                (.then (ask-haiku prompt token)

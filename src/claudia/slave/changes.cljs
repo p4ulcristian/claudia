@@ -4,8 +4,8 @@
   through a separate index file (the repo's own index, branches and stash are never touched), so
   shell edits count too. At the turn's end every touched file is compared with its copy and saved."
   (:require ["diff" :as jsdiff]
+            [claudia.node.crypto :refer [sha256-hex]]
             ["node:child_process" :as cp]
-            ["node:crypto" :as crypto]
             ["node:fs" :as fs]
             ["node:fs/promises" :as fsp]
             ["node:path" :as path]
@@ -64,7 +64,7 @@
   (-> (git dir ["rev-parse" "--show-toplevel"]) (.then #(not-empty (str/trim (str (text %)))))))
 
 (defn- index-file [chat root]
-  (let [h (-> (crypto/createHash "sha256") (.update root) (.digest "hex") (subs 0 12))]
+  (let [h (subs (sha256-hex root) 0 12)]
     (path/join (or @data-dir "/tmp") "index" (str chat "-" h))))
 
 (defn- snapshot-tree
