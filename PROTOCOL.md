@@ -368,6 +368,6 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 The draw tool goes through the chat's form row: kinds switched off are refused; a change that takes
 the last block of a required kind away is refused whole; a required `files`/`git` puts Claudia's own
 block (`auto-files`, `auto-git`, the chat's folder) on the picture. The form row's change is told to
-Claude once, in a `<system-reminder>` before the next message. `templates` and `save_template` are
+Claude once, in a `<system-reminder>` after the text of the next message (with the forms news). `templates` and `save_template` are
 tools of the `picture` server; a block `{ id, template: "<name>", parts? }` is drawn from the template.
 A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
