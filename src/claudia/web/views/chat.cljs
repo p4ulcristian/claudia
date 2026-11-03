@@ -142,11 +142,15 @@
        [:div.loading.muted "Loading…"])
      (when (:more state)
        [:div.loading.muted (if (:loading-older state) "Loading older messages…" "")])
-     (for [m msgs] ^{:key (:id m)} [message ck m])
+     (for [m msgs :when (not (:queued m))] ^{:key (:id m)} [message ck m])
      (for [[i t] (map-indexed vector outbox)]
        ^{:key (str "out" i)} [:div.msg.user.queued [:div.bubble (:text (files/split-files t))] [:span.queued-tag "sending"]])
      (when (or running pending?)
        [:div.working [:span.pulse] (if pending? "Starting…" "Working…")])
+     ;; Sent while Claude worked, not taken in yet: below the chat until then.
+     (for [m msgs :when (:queued m)]
+       ^{:key (:id m)} [:div.msg.user.queued {:title "Claude reads this at its next step"}
+                        [:div.bubble (:text (files/split-files (:text m)))] [:span.queued-tag "queued"]])
      (when-let [err (:error state)]
        [:div.error-line {:on-click #(rf/dispatch [:error/dismiss ck])} err])
      [asks/asks-area ck (:asks state)]]))

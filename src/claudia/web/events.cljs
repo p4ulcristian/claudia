@@ -10,10 +10,17 @@
 (defn- msg-index [msgs id]
   (first (keep-indexed (fn [i m] (when (= id (:id m)) i)) msgs)))
 
-(defn- upsert-msg [msgs msg]
-  (if-let [i (msg-index msgs (:id msg))]
-    (assoc msgs i msg)
-    (conj (or msgs []) msg)))
+(defn- upsert-msg
+  "A new or changed message by id. gone: a queued message Claude Code dropped. A queued message Claude
+  took in joins the chat where it was read: at the end, as things stand now."
+  [msgs msg]
+  (let [msgs (vec msgs)
+        i (msg-index msgs (:id msg))]
+    (cond
+      (:gone msg) (if i (into (subvec msgs 0 i) (subvec msgs (inc i))) msgs)
+      (and i (:queued (nth msgs i)) (not (:queued msg))) (conj (into (subvec msgs 0 i) (subvec msgs (inc i))) msg)
+      i (assoc msgs i msg)
+      :else (conj msgs msg))))
 
 (defn- append-delta [msgs id text]
   (if-let [i (msg-index msgs id)]

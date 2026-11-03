@@ -1,5 +1,6 @@
 (ns claudia.web.views.asks
-  "What Claude asks the person: AskUserQuestion cards, and the Allow card for a 1Password secret."
+  "What Claude asks the person: AskUserQuestion cards, the Allow card for a 1Password secret, and a
+  tool's OK (ExitPlanMode)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -107,6 +108,23 @@
             (when (:vault ask)
               [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/allow k ask])} "Allow"])]]))})))
 
+(defn- permit-card
+  "A tool waiting for the person's OK (ExitPlanMode: the plan to approve), as the TypeScript
+  Claudia's PermitPanel. Allow goes as an answer, Deny as a deny."
+  [k ask]
+  (let [open (r/atom false)]
+    (fn [k ask]
+      (let [{:keys [busy]} @(rf/subscribe [:ask-state (:id ask)])]
+        [:section.panel.permit {:class (when busy "busy")}
+         [:div.q-head [:span.chip.amber (:tool ask)] [:span.muted "needs your OK"]]
+         [:h3 (:title ask)]
+         (when-not (str/blank? (:description ask)) [:p.muted (:description ask)])
+         [:button.link {:on-click #(swap! open not)} (if @open "Hide details" "Details")]
+         (when @open [:pre.preview (:detail ask)])
+         [:div.actions
+          [:button {:disabled busy :on-click #(rf/dispatch [:ask/deny k (:id ask)])} "Deny"]
+          [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/answer k (:id ask) {}])} "Allow"]]]))))
+
 (defn asks-area
   "The open chat's asks, above the composer."
   [k asks]
@@ -116,4 +134,5 @@
        (case (:kind a)
          "question" ^{:key (:id a)} [question-card k a]
          "secret" ^{:key (:id a)} [secret-card k a]
+         "permit" ^{:key (:id a)} [permit-card k a]
          nil))]))
