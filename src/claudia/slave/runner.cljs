@@ -56,76 +56,119 @@
              :when (and (re-matches #"image/(jpeg|png|gif|webp)" (str (:media_type i))) (string? (:data i)))]
          {:media_type (:media_type i) :data (:data i)})))
 
-(defn- on-frame [c {:keys [type chat] :as f}]
-  (let [who (:profile c)]
-    (cond
-      (not (contains? p/page->runner type)) (send! c {:type "error" :text (str "Unknown frame " type ".")})
-      (and (:read-only c) (not (contains? p/read-only-ok type))) (send! c {:type "error" :chat chat :text "Read only."})
-      (= type "hello") (do (reset! (:hello c) true)
-                           (send! c {:type "chats" :chats (chats/rows)})
-                           (send! c (meta/frame)))
-      (= type "new") (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                               (:folder f) (sent-images f))]
-                       (swap! (:open c) conj id)
-                       (send! c {:type "created" :chat id :id (:id f)}))
-      (not (known? chat)) (send! c {:type "error" :chat chat :text "No such chat."})
-      :else
-      (case type
-        ;; A chat opens with its newest page; older pages come with `older` as the page scrolls up.
-        "open" (-> (chats/snapshot chat)
-                   (.then (fn [frame]
-                            (let [ms (:messages frame)
-                                  n (count ms)]
-                              (send! c (assoc frame :messages (subvec ms (max 0 (- n page-size))) :more (> n page-size))))
-                            (send! c {:type "pictures" :chat chat :pictures (pictures/listing chat)})
-                            (swap! (:open c) conj chat))))
-        "picture" (send! c {:type "picture" :chat chat :turn (:turn f) :scene (pictures/one chat (str (:turn f)))})
-        "older" (-> (chats/snapshot chat)
-                    (.then (fn [frame]
-                             (let [ms (:messages frame)
-                                   end (or (first (keep-indexed #(when (= (:before f) (:id %2)) %1) ms)) 0)]
-                               (send! c {:type "older" :chat chat :before (:before f)
-                                         :messages (subvec ms (max 0 (- end page-size)) end)
-                                         :more (> end page-size)})))))
-        "close" (swap! (:open c) disj chat)
-        "send" (let [files (uploads/own-files (:files f))
-                     images (sent-images f)]
-                 (when (or (seq (:text f)) (seq files) (seq images))
-                   ;; Writing to an archived chat brings it back; to a passive one wakes it.
-                   (store/update! chat {:archived false})
-                   (chats/wake! chat)
-                   (chats/send-text! chat (uploads/with-files (str (:text f)) files) images)
-                   (chats-changed)))
-        "stop" (chats/stop! chat)
-        "answer" (chats/answer! chat (:ask f) (:answers f))
-        "secret" (chats/secret! chat (:ask f) (:sealed f) who)
-        "deny" (chats/deny! chat (:ask f) who)
-        "rename" (chats/rename! chat (:title f))
-        "archive" (do (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
-        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))
-        "stop_task" (chats/stop-task! chat (str (:task f)))
-        "settings" (chats/set-settings! chat (select-keys f [:model :effort]))
-        "agent" (-> (chats/agent-detail chat (str (:agent f)))
-                    (.then (fn [d] (send! c (merge {:type "agent" :chat chat :agent (:agent f)} d)))))
-        "agent_git" (-> (chats/agent-git chat (str (:agent f)) (str (:rev f)))
-                        (.then (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
-        "diff" (send! c (merge {:type "diff" :chat chat :change (:change f)}
-                               (or (chats/change-texts chat (:change f)) {:error "No such change."})))
-        ;; The editor form: the user's typing saved into the picture, and its Send.
-        "code_edit" (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat))
-        "code_send" (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
-                      (chats/set-scene! chat scene)
-                      (when (seq text)
-                        (store/update! chat {:archived false})
-                        (chats/wake! chat)
-                        (chats/send-text! chat text)
-                        (chats-changed)))
-        ;; The form row and the columns of this chat's picture.
-        "picture_settings" (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
-                     (when scene (chats/set-scene! chat scene))
-                     (when (some? (:forms f)) (chats/tools-changed! chat))
-                     (emit chat {:type "picture_settings" :chat chat :settings settings}))))))
+(defn frame-gate
+  "What to do with a page frame of type frame-type before its chat: :unknown (no such frame),
+  :read-only (a read-only caller may not send it), :hello, :new, :no-chat (its chat is not known)
+  or :chat."
+  [frame-type read-only chat-known]
+  (cond
+    (not (contains? p/page->runner frame-type)) :unknown
+    (and read-only (not (contains? p/read-only-ok frame-type))) :read-only
+    (= frame-type "hello") :hello
+    (= frame-type "new") :new
+    (not chat-known) :no-chat
+    :else :chat))
 
+(defn newest-page
+  "A chat's messages as its first page: the newest page-size and whether there are more."
+  [ms]
+  (let [n (count ms)]
+    {:messages (subvec ms (max 0 (- n page-size))) :more (> n page-size)}))
+
+(defn older-page
+  "The page of messages before the message with id before (the start when it is not there)."
+  [ms before]
+  (let [end (or (first (keep-indexed #(when (= before (:id %2)) %1) ms)) 0)]
+    {:messages (subvec ms (max 0 (- end page-size)) end) :more (> end page-size)}))
+
+(defn- wake-with!
+  "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes."
+  [chat text images]
+  (store/update! chat {:archived false})
+  (chats/wake! chat)
+  (if images (chats/send-text! chat text images) (chats/send-text! chat text))
+  (chats-changed))
+
+(defmulti ^:private on-chat-frame
+  "A page frame for a known chat: c the page socket, f the frame, chat its id."
+  (fn [_c f _chat] (:type f)))
+
+;; A chat opens with its newest page; older pages come with `older` as the page scrolls up.
+(defmethod on-chat-frame "open" [c _ chat]
+  (.then (chats/snapshot chat)
+         (fn [frame]
+           (send! c (merge frame (newest-page (:messages frame))))
+           (send! c {:type "pictures" :chat chat :pictures (pictures/listing chat)})
+           (swap! (:open c) conj chat))))
+
+(defmethod on-chat-frame "picture" [c f chat]
+  (send! c {:type "picture" :chat chat :turn (:turn f) :scene (pictures/one chat (str (:turn f)))}))
+
+(defmethod on-chat-frame "older" [c f chat]
+  (.then (chats/snapshot chat)
+         (fn [frame]
+           (send! c (merge {:type "older" :chat chat :before (:before f)}
+                           (older-page (:messages frame) (:before f)))))))
+
+(defmethod on-chat-frame "close" [c _ chat] (swap! (:open c) disj chat))
+
+(defmethod on-chat-frame "send" [_ f chat]
+  (let [files (uploads/own-files (:files f))
+        images (sent-images f)]
+    (when (or (seq (:text f)) (seq files) (seq images))
+      (wake-with! chat (uploads/with-files (str (:text f)) files) images))))
+
+(defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
+(defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
+(defmethod on-chat-frame "secret" [c f chat] (chats/secret! chat (:ask f) (:sealed f) (:profile c)))
+(defmethod on-chat-frame "deny" [c f chat] (chats/deny! chat (:ask f) (:profile c)))
+(defmethod on-chat-frame "rename" [_ f chat] (chats/rename! chat (:title f)))
+(defmethod on-chat-frame "archive" [_ f chat] (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
+(defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
+(defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
+(defmethod on-chat-frame "settings" [_ f chat] (chats/set-settings! chat (select-keys f [:model :effort])))
+
+(defmethod on-chat-frame "agent" [c f chat]
+  (.then (chats/agent-detail chat (str (:agent f)))
+         (fn [d] (send! c (merge {:type "agent" :chat chat :agent (:agent f)} d)))))
+
+(defmethod on-chat-frame "agent_git" [c f chat]
+  (.then (chats/agent-git chat (str (:agent f)) (str (:rev f)))
+         (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
+
+(defmethod on-chat-frame "diff" [c f chat]
+  (send! c (merge {:type "diff" :chat chat :change (:change f)}
+                  (or (chats/change-texts chat (:change f)) {:error "No such change."}))))
+
+;; The editor form: the user's typing saved into the picture, and its Send.
+(defmethod on-chat-frame "code_edit" [_ f chat]
+  (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat)))
+
+(defmethod on-chat-frame "code_send" [_ f chat]
+  (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
+    (chats/set-scene! chat scene)
+    (when (seq text) (wake-with! chat text nil))))
+
+;; The form row and the columns of this chat's picture.
+(defmethod on-chat-frame "picture_settings" [_ f chat]
+  (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
+    (when scene (chats/set-scene! chat scene))
+    (when (some? (:forms f)) (chats/tools-changed! chat))
+    (emit chat {:type "picture_settings" :chat chat :settings settings})))
+
+(defn- on-frame [c {frame-type :type :keys [chat] :as f}]
+  (case (frame-gate frame-type (:read-only c) (known? chat))
+    :unknown (send! c {:type "error" :text (str "Unknown frame " frame-type ".")})
+    :read-only (send! c {:type "error" :chat chat :text "Read only."})
+    :hello (do (reset! (:hello c) true)
+               (send! c {:type "chats" :chats (chats/rows)})
+               (send! c (meta/frame)))
+    :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
+                                   (:folder f) (sent-images f))]
+           (swap! (:open c) conj id)
+           (send! c {:type "created" :chat id :id (:id f)}))
+    :no-chat (send! c {:type "error" :chat chat :text "No such chat."})
+    :chat (on-chat-frame c f chat)))
 
 (defn- caller [^js req]
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
@@ -183,27 +226,40 @@
             (.then #(if % (io/send-json res 200 %) (io/send-json res 404 {:error "No such step."})))
             (.catch fail))))))
 
+(defn request-op
+  "Which of the runner's own calls a request is (url without its query; chat-id and sub from
+  /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png, :timeline,
+  :me, :secret-read, or nil (the forms' and the API's calls, then not found)."
+  [method url chat-id sub chat-known]
+  (cond
+    (and chat-id (= "GET" method) (not chat-known)) :no-chat
+    (and chat-id (= sub "picture.png") (= "GET" method)) :picture-png
+    (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" method)) :timeline
+    (and (= url "/api/me") (= "GET" method)) :me
+    (and (= url "/api/secret/read") (= "POST" method)) :secret-read))
+
+(defn chat-call
+  "A request path (no query) of /api/chats/:id/<sub> as [id sub] (id decoded), else [nil nil]."
+  [url]
+  (let [[_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)]
+    [(some-> chat-id js/decodeURIComponent) sub]))
+
 (defn- on-request [^js req ^js res]
   (let [who (caller req)
         url (first (str/split (.-url req) #"\?"))
-        [_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)
-        chat-id (some-> chat-id js/decodeURIComponent)]
-    (cond
-      (and chat-id (= "GET" (.-method req)) (not (known? chat-id)))
-      (io/send-json res 404 {:error "No such chat."})
-      (and chat-id (= sub "picture.png") (= "GET" (.-method req)))
-      (picture-png req res chat-id)
-      (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" (.-method req)))
-      (timeline-reply req res chat-id sub)
-      (and (= url "/api/me") (= "GET" (.-method req)))
-      (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
-                             :version h/version :commit h/commit})
-      (and (= url "/api/secret/read") (= "POST" (.-method req)))
-      (secret-read req res who)
-      (codeforms/handle req res url who {:scene-of chats/scene-of
-                                         :tools-changed! chats/prefs-changed!}) nil
-      (api/handle req res who) nil
-      :else (io/send-json res 404 {:error "Not found."}))))
+        [chat-id sub] (chat-call url)]
+    (case (request-op (.-method req) url chat-id sub (and chat-id (known? chat-id)))
+      :no-chat (io/send-json res 404 {:error "No such chat."})
+      :picture-png (picture-png req res chat-id)
+      :timeline (timeline-reply req res chat-id sub)
+      :me (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
+                                 :version h/version :commit h/commit})
+      :secret-read (secret-read req res who)
+      nil (cond
+            (codeforms/handle req res url who {:scene-of chats/scene-of
+                                               :tools-changed! chats/prefs-changed!}) nil
+            (api/handle req res who) nil
+            :else (io/send-json res 404 {:error "Not found."})))))
 
 (defn- on-socket [^js ws ^js req]
   (let [c (merge (caller req) {:ws ws :hello (atom false) :open (atom #{})})]
@@ -213,6 +269,35 @@
                              (catch :default e (send! c {:type "error" :text (str "Bad frame: " (.-message e))})))))
     (.on ws "close" #(swap! conns disj c))
     (.on ws "error" (fn [_]))))
+
+(defn- listen!
+  "The runner's HTTP and WebSocket server on its unix socket."
+  []
+  (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
+        server (http/createServer on-request)]
+    (.on wss "connection" on-socket)
+    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
+    (set! (.-requestTimeout server) 0)
+    (.on server "upgrade"
+         (fn [req sock head]
+           (if (str/starts-with? (.-url req) "/ws")
+             (.handleUpgrade wss req sock head #(.emit wss "connection" % req))
+             (.destroy sock))))
+    (try (fs/unlinkSync socket-path) (catch :default _))
+    (.listen server socket-path
+             (fn []
+               ;; Group may connect: a front running as another user of the group.
+               (fs/chmodSync socket-path (js/parseInt "660" 8))
+               (println "claudia runner" profile "on" socket-path "(host" host-socket ", cwd" chats/cwd ")")))))
+
+(defn- start!
+  "Once libsodium is ready: the host link, the chats, the 5-minute probe and the server."
+  []
+  (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
+  (chats/init!)
+  ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
+  (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
+  (listen!))
 
 (defn main [& _]
   (store/open! data-dir)
@@ -224,26 +309,4 @@
   (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
-  (-> secret/ready
-      (.then
-       (fn []
-         (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
-         (chats/init!)
-         ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
-         (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
-         (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 64 1024 1024)})
-               server (http/createServer on-request)]
-           (.on wss "connection" on-socket)
-           ;; Uploads take up to 100 MB: no 5-minute cap on a request.
-           (set! (.-requestTimeout server) 0)
-           (.on server "upgrade"
-                (fn [req sock head]
-                  (if (str/starts-with? (.-url req) "/ws")
-                    (.handleUpgrade wss req sock head #(.emit wss "connection" % req))
-                    (.destroy sock))))
-           (try (fs/unlinkSync socket-path) (catch :default _))
-           (.listen server socket-path
-                    (fn []
-                      ;; Group may connect: a front running as another user of the group.
-                      (fs/chmodSync socket-path (js/parseInt "660" 8))
-                      (println "claudia runner" profile "on" socket-path "(host" host-socket ", cwd" chats/cwd ")"))))))))
+  (.then secret/ready start!))

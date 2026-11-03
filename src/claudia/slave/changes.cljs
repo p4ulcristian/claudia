@@ -52,11 +52,11 @@
   ([root args] (git root args nil))
   ([root args env]
    (js/Promise.
-    (fn [resolve]
+    (fn [done]
       (cp/execFile "git" (clj->js (into ["-C" root] args))
                    #js {:env (if env (js/Object.assign #js {} (.-env js/process) (clj->js env)) (.-env js/process))
                         :maxBuffer (* 64 1024 1024) :encoding "buffer" :timeout 60000}
-                   (fn [err stdout] (resolve (when-not err stdout))))))))
+                   (fn [err stdout] (done (when-not err stdout))))))))
 
 (defn- text [buf] (some-> buf (.toString "utf8")))
 
@@ -86,7 +86,7 @@
 (defn- tree-changes [root a b]
   (-> (git root ["diff-tree" "-r" "--no-renames" "--name-only" "-z" a b])
       (.then (fn [out] (->> (str/split (str (text out)) #"\x00") (remove str/blank?) (take 200)
-                            (map (fn [rel] {:rel rel :abs (path/join root rel)})))))))
+                            (map (fn [rel] {:rel rel :full (path/join root rel)})))))))
 
 (defn- blob-state [root tree rel]
   (-> (git root ["cat-file" "-s" (str tree ":" rel)])
@@ -129,41 +129,60 @@
                    {:continue true})))
       (js/Promise.resolve {:continue true}))))
 
+(defn- add-blobs
+  "Promise of before with the snapshot tree's copy of every changed file it does not hold yet."
+  [before root tree files]
+  (reduce (fn [acc {:keys [rel full]}]
+            (.then acc (fn [m]
+                         (if (contains? m full)
+                           m
+                           (.then (blob-state root tree rel) #(assoc m full %))))))
+          (js/Promise.resolve before) files))
+
+(defn- with-tree-befores
+  "Promise of before (path -> copy) with the files that changed in root since the turn's snapshot
+  (tree-p, a promise of its tree), as they were then."
+  [chat before root tree-p]
+  (-> (js/Promise.all #js [tree-p (snapshot-tree root (index-file chat root))])
+      (.then (fn [[a b]]
+               (if (or (nil? a) (nil? b) (= a b))
+                 before
+                 (.then (tree-changes root a b) #(add-blobs before root a %)))))
+      (.catch (fn [_] before))))
+
+(defn same-state?
+  "Whether a file's copy before and its state after are the same."
+  [before after]
+  (and (= (:text after) (:text before)) (= (:skipped after) (:skipped before))))
+
+(defn change-row
+  "The change row of path p in turn: b its copy before, a its state after, at = now (ms)."
+  [turn p b a at]
+  (merge {:turn (or turn "") :path p :before (:text b) :after (:text a)
+          :status (cond (and (nil? (:text b)) (nil? (:skipped b))) "added"
+                        (and (nil? (:text a)) (nil? (:skipped a))) "deleted"
+                        :else "modified")
+          :skipped (or (:skipped a) (:skipped b)) :at at}
+         (line-counts (:text b) (:text a))))
+
+(defn- save-changes!
+  "Promise of the change rows saved for every touched file (path -> copy) that differs now."
+  [chat turn touched]
+  (reduce (fn [acc [p b]]
+            (.then acc (fn [rows]
+                         (.then (read-state p)
+                                (fn [a]
+                                  (if (same-state? b a)
+                                    rows
+                                    (conj rows (store/add-change! chat (change-row turn p b a (js/Date.now))))))))))
+          (js/Promise.resolve []) touched))
+
 (defn finish!
   "The turn ended: compares every touched file with its copy; promise of the new change rows."
   [chat]
   (let [{:keys [turn before trees]} (get @state chat)]
     (swap! state assoc chat {})
-    (-> (reduce (fn [acc [root tree-p]]
-                  (.then acc (fn [before]
-                               (-> (js/Promise.all #js [tree-p (snapshot-tree root (index-file chat root))])
-                                   (.then (fn [[a b]]
-                                            (if (or (nil? a) (nil? b) (= a b))
-                                              before
-                                              (-> (tree-changes root a b)
-                                                  (.then (fn [files]
-                                                           (reduce (fn [acc2 {:keys [rel abs]}]
-                                                                     (.then acc2 (fn [m]
-                                                                                   (if (contains? m abs)
-                                                                                     m
-                                                                                     (.then (blob-state root a rel) #(assoc m abs %))))))
-                                                                   (js/Promise.resolve before) files)))))))
-                                   (.catch (fn [_] before))))))
+    (-> (reduce (fn [acc [root tree-p]] (.then acc #(with-tree-befores chat % root tree-p)))
                 (js/Promise.resolve (or before {})) trees)
-        (.then (fn [touched]
-                 (reduce (fn [acc [p b]]
-                           (.then acc (fn [rows]
-                                        (.then (read-state p)
-                                               (fn [a]
-                                                 (if (and (= (:text a) (:text b)) (= (:skipped a) (:skipped b)))
-                                                   rows
-                                                   (conj rows
-                                                         (store/add-change!
-                                                          chat (merge {:turn (or turn "") :path p :before (:text b) :after (:text a)
-                                                                       :status (cond (and (nil? (:text b)) (nil? (:skipped b))) "added"
-                                                                                     (and (nil? (:text a)) (nil? (:skipped a))) "deleted"
-                                                                                     :else "modified")
-                                                                       :skipped (or (:skipped a) (:skipped b)) :at (js/Date.now)}
-                                                                      (line-counts (:text b) (:text a)))))))))))
-                         (js/Promise.resolve []) touched)))
+        (.then #(save-changes! chat turn %))
         (.catch (fn [e] (js/console.error "changes:" (str (or (.-message e) e))) [])))))
