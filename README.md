@@ -67,17 +67,24 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   change of the count alone goes as a badge-only push; one summary Live Activity per phone. While the
   person works at a desktop page (`POST /hub/presence`), alerts are held; when they leave, the newest
   per chat that still matters goes.
-- **Following main**: `.github/workflows/release.yml` builds everything on each push to `main`,
-  publishes the hub image `ghcr.io/<owner>/claudia-hub:sha-<commit>` and the slave release
-  `claudia-slave-<commit>.tar.gz` (out/, production node_modules for linux-x64, deploy/,
-  commit.txt) on the GitHub release `release-<short commit>`, both signed keyless by cosign. GitHub's
-  webhook (`POST /hub/github`, HMAC with `HUB_GITHUB_SECRET_FILE`) makes the hub poke every front
-  (`POST /api/update-check`, which writes `CLAUDIA_UPDATE_TRIGGER`) on a push to main and again when
-  the run succeeded, and on that success writes the commit into `HUB_UPDATE_REQUEST` for the gate.
-  Each server's `deploy/update.sh` (path unit on the trigger, hourly timer) installs the newest
-  release only after `cosign verify-blob` against this workflow on main, only forward, restarts the
-  front and the runners, never the hosts. A single-user machine's `CLAUDIA_CHECKOUT` must be a release
-  folder (a git checkout is never replaced): first install with
+- **Following main** (built before the merge, 2026-11-03): `check.yml` checks a PR at its head
+  commit and packs what it built as one bundle keyed by that commit's git tree. When the check is
+  green (a PR into main from this repository, or a push to main), `stage.yml` (run on main, so its
+  definition is main's) takes the run's bundle, checks its `tree.txt` against GitHub's record of the
+  run, and publishes the slave release `claudia-tree-<tree>.tar.gz` on the GitHub release
+  `tree-<tree>` and the hub image `ghcr.io/<owner>/claudia-hub:tree-<tree>` (COPY only from the
+  bundle), both signed keyless by cosign as `stage.yml@refs/heads/main` (the image with
+  `tree=<tree>`). GitHub's webhook (`POST /hub/github`, HMAC with `HUB_GITHUB_SECRET_FILE`): a stage
+  run done → the hub tells every front `{stage: tree}` and the gate `stage <tree>` (lines added to
+  `CLAUDIA_UPDATE_TRIGGER` and `HUB_UPDATE_REQUEST`), and they download and verify that build ahead;
+  a push to main → `{main: commit}` and `update <commit> <tree>`. Each server's `deploy/update.sh`
+  (path unit on the trigger, hourly timer) and the gate's helper take main's commit from git's ref
+  list (waiting up to 40 s for a pushed one), its tree from the API, and install that tree's build:
+  fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
+  downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
+  front and the runners restart, never the hosts. `release.yml` (commit releases, `release-<short>`)
+  stays only until every server runs this update.sh. A single-user machine's `CLAUDIA_CHECKOUT`
+  must be a release folder (a git checkout is never replaced): first install with
   `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`.
 
 ## The 3D scene, the phone and alerts (2026-11-03, ported from the TypeScript Claudia's decisions 26 and 29)

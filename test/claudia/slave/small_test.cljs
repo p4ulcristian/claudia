@@ -120,3 +120,10 @@
          (front/newest-heard [{"a" {:limits [1] :at 4} "b" {:limits [3] :at nil}}
                               {"a" {:limits [2] :at 9}}
                               {"a" {:limits [0] :at 1}}]))))
+
+(deftest the-poke-says-check-or-stage
+  (let [t (apply str (repeat 40 "a"))]
+    (is (= (str "stage " t "\n") (front/trigger-line {:stage t} "now")))
+    (is (= (str "main " t "\n") (front/trigger-line {:main t} "now")))
+    (is (= "check now\n" (front/trigger-line {:stage "nope"} "now")))
+    (is (= "check now\n" (front/trigger-line {} "now")))))

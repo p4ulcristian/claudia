@@ -46,3 +46,14 @@
   (is (= {"a" 100} (presence/beaten nil "a" true 100)))
   (is (= {} (presence/beaten {"a" 90} "a" false 100)))
   (is (= {"b" 100} (presence/beaten {"a" (- 100 p/stale-ms)} "b" true 100))))
+
+(deftest pushes-and-stage-runs-name-what-to-fetch
+  (let [c (apply str (repeat 40 "c")) t (apply str (repeat 40 "d"))]
+    (is (= [c t] (github/push-target {:after c :head_commit {:tree_id t}})))
+    (is (nil? (github/push-target {:after c})))
+    (let [d {:action "completed" :workflow_run {:conclusion "success" :path ".github/workflows/stage.yml"
+                                                :display_title (str "stage " t)}}]
+      (is (= t (github/staged-tree "workflow_run" d)))
+      (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :conclusion] "failure"))))
+      (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :display_title] "stage "))))
+      (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :path] ".github/workflows/check.yml")))))))

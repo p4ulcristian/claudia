@@ -61,15 +61,28 @@
                          :version h/version
                          :commit h/commit}))
 
+(defn trigger-line
+  "The line the hub's poke adds to CLAUDIA_UPDATE_TRIGGER: \"stage <tree>\" (body {:stage tree}: a
+  git tree to fetch ahead), \"main <commit>\" (body {:main commit}: main was pushed to it, which
+  GitHub's API may name a few seconds later), else \"check <time>\" (look at main now)."
+  [body iso]
+  (let [hex? #(and (string? %) (re-matches #"^[0-9a-f]{40}$" %))]
+    (cond (hex? (:stage body)) (str "stage " (:stage body) "\n")
+          (hex? (:main body)) (str "main " (:main body) "\n")
+          :else (str "check " iso "\n"))))
+
 (defn- update-check
-  "The hub's poke after a push to the main branch (README, Hub operations: following main): writes CLAUDIA_UPDATE_TRIGGER,
-  which a path unit watches to start deploy/update.sh. Says only \"look now\": the update fetches
-  and verifies what it installs by itself."
-  [^js res]
+  "The hub's poke (README, Hub operations: following main): adds a line to CLAUDIA_UPDATE_TRIGGER,
+  which a path unit watches to start deploy/update.sh. Says only \"look now\" or \"fetch this tree
+  ahead\": the update fetches and verifies what it installs by itself."
+  [^js req ^js res]
   (if-let [file (not-empty (.-CLAUDIA_UPDATE_TRIGGER env))]
-    (try (fs/writeFileSync file (str (.toISOString (js/Date.)) "\n"))
-         (io/send-json res 202 {:ok true})
-         (catch :default e (io/send-json res 500 {:error (.-message e)})))
+    (-> (io/read-json req 4096)
+        (.catch (fn [_] {}))
+        (.then (fn [body]
+                 (try (fs/appendFileSync file (trigger-line body (.toISOString (js/Date.))))
+                      (io/send-json res 202 {:ok true})
+                      (catch :default e (io/send-json res 500 {:error (.-message e)}))))))
     (io/send-json res 501 {:error "no update unit here"})))
 
 (defn- token-answer [^js res v]
@@ -126,7 +139,7 @@
     (cond
       ;; From the hub itself (no caller): only the hub reaches this listener.
       (= url "/api/update-check")
-      (if (= "POST" (.-method req)) (update-check res) (io/send-json res 405 {:error "POST only"}))
+      (if (= "POST" (.-method req)) (update-check req res) (io/send-json res 405 {:error "POST only"}))
       (= url "/api/claude-token/current") (token-current req res)
       (= url "/api/claude-token/limits") (token-limits req res)
       status (io/send-json res status {:error error})

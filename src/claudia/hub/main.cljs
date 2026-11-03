@@ -19,7 +19,8 @@
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
-;; The hub's version and commit (the image writes version.json beside hub.js; elsewhere none).
+;; The hub's version and what it was built from (version.json beside hub.js: the commit, or the git
+;; tree of a staged image; elsewhere none). The gate names the commit it runs (HUB_COMMIT).
 (def ^:private version-info
   (try (js->clj (js/JSON.parse (fs/readFileSync (path/join js/__dirname "version.json") "utf8")) :keywordize-keys true)
        (catch :default _ {:version nil :commit nil})))
@@ -130,7 +131,7 @@
    :admin admin?
    :push (push/on?)
    :version (:version version-info)
-   :commit (:commit version-info)
+   :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
    :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
 (defn- hub-api [^js req ^js res pathname]
