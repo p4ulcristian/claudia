@@ -3,10 +3,10 @@
   (claudia.slave.git) and asked again every few seconds with the graph's fingerprint, so it redraws
   when the repo changes. A click on a commit opens its files and diff beside the graph. Read only."
   (:require [clojure.string :as str]
-            [reagent.core :as r]
             [reagent.hooks :as h]
+            [claudia.shared.git-layout :as layout]
             [claudia.web.api :as api]
-            [claudia.web.hl :as hl]
+            [claudia.web.shiki :as shiki]
             [claudia.web.views.code :as code]))
 
 (def ^:private poll-ms 2500)
@@ -30,31 +30,7 @@
 
 (defn- matches? [c rev head]
   (if (= rev "HEAD") (= (:hash c) head)
-      (or (and (>= (count rev) 2) (str/starts-with? (:hash c) rev)) (some #(= (:name %) rev) (:refs c)))))
-
-;; ---- the demo's layout (the runner lays out live graphs) ----
-
-(defn- layout [commits]
-  (let [present (set (map :hash commits))
-        free #(or (first (keep-indexed (fn [i x] (when (nil? x) i)) %)) (count %))
-        put (fn [ls i v] (assoc (if (>= i (count ls)) (conj ls nil) ls) i v))
-        with-cols (loop [cs commits lanes [] out []]
-                    (if-let [c (first cs)]
-                      (let [col (or (first (keep-indexed #(when (= %2 (:hash c)) %1) lanes)) (free lanes))
-                            lanes (put (mapv #(if (= % (:hash c)) nil %) lanes) col nil)
-                            ps (filter present (:parents c))
-                            lanes (if (empty? ps) lanes
-                                      (reduce (fn [ls p] (if (some #{p} ls) ls (put ls (free ls) p))) (put lanes col (first ps)) (rest ps)))]
-                        (recur (rest cs) lanes (conj out (assoc c :col col))))
-                      out))
-        idx (into {} (map-indexed (fn [i c] [(:hash c) i])) with-cols)
-        tips (filter #(some (fn [r] (#{"branch" "head" "remote"} (:type r))) (:refs %)) with-cols)]
-    (first (reduce (fn [[cs n] tip]
-                     (loop [cs cs i (idx (:hash tip))]
-                       (if (and i (nil? (:colorKey (nth cs i))))
-                         (recur (assoc-in cs [i :colorKey] n) (some-> (first (:parents (nth cs i))) idx))
-                         [cs (inc n)])))
-                   [(mapv #(assoc % :colorKey nil) with-cols) 0] tips))))
+      (or (and (>= (count rev) 4) (str/starts-with? (:hash c) rev)) (some #(= (:name %) rev) (:refs c)))))
 
 ;; ---- a unified diff, with the changed words marked ----
 
@@ -106,16 +82,32 @@
                                (cond-> rows wa (assoc-in [(del k) :words] wa) wb (assoc-in [(add k) :words] wb))))
                            rows (range (min (count del) (count add)))))))))))
 
-(defn- marked-text [text words]
-  (loop [pos 0 ws words out []]
-    (if-let [[p q] (first ws)]
-      (recur q (rest ws) (conj out (subs text pos p) ^{:key p} [:span.w (subs text p q)]))
-      (conj out (subs text pos)))))
+(defn- pieces
+  "A line's Shiki tokens cut where the marked words start and end: [[token-or-nil text hot?]]."
+  [^js toks text words]
+  (let [toks (if (and toks (pos? (.-length toks))) (array-seq toks) [#js {:content text}])]
+    (if-not words
+      (map (fn [^js t] [t (.-content t) false]) toks)
+      (loop [ts toks at 0 out []]
+        (if-let [^js t (first ts)]
+          (let [content (.-content t)
+                n (count content)
+                out (loop [s 0 out out]
+                      (if (>= s n)
+                        out
+                        (let [pos (+ at s)
+                              w (some (fn [[p q]] (when (and (>= pos p) (< pos q)) [p q])) words)
+                              nxt (if w (second w) (reduce min js/Infinity (filter #(> % pos) (map first words))))
+                              len (min (- n s) (- nxt pos))]
+                          (recur (+ s len) (conj out [t (subs content s (+ s len)) (boolean w)])))))]
+            (recur (rest ts) (+ at n) out))
+          out)))))
 
 (defn diff-view [patch path]
   (let [rows (h/use-memo #(parse-patch patch) [patch])
         lines (filter #(= :line (:kind %)) rows)
-        coloured (h/use-memo #(hl/lines (str/join "\n" (map :text lines)) (hl/ext-of path)) [rows path])]
+        lang (code/ext-of path)
+        tokens (shiki/use-tokens (h/use-memo #(str/join "\n" (map :text lines)) [rows]) lang)]
     (into [:div.f-lines.g-diff]
           (first
            (reduce (fn [[out k] [i r]]
@@ -125,11 +117,14 @@
                               [:div.f-ln {:class (case (:sign r) "+" "add" "-" "del" nil)}
                                [:span.num (or (:n r) "")]
                                [:span.sign (if (= "-" (:sign r)) "−" (:sign r))]
-                               (cond
-                                 (not (seq (:text r))) [:code " "]
-                                 (:words r) (into [:code] (marked-text (:text r) (:words r)))
-                                 (nth coloured k nil) [:code {:dangerouslySetInnerHTML (r/unsafe-html (nth coloured k))}]
-                                 :else [:code (:text r)])])
+                               (if (seq (:text r))
+                                 (into [:code]
+                                       (map-indexed (fn [j [^js t txt hot]]
+                                                      ^{:key j} [:span {:class (when hot "w")
+                                                                        :style (merge {:color (some-> t .-color)} (shiki/font-style (some-> t .-fontStyle)))}
+                                                                 txt])
+                                                    (pieces (shiki/line tokens k) (:text r) (:words r))))
+                                 [:code " "])])
                         (inc k)]))
                    [[] 0] (map-indexed vector rows))))))
 
@@ -182,7 +177,7 @@
             [:div
              [:b.g-detail-subj (:subject meta)]
              [:div.g-meta
-              (when-not (= "WORKING" (:hash meta))
+              (when-not (#{"WORKING" "RANGE"} (:hash meta))
                 [:<> [:span.h (subs (str (:hash meta)) 0 10)] (str " · " (:author meta) " · " (.toLocaleString (js/Date. (:date meta))) " · ")])
               (str (:files stats) " file" (when (not= 1 (:files stats)) "s") " ")
               [:span.st-A (str "+" (:additions stats))] " " [:span.st-D (str "−" (:deletions stats))]
@@ -315,12 +310,12 @@
                            (js/Promise.resolve nil)
                            (-> (api/fetch-json (url-of {:limit limit :branches (when only (str/join "," only)) :fp (.-current fp)}))
                                (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (set! (.-current fp) (:fp j)) (set-log j)))))
-                               (.catch (fn [e] (when-not @gone (set-error (.-message e)))))))
+                               (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
                          (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
            (ask)
            #(do (reset! gone true) (js/clearTimeout @timer)))))
      [live repo server chat limit only])
-    (let [shown (h/use-memo #(if demo (update (assoc demo :demo? true) :commits (fn [cs] (layout (mapv (fn [c] (update c :refs items)) (items cs))))) log) [demo log])
+    (let [shown (h/use-memo #(if demo (update (assoc demo :demo? true) :commits (fn [cs] (layout/layout-graph (mapv (fn [c] (update c :refs items)) (items cs))))) log) [demo log])
           branches (or (:branches shown)
                        ;; The demo names no branch list: its refs are the branches.
                        (vec (distinct (for [c (:commits shown) r (:refs c) :when (#{"head" "branch" "remote"} (:type r))]
@@ -340,6 +335,9 @@
         [:span.f-file {:title repo} [:span.dir (if demo "~/Work/apps/" (subs home 0 cut))] [:b (if demo "shop" (subs home cut))]]
         (when shown [:span.g-on {:title (if (:detached shown) "HEAD is not on a branch" "the checked-out branch")}
                      (if (:detached shown) "detached" (str "⎇ " (:currentBranch shown)))])
+        (when (:fetched shown)
+          [:span.g-fetched {:title (str "last fetch: " (.toLocaleString (js/Date. (:fetched shown))))}
+           (str "fetched " (ago (/ (- (js/Date.now) (js/Date.parse (:fetched shown))) 1000)) " ago")])
         (when live [:span.f-kind.real {:title "Read live from the repo; redraws when it changes"} "live"])
         (when demo [:span.f-kind.made "example"])]
        (when error [:p.f-note.f-code-err error])

@@ -7,6 +7,7 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.picture :as picture]
@@ -50,4 +51,5 @@
      [:main.split {:class (when folded? "folded")}
       [chat/chat-pane]
       [picture/picture-pane]]
-     [admin/dialog]]))
+     [admin/dialog]
+     [codeforms/gallery-host]]))

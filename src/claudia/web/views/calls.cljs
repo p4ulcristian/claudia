@@ -5,10 +5,9 @@
   columns by steps away, boxes coloured by folder, arrows for calls. Read live through the runner
   (the clojure form's clj-kondo index); what is shown is read again when the project changes."
   (:require [clojure.string :as str]
-            [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
-            [claudia.web.hl :as hl]
+            [claudia.web.shiki :as shiki]
             [claudia.web.views.code :as code]))
 
 (def ^:private poll-ms 4000)
@@ -105,56 +104,67 @@
                {:error (str "no var " s " in the demo")})))}))
 
 (defn- use-got
-  "A promise-returning read, shown when it lands; nil while it is read."
-  [f k]
+  "A promise-returning read, shown when it lands; nil while it is read. src: the source it reads
+  through (a new one when the project changed: read again, the last answer shown meanwhile)."
+  [f k src]
   (let [[got set-got] (h/use-state nil)]
     (h/use-effect
      (fn []
        (let [gone (atom false)]
          (.then (f) #(when-not @gone (set-got {:k k :d %})))
          #(reset! gone true)))
-     [k])
+     [k src])
     (when (= k (:k got)) (:d got))))
 
 ;; ---- code with its calls as links ----
 
 (defn- segments
-  "A line's HTML pieces cut where a call's link starts and ends: [{:text :html? :to?}]."
-  [text links]
-  (if (empty? links)
-    [{:text text}]
-    (let [cuts (sort (distinct (concat [0 (count text)] (mapcat (fn [l] [(:start l) (:end l)]) links))))]
-      (vec (for [[a b] (partition 2 1 cuts) :when (< a b (inc (count text)))
-                 :let [l (some #(when (and (>= a (:start %)) (< a (:end %))) %) links)]]
-             {:text (subs text a (min b (count text))) :to (:to l)})))))
+  "A line's pieces: Shiki's colours, cut where a call's link starts and ends: [{:text :color :italic :to}]."
+  [text ^js toks links]
+  (let [base (if (and toks (pos? (.-length toks)))
+               (mapv (fn [^js t] {:text (.-content t) :color (.-color t) :italic (pos? (bit-and (or (.-fontStyle t) 0) 1))}) (array-seq toks))
+               [{:text text}])]
+    (if (empty? links)
+      base
+      (let [cuts (set (concat [0 (count text)] (mapcat (fn [l] [(:start l) (:end l)]) links)))]
+        (loop [ss base pos 0 out []]
+          (if-let [sg (first ss)]
+            (let [end (+ pos (count (:text sg)))
+                  inside (sort (filter #(and (> % pos) (< % end)) cuts))
+                  out (loop [from pos cs (concat inside [end]) out out]
+                        (if-let [c (first cs)]
+                          (let [piece (subs (:text sg) (- from pos) (- c pos))
+                                link (some #(when (and (>= from (:start %)) (< from (:end %))) %) links)]
+                            (recur c (rest cs) (if (seq piece) (conj out (assoc sg :text piece :to (:to link))) out)))
+                          out))]
+              (recur (rest ss) end out))
+            out))))))
 
-(defn- line-view [row text html links open on-call marks]
+(defn- line-view [row text toks links open on-call marks]
   (let [m (some #(when (= (:line %) row) %) marks)]
     [:<>
      [:div.ca-ln {:class (when m "marked") :style (when m {"--mk" (mark-colour m)})}
       [:span.ca-no row]
-      (if (and html (empty? links))
-        [:span.ca-tx {:dangerouslySetInnerHTML (r/unsafe-html (if (seq html) html " "))}]
-        (into [:span.ca-tx]
-              (concat
-               (for [[k s] (map-indexed vector (segments text links))]
-                 (if (:to s)
-                   ^{:key k} [:button.ca-call {:type "button" :class (when (contains? open (str row " " (:to s))) "open")
-                                               :on-click #(on-call (:to s) row) :title (str/replace (:to s) #"^file:" "")}
-                              (:text s)]
-                   ^{:key k} [:span (:text s)]))
-               (when-not (seq text) [" "]))))]
+      (into [:span.ca-tx]
+            (concat
+             (for [[k s] (map-indexed vector (segments text toks links))]
+               (if (:to s)
+                 ^{:key k} [:button.ca-call {:type "button" :class (when (contains? open (str row " " (:to s))) "open")
+                                             :on-click #(on-call (:to s) row) :title (str/replace (:to s) #"^file:" "")}
+                            (:text s)]
+                 ^{:key k} [:span {:style {:color (:color s) :font-style (when (:italic s) "italic")}} (:text s)]))
+             (when-not (seq text) [" "])))]
      (when (:note m) [:div.ca-note {:style {:color (mark-colour m)}} (str "● " (:note m))])]))
 
 (defn- shown-rows [d keep]
-  (let [last-row (+ (:row d) (dec (count (str/split (:code d) #"\n"))))
+  (let [last-row (+ (:row d) (dec (count (str/split (:code d) #"\n" -1))))
         hot (concat (for [c (:callees d) a (:at c)] (:row a)) keep)]
     (set (concat (range (:row d) (+ (:row d) 3)) [last-row]
                  (for [r hot x (range (dec r) (+ r 2)) :when (<= (:row d) x last-row)] x)))))
 
 (defn- code-view [d on-call open under marks]
-  (let [lines (str/split (:code d) #"\n")
-        html (h/use-memo #(hl/lines (:code d) (or (:lang d) "clj")) [(:code d) (:lang d)])
+  (let [lines (str/split (:code d) #"\n" -1)
+        tokens (shiki/use-tokens (:code d) (or (:lang d) "clj") false)
         by-row (reduce (fn [m c] (reduce (fn [m a] (update m (:row a) (fnil conj []) {:start (dec (:col a)) :end (dec (:endCol a)) :to (:id c)})) m (:at c)))
                        {} (:callees d))
         line-marks (filter #(number? (:line %)) marks)
@@ -162,7 +172,7 @@
         _ (h/use-effect (fn [] (set-unfolded #{}) nil) [(:id d)])
         shown (when (> (count lines) long-n) (shown-rows d (map :line line-marks)))
         line (fn [k] (let [row (+ (:row d) k)]
-                       ^{:key k} [line-view row (nth lines k) (nth html k nil) (get by-row row []) open on-call line-marks]))]
+                       ^{:key k} [line-view row (nth lines k) (shiki/line tokens k) (get by-row row []) open on-call line-marks]))]
     (into [:div.ca-code]
           (loop [i 0 out []]
             (if (>= i (count lines))
@@ -178,7 +188,7 @@
                                    under (into (when-let [x (under row)] [^{:key (str "u" i)} [:<> x]])))))))))))
 
 (defn- card [src id marks head on-call open under]
-  (let [got (use-got #((:get src) id) id)]
+  (let [got (use-got #((:get src) id) id src)]
     (cond
       (nil? got) [:div.ca-card [:p.f-note.ca-pad "Reading…"]]
       (:error got) [:div.ca-card [:p.f-note.cl-err (:error got)]]
@@ -225,7 +235,7 @@
   (let [[trail set-trail] (h/use-state [start])
         _ (h/use-effect (fn [] (set-trail [start]) nil) [start])
         here (peek trail)
-        got (use-got #((:get src) here) here)
+        got (use-got #((:get src) here) here src)
         go (fn [id] (set-trail #(if (= (peek %) id) % (conj % id))))
         [all set-all] (h/use-state false)
         _ (h/use-effect (fn [] (set-all false) nil) [here])
@@ -273,7 +283,7 @@
          " L" (first (last pts)) "," (second (last pts)))))
 
 (defn- call-map [src start marks up down set-up set-down]
-  (let [m (use-got #((:map src) start up down) (str start " " up " " down))
+  (let [m (use-got #((:map src) start up down) (str start " " up " " down) src)
         [sel set-sel] (h/use-state nil)
         _ (h/use-effect (fn [] (set-sel nil) nil) [start])
         data (when (and m (not (:error m))) m)
@@ -281,7 +291,8 @@
         folders (h/use-memo #(vec (distinct (map :folder (sort-by (comp js/Math.abs :dist) (:nodes data))))) [data])
         colour-of (fn [n] (nth colours (mod (max 0 (.indexOf (clj->js folders) (:folder n))) (count colours))))
         cols (h/use-memo #(vec (for [k (sort (distinct (map :dist (:nodes data))))]
-                                 {:k k :nodes (sort-by (juxt :folder :name) (filter (fn [n] (= k (:dist n))) (:nodes data)))}))
+                                 {:k k :nodes (sort (fn [a b] (let [c (.localeCompare (str (:folder a)) (str (:folder b)))] (if (zero? c) (.localeCompare (str (:name a)) (str (:name b))) c)))
+                                                   (filter (fn [n] (= k (:dist n))) (:nodes data)))}))
                          [data])
         wrap (h/use-ref nil)
         boxes (h/use-ref nil)
@@ -398,7 +409,7 @@
                      (-> (if js/document.hidden (js/Promise.resolve nil)
                              (-> (api/fetch-json (url-of {:fp @known}))
                                  (.then (fn [j] (when-not @gone (set-error nil) (when-not (:same j) (reset! known (:fp j)) (set-fp (:fp j))))))
-                                 (.catch (fn [e] (when-not @gone (set-error (.-message e)))))))
+                                 (.catch (fn [e] (when-not (or @gone (instance? js/TypeError e)) (set-error (.-message e)))))))
                          (.then (fn [_] (when-not @gone (reset! timer (js/setTimeout ask poll-ms)))))))]
            (ask)
            #(do (reset! gone true) (js/clearTimeout @timer)))))

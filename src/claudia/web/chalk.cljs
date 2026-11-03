@@ -44,6 +44,8 @@
    "r7-15" {:r 7 :b 1.5}
    "r8-15-dash" {:r 8 :b 1.5 :dash 4}
    "c30-18" {:r 15 :b 1.8}
+   "line3" {:r 1.5 :noise :line}
+   "dot9-soft" {:r 4.5 :noise :soft}
    "c30-22" {:r 15 :b 2.2}})
 
 ;; ---- The SVG spec's turbulence (Filter Effects, feTurbulence reference code) ----

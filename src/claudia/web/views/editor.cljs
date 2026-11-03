@@ -19,6 +19,8 @@
             ["@codemirror/lang-yaml" :refer [yaml]]
             ["@codemirror/lang-rust" :refer [rust]]
             ["@codemirror/lang-go" :refer [go]]
+            ["@codemirror/lang-java" :refer [java]]
+            ["@codemirror/lang-cpp" :refer [cpp]]
             ["@codemirror/legacy-modes/mode/clojure" :refer [clojure]]
             ["@codemirror/legacy-modes/mode/shell" :refer [shell]]
             ["@codemirror/legacy-modes/mode/toml" :refer [toml]]
@@ -38,7 +40,9 @@
      "ts" ts "mts" ts "tsx" #(javascript #js {:typescript true :jsx true})
      "javascript" javascript "typescript" ts
      "py" python "python" python "sql" sql "html" html "css" css "json" json
-     "rs" rust "rust" rust "go" go "md" markdown "markdown" markdown "yaml" yaml "yml" yaml
+     "rs" rust "rust" rust "go" go "java" java
+     "c" cpp "h" cpp "cpp" cpp "cc" cpp "hpp" cpp
+     "md" markdown "markdown" markdown "yaml" yaml "yml" yaml
      "clj" clj "cljs" clj "cljc" clj "edn" clj "bb" clj "clojure" clj
      "sh" sh "bash" sh "zsh" sh "shell" sh
      "toml" (legacy toml) "rb" (legacy ruby) "ruby" (legacy ruby) "swift" (legacy swift) "lua" (legacy lua)}))
