@@ -9,6 +9,9 @@ Wants=network-online.target
 User=claudia
 EnvironmentFile=/etc/claudia-beta/env
 Environment=FRONT_PROFILES=/etc/claudia-beta/profiles
+# The hub's poke (POST /api/update-check) lands here; claudia-beta-update.path watches it.
+StateDirectory=claudia-beta
+Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia-beta/update-requested
 ExecStart=/usr/bin/env node /srv/claudia-beta/out/front.js
 Restart=always
 RestartSec=5

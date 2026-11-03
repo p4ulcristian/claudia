@@ -200,6 +200,12 @@
           [:svg.st-chev {:viewBox "0 0 20 20"} [:path {:d "M7.5 4l6 6-6 6"}]]]
          [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"
           "Claude Code sessions that are not chats here; one opens as a chat"]]
+        (when (:admin @(rf/subscribe [:me]))
+          [:section.st-group.st-hub {:aria-label "Hub"}
+           [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
+            [:span.st-label "Servers" [:span.st-note "the servers this hub reaches"]]]
+           [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
+            [:span.st-label "Access" [:span.st-note "who may use which server"]]]])
         (when-not ro
           [:div.st-server
            (when (> (count servers) 1)

@@ -66,7 +66,12 @@
           :at (:at r)
           :preview (or question (some #(when (= "secret" (:kind %)) (str "Secret: " (:reason %))) asks) (:preview r))
           :unseen (> (:ended r) (:seen r))
-          :archived (:archived r)})))
+          :archived (:archived r)
+          ;; For the hub's phone alerts: when the last turn ended, and the open asks.
+          :ended (:ended r)
+          :asks (vec (for [a asks]
+                       {:id (:id a) :kind (:kind a)
+                        :text (if (= "secret" (:kind a)) (:reason a) (get-in a [:questions 0 :question]))}))})))
 
 (defn- note-msg!
   "A new or changed Msg of this turn: kept (so a chat opened mid-turn has it) and sent."

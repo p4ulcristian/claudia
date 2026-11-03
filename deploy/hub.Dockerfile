@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 # Claudia's hub, for the gate (under 1 GB of RAM): built here, run as plain Node with only the
-# compiled hub, the built page and the one npm package the hub loads at run time (ws).
+# compiled hub, the built page and the npm packages the hub loads at run time (ws, jose).
 #   docker build -f deploy/hub.Dockerfile -t claudia-hub .
-#   docker run --read-only -p 127.0.0.1:4590:4590 -v /etc/claudia-hub:/config:ro claudia-hub
-# The config folder (holding hub.json) is mounted, not the file: an edited hub.json replaces the
-# file, and a single-file mount would keep showing the old one.
+#   docker run --read-only -p 127.0.0.1:4590:4590 -v /var/lib/claudia-hub:/data claudia-hub
+# /data (writable, owned by the hub's uid) holds the store (hub.db) and the peer requests; a
+# hub.json there is imported once into an empty store. Built and signed by
+# .github/workflows/beta-release.yml.
 
 # shadow-cljs needs Java to compile; the JRE comes from Temurin, Node from the official image.
 FROM eclipse-temurin:25-jre AS java
@@ -23,16 +24,17 @@ RUN --mount=type=cache,target=/root/.m2 \
     npx shadow-cljs release hub web && npm run build:web-files
 RUN mkdir -p /app/node_modules \
  && cp out/hub.js /app/ \
- && cp -r node_modules/ws /app/node_modules/ws \
+ && cp -r node_modules/ws node_modules/jose /app/node_modules/ \
  && cp -r out/web /web \
- && cd /app && node -e "require('ws')"
+ && cd /app && node -e "require('ws'); require('jose')"
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot
 COPY --from=build /app /app
 COPY --from=build /web /web
 WORKDIR /app
-ENV NODE_ENV=production HUB_HOST=0.0.0.0 HUB_PORT=4590 HUB_WEB=/web HUB_CONFIG=/config/hub.json
+ENV NODE_ENV=production HUB_HOST=0.0.0.0 HUB_PORT=4590 HUB_WEB=/web HUB_DATA=/data HUB_CONFIG=/data/hub.json
 EXPOSE 4590
-# nonroot: uid 65532; the hub writes nothing, so --read-only works.
+# nonroot: uid 65532 (the gate runs it as its own uid); the hub writes only into /data, so
+# --read-only works.
 USER 65532:65532
 CMD ["hub.js"]
