@@ -78,10 +78,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 Ported from the TypeScript Claudia (its decisions 17-21): the `files`, `editor` and `flow` forms are
 always on; `git`, `clojure` and `calls` are opt-in per runner (`CLAUDIA_FORMS=git,clojure,calls`;
 clojure and calls need `clj-kondo` on the runner). Forms are described in `claudia.shared.forms`
-(the draw tool, the system prompt and the Forms gallery read it). Code is coloured by highlight.js
-in VS Code's Dark+ colours (lighter than Shiki, same look); the editor is CodeMirror 6. Templates
+(the draw tool, the system prompt and the Forms gallery read it). Code is coloured by Shiki
+(VS Code's grammars and Dark+ theme, loaded from jsdelivr on first use, as the TypeScript Claudia
+did; 2026-11-03: highlight.js coloured differently); the editor is CodeMirror 6. Templates
 (`save_template`, `templates`, "save as template" on a freeform badge) live in the runner's SQLite.
-Each chat has a form row (allowed -> required -> off per kind, questions allowed <-> off) and a
+Built-in forms can be deleted and restored in the Forms window (per profile; Claude's draw tool
+leaves them out). Each chat has a form row (allowed -> required -> off per kind, questions allowed <-> off) and a
 column count (auto, 1, 2, 3) for its picture. Claude Code cuts long tool descriptions, so the forms'
 data is also in the system prompt.
 

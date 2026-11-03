@@ -102,7 +102,7 @@
       (when entries
         (->> (vals entries)
              (map #(if (:dir %) % (let [n (lines-of (path/join abs (:name %)))] (cond-> % n (assoc :lines n)))))
-             (sort-by (juxt #(if (:dir %) 0 1) :name))
+             (sort (fn [a b] (if (= (:dir a) (:dir b)) (.localeCompare (:name a) (:name b)) (if (:dir a) -1 1))))
              vec)))))
 
 (defn read-text
