@@ -327,7 +327,9 @@
                          [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]]))))
      (when running
        [:div.working [:span.pulse] " "
-        (if (seq (:asks state)) "Waiting for your answer" "Working")
+        (cond (some #(= "permit" (:kind %)) (:asks state)) "Waiting for your OK"
+              (seq (:asks state)) "Waiting for your answer"
+              :else (or (:note state) "Working"))
         " · " [:f> elapsed (or since (js/Date.now))]])
      (for [[i t] (map-indexed vector outbox)]
        ^{:key (str "out" i)} [user-msg ck {:id (str "out" i) :text t} {:queued? true}])

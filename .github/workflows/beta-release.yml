@@ -118,6 +118,8 @@ jobs:
           file: deploy/hub.Dockerfile
           push: true
           tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          build-args: |
+            COMMIT=${{ github.sha }}
           # Links the package to this repository (its page, its permissions).
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}

@@ -22,7 +22,10 @@ COPY src src
 COPY resources resources
 RUN --mount=type=cache,target=/root/.m2 \
     npx shadow-cljs release hub web && npm run build:web-files
+# What /hub/me says the hub is: package.json's version and the commit the image was built from.
+ARG COMMIT=unknown
 RUN mkdir -p /app/node_modules \
+ && node -e "require('fs').writeFileSync('/app/version.json', JSON.stringify({version: require('./package.json').version, commit: process.argv[1].slice(0, 7)}))" "$COMMIT" \
  && cp out/hub.js /app/ \
  && cp -r node_modules/ws node_modules/jose /app/node_modules/ \
  && cp -r out/web /web \

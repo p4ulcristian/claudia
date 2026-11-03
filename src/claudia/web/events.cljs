@@ -139,10 +139,17 @@
 (defmethod on-frame "scene" [db server {:keys [chat scene]}]
   {:db (assoc-in db [:chats [server chat] :scene] scene)})
 
+(defmethod on-frame "status" [db server {:keys [chat running note]}]
+  ;; What the running turn is doing beyond "Working" (Thinking, Retrying…, Compacting); none clears it.
+  {:db (-> (assoc-in db [:chats [server chat] :running] running)
+           (assoc-in [:chats [server chat] :note] note)
+           (update-in [:turn-since [server chat]] #(when running (or % (js/Date.now)))))})
+
 (defmethod on-frame "turn" [db server {:keys [chat running stopped]}]
   {:db (cond-> (-> (assoc-in db [:chats [server chat] :running] running)
                    ;; A turn the person stopped says "Stopped." until the next one starts.
                    (assoc-in [:chats [server chat] :stopped] (boolean (and (not running) stopped)))
+                   (update-in [:chats [server chat]] #(if running % (dissoc % :note)))
                    (update-in [:turn-since [server chat]] #(when running (or % (js/Date.now)))))
          ;; A turn's end settles every streamed message.
          (not running) (update-in [:chats [server chat] :messages]

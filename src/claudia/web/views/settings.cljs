@@ -122,6 +122,31 @@
 
 (def github-token-url "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Claudia")
 
+(defn- chat-colours
+  "Whether every new chat gets a colour of its own on this server (the profile's chatColors pref)."
+  [server]
+  (let [[prefs set-prefs] (h/use-state nil)
+        u (ops/api-url server "prefs")
+        save! (fn [v] (-> (js/fetch u #js {:method "PATCH" :headers #js {"content-type" "application/json"}
+                                          :body (js/JSON.stringify #js {:chatColors v})})
+                          (.then #(when (.-ok %) (.json %)))
+                          (.then #(when % (set-prefs (js->clj % :keywordize-keys true))))))]
+    (h/use-effect
+     (fn []
+       (-> (js/fetch u) (.then #(when (.-ok %) (.json %)))
+           (.then #(when % (set-prefs (js->clj % :keywordize-keys true)))))
+       nil)
+     [u])
+    [:section.st-section
+     [:h3 "Chat colours"]
+     [:div.choice
+      [:label [:input {:type "radio" :name (str "chatColors-" server) :checked (= "each" (:chatColors prefs))
+                       :on-change #(save! "each")}]
+       "A colour of its own for every new chat"]
+      [:label [:input {:type "radio" :name (str "chatColors-" server) :checked (= "none" (:chatColors prefs))
+                       :on-change #(save! "none")}]
+       "Default look; colour a chat by hand from its header dot"]]]))
+
 (defn- server-settings [server]
   (let [tokens @(rf/subscribe [:tokens server])
         github @(rf/subscribe [:github server])
@@ -132,6 +157,7 @@
                                            :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}]))]
     [:<>
      [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]
+     (when-not (:readOnly me) [:f> chat-colours server])
      [:section.st-section
       [:h3 "Claude subscription " [:span.muted.small "shared by every profile here"]]
       [:p.small

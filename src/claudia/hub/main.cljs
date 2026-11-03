@@ -16,6 +16,11 @@
             [claudia.hub.narrate :as narrate]
             [claudia.hub.web :as web]))
 
+;; The hub's version and commit (the image writes version.json beside hub.js; elsewhere none).
+(def ^:private version-info
+  (try (js->clj (js/JSON.parse (fs/readFileSync (path/join js/__dirname "version.json") "utf8")) :keywordize-keys true)
+       (catch :default _ {:version nil :commit nil})))
+
 (defn- env [k default]
   (let [v (aget js/process.env k)]
     (if (str/blank? v) default v)))
@@ -139,6 +144,8 @@
                           :name (:name person)
                           :admin admin?
                           :push (push/on?)
+                          :version (:version version-info)
+                          :commit (:commit version-info)
                           :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
       :else
