@@ -43,22 +43,35 @@
   #{"node_modules" ".git" "target" ".shadow-cljs" "dist" "build" "out" ".next" "vendor" "data" "reference"
     "test" "tests" "fixtures" "logos" ".cache" "tmp"})
 
-(defn- find-logo [root]
-  (let [best (atom nil)]
-    (letfn [(walk [dir depth]
-              (doseq [^js e (try (fs/readdirSync dir #js {:withFileTypes true}) (catch :default _ #js []))
-                      :let [n (.-name e)]]
-                (if (.isDirectory e)
-                  (when (and (< depth 6) (not (skip n)) (not (str/starts-with? n ".")))
-                    (walk (path/join dir n) (inc depth)))
-                  (when-let [[_ score] (some #(when (re-find (first %) n) %) names)]
-                    (let [p (path/join dir n)
-                          score (- score depth)]
-                      (when (and (or (nil? @best) (> score (:score @best)))
-                                 (try (<= (.-size (fs/statSync p)) 1000000) (catch :default _ false)))
-                        (reset! best {:path p :score score})))))))]
-      (walk root 0))
-    (:path @best)))
+(defn logo-score
+  "How well a file name fits as the logo, found depth folders down; nil when it is no logo name."
+  [file-name depth]
+  (when-let [[_ score] (some #(when (re-find (first %) file-name) %) names)]
+    (- score depth)))
+
+(defn best-logo
+  "The path of the best scoring {:path :score} (the first of equals), or nil."
+  [candidates]
+  (:path (reduce (fn [best c] (if (or (nil? best) (> (:score c) (:score best))) c best)) nil candidates)))
+
+(defn- small-file? [p]
+  (try (<= (.-size (fs/statSync p)) 1000000) (catch :default _ false)))
+
+(defn- logo-candidates
+  "Every file under folder (six folders deep, skipped folders left out) whose name scores as a logo
+  and is at most 1 MB, as {:path :score}, in the order the walk meets them."
+  [folder depth]
+  (mapcat (fn [^js e]
+            (let [n (.-name e)
+                  p (path/join folder n)]
+              (if (.isDirectory e)
+                (when (and (< depth 6) (not (skip n)) (not (str/starts-with? n ".")))
+                  (logo-candidates p (inc depth)))
+                (when-let [score (logo-score n depth)]
+                  (when (small-file? p) [{:path p :score score}])))))
+          (try (fs/readdirSync folder #js {:withFileTypes true}) (catch :default _ #js []))))
+
+(defn- find-logo [root] (best-logo (logo-candidates root 0)))
 
 (defn project-of
   "{:name :root :logo (path or nil)} for a working folder, or nil."
@@ -67,8 +80,8 @@
     (let [hit (get @by-folder folder)]
       (if (and hit (< (- (js/Date.now) (:at hit)) rescan-ms))
         (:project hit)
-        (let [{:keys [root name]} (root-of folder work)
-              project {:name name :root root :logo (find-logo root)}]
+        (let [{:keys [root] project-name :name} (root-of folder work)
+              project {:name project-name :root root :logo (find-logo root)}]
           (swap! by-folder assoc folder {:at (js/Date.now) :project project})
           project)))))
 

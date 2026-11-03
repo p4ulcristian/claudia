@@ -51,14 +51,12 @@
 
 (defn set-prefs!
   "Changes the given preferences; returns them all."
-  [next]
-  (let [p (prefs)]
-    (when (#{"each" "none"} (:chatColors next))
-      (store/kv! "" "prefs" {:chatColors (:chatColors next)}))
-    (when (sequential? (:hiddenForms next))
-      (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help))) (:hiddenForms next))))))
-    p
-    (prefs)))
+  [changes]
+  (when (#{"each" "none"} (:chatColors changes))
+    (store/kv! "" "prefs" {:chatColors (:chatColors changes)}))
+  (when (sequential? (:hiddenForms changes))
+    (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help))) (:hiddenForms changes))))))
+  (prefs))
 
 (defn hidden-forms
   "Forms Claude doesn't get here: the ones the user deleted and the opt-in ones not on this runner."
@@ -93,39 +91,50 @@
       (and (nil? given) (or (= "form" (:kind known)) (and (= k :root) (sequential? (get-in b [:data :sketch]))))) b
       :else (assoc-in b [:data k] (path/resolve folder (home-path (or given ".")))))))
 
+(defn with-template
+  "A block drawn from template t (nil: no such template): the template's page, its parts under the
+  block's, its name kept; nil when there is no template."
+  [b t]
+  (when t
+    (-> b (assoc :template (:name t) :html (:html t) :parts (merge (:parts t) (:parts b)))
+        (update :name #(or % (:name t))))))
+
+(defn- guard-editor
+  "An editor block's code guarded against the user's unsent edits: {:block :notes}."
+  [scene b]
+  (if-not (:data b)
+    {:block b :notes []}
+    (let [known (known-block scene (:id b))
+          {:keys [data refused]} (editor/guard-draw (when (= "editor" (:form known)) (:data known)) (:data b))]
+      {:block (assoc b :data data)
+       :notes (mapv #(str "Editor block \"" (:id b) "\", " %) refused)})))
+
+(defn- prepare-block
+  "One block of a draw call made ready, into {:blocks :missing :notes}."
+  [scene folder acc b]
+  (let [wanted (when (and (:template b) (nil? (:html b))) (str (:template b)))
+        filled (if wanted (with-template b (store/template wanted)) b)]
+    (if-not filled
+      (update acc :missing conj wanted)
+      (let [{ready :block notes :notes}
+            (case (form-of scene filled)
+              ("files" "clojure" "calls") {:block (with-root scene folder filled :root)}
+              "git" {:block (with-root scene folder filled :repo)}
+              "editor" (guard-editor scene filled)
+              {:block filled})]
+        (-> acc (update :blocks conj ready) (update :notes into notes))))))
+
 (defn prepare
   "A draw call's input made ready for claudia.slave.scene/apply-draw (src/chat.ts draw): templates
   filled in (the block keeps the template's name), roots made absolute, editor code guarded.
   Returns {:input :missing [template names not found] :notes [editor refusals for Claude]}."
   [scene input folder]
-  (let [notes (atom [])
-        missing (atom [])
-        blocks
-        (vec
-         (keep
-          (fn [b]
-            (let [b (if (and (:template b) (nil? (:html b)))
-                      (if-let [t (store/template (str (:template b)))]
-                        (-> b (assoc :template (:name t) :html (:html t) :parts (merge (:parts t) (:parts b)))
-                            (update :name #(or % (:name t))))
-                        (do (swap! missing conj (str (:template b))) nil))
-                      b)]
-              (when b
-                (case (form-of scene b)
-                  "files" (with-root scene folder b :root)
-                  "git" (with-root scene folder b :repo)
-                  ("clojure" "calls") (with-root scene folder b :root)
-                  "editor" (if (:data b)
-                             (let [known (known-block scene (:id b))
-                                   {:keys [data refused]} (editor/guard-draw (when (= "editor" (:form known)) (:data known)) (:data b))]
-                               (swap! notes into (map #(str "Editor block \"" (:id b) "\", " %) refused))
-                               (assoc b :data data))
-                             b)
-                  b))))
-          (:blocks input)))]
+  (let [{:keys [blocks missing notes]} (reduce (partial prepare-block scene folder)
+                                               {:blocks [] :missing [] :notes []}
+                                               (:blocks input))]
     {:input (cond-> input (seq (:blocks input)) (assoc :blocks blocks))
-     :missing @missing
-     :notes @notes}))
+     :missing missing
+     :notes notes}))
 
 ;; ---- templates -------------------------------------------------------------------------------
 
@@ -140,21 +149,21 @@
 
 (defn save-template!
   "Saves a template from a freeform block of scene and/or html; the text for Claude or the page."
-  [scene {:keys [name block html parts description]}]
-  (let [name (let [n (str/trim (str name))] (subs n 0 (min 80 (count n))))
-        old (when (seq name) (store/template name))
+  [scene {:keys [block html parts description] given-name :name}]
+  (let [title (let [n (str/trim (str given-name))] (subs n 0 (min 80 (count n))))
+        old (when (seq title) (store/template title))
         b (when block (known-block scene block))]
     (cond
-      (not (seq name)) "A template needs a name."
+      (not (seq title)) "A template needs a name."
       (and block (not= "html" (:kind b))) (str "No freeform block \"" block "\" in the picture.")
       :else
       (let [html (or html (:html b) (:html old))
             parts (if b (merge (:parts b) parts) (or parts (:parts old) {}))]
         (if-not (seq html)
-          (str "No template \"" name "\" yet: give its html or a block to take it from.")
-          (do (store/save-template! {:name (or (:name old) name) :html html :parts parts
+          (str "No template \"" title "\" yet: give its html or a block to take it from.")
+          (do (store/save-template! {:name (or (:name old) title) :html html :parts parts
                                      :description (or description (:description old) "")})
-              (str (if old "Updated" "Saved") " template \"" (or (:name old) name) "\".")))))))
+              (str (if old "Updated" "Saved") " template \"" (or (:name old) title) "\".")))))))
 
 (def tools
   "The picture server's template tools, for the host's start spec."
@@ -209,113 +218,160 @@
     (cond
       (not (drawn? scenes "files" :root #(root-ok? % root))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
       (= "1" (q "read")) (io/send-json res 200 (files/read-text root rel (some-> (q "since") js/Number)))
-      (= "1" (q "image")) (if-let [abs (files/image-file root rel)]
-                            (do (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname abs)) 1) "application/octet-stream")
+      (= "1" (q "image")) (if-let [full (files/image-file root rel)]
+                            (do (.writeHead res 200 #js {"content-type" (get files/mime (subs (str/lower-case (path/extname full)) 1) "application/octet-stream")
                                                          "cache-control" "max-age=60"
                                                          "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
-                                (.pipe (fs/createReadStream abs) res))
+                                (.pipe (fs/createReadStream full) res))
                             (io/send-json res 404 {:error "not an image"}))
       :else (if-let [entries (files/list-dir root rel)]
               (io/send-json res 200 {:entries entries})
               (io/send-json res 404 {:error "no such folder"})))))
 
-(defn- git-read [^js res scenes q]
+(defn- reply-promise
+  "Answers 200 with what the promise gives, 500 with its error."
+  [^js res answer]
+  (-> answer
+      (.then #(io/send-json res 200 %))
+      (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))
+
+(defn- repo-read [^js res scenes q]
   (let [repo (or (q "repo") "")]
     (cond
       (not (turned-on "git")) (io/send-json res 404 {:error "no git form here"})
       (not (drawn? scenes "git" :repo #(contains? % repo))) (io/send-json res 403 {:error "not a repo of this chat's pictures"})
-      :else (-> (if-let [rev (q "commit")]
-                  (git/commit-detail repo rev (q "file"))
-                  (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")}))
-                (.then #(io/send-json res 200 %))
-                (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))))
+      :else (reply-promise res (if-let [rev (q "commit")]
+                                 (git/commit-detail repo rev (q "file"))
+                                 (git/graph repo {:fp (q "fp") :limit (q "limit") :branches (q "branches")}))))))
+
+(defn int-or
+  "Text as a whole number, or fallback when it is not one."
+  [s fallback]
+  (let [n (js/parseInt s)] (if (js/isNaN n) fallback n)))
+
+(defn- calls-answer
+  "Promise of the calls form's read: the var's calls, its map up and down, or the project's list."
+  [root q]
+  (let [v (q "var")]
+    (cond (nil? v) (clojure/calls-fp root (q "fp"))
+          (= "1" (q "map")) (clojure/calls-map root v (int-or (or (q "up") "2") 2) (int-or (or (q "down") "3") 3))
+          :else (clojure/calls-var root v))))
+
+(defn- clojure-answer
+  "Promise of the clojure form's read: an arrow's uses, a var's source, a namespace, or the list."
+  [root q]
+  (let [from (q "from") to (q "to") space (q "ns") v (q "var")]
+    (cond (and from to) (clojure/edge-uses root from (= "1" (q "fx")) to (= "1" (q "tx")))
+          (and space v) (clojure/var-source root space v)
+          space (clojure/ns-detail root space)
+          :else (clojure/namespaces root (q "fp")))))
 
 (defn- clojure-read [^js res scenes q form]
-  (let [root (or (q "root") "")
-        reply (fn [p] (-> p (.then #(io/send-json res 200 %)) (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))]
+  (let [root (or (q "root") "")]
     (cond
       (not (turned-on form)) (io/send-json res 404 {:error (str "no " form " form here")})
       (not (drawn? scenes form :root #(contains? % root))) (io/send-json res 403 {:error "not a project of this chat's pictures"})
-      (= form "calls")
-      (reply (let [v (q "var")]
-               (cond (nil? v) (clojure/calls-fp root (q "fp"))
-                     (= "1" (q "map")) (clojure/calls-map root v (let [n (js/parseInt (or (q "up") "2"))] (if (js/isNaN n) 2 n))
-                                                          (let [n (js/parseInt (or (q "down") "3"))] (if (js/isNaN n) 3 n)))
-                     :else (clojure/calls-var root v))))
-      :else
-      (reply (let [from (q "from") to (q "to") ns (q "ns") v (q "var")]
-               (cond (and from to) (clojure/edge-uses root from (= "1" (q "fx")) to (= "1" (q "tx")))
-                     (and ns v) (clojure/var-source root ns v)
-                     ns (clojure/ns-detail root ns)
-                     :else (clojure/namespaces root (q "fp"))))))))
+      (= form "calls") (reply-promise res (calls-answer root q))
+      :else (reply-promise res (clojure-answer root q)))))
+
+(defn form-route
+  "Which code-form call a request is: {:op ...} with :chat, :sub and :block for /api/chats/:id/...,
+  or nil when it is none of them."
+  [method url]
+  (let [[_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|blocks/([^/]+)/template)" url)]
+    (cond
+      (and (= url "/api/forms") (= method "GET")) {:op :forms}
+      (and (= url "/api/forms") (= method "PATCH")) {:op :set-forms}
+      (and (= url "/api/templates") (= method "GET")) {:op :templates}
+      (and (str/starts-with? url "/api/templates/") (= method "DELETE"))
+      {:op :delete-template :template (subs url (count "/api/templates/"))}
+      chat {:op :chat :chat chat :sub sub :block block})))
+
+(defn chat-read
+  "Which read of a chat's code form a call is: :files, :repo (the history form), :clojure (the
+  clojure and calls forms), :save-block (a block saved as a template), or :not-found."
+  [method sub block]
+  (cond
+    (and (= sub "files") (= method "GET")) :files
+    (and (= sub "git") (= method "GET")) :repo
+    (and (#{"clojure" "calls"} sub) (= method "GET")) :clojure
+    (and block (= method "POST")) :save-block
+    :else :not-found))
+
+(defn- read-body
+  "Calls f with the request's JSON body; a body that does not read answers 400."
+  [^js req ^js res f]
+  (-> (io/read-text req 65536)
+      (.then #(f (p/read-json %)))
+      (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
+
+(defn- save-block! [^js req ^js res scene block]
+  (read-body req res
+             (fn [{:keys [description] given-name :name}]
+               (let [text (save-template! scene {:name given-name :description description :block (js/decodeURIComponent block)})]
+                 (io/send-json res 200 {:ok (boolean (re-find #"^(Saved|Updated)" text)) :text text})))))
+
+(defn- chat-call
+  "A code-form call on chat: its reads are allowed inside what this chat drew, now or in an earlier
+  picture."
+  [^js req ^js res who scene-of {:keys [chat sub block]}]
+  (let [scene (scene-of chat)
+        scenes [scene (delay (store/picture-scenes chat))]
+        q (query req)]
+    (if (nil? scene)
+      (io/send-json res 404 {:error "No such chat."})
+      (case (chat-read (.-method req) sub block)
+        :files (files-read res scenes q)
+        :repo (repo-read res scenes q)
+        :clojure (clojure-read res scenes q sub)
+        :save-block (if (:read-only who)
+                      (io/send-json res 403 {:error "Read only."})
+                      (save-block! req res scene block))
+        :not-found (io/send-json res 404 {:error "Not found."})))))
+
+;; A form deleted or restored in the Forms window: every chat gets the new draw tool.
+(defn- set-forms! [^js req ^js res tools-changed!]
+  (read-body req res
+             (fn [{:keys [hidden]}]
+               (set-prefs! {:hiddenForms (if (sequential? hidden) hidden [])})
+               (when tools-changed! (tools-changed!))
+               (io/send-json res 200 {:hidden (deleted-forms)}))))
 
 (defn handle
   "The page's code-form calls; true when this was one. scene-of: chat id -> its scene (nil when
   there is no such chat); tools-changed!: every chat's draw tool changed (a form deleted or
   restored in the Forms window)."
   [^js req ^js res url who {:keys [scene-of tools-changed!]}]
-  (let [method (.-method req)
-        [_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|blocks/([^/]+)/template)" url)
-        q (query req)]
-    (cond
-      (and (= url "/api/forms") (= method "GET"))
-      (do (io/send-json res 200 {:forms all-forms :hidden (deleted-forms) :notHere not-here :templates (store/templates)}) true)
-
-      ;; A form deleted or restored in the Forms window: every chat gets the new draw tool.
-      (and (= url "/api/forms") (= method "PATCH"))
-      (do (if (:read-only who)
-            (io/send-json res 403 {:error "Read only."})
-            (-> (io/read-text req 65536)
-                (.then (fn [body]
-                         (let [{:keys [hidden]} (p/read-json body)]
-                           (set-prefs! {:hiddenForms (if (sequential? hidden) hidden [])})
-                           (when tools-changed! (tools-changed!))
-                           (io/send-json res 200 {:hidden (deleted-forms)}))))
-                (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
-          true)
-
-      (and (= url "/api/templates") (= method "GET"))
-      (do (io/send-json res 200 (store/templates)) true)
-
-      (and (str/starts-with? url "/api/templates/") (= method "DELETE"))
-      (do (if (:read-only who)
-            (io/send-json res 403 {:error "Read only."})
-            (do (store/delete-template! (js/decodeURIComponent (subs url (count "/api/templates/"))))
-                (io/send-json res 200 {:ok true})))
-          true)
-
-      chat
-      (let [scene (scene-of chat)
-            ;; Reads are allowed inside what this chat drew, now or in an earlier picture.
-            scenes [scene (delay (store/picture-scenes chat))]]
-        (cond
-          (nil? scene) (io/send-json res 404 {:error "No such chat."})
-          (and (= sub "files") (= method "GET")) (files-read res scenes q)
-          (and (= sub "git") (= method "GET")) (git-read res scenes q)
-          (and (#{"clojure" "calls"} sub) (= method "GET")) (clojure-read res scenes q sub)
-          (and block (= method "POST"))
-          (if (:read-only who)
-            (io/send-json res 403 {:error "Read only."})
-            (-> (io/read-text req 65536)
-                (.then (fn [body]
-                         (let [{:keys [name description]} (p/read-json body)
-                               text (save-template! scene {:name name :description description :block (js/decodeURIComponent block)})]
-                           (io/send-json res 200 {:ok (boolean (re-find #"^(Saved|Updated)" text)) :text text}))))
-                (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
-          :else (io/send-json res 404 {:error "Not found."}))
-        true)
-
-      :else false)))
+  (let [{:keys [op] :as r} (form-route (.-method req) url)
+        read-only (:read-only who)]
+    (case op
+      :forms (io/send-json res 200 {:forms all-forms :hidden (deleted-forms) :notHere not-here :templates (store/templates)})
+      :set-forms (if read-only (io/send-json res 403 {:error "Read only."}) (set-forms! req res tools-changed!))
+      :templates (io/send-json res 200 (store/templates))
+      :delete-template (if read-only
+                         (io/send-json res 403 {:error "Read only."})
+                         (do (store/delete-template! (js/decodeURIComponent (:template r))) (io/send-json res 200 {:ok true})))
+      :chat (chat-call req res who scene-of r)
+      nil nil)
+    (some? op)))
 
 ;; ---- the editor's frames ------------------------------------------------------------------------
+
+(defn- editor-block
+  "The scene's editor block with this id, or nil."
+  [scene block]
+  (let [b (known-block scene block)]
+    (when (and (= "form" (:kind b)) (= "editor" (:form b))) b)))
+
+(defn- with-block-data [scene block data]
+  (update scene :blocks (fn [bs] (mapv #(if (= (:id %) block) (assoc % :data data) %) bs))))
 
 (defn edit-block
   "The scene with the editor block's data changed by f (nil from f: no change), or nil."
   [scene block f]
-  (let [b (known-block scene block)]
-    (when (and (= "form" (:kind b)) (= "editor" (:form b)))
-      (when-let [data (f (:data b))]
-        (update scene :blocks (fn [bs] (mapv #(if (= (:id %) block) (assoc % :data data) %) bs)))))))
+  (when-let [b (editor-block scene block)]
+    (when-let [data (f (:data b))]
+      (with-block-data scene block data))))
 
 (defn code-edit
   "code_edit {block file text base}: the new scene or nil."
@@ -326,13 +382,11 @@
 (defn code-send
   "code_send {block note}: {:scene :text} or nil."
   [scene {:keys [block note]}]
-  (let [out (atom nil)
-        s (when (string? block)
-            (edit-block scene block (fn [data]
-                                      (when-let [r (editor/send-code block data (subs (str note) 0 (min 20000 (count (str note)))))]
-                                        (reset! out (:text r))
-                                        (:data r)))))]
-    (when s {:scene s :text @out})))
+  (when (string? block)
+    (when-let [b (editor-block scene block)]
+      (when-let [{:keys [text data]} (editor/send-code block (:data b) (subs (str note) 0 (min 20000 (count (str note)))))]
+        (when data
+          {:scene (with-block-data scene block data) :text text})))))
 
 ;; ---- the form row: per chat, each kind allowed (default), required or off ------------------------
 
@@ -480,53 +534,99 @@
   []
   (str tools/system-append "\n\n" (tools/forms-prompt (vec (remove (hidden-forms) all-forms)))))
 
+(defn- touches?
+  "Whether a block of a draw call draws something (one only moved, renamed or resized does not)."
+  [b]
+  (or (:form b) (:data b) (some? (:html b)) (:template b) (:parts b) (:kind b)))
+
+(defn- without-hidden
+  "A draw call's input without what the chat can't draw (hidden: those kinds): {:input :refused}."
+  [scene input hidden]
+  (let [refused (for [b (:blocks input) :when (and (touches? b) (hidden (kind-of-call scene b)))]
+                  (kind-of-call scene b))
+        blocks (filterv #(not (and (touches? %) (hidden (kind-of-call scene %)))) (:blocks input))
+        graph-off (and (hidden "graph") (or (seq (:nodes input)) (seq (:edges input)) (seq (:groups input))))]
+    {:input (cond-> (assoc input :blocks blocks) graph-off (dissoc :nodes :edges :groups))
+     :refused (cond-> (vec refused) graph-off (conj "graph"))}))
+
+(defn- auto-blocks-back
+  "Claudia's block of a required auto form is the user's: Claude's clear or removeBlocks doesn't
+  take it off (its last copy comes back, last). The blocks to put back into drawn scene s."
+  [scene s ch hidden folder]
+  (for [[f {:keys [k] nm :name}] auto-forms
+        :let [bid (str "auto-" f)]
+        :when (and (= "required" (ch f)) (not (hidden f)) (some #{f} all-forms)
+                   (not (some #(= (:id %) bid) (:blocks s))))]
+    (or (known-block scene bid) {:id bid :kind "form" :form f :name nm :data {k folder}})))
+
+(defn- them-or-it [xs] (if (> (count xs) 1) "them" "it"))
+
+(defn draw-text
+  "What Claude hears after a draw: the picture now and every note about what was not drawn."
+  [s {:keys [news missing refused absent notes]}]
+  (str "Picture updated: " (scene/describe s)
+       (when news (str "\n\n" news))
+       (when (seq missing) (str ". No template named " (str/join ", " (map #(str "\"" % "\"") missing)) " (see the templates tool)."))
+       (when (seq refused) (str ". Not drawn: " (str/join ", " (distinct refused)) ": switched off by the user; use another kind"))
+       (when (seq absent) (str ". Still missing, required by the user in this chat: " (str/join ", " absent) "; add " (them-or-it absent) "."))
+       (when (seq notes) (str "\n\nNot drawn, kept for the user:\n" (str/join "\n\n" notes)))))
+
+(defn lost-error
+  "The refusal of a draw that takes the last block of required kinds (lost) away."
+  [lost]
+  (str "Not drawn: this change takes the last " (str/join ", " lost) " block out of the picture, and the user made "
+       (if (> (count lost) 1) "those" "that") " required in this chat (form row). Keep one, or put a new one in the same call."))
+
+(defn- required-check
+  "The required kinds (less hidden ones) as {:lost (in scene, gone from s) :absent (not in s)}."
+  [scene s ch hidden]
+  (let [req (filterv #(not (hidden %)) (required-kinds ch))
+        had (set (map kind-of-block (:blocks scene)))
+        has (set (map kind-of-block (:blocks s)))]
+    {:lost (filterv #(and (had %) (not (has %))) req)
+     :absent (filterv #(not (has %)) req)}))
+
 (defn draw
   "One draw call on a chat's scene, through the form row and the code forms (src/chat.ts draw):
   {:scene :changed :text} (the text for Claude) or {:error text}."
   [id scene input folder]
-  (let [st (store/settings id)
-        ch (choices st)
+  (let [ch (choices (store/settings id))
         hidden (into (hidden-forms) (off-set ch))
-        {input :input notes :notes missing :missing} (prepare scene input folder)
-        refused (atom [])
-        blocks (filterv (fn [b]
-                          ;; A block only moved, renamed or resized is no new drawing.
-                          (let [touches (or (:form b) (:data b) (some? (:html b)) (:template b) (:parts b) (:kind b))
-                                k (kind-of-call scene b)]
-                            (if (and touches (hidden k)) (do (swap! refused conj k) false) true)))
-                        (:blocks input))
-        input (cond-> (assoc input :blocks blocks)
-                (and (hidden "graph") (or (seq (:nodes input)) (seq (:edges input)) (seq (:groups input))))
-                (-> (dissoc :nodes :edges :groups) (#(do (swap! refused conj "graph") %))))
-        {s :scene changed :changed error :error} (scene/apply-draw scene input all-forms)]
+        {prepared :input notes :notes missing :missing} (prepare scene input folder)
+        {allowed :input refused :refused} (without-hidden scene prepared hidden)
+        {s :scene changed :changed error :error} (scene/apply-draw scene allowed all-forms)]
     (if error
       {:error error}
-      (let [;; Claudia's block of a required auto form is the user's: Claude's clear or removeBlocks
-            ;; doesn't take it off (its last copy comes back, last).
-            back (for [[f {:keys [k] nm :name}] auto-forms
-                       :let [bid (str "auto-" f)]
-                       :when (and (= "required" (ch f)) (not (hidden f)) (some #{f} all-forms)
-                                  (not (some #(= (:id %) bid) (:blocks s))))]
-                   (or (known-block scene bid) {:id bid :kind "form" :form f :name nm :data {k folder}}))
+      (let [back (auto-blocks-back scene s ch hidden folder)
             s (update s :blocks into back)
-            changed (into (vec changed) (map :id back))
-            req (filterv #(not (hidden %)) (required-kinds ch))
-            had (set (map kind-of-block (:blocks scene)))
-            has (set (map kind-of-block (:blocks s)))
-            lost (filterv #(and (had %) (not (has %))) req)
-            absent (filterv #(not (has %)) req)]
+            {:keys [lost absent]} (required-check scene s ch hidden)]
         (if (seq lost)
-          {:error (str "Not drawn: this change takes the last " (str/join ", " lost) " block out of the picture, and the user made "
-                       (if (> (count lost) 1) "those" "that") " required in this chat (form row). Keep one, or put a new one in the same call.")}
-          (let [news (see-forms! id)]
-            {:scene s
-             :changed changed
-             :text (str "Picture updated: " (scene/describe s)
-                        (when news (str "\n\n" news))
-                        (when (seq missing) (str ". No template named " (str/join ", " (map #(str "\"" % "\"") missing)) " (see the templates tool)."))
-                        (when (seq @refused) (str ". Not drawn: " (str/join ", " (distinct @refused)) ": switched off by the user; use another kind"))
-                        (when (seq absent) (str ". Still missing, required by the user in this chat: " (str/join ", " absent) "; add " (if (> (count absent) 1) "them" "it") "."))
-                        (when (seq notes) (str "\n\nNot drawn, kept for the user:\n" (str/join "\n\n" notes))))}))))))
+          {:error (lost-error lost)}
+          {:scene s
+           :changed (into (vec changed) (map :id back))
+           :text (draw-text s {:news (see-forms! id) :missing missing :refused refused :absent absent :notes notes})})))))
+
+(defn- auto-added
+  "Blocks of auto forms turned required now (before -> now choices) that the scene lacks."
+  [scene folder before now]
+  (for [[f {:keys [k] nm :name}] auto-forms
+        :let [bid (str "auto-" f)]
+        :when (and (= "required" (now f)) (not= "required" (before f)) (some #{f} all-forms)
+                   (not (known-block scene bid)))]
+    {:id bid :kind "form" :form f :name nm :data {k folder}}))
+
+(defn- auto-gone
+  "Ids of blocks that leave: auto forms no longer required, and blocks of kinds turned off."
+  [scene before now]
+  (set (concat (for [[f _] auto-forms :when (and (= "required" (before f)) (not= "required" (now f)))] (str "auto-" f))
+               (for [b (:blocks scene) :when (and (= "off" (now (kind-of-block b))) (not= "off" (before (kind-of-block b))))] (:id b)))))
+
+(defn- settings-note
+  "The form row's note for Claude, with the auto blocks Claudia put on the picture (add)."
+  [now add]
+  (str (forms-note now)
+       (when (seq add) (str " Claudia already put " (str/join ", " (map #(str "a " (:form %) " block (id " (:id %) ": " (:name %) ")") add))
+                            " on the picture; update or keep " (them-or-it add) ", don't draw " (them-or-it add) " again."))))
 
 (defn set-settings
   "The page changed a chat's form row or columns: {:settings (for the page) :scene (new, or nil)}.
@@ -540,17 +640,9 @@
     (store/save-settings! id (assoc st :forms now :cols cols))
     (if-not (some? forms)
       {:settings {:forms now :cols cols} :scene nil}
-      (let [add (for [[f {:keys [k] nm :name}] auto-forms
-                      :let [bid (str "auto-" f)]
-                      :when (and (= "required" (now f)) (not= "required" (before f)) (some #{f} all-forms)
-                                 (not (known-block scene bid)))]
-                  {:id bid :kind "form" :form f :name nm :data {k folder}})
-            gone (set (concat (for [[f _] auto-forms :when (and (= "required" (before f)) (not= "required" (now f)))] (str "auto-" f))
-                              (for [b (:blocks scene) :when (and (= "off" (now (kind-of-block b))) (not= "off" (before (kind-of-block b))))] (:id b))))]
-        (swap! pending-notes assoc id
-               (str (forms-note now)
-                    (when (seq add) (str " Claudia already put " (str/join ", " (map #(str "a " (:form %) " block (id " (:id %) ": " (:name %) ")") add))
-                                         " on the picture; update or keep " (if (> (count add) 1) "them" "it") ", don't draw " (if (> (count add) 1) "them" "it") " again."))))
+      (let [add (auto-added scene folder before now)
+            gone (auto-gone scene before now)]
+        (swap! pending-notes assoc id (settings-note now add))
         {:settings {:forms now :cols cols}
          :scene (when (or (seq add) (seq gone))
                   (update scene :blocks #(into (filterv (fn [b] (not (gone (:id b)))) %) add)))}))))

@@ -42,17 +42,24 @@
 (def ^:private types {".js" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml" ".map" "application/json"
                       ".glb" "model/gltf-binary"})
 
+(defn asset-path
+  "The file under folder that a request path (no query) asks for, when it is one of the page's
+  assets (js, css, img, person), else nil."
+  [folder url]
+  (let [file (path/join folder (path/normalize url))]
+    (when (and (str/starts-with? file (str folder "/"))
+               (re-find #"^/(js|css|img|person)/" url))
+      file)))
+
 (defn- serve [^js req ^js res]
-  (let [url (first (str/split (.-url req) #"\?"))]
-    (if (= url "/")
-      (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
-      (let [file (path/join web-dir (path/normalize url))]
-        (if (and (str/starts-with? file (str web-dir "/"))
-                 (re-find #"^/(js|css|img|person)/" url)
-                 (fs/existsSync file))
-          (do (.writeHead res 200 #js {"content-type" (get types (path/extname file) "application/octet-stream")})
-              (.pipe (fs/createReadStream file) res))
-          (do (.writeHead res 404) (.end res)))))))
+  (let [url (first (str/split (.-url req) #"\?"))
+        file (asset-path web-dir url)]
+    (cond
+      (= url "/") (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
+      (and file (fs/existsSync file))
+      (do (.writeHead res 200 #js {"content-type" (get types (path/extname file) "application/octet-stream")})
+          (.pipe (fs/createReadStream file) res))
+      :else (do (.writeHead res 404) (.end res)))))
 
 (defonce ^:private server (atom nil))   ; Promise of the base URL
 (defonce ^:private browser (atom nil))  ; Promise of the Browser
@@ -63,11 +70,11 @@
   (or @server
       (reset! server
               (js/Promise.
-               (fn [resolve reject]
+               (fn [done fail]
                  (let [s (http/createServer serve)]
-                   (.on s "error" reject)
+                   (.on s "error" fail)
                    (.listen s 0 "127.0.0.1"
-                            #(resolve {:server s :url (str "http://127.0.0.1:" (.-port (.address s)) "/")}))))))))
+                            #(done {:server s :url (str "http://127.0.0.1:" (.-port (.address s)) "/")}))))))))
 
 (defn- launch []
   (or @browser
@@ -98,7 +105,7 @@
              (let [b @browser s @server]
                (reset! browser nil)
                (reset! server nil)
-               (some-> s (.then (fn [{:keys [^js server]}] (.close server))))
+               (some-> s (.then (fn [{^js listener :server}] (.close listener))))
                (some-> b (.then (fn [^js b] (.close b))) (.catch (fn [_])))))
            idle-ms)))
 
@@ -107,26 +114,31 @@
 
 (defn- first-line [e] (first (str/split-lines (str (or (some-> e .-message) e)))))
 
+(defn shot-height
+  "The screenshot's height for a picture height tall: at least 120, at most max-height."
+  [height]
+  (max 120 (min height max-height)))
+
 (defn- shoot [scene color]
   (some-> @idle js/clearTimeout)
   (let [pg (atom nil)]
     (-> (js/Promise.all #js [(launch) (base-url)])
         (.then (fn [[^js b {:keys [url]}]]
                  (-> (.newPage b #js {:viewport #js {:width width :height 700}})
-                     (.then (fn [^js page]
-                              (reset! pg page)
-                              (.setDefaultTimeout page timeout-ms)
-                              (-> (.goto page url #js {:waitUntil "load"})
-                                  (.then #(.waitForFunction page "typeof window.__draw === 'function'"))
-                                  (.then #(.evaluate page draw-fn #js [(p/write-json scene) color]))
-                                  (.then #(.waitForFunction page "window.__drawn === true"))
-                                  (.then #(.evaluate page "document.fonts.ready.then(() => true)"))
-                                  (.then #(.waitForTimeout page settle-ms))
+                     (.then (fn [^js tab]
+                              (reset! pg tab)
+                              (.setDefaultTimeout tab timeout-ms)
+                              (-> (.goto tab url #js {:waitUntil "load"})
+                                  (.then #(.waitForFunction tab "typeof window.__draw === 'function'"))
+                                  (.then #(.evaluate tab draw-fn #js [(p/write-json scene) color]))
+                                  (.then #(.waitForFunction tab "window.__drawn === true"))
+                                  (.then #(.evaluate tab "document.fonts.ready.then(() => true)"))
+                                  (.then #(.waitForTimeout tab settle-ms))
                                   ;; The board as tall as the picture (capped), shot whole.
-                                  (.then #(.evaluate page "Math.ceil(document.querySelector('.render-stage').getBoundingClientRect().height)"))
+                                  (.then #(.evaluate tab "Math.ceil(document.querySelector('.render-stage').getBoundingClientRect().height)"))
                                   (.then (fn [height]
-                                           (.setViewportSize page #js {:width width :height (max 120 (min height max-height))})))
-                                  (.then #(.screenshot page #js {:type "png"}))))))))
+                                           (.setViewportSize tab #js {:width width :height (shot-height height)})))
+                                  (.then #(.screenshot tab #js {:type "png"}))))))))
         (.then (fn [png] {:png png}))
         (.catch (fn [e] {:error (first-line e)}))
         (.finally (fn []

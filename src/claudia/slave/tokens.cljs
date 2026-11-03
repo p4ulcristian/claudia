@@ -97,13 +97,13 @@
   "Promise of {:out :err :code} of a command (stdin: text or nil)."
   [cmd args stdin]
   (js/Promise.
-   (fn [resolve]
+   (fn [done]
      (let [^js c (cp/spawn cmd (clj->js args) #js {:stdio #js ["pipe" "pipe" "pipe"]})
            out (atom "") err (atom "")]
        (.on (.-stdout c) "data" #(swap! out str %))
        (.on (.-stderr c) "data" #(swap! err str %))
-       (.on c "error" (fn [e] (resolve {:out "" :err (.-message e) :code -1})))
-       (.on c "close" (fn [code] (resolve {:out (str/trim @out) :err (str/trim @err) :code code})))
+       (.on c "error" (fn [e] (done {:out "" :err (.-message e) :code -1})))
+       (.on c "close" (fn [code] (done {:out (str/trim @out) :err (str/trim @err) :code code})))
        (if stdin (.end (.-stdin c) stdin) (.end (.-stdin c)))))))
 
 (defonce ^:private known (atom ::unknown))
@@ -118,6 +118,32 @@
                  (reset! known (when (zero? code)
                                  (let [u (p/read-json out)] {:login (:login u) :name (:name u)}))))))))
 
+(defn commit-identity
+  "The name and email commits carry for a GitHub user (its API answer): [name email]."
+  [u]
+  [(or (not-empty (:name u)) (:login u))
+   (str (:id u) "+" (:login u) "@users.noreply.github.com")])
+
+(defn- use-identity!
+  "Sets git's commit name and email to the GitHub user u's; promise of {:user}."
+  [u]
+  (let [[user-name email] (commit-identity u)]
+    (-> (run "git" ["config" "--global" "user.name" user-name] nil)
+        (.then #(run "git" ["config" "--global" "user.email" email] nil))
+        (.then (fn [_]
+                 (reset! known {:login (:login u) :name (:name u)})
+                 {:user @known})))))
+
+(defn- logged-in!
+  "After gh took the token: gh as git's credential helper, then the user's identity for commits."
+  []
+  (-> (run "gh" ["auth" "setup-git" "--hostname" "github.com"] nil)
+      (.then #(run "gh" ["api" "user" "--hostname" "github.com"] nil))
+      (.then (fn [{:keys [code out err]}]
+               (if-not (zero? code)
+                 {:error (str "GitHub: " err)}
+                 (use-identity! (p/read-json out)))))))
+
 (defn set-github-token!
   "Promise of {:user} or {:error}."
   [raw]
@@ -128,15 +154,4 @@
           (.then (fn [{:keys [code err out]}]
                    (if-not (zero? code)
                      {:error (str "GitHub refused the token: " (or (not-empty err) out))}
-                     (-> (run "gh" ["auth" "setup-git" "--hostname" "github.com"] nil)
-                         (.then #(run "gh" ["api" "user" "--hostname" "github.com"] nil))
-                         (.then (fn [{:keys [code out err]}]
-                                  (if-not (zero? code)
-                                    {:error (str "GitHub: " err)}
-                                    (let [u (p/read-json out)]
-                                      (-> (run "git" ["config" "--global" "user.name" (or (not-empty (:name u)) (:login u))] nil)
-                                          (.then #(run "git" ["config" "--global" "user.email"
-                                                              (str (:id u) "+" (:login u) "@users.noreply.github.com")] nil))
-                                          (.then (fn [_]
-                                                   (reset! known {:login (:login u) :name (:name u)})
-                                                   {:user @known})))))))))))))))
+                     (logged-in!))))))))

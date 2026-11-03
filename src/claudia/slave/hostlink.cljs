@@ -9,7 +9,7 @@
 ;; Ops wait here until the host has said which sessions it holds.
 (defonce ^:private ready (atom false))
 (defonce ^:private queue (atom []))
-;; Control calls waiting for the host's answer: req -> {:resolve :reject}.
+;; Control calls waiting for the host's answer: req -> {:done :fail}.
 (defonce ^:private controls (atom {}))
 (defonce ^:private next-req (atom 0))
 
@@ -25,19 +25,19 @@
   (ClojureScript data). Rejected when the host has no such session or the call failed."
   [id method & args]
   (js/Promise.
-   (fn [resolve reject]
+   (fn [done fail]
      (let [req (swap! next-req inc)]
-       (swap! controls assoc req {:resolve resolve :reject reject})
-       (js/setTimeout #(when-let [{:keys [reject]} (get @controls req)]
+       (swap! controls assoc req {:done done :fail fail})
+       (js/setTimeout #(when-let [{late :fail} (get @controls req)]
                          (swap! controls dissoc req)
-                         (reject (js/Error. "control timed out")))
+                         (late (js/Error. "control timed out")))
                       15000)
        (send! {:op "control" :id id :req req :method method :args (vec args)})))))
 
 (defn- on-control [{:keys [req value error]}]
-  (when-let [{:keys [resolve reject]} (get @controls req)]
+  (when-let [{:keys [done fail]} (get @controls req)]
     (swap! controls dissoc req)
-    (if (some? error) (reject (js/Error. error)) (resolve value))))
+    (if (some? error) (fail (js/Error. error)) (done value))))
 
 (defn connect!
   "on-event gets every host event as data; on-lost is called when the connection drops."

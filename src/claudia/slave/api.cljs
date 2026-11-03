@@ -25,11 +25,13 @@
 
 (def ^:private max-body (* 1024 1024))
 
-(defn- text-of [body]
+(defn text-of
+  "A request body's text, trimmed, when it is 1 to 20000 characters; else nil."
+  [body]
   (let [t (:text body)] (when (string? t) (let [t (str/trim t)] (when (<= 1 (count t) 20000) t)))))
 
-(defn- reply-promise [^js res pr]
-  (-> pr
+(defn- reply-promise [^js res answer]
+  (-> answer
       (.then (fn [v] (when-not (.-headersSent res)
                        (if (and (map? v) (:error v))
                          (io/send-json res (or (:status v) 400) (dissoc v :status))
@@ -39,37 +41,71 @@
 
 (defn least-used-colour [] (chats/least-used-colour))
 
+(def ^:private no-chat (js/Promise.resolve {:error "no such chat" :status 404}))
+
 ;; ---- the delegate API (decision 16 of the TypeScript Claudia) ----
 
 (defn- delegate [req]
   (-> (io/read-json req max-body)
       (.then (fn [b]
-               (if-let [text (text-of b)]
-                 {:id (chats/new-chat! text nil)}
+               (if-let [t (text-of b)]
+                 {:id (chats/new-chat! t nil)}
                  {:error "text: 1 to 20000 characters"})))))
 
 (defn- send-to [req id]
   (-> (io/read-json req max-body)
       (.then (fn [b]
-               (let [text (text-of b)]
-                 (cond (not text) {:error "text: 1 to 20000 characters"}
+               (let [t (text-of b)]
+                 (cond (not t) {:error "text: 1 to 20000 characters"}
                        (not (known? id)) {:error "no such chat" :status 404}
                        :else (do (store/update! id {:archived false})
                                  (chats/wake! id)
-                                 (chats/send-text! id text)
+                                 (chats/send-text! id t)
                                  (changed!)
                                  {:ok true})))))))
+
+(defn answers-for
+  "The answers to an ask: the same text for each of its questions, keyed by the question."
+  [ask t]
+  (into {} (for [q (:questions ask)] [(keyword (:question q)) t])))
 
 (defn- answer [req id]
   (-> (io/read-json req max-body)
       (.then (fn [b]
-               (let [text (text-of b)
+               (let [t (text-of b)
                      open (->> (vals (:asks (get @chats/state id))) (map :ask) (filter #(= "question" (:kind %))))]
-                 (cond (not text) {:error "text: 1 to 20000 characters"}
+                 (cond (not t) {:error "text: 1 to 20000 characters"}
                        (empty? open) {:error "no open question in this chat" :status 409}
-                       :else (do (doseq [a open]
-                                   (chats/answer! id (:id a) (into {} (for [q (:questions a)] [(keyword (:question q)) text]))))
+                       :else (do (doseq [a open] (chats/answer! id (:id a) (answers-for a t)))
                                  {:ok true :answered (count open)})))))))
+
+(def unknown-state
+  {:known false :running false :waiting false :asks [] :last "" :step "" :steps 0 :since nil :agents 0})
+
+(defn- newest-step
+  "The newest message of a turn as a progress line: \"<tool>: <title>\" or the start of what it said."
+  [newest]
+  (let [cut #(subs % 0 (min 160 (count %)))]
+    (case (:role newest)
+      "tool" (cut (str (or (:label newest) (:tool newest)) ": " (or (:title newest) (:summary newest))))
+      "assistant" (cut (first (str/split-lines (str (:text newest)))))
+      "")))
+
+(defn turn-state
+  "How a known chat stands, from its snapshot and the number of agents it left working."
+  [{:keys [messages running asks since]} agents]
+  (let [msgs (vec messages)
+        last-user (or (last (keep-indexed #(when (= "user" (:role %2)) %1) msgs)) -1)
+        turn (subvec msgs (inc last-user))]
+    {:known true
+     :running (boolean running)
+     :waiting (boolean (seq asks))
+     :asks (vec (for [a asks :when (= "question" (:kind a))] (select-keys a [:id :questions])))
+     :last (str/join "\n\n" (keep #(when (= "assistant" (:role %)) (:text %)) turn))
+     :step (newest-step (peek turn))
+     :steps (count (filter #(= "tool" (:role %)) turn))
+     :since (when (and running since) (.toISOString (js/Date. since)))
+     :agents agents}))
 
 (defn- state-of
   "How a chat stands, for whoever started it from outside (runner.ts /api/chats/:id/state): working,
@@ -78,40 +114,23 @@
   progress line, and how many agents it left working."
   [id]
   (if-not (known? id)
-    (js/Promise.resolve {:known false :running false :waiting false :asks [] :last "" :step "" :steps 0 :since nil :agents 0})
-    (-> (chats/snapshot id)
-        (.then (fn [{:keys [messages running asks since]}]
-                 (let [msgs (vec messages)
-                       last-user (or (last (keep-indexed #(when (= "user" (:role %2)) %1) msgs)) -1)
-                       turn (subvec msgs (inc last-user))
-                       newest (peek turn)
-                       cut #(subs % 0 (min 160 (count %)))]
-                   {:known true
-                    :running (boolean running)
-                    :waiting (boolean (seq asks))
-                    :asks (vec (for [a asks :when (= "question" (:kind a))] (select-keys a [:id :questions])))
-                    :last (str/join "\n\n" (keep #(when (= "assistant" (:role %)) (:text %)) turn))
-                    :step (case (:role newest)
-                            "tool" (cut (str (or (:label newest) (:tool newest)) ": " (or (:title newest) (:summary newest))))
-                            "assistant" (cut (first (str/split-lines (str (:text newest)))))
-                            "")
-                    :steps (count (filter #(= "tool" (:role %)) turn))
-                    :since (when (and running since) (.toISOString (js/Date. since)))
-                    :agents (tasks/working id)}))))))
+    (js/Promise.resolve unknown-state)
+    (.then (chats/snapshot id) #(turn-state % (tasks/working id)))))
 
 ;; ---- all ~/Work sessions ----
+
+(defn- session-row [^js s]
+  {:id (.-sessionId s)
+   :title (or (not-empty (.-customTitle s)) (not-empty (.-summary s)) (not-empty (.-firstPrompt s)) "Session")
+   :at (.-lastModified s)})
 
 (defn- sessions
   "Claude Code sessions of the working folder that are not chats here (newest first)."
   []
   (-> (sdk/listSessions #js {:dir chats/cwd :limit 300 :includeWorktrees false})
-      (.then (fn [list]
+      (.then (fn [found]
                (let [have (set (map :id (store/chats)))]
-                 {:sessions (vec (for [^js s list
-                                       :when (not (have (.-sessionId s)))]
-                                   {:id (.-sessionId s)
-                                    :title (or (not-empty (.-customTitle s)) (not-empty (.-summary s)) (not-empty (.-firstPrompt s)) "Session")
-                                    :at (.-lastModified s)}))})))))
+                 {:sessions (vec (for [^js s found :when (not (have (.-sessionId s)))] (session-row s)))})))))
 
 (defn- adopt [id]
   (if (known? id)
@@ -137,123 +156,182 @@
         (.end res (js/Buffer.from (.. im -source -data) "base64")))
     (io/send-json res 404 {:error "No such image."})))
 
+(defn- image-in
+  "In a parsed user entry e (content its blocks): the n-th image when entry is the user entry
+  entry, else the image of the tool result for tool use tool."
+  [^js e content {entry :uuid n :n tool :tool}]
+  (if entry
+    (when (= entry (.-uuid e))
+      (nth (filterv #(= "image" (.-type ^js %)) content) n nil))
+    (some (fn [^js b]
+            (when (and (= "tool_result" (.-type b)) (= tool (.-tool_use_id b)) (array? (.-content b)))
+              (some #(when (= "image" (.-type ^js %)) %) (.-content b))))
+          content)))
+
+(defn image-of-line
+  "The image a session file line holds for want ({:uuid :n} or {:tool}), or nil."
+  [line {entry :uuid tool :tool :as want}]
+  (when (or (and entry (str/includes? line entry)) (and tool (str/includes? line tool)))
+    (let [^js e (try (js/JSON.parse line) (catch :default _ nil))
+          content (some-> e .-message .-content)]
+      (when (and e (= "user" (.-type e)) (array? content))
+        (image-in e content want)))))
+
 (defn- find-image
   "Promise of the n-th image block of the user entry `uuid`, or of the tool result for tool use `tool`."
-  [id {:keys [uuid n tool]}]
+  [id want]
   (-> (.readFile (.-promises fs) (history/session-file chats/cwd id) "utf8")
-      (.then (fn [text]
-               (some (fn [line]
-                       (when (or (and uuid (str/includes? line uuid)) (and tool (str/includes? line tool)))
-                         (let [^js e (try (js/JSON.parse line) (catch :default _ nil))
-                               content (some-> e .-message .-content)]
-                           (when (and e (= "user" (.-type e)) (array? content))
-                             (if uuid
-                               (when (= uuid (.-uuid e))
-                                 (nth (filterv #(= "image" (.-type ^js %)) content) n nil))
-                               (some (fn [^js b]
-                                       (when (and (= "tool_result" (.-type b)) (= tool (.-tool_use_id b)) (array? (.-content b)))
-                                         (some #(when (= "image" (.-type ^js %)) %) (.-content b))))
-                                     content))))))
-                     (str/split-lines text))))
+      (.then (fn [t] (some #(image-of-line % want) (str/split-lines t))))
       (.catch (fn [_] nil))))
+
+;; ---- chat operations ----
+
+(defn- fork-chat [req id]
+  (if-not (known? id)
+    no-chat
+    (-> (io/read-json req max-body)
+        (.then #(fork/fork! chats/cwd id (when (string? (:at %)) (not-empty (:at %)))
+                            (boolean (:running (get @chats/state id))) (least-used-colour)))
+        (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
+        (.catch (fn [e] {:error (.-message e) :status 409})))))
+
+(defn- claude-token []
+  (let [f (.-CLAUDIA_TOKEN_FILE (.-env js/process))]
+    (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))))
+
+(defn- explain-step [req id]
+  (if-not (known? id)
+    no-chat
+    (.then (io/read-json req max-body)
+           (fn [{:keys [step]}]
+             (let [token (claude-token)]
+               (cond (not (string? step)) {:error "step: a tool call's id"}
+                     (not (seq token)) {:error "No Claude token on this runner." :status 503}
+                     :else (.then (explain/explain chats/cwd id step token
+                                                   (some #(when (= step (:id %)) %) (:turn (get @chats/state id))))
+                                  (fn [t] {:text t}))))))))
+
+(defn chat-update
+  "What a chat menu PATCH changes in the chat's row (row: the chat as stored now): archived, a colour
+  of the palette, ash (passive: grey, remembering the colour it had) or wake (the colour it had, else
+  (fresh), a new one)."
+  [{:keys [archived color]} row palette fresh]
+  (cond-> {}
+    (boolean? archived) (assoc :archived archived)
+    (and (string? color) (some #{color} palette)) (assoc :color color)
+    (= color "ash") (assoc :color "ash" :prev_color (let [c (:color row)] (if (= c "ash") (:prev-color row) c)))
+    (= color "wake") (assoc :color (or (:prev-color row) (fresh)) :prev_color nil)))
+
+(defn- patch-chat [req id]
+  (.then (io/read-json req max-body)
+         (fn [{:keys [title] :as b}]
+           (if-not (known? id)
+             {:error "no such chat" :status 404}
+             (do (when (string? title) (chats/rename! id title))
+                 (store/update! id (chat-update b (store/chat id) chats/chat-colors #(chats/least-used-colour id)))
+                 (changed!)
+                 {:ok true})))))
+
+;; ---- the other calls ----
+
+(defn- search-rows [archived]
+  (for [r (store/chats) :when (= archived (boolean (:archived r)))]
+    {:id (:id r) :title (:title r) :file (history/session-file chats/cwd (:id r))}))
+
+(defn- project-info [folder]
+  (let [found (projects/project-of folder chats/cwd)]
+    (if found {:name (:name found) :logo (boolean (:logo found))} {:name nil :logo false})))
+
+(defn- project-logo [^js res folder part]
+  (if-let [logo (and (= "logo" part) (:logo (projects/project-of folder chats/cwd)))]
+    (do (.writeHead res 200 #js {"content-type" (projects/logo-type logo)
+                                 "cache-control" "private, max-age=600"
+                                 "x-content-type-options" "nosniff"
+                                 "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
+        (.pipe (fs/createReadStream logo) res))
+    (io/send-json res 404 {:error "No logo."})))
+
+;; The profile's preferences (runner.ts /api/prefs): chatColors, the forms deleted in the Forms
+;; window (they leave Claude's draw tool), and the opt-in forms this runner doesn't have.
+(defn- set-prefs [req]
+  (.then (io/read-json req max-body)
+         (fn [b]
+           (let [out (codeforms/set-prefs! b)]
+             (when (contains? b :hiddenForms) (chats/prefs-changed!))
+             (assoc out :notHere codeforms/not-here)))))
 
 ;; ---- the router ----
 
+(def ^:private api-routes
+  "[method [\"api\" name] parts] -> operation, for /api/<name>[/...]."
+  {["POST" ["api" "delegate"] 2] :delegate
+   ["GET" ["api" "search"] 2] :search
+   ["GET" ["api" "sessions"] 2] :sessions
+   ["GET" ["api" "project"] 2] :project
+   ["GET" ["api" "project"] 3] :project-logo
+   ["GET" ["api" "prefs"] 2] :prefs
+   ["PATCH" ["api" "prefs"] 2] :set-prefs
+   ["GET" ["api" "github"] 2] :github
+   ["PUT" ["api" "github"] 2] :set-github
+   ["POST" ["api" "sessions"] 4] :adopt})
+
+(def ^:private chat-routes
+  "[method op] -> operation, for /api/chats/:id[/op/a/b]."
+  {["POST" "send"] :send
+   ["POST" "answer"] :answer
+   ["GET" "state"] :state
+   ["POST" "uploads"] :upload
+   ["GET" "uploads"] :download
+   ["GET" "sent"] :sent
+   ["GET" "shown"] :shown
+   ["POST" "fork"] :fork
+   ["POST" "explain"] :explain
+   ["PATCH" nil] :patch-chat})
+
+(defn route
+  "Which operation a call is: method, the path's decoded parts (without the leading empty one) and
+  whether the caller only reads. :read-only (refused: anything but GET, and Settings' logins, the
+  profile's own business), an operation keyword, or nil when it is none of these."
+  [method parts read-only]
+  (cond
+    (and read-only (or (not= "GET" method) (#{"github"} (second parts)))) :read-only
+    :else (or (get api-routes [method (vec (take 2 parts)) (count parts)])
+              (when (and (= ["api" "chats"] (vec (take 2 parts))) (>= (count parts) 3))
+                (get chat-routes [method (nth parts 3 nil)])))))
+
+(defn- operate
+  "Runs operation op for the call ({:req :res :q (query) :parts}); reply answers a promise."
+  [op {:keys [^js req ^js res ^js q parts]}]
+  (let [reply #(reply-promise res %)
+        [_ _ id _ a b] parts]
+    (case op
+      :read-only (io/send-json res 403 {:error "Read only."})
+      :delegate (reply (delegate req))
+      :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (= "1" (.get q "archived"))))})
+      :sessions (reply (sessions))
+      :project (io/send-json res 200 (project-info (.get q "folder")))
+      :project-logo (project-logo res (.get q "folder") (nth parts 2))
+      :prefs (io/send-json res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here))
+      :set-prefs (reply (set-prefs req))
+      :github (reply (.then (tokens/github-user) (fn [u] {:user u})))
+      :set-github (reply (.then (io/read-json req max-body) #(tokens/set-github-token! (:token %))))
+      :adopt (reply (adopt (nth parts 2)))
+      :send (reply (send-to req id))
+      :answer (reply (answer req id))
+      :state (reply (state-of id))
+      :upload (uploads/save! req res id (.get q "name"))
+      :download (uploads/serve! res id a)
+      :sent (.then (find-image id {:uuid a :n (js/Number b)}) #(image-reply res %))
+      :shown (.then (find-image id {:tool a}) #(image-reply res %))
+      :fork (reply (fork-chat req id))
+      :explain (reply (explain-step req id))
+      :patch-chat (reply (patch-chat req id)))))
+
 (defn handle
   "Answers the call when it is one of these; false when not (the runner answers 404)."
-  [^js req ^js res {:keys [read-only] who :profile}]
-  (let [method (.-method req)
-        [path qs] (str/split (.-url req) #"\?" 2)
-        q (js/URLSearchParams. (or qs ""))
-        parts (mapv js/decodeURIComponent (rest (str/split path #"/")))
-        reply #(reply-promise res %)]
-    (if (and read-only (or (not= "GET" method)
-                           ;; Settings' logins are the profile's own business.
-                           (#{"github"} (second parts))))
-      (do (io/send-json res 403 {:error "Read only."}) true)
-      (condp = [method (vec (take 2 parts)) (count parts)]
-        ["POST" ["api" "delegate"] 2] (do (reply (delegate req)) true)
-        ["GET" ["api" "search"] 2]
-        (let [arch (= "1" (.get q "archived"))
-              rows (for [r (store/chats) :when (= arch (boolean (:archived r)))]
-                     {:id (:id r) :title (:title r) :file (history/session-file chats/cwd (:id r))})]
-          (io/send-json res 200 {:found (search/search (or (.get q "q") "") rows)}) true)
-        ["GET" ["api" "sessions"] 2] (do (reply (sessions)) true)
-        ["GET" ["api" "project"] 2]
-        (let [pr (projects/project-of (.get q "folder") chats/cwd)]
-          (io/send-json res 200 (if pr {:name (:name pr) :logo (boolean (:logo pr))} {:name nil :logo false})) true)
-        ["GET" ["api" "project"] 3]
-        (let [pr (projects/project-of (.get q "folder") chats/cwd)]
-          (if-let [logo (and (= "logo" (nth parts 2)) (:logo pr))]
-            (do (.writeHead res 200 #js {"content-type" (projects/logo-type logo)
-                                         "cache-control" "private, max-age=600"
-                                         "x-content-type-options" "nosniff"
-                                         "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'"})
-                (.pipe (fs/createReadStream logo) res))
-            (io/send-json res 404 {:error "No logo."}))
-          true)
-        ;; The profile's preferences (runner.ts /api/prefs): chatColors, the forms deleted in the Forms
-        ;; window (they leave Claude's draw tool), and the opt-in forms this runner doesn't have.
-        ["GET" ["api" "prefs"] 2] (do (io/send-json res 200 (assoc (codeforms/prefs) :notHere codeforms/not-here)) true)
-        ["PATCH" ["api" "prefs"] 2]
-        (do (reply (-> (io/read-json req max-body)
-                       (.then (fn [b]
-                                (let [out (codeforms/set-prefs! b)]
-                                  (when (contains? b :hiddenForms) (chats/prefs-changed!))
-                                  (assoc out :notHere codeforms/not-here))))))
-            true)
-        ["GET" ["api" "github"] 2] (do (reply (.then (tokens/github-user) (fn [u] {:user u}))) true)
-        ["PUT" ["api" "github"] 2] (do (reply (-> (io/read-json req max-body) (.then #(tokens/set-github-token! (:token %))))) true)
-        ["POST" ["api" "sessions"] 4] (do (reply (adopt (nth parts 2))) true)
-        ;; /api/chats/:id/...
-        (if (and (= ["api" "chats"] (vec (take 2 parts))) (>= (count parts) 3))
-          (let [id (nth parts 2)
-                [_ _ _ op a b] parts]
-            (case [method op]
-              ["POST" "send"] (do (reply (send-to req id)) true)
-              ["POST" "answer"] (do (reply (answer req id)) true)
-              ["GET" "state"] (do (reply (state-of id)) true)
-              ["POST" "uploads"] (do (uploads/save! req res id (.get q "name")) true)
-              ["GET" "uploads"] (do (uploads/serve! res id a) true)
-              ["GET" "sent"] (do (.then (find-image id {:uuid a :n (js/Number b)}) #(image-reply res %)) true)
-              ["GET" "shown"] (do (.then (find-image id {:tool a}) #(image-reply res %)) true)
-              ["POST" "fork"]
-              (do (reply (if-not (known? id)
-                           (js/Promise.resolve {:error "no such chat" :status 404})
-                           (-> (io/read-json req max-body)
-                               (.then #(fork/fork! chats/cwd id (when (string? (:at %)) (not-empty (:at %)))
-                                                   (boolean (:running (get @chats/state id))) (least-used-colour)))
-                               (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
-                               (.catch (fn [e] {:error (.-message e) :status 409})))))
-                  true)
-              ["POST" "explain"]
-              (do (reply (if-not (known? id)
-                           (js/Promise.resolve {:error "no such chat" :status 404})
-                           (-> (io/read-json req max-body)
-                               (.then (fn [{:keys [step]}]
-                                        (let [f (.-CLAUDIA_TOKEN_FILE (.-env js/process))
-                                              token (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
-                                          (cond (not (string? step)) {:error "step: a tool call's id"}
-                                                (not (seq token)) {:error "No Claude token on this runner." :status 503}
-                                                :else (.then (explain/explain chats/cwd id step token
-                                                                              (some #(when (= step (:id %)) %) (:turn (get @chats/state id))))
-                                                             (fn [t] {:text t})))))))))
-                  true)
-              ["PATCH" nil]
-              (do (reply (-> (io/read-json req max-body)
-                             (.then (fn [{:keys [title archived color]}]
-                                      (if-not (known? id)
-                                        {:error "no such chat" :status 404}
-                                        (do (when (string? title) (chats/rename! id title))
-                                            (store/update! id (cond-> {}
-                                                                (boolean? archived) (assoc :archived archived)
-                                                                (and (string? color) (some #{color} chats/chat-colors)) (assoc :color color)
-                                                                ;; passive: grey, remembering the colour it had
-                                                                (= color "ash") (assoc :color "ash" :prev_color (let [c (:color (store/chat id))] (if (= c "ash") (:prev-color (store/chat id)) c)))
-                                                                ;; awake again: the colour it had, else a fresh one
-                                                                (= color "wake") (assoc :color (or (:prev-color (store/chat id)) (chats/least-used-colour id)) :prev_color nil)))
-                                            (changed!)
-                                            {:ok true}))))))
-                  true)
-              false))
-          false)))))
+  [^js req ^js res {:keys [read-only]}]
+  (let [[path qs] (str/split (.-url req) #"\?" 2)
+        parts (mapv js/decodeURIComponent (rest (str/split path #"/")))]
+    (if-let [op (route (.-method req) parts read-only)]
+      (do (operate op {:req req :res res :q (js/URLSearchParams. (or qs "")) :parts parts}) true)
+      false)))

@@ -96,8 +96,8 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 (defn help-lines
   "The forms part of the draw tool's description (src/forms.ts formsHelp): one line per form."
   [forms]
-  (str/join "\n" (for [f forms :let [[when fields] (form-help f)] :when when]
-                   (str "- " f ": " when " Data: " fields "."))))
+  (str/join "\n" (for [f forms :let [[use-when fields] (form-help f)] :when use-when]
+                   (str "- " f ": " use-when " Data: " fields "."))))
 
 (defn first-sentence
   "A form's when-line up to its first full stop (what forms news names it by)."
@@ -107,13 +107,49 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 (defn fingerprint
   "How a form is described now: a change tells Claude to read its data again."
   [f]
-  (let [[when fields] (form-help f)] (str (hash (str when fields)))))
+  (let [[use-when fields] (form-help f)] (str (hash (str use-when fields)))))
 
 (def ^:private colour {:type "string" :enum ["green" "red" "amber" "blue" "grey" "violet"]})
 (defn- s [description] {:type "string" :description description})
 (defn- strings [description] {:type "array" :items {:type "string"} :description description})
 (defn- obj [required props] (cond-> {:type "object" :properties props :additionalProperties false}
                               (seq required) (assoc :required required)))
+
+(def ^:private node-item
+  (obj ["id"] (array-map :id (s "Stable id, reused across turns")
+                          :label {:type "string"}
+                          :shape {:type "string" :enum ["circle" "box" "pill" "diamond"]
+                                  :description "circle (default), box, pill, diamond (a decision)"}
+                          :color colour
+                          :note (s "One short line under the label")
+                          :group (s "Id of a group frame to sit in")
+                          :state {:type "string" :enum ["todo" "active" "done" "blocked"]})))
+
+(def ^:private edge-item
+  (obj ["from" "to"] (array-map :from {:type "string"} :to {:type "string"} :label {:type "string"}
+                                 :dashed {:type "boolean"} :color colour)))
+
+(defn- block-item
+  "One block of a draw call; forms: the ones on offer."
+  [forms]
+  (obj ["id"]
+       (array-map
+        :id (s "Stable block id, reused across turns")
+        :name (s "Short telling name shown on the block's badge, e.g. \"Deploy steps\"")
+        :kind {:type "string" :enum ["graph" "html"]
+               :description "Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"}
+        :form {:type "string" :enum (if (seq forms) (vec forms) ["none"]) :description "Makes this a form block of that kind"}
+        :data {:type "object" :propertyNames {:type "string"} :additionalProperties {}
+               :description "A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"}
+        :removeItems (strings "Ids of form items to remove")
+        :template (s "Draw a saved template (by name) in this freeform block; fill it through parts")
+        :width {:type "string" :enum ["full" "half"]
+                :description "full (default) or half: two half blocks in a row sit side by side"}
+        :before (s "Move or put this block before the block with this id; new blocks go last")
+        :html (s "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.")
+        :parts {:type "object" :propertyNames {:type "string"} :additionalProperties {:type "string"}
+                :description "New inner markup for the elements marked data-part=\"<name>\" (markup only: scripts in it do not run). The page is not reloaded"}
+        :height {:type "number" :description "Not used: a page is always shown at its full height"})))
 
 (defn- draw-schema
   "The draw tool's input (src/prompt.ts drawShape); forms: the ones on offer."
@@ -125,41 +161,16 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
     :title (s "Picture title, a few words")
     :clear {:type "boolean" :description "Start a fresh picture before applying the rest (new topic)"}
     :nodes {:type "array"
-            :items (obj ["id"] (array-map :id (s "Stable id, reused across turns")
-                                          :label {:type "string"}
-                                          :shape {:type "string" :enum ["circle" "box" "pill" "diamond"]
-                                                  :description "circle (default), box, pill, diamond (a decision)"}
-                                          :color colour
-                                          :note (s "One short line under the label")
-                                          :group (s "Id of a group frame to sit in")
-                                          :state {:type "string" :enum ["todo" "active" "done" "blocked"]}))
+            :items node-item
             :description "Add or change nodes by id; fields left out stay as they were"}
     :edges {:type "array"
-            :items (obj ["from" "to"] (array-map :from {:type "string"} :to {:type "string"} :label {:type "string"}
-                                                 :dashed {:type "boolean"} :color colour))
+            :items edge-item
             :description "Add or change arrows; an arrow is identified by from + to"}
     :groups {:type "array"
              :items (obj ["id"] (array-map :id {:type "string"} :label {:type "string"} :color colour))}
     :graph (s "The graph block that nodes, edges, groups and remove apply to (made if missing). Default \"graph\"")
     :blocks {:type "array"
-             :items (obj ["id"]
-                         (array-map
-                          :id (s "Stable block id, reused across turns")
-                          :name (s "Short telling name shown on the block's badge, e.g. \"Deploy steps\"")
-                          :kind {:type "string" :enum ["graph" "html"]
-                                 :description "Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"}
-                          :form {:type "string" :enum (if (seq forms) (vec forms) ["none"]) :description "Makes this a form block of that kind"}
-                          :data {:type "object" :propertyNames {:type "string"} :additionalProperties {}
-                                 :description "A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"}
-                          :removeItems (strings "Ids of form items to remove")
-                          :template (s "Draw a saved template (by name) in this freeform block; fill it through parts")
-                          :width {:type "string" :enum ["full" "half"]
-                                  :description "full (default) or half: two half blocks in a row sit side by side"}
-                          :before (s "Move or put this block before the block with this id; new blocks go last")
-                          :html (s "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.")
-                          :parts {:type "object" :propertyNames {:type "string"} :additionalProperties {:type "string"}
-                                  :description "New inner markup for the elements marked data-part=\"<name>\" (markup only: scripts in it do not run). The page is not reloaded"}
-                          :height {:type "number" :description "Not used: a page is always shown at its full height"}))
+             :items (block-item forms)
              :description "Add or change blocks by id: HTML blocks, and the width/position of any block"}
     :removeBlocks (strings "Ids of whole blocks to remove")
     :remove (strings "Ids to remove from the graph block: nodes, groups, or arrows as \"from->to\""))})
