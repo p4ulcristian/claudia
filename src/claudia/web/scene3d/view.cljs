@@ -1,11 +1,12 @@
 (ns claudia.web.scene3d.view
   "The scene3d form's view (its own module, loaded on first use, so pictures without a 3D scene
   cost nothing): the stage, the story bar (play, pause, steps, voice), the legend, subtitles, the
-  part popup with Explain, the overlap check, the style and quality switches, reset view and the
-  height grip."
+  part popup with Explain, the overlap check, the style and quality switches, reset view, full
+  screen and the height grip."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
+            [claudia.web.fullscreen :as fs]
             [claudia.web.scene3d.bar :as bar]
             [claudia.web.scene3d.engine :as engine]
             [claudia.web.scene3d.story :as story]))
@@ -20,7 +21,9 @@
    :reset "M4.5 10a5.5 5.5 0 1 0 1.8-4.1M4.5 3.5v3.7h3.7"
    :warn "M10 3.5l7 12.2H3zM10 8.3v3.2M10 13.6v.4"
    :check "M4 10.5l4 4 8-9"
-   :close "M5 5l10 10M15 5L5 15"})
+   :close "M5 5l10 10M15 5L5 15"
+   :full "M3.5 8V3.5H8M12 3.5h4.5V8M16.5 12v4.5H12M8 16.5H3.5V12"
+   :exit "M8 3.5V8H3.5M16.5 8H12V3.5M12 16.5V12h4.5M3.5 12H8v4.5"})
 
 (defn- icon [k] [:svg.s3-ic {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d (icons k)}]])
 
@@ -63,8 +66,9 @@
 
 (defn- part-popup [ui api {:keys [chat block live?]} host]
   (let [{:keys [picked height]} @ui
-        w (or (some-> ^js @host .-clientWidth) 400)]
-    [:div.s3-pop {:style (bar/popup-at picked w height)
+        w (or (some-> ^js @host .-clientWidth) 400)
+        h (or (some-> ^js @host .-clientHeight) height)]
+    [:div.s3-pop {:style (bar/popup-at picked w h)
                   :on-pointer-down #(.stopPropagation %)}
      [:div.s3-pop-head
       [:b (:title picked)]
@@ -151,18 +155,24 @@
                                 ((:quality! @api) q))}
    (if (= quality "high") "High" "Low")])
 
-(defn- tools [ui api {:keys [animated style quality] :as state}]
+(defn- full-button [host full]
+  [:button.f-tool {:title (if full "Leave full screen (Esc)" "Full screen")
+                   :on-click #(fs/toggle! @host)}
+   (if full [:<> [icon :exit] " exit"] [:<> [icon :full] " full screen"])])
+
+(defn- tools [ui api host {:keys [animated style quality full] :as state}]
   [:span.s3-tools
    (when animated [motion-tools ui api state])
    [style-button ui api style]
    (when (= style "real") [quality-button ui api quality])
-   [:button.f-tool {:on-click #((:fit! @api))} [icon :reset] " reset view"]])
+   [:button.f-tool {:on-click #((:fit! @api))} [icon :reset] " reset view"]
+   [full-button host full]])
 
 (defn- scene-view [ui api host props]
-  (let [{:keys [error solids panel picked legend height story-len idx playing sub autoplay] :as state} @ui]
+  (let [{:keys [error solids panel picked legend height story-len idx playing sub autoplay full] :as state} @ui]
     [:div.f-scene3d {:ref #(reset! host %)}
-     [:div.s3-stage {:style {:height height}}]
-     [grip ui]
+     [:div.s3-stage {:style {:height (if full "100%" height)}}]
+     (when-not full [grip ui])
      (when picked [part-popup ui api props host])
      (when (seq legend) [legend-view legend])
      (when (and (pos? story-len) (neg? idx) (not playing) (false? autoplay))
@@ -172,11 +182,11 @@
      (when (and panel (> solids 1)) [overlap-panel state api])
      [:div.s3-bar
       [left-bar ui api state]
-      [tools ui api state]]]))
+      [tools ui api host state]]]))
 
 (defn- initial-ui []
   {:animated false :running true :speed 2 :error "" :solids 0 :now [] :seen []
-   :panel false :scanned false :picked nil :legend [] :hint ""
+   :panel false :scanned false :picked nil :legend [] :hint "" :full false
    :height (bar/stored-height (stored height-key) js/innerHeight)
    :quality (if (= "low" (stored "claudia.scene3d.quality")) "low" "high")
    :style (if (= "real" (stored "claudia.scene3d.style")) "real" "diagram")
@@ -197,14 +207,19 @@
   [_props]
   (let [host (atom nil)
         api (atom nil)
+        unlisten (atom nil)
         ui (r/atom (initial-ui))]
     (watch-hint! ui)
     (r/create-class
      {:display-name "scene3d"
       :component-did-mount (fn [this]
+                             (reset! unlisten (fs/on-change! #(swap! ui assoc :full (fs/full? @host))))
                              (reset! api (engine/start! @host ui (:data (r/props this)))))
       :component-did-update (fn [this [_ old]]
                               (let [d (:data (r/props this))]
                                 (when (not= d (:data old)) ((:set! @api) d))))
-      :component-will-unmount (fn [] (when-let [a @api] ((:destroy! a))) (reset! api nil))
+      :component-will-unmount (fn []
+                                (when-let [stop @unlisten] (stop))
+                                (when-let [a @api] ((:destroy! a)))
+                                (reset! api nil))
       :reagent-render (fn [props] [scene-view ui api host props])})))
