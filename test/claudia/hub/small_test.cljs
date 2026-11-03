@@ -6,20 +6,11 @@
             [claudia.hub.presence :as presence]
             [claudia.shared.presence :as p]))
 
-(def sha (apply str (repeat 40 "a")))
 
 (deftest github-deliveries-that-act
   (is (github/main-push? "push" {:ref "refs/heads/main"}))
   (is (not (github/main-push? "push" {:ref "refs/heads/other"})))
-  (is (not (github/main-push? "workflow_run" {:ref "refs/heads/main"})))
-  (let [d {:action "completed"
-           :workflow_run {:conclusion "success" :head_branch "main"
-                          :path ".github/workflows/release.yml" :head_sha sha}}]
-    (is (true? (github/release-done? "workflow_run" d)))
-    (is (false? (github/release-done? "workflow_run" (assoc-in d [:workflow_run :conclusion] "failure"))))
-    (is (false? (github/release-done? "workflow_run" (assoc-in d [:workflow_run :head_sha] "abc"))))
-    (is (false? (github/release-done? "workflow_run" (assoc d :action "requested"))))
-    (is (false? (github/release-done? "push" d)))))
+  (is (not (github/main-push? "workflow_run" {:ref "refs/heads/main"}))))
 
 (deftest github-signature
   (let [body (js/Buffer.from "{}")]

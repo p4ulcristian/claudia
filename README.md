@@ -82,8 +82,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   list (waiting up to 40 s for a pushed one), its tree from the API, and install that tree's build:
   fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
-  front and the runners restart, never the hosts. `release.yml` (commit releases, `release-<short>`)
-  stays only until every server runs this update.sh. A single-user machine's `CLAUDIA_CHECKOUT`
+  front and the runners restart, never the hosts. A single-user machine's `CLAUDIA_CHECKOUT`
   must be a release folder (a git checkout is never replaced): first install with
   `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`.
 
