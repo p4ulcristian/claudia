@@ -322,8 +322,6 @@
 /* The picture header: the Forms button and the form row under the title. */
 .picture-head { flex-wrap: wrap; }
 .form-tools { display: flex; gap: 10px; }
-.right { container-type: inline-size; }
-.gallery header .icon { font: 700 26px var(--hand); color: var(--muted); }
 .gallery .g-sample .form-view { width: 100%; }
 
 .code-chip .add { color: var(--green); }

@@ -5,6 +5,7 @@
   agent and the agents it started. A step opens in full under itself: Edit and Write steps as their
   diff. Read from the runner (GET /api/chats/:id/timeline), every 2 s while the chat runs."
   (:require [clojure.string :as str]
+            [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.shared.protocol :as protocol]
@@ -56,6 +57,20 @@
 
 ;; ---- a step in full ----
 
+(defn- explain
+  "Explain on an opened tool step: the same plain-words explanation as on the chat's steps."
+  [oc e]
+  (let [k [(:server oc) (:chat oc) (:id e)]
+        {:keys [busy text error open]} @(rf/subscribe [:explain k])
+        ask #(rf/dispatch [:ops/explain [(:server oc) (:chat oc)] (:id e)])]
+    [:div.tl-explain
+     [:button.explain-btn.live {:type "button" :on-click #(when-not (or busy open) (ask))}
+      (if busy "…" "explain this step")]
+     (when open
+       [:div.explain-note {:class [(when busy "busy") (when error "err")]}
+        [:span (cond busy "explaining…" error (str "Couldn't explain: " error) :else text)]
+        (when-not busy [:button.explain-x {:type "button" :aria-label "Close" :on-click ask} "×"])])]))
+
 (defn- patch-diff [hunks]
   [:table.diff
    [:colgroup [:col.ln-col] [:col.ln-col] [:col]]
@@ -95,6 +110,7 @@
          #(reset! dead true)))
      [(:server oc) (:chat oc) (:id lane) (:id e) done])
     [:div.tl-detail
+     (when (and (= "tool" (:k e)) (= "tool" (:k d))) [explain oc e])
      (cond
        failed [:p.muted.small "Couldn't read this from the session file."]
        (nil? d) [:p.muted.small "Loading…"]
@@ -144,7 +160,7 @@
           [:span.tl-tool {:class (category (:name e))} (:name e)]
           [:span.tl-title (:title e)]
           (when started
-            [:span.tl-link {:role "button" :on-click (fn [ev] (.stopPropagation ev) (on-lane (:id started)))} "its steps"])]
+            [:span.link {:role "button" :on-click (fn [ev] (.stopPropagation ev) (on-lane (:id started)))} "its steps"])]
          [:<>
           [:span.tl-who {:class (:k e)}
            (case (:k e) "user" (if (= "main" (:kind lane)) "You" "Task") "note" "Note" "Claude")]
@@ -247,6 +263,7 @@
      [open])
     (if (or missing (nil? data))
       [:div.tl
+       [:div.tl-head [:b "Timeline"]]
        [:p.muted.tl-empty (if missing
                             "Nothing yet: the timeline fills in once Claude starts working in this chat."
                             "Loading…")]]
@@ -268,6 +285,7 @@
             only-lane (when only (some #(when (= (:id %) only) %) lanes))]
         [:div.tl
          [:div.tl-head
+          [:b "Timeline"]
           [:span.muted.small
            (if (seq agents)
              (str (count agents) (if (= 1 (count agents)) " agent" " agents")
@@ -280,13 +298,13 @@
              [:option {:value "main"} "Chat only"]
              (for [l agents]
                ^{:key (:id l)} [:option {:value (:id l)} (str (:title l) (when (:running l) " (running)"))])])
-          (when only-lane [:button.tl-more {:on-click #(set-only nil)} "show everything"])]
+          (when only-lane [:button.link {:on-click #(set-only nil)} "show everything"])]
          [:div.tl-scroll {:ref #(set! (.-current scroller) %)
                           :on-scroll (fn [^js e]
                                        (let [el (.-currentTarget e)]
                                          (set! (.-current at-end) (>= (+ (.-scrollTop el) (.-clientHeight el)) (- (.-scrollHeight el) 40)))))}
           (when (> (count all) (count rows))
-            [:button.tl-more {:on-click #(do (set! (.-current at-end) false) (set-shown (fn [n] (+ n page-rows))))}
+            [:button.tl-more.link {:on-click #(do (set! (.-current at-end) false) (set-shown (fn [n] (+ n page-rows))))}
              (str (- (count all) (count rows)) " earlier steps · show " (min page-rows (- (count all) (count rows))) " more")])
           (into [:ul.tl-feed]
                 (mapcat

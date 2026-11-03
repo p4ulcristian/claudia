@@ -436,10 +436,11 @@
   (let [ch (choices (store/settings id))
         off (off-set ch)
         req (filterv #(not (off %)) (required-kinds ch))
-        base (get-in tools/mcp [:picture :draw :description])
-        base (str/join "\n" (remove #(when-let [[_ f] (re-matches #"- (\w+): .*" %)] (off f)) (str/split-lines base)))
-        code (str/join "\n" (map forms/help-line (remove off code-forms)))
-        desc (str base (when (seq code) (str "\n" code))
+        whole (get-in tools/mcp [:picture :draw :description])
+        ;; Every form in the old Claudia's order (claudia.shared.forms/order), base and code forms mixed.
+        head (subs whole 0 (inc (str/index-of whole "\n- ")))
+        desc (str head (str/join "\n" (for [f all-forms :when (not (off f))]
+                                         (if (get forms/specs f) (forms/help-line f) (str "- " f ": " (get base-help f)))))
                   (when (seq req) (str "\n\nIn this chat the user made REQUIRED: " (str/join ", " req)
                                        " (green in the form row). The picture always holds at least one block of each; a change that takes the last one away is refused. Other kinds stay allowed."))
                   (when (some #{"freeform"} req) " Freeform required means: be creative, build interactive pages where they help.")

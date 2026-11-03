@@ -142,7 +142,7 @@
       [chat/chat-pane]
       [:div.divider {:on-pointer-down (when-not folded? #(drag-split! % set-chat-w))}]
       [picture/picture-pane]]
-     ;; The right rail, mirroring the chats rail: this chat's forms (claudia.web.views.codeforms).
-     (when-not phone? [:nav.rail.right-rail {:aria-label "Forms"}])
+     ;; The right rail, mirroring the chats rail: this chat's forms (claudia.web.views.picture/right-rail).
+     (when-not phone? [picture/right-rail])
      [gallery]
      [admin/dialog]]))
