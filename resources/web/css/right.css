@@ -354,3 +354,5 @@ html.render #root { height: auto; }
 .rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 /* Folded: only the edge line between the chat and the rail. */
 .split.folded > .left::after { display: none; }
+/* The phone's picture has the form row only; the Forms window opens from Settings (as the old one did). */
+.right-scroll > .forms-btn { display: none; }
