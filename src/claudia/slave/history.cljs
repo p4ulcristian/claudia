@@ -16,7 +16,7 @@
   (let [s (str/trim (str/replace (str s) #"\s+" " "))]
     (if (> (count s) n) (str (subs s 0 (dec n)) "…") s)))
 
-(defn- shown-path
+(defn shown-path
   "A path as the user reads it: relative to the working folder when inside it, else with ~."
   [p folder]
   (let [p (str p)

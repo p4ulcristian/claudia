@@ -8,9 +8,11 @@
             ["ws" :refer [WebSocketServer]]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
+            [claudia.slave.meta :as meta]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]))
 
@@ -41,7 +43,9 @@
     (cond
       (not (contains? p/page->runner type)) (send! c {:type "error" :text (str "Unknown frame " type ".")})
       (and (:read-only c) (not (contains? p/read-only-ok type))) (send! c {:type "error" :chat chat :text "Read only."})
-      (= type "hello") (do (reset! (:hello c) true) (send! c {:type "chats" :chats (chats/rows)}))
+      (= type "hello") (do (reset! (:hello c) true)
+                           (send! c {:type "chats" :chats (chats/rows)})
+                           (send! c (meta/frame)))
       (= type "new") (let [id (chats/new-chat! (str (:text f)) (:folder f))]
                        (swap! (:open c) conj id)
                        (send! c {:type "created" :chat id :id (:id f)}))
@@ -58,7 +62,13 @@
         "deny" (chats/deny! chat (:ask f) who)
         "rename" (do (store/update! chat {:title (str/trim (str (:title f)))}) (chats-changed))
         "archive" (do (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
-        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))))))
+        "seen" (do (store/update! chat {:seen (js/Date.now)}) (chats-changed))
+        "stop_task" (chats/stop-task! chat (str (:task f)))
+        "settings" (chats/set-settings! chat (select-keys f [:model :effort]))
+        "agent" (-> (chats/agent-detail chat (str (:agent f)))
+                    (.then (fn [d] (send! c (merge {:type "agent" :chat chat :agent (:agent f)} d)))))
+        "diff" (send! c (merge {:type "diff" :chat chat :change (:change f)}
+                               (or (chats/change-texts chat (:change f)) {:error "No such change."})))))))
 
 (defn- caller [^js req]
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
@@ -105,10 +115,14 @@
 (defn main [& _]
   (store/open! data-dir)
   (reset! chats/out {:emit emit :changed chats-changed})
+  (reset! changes/data-dir data-dir)
+  (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
+                                   (doseq [c @conns :when @(:hello c)] (send! c frame)))))
   (-> secret/ready
       (.then
        (fn []
          (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
+         (chats/init!)
          (let [wss (WebSocketServer. #js {:noServer true :maxPayload (* 16 1024 1024)})
                server (http/createServer on-request)]
            (.on wss "connection" on-socket)

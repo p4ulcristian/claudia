@@ -8,12 +8,16 @@
             ["node:path" :as path]
             ["node:child_process" :as cp]
             [clojure.string :as str]
+            [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
+            [claudia.slave.meta :as meta]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.store :as store]
-            [claudia.slave.tools :as tools]))
+            [claudia.slave.tasks :as tasks]
+            [claudia.slave.tools :as tools]
+            [claudia.slave.worktree :as worktree]))
 
 (def ^:private env (.-env js/process))
 
@@ -59,13 +63,16 @@
   (vec (for [r (store/chats)
              :let [s (st (:id r))
                    asks (map :ask (vals (:asks s)))
-                   question (some #(get-in % [:questions 0 :question]) asks)]]
+                   question (some #(get-in % [:questions 0 :question]) asks)
+                   agents (tasks/working (:id r))]]
          {:id (:id r) :title (:title r) :folder (:folder r) :color (:color r)
           :running (boolean (:running s))
           :waiting (boolean (seq asks))
           :at (:at r)
           :preview (or question (some #(when (= "secret" (:kind %)) (str "Secret: " (:reason %))) asks) (:preview r))
-          :unseen (> (:ended r) (:seen r))
+          ;; Work Claude started still runs: not done yet (README decision 25).
+          :agents agents
+          :unseen (and (zero? agents) (> (:ended r) (:seen r)))
           :archived (:archived r)})))
 
 (defn- note-msg!
@@ -79,19 +86,27 @@
                     (conj (if (> (count t) 400) (subvec t 1) t) msg)))))
   (emit! id {:type "msg" :msg msg}))
 
+(declare arm-idle!)
+
 (defn- arm-idle! [id]
   (some-> (:idle (st id)) js/clearTimeout)
   (swap-chat! id assoc :idle
               (when-not (:running (st id))
                 (js/setTimeout (fn []
                                  (when (and (:live (st id)) (not (:running (st id))))
-                                   (hostlink/send! {:op "close" :id id})
-                                   (swap-chat! id assoc :live false)))
+                                   ;; Closing would end the work it started: wait for that.
+                                   (if (tasks/running-any? id)
+                                     (arm-idle! id)
+                                     (do (hostlink/send! {:op "close" :id id})
+                                         (swap-chat! id assoc :live false)))))
                                idle-ms))))
 
 (defn- set-running! [id running]
   (when (not= running (boolean (:running (st id))))
     (swap-chat! id assoc :running running)
+    (when running
+      (changes/begin-turn! id (or (:turn-id (st id)) (str (random-uuid))) (:folder (store/chat id)))
+      (swap-chat! id dissoc :turn-id))
     (store/update! id {:at (now)})
     (emit! id {:type "turn" :running running})
     (changed!))
@@ -208,6 +223,7 @@
     (if-not (try (.isDirectory (fs/statSync abs)) (catch :default _ false))
       (text-result (str "No folder at " abs ". Nothing changed."))
       (do (store/update! id {:folder abs})
+          (changes/folder-set! id abs (:running (st id)))
           (changed!)
           (-> (js/Promise.all #js [(read "CLAUDE.md") (read ".claude/CLAUDE.md") (sh-out "git" ["-C" abs "status" "-sb"])])
               (.then (fn [[md md2 status]]
@@ -243,9 +259,106 @@
       (.then (fn [] (case kind
                       "mcp" (mcp-call id args)
                       "canUseTool" (can-use id args)
+                      "hook" (case (:event args)
+                               "PreToolUse" (changes/before-edit! id (get-in args [:input :tool_input]))
+                               "PostToolUse" (do (worktree/report! (store/chat id) (:input args))
+                                                 {:continue true})
+                               {:continue true})
                       {:continue true})))
       (.then (fn [v] (hostlink/send! {:op "reply" :rpc rpc :value v}))
              (fn [e] (hostlink/send! {:op "reply" :rpc rpc :error (message e)})))))
+
+;; Agents, changes, meters -----------------------------------------------------------------------
+
+(defn- folder-of [id] (:folder (store/chat id)))
+
+(defn- token []
+  (let [f (.-CLAUDIA_TOKEN_FILE env)
+        t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
+    (if (seq t) t (throw (js/Error. "No Claude token: CLAUDIA_TOKEN_FILE is unset, missing or empty.")))))
+
+;; claudia-progress (bin/) is on the PATH of every chat's commands.
+(def ^:private bin-dir (path/resolve (if (exists? js/__dirname) js/__dirname (js/process.cwd)) ".." "bin"))
+
+(defn- run-env
+  "The environment chats run with: the runner's own, the token (read on every start, so a new token
+  takes effect with the next session) and Claudia's helpers on the PATH."
+  []
+  (let [t (token)]
+    (meta/use-token! t)
+    (assoc (into {} (for [k (js-keys env)] [k (aget env k)]))
+           "CLAUDE_CODE_OAUTH_TOKEN" t
+           "PATH" (str bin-dir ":" (.-PATH env)))))
+
+(defonce ^:private agent-timers (atom {}))
+
+(defn- emit-agents!
+  "The chat's agent list to the page (a little later, once for a burst of task events); the rows
+  when its running count changed."
+  [id]
+  (when-not (get @agent-timers id)
+    (swap! agent-timers assoc id
+           (js/setTimeout
+            (fn []
+              (swap! agent-timers dissoc id)
+              (tasks/refresh! cwd id (folder-of id))
+              (let [n (tasks/working id)]
+                (emit! id {:type "agents" :agents (tasks/agents cwd id (folder-of id))})
+                (when (not= n (:agents-n (st id)))
+                  (swap-chat! id assoc :agents-n n)
+                  (changed!))))
+            250))))
+
+(defn settings
+  "The chat's model and effort (nil = the user's default), applied on its next start."
+  [id]
+  (merge {:model nil :effort nil} (select-keys (store/kv id "settings") [:model :effort])))
+
+(defn set-settings! [id m]
+  (let [s (merge (settings id) (select-keys m [:model :effort]))
+        quiet #(.catch % (fn [_]))]
+    (store/kv! id "settings" s)
+    ;; A live session takes them now too.
+    (when (:live (st id))
+      (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
+      (when (contains? m :effort) (quiet (hostlink/control! id "applyFlagSettings" {:effortLevel (:effort s)}))))
+    (emit! id {:type "settings" :settings s :model (:model (st id))})))
+
+(defn- read-context!
+  "The chat's context use (tokens of its window), after a turn and at its start."
+  [id]
+  (-> (hostlink/control! id "getContextUsage" {:detail "summary"})
+      (.then (fn [c]
+               (when (number? (:totalTokens c))
+                 (let [ctx {:used (:totalTokens c) :max (:maxTokens c)
+                            :percent (js/Math.round (or (:percentage c) 0)) :model (:model c)}]
+                   (swap-chat! id assoc :context ctx)
+                   (store/kv! id "context" ctx)
+                   (emit! id {:type "context" :context ctx})))))
+      (.catch (fn [_] nil))))
+
+(defn stop-task!
+  "Stops one agent or background shell of the chat."
+  [id task]
+  (-> (hostlink/control! id "stopTask" task)
+      (.catch (fn [_] nil))
+      (.then #(tasks/stopped! id task))))
+
+(defn agent-detail [id agent] (tasks/detail cwd id (folder-of id) agent))
+
+(defn change-texts [id change] (store/change-texts id change))
+
+(defn init!
+  "Called once by the runner: agent lists follow their tasks, running agents' steps and shells'
+  progress are read every 2 s, and the models and commands are probed."
+  []
+  (reset! tasks/on-change emit-agents!)
+  (js/setInterval (fn []
+                    (doseq [id (tasks/chats-running)]
+                      (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))))
+                  2000)
+  (try (meta/probe! cwd (run-env))
+       (catch :default e (js/console.error "meta:" (message e)))))
 
 ;; SDK messages -----------------------------------------------------------------------------------
 
@@ -260,7 +373,10 @@
     (swap-chat! id assoc :partial nil :stopping false :stream-counts {} :final-counts (atom {}))
     (when error (emit! id {:type "error" :text error}))
     (set-running! id false)
-    (changed!)))
+    (changed!)
+    (read-context! id)
+    (-> (changes/finish! id)
+        (.then (fn [rows] (when (seq rows) (emit! id {:type "changes" :changes rows})))))))
 
 (defn- on-stream [id e]
   (case (:type e)
@@ -291,24 +407,48 @@
                                      (get-in (swap-chat! id assoc :final-counts (atom {})) [id :final-counts]))
                           folder (:folder (store/chat id))]
                       (swap-chat! id assoc :partial nil)
+                      (tasks/note-calls! id (:message m))
                       (doseq [msg (history/assistant-msgs (:message m) counts (now) folder)]
                         (note-msg! id msg))))
-      "user" (when (and top (sequential? (get-in m [:message :content])))
-               (doseq [b (get-in m [:message :content])
-                       :when (and (= "tool_result" (:type b)) (:is_error b))
-                       :let [msg (some #(when (= (:id %) (:tool_use_id b)) %) (:turn (st id)))]
-                       :when msg]
-                 (note-msg! id (assoc msg :error true))))
+      "user" (when top
+               ;; A background task's notice, when Claude Code hands it on as a user message.
+               (let [c (get-in m [:message :content])
+                     text (if (string? c) c (str/join "\n" (keep #(when (= "text" (:type %)) (:text %)) (when (sequential? c) c))))]
+                 (when-let [notice (history/task-notice (history/strip-reminders text))]
+                   (note-msg! id {:id (or (:uuid m) (str "notice-" (now))) :role "note" :text notice :at (now)}))
+                 (doseq [b (when (sequential? c) c)
+                         :when (and (= "tool_result" (:type b)) (:is_error b))
+                         :let [msg (some #(when (= (:id %) (:tool_use_id b)) %) (:turn (st id)))]
+                         :when msg]
+                   (note-msg! id (assoc msg :error true)))))
       "result" (turn-end! id m)
-      "system" (when (= "compact_boundary" (:subtype m))
-                 (note-msg! id {:id (:uuid m) :role "note" :at (now)
-                                :text (str "Context compacted ("
-                                           (js/Math.round (/ (or (get-in m [:compact_metadata :pre_tokens]) 0) 1000))
-                                           "k tokens before).")}))
+      "system" (case (:subtype m)
+                 "compact_boundary"
+                 (do (note-msg! id {:id (:uuid m) :role "note" :at (now)
+                                    :text (str "Context compacted ("
+                                               (js/Math.round (/ (or (get-in m [:compact_metadata :pre_tokens]) 0) 1000))
+                                               "k tokens before).")})
+                     (read-context! id))
+                 "init"
+                 (do (swap-chat! id assoc :model (:model m) :commands (vec (:slash_commands m)))
+                     (emit! id {:type "settings" :settings (settings id) :model (:model m)
+                                :commands (vec (:slash_commands m))})
+                     (read-context! id))
+                 ;; A slash command's output, and Claude Code's warnings and notices.
+                 "local_command_output"
+                 (note-msg! id {:id (or (:uuid m) (str "out-" (now))) :role "note" :text (str (:content m)) :at (now)})
+                 "informational"
+                 (when (#{"warning" "notice"} (:level m))
+                   (note-msg! id {:id (or (:uuid m) (str "info-" (now))) :role "note" :text (str (:content m)) :at (now)}))
+                 (do (tasks/load! id true)
+                     (tasks/on-system! id m)))
+      "rate_limit_event" (try (meta/note-limits! (token) (:rate_limit_info m))
+                              (catch :default _ nil))
       nil)))
 
 (defn- ended! [id error]
   (swap-chat! id assoc :live false :partial nil)
+  (tasks/session-gone! id)
   (drop-asks! id false nil)
   (when error (emit! id {:type "error" :text error}))
   (set-running! id false))
@@ -320,6 +460,7 @@
                  (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
                    (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))
                  (doseq [[cid busy] live]
+                   (tasks/load! cid true)
                    (swap-chat! cid assoc :live true)
                    (set-running! cid (boolean busy))))
     "msg" (on-sdk id (:msg e))
@@ -335,23 +476,22 @@
 
 ;; Page actions -----------------------------------------------------------------------------------
 
-(defn- token []
-  (let [f (.-CLAUDIA_TOKEN_FILE env)
-        t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
-    (if (seq t) t (throw (js/Error. "No Claude token: CLAUDIA_TOKEN_FILE is unset, missing or empty.")))))
-
 (defn- start-spec [id resume?]
-  {:options {:cwd cwd
-             ;; Read on every start, so a new token takes effect with the next session.
-             :env (assoc (into {} (for [k (js-keys env)] [k (aget env k)])) "CLAUDE_CODE_OAUTH_TOKEN" (token))
+  {:options (cond-> {:cwd cwd
+             :env (run-env)
              (if resume? :resume :sessionId) id
              :systemPrompt {:type "preset" :preset "claude_code" :append tools/system-append}
              :allowedTools tools/allowed-tools
              :permissionMode "bypassPermissions"
              :allowDangerouslySkipPermissions true
              :includePartialMessages true}
+             (:model (settings id)) (assoc :model (:model (settings id)))
+             (:effort (settings id)) (assoc :effort (:effort (settings id))))
    :mcp tools/mcp
-   :hooks {}})
+   ;; A copy of each file before Claude's edit tools first touch it (the turn's changes).
+   :hooks (cond-> {:PreToolUse [{:matcher changes/edit-tools}]}
+            ;; Edits and commands inside Eye on Rainbow's worktrees are reported (where configured).
+            (worktree/on?) (assoc :PostToolUse [{:matcher (str changes/edit-tools "|Bash")}]))})
 
 (defn- ensure-session! [id]
   (if (:live (st id))
@@ -366,7 +506,7 @@
   (-> (ensure-session! id)
       (.then (fn []
                (let [uuid (str (random-uuid))]
-                 (when-not (:running (st id)) (swap-chat! id assoc :turn []))
+                 (when-not (:running (st id)) (swap-chat! id assoc :turn [] :turn-id uuid))
                  (note-msg! id {:id uuid :role "user" :text text :at (now)})
                  (hostlink/send! {:op "send" :id id :text text :uuid uuid})
                  (set-running! id true))))
@@ -405,8 +545,17 @@
                        partial (:partial s)
                        by-id (into {} (map (juxt :id identity)) turn)
                        known (set (map :id hist))
-                       msgs (into (mapv #(get by-id (:id %) %) hist) (remove #(known (:id %)) turn))]
+                       notes (set (keep #(when (= "note" (:role %)) (:text %)) hist))
+                       msgs (into (mapv #(get by-id (:id %) %) hist)
+                                  (remove #(or (known (:id %)) (and (= "note" (:role %)) (notes (:text %)))) turn))]
+                   (tasks/load! id (boolean (:live s)))
                    {:type "chat" :chat id :title (:title r) :folder (:folder r)
+                    :agents (tasks/agents cwd id (:folder r))
+                    :changes (store/changes id)
+                    :settings (settings id)
+                    :model (:model s)
+                    :commands (:commands s)
+                    :context (or (:context s) (store/kv id "context"))
                     :messages (if partial (mapv #(if (= (:id %) (:id partial)) partial %) msgs) msgs)
                     :scene (current-scene id)
                     :running (boolean (:running s))

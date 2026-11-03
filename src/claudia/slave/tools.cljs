@@ -39,7 +39,10 @@ The draw call costs the user nothing to read, so prefer drawing over writing.
 The chat runs in one fixed folder. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. Run commands in the working folder (cd <folder> && ...).
 
 ## Secrets
-When a command needs a password or token, never ask the user to paste it into the chat and never read it yourself. Call mcp__workspace__run_with_secret with the 1Password reference (op://vault/item/field), the environment variable name, the reason and the command: the user allows it in Claudia, the command runs with the value in that variable only, and the value is replaced by [secret] in the output you get."))
+When a command needs a password or token, never ask the user to paste it into the chat and never read it yourself. Call mcp__workspace__run_with_secret with the 1Password reference (op://vault/item/field), the environment variable name, the reason and the command: the user allows it in Claudia, the command runs with the value in that variable only, and the value is replaced by [secret] in the output you get.
+
+## Progress bars
+A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists."))
 
 (def ^:private colour {:type "string" :enum ["green" "red" "amber" "blue" "grey" "violet"]})
 (defn- s [description] {:type "string" :description description})
