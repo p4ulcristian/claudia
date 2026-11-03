@@ -138,7 +138,7 @@
        [:div.loading.muted (if (:loading-older state) "Loading older messages…" "")])
      (for [m msgs] ^{:key (:id m)} [message ck m])
      (for [[i t] (map-indexed vector outbox)]
-       ^{:key (str "out" i)} [:div.msg.user.queued [:div.bubble t] [:span.queued-tag "sending"]])
+       ^{:key (str "out" i)} [:div.msg.user.queued [:div.bubble (:text (files/split-files t))] [:span.queued-tag "sending"]])
      (when (or running pending?)
        [:div.working [:span.pulse] (if pending? "Starting…" "Working…")])
      (when-let [err (:error state)]
@@ -217,7 +217,8 @@
        oc [:f> messages-view oc]
        :else [new-chat])
      (when @(rf/subscribe [:read-only?])
-       [:div.read-only-note [:span "Read only: "] (str (or @(rf/subscribe [:view]) "") "'s chat")])
+       (let [v (str @(rf/subscribe [:view]))]
+         [:div.read-only-note (str (str/upper-case (subs v 0 1)) (subs v 1) "'s chat, read only")]))
      (when (and me (seq (:servers me)) (not @(rf/subscribe [:read-only?])))
        [:f> composer {:draft-key (if oc (:ck oc) :new)
                       :running (get-in oc [:state :running])

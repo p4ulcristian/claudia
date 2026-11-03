@@ -220,7 +220,10 @@
          images (vec (mapcat :images attach))
          notes (keep :note attach)
          typed (str/trim (or text ""))
-         text (files/with-files (str/join "\n\n" (filter seq (concat notes [typed]))) sent-files)
+         ;; The runner adds the files' tags to what is sent; the outbox holds the text with them, as
+         ;; the runner's echo will.
+         sent (str/join "\n\n" (filter seq (concat notes [typed])))
+         text (files/with-files sent sent-files)
          extra (cond-> {}
                  (seq sent-files) (assoc :files (vec sent-files))
                  (seq images) (assoc :images images))]
@@ -232,7 +235,7 @@
        (contains? (:pending-new db) chat) {}
        chat
        {:db (-> db (update-in [:outbox k] (fnil conj []) text) (assoc-in [:drafts k] "") (update :attach dissoc k))
-        :ws/send [server (merge {:type "send" :chat chat :text text} extra)]}
+        :ws/send [server (merge {:type "send" :chat chat :text sent} extra)]}
        :else
        (let [server (default-server db)
              id (uuid-v4)]
@@ -246,7 +249,7 @@
                     (dissoc :new-upload-id)
                     (assoc :new-server server))
             :store ["claudia.newServer" server]
-            :ws/send [server (merge {:type "new" :id id :text text} extra)]}))))))
+            :ws/send [server (merge {:type "new" :id id :text sent} extra)]}))))))
 
 (defn- on-open-chat [db f]
   (let [[server chat] (:open db)]
@@ -281,7 +284,7 @@
    (let [[s c :as k] (:open db)
          row (get-in db [:servers s :rows c])
          shown? (or (not (db/phone?)) (not= :list (:screen db)))]
-     (if (and c row (:unseen row) (visible?) shown?
+     (if (and c row (:unseen row) (visible?) shown? (not (:view db))
               (get-in db [:chats k :loaded])
               (not (get-in db [:chats k :running]))
               (not= (:at row) (get-in db [:seen-sent k])))
