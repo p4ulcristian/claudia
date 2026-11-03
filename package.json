@@ -49,7 +49,7 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "shadow-cljs": "3.5.11",
-    "shiki": "3.23.0",
+    "shiki": "4.6.0",
     "three": "^0.187.0",
     "three-mesh-bvh": "^0.9.17",
     "vega": "6.4.0",
