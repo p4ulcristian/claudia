@@ -3,6 +3,7 @@
   Data shapes as the draw tool describes them (PROTOCOL.md)."
   (:require [clojure.string :as str]
             [reagent.hooks :as h]
+            [shadow.lazy :as lazy]
             [claudia.web.hooks :as hooks]
             [claudia.shared.forms :as forms]
             [claudia.web.scene3d :as scene3d]))
@@ -87,12 +88,8 @@
         [:span.f-bar [:i {:style {:width (str (* 100 (max 0 (min 1 (:progress t)))) "%")}}]])
       (when (:note t) [:span.f-note (:note t)])])])
 
-;; Charts are Vega-Lite, loaded from the CDN the first time one is drawn, themed to the board.
-(defonce ^:private embed-lib (atom nil))
-(defn- embed []
-  (or @embed-lib
-      (reset! embed-lib (-> ((js/Function. "u" "return import(u)") "https://cdn.jsdelivr.net/npm/vega-embed@6/+esm")
-                            (.then #(.-default ^js %))))))
+;; Charts are Vega-Lite (the :chart module, loaded the first time one is drawn), themed to the board.
+(def ^:private lazy-embed (lazy/loadable claudia.web.chart/embed))
 
 (defn chart-spec
   "The Vega-Lite spec for a chart form, themed to the board: theme {:fg :muted :line :palette}."
@@ -101,7 +98,7 @@
         values (mapv #(dissoc % :id) (items (:rows data)))
         numeric-x (and (seq values) (every? #(number? (get % (keyword x))) values))]
     (merge
-     {"$schema" "https://vega.github.io/schema/vega-lite/v5.json"
+     {"$schema" "https://vega.github.io/schema/vega-lite/v6.json"
       :width "container" :height 220 :background "transparent"
       :data {:values values}
       :mark (merge {:type (or (:mark data) "bar") :tooltip true}
@@ -130,8 +127,8 @@
   (let [gone (atom false)
         view (atom nil)
         spec (chart-spec data (board-theme el))]
-    (-> (embed)
-        (.then (fn [vega-embed] (when-not @gone (vega-embed el (clj->js spec) #js {:actions false :renderer "svg"}))))
+    (-> (lazy/load lazy-embed)
+        (.then (fn [embed] (when-not @gone (embed el (clj->js spec)))))
         (.then (fn [^js r] (reset! view (some-> r .-view))))
         (.catch (fn [e] (when-not @gone (set! (.-textContent el) (str "Chart failed: " (or (.-message e) e)))))))
     #(do (reset! gone true) (some-> ^js @view .finalize))))

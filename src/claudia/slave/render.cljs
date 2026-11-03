@@ -8,6 +8,7 @@
             ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.shared.csp :as csp]
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]))
 
@@ -39,16 +40,17 @@
        "<script>window.claudiaRender = true;</script></head>"
        "<body><div id=\"root\"></div><script src=\"/js/main.js\"></script></body></html>"))
 
-(def ^:private types {".js" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml" ".map" "application/json"
-                      ".glb" "model/gltf-binary"})
+(def ^:private types {".js" "text/javascript" ".mjs" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml"
+                      ".map" "application/json" ".json" "application/json" ".glb" "model/gltf-binary"
+                      ".html" "text/html; charset=utf-8"})
 
 (defn asset-path
   "The file under folder that a request path (no query) asks for, when it is one of the page's
-  assets (js, css, img, person), else nil."
+  assets (js, css, img, person, the freeform frame), else nil."
   [folder url]
   (let [file (path/join folder (path/normalize url))]
     (when (and (str/starts-with? file (str folder "/"))
-               (re-find #"^/(js|css|img|person)/" url))
+               (or (re-find #"^/(js|css|img|person)/" url) (= url (str "/" csp/frame-file))))
       file)))
 
 (defn- serve [^js req ^js res]
@@ -57,7 +59,9 @@
     (cond
       (= url "/") (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
       (and file (fs/existsSync file))
-      (do (.writeHead res 200 #js {"content-type" (get types (path/extname file) "application/octet-stream")})
+      ;; frame.html with its own policy (sandboxed, inline scripts and the CDN), as the hub sends it.
+      (do (.writeHead res 200 (clj->js (merge {"content-type" (get types (path/extname file) "application/octet-stream")}
+                                              (when (= url (str "/" csp/frame-file)) (csp/headers csp/frame-file)))))
           (.pipe (fs/createReadStream file) res))
       :else (do (.writeHead res 404) (.end res)))))
 

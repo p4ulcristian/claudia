@@ -103,6 +103,9 @@
 (deftest render-serves-only-assets
   (is (= "/w/js/main.js" (render/asset-path "/w" "/js/main.js")))
   (is (nil? (render/asset-path "/w" "/secret.txt")))
+  (is (= "/w/frame.html" (render/asset-path "/w" "/frame.html")))
+  (is (nil? (render/asset-path "/w" "/index.html")))
+  (is (= "/w/js/shiki-langs/clojure.mjs" (render/asset-path "/w" "/js/shiki-langs/clojure.mjs")))
   (is (= "/w/etc/passwd" (render/asset-path "/w" "/js/../../etc/passwd")))
   (is (= 120 (render/shot-height 10)))
   (is (= 3200 (render/shot-height 99999)))
