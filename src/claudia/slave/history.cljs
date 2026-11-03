@@ -43,6 +43,7 @@
       "mcp__picture__draw" (if (seq (:title i)) (str "draw: " (short-text (:title i) 60)) "draw")
       "mcp__workspace__set_folder" (str "folder " (shown-path (str (:path i)) nil))
       "mcp__workspace__run_with_secret" (str "secret: " (short-text (:reason i) 80))
+      "mcp__workspace__show_image" (str "image " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       (if (str/starts-with? tool "mcp__")
         (str/join " " (rest (str/split tool #"__")))
         tool))))
@@ -85,8 +86,10 @@
                     "text" (let [n (get (swap! counts update mid (fnil inc -1)) mid)]
                              (when (seq (str/trim (str (:text b))))
                                {:id (str mid ":" n) :role "assistant" :text (:text b) :at at}))
-                    "tool_use" {:id (:id b) :role "tool" :tool (:name b)
-                                :summary (tool-summary (:name b) (:input b) folder) :at at}
+                    "tool_use" (cond-> {:id (:id b) :role "tool" :tool (:name b)
+                                        :summary (tool-summary (:name b) (:input b) folder) :at at}
+                                 ;; the page shows the image from GET /api/chats/:id/shown/<this id>
+                                 (= "mcp__workspace__show_image" (:name b)) (assoc :image true))
                     nil)))
           (:content message))))
 
@@ -152,11 +155,14 @@
                                (when (seq text)
                                  (swap! out conj {:id (str "answer-" (:tool_use_id b)) :role "user" :text text :at at})))))
                        "text" (swap! texts conj (strip-reminders (:text b)))
-                       "image" (swap! texts conj "[image]")
                        nil))
-                   (let [text (str/join "\n" (filter seq @texts))]
+                   (let [text (str/join "\n" (filter seq @texts))
+                         images (count (filter #(= "image" (:type %)) content))]
                      (if-let [notice (task-notice text)]
                        (swap! out conj {:id (:uuid m) :role "note" :text notice :at at})
-                       (when (seq text) (swap! out conj {:id (:uuid m) :role "user" :text text :at at}))))))
+                       (when (or (seq text) (pos? images))
+                         (swap! out conj (cond-> {:id (:uuid m) :role "user" :text text :at at}
+                                           ;; GET /api/chats/:id/sent/<this id>/<n> for each
+                                           (pos? images) (assoc :images images))))))))
                nil))
            @out)))))

@@ -45,6 +45,7 @@
 (defn- me [res {:keys [own target read-only]}]
   (h/json-reply res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
+                         :profiles (mapv :profile @profiles)
                          :viewing (when read-only (:profile target))
                          :readOnly read-only
                          :version h/version
@@ -106,7 +107,9 @@
   (let [file (.-FRONT_PROFILES env)]
     (when-not (seq file) (throw (js/Error. "FRONT_PROFILES is not set.")))
     (reset! profiles (read-profiles file))
-    (let [server (http/createServer on-request)
+    (let [server (doto (http/createServer on-request)
+                   ;; Uploads take up to 100 MB: no 5-minute cap on a request.
+                   (aset "requestTimeout" 0))
           port (js/parseInt (or (.-FRONT_PORT env) "4540") 10)
           host (or (.-FRONT_HOST env) "127.0.0.1")]
       (.on server "upgrade" on-upgrade)
