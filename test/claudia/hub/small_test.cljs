@@ -6,7 +6,6 @@
             [claudia.hub.presence :as presence]
             [claudia.shared.presence :as p]))
 
-(def sha (apply str (repeat 40 "a")))
 
 (deftest github-deliveries-that-act
   (is (github/main-push? "push" {:ref "refs/heads/main"}))
