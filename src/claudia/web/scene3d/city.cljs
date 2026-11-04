@@ -146,8 +146,19 @@
             {:tile? true :w lines :id (file-id cid path) :lines lines :path (str prefix path)
              :note (str nm " · " lines " lines")})))
 
-(defn- hue-for [ctx level hue i]
-  (if (zero? level) (hue-of i (:tops ctx)) hue))
+(defn folders-at
+  "The paths of the folders at depth d (1 = the root's own folders), in the tree's order."
+  [n d]
+  (if (= d 1) (mapv :path (:dirs n)) (vec (mapcat #(folders-at % (dec d)) (:dirs n)))))
+
+(defn hues
+  "A hue per folder at depth d, spread round the colour wheel: {path hue}."
+  [root d]
+  (let [ps (folders-at root d)]
+    (zipmap ps (map #(hue-of % (count ps)) (range)))))
+
+(defn- hue-for [ctx it hue]
+  (or (some->> (:dir it) :path (get (:hues ctx))) hue))
 
 (defn- walk
   "The parts of folder n at level in rect: its area, its name, its towers and its folders' parts."
@@ -157,14 +168,15 @@
         items (vec (items-of ctx n level))
         rects (squarify (mapv #(max 1 (:w %)) items) (inner rect pad hdr))]
     (into (filterv some? [(platform ctx n level rect hue) (name-text ctx n level rect pad hdr)])
-          (mapcat (fn [i it r]
-                    (let [h (hue-for ctx level hue i)]
+          (mapcat (fn [it r]
+                    (let [h (hue-for ctx it hue)]
                       (if (:tile? it) [(tower ctx it (inc level) r h)] (walk ctx (:dir it) (inc level) r h))))
-                  (range) items rects))))
+                  items rects))))
 
 (defn parts
   "The parts of city part p (its id, pos, rot, size: the map's width, height: the tallest tower,
-  max: at most this many towers) for the files [[path lines]] of the scene's root."
+  max: at most this many towers, hue: the folder depth that gets its own colour, default 1) for
+  the files [[path lines]] of the scene's root."
   [p files]
   (let [cid (str (:id p))
         folder (str/replace (str (or (:path p) "")) #"^\./|/+$" "")
@@ -174,6 +186,7 @@
         ctx {:cid cid :size size :step (* size 0.006) :cut (cut-depth root cap)
              :tallest (let [h (js/Number (:height p))] (if (pos? h) h (* size 0.22)))
              :max-lines (reduce max 1 (map second (under files folder)))
-             :prefix (if (seq folder) (str folder "/") "") :tops (count (:dirs root))}]
+             :prefix (if (seq folder) (str folder "/") "")
+             :hues (hues root (let [h (js/Number (:hue p))] (if (pos? h) (min 6 (js/Math.round h)) 1)))}]
     (into [{:id cid :shape "group" :pos (:pos p) :rot (:rot p)}]
           (walk ctx root 0 {:x 0 :z 0 :w size :d size} nil))))

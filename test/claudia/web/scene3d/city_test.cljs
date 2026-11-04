@@ -48,3 +48,13 @@
       (is (= "src/b/three.clj" (:file (some #(when (= "c:b/three.clj" (:id %)) %) (city/parts {:id "c" :path "src"} files))))))
     (testing "top folders differ in hue"
       (is (not= (city/colour (city/hue-of 0 2) 1 true) (city/colour (city/hue-of 1 2) 1 true))))))
+
+(deftest hues-by-depth
+  (let [root (city/tree (city/under files ""))]
+    (is (= ["src"] (city/folders-at root 1)))
+    (is (= ["src/a" "src/b"] (city/folders-at root 2)))
+    (is (= 2 (count (set (vals (city/hues root 2))))))
+    (let [ps (into {} (map (juxt :id identity)) (city/parts {:id "c" :hue 2} files))]
+      (is (not= (:color (ps "c:src/a/one.clj")) (:color (ps "c:src/b/three.clj"))) "a and b differ at hue 2"))
+    (let [ps (into {} (map (juxt :id identity)) (city/parts {:id "c"} files))]
+      (is (not= (:color (ps "c:src/a/one.clj")) (:color (ps "c:README.md"))) "root files are grey"))))
