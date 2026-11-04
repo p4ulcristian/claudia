@@ -435,11 +435,15 @@
 ;; ---- slabs floating over parts ----
 
 (defn- tether!
-  "A thin line from a floating slab's bottom down by lift (world units) to what it floats over."
-  [^js mesh lift]
-  (let [down (- -0.5 (/ lift (max 1e-6 (.. mesh -scale -y))))
-        g (.setFromPoints (THREE/BufferGeometry.) #js [(THREE/Vector3. 0 -0.5 0) (THREE/Vector3. 0 down 0)])]
-    (.add mesh (THREE/LineSegments. g (THREE/LineBasicMaterial. #js {:color 0x555555 :transparent true :opacity 0.35})))))
+  "A thin line from a floating slab's bottom middle to the top middle of what it floats over (to,
+  in the world); the old line goes."
+  [^js mesh ^js to]
+  (doseq [^js c (vec (.-children mesh)) :when (.. c -userData -tether)]
+    (.remove mesh c) (.dispose (.-geometry c)) (.dispose (.-material c)))
+  (let [g (.setFromPoints (THREE/BufferGeometry.) #js [(THREE/Vector3. 0 -0.5 0) (.worldToLocal mesh (.clone to))])
+        line (THREE/LineSegments. g (THREE/LineBasicMaterial. #js {:color 0x555555 :transparent true :opacity 0.35}))]
+    (set! (.. line -userData -tether) true)
+    (.add mesh line)))
 
 (defn- in-front?
   "Whether box b stands in the column in front (+z) of a slab of width w centred at x cx, z cz:
@@ -459,25 +463,34 @@
                   (if (in-front? b cx cz w) (max top (.. b -max -y)) top)))))
           js/-Infinity by-id))
 
-(defn- place-over!
-  "A part with over: centred above that part, lift (default 1.5) over its top and clear of every part
-  in front of it (so nothing hides it from a camera reading it), pos as an offset."
+(defn- over-wish
+  "Where a slab floating over a part would sit alone: over its part's middle (pos as an offset), lift
+  (default 1.5) over its top and clear of the parts in front of it. -> {:e :x :z :w :bottom :to}."
   [by-id ^js e]
-  (let [spec (.-spec e)
-        ^js mesh (.-mesh e)]
+  (let [spec (.-spec e)]
     (when-let [^js t (get by-id (str (:over spec)))]
       (let [b (.setFromObject (THREE/Box3.) (.-mesh t))
             c (.getCenter b (THREE/Vector3.))
             [ox oy oz] (data/vec3 (:pos spec))
             lift (let [l (js/Number (:lift spec))] (if (pos? l) l 1.5))
-            x (+ (.-x c) ox) z (+ (.-z c) oz)
-            bottom (max (+ (.. b -max -y) lift oy) (+ 0.3 (front-top by-id e x z (.. mesh -scale -x))))]
-        (.copy (.-position mesh) (.worldToLocal (.-parent mesh) (THREE/Vector3. x (+ bottom (/ (.. mesh -scale -y) 2)) z)))
-        (tether! mesh (- bottom (.. b -max -y)))))))
+            x (+ (.-x c) ox) z (+ (.-z c) oz) w (.. e -mesh -scale -x)]
+        {:e e :x x :z z :w w :to (THREE/Vector3. (.-x c) (.. b -max -y) (.-z c))
+         :bottom (max (+ (.. b -max -y) lift oy) (+ 0.3 (front-top by-id e x z w)))}))))
 
-(defn- place-overs! [{:keys [^js root by-id]}]
+(defn- place-overs!
+  "Slabs floating over parts hang as one row (claudia.web.scene3d.maths/shelf): never over each
+  other, in the order of their parts, at one height and depth, each with a line down to its part."
+  [{:keys [^js root by-id]}]
   (.updateMatrixWorld root true)
-  (doseq [[_ ^js e] @by-id :when (:over (.-spec e))] (place-over! @by-id e))
+  (let [ws (vec (keep #(when (:over (.-spec ^js %)) (over-wish @by-id %)) (vals @by-id)))
+        xs (m/shelf ws (* 0.08 (/ (reduce + (map :w ws)) (max 1 (count ws)))))
+        z (/ (reduce + (map :z ws)) (max 1 (count ws)))
+        bottom (reduce max js/-Infinity (map :bottom ws))]
+    (doseq [[{:keys [^js e to]} x] (map vector ws xs)]
+      (let [^js mesh (.-mesh e)]
+        (.copy (.-position mesh) (.worldToLocal (.-parent mesh) (THREE/Vector3. x (+ bottom (/ (.. mesh -scale -y) 2)) z)))
+        (.updateMatrixWorld mesh true)
+        (tether! mesh to))))
   (.updateMatrixWorld root true))
 
 ;; ---- making the scene ----
@@ -1244,7 +1257,7 @@
     (move-camera! sc {:read rid})))
 
 (defn- raise!
-  "A click on a city's file: its code rises above it and the camera comes to read it; a second
+  "A click on a file of a folders map: its code rises above it and the camera comes to read it; a second
   click on the same file puts it back."
   [{:keys [^js st el] :as sc} id spec]
   (let [rid (str id "#code")

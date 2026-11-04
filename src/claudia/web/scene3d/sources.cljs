@@ -1,10 +1,10 @@
 (ns claudia.web.scene3d.sources
-  "What a scene's real code needs before it is built: cities read their folder's files (with line
+  "What a scene's real code needs before it is built: folders maps read their folder's files (with line
   counts) and become plain parts; code slabs get their text (inline, or a file of the scene's root
   read at its ref), Shiki's colours and a size that fits their lines; texts get theirs. All reads go
   through the chat's server (/api/chats/:id/source), which only reads inside a root this chat drew."
   (:require [claudia.web.api :as api]
-            [claudia.web.scene3d.city :as city]
+            [claudia.web.scene3d.folders :as folders]
             [claudia.web.scene3d.code :as code]
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.shiki :as shiki]))
@@ -26,26 +26,26 @@
 
 (defn- failed [what e] {:error (str what ": " (or (.-message e) e))})
 
-(defn- city-parts
-  "Promise of the parts a city part stands for (or [] and an error)."
+(defn- folders-parts
+  "Promise of the parts a folders part stands for (or [] and an error)."
   [rd {:keys [root ref]} p]
   (if-not (and rd root)
-    (js/Promise.resolve {:parts [] :error "a city needs the scene's root (and a chat)"})
+    (js/Promise.resolve {:parts [] :error "a folders map needs the scene's root (and a chat)"})
     (-> ((:tree rd) root ref (str (or (:path p) "")))
-        (.then (fn [{:keys [files error]}] (if error {:parts [] :error error} {:parts (city/parts p files)})))
-        (.catch #(assoc (failed "city" %) :parts [])))))
+        (.then (fn [{:keys [files error]}] (if error {:parts [] :error error} {:parts (folders/parts p files)})))
+        (.catch #(assoc (failed "folders" %) :parts [])))))
 
-(defn- expand-cities
-  "Promise of {:parts (every city part replaced by its parts) :errors}."
+(defn- expand-folders
+  "Promise of {:parts (every folders part replaced by its parts) :errors}."
   [rd d parts]
-  (-> (js/Promise.all (into-array (map #(if (= "city" (:shape %))
-                                          (city-parts rd d %)
+  (-> (js/Promise.all (into-array (map #(if (= "folders" (:shape %))
+                                          (folders-parts rd d %)
                                           (js/Promise.resolve {:parts [%]}))
                                        parts)))
       (.then (fn [answers] {:parts (vec (mapcat :parts answers)) :errors (keep :error answers)}))))
 
 (defn code-file
-  "The file a code part shows: its file, else the file of the city tower it floats over."
+  "The file a code part shows: its file, else the file of the folders tile it floats over."
   [p by-id]
   (or (:file p) (:file (get by-id (:over p)))))
 
@@ -98,7 +98,7 @@
   "Promise of {:parts :faces {id {:canvas :input :mark}} :errors} for the data's parts. text-canvas:
   the engine's painter of a text part (host, part -> canvas)."
   [host rd d parts text-canvas]
-  (-> (expand-cities rd d parts)
+  (-> (expand-folders rd d parts)
       (.then (fn [{:keys [parts errors]}]
                (let [by-id (into {} (map (juxt #(str (:id %)) identity)) parts)]
                  (-> (js/Promise.all

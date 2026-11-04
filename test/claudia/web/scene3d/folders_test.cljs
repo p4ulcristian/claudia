@@ -1,6 +1,6 @@
-(ns claudia.web.scene3d.city-test
+(ns claudia.web.scene3d.folders-test
   (:require [cljs.test :refer [deftest is testing]]
-            [claudia.web.scene3d.city :as city]))
+            [claudia.web.scene3d.folders :as city]))
 
 (def files [["src/a/one.clj" 100] ["src/a/two.clj" 50] ["src/b/three.clj" 25] ["README.md" 10] ["empty" 0]])
 
@@ -38,13 +38,16 @@
       (is (every? #(= "c" (:parent %)) (rest ps)))
       (is (contains? by-id "c:src/a/"))
       (is (= "src/a/one.clj" (:file (by-id "c:src/a/one.clj"))))
-      (is (> (get-in (by-id "c:src/a/one.clj") [:size 1]) (get-in (by-id "c:src/a/two.clj") [:size 1])) "taller with more lines"))
+      (let [area #(* (get-in % [:size 0]) (get-in % [:size 2]))]
+        (is (> (area (by-id "c:src/a/one.clj")) (area (by-id "c:src/a/two.clj"))) "bigger with more lines"))
+      (is (= (get-in (by-id "c:src/a/one.clj") [:size 1]) (get-in (by-id "c:src/a/two.clj") [:size 1])) "flat: one thickness")
+      (is (= "one.clj" (:text (by-id "c:src/a/one.clj#name"))) "its name painted on it"))
     (testing "files stand on their folder's area"
       (let [area (by-id "c:src/a/")
             t (by-id "c:src/a/two.clj")
             top (+ (get-in area [:pos 1]) (/ (get-in area [:size 1]) 2))]
         (is (< (js/Math.abs (- top (- (get-in t [:pos 1]) (/ (get-in t [:size 1]) 2)))) 1e-9))))
-    (testing "a city of a folder keeps paths from the root"
+    (testing "a map of a folder keeps paths from the root"
       (is (= "src/b/three.clj" (:file (some #(when (= "c:b/three.clj" (:id %)) %) (city/parts {:id "c" :path "src"} files))))))
     (testing "top folders differ in hue"
       (is (not= (city/colour (city/hue-of 0 2) 1 true) (city/colour (city/hue-of 1 2) 1 true))))))

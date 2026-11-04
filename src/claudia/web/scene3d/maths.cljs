@@ -155,3 +155,20 @@
   "The angle at the chain's root between the line to the target (dist away) and its first bone."
   [l1 l2 dist]
   (js/Math.acos (min 1 (max -1 (/ (- (+ (* l1 l1) (* dist dist)) (* l2 l2)) (* 2 l1 dist))))))
+
+(defn shelf
+  "Slabs floating over parts as one row that never overlaps: items [{:x (where one would like its
+  centre) :w (its width)}]; sorted by x, each is pushed right until it clears the one before by gap,
+  then the row moves back so its middle stays over the middle of what they float over. -> the
+  centres, in the items' order."
+  [items gap]
+  (let [n (count items)
+        placed (reduce (fn [acc i]
+                         (let [{:keys [x w]} (nth items i)
+                               prev (peek acc)]
+                           (conj acc {:i i :w w :x (if prev (max x (+ (:x prev) (/ (:w prev) 2) gap (/ w 2))) x)})))
+                       [] (sort-by #(:x (nth items %)) (range n)))
+        mean #(if (seq %) (/ (reduce + %) (count %)) 0)
+        shift (- (mean (map :x items)) (mean (map :x placed)))
+        at (into {} (map (juxt :i #(+ (:x %) shift))) placed)]
+    (mapv at (range n))))
