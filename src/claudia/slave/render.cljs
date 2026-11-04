@@ -8,9 +8,11 @@
             ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.node.http :as io]
             [claudia.shared.csp :as csp]
             [claudia.shared.protocol :as p]
-            [claudia.slave.http :as h]))
+            [claudia.slave.http :as h]
+            [claudia.slave.source :as source]))
 
 (def ^:private width 1000)
 (def ^:private max-height 3200)
@@ -53,11 +55,33 @@
                (or (re-find #"^/(js|css|img|person)/" url) (= url (str "/" csp/frame-file))))
       file)))
 
+(defonce ^:private shooting (atom #{})) ; the roots of the scene3d blocks in the picture being shot
+
+(defn scene-roots
+  "The roots of the scene3d blocks in a picture (the only folders its screenshot may read)."
+  [scene]
+  (set (for [b (:blocks scene) :when (and (= "form" (:kind b)) (= "scene3d" (:form b)) (string? (get-in b [:data :root])))]
+         (get-in b [:data :root]))))
+
+(defn- source-reply
+  "The render page's code reads (cities, code slabs), inside a root of the picture being shot."
+  [^js req ^js res]
+  (let [q (.-searchParams (js/URL. (.-url req) "http://x"))
+        root (or (.get q "root") "")
+        rel (or (.get q "path") "")
+        ref (not-empty (.get q "ref"))]
+    (if (or (not (@shooting root)) (not (source/rel-ok? rel)) (and ref (not (source/ref-ok? ref))))
+      (io/send-json res 403 {:error "not a folder of this picture"})
+      (-> (if (= "1" (.get q "read")) (source/text root rel ref) (source/tree root rel ref))
+          (.then #(io/send-json res 200 %))
+          (.catch #(io/send-json res 500 {:error (str %)}))))))
+
 (defn- serve [^js req ^js res]
   (let [url (first (str/split (.-url req) #"\?"))
         file (asset-path web-dir url)]
     (cond
       (= url "/") (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
+      (= url "/api/source") (source-reply req res)
       (and file (fs/existsSync file))
       ;; frame.html with its own policy (sandboxed, inline scripts and the CDN), as the hub sends it.
       (do (.writeHead res 200 (clj->js (merge {"content-type" (get types (path/extname file) "application/octet-stream")}
@@ -125,6 +149,7 @@
 
 (defn- shoot [scene color]
   (some-> @idle js/clearTimeout)
+  (reset! shooting (scene-roots scene))
   (let [pg (atom nil)]
     (-> (js/Promise.all #js [(launch) (base-url)])
         (.then (fn [[^js b {:keys [url]}]]
@@ -136,6 +161,9 @@
                                   (.then #(.waitForFunction tab "typeof window.__draw === 'function'"))
                                   (.then #(.evaluate tab draw-fn #js [(p/write-json scene) color]))
                                   (.then #(.waitForFunction tab "window.__drawn === true"))
+                                  ;; 3D scenes reading real code: until they are built (or 15 s).
+                                  (.then #(-> (.waitForFunction tab "!(window.__scene3dLoading > 0)" nil #js {:timeout 15000})
+                                              (.catch (fn [_] nil))))
                                   (.then #(.evaluate tab "document.fonts.ready.then(() => true)"))
                                   (.then #(.waitForTimeout tab settle-ms))
                                   ;; The board as tall as the picture (capped), shot whole.
@@ -146,6 +174,7 @@
         (.then (fn [png] {:png png}))
         (.catch (fn [e] {:error (first-line e)}))
         (.finally (fn []
+                    (reset! shooting #{})
                     (some-> ^js @pg .close (.catch (fn [_])))
                     (later))))))
 
