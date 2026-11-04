@@ -26,14 +26,14 @@
   (set! (.-font ctx) (str "32px " font)) (set! (.-fillStyle ctx) "#9da5b4")
   (.fillText ctx title (+ code/pad 140) (/ code/head 2)))
 
-(defn- paint-tokens! [^js ctx ^js toks line x]
+(defn- paint-tokens! [^js ctx ^js toks line x y]
   (if (and toks (pos? (.-length toks)))
-    (reduce (fn [x ^js t]
+    (reduce (fn [left ^js t]
               (set! (.-fillStyle ctx) (or (.-color t) plain))
-              (.fillText ctx (.-content t) x)
-              (+ x (.-width (.measureText ctx (.-content t)))))
+              (.fillText ctx (.-content t) left y)
+              (+ left (.-width (.measureText ctx (.-content t)))))
             x toks)
-    (do (set! (.-fillStyle ctx) plain) (.fillText ctx line x))))
+    (do (set! (.-fillStyle ctx) plain) (.fillText ctx line x y))))
 
 (defn- paint-row! [^js ctx {:keys [line-h char-w font-px tokens start marks width]} i row]
   (let [y (+ code/head (* code/pad 0.55) (* i line-h) (/ line-h 2))
@@ -44,7 +44,7 @@
             (set! (.-fillStyle ctx) "#ffbe00") (.fillRect ctx 0 (- y (/ line-h 2)) 9 line-h))
           (set! (.-fillStyle ctx) dim) (.fillText ctx (.padStart (str n) 4) x0 y)
           (paint-tokens! ctx (when tokens (aget tokens (- n start))) line
-                         (+ x0 (* char-w font-px code/gutter-chars))))
+                         (+ x0 (* char-w font-px code/gutter-chars)) y))
       (do (set! (.-fillStyle ctx) dim) (.fillText ctx "     ⋮" x0 y)))))
 
 (defn paint
