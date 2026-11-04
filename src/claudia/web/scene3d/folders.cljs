@@ -84,8 +84,11 @@
 
 ;; ---- colours ----
 
-(defn hue-of "The hue of top folder i of n (a full turn, red to violet)." [i n]
-  (js/Math.round (* 330 (/ i (max 1 n)))))
+(defn hue-of
+  "The hue of folder i of n: each next folder about 137.5° further round the wheel (the golden angle),
+  so folders side by side never get near the same colour, however many there are."
+  [i _n]
+  (js/Math.round (mod (* i 137.508) 360)))
 
 (defn colour
   "A tile's or an area's colour in its top folder's hue (nil: grey, the root's own); deeper is darker."
