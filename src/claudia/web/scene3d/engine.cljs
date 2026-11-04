@@ -441,19 +441,39 @@
         g (.setFromPoints (THREE/BufferGeometry.) #js [(THREE/Vector3. 0 -0.5 0) (THREE/Vector3. 0 down 0)])]
     (.add mesh (THREE/LineSegments. g (THREE/LineBasicMaterial. #js {:color 0x555555 :transparent true :opacity 0.35})))))
 
+(defn- in-front?
+  "Whether box b stands in the column in front (+z) of a slab of width w centred at x cx, z cz:
+  where the camera reading it stands."
+  [^js b cx cz w]
+  (and (< (.. b -min -x) (+ cx (/ w 2))) (> (.. b -max -x) (- cx (/ w 2)))
+       (< (.. b -min -z) (+ cz (* 3 w))) (> (.. b -max -z) (- cz 0.5))))
+
+(defn- front-top
+  "The highest top of the parts (not other floating slabs or texts) in front of the slab."
+  [by-id ^js self cx cz w]
+  (reduce (fn [top [_ ^js e]]
+            (let [spec (.-spec e)]
+              (if (or (identical? e self) (:over spec) (#{"code" "text" "group"} (:shape spec)))
+                top
+                (let [b (.setFromObject (THREE/Box3.) (.-mesh e))]
+                  (if (in-front? b cx cz w) (max top (.. b -max -y)) top)))))
+          js/-Infinity by-id))
+
 (defn- place-over!
-  "A part with over: centred above that part, lift (default 1.5) over its top, pos as an offset."
+  "A part with over: centred above that part, lift (default 1.5) over its top and clear of every part
+  in front of it (so nothing hides it from a camera reading it), pos as an offset."
   [by-id ^js e]
   (let [spec (.-spec e)
         ^js mesh (.-mesh e)]
     (when-let [^js t (get by-id (str (:over spec)))]
       (let [b (.setFromObject (THREE/Box3.) (.-mesh t))
             c (.getCenter b (THREE/Vector3.))
-            lift (let [l (js/Number (:lift spec))] (if (pos? l) l 1.5))
             [ox oy oz] (data/vec3 (:pos spec))
-            at (THREE/Vector3. (+ (.-x c) ox) (+ (.. b -max -y) lift (/ (.. mesh -scale -y) 2) oy) (+ (.-z c) oz))]
-        (.copy (.-position mesh) (.worldToLocal (.-parent mesh) at))
-        (tether! mesh (+ lift oy))))))
+            lift (let [l (js/Number (:lift spec))] (if (pos? l) l 1.5))
+            x (+ (.-x c) ox) z (+ (.-z c) oz)
+            bottom (max (+ (.. b -max -y) lift oy) (+ 0.3 (front-top by-id e x z (.. mesh -scale -x))))]
+        (.copy (.-position mesh) (.worldToLocal (.-parent mesh) (THREE/Vector3. x (+ bottom (/ (.. mesh -scale -y) 2)) z)))
+        (tether! mesh (- bottom (.. b -max -y)))))))
 
 (defn- place-overs! [{:keys [^js root by-id]}]
   (.updateMatrixWorld root true)
