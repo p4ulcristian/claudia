@@ -77,10 +77,18 @@ fetch() {
 	rm -rf "$d"
 }
 
-# fetch_tree <tree> <into>: stage.yml's build of a git tree, checked to be that tree's.
+# fetch_tree <tree> <into>: stage.yml's build of a git tree, checked to be that tree's. A tree the
+# poke named as staged was just published, but GitHub can take a few seconds to serve its files:
+# that one is tried again for up to a minute before it counts as not published.
 fetch_tree() {
-	local rc=0
-	fetch "https://github.com/$repo/releases/download/tree-$1" "claudia-tree-$1.tar.gz" "$stage_identity" "$2" || rc=$?
+	local rc i tries=1
+	[[ " ${stages[*]} " == *" $1 "* ]] && tries=12
+	for ((i = 1; i <= tries; i++)); do
+		rc=0
+		fetch "https://github.com/$repo/releases/download/tree-$1" "claudia-tree-$1.tar.gz" "$stage_identity" "$2" || rc=$?
+		[ $rc = 1 ] && [ $i -lt $tries ] && { sleep 5; continue; }
+		break
+	done
 	[ $rc = 0 ] || return $rc
 	[ "$(cat "$2/tree.txt" 2>/dev/null)" = "$1" ] || { echo "the build for tree ${1:0:7} says another tree" >&2; rm -rf "$2"; return 2; }
 }
