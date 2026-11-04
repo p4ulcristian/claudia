@@ -1,10 +1,10 @@
-(ns claudia.web.scene3d.city
-  "A city of real code, without three.js: the files under a folder (with their line counts) as a
-  map on the floor. Every folder is an area (a platform one step above its parent's, its name painted
-  at its front edge), every file a tower on its folder's area, as tall as its lines and as big as
-  its share of the folder (a squarified treemap). Each top folder has its own colour, so you see
-  which part a file is in. Big trees are cut at a depth: deeper folders become one tower each.
-  -> plain parts (a group, boxes and texts) the engine builds like any other."
+(ns claudia.web.scene3d.folders
+  "A folder of real code as a flat map on the floor, without three.js: every folder an area (a
+  platform one thin step above its parent's, its name painted at its front edge), every file a flat
+  tile inside its folder's area, as big as its share of the folder's lines (a squarified treemap),
+  its name painted on it when it is big enough to read. Each folder at the hue depth has its own
+  colour, so you see which part a file is in. Big trees are cut at a depth: deeper folders become one
+  tile each. -> plain parts (a group, boxes and texts) the engine builds like any other."
   (:require [clojure.string :as str]))
 
 ;; ---- the tree ----
@@ -88,7 +88,7 @@
   (js/Math.round (* 330 (/ i (max 1 n)))))
 
 (defn colour
-  "A tower's or an area's colour in its top folder's hue (nil: grey, the root's own); deeper is darker."
+  "A tile's or an area's colour in its top folder's hue (nil: grey, the root's own); deeper is darker."
   [hue level file?]
   (let [h (or hue 0)
         sat (cond (nil? hue) 0 file? 62 :else 30)]
@@ -123,19 +123,27 @@
              (- (+ z d (- (/ pad 2)) (- (/ hdr 2))) (/ size 2))]
        :rot [-90 0 0] :parent cid})))
 
-(defn- tower
-  "A file (or a folder cut into one tile) standing on its folder's area at level."
-  [{:keys [cid size step tallest max-lines]} {:keys [id path lines note]} level rect hue]
+(defn- tile
+  "A file (or a folder cut into one tile) lying flat on its folder's area at level."
+  [{:keys [cid size step]} {:keys [id path note]} level rect hue]
   (let [[cx cz] (centre rect size)
-        h (max step (* tallest (js/Math.sqrt (/ lines (max 1 max-lines)))))
         gap (min (* 0.09 (min (:w rect) (:d rect))) (* size 0.004))]
     (cond-> {:id id :shape "box" :ghost true :outline false :color (colour hue level true)
-             :pos [cx (+ (* level step) (/ h 2)) cz] :size [(max 0.001 (- (:w rect) gap)) h (max 0.001 (- (:d rect) gap))]
+             :pos [cx (+ (* level step) (/ step 2)) cz] :size [(max 0.001 (- (:w rect) gap)) step (max 0.001 (- (:d rect) gap))]
              :note note :parent cid}
-      path (assoc :file path :slab {:size (* size 0.34) :lift (* size 0.06)}))))
+      path (assoc :file path :slab {:size (* size 0.34) :lift (* size 0.08)}))))
+
+(defn- file-name
+  "A file's name painted on its tile when it fits at a readable size (nil otherwise)."
+  [{:keys [cid size step]} {:keys [id fname]} level rect]
+  (let [letter (min (* (:d rect) 0.32) (/ (* 0.86 (:w rect)) (* 0.62 (max 1 (count fname)))))
+        [cx cz] (centre rect size)]
+    (when (and fname (> letter (* size 0.006)))
+      {:id (str id "#name") :shape "text" :text fname :size letter :color "#1b1d22" :name-of id
+       :pos [cx (+ (* (inc level) step) 0.002) cz] :rot [-90 0 0] :parent cid})))
 
 (defn- items-of
-  "A folder's children as tiles to lay out: its folders (cut ones as towers) and its files."
+  "A folder's children as tiles to lay out: its folders (cut ones as one tile) and its files."
   [{:keys [cid cut prefix]} n level]
   (concat (for [dn (:dirs n)]
             (if (> (inc level) cut)
@@ -143,7 +151,7 @@
                :note (str (:path dn) "/ · " (:count dn) " files · " (:lines dn) " lines")}
               {:w (:lines dn) :dir dn}))
           (for [[nm lines path] (:files n)]
-            {:tile? true :w lines :id (file-id cid path) :lines lines :path (str prefix path)
+            {:tile? true :w lines :id (file-id cid path) :lines lines :path (str prefix path) :fname nm
              :note (str nm " · " lines " lines")})))
 
 (defn folders-at
@@ -161,7 +169,7 @@
   (or (some->> (:dir it) :path (get (:hues ctx))) hue))
 
 (defn- walk
-  "The parts of folder n at level in rect: its area, its name, its towers and its folders' parts."
+  "The parts of folder n at level in rect: its area, its name, its tiles and its folders' parts."
   [{:keys [size] :as ctx} n level rect hue]
   (let [pad (+ (* 0.025 (min (:w rect) (:d rect))) (* size 0.001))
         hdr (if (<= level 3) (min (* (:d rect) 0.14) (* size 0.035)) 0)
@@ -170,23 +178,32 @@
     (into (filterv some? [(platform ctx n level rect hue) (name-text ctx n level rect pad hdr)])
           (mapcat (fn [it r]
                     (let [h (hue-for ctx it hue)]
-                      (if (:tile? it) [(tower ctx it (inc level) r h)] (walk ctx (:dir it) (inc level) r h))))
+                      (if (:tile? it)
+                        (filterv some? [(tile ctx it (inc level) r h) (file-name ctx it (inc level) r)])
+                        (walk ctx (:dir it) (inc level) r h))))
                   items rects))))
 
+(def max-names "File names painted at most (each is a texture), the biggest first." 160)
+
+(defn- fewer-names
+  "The parts with at most max-names file names, the biggest kept."
+  [ps]
+  (let [names (filter :name-of ps)
+        kept (set (map :id (take max-names (sort-by #(- (:size %)) names))))]
+    (filterv #(or (not (:name-of %)) (kept (:id %))) ps)))
+
 (defn parts
-  "The parts of city part p (its id, pos, rot, size: the map's width, height: the tallest tower,
-  max: at most this many towers, hue: the folder depth that gets its own colour, default 1) for
-  the files [[path lines]] of the scene's root."
+  "The parts of folders part p (its id, pos, rot, size: the map's width, max: at most this many
+  tiles, hue: the folder depth that gets its own colour, default 1) for the files [[path lines]] of
+  the scene's root."
   [p files]
   (let [cid (str (:id p))
         folder (str/replace (str (or (:path p) "")) #"^\./|/+$" "")
         root (tree (under files folder))
         size (let [s (js/Number (:size p))] (if (pos? s) s 20))
         cap (let [c (js/Number (:max p))] (if (pos? c) (min c 4000) 1500))
-        ctx {:cid cid :size size :step (* size 0.006) :cut (cut-depth root cap)
-             :tallest (let [h (js/Number (:height p))] (if (pos? h) h (* size 0.22)))
-             :max-lines (reduce max 1 (map second (under files folder)))
+        ctx {:cid cid :size size :step (* size 0.004) :cut (cut-depth root cap)
              :prefix (if (seq folder) (str folder "/") "")
              :hues (hues root (let [h (js/Number (:hue p))] (if (pos? h) (min 6 (js/Math.round h)) 1)))}]
     (into [{:id cid :shape "group" :pos (:pos p) :rot (:rot p)}]
-          (walk ctx root 0 {:x 0 :z 0 :w size :d size} nil))))
+          (fewer-names (walk ctx root 0 {:x 0 :z 0 :w size :d size} nil)))))

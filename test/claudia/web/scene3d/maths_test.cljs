@@ -96,3 +96,13 @@
     (is (= 0.7 (m/chain-reach 0.5 0.5 0.7))))
   (is (near? (/ js/Math.PI 3) (m/bend-angle 1 1 1)))
   (is (near? 0 (m/bend-angle 1 1 2))))
+
+(deftest shelf-never-overlaps
+  (is (= [] (m/shelf [] 1)))
+  (is (= [5] (m/shelf [{:x 5 :w 2}] 1)) "alone: right over its part")
+  (is (= [0 10] (m/shelf [{:x 0 :w 2} {:x 10 :w 2}] 1)) "far apart: untouched")
+  (let [[a b c] (m/shelf [{:x 1 :w 4} {:x 0 :w 4} {:x 0.5 :w 4}] 1)]
+    (is (< b c a) "the order of what they float over")
+    (is (>= (- c b) 5))
+    (is (>= (- a c) 5))
+    (is (< (js/Math.abs (- (/ (+ a b c) 3) 0.5)) 1e-9) "centred where they wanted")))
