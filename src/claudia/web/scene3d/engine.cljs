@@ -237,7 +237,7 @@
         (set! (.-visible mesh) (> k 0.003))
         (set! (.-castShadow mesh) (and (.. mesh -userData -casts) (> k 0.5) (> dim 0.5)))
         (set! (.-opacity mat) (* op k dim))
-        (set! (.-transparent mat) (or (< op 1) (< k 1) (< dim 1)))
+        (set! (.-transparent mat) (or (.. mat -userData -alpha) (< op 1) (< k 1) (< dim 1)))
         (when-let [p (.-person e)] ((:reveal! p) k dim (.-lit e) op))
         (when-let [o (.-outline e)] (ink/set-outline! o k dim (.-lit e) op))
         (doseq [^js c (.-children mesh)]
@@ -319,6 +319,7 @@
   (let [m (THREE/MeshBasicMaterial. #js {:map (canvas-texture canvas) :transparent true :depthWrite false
                                          :side THREE/DoubleSide})]
     (set! (.. m -userData -op) 1)
+    (set! (.. m -userData -alpha) true)
     m))
 
 (defn- add-face!
@@ -721,7 +722,10 @@
   "The person model and the real code (cities, code slabs, texts) load, then the scene is built."
   [{:keys [^js st el] :as sc} d extra current?]
   (let [all (vec (filter map? (concat (data/lst (:parts d)) (data/lst (:parts extra)))))]
+    ;; The screenshot waits while some scene is still reading its code.
+    (set! (.-__scene3dLoading js/window) (inc (or (.-__scene3dLoading js/window) 0)))
     (-> (js/Promise.all #js [(load-people sc all) (sources/prepare el (.-reader st) d all text-canvas)])
+        (.finally #(set! (.-__scene3dLoading js/window) (dec (.-__scene3dLoading js/window))))
         (.then (fn [[people {:keys [parts faces errors]}]]
                  (when (current?)
                    (when (seq errors) (ui! sc :error (str "code: " (first errors))))

@@ -130,3 +130,9 @@
     (is (= (str "main " t "\n") (front/trigger-line {:main t} "now")))
     (is (= "check now\n" (front/trigger-line {:stage "nope"} "now")))
     (is (= "check now\n" (front/trigger-line {} "now")))))
+
+(deftest screenshot-reads-only-its-scenes-roots
+  (is (= #{"/a"} (render/scene-roots {:blocks [{:kind "form" :form "scene3d" :data {:root "/a"}}
+                                               {:kind "form" :form "files" :data {:root "/b"}}
+                                               {:kind "form" :form "scene3d" :data {}}]})))
+  (is (= #{} (render/scene-roots {}))))

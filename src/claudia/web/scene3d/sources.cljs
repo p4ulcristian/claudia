@@ -9,11 +9,18 @@
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.shiki :as shiki]))
 
+(defn- render-url
+  "The screenshot page's own read (claudia.slave.render serves it for the picture it shoots)."
+  [query]
+  (str "/api/source?" (.toString (js/URLSearchParams. (clj->js (into {} (remove (comp nil? val)) query))))))
+
 (defn reader
-  "The reads for a scene drawn in chat on server (nil outside a chat: the gallery)."
+  "The reads for a scene drawn in chat on server; on the screenshot page its own; nil outside a
+  chat (the gallery)."
   [server chat]
-  (when (and server chat)
-    (let [url #(api/url server (str "chats/" (js/encodeURIComponent chat) "/source") %)]
+  (let [url (cond (.-claudiaRender js/window) render-url
+                  (and server chat) #(api/url server (str "chats/" (js/encodeURIComponent chat) "/source") %))]
+    (when url
       {:tree (fn [root ref p] (api/fetch-json (url {:root root :ref ref :path p})))
        :text (fn [root ref p] (api/fetch-json (url {:root root :ref ref :path p :read 1})))})))
 
