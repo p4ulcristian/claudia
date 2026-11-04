@@ -61,3 +61,8 @@
       (is (not= (:color (ps "c:src/a/one.clj")) (:color (ps "c:src/b/three.clj"))) "a and b differ at hue 2"))
     (let [ps (into {} (map (juxt :id identity)) (city/parts {:id "c"} files))]
       (is (not= (:color (ps "c:src/a/one.clj")) (:color (ps "c:README.md"))) "root files are grey"))))
+
+(deftest neighbours-differ-in-hue
+  (let [hs (map #(city/hue-of % 20) (range 20))
+        apart (fn [a b] (let [d (js/Math.abs (- a b))] (min d (- 360 d))))]
+    (is (every? #(> % 60) (map apart hs (rest hs))) "side by side: far apart on the wheel")))
