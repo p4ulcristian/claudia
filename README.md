@@ -82,7 +82,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   green (a PR into main from this repository, or a push to main), `stage.yml` (run on main, so its
   definition is main's) takes the run's bundle, checks its `tree.txt` against GitHub's record of the
   run, and publishes the slave release `claudia-tree-<tree>.tar.gz` on the GitHub release
-  `tree-<tree>` and the hub image `ghcr.io/<owner>/claudia-hub:tree-<tree>` (COPY only from the
+  `tree-<tree>` (with the same build in two: `claudia-code-<tree>.tar.gz`, a few MB, and
+  `claudia-deps-<lockfile hash>.tar.gz`, its node_modules, which a server downloads only when the
+  lockfile changed and keeps in its state folder) and the hub image `ghcr.io/<owner>/claudia-hub:tree-<tree>` (COPY only from the
   bundle), both signed keyless by cosign as `stage.yml@refs/heads/main` (the image with
   `tree=<tree>`). GitHub's webhook (`POST /hub/github`, HMAC with `HUB_GITHUB_SECRET_FILE`): a stage
   run done → the hub tells every front `{stage: tree}` and the gate `stage <tree>` (lines added to

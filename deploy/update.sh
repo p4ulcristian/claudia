@@ -77,6 +77,45 @@ fetch() {
 	rm -rf "$d"
 }
 
+# from_release <tree> <file> <into>: one signed file of the release tree-<tree>, unpacked into <into>.
+from_release() {
+	fetch "https://github.com/$repo/releases/download/tree-$1" "$2" "$stage_identity" "$3"
+}
+
+# deps_for <into>: the node_modules the code in <into> names (deps.txt: its lockfile's hash), from
+# $work/deps when an earlier build had the same lockfile, else downloaded once (claudia-deps-<hash>
+# of the same release) and kept there; hard-linked in, so a cached one costs no space or time.
+deps_for() {
+	local into=$1 t=$2 deps rc=0
+	deps=$(cat "$into/deps.txt" 2>/dev/null || true)
+	[[ $deps =~ ^[0-9a-f]{20}$ ]] || { echo "the code for tree ${t:0:7} names no node_modules" >&2; return 2; }
+	mkdir -p "$work/deps"
+	if [ ! -f "$work/deps/$deps/deps.txt" ]; then
+		rm -rf "$work/deps/$deps.new"
+		from_release "$t" "claudia-deps-$deps.tar.gz" "$work/deps/$deps.new" || rc=$?
+		[ $rc = 0 ] || { rm -rf "$work/deps/$deps.new"; return $rc; }
+		[ "$(cat "$work/deps/$deps.new/deps.txt" 2>/dev/null)" = "$deps" ] || { echo "the node_modules ${deps:0:7} say another lockfile" >&2; rm -rf "$work/deps/$deps.new"; return 2; }
+		mv "$work/deps/$deps.new" "$work/deps/$deps"
+		echo "fetched node_modules ${deps:0:7} (the lockfile changed)"
+	fi
+	touch "$work/deps/$deps"
+	cp -al "$work/deps/$deps/node_modules" "$into/node_modules" 2>/dev/null || cp -a "$work/deps/$deps/node_modules" "$into/node_modules"
+}
+
+# build_of <tree> <into>: the tree's build: its code bundle (a few MB) and the node_modules it names;
+# a release made before the split has only the whole build (claudia-tree-<tree>), taken then.
+build_of() {
+	local rc=0
+	from_release "$1" "claudia-code-$1.tar.gz" "$2" || rc=$?
+	if [ $rc = 1 ]; then
+		rc=0
+		from_release "$1" "claudia-tree-$1.tar.gz" "$2" || rc=$?
+		return $rc
+	fi
+	[ $rc = 0 ] || return $rc
+	deps_for "$2" "$1" || { rc=$?; rm -rf "$2"; return $rc; }
+}
+
 # fetch_tree <tree> <into>: stage.yml's build of a git tree, checked to be that tree's. A tree the
 # poke named as staged was just published, but GitHub can take a few seconds to serve its files:
 # that one is tried again for up to a minute before it counts as not published.
@@ -85,7 +124,7 @@ fetch_tree() {
 	[[ " ${stages[*]} " == *" $1 "* ]] && tries=12
 	for ((i = 1; i <= tries; i++)); do
 		rc=0
-		fetch "https://github.com/$repo/releases/download/tree-$1" "claudia-tree-$1.tar.gz" "$stage_identity" "$2" || rc=$?
+		build_of "$1" "$2" || rc=$?
 		[ $rc = 1 ] && [ $i -lt $tries ] && { sleep 5; continue; }
 		break
 	done
@@ -175,3 +214,7 @@ for t in "${stages[@]}"; do
 	rm -rf "$staged/$t.new"
 done
 find "$staged" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +3 | cut -d' ' -f2- | xargs -r rm -rf
+# The node_modules of the two lockfiles used last stay (an install hard-links them, so it keeps its own).
+if [ -d "$work/deps" ]; then
+	find "$work/deps" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +3 | cut -d' ' -f2- | xargs -r rm -rf
+fi

@@ -1,8 +1,10 @@
 # Claudia's builds, signed and published ahead of the merge (README, Hub operations: following main).
 # After every green check (check.yml) of a pull request into main from this repository, or of a
 # push to main, this takes the run's `bundle` (built from one git tree) and publishes:
-# - the slave release: claudia-tree-<tree>.tar.gz on the GitHub release tree-<tree>, with its
-#   cosign keyless signature bundle (<file>.sigstore.json);
+# - the slave release on the GitHub release tree-<tree>: claudia-tree-<tree>.tar.gz (the whole
+#   build) and the same in two, claudia-code-<tree>.tar.gz and claudia-deps-<lockfile hash>.tar.gz
+#   (servers download node_modules only when the lockfile changed), each with its cosign keyless
+#   signature bundle (<file>.sigstore.json);
 # - the hub's image: ghcr.io/<owner>/claudia-hub:tree-<tree>, put together from the bundle by COPY
 #   only (deploy/hub.Dockerfile; one with RUN is refused, so none of the bundle's code runs here),
 #   signed keyless with the annotation tree=<tree>.
@@ -73,15 +75,26 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check the bundle
+        id: bundle
         if: steps.tree.outputs.release != 'done' || steps.tree.outputs.image != 'done'
         env:
           TREE: ${{ steps.tree.outputs.tree }}
         run: |
           name="claudia-tree-$TREE.tar.gz"
-          [ "$(ls dist)" = "$name" ] || { echo "the bundle is not $name: $(ls dist)" >&2; exit 1; }
           mkdir dist/pkg
           tar -xzf "dist/$name" -C dist/pkg --no-same-owner
           [ "$(cat dist/pkg/tree.txt)" = "$TREE" ] || { echo "the bundle's tree.txt is not $TREE" >&2; exit 1; }
+          deps=$(cat dist/pkg/deps.txt)
+          [[ $deps =~ ^[0-9a-f]{20}$ ]] || { echo "the bundle names no node_modules" >&2; exit 1; }
+          want=$(printf '%s\n' "claudia-code-$TREE.tar.gz" "claudia-deps-$deps.tar.gz" "$name" | sort)
+          [ "$(ls dist | grep -v '^pkg$' | sort)" = "$want" ] || { echo "the bundle is not $want: $(ls dist)" >&2; exit 1; }
+          # The code and the node_modules together are the whole build, file for file.
+          mkdir dist/split
+          tar -xzf "dist/claudia-code-$TREE.tar.gz" -C dist/split --no-same-owner
+          tar -xzf "dist/claudia-deps-$deps.tar.gz" -C dist/split --no-same-owner
+          diff -r dist/pkg dist/split > /dev/null || { echo "code + node_modules differ from the whole build" >&2; exit 1; }
+          rm -rf dist/split
+          echo "deps=$deps" >> "$GITHUB_OUTPUT"
           if grep -qiE '^[[:space:]]*RUN([[:space:]]|$)' dist/pkg/deploy/hub.Dockerfile; then
             echo "deploy/hub.Dockerfile has RUN: refused (the image is put together by COPY only)" >&2; exit 1
           fi
@@ -95,15 +108,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TREE: ${{ steps.tree.outputs.tree }}
+          DEPS: ${{ steps.bundle.outputs.deps }}
         run: |
-          f="dist/claudia-tree-$TREE.tar.gz"
-          cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
-          cosign verify-blob --bundle "$f.sigstore.json" \
-            --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$f"
+          files=()
+          for f in "dist/claudia-tree-$TREE.tar.gz" "dist/claudia-code-$TREE.tar.gz" "dist/claudia-deps-$DEPS.tar.gz"; do
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+            cosign verify-blob --bundle "$f.sigstore.json" \
+              --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$f"
+            files+=("$f" "$f.sigstore.json")
+          done
           gh release create "tree-$TREE" --repo "$GITHUB_REPOSITORY" --target "$HEAD_SHA" --prerelease \
             --title "Claudia tree ${TREE::7}" \
-            --notes "Slave release of git tree ${TREE} (checked at ${HEAD_SHA}), signed by this repository's stage workflow." \
-            "$f" "$f.sigstore.json"
+            --notes "Slave release of git tree ${TREE} (checked at ${HEAD_SHA}), signed by this repository's stage workflow: the whole build, and the same as its code and its node_modules (by lockfile ${DEPS})." \
+            "${files[@]}"
           echo "release: tree-$TREE" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

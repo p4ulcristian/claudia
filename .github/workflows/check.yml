@@ -80,13 +80,21 @@ jobs:
           cp -r out deploy package.json package-lock.json dist/pkg/
           rm -rf dist/pkg/out/test.js dist/pkg/out/test.js.map dist/pkg/out/cljs-runtime
           echo "$tree" > dist/pkg/tree.txt
+          # The lockfile's hash names the node_modules, so an update downloads them only when it changes.
+          deps=$(sha256sum package-lock.json | cut -c1-20)
+          echo "$deps" > dist/pkg/deps.txt
           (cd dist/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund && rm package-lock.json)
+          # The whole build (the hub's image; servers that have not updated past the split), and the
+          # same split in two: its code (every update, a few MB) and its node_modules.
           tar -czf "dist/claudia-tree-$tree.tar.gz" -C dist/pkg .
-          echo "bundle: tree $tree" >> "$GITHUB_STEP_SUMMARY"
+          tar -czf "dist/claudia-code-$tree.tar.gz" -C dist/pkg --exclude=./node_modules .
+          tar -czf "dist/claudia-deps-$deps.tar.gz" -C dist/pkg ./node_modules ./deps.txt
+          ls -l dist/*.tar.gz
+          echo "bundle: tree $tree, node_modules $deps" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle
-          path: dist/claudia-tree-*.tar.gz
+          path: dist/claudia-*.tar.gz
           retention-days: 7
           if-no-files-found: error
