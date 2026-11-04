@@ -7,7 +7,7 @@
             ["node:child_process" :as cp]
             [clojure.string :as str]))
 
-(def ^:private skip #{".git" "node_modules" ".shadow-cljs" "target" ".next" ".cache" "dist" "out"})
+(def skip "Build and tool folders a walk of the disk leaves out." #{".git" "node_modules" ".shadow-cljs" "target" ".next" ".cache" "dist" "out"})
 (def ^:private max-bytes 2000000)
 (def ^:private fresh-ms 4000)
 

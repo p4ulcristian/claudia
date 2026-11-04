@@ -12,12 +12,15 @@
             ["three/examples/jsm/controls/OrbitControls.js" :refer [OrbitControls]]
             ["three/examples/jsm/renderers/CSS2DRenderer.js" :refer [CSS2DObject CSS2DRenderer]]
             ["three/examples/jsm/environments/RoomEnvironment.js" :refer [RoomEnvironment]]
+            [claudia.web.scene3d.code :as code]
+            [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.scene3d.data :as data]
             [claudia.web.scene3d.ink :as ink]
             [claudia.web.scene3d.labels :as label-layout]
             [claudia.web.scene3d.maths :as m]
             [claudia.web.scene3d.overlap :as overlap]
             [claudia.web.scene3d.person :as person]
+            [claudia.web.scene3d.sources :as sources]
             [claudia.web.scene3d.story :as story]
             [claudia.web.scene3d.vm :as vm]
             [claudia.web.scene3d.voice :as voice]))
@@ -58,6 +61,7 @@
       "torus" (THREE/TorusGeometry. 0.4 0.1 20 56)
       "capsule" (THREE/CapsuleGeometry. 0.25 0.5 8 24)
       "plane" (.rotateX (THREE/PlaneGeometry. 1 1) (/ js/Math.PI -2))
+      "text" (cond-> (THREE/PlaneGeometry. 1 1) (= "left" (:align p)) (.translate 0.5 0 0))
       "ring" (.rotateX (THREE/RingGeometry. 0.3 0.5 48) (/ js/Math.PI -2))
       "extrude" (if (< (count pts2) 3)
                   (THREE/BoxGeometry. 1 1 1)
@@ -242,6 +246,9 @@
             (do (set! (.-visible c) (and (> k 0.05) (> dim 0.5)))
                 (set! (.. c -element -style -opacity) (str k))
                 (.toggle (.. c -element -classList) "s3-noted" (boolean (.-notes e))))
+            (.. c -userData -face) (let [^js fm (.-material c)]
+                                     (set! (.-opacity fm) (* k dim))
+                                     (set! (.-transparent fm) (< (* k dim) 1)))
             (.-isLineSegments c) (set! (.. c -material -opacity) (* 0.35 k))))))))
 
 (defn- override-person!
@@ -302,8 +309,35 @@
           (set-xyz! (.-position mesh) (data/vec3 (:pos p)))
           (set-rot! mesh (:rot p))))))
 
-(defn- part-mesh [host p style]
-  (let [^js mat (part-material host p style)
+(defn- canvas-texture [^js canvas]
+  (let [t (THREE/CanvasTexture. canvas)]
+    (set! (.-colorSpace t) THREE/SRGBColorSpace)
+    (set! (.-anisotropy t) 8)
+    t))
+
+(defn- text-material [^js canvas]
+  (let [m (THREE/MeshBasicMaterial. #js {:map (canvas-texture canvas) :transparent true :depthWrite false
+                                         :side THREE/DoubleSide})]
+    (set! (.. m -userData -op) 1)
+    m))
+
+(defn- add-face!
+  "A code slab's face: its painted canvas on a plane just in front of the box's +z side."
+  [^js mesh ^js canvas]
+  (let [face (THREE/Mesh. (THREE/PlaneGeometry. 1 1) (THREE/MeshBasicMaterial. #js {:map (canvas-texture canvas)}))]
+    (set! (.. face -position -z) 0.502)
+    (set! (.. face -userData -face) true)
+    (set! (.. face -userData -id) (.. mesh -userData -id))
+    (.add mesh face)
+    face))
+
+(defn text-canvas
+  "A text part's canvas (sources/prepare paints texts with this)."
+  [host p]
+  (codepaint/paint-text host (str "#" (.getHexString (color-of host (:color p) "#1b1d22"))) p))
+
+(defn- part-mesh [host p style face]
+  (let [^js mat (if (and (= "text" (:shape p)) face) (text-material (:canvas face)) (part-material host p style))
         ^js mesh (THREE/Mesh. (geometry-of p) mat)
         shape (:shape p)
         group? (= "group" shape)]
@@ -313,6 +347,7 @@
     (set! (.-receiveShadow mesh) (and (not group?) (not (:ghost p))))
     (when (or group? (= "person" shape)) (set! (.-visible mat) false))
     (place-part! mesh p (data/radius-of p))
+    (when (and (= "code" shape) face) (add-face! mesh (:canvas face)))
     mesh))
 
 (defn- add-outline! [^js e]
@@ -335,8 +370,8 @@
 
 (defn- part-entry
   "One part's entry: its mesh with outline, edges and label as its style and data ask."
-  [host p style]
-  (let [mesh (part-mesh host p style)
+  [host p style face]
+  (let [mesh (part-mesh host p style face)
         ^js e #js {:mesh mesh :spec p :radius (data/radius-of p) :k 1 :dim 1 :lit false :notes true
                    :outline nil :label nil :lift js/NaN :person nil :poseKey nil}]
     (when (data/outline? p style) (add-outline! e))
@@ -363,8 +398,8 @@
 (defn- build-parts
   "Every part's entry (people need the loaded model), parented as the data says. -> an atom of
   {id entry}."
-  [host ^js root parts style people]
-  (let [by-id (atom (reduce (fn [acc p] (assoc acc (str (:id p)) (part-entry host p style))) {} parts))]
+  [host ^js root parts style people faces]
+  (let [by-id (atom (reduce (fn [acc p] (assoc acc (str (:id p)) (part-entry host p style (get faces (str (:id p)))))) {} parts))]
     (attach-people! host by-id style people)
     (parent-parts! @by-id root)
     by-id))
@@ -395,6 +430,34 @@
                       (if (array? mat) (doseq [^js x mat] (.dispose x)) (some-> ^js mat .dispose)))
                     (when (instance? CSS2DObject o) (.remove (.-element o)))))
   (.clear root))
+
+;; ---- slabs floating over parts ----
+
+(defn- tether!
+  "A thin line from a floating slab's bottom down by lift (world units) to what it floats over."
+  [^js mesh lift]
+  (let [down (- -0.5 (/ lift (max 1e-6 (.. mesh -scale -y))))
+        g (.setFromPoints (THREE/BufferGeometry.) #js [(THREE/Vector3. 0 -0.5 0) (THREE/Vector3. 0 down 0)])]
+    (.add mesh (THREE/LineSegments. g (THREE/LineBasicMaterial. #js {:color 0x555555 :transparent true :opacity 0.35})))))
+
+(defn- place-over!
+  "A part with over: centred above that part, lift (default 1.5) over its top, pos as an offset."
+  [by-id ^js e]
+  (let [spec (.-spec e)
+        ^js mesh (.-mesh e)]
+    (when-let [^js t (get by-id (str (:over spec)))]
+      (let [b (.setFromObject (THREE/Box3.) (.-mesh t))
+            c (.getCenter b (THREE/Vector3.))
+            lift (let [l (js/Number (:lift spec))] (if (pos? l) l 1.5))
+            [ox oy oz] (data/vec3 (:pos spec))
+            at (THREE/Vector3. (+ (.-x c) ox) (+ (.. b -max -y) lift (/ (.. mesh -scale -y) 2) oy) (+ (.-z c) oz))]
+        (.copy (.-position mesh) (.worldToLocal (.-parent mesh) at))
+        (tether! mesh (+ lift oy))))))
+
+(defn- place-overs! [{:keys [^js root by-id]}]
+  (.updateMatrixWorld root true)
+  (doseq [[_ ^js e] @by-id :when (:over (.-spec e))] (place-over! @by-id e))
+  (.updateMatrixWorld root true))
 
 ;; ---- making the scene ----
 
@@ -454,6 +517,7 @@
        :script nil :arrows [] :steps []
        :sIdx -1 :sPlaying false :sElapsed 0 :sDur 0 :sToken 0 :sTick 0 :sLast 0
        :sMuted (not= "on" (js/localStorage.getItem voice-key)) :sInstruction nil :sAutoplay false
+       :world nil :faces {} :raised nil :reader nil
        :focus #{} :cam nil :checker nil :flagged "" :bad #{} :chosen nil
        :frames 0 :scanSeconds scan-seconds
        :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0})
@@ -495,16 +559,32 @@
     (.updateProjectionMatrix camera)
     (want! sc)))
 
+(defn- construct? [{:keys [^js st]}] (= "construct" (.-world st)))
+
+(defn- apply-world!
+  "The construct: an endless white room (white all round, fog into it, no grid, a floor as far as
+  you look that only shows shadows); else the page shows through, with the grid."
+  [{:keys [^js scene ^js grid ^js ground] :as sc}]
+  (let [c (construct? sc)]
+    (set! (.-background scene) (when c (THREE/Color. 0xffffff)))
+    (when-not c (set! (.-fog scene) nil))
+    (set! (.-visible grid) (not c))
+    (.setScalar (.-scale ground) (if c 40 1))))
+
 (defn- apply-style!
-  "The diagram style: flat light, no reflections, no shadows; the realistic one: room, sun, shadows."
+  "The diagram style: flat light, no reflections, no shadows (but in the construct); the realistic
+  one: room, sun, shadows."
   [{:keys [^js st ^js renderer ^js scene ^js hemi ^js sun ^js ground env] :as sc}]
-  (let [d (diagram? sc)]
+  (let [d (diagram? sc)
+        shadows (and (.-high st) (or (not d) (construct? sc)))]
     (set! (.-toneMapping renderer) (if d THREE/NoToneMapping THREE/ACESFilmicToneMapping))
     (set! (.-environment scene) (if d nil env))
     (set! (.-intensity hemi) (if d 1.25 0.35))
     (set! (.-intensity sun) (if d 1.5 2.1))
-    (set! (.-castShadow sun) (and (not d) (.-high st)))
-    (set! (.-visible ground) (and (not d) (.-high st)))))
+    (set! (.-castShadow sun) shadows)
+    (set! (.. ground -material -opacity) (if (construct? sc) 0.14 0.3))
+    (set! (.-visible ground) shadows)
+    (apply-world! sc)))
 
 (defn- set-quality! [{:keys [^js st ^js renderer] :as sc} q]
   (set! (.-high st) (= q "high"))
@@ -538,6 +618,13 @@
     (.updateProjectionMatrix cam)
     (set! (.. ground -position -y) y)
     (set! (.. grid -position -y) y)))
+
+(defn- fit-fog!
+  "The construct's fog: clear around the scene, white far away."
+  [{:keys [^js st ^js scene] :as sc}]
+  (when (construct? sc)
+    (let [r (max (/ (.length (.getSize (.-box st) (THREE/Vector3.))) 2) 2)]
+      (set! (.-fog scene) (THREE/Fog. 0xffffff (* r 2.2) (* r 7))))))
 
 (defn- stop-script! [{:keys [^js st]}]
   (when-let [s (.-script st)] ((:close s)) (set! (.-script st) nil)))
@@ -588,7 +675,7 @@
             (doseq [t (range 0 (+ (.-scanSeconds st) 1e-9) (/ 1 30))]
               (apply-frame! sc ((:frame s) t (.-sIdx st)))
               (run-check! sc))
-            (catch :default e (ui! sc :error (.-message e))))
+            (catch :default e (ui! sc :error (str "script: " (.-message e)))))
           (move-parts! sc)
           (run-check! sc)
           (ui! sc :scanned true)))))
@@ -604,7 +691,7 @@
       (set! (.-frames st) (inc (.-frames st)))
       (when (even? (.-frames st)) (run-check! sc))
       (catch :default e
-        (ui! sc :error (.-message e) :animated false)
+        (ui! sc :error (str "script: " (.-message e)) :animated false)
         (stop-script! sc)))))
 
 ;; ---- new data ----
@@ -619,7 +706,7 @@
                  (if (not= mine (.-token st))
                    (do ((:close s)) nil)
                    (do (set! (.-script st) s) ((:build s))))))
-        (.catch (fn [e] (when (= mine (.-token st)) (ui! sc :error (.-message e))) {})))
+        (.catch (fn [e] (when (= mine (.-token st)) (ui! sc :error (str "script: " (.-message e)))) {})))
     (js/Promise.resolve {})))
 
 (defn- load-people
@@ -630,6 +717,17 @@
             (fn [e] (ui! sc :error (str "person model: " (.-message e))) nil))
     (js/Promise.resolve nil)))
 
+(defn- load-and-build!
+  "The person model and the real code (cities, code slabs, texts) load, then the scene is built."
+  [{:keys [^js st el] :as sc} d extra current?]
+  (let [all (vec (filter map? (concat (data/lst (:parts d)) (data/lst (:parts extra)))))]
+    (-> (js/Promise.all #js [(load-people sc all) (sources/prepare el (.-reader st) d all text-canvas)])
+        (.then (fn [[people {:keys [parts faces errors]}]]
+                 (when (current?)
+                   (when (seq errors) (ui! sc :error (str "code: " (first errors))))
+                   (set! (.-faces st) faces)
+                   (build! sc d extra parts people)))))))
+
 (defn- set-data!
   "New data: the script runs, the model loads, then the scene is built again (only for the latest)."
   [{:keys [^js st] :as sc} d]
@@ -637,15 +735,13 @@
         current? #(= mine (.-token st))]
     (set! (.-token st) mine)
     (set! (.-data st) d)
+    (set! (.-world st) (:world d))
+    (set! (.-raised st) nil)
+    (apply-style! sc)
     (ui! sc :legend (data/legend-of d) :error "")
     (stop-script! sc)
     (-> (load-script! sc d mine)
-        (.then (fn [extra]
-                 (when (current?)
-                   (let [extra (if (map? extra) extra {})
-                         all (vec (concat (data/lst (:parts d)) (data/lst (:parts extra))))]
-                     (-> (load-people sc all)
-                         (.then (fn [people] (when (current?) (build! sc d extra all people)))))))))
+        (.then (fn [extra] (when (current?) (load-and-build! sc d (if (map? extra) extra {}) current?))))
         (.catch (fn [^js e] (js/console.error e) (ui! sc :error (str (.-message e))))))))
 
 (defn- frame-scene!
@@ -653,14 +749,16 @@
   [{:keys [^js st ^js root] :as sc}]
   (set! (.-box st) (.setFromObject (THREE/Box3.) root))
   (fit-light! sc)
+  (fit-fog! sc)
   (when-not (.-fitted st) (fit! sc) (set! (.-fitted st) true)))
 
 (defn- build!
   "The parts, arrows and overlap checker from the data and what the script built."
   [{:keys [^js st ^js root el by-id k-of fades ever-seen] :as sc} d extra all people]
   (dispose! root)
-  (reset! by-id @(build-parts el root (filterv map? all) (.-style st) people))
+  (reset! by-id @(build-parts el root (filterv map? all) (.-style st) people (.-faces st)))
   (.updateMatrixWorld root true)
+  (place-overs! sc)
   (set! (.-arrows st) (mapv #(make-arrow el root by-id %)
                             (filter map? (concat (data/lst (:arrows d)) (data/lst (:arrows extra))))))
   (reset! k-of {})
@@ -734,12 +832,25 @@
       (set-xyz! dir (m/orbit-dir (or (:az c) 30) (or (:el c) 25))))
     (.normalize dir)))
 
+(defn- read-goal
+  "camera.read: straight in front of a part's face (+z), near enough that its width or height fills
+  the view, a little above centre so the subtitles leave it free. -> [target dist dir] or nil."
+  [{:keys [^js camera by-id]} c]
+  (when-let [^js e (get @by-id (str (:read c)))]
+    (let [^js mesh (.-mesh e)
+          sc3 (.getWorldScale mesh (THREE/Vector3.))
+          w (.-x sc3) h (.-y sc3)
+          t (js/Math.tan (/ (* (.-fov camera) deg) 2))
+          d (max (/ (* h 0.64) t) (/ (* w 0.56) (* t (.-aspect camera))))
+          target (.getWorldPosition mesh (THREE/Vector3.))]
+      (set! (.-y target) (- (.-y target) (* h 0.07)))
+      [target (or (:dist c) d) (.getWorldDirection mesh (THREE/Vector3.))])))
+
 (defn- move-camera!
   "A step's camera: glides there over 1.2 s (the frames ease it)."
   [{:keys [^js st ^js root ^js camera ^js controls] :as sc} c]
   (.updateMatrixWorld root true)
-  (let [[^js target dist] (camera-goal sc c)
-        dir (camera-dir sc c)]
+  (let [[^js target dist dir] (or (read-goal sc c) (conj (camera-goal sc c) (camera-dir sc c)))]
     (set! (.-cam st) {:at (js/performance.now) :dur 1200
                       :p0 (.clone (.-position camera)) :t0 (.clone (.-target controls))
                       :p1 (.addScaledVector (.clone target) dir dist) :t1 target}))
@@ -806,6 +917,30 @@
                              (step-timed! sc mine est))))
       (step-timed! sc mine est))))
 
+(defn- face-of [^js mesh] (some #(when (.. ^js % -userData -face) %) (.-children mesh)))
+
+(defn- repaint-face!
+  "A code slab painted again with these marks (its texture swapped)."
+  [{:keys [^js st el by-id]} id marks]
+  (when-let [^js e (get @by-id id)]
+    (when-let [^js face (face-of (.-mesh e))]
+      (let [^js mat (.-material face)
+            canvas (sources/paint-code el (get-in (.-faces st) [id :input]) marks)]
+        (some-> (.-map mat) .dispose)
+        (set! (.-map mat) (canvas-texture canvas))
+        (set! (.-needsUpdate mat) true)
+        (set! (.-faces st) (assoc-in (.-faces st) [id :shown] marks))))))
+
+(defn- mark-step!
+  "Step marks: a slab's lines marked as the step says, else as the slab's own mark."
+  [{:keys [^js st] :as sc} step]
+  (doseq [[id f] (.-faces st) :when (:input f)]
+    (let [given (some (fn [[k v]] (when (= (data/id-str k) id) v)) (:mark step))
+          marks (code/marked (if (some? given) given (:mark f)))]
+      (when (not= marks (get f :shown (code/marked (:mark f))))
+        (repaint-face! sc id marks))))
+  (want! sc))
+
 (defn- show-step!
   "What step n shows: parts on, poses, the focus and spotlight, the camera."
   [{:keys [^js st] :as sc} n step animate?]
@@ -814,6 +949,7 @@
   (set! (.-focus st) (focus-of sc step))
   (set-spotlight! sc)
   (when (empty? (.-focus st)) (paint! sc))
+  (mark-step! sc step)
   (when (:camera step) (move-camera! sc (:camera step))))
 
 (defn- start-step! [{:keys [^js st narrator] :as sc} n animate?]
@@ -1062,6 +1198,42 @@
         rod (when (= "rod" (:shape spec)) (m/vdist (data/vec3 (:from spec)) (data/vec3 (:to spec))))]
     [spec (data/part-rows id spec (arr w) rod (overlap/solid? spec) ((.-bad st) id))]))
 
+(defn- drop-raised!
+  "The code raised by a click goes away. -> the id it had."
+  [{:keys [^js st by-id]}]
+  (when-let [rid (.-raised st)]
+    (when-let [^js e (get @by-id rid)]
+      (let [^js mesh (.-mesh e)]
+        (dispose! mesh)
+        (some-> (.-parent mesh) (.remove mesh))))
+    (swap! by-id dissoc rid)
+    (set! (.-raised st) nil)
+    rid))
+
+(defn- show-raised! [{:keys [^js st ^js root el by-id] :as sc} rid p face]
+  (let [^js e (part-entry el p (.-style st) face)]
+    (.add root (.-mesh e))
+    (swap! by-id assoc rid e)
+    (set! (.-faces st) (assoc (.-faces st) rid face))
+    (set! (.-raised st) rid)
+    (place-overs! sc)
+    (move-camera! sc {:read rid})))
+
+(defn- raise!
+  "A click on a city's file: its code rises above it and the camera comes to read it; a second
+  click on the same file puts it back."
+  [{:keys [^js st el] :as sc} id spec]
+  (let [rid (str id "#code")
+        token (.-token st)
+        {:keys [size lift]} (:slab spec)]
+    (when-not (= rid (drop-raised! sc))
+      (-> (sources/prepare el (.-reader st) (.-data st)
+                           [{:id rid :shape "code" :file (:file spec) :over id :range "1-60" :size size :lift lift}]
+                           text-canvas)
+          (.then (fn [{[p] :parts faces :faces}]
+                   (when (= token (.-token st)) (show-raised! sc rid p (get faces rid)))))))
+    (want! sc)))
+
 (defn- pick!
   "A click on a part opens its facts; on nothing, closes them."
   [{:keys [^js root el by-id] :as sc} cx cy]
@@ -1073,6 +1245,7 @@
             [spec rows] (part-facts sc id)
             ^js box (.getBoundingClientRect el)]
         (select! sc id)
+        (when (and (:file spec) (:slab spec)) (raise! sc id spec))
         (ui! sc :picked (data/picked id spec rows (- cx (.-left box)) (- cy (.-top box))))))))
 
 (defn- dolly! [{:keys [^js camera ^js controls]} factor]
@@ -1166,10 +1339,12 @@
    :mute #(mute! sc %)})
 
 (defn start!
-  "Builds the view inside `el` (which holds a .s3-stage). ui: the view's state atom. -> the api map."
-  [^js el ui data0]
+  "Builds the view inside `el` (which holds a .s3-stage). ui: the view's state atom; rd: the reads
+  of real code (claudia.web.scene3d.sources/reader, nil outside a chat). -> the api map."
+  [^js el ui data0 rd]
   (let [{:keys [^js st] :as sc} (make-scene el ui data0)
         input (listen! sc)]
+    (set! (.-reader st) rd)
     (size! sc)
     (set-quality! sc (:quality @ui))
     (set-data! sc data0)

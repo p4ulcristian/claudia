@@ -9,6 +9,7 @@
             [claudia.web.fullscreen :as fs]
             [claudia.web.scene3d.bar :as bar]
             [claudia.web.scene3d.engine :as engine]
+            [claudia.web.scene3d.sources :as sources]
             [claudia.web.scene3d.story :as story]))
 
 (def ^:private icons
@@ -178,7 +179,7 @@
      (when (and (pos? story-len) (neg? idx) (not playing) (false? autoplay))
        [:button.primary.s3-bigplay {:on-click #((story-api api :play))} [icon :play] " Play the story"])
      (when (and (seq sub) (>= idx 0)) [:div.s3-sub sub])
-     (when (seq error) [:p.s3-error (str "script: " error)])
+     (when (seq error) [:p.s3-error error])
      (when (and panel (> solids 1)) [overlap-panel state api])
      [:div.s3-bar
       [left-bar ui api state]
@@ -203,7 +204,8 @@
                              (reset! timer (js/setTimeout #(swap! ui assoc :hint "") 1500)))))))
 
 (defn scene3d
-  "props: {:data (the form's data) :chat :block :live? (the open chat, so Explain can ask)}."
+  "props: {:data (the form's data) :server :chat :block :live? (the open chat, so Explain can ask and
+  the scene can read real code)}."
   [_props]
   (let [host (atom nil)
         api (atom nil)
@@ -214,7 +216,8 @@
      {:display-name "scene3d"
       :component-did-mount (fn [this]
                              (reset! unlisten (fs/on-change! #(swap! ui assoc :full (fs/full? @host))))
-                             (reset! api (engine/start! @host ui (:data (r/props this)))))
+                             (let [{:keys [data server chat]} (r/props this)]
+                                 (reset! api (engine/start! @host ui data (sources/reader server chat)))))
       :component-did-update (fn [this [_ old]]
                               (let [d (:data (r/props this))]
                                 (when (not= d (:data old)) ((:set! @api) d))))

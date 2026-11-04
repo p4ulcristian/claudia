@@ -23,9 +23,11 @@
             :hide (strings (:hide s))
             :focus (strings (:focus s))
             :camera (when c {:frame (strings (:frame c)) :target (:target c)
-                             :dist (num (:dist c)) :az (num (:az c)) :el (num (:el c))})
+                             :dist (num (:dist c)) :az (num (:az c)) :el (num (:el c))
+                             :read (when (string? (:read c)) (:read c))})
             :hold (if (and hold (pos? hold)) hold 0)
             :pose (when (map? (:pose s)) (:pose s))
+            :mark (when (map? (:mark s)) (:mark s))
             :move (if (and move (pos? move)) (min move 20) 1.4)}))))
 
 (defn matches?

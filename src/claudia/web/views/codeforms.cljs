@@ -17,6 +17,7 @@
             [claudia.web.views.frame :as frame]
             [claudia.web.views.git :as git]
             [claudia.web.views.graph :as graph]
+            [claudia.web.scene3d :as scene3d]
             [claudia.web.events :as events]))
 
 ;; ---- state: a chat's settings come with `chat` and with `settings` frames ----
@@ -47,6 +48,7 @@
     "flow" [:div.form-view.form-flow [:f> flow/flow-form data]]
     ;; "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
     "code" [:div.form-view.form-code [:f> code/code-view data]]
+    "scene3d" [:div.form-view.form-scene3d [scene3d/scene3d-form data (:block ctx) ctx]]
     [base-forms/form-view form data (:block ctx)]))
 
 ;; ---- "save as template" on a freeform block's badge ----
