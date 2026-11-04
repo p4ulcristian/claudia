@@ -97,6 +97,8 @@
   (is (= :files (codeforms/chat-read "GET" "files" nil)))
   (is (= :repo (codeforms/chat-read "GET" "git" nil)))
   (is (= :clojure (codeforms/chat-read "GET" "calls" nil)))
+  (is (= :source (codeforms/chat-read "GET" "source" nil)))
+  (is (= {:op :chat :chat "c" :sub "source" :block nil} (codeforms/form-route "GET" "/api/chats/c/source")))
   (is (= :save-block (codeforms/chat-read "POST" "blocks/b/template" "b")))
   (is (= :not-found (codeforms/chat-read "POST" "files" nil)))
   (is (= 2 (codeforms/int-or "x" 2)))

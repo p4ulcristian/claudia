@@ -35,14 +35,14 @@
 ;; ---- what a part gets ----
 
 (defn outline? "The chalk outline (the diagram style), not on groups, people or a ghost ball." [p style]
-  (and (= style "diagram") (not (#{"group" "person"} (:shape p))) (not= false (:outline p))
+  (and (= style "diagram") (not (#{"group" "person" "text"} (:shape p))) (not= false (:outline p))
        (not (and (:ghost p) (= "sphere" (:shape p))))))
 
 (defn edges?
   "Dark edge lines (the realistic style) on a plain solid part without a preset material."
   [p style has-material?]
   (and (= style "real") (not has-material?) (not (:wire p))
-       (not (#{"plane" "ring" "rod" "tube" "group" "person"} (:shape p)))))
+       (not (#{"plane" "ring" "rod" "tube" "group" "person" "text"} (:shape p)))))
 
 (defn legend-of [d] (filterv #(and (map? %) (string? (:label %))) (lst (:legend d))))
 

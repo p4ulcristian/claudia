@@ -7,6 +7,8 @@
     (is (= "hi" (:say s)))
     (is (= ["a"] (:show s)))
     (is (= 3 (:dist (:camera s))))
+    (is (nil? (:read (:camera s))))
+    (is (nil? (:mark s)))
     (is (= 20 (:move s)))
     (is (= 0 (:hold s))))
   (is (= [] (story/normalize nil))))
@@ -31,3 +33,8 @@
   (is (= 1.6 (story/estimate-seconds {:say "" :hold 0 :move 1.4})))
   (is (= 3 (story/estimate-seconds {:say "" :hold 3 :move 1.4 :pose {}})))
   (is (= (+ 0.6 (/ 2 2.6)) (story/estimate-seconds {:say "one two" :hold 0 :move 1.4}))))
+
+(deftest read-and-mark
+  (let [[s] (story/normalize [{:camera {:read "slab"} :mark {:slab [3 "5-6"]}}])]
+    (is (= "slab" (:read (:camera s))))
+    (is (= {:slab [3 "5-6"]} (:mark s)))))

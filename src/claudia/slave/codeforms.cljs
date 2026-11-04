@@ -15,6 +15,7 @@
             [claudia.slave.git :as git]
             [claudia.slave.reach :as reach]
             [claudia.slave.scene :as scene]
+            [claudia.slave.source :as source]
             [claudia.slave.store :as store]
             [claudia.slave.tools :as tools]))
 
@@ -121,6 +122,7 @@
             (case (form-of scene filled)
               ("files" "clojure" "calls") {:block (with-root scene folder filled :root)}
               "git" {:block (with-root scene folder filled :repo)}
+              "scene3d" {:block (if (string? (get-in filled [:data :root])) (with-root scene folder filled :root) filled)}
               "editor" (guard-editor scene filled)
               {:block filled})]
         (-> acc (update :blocks conj ready) (update :notes into notes))))))
@@ -245,6 +247,23 @@
       (.then #(io/send-json res 200 %))
       (.catch #(io/send-json res 500 {:error (str (or (.-message %) %))}))))
 
+(defn- source-answer
+  "Promise of the scene3d form's read: a file's text (read=1) or a folder's files with line counts."
+  [root rel ref read?]
+  (if read? (source/text root rel ref) (source/tree root rel ref)))
+
+(defn- source-read [^js res scenes q {:keys [work view?] :as caller}]
+  (let [root (or (q "root") "")
+        rel (or (q "path") "")
+        ref (not-empty (q "ref"))]
+    (cond
+      (not (drawn? scenes "scene3d" :root #(root-ok? % root (if view? work (os/homedir))))) (io/send-json res 403 {:error "not a folder of this chat's pictures"})
+      (not (source/rel-ok? rel)) (io/send-json res 400 {:error "not a path inside the folder"})
+      (and ref (not (source/ref-ok? ref))) (io/send-json res 400 {:error "not a git ref"})
+      (files-refusal caller root rel) (io/send-json res 403 {:error (files-refusal caller root rel)})
+      (and view? (reach/hidden? rel)) (io/send-json res 403 {:error "a dot path, hidden in a read-only view"})
+      :else (reply-promise res (source-answer root rel ref (= "1" (q "read")))))))
+
 (defn- repo-refusal
   "Why this caller may not read the repo and, given, the file in it (relative to the repo), or nil."
   [{:keys [work view?]} repo file]
@@ -307,7 +326,7 @@
   "Which code-form call a request is: {:op ...} with :chat, :sub and :block for /api/chats/:id/...,
   or nil when it is none of them."
   [method url]
-  (let [[_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|blocks/([^/]+)/template)" url)]
+  (let [[_ chat sub block] (re-matches #"/api/chats/([^/]+)/(files|git|clojure|calls|source|blocks/([^/]+)/template)" url)]
     (cond
       (and (= url "/api/forms") (= method "GET")) {:op :forms}
       (and (= url "/api/forms") (= method "PATCH")) {:op :set-forms}
@@ -318,11 +337,12 @@
 
 (defn chat-read
   "Which read of a chat's code form a call is: :files, :repo (the history form), :clojure (the
-  clojure and calls forms), :save-block (a block saved as a template), or :not-found."
+  clojure and calls forms), :source (the scene3d form's code), :save-block (a block saved as a template), or :not-found."
   [method sub block]
   (cond
     (and (= sub "files") (= method "GET")) :files
     (and (= sub "git") (= method "GET")) :repo
+    (and (= sub "source") (= method "GET")) :source
     (and (#{"clojure" "calls"} sub) (= method "GET")) :clojure
     (and block (= method "POST")) :save-block
     :else :not-found))
@@ -353,6 +373,7 @@
       (case (chat-read (.-method req) sub block)
         :files (files-read res scenes q caller)
         :repo (repo-read res scenes q caller)
+        :source (source-read res scenes q caller)
         :clojure (clojure-read res scenes q sub caller)
         :save-block (if (:read-only who)
                       (io/send-json res 403 {:error "Read only."})
