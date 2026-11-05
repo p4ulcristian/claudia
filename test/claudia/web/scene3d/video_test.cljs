@@ -39,8 +39,8 @@
     (testing "a failure newer than the last video shows when nothing is being made"
       (is (= (second vs) (:failed (video/latest (take 2 vs))))))
     (is (= {:making nil :done nil :failed nil} (video/latest nil))))
-  (is (= "video 42%" (video/making-text {:state "render" :progress 0.42})))
-  (is (= "voicing" (video/making-text {:state "voice"}))))
+  (is (= "Making video 42%" (video/making-text {:state "render" :progress 0.42})))
+  (is (= "Voicing the story…" (video/making-text {:state "voice"}))))
 
 (deftest a-video-just-finished
   (let [before [{:id "a" :state "render"} {:id "b" :state "done"}]

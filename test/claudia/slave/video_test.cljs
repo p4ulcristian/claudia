@@ -36,3 +36,7 @@
   (is (= "pipe:0" (nth (video/frames-args 30 "/o.mp4") 10)))
   (is (= "/o.mp4" (last (video/frames-args 30 "/o.mp4"))))
   (is (= ["-i" "/v.mp4" "-i" "/v.wav"] (subvec (video/mux-args "/v.mp4" "/v.wav" "/o.mp4") 3 7))))
+
+(deftest the-downloads-name
+  (is (= "attachment; filename*=UTF-8''Electricity-built-up.mp4" (video/disposition "Electricity, built up")))
+  (is (= "attachment; filename*=UTF-8''scene.mp4" (video/disposition nil))))

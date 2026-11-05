@@ -76,10 +76,10 @@
   "How far a video being made is, in a few words."
   [{:keys [state progress]}]
   (case state
-    "voice" "voicing"
-    "queued" "waiting"
-    "render" (str "video " (js/Math.floor (* 100 (or progress 0))) "%")
-    "encode" "finishing"
+    "voice" "Voicing the story…"
+    "queued" "Waiting for another video…"
+    "render" (str "Making video " (js/Math.floor (* 100 (or progress 0))) "%")
+    "encode" "Finishing the video…"
     ""))
 
 (defn just-done

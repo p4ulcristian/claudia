@@ -3,6 +3,7 @@
   The runner takes it with the same headless browser that shows Claude its drawings
   (GET /api/chats/:id/picture.png?turn=), so it is the whole picture at its full height."
   (:require [reagent.core :as r]
+            [claudia.shared.text :as text]
             [claudia.web.download :as download]))
 
 (defn- png-url [{:keys [server chat]} {:keys [pictures index viewing?]}]
@@ -28,7 +29,7 @@
   (reset! state :busy)
   (-> (fetch-png (png-url oc hist))
       (.then (fn [blob]
-               (download/save-blob! blob (download/file-name (:title hist) "picture" "png"))
+               (download/save-blob! blob (text/file-name (:title hist) "picture" "png"))
                (flash! state :done)))
       (.catch (fn [e] (flash! state (str "No snapshot: " (.-message e)))))))
 

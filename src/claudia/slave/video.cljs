@@ -18,6 +18,7 @@
             [claudia.node.audio :as audio]
             [claudia.node.http :as io]
             [claudia.shared.protocol :as p]
+            [claudia.shared.text :as text]
             [claudia.slave.render :as render]
             [claudia.slave.store :as store]))
 
@@ -282,13 +283,22 @@
              (fn [ms]
                (io/send-json res 200 {:fp fp :videos (listing ms (filter #(= chat (:chat %)) (vals @jobs)) (.get q "block"))}))))))
 
+(defn disposition
+  "The download's Content-Disposition: the file named after the scene's title (else scene.mp4)."
+  [title]
+  (str "attachment; filename*=UTF-8''" (js/encodeURIComponent (text/file-name title "scene" "mp4"))))
+
 (defn- file-reply [^js res chat vid]
   (let [f (path/join (chat-dir chat) (str vid ".mp4"))]
     (if-not (fs/existsSync f)
       (io/send-json res 404 {:error "No such video."})
-      (do (.writeHead res 200 #js {"content-type" "video/mp4" "content-length" (.-size (fs/statSync f))
-                                   "content-disposition" (str "attachment; filename=\"" vid ".mp4\"")})
-          (.pipe (fs/createReadStream f) res)))))
+      (-> (fsp/readFile (path/join (chat-dir chat) (str vid ".json")) "utf8")
+          (.then p/read-json)
+          (.catch (fn [_] {}))
+          (.then (fn [{:keys [title]}]
+                   (.writeHead res 200 #js {"content-type" "video/mp4" "content-length" (.-size (fs/statSync f))
+                                            "content-disposition" (disposition title)})
+                   (.pipe (fs/createReadStream f) res)))))))
 
 (defn handle
   "The video calls; true when this was one. who: the caller (a read-only view only lists and
