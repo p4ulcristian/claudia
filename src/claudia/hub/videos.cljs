@@ -1,9 +1,10 @@
 (ns claudia.hub.videos
-  "A 3D scene's video, asked for from the page: POST /hub/videos {server chat block title data
-  voice}. The hub hands it to that person's runner on that server (claudia.slave.video), answers
-  at once (202 {id}), then, when the video is to have the narrator (voice asked for, a voice set up,
-  lines to say), says the story's lines (claudia.hub.narrate) and brings the clips to the runner,
-  which waits for them. The page can close as soon as it has asked."
+  "A 3D scene's video, asked for from the page: POST /hub/videos {server chat block title data}.
+  The hub hands it to that person's runner on that server (claudia.slave.video), answers at once
+  (202 {id}), then, when the video can have the narrator (a voice set up, lines to say: a video is
+  watched later, so the page's voice switch does not count), says the story's lines
+  (claudia.hub.narrate) and brings the clips to the runner, which waits for them. The page can
+  close as soon as it has asked."
   (:require [claudia.hub.config :as config]
             [claudia.hub.front :as front]
             [claudia.hub.narrate :as narrate]
@@ -47,11 +48,11 @@
   (if (not= "POST" (.-method req))
     (do (.setHeader res "allow" "POST") (io/send-json res 405 {:error "POST only"}))
     (-> (io/read-json req max-body)
-        (.then (fn [{:keys [server chat block data voice] :as body}]
+        (.then (fn [{:keys [server chat block data] :as body}]
                  (let [s (config/server-of person (str server))]
                    (cond
                      (not (and (string? chat) (string? block) (map? data))) (io/send-json res 400 {:error "chat, block and data"})
                      (not s) (io/send-json res 403 {:error (str "no access to " server)})
                      :else (.then (narrate/voice?)
-                                  #(ask! res s email body (boolean (and voice % (seq (narration/lines data))))))))))
+                                  #(ask! res s email body (boolean (and % (seq (narration/lines data))))))))))
         (.catch (fn [e] (when-not (.-headersSent res) (io/send-json res 400 {:error (.-message e)})))))))

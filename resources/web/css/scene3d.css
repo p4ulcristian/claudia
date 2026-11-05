@@ -62,7 +62,14 @@
 .s3-left { flex: 1 1 0; min-width: 0; }
 .s3-story { flex: 1 1 auto; }
 @media (max-width: 679px) { .s3-bar { flex-wrap: wrap; justify-content: flex-end; } .s3-left { flex-basis: 100%; } .s3-sub { bottom: 122px; } }
-.f-scene3d .s3-making:disabled { opacity: 1; color: var(--accent); }
+.f-scene3d .s3-making { color: var(--accent); cursor: default; pointer-events: auto; }
+.f-scene3d .s3-video-new { color: var(--green); background: color-mix(in srgb, var(--green) 18%, transparent); }
+/* A finished video playing over the page, with Download. */
+.s3-player { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: #000b; pointer-events: auto; }
+.s3-player-box { display: flex; flex-direction: column; gap: 8px; width: min(92vw, calc(80vh * 16 / 9)); background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.s3-player-box video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; }
+.s3-player-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font: 700 14px var(--hand); color: var(--fg); }
+.s3-player-bar b { margin-right: auto; }
 .f-scene3d .s3-making .s3-ic { animation: s3-spin 1s linear infinite; }
 @keyframes s3-spin { to { transform: rotate(360deg); } }
 .f-scene3d .s3-video-failed { color: var(--red); }

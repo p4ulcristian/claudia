@@ -20,3 +20,9 @@
 (deftest error-text-says-the-message
   (is (= "boom" (text/error-text (js/Error. "boom"))))
   (is (= "plain" (text/error-text "plain"))))
+
+(deftest a-title-as-a-file-name
+  (is (= "Electricity-built-up.mp4" (text/file-name "Electricity, built up" "scene" "mp4")))
+  (is (= "Árvíztűrő-tükör.png" (text/file-name " Árvíztűrő / tükör " "picture" "png")))
+  (is (= "scene.webm" (text/file-name nil "scene" "webm")))
+  (is (= "picture.png" (text/file-name "!!" "picture" "png"))))

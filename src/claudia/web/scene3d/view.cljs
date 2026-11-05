@@ -149,13 +149,13 @@
     [:button.f-tool {:title what :aria-label what :on-click #(fs/toggle! @host)}
      [icon (if full :exit :full)]]))
 
-(defn- tools [ui api host {:keys [animated style quality full muted] :as state} props]
+(defn- tools [ui api host {:keys [animated style quality full] :as state} props]
   [:span.s3-tools
    (when animated [motion-tools ui api state])
    [style-button ui api style]
    (when (= style "real") [quality-button ui api quality])
    (when (and (:server props) (:chat props) (:block props))
-     [:f> videos/control (assoc (select-keys props [:server :chat :block :title :data :live?]) :voice (not muted))])
+     [:f> videos/control (select-keys props [:server :chat :block :title :data :live?])])
    [:button.f-tool {:title "Reset view" :aria-label "Reset view" :on-click #((:fit! @api))} [icon :reset]]
    [full-button host full]])
 

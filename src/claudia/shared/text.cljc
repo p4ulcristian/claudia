@@ -24,3 +24,13 @@
      "An error (or anything thrown) as text: its message, else itself."
      [e]
      (str (or (some-> e .-message) e))))
+
+(defn file-name
+  "A title as a file name: letters and digits kept, every run of anything else one -, fallback when
+  nothing is left; then .ext."
+  [title fallback ext]
+  (let [t #?(:cljs (-> (str title)
+                       (.replace (js/RegExp. "[^\\p{L}\\p{N}]+" "gu") "-")
+                       (.replace (js/RegExp. "^-+|-+$" "g") ""))
+             :clj (-> (str title) (str/replace #"[^\p{L}\p{N}]+" "-") (str/replace #"^-+|-+$" "")))]
+    (str (if (seq t) t fallback) "." ext)))
