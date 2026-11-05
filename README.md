@@ -74,10 +74,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     It reads only while someone asked in the last 30 s. On macOS (no `/proc`) the same sample comes
     from `os.cpus()` per core (no iowait or steal there), `vm_stat` (used = app memory + wired +
     compressed, as Activity Monitor counts it), `sysctl vm.swapusage`, `netstat -ibn` (en* cards),
-    `ioreg` (bytes read and written), `mount` with `statfs` (one row per APFS container) and `ps`
+    `ioreg` (bytes read and written), `mount` with `statfs` (one row per APFS container, its volumes' files summed) and `ps`
     (`claudia.node.darwin`); no temperatures. Instead of: the `systeminformation`
     library, which runs `df`, `lsblk` and `nvidia-smi` per call and measures CPU since the
     previous call from anywhere in the process; an admin-only view.
+
+13. A Mac is a server too (2026-11-05; [deploy/macos/README.md](deploy/macos/README.md)): an Apple
+    Silicon Mac with one user runs the front, runner and host as launchd agents written from the same
+    `~/.config/claudia/env` (`deploy/macos/install.sh`), follows main with the same
+    `deploy/update.sh` (bash 3.2 and BSD tools as well as Linux's), and takes the release's
+    darwin-arm64 node_modules (`claudia-deps-<lockfile hash>-darwin-arm64`, packed by check.yml,
+    signed by stage.yml: the Agent SDK's Claude Code is per platform). The front listens on the Mac's
+    WireGuard address only, and a pf anchor (`deploy/macos/guard.sh`, root) lets its port in only
+    from the hub's tunnel address, as the nft rule does on Linux. Instead of: a Linux VM on the Mac,
+    or building node_modules on the Mac itself.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
@@ -116,7 +126,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
   front and the runners restart, never the hosts. A single-user machine's `CLAUDIA_CHECKOUT`
   must be a release folder (a git checkout is never replaced): first install with
-  `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`.
+  `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`
+  (on a Mac the same first install loads the launchd agents, the update agent included:
+  [deploy/macos/README.md](deploy/macos/README.md)).
 
 ## The 3D scene, the phone and alerts (2026-11-03, ported from the TypeScript Claudia's decisions 26 and 29)
 

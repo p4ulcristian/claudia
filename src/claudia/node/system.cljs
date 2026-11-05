@@ -62,13 +62,25 @@
              (when (and err (= "ENOENT" (.-code err))) (reset! no-nvidia true))
              (if err [] (proc/gpu-rows out))))))
 
-(defn- space [{:keys [mount] :as m}]
+(defn- statfs-of
+  "Promise of a mount's statfs numbers {:bsize :blocks :bfree :bavail}, nil when it cannot be read."
+  [mount]
   (-> (.statfs fsp mount)
-      (.then (fn [^js s] (merge (select-keys m [:mount :fs :source])
-                                (proc/disk-space {:bsize (.-bsize s) :blocks (.-blocks s) :bfree (.-bfree s) :bavail (.-bavail s)}))))
+      (.then (fn [^js s] {:bsize (.-bsize s) :blocks (.-blocks s) :bfree (.-bfree s) :bavail (.-bavail s)}))
       (.catch (fn [_] nil))))
 
+(defn- space [{:keys [mount] :as m}]
+  (.then (statfs-of mount) #(when % (merge (select-keys m [:mount :fs :source]) (proc/disk-space %)))))
+
 (defn- spaces [mounts] (.then (all (map space mounts)) #(vec (keep identity %))))
+
+(defn- container-space
+  "An APFS container's row on macOS: its volumes' statfs, added up by darwin/container-space."
+  [{:keys [volumes] :as m}]
+  (.then (all (map statfs-of volumes))
+         #(when-let [ok (seq (keep identity %))] (merge (select-keys m [:mount :fs :source]) (darwin/container-space ok)))))
+
+(defn- container-spaces [mounts] (.then (all (map container-space mounts)) #(vec (keep identity %))))
 
 (defn- disks [] (.then (text-of "/proc/self/mountinfo") #(spaces (proc/disk-mounts (or % "")))))
 
@@ -116,7 +128,7 @@
   []
   (-> (all [(text-from "vm_stat") (text-from "sysctl" "vm.swapusage") (text-from "netstat" "-ibn")
             (text-from "ioreg" "-r" "-c" "IOBlockStorageDriver" "-k" "Statistics")
-            (.then (text-from "mount") #(spaces (darwin/disk-mounts %)))
+            (.then (text-from "mount") #(container-spaces (darwin/disk-mounts %)))
             (text-from "ps" "-axo" "pid=,ppid=,rss=,command=")])
       (.then (fn [[vm swap net dio ds ps]]
                (let [nets (darwin/net-bytes net)]

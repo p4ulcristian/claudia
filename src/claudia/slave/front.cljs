@@ -202,6 +202,11 @@
           port (js/parseInt (or (.-FRONT_PORT env) "4540") 10)
           host (or (.-FRONT_HOST env) "127.0.0.1")]
       (.on server "upgrade" on-upgrade)
+      ;; FRONT_HOST is the tunnel's address: while the tunnel is down there is nothing to listen on.
+      ;; The front stops and its service manager starts it again (systemd Restart, launchd KeepAlive).
+      (.on server "error" (fn [e]
+                            (js/console.error "claudia front cannot listen on" (str host ":" port) "-" (.-message e))
+                            (js/process.exit 1)))
       (.listen server port host
                #(println "claudia front" (.-FRONT_NAME env) "on" (str host ":" port)
                          "for" (count @profiles) "profiles")))))

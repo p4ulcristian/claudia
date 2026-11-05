@@ -178,7 +178,7 @@ cpu: { model, load: [1, 5, 15 min], all: Share, cores: [Share] }, memory: { tota
 cached, swapTotal, swapUsed }, disks: [{ mount, fs, source, size, used, avail }], io: { read, write },
 net: { rx, tx }, temps: [{ name, label, c }], gpus: [{ index, name, util, memUsed, memTotal, temp, power }],
 claudia: [{ kind: front|runner|host|chats|hub, count, rss }] }`; `Share` = `{ busy, user, sys, iowait, steal }`
-(busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null. On macOS iowait and steal are 0 and `temps` is empty.
+(busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null. On macOS iowait and steal are 0, `temps` is empty, and a disk is an APFS container (its volumes' files summed).
 
 `Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
 running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:

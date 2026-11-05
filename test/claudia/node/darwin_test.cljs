@@ -44,12 +44,18 @@
            (darwin/disk-bytes "\"Statistics\" = {\"Bytes (Read)\"=1000,\"Bytes (Write)\"=40}\n\"Statistics\" = {\"Bytes (Read)\"=2000,\"Bytes (Write)\"=0}")))))
 
 (deftest one-row-per-container
-  (is (= [{:source "/dev/disk3s1s1" :mount "/" :fs "apfs"}
-          {:source "/dev/disk5s1" :mount "/Volumes/My Disk" :fs "exfat"}]
+  (is (= [{:source "/dev/disk3s1s1" :mount "/" :fs "apfs" :volumes ["/" "/System/Volumes/Data"]}
+          {:source "/dev/disk5s1" :mount "/Volumes/My Disk" :fs "exfat" :volumes ["/Volumes/My Disk"]}]
          (darwin/disk-mounts (str "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n"
                                   "devfs on /dev (devfs, local, nobrowse)\n"
                                   "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)\n"
+                                  "/dev/disk1s3 on /System/Volumes/Hardware (apfs, local, journaled, nobrowse)\n"
                                   "/dev/disk5s1 on /Volumes/My Disk (exfat, local, nodev, nosuid)\n")))))
+
+(deftest a-container-adds-up-its-volumes
+  (is (= {:size 4096000 :used 1638400 :avail 2048000}
+         (darwin/container-space [{:bsize 4096 :blocks 1000 :bfree 900 :bavail 500}
+                                  {:bsize 4096 :blocks 1000 :bfree 700 :bavail 500}]))))
 
 (deftest claudia-processes-from-ps
   (let [rows (darwin/ps-rows (str "  10     1  20000 node /Users/x/claudia/out/front.js\n"
