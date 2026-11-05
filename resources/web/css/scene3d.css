@@ -70,6 +70,7 @@
 .s3-player-box video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; }
 .s3-player-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font: 700 14px var(--hand); color: var(--fg); }
 .s3-player-bar b { margin-right: auto; }
+.s3-player .f-tool { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
 .f-scene3d .s3-making .s3-ic { animation: s3-spin 1s linear infinite; }
 @keyframes s3-spin { to { transform: rotate(360deg); } }
 .f-scene3d .s3-video-failed { color: var(--red); }

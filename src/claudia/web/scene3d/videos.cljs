@@ -5,7 +5,9 @@
   there is: while one is made, how far it is; when done, a button that plays it here, in a player
   with Download (a web-app window shows no downloads of its own), and a desktop popup (when turned
   on)."
-  (:require [reagent.hooks :as h]
+  (:require ["react-dom" :as react-dom]
+            [reagent.core :as r]
+            [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.shared.text :as text]
             [claudia.web.alerts :as alerts]
@@ -62,7 +64,9 @@
    [:button.f-tool {:title "Close (Esc)" :aria-label "Close" :on-click close} [icon :close]]])
 
 (defn- player
-  "The video playing over the page, with Download; Esc or a click beside it closes it."
+  "The video playing over the window, with Download; Esc or a click beside it closes it. It is put
+  in the page's body (or the element in full screen): inside the picture pane, a container, a
+  fixed box is placed in the pane, not the window, and fell out of sight."
   [props v close]
   (let [[note set-note] (h/use-state nil)]
     (h/use-effect (fn []
@@ -70,10 +74,14 @@
                       (js/addEventListener "keydown" f)
                       #(js/removeEventListener "keydown" f)))
                   [])
-    [:div.s3-player {:on-click #(when (identical? (.-target %) (.-currentTarget %)) (close))}
-     [:div.s3-player-box
-      [:video {:src (file-url props v) :controls true :auto-play true :plays-inline true}]
-      [player-bar props v note set-note close]]]))
+    (react-dom/createPortal
+     (r/as-element
+      [:div.s3-player {:role "dialog" :aria-label "Video"
+                       :on-click #(when (identical? (.-target %) (.-currentTarget %)) (close))}
+       [:div.s3-player-box
+        [:video {:src (file-url props v) :controls true :auto-play true :plays-inline true}]
+        [player-bar props v note set-note close]]])
+     (or js/document.fullscreenElement js/document.body))))
 
 (defn- watch-button [v fresh open]
   [:button.f-tool {:class (when fresh "s3-video-new")
