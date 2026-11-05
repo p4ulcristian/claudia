@@ -36,12 +36,14 @@
       (is (= "group" (:shape (by-id "c"))))
       (is (= [1 0 2] (:pos (by-id "c"))))
       (is (every? #(= "c" (:parent %)) (rest ps)))
+      (is (= 1 (count (filter #(= "names" (:shape %)) ps))) "one names layer")
       (is (contains? by-id "c:src/a/"))
       (is (= "src/a/one.clj" (:file (by-id "c:src/a/one.clj"))))
       (let [area #(* (get-in % [:size 0]) (get-in % [:size 2]))]
         (is (> (area (by-id "c:src/a/one.clj")) (area (by-id "c:src/a/two.clj"))) "bigger with more lines"))
       (is (= (get-in (by-id "c:src/a/one.clj") [:size 1]) (get-in (by-id "c:src/a/two.clj") [:size 1])) "flat: one thickness")
-      (is (= "one.clj" (:text (by-id "c:src/a/one.clj#name"))) "its name painted on it"))
+      (is (some #(= "one.clj" (:name %)) (:names (by-id "c#names"))) "its name painted on it")
+      (is (every? #(= "c" (:batch %)) (filter #(= "box" (:shape %)) ps)) "boxes drawn as one batch"))
     (testing "files stand on their folder's area"
       (let [area (by-id "c:src/a/")
             t (by-id "c:src/a/two.clj")

@@ -2,7 +2,8 @@
   "A folder of real code as a flat map on the floor, without three.js: every folder an area (a
   platform one thin step above its parent's, its name painted at its front edge), every file a flat
   tile inside its folder's area, as big as its share of the folder's lines (a squarified treemap),
-  its name painted on it when it is big enough to read. Each folder at the hue depth has its own
+  its name painted on it when it is big enough to read. The boxes carry :batch (the engine draws
+  them all as one instanced mesh) and the names come as one names part (one texture). Each folder at the hue depth has its own
   colour, so you see which part a file is in. Big trees are cut at a depth: deeper folders become one
   tile each. -> plain parts (a group, boxes and texts) the engine builds like any other."
   (:require [clojure.string :as str]))
@@ -114,17 +115,18 @@
 (defn- platform [{:keys [cid size step]} n level rect hue]
   (let [[cx cz] (centre rect size)]
     {:id (folder-id cid (:path n)) :shape "box" :ghost true :outline false :color (colour hue level false)
-     :pos [cx (+ (* level step) (/ step 2)) cz] :size [(:w rect) step (:d rect)] :parent cid
+     :pos [cx (+ (* level step) (/ step 2)) cz] :size [(:w rect) step (:d rect)] :parent cid :batch cid
      :note (str (or (not-empty (:path n)) "/") " · " (:count n) " files · " (:lines n) " lines")}))
 
-(defn- name-text [{:keys [cid size step]} n level {:keys [x z w d]} pad hdr]
+(defn- name-text
+  "A folder's name for the names layer: at the front edge of its area, from its left (nil when it
+  does not fit at a readable size)."
+  [{:keys [size]} n {:keys [x z w d]} pad hdr]
   (let [label (if (seq (:name n)) (:name n) (:path n))
         letter (min (* hdr 0.62) (/ (- w (* 2 pad)) (* 0.62 (max 1 (count label)))))]
     (when (and (seq label) (pos? hdr) (> letter (* size 0.003)))
-      {:id (str (folder-id cid (:path n)) "#name") :shape "text" :text label :size letter :color "#1b1d22"
-       :pos [(- (+ x pad (/ (* 0.62 letter (count label)) 2)) (/ size 2)) (+ (* (inc level) step) 0.002)
-             (- (+ z d (- (/ pad 2)) (- (/ hdr 2))) (/ size 2))]
-       :rot [-90 0 0] :parent cid})))
+      {:name label :letter letter :align "left"
+       :x (- (+ x pad) (/ size 2)) :z (- (+ z d (- (/ pad 2)) (- (/ hdr 2))) (/ size 2))})))
 
 (defn- tile
   "A file (or a folder cut into one tile) lying flat on its folder's area at level."
@@ -133,17 +135,17 @@
         gap (min (* 0.09 (min (:w rect) (:d rect))) (* size 0.004))]
     (cond-> {:id id :shape "box" :ghost true :outline false :color (colour hue level true)
              :pos [cx (+ (* level step) (/ step 2)) cz] :size [(max 0.001 (- (:w rect) gap)) step (max 0.001 (- (:d rect) gap))]
-             :note note :parent cid}
+             :note note :parent cid :batch cid}
       path (assoc :file path :slab {:size (* size 0.34) :lift (* size 0.08)}))))
 
 (defn- file-name
-  "A file's name painted on its tile when it fits at a readable size (nil otherwise)."
-  [{:keys [cid size step]} {:keys [id fname]} level rect]
+  "A file's name for the names layer, centred on its tile (nil when it does not fit readably)."
+  [{:keys [size]} {:keys [fname]} rect]
   (let [letter (min (* (:d rect) 0.32) (/ (* 0.86 (:w rect)) (* 0.62 (max 1 (count fname)))))
         [cx cz] (centre rect size)]
     (when (and fname (> letter (* size 0.006)))
-      {:id (str id "#name") :shape "text" :text fname :size letter :color "#1b1d22" :name-of id
-       :pos [cx (+ (* (inc level) step) 0.002) cz] :rot [-90 0 0] :parent cid})))
+      {:name fname :letter letter :align "center" :x cx :z cz})))
+
 
 (defn- items-of
   "A folder's children as tiles to lay out: its folders (cut ones as one tile) and its files."
@@ -171,6 +173,7 @@
 (defn- hue-for [ctx it hue]
   (or (some->> (:dir it) :path (get (:hues ctx))) hue))
 
+
 (defn- walk
   "The parts of folder n at level in rect: its area, its name, its tiles and its folders' parts."
   [{:keys [size] :as ctx} n level rect hue]
@@ -178,22 +181,28 @@
         hdr (if (<= level 3) (min (* (:d rect) 0.14) (* size 0.035)) 0)
         items (vec (items-of ctx n level))
         rects (squarify (mapv #(max 1 (:w %)) items) (inner rect pad hdr))]
-    (into (filterv some? [(platform ctx n level rect hue) (name-text ctx n level rect pad hdr)])
+    (into (filterv some? [(platform ctx n level rect hue) (name-text ctx n rect pad hdr)])
           (mapcat (fn [it r]
                     (let [h (hue-for ctx it hue)]
                       (if (:tile? it)
-                        (filterv some? [(tile ctx it (inc level) r h) (file-name ctx it (inc level) r)])
+                        (filterv some? [(tile ctx it (inc level) r h) (file-name ctx it r)])
                         (walk ctx (:dir it) (inc level) r h))))
                   items rects))))
 
-(def max-names "File names painted at most (each is a texture), the biggest first." 160)
+(def max-names "Names painted at most, the biggest first." 1500)
 
-(defn- fewer-names
-  "The parts with at most max-names file names, the biggest kept."
-  [ps]
-  (let [names (filter :name-of ps)
-        kept (set (map :id (take max-names (sort-by #(- (:size %)) names))))]
-    (filterv #(or (not (:name-of %)) (kept (:id %))) ps)))
+(defn- names-layer
+  "All the names of a map as one part: painted on one texture lying just over the highest tile."
+  [cid size names top]
+  {:id (str cid "#names") :shape "names" :parent cid :size size :pos [0 top 0]
+   :names (vec (take max-names (sort-by #(- (:letter %)) names)))})
+
+(defn- with-names
+  "The map's boxes, with the names walk left among them gathered into one layer."
+  [cid size ps]
+  (let [boxes (filterv :batch ps)
+        top (+ 0.004 (reduce max 0 (map #(+ (get-in % [:pos 1]) (/ (get-in % [:size 1]) 2)) boxes)))]
+    (conj boxes (names-layer cid size (filterv :name ps) top))))
 
 (defn parts
   "The parts of folders part p (its id, pos, rot, size: the map's width, max: at most this many
@@ -205,8 +214,8 @@
         root (tree (under files folder))
         size (let [s (js/Number (:size p))] (if (pos? s) s 20))
         cap (let [c (js/Number (:max p))] (if (pos? c) (min c 4000) 1500))
-        ctx {:cid cid :size size :step (* size 0.004) :cut (cut-depth root cap)
+        ctx {:cid cid :size size :step (* size 0.0015) :cut (cut-depth root cap)
              :prefix (if (seq folder) (str folder "/") "")
              :hues (hues root (let [h (js/Number (:hue p))] (if (pos? h) (min 6 (js/Math.round h)) 1)))}]
     (into [{:id cid :shape "group" :pos (:pos p) :rot (:rot p)}]
-          (fewer-names (walk ctx root 0 {:x 0 :z 0 :w size :d size} nil)))))
+          (with-names cid size (walk ctx root 0 {:x 0 :z 0 :w size :d size} nil)))))

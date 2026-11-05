@@ -46,7 +46,7 @@
                s)]
      (try (THREE/Color. css) (catch :default _ (THREE/Color. 0x888888))))))
 
-(defn- geometry-of
+(defn- make-geometry
   "Unit-sized geometry per shape; size scales it. Extrude, lathe and tube build from the points."
   [p]
   (let [pts2 (map (fn [q] (THREE/Vector2. (js/Number (nth q 0 0)) (js/Number (nth q 1 0)))) (data/lst (:points p)))]
@@ -62,6 +62,7 @@
       "capsule" (THREE/CapsuleGeometry. 0.25 0.5 8 24)
       "plane" (.rotateX (THREE/PlaneGeometry. 1 1) (/ js/Math.PI -2))
       "text" (cond-> (THREE/PlaneGeometry. 1 1) (= "left" (:align p)) (.translate 0.5 0 0))
+      "names" (.rotateX (THREE/PlaneGeometry. 1 1) (/ js/Math.PI -2))
       "ring" (.rotateX (THREE/RingGeometry. 0.3 0.5 48) (/ js/Math.PI -2))
       "extrude" (if (< (count pts2) 3)
                   (THREE/BoxGeometry. 1 1 1)
@@ -73,6 +74,17 @@
                  (THREE/TubeGeometry. (THREE/CatmullRomCurve3. (into-array path)) (* 16 (count path))
                                       (or (js/Number (:radius p)) 0.08) 12 false)))
       (THREE/BoxGeometry. 1 1 1))))
+
+(def ^:private shared-geometry
+  "One geometry per shape that has no points, made once and shared by every such part (thousands of
+  boxes cost one buffer, and the overlap check one triangle tree)."
+  (into {} (for [shape ["box" "code" "sphere" "cylinder" "rod" "cone" "pyramid" "torus" "capsule" "plane"
+                        "ring" "names" "group" "person"]]
+             [shape (make-geometry {:shape shape})])))
+
+(defn- geometry-of [p]
+  (or (when-not (= "text" (:shape p)) (get shared-geometry (or (:shape p) "box")))
+      (make-geometry p)))
 
 (defn- label-el [text note color]
   (let [d (js/document.createElement "div")
@@ -223,7 +235,30 @@
 
 ;; ---- parts ----
 
+(def ^:private white (THREE/Color. 1 1 1))
+(def ^:private no-size (.makeScale (THREE/Matrix4.) 0 0 0))
+
+(defn- batch-reveal!
+  "A batched part's look in its instanced mesh: faded towards white as it is dimmed, gone when hidden."
+  [^js e k]
+  (when-let [^js b (.-batch e)]
+    (let [^js im (.-im b)]
+      (.setColorAt im (.-bi e) (.lerp (.clone (.-base b)) white (* 0.85 (- 1 (.-dim e)))))
+      (.setMatrixAt im (.-bi e) (if (> k 0.5) (.-m b) no-size))
+      (set! (.. im -instanceColor -needsUpdate) true)
+      (set! (.. im -instanceMatrix -needsUpdate) true))))
+
+(declare mesh-reveal!)
+
 (defn- apply-reveal!
+  "How far a part has appeared (0 hidden .. 1 there) and how far it is dimmed, on its mesh or, for a
+  batched part, in its batch."
+  [^js e k]
+  (if (.-proxy e)
+    (do (set! (.-k e) k) (batch-reveal! e k))
+    (mesh-reveal! e k)))
+
+(defn- mesh-reveal!
   "How far a part has appeared (0 hidden .. 1 there): a fade, with its label and outline. dim fades
   the part back (the spotlight leaves the others faint); lit thickens its outline."
   [^js e k]
@@ -338,7 +373,7 @@
   (codepaint/paint-text host (str "#" (.getHexString (color-of host (:color p) "#1b1d22"))) p))
 
 (defn- part-mesh [host p style face]
-  (let [^js mat (if (and (= "text" (:shape p)) face) (text-material (:canvas face)) (part-material host p style))
+  (let [^js mat (if (and (#{"text" "names"} (:shape p)) face) (text-material (:canvas face)) (part-material host p style))
         ^js mesh (THREE/Mesh. (geometry-of p) mat)
         shape (:shape p)
         group? (= "group" shape)]
@@ -369,6 +404,20 @@
       (.add mesh l)
       (set! (.-label e) l))))
 
+(def ^:private hidden-material
+  (let [m (THREE/MeshBasicMaterial.)] (set! (.-visible m) false) m))
+
+(defn- proxy-entry
+  "A part its batch's instanced mesh draws (:batch): an invisible stand-in that clicks, boxes, focus
+  and floating code use like any part's mesh."
+  [p]
+  (let [mesh (THREE/Mesh. (get shared-geometry "box") hidden-material)]
+    (set! (.-visible mesh) false)
+    (set! (.. mesh -userData -id) (str (:id p)))
+    (place-part! mesh p 0.08)
+    #js {:mesh mesh :spec p :radius 0.08 :k 1 :dim 1 :lit false :notes true :outline nil :label nil
+         :lift js/NaN :person nil :poseKey nil :proxy true :batch nil :bi -1}))
+
 (defn- part-entry
   "One part's entry: its mesh with outline, edges and label as its style and data ask."
   [host p style face]
@@ -396,13 +445,35 @@
           ^js parent (or (joint-of by-id par) (some-> ^js (get by-id par) .-mesh) root)]
       (.add parent (.-mesh e)))))
 
+(defn- make-batch!
+  "One instanced mesh drawing a batch's stand-ins (one draw call for thousands), beside them."
+  [host entries]
+  (let [im (THREE/InstancedMesh. (get shared-geometry "box") (THREE/MeshLambertMaterial.) (count entries))]
+    (doseq [[i ^js e] (map-indexed vector entries)
+            :let [^js mesh (.-mesh e)
+                  c (color-of host (:color (.-spec e)))]]
+      (.updateMatrix mesh)
+      (.setMatrixAt im i (.-matrix mesh))
+      (.setColorAt im i c)
+      (set! (.-batch e) #js {:im im :base c :m (.clone (.-matrix mesh))})
+      (set! (.-bi e) i))
+    (set! (.-receiveShadow im) true)
+    (.computeBoundingSphere im)
+    (.add (.. ^js (first entries) -mesh -parent) im)))
+
+(defn- make-batches! [host by-id]
+  (doseq [[_ es] (group-by #(:batch (.-spec ^js %)) (filter #(.-proxy ^js %) (vals by-id)))]
+    (make-batch! host (vec es))))
+
 (defn- build-parts
   "Every part's entry (people need the loaded model), parented as the data says. -> an atom of
   {id entry}."
   [host ^js root parts style people faces]
-  (let [by-id (atom (reduce (fn [acc p] (assoc acc (str (:id p)) (part-entry host p style (get faces (str (:id p)))))) {} parts))]
+  (let [entry #(if (:batch %) (proxy-entry %) (part-entry host % style (get faces (str (:id %)))))
+        by-id (atom (reduce (fn [acc p] (assoc acc (str (:id p)) (entry p))) {} parts))]
     (attach-people! host by-id style people)
     (parent-parts! @by-id root)
+    (make-batches! host @by-id)
     by-id))
 
 (def ^:private lc (THREE/Vector3.))

@@ -83,3 +83,24 @@
     (set! (.-fillStyle ctx) colour)
     (.fillText ctx s 24 88)
     canvas))
+
+(def names-px "The names layer's canvas side, in pixels (one texture for a whole map)." 4096)
+
+(defn paint-names
+  "A folders map's names on one square canvas covering the map (size wide, centred on 0): each
+  {:name :letter :align :x :z} at its place, letter tall, from the left or centred."
+  [^js host {:keys [size names]}]
+  (let [^js canvas (js/document.createElement "canvas")
+        ^js ctx (.getContext canvas "2d")
+        v (.trim (.getPropertyValue (js/getComputedStyle host) "--sans"))
+        family (if (seq v) v "sans-serif")
+        px (/ names-px (max size 1e-6))]
+    (set! (.-width canvas) names-px)
+    (set! (.-height canvas) names-px)
+    (set! (.-fillStyle ctx) "#1b1d22")
+    (set! (.-textBaseline ctx) "middle")
+    (doseq [{label :name :keys [letter align x z]} names]
+      (set! (.-font ctx) (str "600 " (max 6 (* letter px)) "px " family))
+      (set! (.-textAlign ctx) (if (= "left" align) "left" "center"))
+      (.fillText ctx (str label) (* (+ x (/ size 2)) px) (* (+ z (/ size 2)) px)))
+    canvas))

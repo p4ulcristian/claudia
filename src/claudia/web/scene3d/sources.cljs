@@ -106,6 +106,7 @@
                                          (case (:shape p)
                                            "code" (prepare-code host rd d by-id p)
                                            "text" (let [c (text-canvas host p)] (js/Promise.resolve [(text-size p c) {:canvas c}]))
+                                           "names" (js/Promise.resolve [p {:canvas (codepaint/paint-names host p)}])
                                            (js/Promise.resolve [p nil])))
                                        parts)))
                      (.then (fn [pairs]
