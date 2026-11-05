@@ -20,10 +20,10 @@
 ;; ---- one block ----
 
 (defn- block-ctx
-  "What a form needs to read and write through the open chat's server."
+  "What a form needs to read and write through the open chat's server, and the block's id and name."
   [block live?]
   (let [{:keys [server chat]} @(rf/subscribe [:open-chat])]
-    {:server server :chat chat :block (:id block) :live (boolean (and server chat live?))}))
+    {:server server :chat chat :block (:id block) :title (:name block) :live (boolean (and server chat live?))}))
 
 (defn block-view
   "One block. hot: the last draw changed it (a new glow per draw, seq); kept: :here or :gone for a

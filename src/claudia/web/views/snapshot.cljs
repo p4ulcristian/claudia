@@ -2,13 +2,8 @@
   "The camera in the bar: the picture shown, as a PNG, copied to the clipboard or saved as a file.
   The runner takes it with the same headless browser that shows Claude its drawings
   (GET /api/chats/:id/picture.png?turn=), so it is the whole picture at its full height."
-  (:require [reagent.core :as r]))
-
-(defn- file-name [title]
-  (let [t (-> (str title)
-              (.replace (js/RegExp. "[^\\p{L}\\p{N}]+" "gu") "-")
-              (.replace (js/RegExp. "^-+|-+$" "g") ""))]
-    (str (if (seq t) t "picture") ".png")))
+  (:require [reagent.core :as r]
+            [claudia.web.download :as download]))
 
 (defn- png-url [{:keys [server chat]} {:keys [pictures index viewing?]}]
   (let [turn (when viewing? (:turn (get pictures index)))]
@@ -33,13 +28,8 @@
   (reset! state :busy)
   (-> (fetch-png (png-url oc hist))
       (.then (fn [blob]
-               (let [href (js/URL.createObjectURL blob)
-                     a (js/document.createElement "a")]
-                 (set! (.-href a) href)
-                 (set! (.-download a) (file-name (:title hist)))
-                 (.click a)
-                 (js/setTimeout #(js/URL.revokeObjectURL href) 10000)
-                 (flash! state :done))))
+               (download/save-blob! blob (download/file-name (:title hist) "picture" "png"))
+               (flash! state :done)))
       (.catch (fn [e] (flash! state (str "No snapshot: " (.-message e)))))))
 
 (defn- copy! [state oc hist]

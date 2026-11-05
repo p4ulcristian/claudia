@@ -1,14 +1,16 @@
 (ns claudia.web.scene3d.view
   "The scene3d form's view (its own module, loaded on first use, so pictures without a 3D scene
   cost nothing): the stage, the story bar (play, pause, steps, voice), the legend, subtitles, the
-  part popup with Explain, the overlap check, the style and quality switches, reset view, full
-  screen and the height grip."
+  part popup with Explain, the overlap check, the style and quality switches, recording a video,
+  reset view, full screen and the height grip."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
+            [claudia.web.format :as fmt]
             [claudia.web.fullscreen :as fs]
             [claudia.web.scene3d.bar :as bar]
             [claudia.web.scene3d.engine :as engine]
+            [claudia.web.scene3d.record :as record]
             [claudia.web.scene3d.sources :as sources]
             [claudia.web.scene3d.story :as story]))
 
@@ -23,6 +25,8 @@
    :warn "M10 3.5l7 12.2H3zM10 8.3v3.2M10 13.6v.4"
    :check "M4 10.5l4 4 8-9"
    :close "M5 5l10 10M15 5L5 15"
+   :record "M10 4.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z"
+   :stop "M5.5 5.5h9v9h-9z"
    :full "M3.5 8V3.5H8M12 3.5h4.5V8M16.5 12v4.5H12M8 16.5H3.5V12"
    :exit "M8 3.5V8H3.5M16.5 8H12V3.5M12 16.5V12h4.5M3.5 12H8v4.5"})
 
@@ -36,7 +40,7 @@
 (defn- story-api [api k] (-> @api :story k))
 
 (defn- story-track [ui api secs]
-  (let [{:keys [story idx prog] peeked :peek} @ui
+  (let [{:keys [story idx prog recording] peeked :peek} @ui
         n (count story)]
     [:span.s3-track {:on-mouse-leave #(swap! ui assoc :peek -1)}
      (when (>= peeked 0)
@@ -44,23 +48,23 @@
         (str (inc peeked) ". " (:say (story peeked)))])
      (for [[i w] (map-indexed vector secs)]
        ^{:key i}
-       [:button.s3-seg {:class (when (= i peeked) "peek") :style {:flex-grow w}
+       [:button.s3-seg {:class (when (= i peeked) "peek") :style {:flex-grow w} :disabled recording
                         :aria-label (str "Step " (inc i) " of " n)
                         :on-mouse-enter #(swap! ui assoc :peek i)
                         :on-click #((story-api api :goto) i)}
         [:i {:style {:width (str (bar/seg-fill i idx prog) "%")}}]])]))
 
 (defn- story-bar [ui api]
-  (let [{:keys [story idx playing voice-state muted]} @ui
+  (let [{:keys [story idx playing voice-state muted recording]} @ui
         n (count story)]
     [:span.s3-story
-     [:button.f-tool {:disabled (< idx 1) :title "Previous step" :on-click #((story-api api :prev))} [icon :prev]]
-     [:button.f-tool {:on-click #(if playing ((story-api api :pause)) ((story-api api :play)))}
+     [:button.f-tool {:disabled (or recording (< idx 1)) :title "Previous step" :on-click #((story-api api :prev))} [icon :prev]]
+     [:button.f-tool {:disabled recording :on-click #(if playing ((story-api api :pause)) ((story-api api :play)))}
       [icon (if playing :pause :play)]]
-     [:button.f-tool {:disabled (>= idx (dec n)) :title "Next step" :on-click #((story-api api :next))} [icon :next]]
+     [:button.f-tool {:disabled (or recording (>= idx (dec n))) :title "Next step" :on-click #((story-api api :next))} [icon :next]]
      [story-track ui api (mapv story/estimate-seconds story)]
      (when (str/starts-with? (or voice-state "") "voice")
-       [:button.f-tool {:title (if muted "Voice off: click to hear it" "Mute the voice")
+       [:button.f-tool {:disabled recording :title (if muted "Voice off: click to hear it" "Mute the voice")
                         :on-click #((story-api api :mute) (not muted))}
         [icon (if muted :mute :volume)]])
      (when (seq voice-state) [:span.f-note voice-state])]))
@@ -157,16 +161,32 @@
    (if (= quality "high") "High" "Low")])
 
 (defn- full-button [host full]
-  [:button.f-tool {:title (if full "Leave full screen (Esc)" "Full screen")
-                   :on-click #(fs/toggle! @host)}
-   (if full [:<> [icon :exit] " exit"] [:<> [icon :full] " full screen"])])
+  (let [what (if full "Leave full screen (Esc)" "Full screen")]
+    [:button.f-tool {:title what :aria-label what :on-click #(fs/toggle! @host)}
+     [icon (if full :exit :full)]]))
 
-(defn- tools [ui api host {:keys [animated style quality full] :as state}]
+(defn- record-button
+  "Record: the story from its start (the file downloads when it ends), or the scene until clicked
+  again. While recording: stop, and how long so far."
+  [api {:keys [recording rec-secs story-len]} file]
+  (if recording
+    [:button.f-tool.s3-rec {:title "Stop recording and download the video" :aria-label "Stop recording"
+                            :on-click #((:stop-record! @api))}
+     [icon :stop] (str " " (fmt/duration rec-secs))]
+    (let [what (if (pos? story-len)
+                 "Record the story from its start as a video (it downloads when the story ends)"
+                 "Record a video (click again to stop; it downloads then)")]
+      [:button.f-tool {:title what :aria-label what :on-click #((:record! @api) file)} [icon :record]])))
+
+(defonce ^:private can-record (delay (record/supported?)))
+
+(defn- tools [ui api host {:keys [animated style quality full] :as state} file]
   [:span.s3-tools
    (when animated [motion-tools ui api state])
    [style-button ui api style]
    (when (= style "real") [quality-button ui api quality])
-   [:button.f-tool {:on-click #((:fit! @api))} [icon :reset] " reset view"]
+   (when @can-record [record-button api state file])
+   [:button.f-tool {:title "Reset view" :aria-label "Reset view" :on-click #((:fit! @api))} [icon :reset]]
    [full-button host full]])
 
 (defn- scene-view [ui api host props]
@@ -183,7 +203,7 @@
      (when (and panel (> solids 1)) [overlap-panel state api])
      [:div.s3-bar
       [left-bar ui api state]
-      [tools ui api host state]]]))
+      [tools ui api host state (or (:title props) (:block props))]]]))
 
 (defn- initial-ui []
   {:animated false :running true :speed 2 :error "" :solids 0 :now [] :seen []
@@ -192,7 +212,7 @@
    :quality (if (= "low" (stored "claudia.scene3d.quality")) "low" "high")
    :style (if (= "real" (stored "claudia.scene3d.style")) "real" "diagram")
    :story-len 0 :story [] :idx -1 :prog 0 :peek -1 :playing false :sub ""
-   :voice-state "" :muted (not= "on" (stored engine/voice-key))})
+   :voice-state "" :muted (not= "on" (stored engine/voice-key)) :recording false :rec-secs 0})
 
 (defn- watch-hint!
   "A hint shows for 1.5 s."
@@ -204,8 +224,8 @@
                              (reset! timer (js/setTimeout #(swap! ui assoc :hint "") 1500)))))))
 
 (defn scene3d
-  "props: {:data (the form's data) :server :chat :block :live? (the open chat, so Explain can ask and
-  the scene can read real code)}."
+  "props: {:data (the form's data) :server :chat :block :title (the block's name, for a recording's
+  file) :live? (the open chat, so Explain can ask and the scene can read real code)}."
   [_props]
   (let [host (atom nil)
         api (atom nil)
