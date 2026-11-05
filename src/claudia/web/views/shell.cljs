@@ -7,6 +7,8 @@
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
             [claudia.web.admin :as admin]
+            [claudia.web.face.view :as face]
+            [claudia.web.hooks :as hooks]
             [claudia.web.views.asks :as asks]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
@@ -32,19 +34,6 @@
              (.removeProperty (.-style root) "--hue"))))
      nil)
    [color]))
-
-(defn use-media
-  "Whether the media query matches, kept up to date."
-  [q]
-  (let [[on set-on] (h/use-state #(.-matches (js/matchMedia q)))]
-    (h/use-effect
-     (fn []
-       (let [m (js/matchMedia q)
-             f #(set-on (.-matches m))]
-         (.addEventListener m "change" f)
-         #(.removeEventListener m "change" f)))
-     [q])
-    on))
 
 (defn- keys!
   "Escape stops the running turn, Alt+N starts a new chat, Ctrl+B (⌘B) opens or closes the list."
@@ -103,7 +92,7 @@
   [:button.icon.menu-toggle {:title (if shown? "Hide chats (Ctrl+B)" "Show chats (Ctrl+B)")
                              :aria-expanded shown?
                              :on-click #(rf/dispatch [:sidebar/toggle])}
-   [:svg.burger {:viewBox "0 0 18 18" :aria-hidden true} [:path {:d "M3 4.6h12M3.4 9h11.3M3 13.4h12"}]]])
+   [:f> face/face]])
 
 (defn- split-view [{:keys [phone? folded? chat-w set-chat-w]}]
   [:main.split {:class (when folded? "folded")
@@ -149,8 +138,8 @@
         ro @(rf/subscribe [:read-only?])
         {:keys [settings?]} @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
-        phone? (use-media "(max-width: 679px)")
-        narrow? (use-media "(max-width: 1099px)")
+        phone? (hooks/use-media "(max-width: 679px)")
+        narrow? (hooks/use-media "(max-width: 1099px)")
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Desktop: the drawer.
         shown? (if phone? (= screen :list) drawer?)]

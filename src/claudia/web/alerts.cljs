@@ -10,7 +10,8 @@
   chat."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
-            [reagent.core :as r]))
+            [reagent.core :as r]
+            [claudia.web.rowdiff :as rowdiff]))
 
 ;; The chat colours in hue order (claudia.css --c-*): neighbouring colours get neighbouring notes.
 (def ^:private colours
@@ -113,19 +114,10 @@
 
 ;; ---- watching the chat lists ----
 
-(defn- rows-of [db] (for [[s {:keys [rows]}] (:servers db) [id row] rows] [[s id] row]))
-
-(defn- changes
+(defn changes
   "The chats that finished or started waiting between two states of app-db."
   [before after]
-  (let [was-rows (into {} (rows-of before))]
-    (for [[k row] (rows-of after)
-          :let [was (get was-rows k)]
-          :when was
-          :let [kind (cond (and (:waiting row) (not (:waiting was))) :waiting
-                           (and (:running was) (not (:running row)) (not (:waiting row))) :done)]
-          :when kind]
-      [kind k row])))
+  (filter #(#{:waiting :done} (first %)) (rowdiff/row-events before after)))
 
 (defonce ^:private watching (atom false))
 
