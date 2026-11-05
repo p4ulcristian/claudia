@@ -3,7 +3,7 @@
   as the page shows them (their boxes: background, border, round corners; their words: font,
   colour, place). Coordinates are CSS pixels from the stage's corner; the caller's transform maps
   them into the video. Shadows and filters are left out."
-  (:require [claudia.web.scene3d.recording :as rec]))
+  (:require [claudia.web.scene3d.video :as video]))
 
 (defn- px [v] (or (js/parseFloat v) 0))
 
@@ -56,14 +56,14 @@
       (let [w (subs (.-data n) start end)
             ^js mt (.measureText ctx w)]
         (.fillText ctx w (- (.-left r) (:left o))
-                   (rec/baseline (- (.-top r) (:top o)) (.-height r)
+                   (video/baseline (- (.-top r) (:top o)) (.-height r)
                                  (.-fontBoundingBoxAscent mt) (.-fontBoundingBoxDescent mt)))))))
 
 (defn- words! [^js ctx ^js n ^js cs o]
   (set! (.-font ctx) (font-of cs))
   (set! (.-fillStyle ctx) (.-color cs))
   (set! (.-textBaseline ctx) "alphabetic")
-  (doseq [span (rec/word-spans (.-data n))] (word! ctx n span o)))
+  (doseq [span (video/word-spans (.-data n))] (word! ctx n span o)))
 
 (defn- shown? [^js cs]
   (and (not= "none" (.-display cs)) (not= "hidden" (.-visibility cs)) (pos? (px (.-opacity cs)))))

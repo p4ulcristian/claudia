@@ -71,20 +71,25 @@
     (= "default" (.-permission js/Notification)) (.then (.requestPermission js/Notification) #(popups-allowed?))
     :else (js/Promise.resolve (popups-allowed?))))
 
-(defn- popup! [kind server {:keys [id title]}]
-  (when (popups-allowed?)
-    (let [n (js/Notification. (if (seq title) title "Chat")
-                              #js {:body (if (= kind :done) "Finished" "Waiting for you")
-                                   :tag (str server "/" id) :icon "/app-icon/icon-192.png" :silent true})]
+(defonce on (r/atom {:sounds (= "on" (js/localStorage.getItem "claudia.sounds"))
+                               :popups (and (= "on" (js/localStorage.getItem "claudia.popups")) (popups-allowed?))}))
+
+(defn notify!
+  "A desktop popup (when popups are on and allowed): title, body; tag: one popup per tag at a time;
+  a click brings the window up, opens the chat [server id] and closes it."
+  [title body tag [server id]]
+  (when (and (:popups @on) (popups-allowed?))
+    (let [n (js/Notification. title #js {:body body :tag tag :icon "/app-icon/icon-192.png" :silent true})]
       (set! (.-onclick n) (fn []
                             (js/window.focus)
                             (rf/dispatch [:nav/open [server id]])
                             (.close n))))))
 
-;; ---- the toggles ----
+(defn- popup! [kind server {:keys [id title]}]
+  (notify! (if (seq title) title "Chat") (if (= kind :done) "Finished" "Waiting for you")
+           (str server "/" id) [server id]))
 
-(defonce on (r/atom {:sounds (= "on" (js/localStorage.getItem "claudia.sounds"))
-                               :popups (and (= "on" (js/localStorage.getItem "claudia.popups")) (popups-allowed?))}))
+;; ---- the toggles ----
 
 (defn set-sounds! [v]
   (swap! on assoc :sounds v)

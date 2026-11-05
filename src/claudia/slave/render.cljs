@@ -3,7 +3,10 @@
   camera can save it. The page's own build (out/web of this checkout) is served on a loopback port
   nobody is told about, as a render-only page (claudia.web.render); one headless Chromium, started
   on the first shot and closed after a minute without one, opens it, is handed the scene and shoots
-  it. No browser or no built page: no screenshot, and the reason says why."
+  it. No browser or no built page: no screenshot, and the reason says why.
+
+  A 3D scene's video (claudia.slave.video) opens the same page in a browser of its own; while it
+  is made the page's server stays up and the scene's folders may be read."
   (:require ["node:http" :as http]
             ["node:fs" :as fs]
             ["node:path" :as path]
@@ -58,6 +61,7 @@
       file)))
 
 (defonce ^:private shooting (atom #{})) ; the roots of the scene3d blocks in the picture being shot
+(defonce ^:private held (atom {}))       ; a video being made -> its scene's roots (the server stays up)
 
 (defn scene-roots
   "The roots of the scene3d blocks in a picture (the only folders its screenshot may read)."
@@ -72,7 +76,8 @@
         root (or (.get q "root") "")
         rel (or (.get q "path") "")
         ref (not-empty (.get q "ref"))]
-    (if (or (not (@shooting root)) (not (source/rel-ok? rel)) (and ref (not (source/ref-ok? ref))))
+    (if (or (not (or (@shooting root) (some #(% root) (vals @held))))
+            (not (source/rel-ok? rel)) (and ref (not (source/ref-ok? ref))))
       (io/send-json res 403 {:error "not a folder of this picture"})
       (-> (if (= "1" (.get q "read")) (source/text root rel ref) (source/tree root rel ref))
           (.then #(io/send-json res 200 %))
@@ -96,7 +101,9 @@
 (defonce ^:private idle (atom nil))
 (defonce ^:private queue (atom (js/Promise.resolve nil)))
 
-(defn- base-url []
+(defn base-url
+  "Promise of {:url} of the render page's server (started on first use)."
+  []
   (or @server
       (reset! server
               (js/Promise.
@@ -106,24 +113,61 @@
                    (.listen s 0 "127.0.0.1"
                             #(done {:server s :url (str "http://127.0.0.1:" (.-port (.address s)) "/")}))))))))
 
+(def ^:private software-gl ["--use-gl=angle" "--use-angle=swiftshader" "--enable-unsafe-swiftshader"])
+
+(def ^:private gpu-gls
+  "How a video's browser tries to draw, best first: the GPU through Vulkan (Linux), the platform's
+  own GPU path (a Mac), then software. About ten times faster on a GPU (40 against 400 ms a 1920 x
+  1080 frame, measured)."
+  [["--use-angle=vulkan" "--enable-features=Vulkan" "--ignore-gpu-blocklist"]
+   ["--ignore-gpu-blocklist"]
+   software-gl])
+
+(defn- launch-with
+  "Promise of a headless Chromium (Playwright's, else a system Chrome or Chromium) with args."
+  [args]
+  (let [env (.-env js/process)
+        _ (when (and (not (.-PLAYWRIGHT_BROWSERS_PATH env)) (fs/existsSync system-browsers))
+            (set! (.-PLAYWRIGHT_BROWSERS_PATH env) system-browsers))
+        chromium (.-chromium (js/require "playwright-core"))
+        own (some #(when (and (seq %) (fs/existsSync %)) %) (cons (.-CLAUDIA_CHROME env) chromes))]
+    (-> (.launch chromium #js {:args (clj->js args) :timeout timeout-ms})
+        ;; Playwright's own browser is not installed here: a system Chrome or Chromium.
+        (.catch (fn [e]
+                  (if own
+                    (.launch chromium #js {:args (clj->js args) :executablePath own :timeout timeout-ms})
+                    (throw e)))))))
+
+(defn new-browser
+  "Promise of a new headless Chromium drawing WebGL in software (the screenshots: a server may have
+  no GPU, and a picture is one frame)."
+  []
+  (launch-with software-gl))
+
+(defn- webgl
+  "Promise of what browser b draws WebGL 2 with (its renderer's name), or nil when it cannot."
+  [^js b]
+  (.then (.newPage b)
+         (fn [^js tab]
+           (-> (.evaluate tab "(() => { const c = document.createElement('canvas').getContext('webgl2'); if (!c) return null; const e = c.getExtension('WEBGL_debug_renderer_info'); return e ? c.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'WebGL 2'; })()")
+               (.finally #(.close tab))))))
+
+(defn drawing-browser
+  "Promise of [browser renderer]: a new headless Chromium drawing WebGL on the GPU when this machine
+  lets it, else in software (a video's many frames)."
+  ([] (drawing-browser gpu-gls))
+  ([[args & more]]
+   (-> (launch-with args)
+       (.then (fn [^js b]
+                (.then (webgl b) (fn [r] (if (or r (empty? more)) [b r] (do (.close b) (drawing-browser more)))))))
+       (.catch (fn [e] (if (seq more) (drawing-browser more) (throw e)))))))
+
 (defn- launch []
   (or @browser
-      (let [env (.-env js/process)
-            _ (when (and (not (.-PLAYWRIGHT_BROWSERS_PATH env)) (fs/existsSync system-browsers))
-                (set! (.-PLAYWRIGHT_BROWSERS_PATH env) system-browsers))
-            chromium (.-chromium (js/require "playwright-core"))
-            ;; Software GL: a server has no GPU for a headless browser.
-            args #js ["--use-gl=angle" "--use-angle=swiftshader" "--enable-unsafe-swiftshader"]
-            own (some #(when (and (seq %) (fs/existsSync %)) %) (cons (.-CLAUDIA_CHROME env) chromes))
-            b (-> (.launch chromium #js {:args args})
-                  ;; Playwright's own browser is not installed here: a system Chrome or Chromium.
-                  (.catch (fn [e]
-                            (if own
-                              (.launch chromium #js {:args args :executablePath own})
-                              (throw e))))
-                  (.then (fn [^js b]
-                           (.on b "disconnected" #(reset! browser nil))
-                           b)))]
+      (let [b (.then (new-browser)
+                     (fn [^js b]
+                       (.on b "disconnected" #(reset! browser nil))
+                       b))]
         (.catch b (fn [_] (reset! browser nil)))
         (reset! browser b))))
 
@@ -132,12 +176,26 @@
   (reset! idle
           (js/setTimeout
            (fn []
-             (let [b @browser s @server]
-               (reset! browser nil)
-               (reset! server nil)
-               (some-> s (.then (fn [{^js listener :server}] (.close listener))))
-               (some-> b (.then (fn [^js b] (.close b))) (.catch (fn [_])))))
+             (if (seq @held)
+               (later)
+               (let [b @browser s @server]
+                 (reset! browser nil)
+                 (reset! server nil)
+                 (some-> s (.then (fn [{^js listener :server}] (.close listener))))
+                 (some-> b (.then (fn [^js b] (.close b))) (.catch (fn [_]))))))
            idle-ms)))
+
+(defn hold!
+  "A video is being made (k) of a scene with these folders (roots): the page's server stays up and
+  the folders may be read until release!."
+  [k roots]
+  (swap! held assoc k roots))
+
+(defn release!
+  "The video k is made: its folders are closed again, and the server goes after a minute idle."
+  [k]
+  (swap! held dissoc k)
+  (later))
 
 ;; Sent to the page as source: a plain function, not compiled ClojureScript.
 (def ^:private draw-fn (js/Function. "a" "return window.__draw(a[0], a[1]);"))

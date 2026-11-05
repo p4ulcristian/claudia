@@ -12,6 +12,8 @@
             ["three/examples/jsm/controls/OrbitControls.js" :refer [OrbitControls]]
             ["three/examples/jsm/renderers/CSS2DRenderer.js" :refer [CSS2DObject CSS2DRenderer]]
             ["three/examples/jsm/environments/RoomEnvironment.js" :refer [RoomEnvironment]]
+            [claudia.shared.narration :as narration]
+            [claudia.web.scene3d.clock :as clock]
             [claudia.web.scene3d.code :as code]
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.scene3d.data :as data]
@@ -20,7 +22,6 @@
             [claudia.web.scene3d.maths :as m]
             [claudia.web.scene3d.overlap :as overlap]
             [claudia.web.scene3d.person :as person]
-            [claudia.web.scene3d.record :as record]
             [claudia.web.scene3d.sources :as sources]
             [claudia.web.scene3d.story :as story]
             [claudia.web.scene3d.vm :as vm]
@@ -626,11 +627,12 @@
        :world nil :faces {} :raised nil :reader nil
        :focus #{} :cam nil :checker nil :flagged "" :bad #{} :chosen nil
        :frames 0 :scanSeconds scan-seconds
-       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0 :rec nil})
+       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0})
 
 (defn- make-scene
-  "Everything a running scene holds."
-  [^js el ui data0]
+  "Everything a running scene holds. video: {:seconds {[instruction text] seconds}} when a video is
+  made off screen (the narrator only notes what it would say), else nil."
+  [^js el ui data0 video]
   (let [stage (.querySelector el ".s3-stage")
         camera (THREE/PerspectiveCamera. 45 1 0.05 500)
         {:keys [renderer labels]} (make-renderer stage)
@@ -643,14 +645,18 @@
             :root root :controls controls :st (initial-state ui data0)
             :by-id (atom {}) :k-of (atom {}) :fades (atom []) :dim-target (atom {})
             :ever-seen (atom #{}) :shifts (atom {}) :pressed (atom nil)
-            :narrator (voice/make) :voice-ready (voice/available?)})))
+            :narrator (if video (voice/given (:seconds video)) (voice/make))
+            :voice-ready (if video (js/Promise.resolve true) (voice/available?))})))
 
 ;; ---- the running scene's steps ----
 
-(declare draw! tick! move-parts! build! new-story! start-step! stop-record!)
+(declare draw! tick! move-parts! build! new-story! start-step!)
 
-(defn- want! "Draw on the next frame (once)." [{:keys [^js st] :as sc}]
-  (when (zero? (.-raf st)) (set! (.-raf st) (js/requestAnimationFrame #(draw! sc %)))))
+(defn- want!
+  "Draw on the next frame (once). A video's maker draws every frame itself."
+  [{:keys [^js st] :as sc}]
+  (when (and (zero? (.-raf st)) (not (clock/stepped?)))
+    (set! (.-raf st) (js/requestAnimationFrame #(draw! sc (clock/now))))))
 
 (defn- ui! [sc & kvs] (apply swap! (:ui sc) assoc kvs))
 (defn- diagram? [{:keys [^js st]}] (= "diagram" (.-style st)))
@@ -901,7 +907,7 @@
   [{:keys [^js st ^js root k-of fades] :as sc} n animate?]
   (let [ids (all-ids sc)
         plan (data/reveal-plan ids (story/visible-at (.-steps st) n ids) @k-of @fades animate?
-                               (js/performance.now))]
+                               (clock/now))]
     (reset! k-of (:k-of plan))
     (reset! fades (:fades plan))
     (doseq [[id k] (:jump plan)] (set-reveal! sc id k))
@@ -960,7 +966,7 @@
   [{:keys [^js st ^js root ^js camera ^js controls] :as sc} c]
   (.updateMatrixWorld root true)
   (let [[^js target dist dir] (or (read-goal sc c) (conj (camera-goal sc c) (camera-dir sc c)))]
-    (set! (.-cam st) {:at (js/performance.now) :dur 1200
+    (set! (.-cam st) {:at (clock/now) :dur 1200
                       :p0 (.clone (.-position camera)) :t0 (.clone (.-target controls))
                       :p1 (.addScaledVector (.clone target) dir dist) :t1 target}))
   (want! sc))
@@ -978,10 +984,12 @@
           (apply-reveal! e (.-k e)))))
     (want! sc)))
 
-(defn- start-tick! [{:keys [^js st] :as sc}] (set! (.-sTick st) (js/setInterval #(tick! sc) 100)))
+(defn- start-tick!
+  "The story's clock ticks every 100 ms; a video's maker ticks it every frame (-1 marks it on)."
+  [{:keys [^js st] :as sc}]
+  (set! (.-sTick st) (if (clock/stepped?) -1 (js/setInterval #(tick! sc) 100))))
 (defn- stop-tick! [{:keys [^js st]}] (js/clearInterval (.-sTick st)) (set! (.-sTick st) 0))
-(defn- end-story! [{:keys [^js st] :as sc}]
-  (set! (.-sPlaying st) false) (stop-tick! sc) (ui! sc :playing false) (stop-record! sc))
+(defn- end-story! [{:keys [^js st] :as sc}] (set! (.-sPlaying st) false) (stop-tick! sc) (ui! sc :playing false))
 (defn- focus-of [{:keys [by-id]} step] (set (filter #(story/matches-any? (:focus step) %) (keys @by-id))))
 
 (defn- pose-people!
@@ -1000,7 +1008,7 @@
   [{:keys [^js st] :as sc} mine seconds]
   (when (= mine (.-sToken st))
     (set! (.-sDur st) (+ seconds story/gap-seconds))
-    (set! (.-sLast st) (js/performance.now))
+    (set! (.-sLast st) (clock/now))
     (when (and (.-sPlaying st) (zero? (.-sTick st))) (start-tick! sc))
     (want! sc)))
 
@@ -1078,7 +1086,7 @@
   [{:keys [^js st] :as sc}]
   (let [c (data/tick {:playing (.-sPlaying st) :dur (.-sDur st) :elapsed (.-sElapsed st) :last (.-sLast st)
                       :idx (.-sIdx st) :n (count (.-steps st))}
-                     (js/performance.now))]
+                     (clock/now))]
     (set! (.-sElapsed st) (:elapsed c))
     (set! (.-sLast st) (:last c))
     (when (some? (:prog c)) (ui! sc :prog (:prog c)))
@@ -1092,7 +1100,7 @@
 
 (defn- resume-story! [{:keys [^js st narrator] :as sc}]
   ((:resume narrator))
-  (set! (.-sLast st) (js/performance.now))
+  (set! (.-sLast st) (clock/now))
   (when (zero? (.-sTick st)) (start-tick! sc))
   (when (zero? (.-sDur st)) (start-step! sc (.-sIdx st) false)))
 
@@ -1172,7 +1180,7 @@
   [{:keys [^js st] :as sc} d]
   (let [steps (story/normalize (:story d))]
     (set! (.-steps st) steps)
-    (set! (.-sInstruction st) (when (string? (:voice d)) (:voice d)))
+    (set! (.-sInstruction st) (narration/voice-of d))
     (ui! sc :story-len (count steps) :story steps :autoplay (:autoplay d))
     (if (empty? steps) (clear-story! sc) (keep-story! sc d steps))))
 
@@ -1260,23 +1268,12 @@
   (.render renderer scene camera)
   (.render labels scene camera))
 
-(defn- record-frame!
-  "While recording: the frame just drawn goes into the video, and the button's clock follows
-  (once a second). -> whether it recorded."
-  [{:keys [^js st ui] :as sc}]
-  (when-let [r (.-rec st)]
-    (record/frame! r)
-    (let [secs (js/Math.floor (record/seconds r))]
-      (when (not= secs (:rec-secs @ui)) (ui! sc :rec-secs secs)))
-    true))
-
 (defn- draw!
   "One frame: the script, fades, people, camera, focus pulse, dims, flows, the orbit, then drawing
-  and labels (and the recording's frame); another frame comes while anything still moves, and
-  every frame while recording."
+  and labels; another frame comes while anything still moves."
   [{:keys [^js st ^js controls] :as sc} now]
   (set! (.-raf st) 0)
-  (let [wall (js/performance.now)
+  (let [wall now
         ticking (script-frame! sc now)
         _ (set! (.-last st) (if ticking now 0))
         fading (fade-frame! sc wall)
@@ -1287,9 +1284,8 @@
         flowing (flow-frame! sc wall)
         turning (.update controls)
         _ (render! sc)
-        recording (record-frame! sc)
         easing (declutter! sc)]
-    (when (or ticking fading posing flying pulsing dimming flowing turning easing recording) (want! sc))))
+    (when (or ticking fading posing flying pulsing dimming flowing turning easing) (want! sc))))
 
 ;; ---- input ----
 
@@ -1446,7 +1442,6 @@
   (.dispose env)
   (.dispose pmrem)
   (stop-tick! sc)
-  (stop-record! sc)
   ((:close narrator))
   (stop-script! sc)
   (dispose! root)
@@ -1461,26 +1456,29 @@
     (set-quality! sc (if (.-high st) "high" "low"))
     (set-data! sc (.-data st))))
 
-(defn- record!
-  "Starts a video of the scene (title: the file's name). A story restarts and the video ends with
-  it; its voice goes in when it is on."
-  [{:keys [^js st el ^js renderer narrator] :as sc} title]
-  (when-not (.-rec st)
-    (let [story? (seq (.-steps st))
-          audio (when (and story? (not (.-sMuted st))) ((:tap narrator)))]
-      (set! (.-rec st) (record/start! el (.-domElement renderer) audio title))
-      (ui! sc :recording true :rec-secs 0)
-      (when story? (restart-story! sc))
-      (want! sc))))
+(defn- video-begin!
+  "A video starts: the story from step 1 (when there is one), the first frame drawn."
+  [{:keys [^js st] :as sc}]
+  (when (seq (.-steps st)) (restart-story! sc))
+  (draw! sc (clock/now)))
 
-(defn- stop-record!
-  "Ends the video; its file downloads."
-  [{:keys [^js st narrator] :as sc}]
-  (when-let [r (.-rec st)]
-    (set! (.-rec st) nil)
-    ((:untap narrator))
-    (record/stop! r)
-    (ui! sc :recording false)))
+(defn- video-step!
+  "The video's next frame, ms after the last: the clock moves on, the story ticks, the frame is
+  drawn (paint it into the video right after, while the drawing is there)."
+  [{:keys [^js st] :as sc} ms]
+  (clock/step! ms)
+  (when-not (zero? (.-sTick st)) (tick! sc))
+  (draw! sc (clock/now)))
+
+(defn- video-api
+  "What a video's maker drives: begin, step, whether the story still plays, what was said when."
+  [{:keys [^js st ^js renderer narrator] :as sc}]
+  {:begin! #(video-begin! sc)
+   :step! #(video-step! sc %)
+   :playing? #(boolean (.-sPlaying st))
+   :steps #(.-steps st)
+   :said #(deref (:said narrator))
+   :gl (.-domElement renderer)})
 
 (defn- story-api [{:keys [^js st] :as sc}]
   {:play #(story-play! sc)
@@ -1492,11 +1490,17 @@
 
 (defn start!
   "Builds the view inside `el` (which holds a .s3-stage). ui: the view's state atom; rd: the reads
-  of real code (claudia.web.scene3d.sources/reader, nil outside a chat). -> the api map."
-  [^js el ui data0 rd]
-  (let [{:keys [^js st] :as sc} (make-scene el ui data0)
+  of real code (claudia.web.scene3d.sources/reader, nil outside a chat); video: for a video made off
+  screen, {:seconds {[instruction text] seconds}} of the narrator's clips (the clock is stepped,
+  the story waits to be begun, the api holds :video). -> the api map."
+  [^js el ui data0 rd video]
+  (when video (clock/start-stepping!))
+  (let [{:keys [^js st] :as sc} (make-scene el ui data0 video)
         input (listen! sc)]
     (set! (.-reader st) rd)
+    (when video
+      (set! (.-sMuted st) (empty? (:seconds video)))
+      (set! (.-sAutoplay st) true))
     (size! sc)
     (set-quality! sc (:quality @ui))
     (set-data! sc data0)
@@ -1508,7 +1512,6 @@
      :select! #(select! sc %)
      :quality! #(set-quality! sc %)
      :style! #(set-style! sc %)
-     :record! #(record! sc %)
-     :stop-record! #(stop-record! sc)
+     :video (when video (video-api sc))
      :story (story-api sc)
      :destroy! #(destroy! sc input)}))

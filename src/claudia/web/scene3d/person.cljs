@@ -12,6 +12,7 @@
   (:require ["three" :as THREE]
             ["three/examples/jsm/loaders/GLTFLoader.js" :refer [GLTFLoader]]
             ["three/examples/jsm/utils/SkeletonUtils.js" :as SkeletonUtils]
+            [claudia.web.scene3d.clock :as clock]
             [claudia.web.scene3d.ink :as ink]
             [claudia.web.scene3d.maths :as m]
             [claudia.web.scene3d.poses :as poses]))
@@ -399,7 +400,7 @@
 ;; ---- the person's api ----
 
 (defn- set-pose! [{:keys [state]} spec seconds]
-  (swap! state poses/start-move spec seconds (js/performance.now)))
+  (swap! state poses/start-move spec seconds (clock/now)))
 
 (defn- update!
   "One frame of the pose (a glide, or targets that follow parts). -> whether it still glides."

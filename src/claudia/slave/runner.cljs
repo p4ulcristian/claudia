@@ -16,6 +16,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.search :as search]
             [claudia.slave.uploads :as uploads]
+            [claudia.slave.video :as video]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
             [claudia.slave.meta :as meta]
@@ -256,6 +257,7 @@
                                  :version h/version :commit h/commit})
       :secret-read (secret-read req res who)
       nil (cond
+            (video/handle req res url who) nil
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil
             (api/handle req res who) nil
@@ -302,6 +304,7 @@
 (defn main [& _]
   (store/open! data-dir)
   (uploads/set-root! data-dir)
+  (video/set-root! data-dir)
   (search/open! data-dir)
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
