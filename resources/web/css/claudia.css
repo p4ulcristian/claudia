@@ -560,3 +560,39 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .pair-state.fetched, .pair-state.on-WireGuard { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .pair-state.peer-up { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .pair-state.waiting-for-peer { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+
+/* ---------- The Systems popup (claudia.web.views.systems) ----------
+   One card per machine: the cores as bars (user, system, steal filled; waiting on disk faint),
+   then memory, disks, speeds, cards, temperatures and Claudia's own processes. */
+.chat-menu.systems-pop { width: 380px; grid-template-columns: minmax(0, 1fr); overflow-y: auto; gap: 8px; }
+.sys-card > * { min-width: 0; }
+.sys-card { display: grid; gap: 5px; padding: 8px 8px 9px; border-radius: 10px; background: var(--bg2); transition: opacity 0.3s; }
+.sys-card.stale { opacity: 0.55; filter: grayscale(0.7); }
+.sys-card.off { opacity: 0.6; }
+.sys-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sys-name { font: 700 16px/1.1 var(--hand); color: var(--fg); }
+.sys-sub { min-width: 0; font: 11px/1.2 var(--mono); color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-meta { font: 11px/1.2 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-error { font-size: 11.5px; color: var(--amber); overflow-wrap: anywhere; }
+.sys-cores { display: grid; gap: 2px; height: 46px; margin: 2px 0 4px; }
+.sys-cores:has(.sys-core:nth-child(33)) { height: auto; grid-auto-rows: 30px; }
+.sys-core { position: relative; display: flex; flex-direction: column-reverse; height: 100%; min-width: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.sys-core i { display: block; flex: none; transition: height 0.6s var(--ease); }
+.sys-core i.user { background: var(--green); }
+.sys-core i.sys { background: var(--red); }
+.sys-core i.steal { background: var(--violet); }
+.sys-core i.iowait { background: color-mix(in srgb, var(--amber) 45%, transparent); }
+.sys-row { display: grid; grid-template-columns: 74px 1fr 136px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.sys-row .m-bar > span { background: var(--blue); transition: width 0.6s var(--ease); }
+.sys-row.amber .m-bar > span { background: var(--amber); }
+.sys-row.red .m-bar > span { background: var(--red); }
+.sys-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-num { font: 11.5px/1.2 var(--mono); color: var(--fg); text-align: right; white-space: nowrap; }
+.sys-rate { grid-template-columns: 74px 1fr 1fr; }
+.sys-line { grid-template-columns: 74px 1fr; }
+.sys-text { font: 11.5px/1.2 var(--mono); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-chips, .sys-own { display: flex; flex-wrap: wrap; gap: 4px; }
+.sys-chip { padding: 2px 6px; border-radius: 6px; background: var(--panel); font: 11px/1.3 var(--mono); color: var(--muted); }
+.sys-chip b { font-weight: 500; color: var(--fg); }
+.sys-chip.amber { color: var(--amber); }
+.sys-chip.red { color: var(--red); }

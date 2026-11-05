@@ -1,8 +1,8 @@
 (ns claudia.hub.ops
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
-  Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…)
-  and GitHub's webhook (/hub/github)."
+  Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…),
+  the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
             [claudia.shared.text :as text]
@@ -16,6 +16,7 @@
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
             [claudia.hub.store :as store]
+            [claudia.hub.systems :as systems]
             [claudia.hub.tokens :as tokens]))
 
 (def ^:private max-body (* 64 1024))
@@ -366,6 +367,10 @@
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
+                 (= pathname "/hub/gate/system")
+                 (cond (not admin?) (fail res 403 "admins only")
+                       (not= "GET" (.-method req)) (fail res 405 "GET only")
+                       :else (systems/gate-sample res))
                  (str/starts-with? pathname "/hub/claude-token")
                  (token-call req res pathname email)
                  :else (fail res 404 "not found"))))

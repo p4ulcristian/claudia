@@ -59,6 +59,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     to the shadow-cljs server) is refused: reload by hand. Instead of: importing Shiki and Vega from
     jsdelivr by major version at run time, where a bad release would run as the signed-in person.
 
+12. Systems popup (2026-11-05): a computer on the rail, above the sounds, opens a card per server
+    the person may use (the access grid) and, for admins, one for the gate. Each card asks every 2 s
+    while open (`GET /hub/servers/<name>/system`, `GET /hub/gate/system`) and shows how old its
+    numbers are; older than 8 s greys it, a server that does not answer says why. Every server's
+    front reads its machine straight from the kernel (`claudia.node.proc`, `claudia.node.system`):
+    each core's use as the difference of two `/proc/stat` reads 2 s apart (the first after a quiet
+    spell: 1 s), split into user, system, steal and waiting on disk (not counted as busy); memory
+    used = MemTotal − MemAvailable; real filesystems from `/proc/self/mountinfo`, one per device,
+    space by `statfs` (used of used + available, as `df` counts it); disk and network speed from
+    `/proc/diskstats` and `/proc/net/dev` over the same window (physical disks and network cards
+    only); CPU and drive temperatures from hwmon; NVIDIA cards by `nvidia-smi`; Claudia's own
+    processes (front, runners, hosts, and as chats everything the hosts started) by resident memory.
+    It reads only while someone asked in the last 30 s. Instead of: the `systeminformation`
+    library, which runs `df`, `lsblk` and `nvidia-smi` per call and measures CPU since the
+    previous call from anywhere in the process; an admin-only view.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

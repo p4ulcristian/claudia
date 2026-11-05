@@ -6,6 +6,7 @@
             ["node:net" :as net]
             ["node:fs" :as fs]
             [clojure.string :as str]
+            [claudia.node.system :as system]
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
             [claudia.slave.tokens :as tokens]))
@@ -133,6 +134,15 @@
            #(io/send-json res 200 {:tokens (newest-heard (map (fn [m] (update-keys m name)) %))}))
     (io/send-json res 405 {:error "GET only"})))
 
+(defn- system-sample
+  "The hub's own call (README decision 12): this machine's newest numbers for the Systems popup."
+  [^js req ^js res]
+  (if (= "GET" (.-method req))
+    (-> (system/latest!)
+        (.then #(io/send-json res 200 %))
+        (.catch #(io/send-json res 500 {:error (.-message %)})))
+    (io/send-json res 405 {:error "GET only"})))
+
 (defn- on-request [^js req ^js res]
   (let [{:keys [status error target read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
@@ -142,6 +152,7 @@
       (if (= "POST" (.-method req)) (update-check req res) (io/send-json res 405 {:error "POST only"}))
       (= url "/api/claude-token/current") (token-current req res)
       (= url "/api/claude-token/limits") (token-limits req res)
+      (= url "/api/system") (system-sample req res)
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})

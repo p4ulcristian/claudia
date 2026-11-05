@@ -7,6 +7,7 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.pure.usage :as pure]))
 
@@ -27,11 +28,6 @@
       0 (str "today " hh-mm)
       1 (str "tomorrow " hh-mm)
       (str (.toLocaleDateString d js/undefined #js {:weekday "short" :day "numeric" :month "short"}) ", " hh-mm))))
-
-(defn- use-now! []
-  (let [[now set-now] (h/use-state (js/Date.now))]
-    (h/use-effect (fn [] (let [t (js/setInterval #(set-now (js/Date.now)) 1000)] #(js/clearInterval t))) [])
-    now))
 
 (def ^:private compact-icon
   "M17 7.5v6m-3.2-3.2 3.2 3.2 3.2-3.2M17 26.5v-6m-3.2 3.2 3.2-3.2 3.2 3.2M10.5 17h13")
@@ -73,7 +69,7 @@
    [pop-meter "Week" week now]
    [pop-meter "5-hour" five now]])
 
-(defn- pop-place
+(defn pop-place
   "Where the popup opens by the rings in box: below them (the list's header) or beside them (the rail)."
   [^js box beside?]
   (let [rc (.getBoundingClientRect box)]
@@ -93,7 +89,7 @@
   the page has it), by the rings in box; hover a token for how fresh its numbers are."
   [{:keys [box beside? close]}]
   (let [menu (h/use-ref nil)
-        now (use-now!)
+        now (hooks/use-now)
         rows (pop-rows @(rf/subscribe [:tokens]) @(rf/subscribe [:live-limits]))]
     (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
     (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t)) (some-> (.-current box) (.contains t))))
@@ -108,7 +104,7 @@
   "The list header's two rings (5-hour, week): one button that opens every token's limits."
   []
   (let [limits @(rf/subscribe [:limits])
-        now (use-now!)
+        now (hooks/use-now)
         shown (pure/two limits)
         [open? set-open] (h/use-state false)
         box (h/use-ref nil)]
@@ -167,7 +163,7 @@
         tokens @(rf/subscribe [:tokens])
         account (get-in tokens [:inUse :name])
         plan (if account (str account "'s plan") "Plan")
-        now (use-now!)]
+        now (hooks/use-now)]
     (when (or context (seq limits))
       [:div.meters
        (when context (context-meter context))
@@ -188,7 +184,7 @@
   (let [limits @(rf/subscribe [:limits])
         oc @(rf/subscribe [:open-chat])
         ro @(rf/subscribe [:read-only?])
-        now (use-now!)
+        now (hooks/use-now)
         [open? set-open] (h/use-state false)
         box (h/use-ref nil)]
     (when (or (seq limits) (get-in oc [:state :context]))

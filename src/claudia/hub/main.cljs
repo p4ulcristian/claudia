@@ -15,6 +15,7 @@
             [claudia.hub.pairing :as pairing]
             [claudia.hub.pass :as pass]
             [claudia.hub.push :as push]
+            [claudia.hub.systems :as systems]
             [claudia.hub.narrate :as narrate]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
@@ -90,8 +91,8 @@
     (and (not ws?) (= rest-path "/ws")) {:status 426 :error "a WebSocket upgrade is needed"}
     (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
-    ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits), never a page's.
-    (#{"/api/update-check" "/api/claude-token/current" "/api/claude-token/limits"} rest-path) {:status 404 :error "not found"}
+    ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
+    (#{"/api/update-check" "/api/claude-token/current" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
@@ -134,14 +135,24 @@
    :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
    :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
+(defn- server-call
+  "/hub/servers/<name>/state (does its front answer) and /hub/servers/<name>/system (its numbers),
+  for a server this person may use."
+  [^js res person email server-name what]
+  (if-let [server (config/server-of person server-name)]
+    (if (= what "state")
+      (pass/up? server email #(io/send-json res 200 {:up %}))
+      (systems/server-sample server res))
+    (io/send-json res 403 {:error (str "no access to " server-name)})))
+
 (defn- hub-api [^js req ^js res pathname]
-  (let [[_ state-of] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/state$" pathname)
+  (let [[_ server-name what] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/(state|system)$" pathname)
         email (caller req)
         group-admin (admin-group? req)
         person (or (some-> email config/person)
                    (when (and email group-admin) {:email email :name email :admin true :servers []}))
         admin? (boolean (or (:admin person) group-admin))
-        own? (or (= pathname "/hub/me") state-of)]
+        own? (or (= pathname "/hub/me") server-name)]
     (cond
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
@@ -149,13 +160,8 @@
       (cross-site? req) (io/send-json res 403 {:error "cross-site request"})
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
       (not own?) (ops/call req res pathname email admin?)
-
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
-
-      :else
-      (if-let [server (config/server-of person state-of)]
-        (pass/up? server email #(io/send-json res 200 {:up %}))
-        (io/send-json res 403 {:error (str "no access to " state-of)})))))
+      :else (server-call res person email server-name what))))
 
 (defn- on-request [web-root ^js req ^js res]
   (let [[pathname query] (split-url (.-url req))]

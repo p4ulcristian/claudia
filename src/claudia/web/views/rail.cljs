@@ -1,7 +1,7 @@
 (ns claudia.web.views.rail
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): + for a new chat, the
   search, then a circle per chat with its title under it and, on the hub, its server's name; passive
-  (ash) chats last, above a chalk line. At its foot: sounds, the Claude subscription every server runs on (the
+  (ash) chats last, above a chalk line. At its foot: the Systems popup (claudia.web.views.systems), sounds, the Claude subscription every server runs on (the
   hub keeps it; a click switches it; the Forms window stays in Settings), the usage rings. Circles
   slide to their new places when the order changes; a new one grows in."
   (:require [clojure.string :as str]
@@ -14,6 +14,7 @@
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.sidebar :as sidebar]
+            [claudia.web.views.systems :as systems]
             [claudia.web.views.usage :as usage]))
 
 (defn- use-slide!
@@ -147,6 +148,7 @@
       (for [[i r] (map-indexed vector rows)]
         ^{:key (str (:server r) "/" (:id r))}
         [rail-chat (assoc m :i i) r])]
+     [:f> systems/systems-button]
      (sound-button (:sounds @alerts/on))
      (when-not ro [:f> plan-button])
      [:f> usage/rail-meters]]))
