@@ -1,5 +1,6 @@
 (ns claudia.web.hooks
-  "React hooks the views share: an element's size, the time ticking, and a form's live poll of its server."
+  "React hooks the views share: an element's size, a media query, the time ticking, and a form's live
+  poll of its server."
   (:require [reagent.hooks :as h]
             [claudia.web.api :as api]))
 
@@ -15,6 +16,19 @@
          (.observe ro el)
          #(.disconnect ro))))
    deps))
+
+(defn use-media
+  "Whether the media query matches, kept up to date."
+  [q]
+  (let [[on set-on] (h/use-state #(.-matches (js/matchMedia q)))]
+    (h/use-effect
+     (fn []
+       (let [m (js/matchMedia q)
+             f #(set-on (.-matches m))]
+         (.addEventListener m "change" f)
+         #(.removeEventListener m "change" f)))
+     [q])
+    on))
 
 (defn use-width
   "The element's width in px (clientWidth), kept up to date; 0 until it is measured."

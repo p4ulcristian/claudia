@@ -438,13 +438,14 @@ code, pre { font-family: var(--mono); }
 .act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
 .rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
 
-/* The menu button: three chalk strokes, centred over the closed rail; a chalk ring on hover. */
-.menu-toggle { width: 32px; height: 32px; border-radius: 50%; color: var(--fg); --ring: var(--chalk-c32-2); --ink: var(--chalk-c, var(--chalk)); }
+/* The menu button: Claudia's face (claudia.web.face), centred over the closed rail; a chalk ring on
+   hover. Her effects (bubbles, sparkles, z z z) spill out of the button, so nothing clips her. */
+.menu-toggle { width: 32px; height: 32px; padding: 0; border-radius: 50%; color: var(--fg); overflow: visible; --ring: var(--chalk-c32-2); --ink: var(--chalk-c, var(--chalk)); }
+.menu-toggle .face { width: 38px; height: 38px; margin: -3px; overflow: visible; pointer-events: none; display: block; }
 .menu-toggle:hover { background: none; }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
 /* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
-.burger, .rail-forms svg, .form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
-.burger { width: 18px; height: 18px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.rail-forms svg, .form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 
 @keyframes breathe { 50% { opacity: 0.35; } }
 @keyframes blink { 50% { opacity: 0; } }
