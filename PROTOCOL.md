@@ -98,6 +98,8 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 | `GET /hub/narrate` | `{ voice: bool }`: a voice service is set up (`HUB_TTS_URL` and its token) |
 | `POST /hub/narrate` `{ text, instruction? }` | the line as speech: raw 16-bit mono PCM at 24 kHz (`audio/L16;rate=24000;channels=1`, `x-seconds`); `instruction` = a story's `voice` (one reference clip is made from it, every line is a clone of it). Clips are kept in `HUB_DATA/narration` by their text. 400 without text, 501 without a voice, 502 when the voice service fails. The service's route is `<HUB_TTS_URL>/v1/audio/speech` (form fields `text`, and `ref_audio` + `ref_text` for a cloned voice, or `instruction`) |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
+| `GET /hub/servers/:name/system` | that server's newest `Sample` (from its front's `GET /api/system`, 4 s); 502 `{ error }` when the front is not reached or fails; 403 when not in the person's list |
+| `GET /hub/gate/system` | admins: the gate's own `Sample` (the hub reads its machine itself); 403 for others |
 | `ANY /s/<server>/api/…` | passed to that front's `/api/…`, bodies streamed both ways (refused 403 if not in the person's list; 502 when the front is not reachable) |
 | `WS /s/<server>/ws` | passed to that front's `/ws`; the front's own refusal (status and body) reaches the page; frames pass as they are, close codes too |
 
@@ -106,8 +108,8 @@ files are served without either check (they hold no data). The hub listens on `H
 (default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
-`/s/<server>/api/update-check`, `/s/<server>/api/claude-token/current` and
-`/s/<server>/api/claude-token/limits` are refused (404): only
+`/s/<server>/api/update-check`, `/s/<server>/api/claude-token/current`,
+`/s/<server>/api/claude-token/limits` and `/s/<server>/api/system` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -164,10 +166,19 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `GET /api/claude-token/current` | the front, the hub only: `{ name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
 | `PUT /api/claude-token/current` `{ name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
+| `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
 | `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
 | `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
+
+`Sample` (README decision 12; sizes and speeds in bytes and bytes per second, shares in percent):
+`{ at, age (ms since it was read, when answered), window (ms the use covers), uptime (s),
+cpu: { model, load: [1, 5, 15 min], all: Share, cores: [Share] }, memory: { total, available, used,
+cached, swapTotal, swapUsed }, disks: [{ mount, fs, source, size, used, avail }], io: { read, write },
+net: { rx, tx }, temps: [{ name, label, c }], gpus: [{ index, name, util, memUsed, memTotal, temp, power }],
+claudia: [{ kind: front|runner|host|chats|hub, count, rss }] }`; `Share` = `{ busy, user, sys, iowait, steal }`
+(busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null.
 
 `Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
 running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:

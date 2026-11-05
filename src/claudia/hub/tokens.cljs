@@ -10,13 +10,12 @@
   Without a key file the hub keeps no tokens and leaves the servers' token files alone."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
-            ["node:http" :as http]
             [clojure.string :as str]
             [claudia.hub.config :as config]
             [claudia.hub.store :as store]
             [claudia.node.crypto :refer [token-hash]]
             [claudia.node.env :refer [env]]
-            [claudia.shared.protocol :as protocol]))
+            [claudia.hub.front :as front]))
 
 (defonce ^:private key-bytes (atom nil))
 
@@ -90,30 +89,6 @@
 
 ;; ---- the servers' fronts ----
 
-(defn- request-options [server method path text]
-  #js {:host (:host server) :port (:port server) :method method :path path :timeout 5000
-       :headers (clj->js (cond-> {"accept" "application/json"}
-                           text (assoc "content-type" "application/json"
-                                       "content-length" (js/Buffer.byteLength text))))})
-
-(defn- answer-body [chunks]
-  (or (try (protocol/read-json (.toString (js/Buffer.concat chunks) "utf8")) (catch :default _ nil)) {}))
-
-(defn- front-call
-  "Promise of [status body-map] of a hub-only call on a server's front (5 s), or [0 {:error}]."
-  [server method path body]
-  (js/Promise.
-   (fn [done]
-     (let [text (when body (protocol/write-json body))
-           on-answer (fn [^js res]
-                       (let [chunks #js []]
-                         (.on res "data" #(.push chunks %))
-                         (.on res "end" #(done [(.-statusCode res) (answer-body chunks)]))))
-           ^js req (http/request (request-options server method path text) on-answer)]
-       (.on req "timeout" #(.destroy req (js/Error. "no answer in 5 s")))
-       (.on req "error" #(done [0 {:error (.-message %)}]))
-       (.end req text)))))
-
 (defn same-token?
   "Whether a server already runs on the token in use (same name and same switch time)."
   [have in-use]
@@ -130,9 +105,10 @@
 (defn- write-token!
   "Promise of [status body]: the token in use written to the server."
   [server in-use]
-  (-> (front-call server "PUT" "/api/claude-token/current"
+  (-> (front/call server "PUT" "/api/claude-token/current"
                   {:name (:name in-use) :by (:by in-use) :at (:at in-use)
-                   :token (unseal @key-bytes (:key in-use) (store/claude-token-sealed (:key in-use)))})
+                   :token (unseal @key-bytes (:key in-use) (store/claude-token-sealed (:key in-use)))}
+                  5000)
       (.then (fn [[status body :as answer]]
                (when (= 200 status) (js/console.log (str "tokens: " (:name server) " now on \"" (:name body) "\"")))
                answer))))
@@ -140,7 +116,7 @@
 (defn- sync-server!
   "Makes one server's token in use the hub's: asks what it has, writes it when that differs."
   [server in-use]
-  (-> (front-call server "GET" "/api/claude-token/current" nil)
+  (-> (front/call server "GET" "/api/claude-token/current" nil 5000)
       (.then (fn [[status have :as answer]]
                (if (or (not= 200 status) (same-token? have in-use)) answer (write-token! server in-use))))
       (.then #(swap! synced assoc (:name server) (sync-record % (js/Date.now))))
@@ -165,7 +141,7 @@
 (defn- collect-limits!
   "Promise: the server's last heard limits per token kept, when newer than the hub's."
   [server]
-  (-> (front-call server "GET" "/api/claude-token/limits" nil)
+  (-> (front/call server "GET" "/api/claude-token/limits" nil 5000)
       (.then (fn [[status body]]
                (when (= 200 status)
                  (doseq [[k limits at] (heard-rows (hash->key) (:tokens body))]

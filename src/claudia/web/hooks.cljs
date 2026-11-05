@@ -1,5 +1,5 @@
 (ns claudia.web.hooks
-  "React hooks the views share: an element's size, and a form's live poll of its server."
+  "React hooks the views share: an element's size, the time ticking, and a form's live poll of its server."
   (:require [reagent.hooks :as h]
             [claudia.web.api :as api]))
 
@@ -22,6 +22,13 @@
   (let [[width set-width] (h/use-state 0)]
     (use-resize ref #(set-width (.-clientWidth %)) deps)
     width))
+
+(defn use-now
+  "The time now (ms), new every second: for countdowns and ages."
+  []
+  (let [[now set-now] (h/use-state (js/Date.now))]
+    (h/use-effect (fn [] (let [t (js/setInterval #(set-now (js/Date.now)) 1000)] #(js/clearInterval t))) [])
+    now))
 
 (defn- network-blip?
   "A fetch that failed before any answer (offline, the server restarting): not shown as an error."
