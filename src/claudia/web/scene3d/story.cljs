@@ -1,6 +1,7 @@
 (ns claudia.web.scene3d.story
   "A scene3d's story: steps that say a line, show or hide parts, aim the camera, light parts up and
-  pose people. Pure data, no three.js: which parts are on at which step, how long a step lasts.")
+  pose people. Pure data, no three.js: which parts are on at which step, how long a step lasts."
+  (:require [claudia.shared.narration :as narration]))
 
 (defn- strings [v]
   (cond (string? v) [v]
@@ -18,7 +19,7 @@
                :let [c (when (map? (:camera s)) (:camera s))
                      hold (num (:hold s))
                      move (num (:move s))]]
-           {:say (if (string? (:say s)) (subs (.trim (:say s)) 0 (min 1200 (count (.trim (:say s))))) "")
+           {:say (narration/say-of s)
             :show (strings (:show s))
             :hide (strings (:hide s))
             :focus (strings (:focus s))

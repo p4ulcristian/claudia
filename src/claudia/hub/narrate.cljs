@@ -12,7 +12,8 @@
 
   GET /hub/narrate -> {voice: bool}; POST /hub/narrate {text, instruction?} -> the PCM
   (audio/L16;rate=24000;channels=1, x-seconds), or {error} (501 without a voice)."
-  (:require [claudia.node.crypto :refer [sha256-hex]]
+  (:require [claudia.node.audio :as audio]
+            [claudia.node.crypto :refer [sha256-hex]]
             [claudia.node.http :as io]
             [claudia.node.env :refer [env]]
             [claudia.shared.text :as text]
@@ -44,18 +45,6 @@
         (.then (fn [token]
                  (when (and url (not (str/blank? token)))
                    {:url (str/replace url #"/$" "") :token token}))))))
-
-(defn- wav
-  "Raw 16-bit mono PCM at 24 kHz as a WAV file: the 44-byte RIFF header, then the samples."
-  [^js pcm]
-  (let [out (js/Buffer.alloc (+ 44 (.-length pcm)))]
-    (.write out "RIFF" 0 "ascii") (.writeUInt32LE out (+ 36 (.-length pcm)) 4)
-    (.write out "WAVE" 8 "ascii") (.write out "fmt " 12 "ascii")
-    (.writeUInt32LE out 16 16) (.writeUInt16LE out 1 20) (.writeUInt16LE out 1 22)
-    (.writeUInt32LE out 24000 24) (.writeUInt32LE out 48000 28) (.writeUInt16LE out 2 32) (.writeUInt16LE out 16 34)
-    (.write out "data" 36 "ascii") (.writeUInt32LE out (.-length pcm) 40)
-    (.copy pcm out 44)
-    out))
 
 (defn- speak [{:keys [url token]} ^js form]
   (-> (js/fetch (str url "/v1/audio/speech")
@@ -91,7 +80,7 @@
     (-> (fsp/readFile file)
         (.catch (fn [_]
                   (-> (speak c (form-of [["text" reference-text] ["instruction" voice]]))
-                      (.then #(saved file (wav %))))))
+                      (.then #(saved file (audio/wav % 24000))))))
         (.then (fn [w] {:wav w :text reference-text})))))
 
 (defn voice-of
@@ -164,3 +153,20 @@
                (.catch (fn [e] (when-not (.-headersSent res) (io/send-json res 400 {:error (.-message e)})))))
     (do (.setHeader res "allow" "GET, POST")
         (io/send-json res 405 {:error "GET or POST"}))))
+
+(defn voice?
+  "Promise of whether a voice service is set up."
+  []
+  (.then (config) boolean))
+
+(defn clips
+  "Promise of the lines ([{:text :instruction}]) said: [{:text :instruction :pcm Buffer}], one
+  after the other (kept clips come from disk). Rejects when there is no voice or it fails."
+  [lines]
+  (.then (config)
+         (fn [c]
+           (when-not c (throw (js/Error. "no voice set up on this hub")))
+           (reduce (fn [chain {:keys [text instruction] :as said}]
+                     (.then chain (fn [out] (.then (narrate c text instruction) #(conj out (assoc said :pcm %))))))
+                   (js/Promise.resolve [])
+                   lines))))

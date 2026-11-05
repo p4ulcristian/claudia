@@ -1,7 +1,9 @@
 (ns claudia.web.scene3d.voice
   "The narrator of a scene3d story: the hub turns each line into speech (POST /hub/narrate: raw 16-bit
   mono PCM at 24 kHz, kept on disk by the text); this plays it on the Web Audio clock, so a clip's
-  length is known exactly and pausing pauses the voice with the story.")
+  length is known exactly and pausing pauses the voice with the story. A video made off screen has
+  a narrator that only notes what it says and when (given)."
+  (:require [claudia.web.scene3d.clock :as clock]))
 
 (def ^:private rate 24000)
 
@@ -51,7 +53,7 @@
   (when-let [^js s @source] (try (.stop s) (catch :default _ nil)))
   (reset! source nil))
 
-(defn- play! [{:keys [source tap] :as voice} {:keys [buffer]}]
+(defn- play! [{:keys [source] :as voice} {:keys [buffer]}]
   (stop! voice)
   (let [^js c (context! voice)]
     (-> (if (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)) (js/Promise.resolve nil))
@@ -59,7 +61,6 @@
                  (let [^js src (.createBufferSource c)]
                    (set! (.-buffer src) buffer)
                    (.connect src (.-destination c))
-                   (when-let [{:keys [dest]} @tap] (.connect src dest))
                    (.start src)
                    (reset! source src)))))))
 
@@ -68,49 +69,33 @@
   (some-> ^js @ctx .close)
   (reset! ctx nil))
 
-(defn- hum!
-  "A looped noise about 70 dB below full scale (not heard) into node d, so the recording's sound
-  never goes silent: the browser's encoder leaves silent stretches out of the file, and players
-  that do not keep the timestamps then slip the voice against the picture. -> the playing source."
-  [^js c ^js d]
-  (let [n (.-sampleRate c)
-        ^js b (.createBuffer c 1 n n)
-        ch (.getChannelData b 0)
-        ^js src (.createBufferSource c)]
-    (dotimes [i n] (aset ch i (* 0.0006 (- (js/Math.random) 0.5))))
-    (set! (.-buffer src) b)
-    (set! (.-loop src) true)
-    (.connect src d)
-    (.start src)
-    src))
-
-(defn- tap!
-  "From now on every clip also plays into a stream (for a recording), over a hum that keeps it
-  going. -> that MediaStream."
-  [{:keys [tap] :as voice}]
-  (let [^js c (context! voice)
-        ^js d (.createMediaStreamDestination c)]
-    (.catch (.resume c) (fn [_] nil))
-    (reset! tap {:dest d :hum (hum! c d)})
-    (.-stream d)))
-
-(defn- untap! [{:keys [tap]}]
-  (when-let [{:keys [^js hum]} @tap] (.stop hum))
-  (reset! tap nil))
-
 (defn make
   "One story's voice: {:load (fn [text instruction] promise of clip or nil) :play :stop :pause
-  :resume :close :tap (-> a MediaStream every clip also plays into) :untap :error (atom)}. A clip
-  is {:buffer AudioBuffer :seconds n}."
+  :resume :close :error (atom)}. A clip is {:buffer AudioBuffer :seconds n}."
   []
-  (let [{:keys [ctx error] :as voice} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :tap (atom nil)
-                                           :error (atom "")}]
+  (let [{:keys [ctx error] :as voice} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :error (atom "")}]
     {:error error
      :load #(load! voice %1 %2)
      :play #(play! voice %)
      :stop #(stop! voice)
      :pause (fn [] (some-> ^js @ctx .suspend))
      :resume (fn [] (some-> ^js @ctx .resume))
-     :close #(close! voice)
-     :tap #(tap! voice)
-     :untap #(untap! voice)}))
+     :close #(close! voice)}))
+
+(defn given
+  "The narrator of a video made off screen: the clips' lengths are given ({[instruction text]
+  seconds}) and nothing is heard; each line it says is noted in :said (an atom of [{:text
+  :instruction :at}], :at the clock's ms), for the video's sound. A line without a clip has none."
+  [seconds]
+  (let [said (atom [])]
+    {:error (atom "")
+     :said said
+     :load (fn [text instruction]
+             (js/Promise.resolve
+              (when-let [secs (get seconds [instruction text])]
+                {:text text :instruction instruction :seconds secs})))
+     :play (fn [{:keys [text instruction]}] (swap! said conj {:text text :instruction instruction :at (clock/now)}))
+     :stop (fn [])
+     :pause (fn [])
+     :resume (fn [])
+     :close (fn [])}))

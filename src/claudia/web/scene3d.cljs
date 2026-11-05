@@ -11,16 +11,18 @@
 
 (defn scene3d-form
   "data: the form's data; block: the block's id; ctx: {:server :chat :title} of the picture's chat
-  (the scene reads real code from there; else the open chat's) and the block's name (a recording's
-  file is named after it)."
+  (the scene reads real code from there; else the open chat's) and the block's name (its video's
+  file is named after it); on the runner's headless page making a video, also :fill :video
+  :on-video (claudia.web.scene3d.view/scene3d)."
   [data block & [ctx]]
   (let [oc @(rf/subscribe [:open-chat])
         ro @(rf/subscribe [:read-only?])
         ok @loaded]
     (cond
-      (= ok :ready) [@lazy-view {:data data :block block :title (:title ctx) :chat (or (:chat ctx) (:chat oc))
-                                 :server (or (:server ctx) (:server oc))
-                            :live? (boolean (and (:chat oc) (not (:pending? oc)) (not ro)))}]
+      (= ok :ready) [@lazy-view (merge {:data data :block block :title (:title ctx) :chat (or (:chat ctx) (:chat oc))
+                                        :server (or (:server ctx) (:server oc))
+                                        :live? (boolean (and (:chat oc) (not (:pending? oc)) (not ro)))}
+                                       (select-keys ctx [:fill :video :on-video]))]
       (string? ok) [:p.f-note (str "The 3D view did not load: " ok)]
       :else (do (when-not ok
                   (reset! loaded :loading)

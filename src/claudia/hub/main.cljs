@@ -16,6 +16,7 @@
             [claudia.hub.pass :as pass]
             [claudia.hub.push :as push]
             [claudia.hub.systems :as systems]
+            [claudia.hub.videos :as videos]
             [claudia.hub.narrate :as narrate]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
@@ -159,6 +160,7 @@
       (not email) (io/send-json res 401 {:error "not signed in"})
       (cross-site? req) (io/send-json res 403 {:error "cross-site request"})
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
+      (= pathname "/hub/videos") (videos/call req res person email)
       (not own?) (ops/call req res pathname email admin?)
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
       :else (server-call res person email server-name what))))

@@ -45,7 +45,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
-| runner | `RUNNER_DATA` | folder for `claudia.db` and uploads |
+| runner | `RUNNER_DATA` | folder for `claudia.db`, uploads and 3D scenes' videos (`videos/`) |
+| runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ name, by, at }` |
@@ -97,6 +98,7 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
 | `GET /hub/narrate` | `{ voice: bool }`: a voice service is set up (`HUB_TTS_URL` and its token) |
 | `POST /hub/narrate` `{ text, instruction? }` | the line as speech: raw 16-bit mono PCM at 24 kHz (`audio/L16;rate=24000;channels=1`, `x-seconds`); `instruction` = a story's `voice` (one reference clip is made from it, every line is a clone of it). Clips are kept in `HUB_DATA/narration` by their text. 400 without text, 501 without a voice, 502 when the voice service fails. The service's route is `<HUB_TTS_URL>/v1/audio/speech` (form fields `text`, and `ref_audio` + `ref_text` for a cloned voice, or `instruction`) |
+| `POST /hub/videos` `{ server, chat, block, title, data, voice }` | a 3D scene's video (`data`: the scene3d form's data as shown): handed to the caller's runner on that server (`POST /api/chats/:id/videos`, as the caller), answered at once `202 { id }`; then, when `voice` and a voice is set up and the story has lines, the lines are said (as `POST /hub/narrate` would) and brought to the runner (`PUT …/videos/:id/voice`). 400 without chat, block or data; 403 no access to the server |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
 | `GET /hub/servers/:name/system` | that server's newest `Sample` (from its front's `GET /api/system`, 4 s); 502 `{ error }` when the front is not reached or fails; 403 when not in the person's list |
 | `GET /hub/gate/system` | admins: the gate's own `Sample` (the hub reads its machine itself); 403 for others |
@@ -169,6 +171,10 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
+| `POST /api/chats/:id/videos` `{ block, title, data, voice }` | a 3D scene's video (from the hub): `202 { id }`; it waits for its voice when `voice`, else is queued. One is made at a time: the render page in a headless browser of its own (1280×720 at 1.5×: 1920×1080) plays the story on a stepped clock and hands over JPEG frames; ffmpeg (`CLAUDIA_FFMPEG`, else `ffmpeg`) makes them H.264 and the voice AAC; the file is kept at `RUNNER_DATA/videos/<chat>/<id>.mp4` (+ `.json`) |
+| `PUT /api/chats/:id/videos/:vid/voice` `{ clips: [{ text, instruction, pcm }], error? }` | the narrator's clips (pcm: base64 of 16-bit mono PCM at 24 kHz) for a video waiting for them; it is queued. 409 when that video waits for none |
+| `GET /api/chats/:id/videos?block=&fp=` | `{ fp, videos: [{ id, block, title, state, progress, error, seconds, at }] }` newest first (state: voice, queued, render, encode, done, failed; videos being made are lost when the runner restarts); `{ same: true }` when nothing changed since fp |
+| `GET /api/chats/:id/videos/:vid.mp4` | the finished video (`video/mp4`, as an attachment); 404 when there is none |
 | `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
 | `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
 
