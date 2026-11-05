@@ -62,3 +62,6 @@
 .s3-left { flex: 1 1 0; min-width: 0; }
 .s3-story { flex: 1 1 auto; }
 @media (max-width: 679px) { .s3-bar { flex-wrap: wrap; justify-content: flex-end; } .s3-left { flex-basis: 100%; } .s3-sub { bottom: 122px; } }
+.f-scene3d .s3-rec, .f-scene3d .s3-rec:hover:not(:disabled) { color: var(--red); }
+.f-scene3d .s3-rec .s3-ic { fill: currentColor; animation: s3-rec-blink 1.2s ease-in-out infinite; }
+@keyframes s3-rec-blink { 50% { opacity: 0.35; } }

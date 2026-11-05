@@ -20,6 +20,7 @@
             [claudia.web.scene3d.maths :as m]
             [claudia.web.scene3d.overlap :as overlap]
             [claudia.web.scene3d.person :as person]
+            [claudia.web.scene3d.record :as record]
             [claudia.web.scene3d.sources :as sources]
             [claudia.web.scene3d.story :as story]
             [claudia.web.scene3d.vm :as vm]
@@ -625,7 +626,7 @@
        :world nil :faces {} :raised nil :reader nil
        :focus #{} :cam nil :checker nil :flagged "" :bad #{} :chosen nil
        :frames 0 :scanSeconds scan-seconds
-       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0})
+       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0 :rec nil})
 
 (defn- make-scene
   "Everything a running scene holds."
@@ -646,7 +647,7 @@
 
 ;; ---- the running scene's steps ----
 
-(declare draw! tick! move-parts! build! new-story! start-step!)
+(declare draw! tick! move-parts! build! new-story! start-step! stop-record!)
 
 (defn- want! "Draw on the next frame (once)." [{:keys [^js st] :as sc}]
   (when (zero? (.-raf st)) (set! (.-raf st) (js/requestAnimationFrame #(draw! sc %)))))
@@ -979,7 +980,8 @@
 
 (defn- start-tick! [{:keys [^js st] :as sc}] (set! (.-sTick st) (js/setInterval #(tick! sc) 100)))
 (defn- stop-tick! [{:keys [^js st]}] (js/clearInterval (.-sTick st)) (set! (.-sTick st) 0))
-(defn- end-story! [{:keys [^js st] :as sc}] (set! (.-sPlaying st) false) (stop-tick! sc) (ui! sc :playing false))
+(defn- end-story! [{:keys [^js st] :as sc}]
+  (set! (.-sPlaying st) false) (stop-tick! sc) (ui! sc :playing false) (stop-record! sc))
 (defn- focus-of [{:keys [by-id]} step] (set (filter #(story/matches-any? (:focus step) %) (keys @by-id))))
 
 (defn- pose-people!
@@ -1094,13 +1096,21 @@
   (when (zero? (.-sTick st)) (start-tick! sc))
   (when (zero? (.-sDur st)) (start-step! sc (.-sIdx st) false)))
 
+(defn- restart-story!
+  "The story from its start: every story part hidden again, step 1 playing."
+  [{:keys [^js st] :as sc}]
+  (set! (.-sPlaying st) true)
+  (ui! sc :playing true)
+  (apply-story-state! sc -1 false)
+  (start-step! sc 0 true))
+
 (defn- story-play! [{:keys [^js st] :as sc}]
   (when (seq (.-steps st))
-    (set! (.-sPlaying st) true)
-    (ui! sc :playing true)
     (if (data/restart? (.-sIdx st) (count (.-steps st)) (.-sDur st) (.-sElapsed st))
-      (do (apply-story-state! sc -1 false) (start-step! sc 0 true))
-      (resume-story! sc))))
+      (restart-story! sc)
+      (do (set! (.-sPlaying st) true)
+          (ui! sc :playing true)
+          (resume-story! sc)))))
 
 (defn- story-pause! [{:keys [^js st narrator] :as sc}]
   (set! (.-sPlaying st) false) (ui! sc :playing false) ((:pause narrator)) (stop-tick! sc))
@@ -1250,9 +1260,20 @@
   (.render renderer scene camera)
   (.render labels scene camera))
 
+(defn- record-frame!
+  "While recording: the frame just drawn goes into the video, and the button's clock follows
+  (once a second). -> whether it recorded."
+  [{:keys [^js st ui] :as sc}]
+  (when-let [r (.-rec st)]
+    (record/frame! r)
+    (let [secs (js/Math.floor (record/seconds r))]
+      (when (not= secs (:rec-secs @ui)) (ui! sc :rec-secs secs)))
+    true))
+
 (defn- draw!
   "One frame: the script, fades, people, camera, focus pulse, dims, flows, the orbit, then drawing
-  and labels; another frame comes while anything still moves."
+  and labels (and the recording's frame); another frame comes while anything still moves, and
+  every frame while recording."
   [{:keys [^js st ^js controls] :as sc} now]
   (set! (.-raf st) 0)
   (let [wall (js/performance.now)
@@ -1266,8 +1287,9 @@
         flowing (flow-frame! sc wall)
         turning (.update controls)
         _ (render! sc)
+        recording (record-frame! sc)
         easing (declutter! sc)]
-    (when (or ticking fading posing flying pulsing dimming flowing turning easing) (want! sc))))
+    (when (or ticking fading posing flying pulsing dimming flowing turning easing recording) (want! sc))))
 
 ;; ---- input ----
 
@@ -1424,6 +1446,7 @@
   (.dispose env)
   (.dispose pmrem)
   (stop-tick! sc)
+  (stop-record! sc)
   ((:close narrator))
   (stop-script! sc)
   (dispose! root)
@@ -1437,6 +1460,27 @@
     (apply-style! sc)
     (set-quality! sc (if (.-high st) "high" "low"))
     (set-data! sc (.-data st))))
+
+(defn- record!
+  "Starts a video of the scene (title: the file's name). A story restarts and the video ends with
+  it; its voice goes in when it is on."
+  [{:keys [^js st el ^js renderer narrator] :as sc} title]
+  (when-not (.-rec st)
+    (let [story? (seq (.-steps st))
+          audio (when (and story? (not (.-sMuted st))) ((:tap narrator)))]
+      (set! (.-rec st) (record/start! el (.-domElement renderer) audio title))
+      (ui! sc :recording true :rec-secs 0)
+      (when story? (restart-story! sc))
+      (want! sc))))
+
+(defn- stop-record!
+  "Ends the video; its file downloads."
+  [{:keys [^js st narrator] :as sc}]
+  (when-let [r (.-rec st)]
+    (set! (.-rec st) nil)
+    ((:untap narrator))
+    (record/stop! r)
+    (ui! sc :recording false)))
 
 (defn- story-api [{:keys [^js st] :as sc}]
   {:play #(story-play! sc)
@@ -1464,5 +1508,7 @@
      :select! #(select! sc %)
      :quality! #(set-quality! sc %)
      :style! #(set-style! sc %)
+     :record! #(record! sc %)
+     :stop-record! #(stop-record! sc)
      :story (story-api sc)
      :destroy! #(destroy! sc input)}))
