@@ -52,10 +52,11 @@
                                   "/dev/disk1s3 on /System/Volumes/Hardware (apfs, local, journaled, nobrowse)\n"
                                   "/dev/disk5s1 on /Volumes/My Disk (exfat, local, nodev, nosuid)\n")))))
 
-(deftest a-container-adds-up-its-volumes
-  (is (= {:size 4096000 :used 1638400 :avail 2048000}
-         (darwin/container-space [{:bsize 4096 :blocks 1000 :bfree 900 :bavail 500}
-                                  {:bsize 4096 :blocks 1000 :bfree 700 :bavail 500}]))))
+(deftest a-container-used-is-its-size-less-free
+  ;; A real Mac (2026-11-05): two volumes of a 148 GB container, 97.7 GB free, diskutil says 50.6 GB in use (block counts rounded to 4 KiB).
+  (is (= {:size 148319830016 :used 50603798528 :avail 97716031488}
+         (darwin/container-space [{:bsize 4096 :blocks 36210896 :bfree 32852919 :bavail 23856453}
+                                  {:bsize 4096 :blocks 36210896 :bfree 30022054 :bavail 23856453}]))))
 
 (deftest claudia-processes-from-ps
   (let [rows (darwin/ps-rows (str "  10     1  20000 node /Users/x/claudia/out/front.js\n"
