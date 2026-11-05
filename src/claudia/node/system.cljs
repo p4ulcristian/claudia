@@ -120,7 +120,7 @@
             (text-from "ps" "-axo" "pid=,ppid=,rss=,command=")])
       (.then (fn [[vm swap net dio ds ps]]
                (let [nets (darwin/net-bytes net)]
-                 {:t (js/Date.now) :cpu (darwin/cpu-times (map #(js->clj (.-times %) :keywordize-keys true) (os/cpus)))
+                 {:t (js/Date.now) :cpu (darwin/cpu-times (map (fn [^js c] (js->clj (.-times c) :keywordize-keys true)) (os/cpus)))
                   :memory (darwin/memory (os/totalmem) (darwin/vm-stat vm) (darwin/swap-usage swap))
                   :load (vec (os/loadavg)) :uptime (os/uptime)
                   :net nets :ifaces (darwin/physical-ifaces (keys nets)) :dio (darwin/disk-bytes dio) :blocks ["all"]
