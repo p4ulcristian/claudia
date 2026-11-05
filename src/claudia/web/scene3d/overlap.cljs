@@ -13,7 +13,7 @@
 (defn solid? [spec]
   (and (not (:ghost spec)) (not (:wire spec))
        (not (and (number? (:opacity spec)) (< (:opacity spec) 1)))
-       (not (#{"plane" "ring" "group" "person" "text"} (:shape spec)))
+       (not (#{"plane" "ring" "group" "person" "text" "names"} (:shape spec)))
        (not= "glass" (:material spec))))
 
 (defn- shrink-matrix
