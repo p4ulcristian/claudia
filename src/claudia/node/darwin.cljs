@@ -92,14 +92,14 @@
 
 (defn container-space
   "A container's space from its volumes' statfs numbers ({:bsize :blocks :bfree :bavail} each). APFS
-  gives every volume the container's size and free space but counts in blocks - bfree only that
-  volume's own files (statfs of / alone counts only the sealed system volume), so used is the
-  volumes' sum, size and avail the container's."
+  gives every volume the container's size and free space, so used is size less free: the container's
+  \"Capacity In Use By Volumes\" (diskutil apfs list). Adding up the volumes' own used counts snapshots
+  and shared blocks again (a 148 GB container showed 253 GB used)."
   [volumes]
-  (let [spaces (map proc/disk-space volumes)]
-    {:size (apply max 0 (map :size spaces))
-     :used (reduce + (map :used spaces))
-     :avail (apply max 0 (map :avail spaces))}))
+  (let [spaces (map proc/disk-space volumes)
+        size (apply max 0 (map :size spaces))
+        avail (apply max 0 (map :avail spaces))]
+    {:size size :used (max 0 (- size avail)) :avail avail}))
 
 (defn ps-rows
   "ps -axo pid=,ppid=,rss=,command= as [{:pid :ppid :rss (bytes) :kind}], kind as
