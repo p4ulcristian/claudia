@@ -2,12 +2,14 @@
   "This machine's numbers for the Systems popup (README decision 12), read from the kernel by
   claudia.node.proc: a read every 2 s while someone asked in the last 30 s, then none. Each sample is
   the difference of the last two reads, so CPU, disk and network use cover exactly that window.
-  The front answers it for its server, the hub for the gate."
+  The front answers it for its server, the hub for the gate. On macOS (no /proc) the same shape
+  comes from its own tools, read by claudia.node.darwin."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.node.darwin :as darwin]
             [claudia.node.proc :as proc]))
 
 (def ^:private fsp (.-promises fs))
@@ -18,6 +20,14 @@
 (defn- text-of [p] (-> (.readFile fsp p "utf8") (.catch (fn [_] nil))))
 (defn- names-in [p] (-> (.readdir fsp p) (.then js->clj) (.catch (fn [_] []))))
 (defn- all [ps] (js/Promise.all (into-array ps)))
+
+(defn- output-of
+  "Promise of [error stdout] of a program run with args (1.5 s at most)."
+  [program args]
+  (js/Promise. (fn [done] (cp/execFile program (clj->js args) #js {:timeout 1500 :maxBuffer 8388608}
+                                       (fn [err out] (done [err out]))))))
+
+(defn- text-from [program & args] (.then (output-of program args) (fn [[err out]] (if err "" out))))
 
 (defn- hardware
   "Names in a /sys/class folder that sit on a real device (a `device` link): network cards and disks,
@@ -47,12 +57,10 @@
   []
   (if @no-nvidia
     (js/Promise.resolve [])
-    (js/Promise.
-     (fn [done]
-       (cp/execFile "nvidia-smi" #js [gpu-query "--format=csv,noheader,nounits"] #js {:timeout 1500}
-                    (fn [err out]
-                      (when (and err (= "ENOENT" (.-code err))) (reset! no-nvidia true))
-                      (done (if err [] (proc/gpu-rows out)))))))))
+    (.then (output-of "nvidia-smi" [gpu-query "--format=csv,noheader,nounits"])
+           (fn [[err out]]
+             (when (and err (= "ENOENT" (.-code err))) (reset! no-nvidia true))
+             (if err [] (proc/gpu-rows out))))))
 
 (defn- space [{:keys [mount] :as m}]
   (-> (.statfs fsp mount)
@@ -60,10 +68,9 @@
                                 (proc/disk-space {:bsize (.-bsize s) :blocks (.-blocks s) :bfree (.-bfree s) :bavail (.-bavail s)}))))
       (.catch (fn [_] nil))))
 
-(defn- disks []
-  (-> (text-of "/proc/self/mountinfo")
-      (.then #(all (map space (proc/disk-mounts (or % "")))))
-      (.then #(vec (keep identity %)))))
+(defn- spaces [mounts] (.then (all (map space mounts)) #(vec (keep identity %))))
+
+(defn- disks [] (.then (text-of "/proc/self/mountinfo") #(spaces (proc/disk-mounts (or % "")))))
 
 (defn- pid-info [pid]
   (-> (all [(text-of (str "/proc/" pid "/stat")) (text-of (str "/proc/" pid "/cmdline"))])
@@ -85,7 +92,7 @@
                 (all (for [[p k] kinds] (.then (text-of (str "/proc/" p "/status")) (fn [t] [k (proc/vm-rss (or t ""))]))))))
       (.then #(proc/group-rss (filterv (comp pos? second) %)))))
 
-(defn- read-all
+(defn- read-linux
   "Promise of one read of everything: the counters (CPU, disk, network) and what needs no
   difference (memory, load, disks, sensors, cards, Claudia's own processes)."
   []
@@ -97,6 +104,30 @@
                 :load (proc/loadavg (or lavg "")) :uptime (proc/uptime (or up ""))
                 :net (proc/net-bytes (or net "")) :dio (proc/disk-bytes (or dio "")) :ifaces ifaces :blocks blocks
                 :disks ds :temps ts :gpus gs :claudia own}))))
+
+(defn darwin-memory
+  "Claudia's own processes on macOS from ps-rows, grouped like on Linux."
+  [rows]
+  (let [rss (into {} (map (juxt :pid :rss) rows))]
+    (proc/group-rss (filterv (comp pos? second) (for [[p k] (kinds-of rows)] [k (get rss p 0)])))))
+
+(defn- read-darwin
+  "Promise of one read on macOS: os.cpus() for the cores, its tools for the rest; no sensors."
+  []
+  (-> (all [(text-from "vm_stat") (text-from "sysctl" "vm.swapusage") (text-from "netstat" "-ibn")
+            (text-from "ioreg" "-r" "-c" "IOBlockStorageDriver" "-k" "Statistics")
+            (.then (text-from "mount") #(spaces (darwin/disk-mounts %)))
+            (text-from "ps" "-axo" "pid=,ppid=,rss=,command=")])
+      (.then (fn [[vm swap net dio ds ps]]
+               (let [nets (darwin/net-bytes net)]
+                 {:t (js/Date.now) :cpu (darwin/cpu-times (map #(js->clj (.-times %) :keywordize-keys true) (os/cpus)))
+                  :memory (darwin/memory (os/totalmem) (darwin/vm-stat vm) (darwin/swap-usage swap))
+                  :load (vec (os/loadavg)) :uptime (os/uptime)
+                  :net nets :ifaces (darwin/physical-ifaces (keys nets)) :dio (darwin/disk-bytes dio) :blocks ["all"]
+                  :disks ds :temps [] :gpus [] :claudia (darwin-memory (darwin/ps-rows ps))})))))
+
+(defn- read-all []
+  (if (= "darwin" (os/platform)) (read-darwin) (read-linux)))
 
 (defn sample-of
   "The sample a page sees from two reads a then b: use over the window between them, the rest from b."

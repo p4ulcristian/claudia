@@ -71,7 +71,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `/proc/diskstats` and `/proc/net/dev` over the same window (physical disks and network cards
     only); CPU and drive temperatures from hwmon; NVIDIA cards by `nvidia-smi`; Claudia's own
     processes (front, runners, hosts, and as chats everything the hosts started) by resident memory.
-    It reads only while someone asked in the last 30 s. Instead of: the `systeminformation`
+    It reads only while someone asked in the last 30 s. On macOS (no `/proc`) the same sample comes
+    from `os.cpus()` per core (no iowait or steal there), `vm_stat` (used = app memory + wired +
+    compressed, as Activity Monitor counts it), `sysctl vm.swapusage`, `netstat -ibn` (en* cards),
+    `ioreg` (bytes read and written), `mount` with `statfs` (one row per APFS container) and `ps`
+    (`claudia.node.darwin`); no temperatures. Instead of: the `systeminformation`
     library, which runs `df`, `lsblk` and `nvidia-smi` per call and measures CPU since the
     previous call from anywhere in the process; an admin-only view.
 
