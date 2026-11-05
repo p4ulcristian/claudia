@@ -22,7 +22,9 @@
 (def ^:private timeout-ms 20000)
 (def ^:private system-browsers "/opt/claudia-tools/ms-playwright")
 (def ^:private chromes ["/opt/google/chrome/chrome" "/usr/bin/chromium" "/usr/bin/chromium-browser"
-                        "/usr/bin/google-chrome-stable" "/usr/bin/google-chrome"])
+                        "/usr/bin/google-chrome-stable" "/usr/bin/google-chrome"
+                        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                        "/Applications/Chromium.app/Contents/MacOS/Chromium"])
 
 (def web-dir (path/join h/checkout "out" "web"))
 

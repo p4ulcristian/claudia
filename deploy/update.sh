@@ -3,8 +3,12 @@
 # Started by the path unit when the hub pokes the front (POST /api/update-check adds a line to
 # CLAUDIA_UPDATE_TRIGGER), and hourly by the timer for a poke that was missed.
 #
-#   deploy/update.sh             single-user machine (user units): installs into $CLAUDIA_CHECKOUT
-#   deploy/update.sh --shared    shared server (root): installs through deploy/shared-server/install.sh
+#   deploy/update.sh             single-user machine (systemd user units, or launchd agents on a Mac:
+#                                deploy/macos): installs into $CLAUDIA_CHECKOUT
+#   deploy/update.sh --shared    shared server (root, Linux): installs through deploy/shared-server/install.sh
+#
+# Runs on Linux (bash 5, GNU tools) and macOS (bash 3.2, BSD tools): no mapfile, no empty arrays
+# under set -u, no GNU-only flags.
 #
 # The poke's lines: `main <commit>` (main was pushed to it: GitHub's API names it a few seconds
 # later, so this waits up to 40 s for git to name it), `stage <tree>` (a build of that git tree was published
@@ -25,6 +29,11 @@ stage_identity="https://github.com/$repo/.github/workflows/stage.yml@refs/heads/
 issuer=https://token.actions.githubusercontent.com
 mode=user
 [ "${1:-}" = --shared ] && mode=shared
+os=$(uname -s)
+# The node_modules hold the Agent SDK's Claude Code binary, one per platform: a Mac takes its own
+# (claudia-deps-<hash>-darwin-arm64), Linux the plain one (linux-x64).
+deps_suffix=
+[ "$os" = Darwin ] && deps_suffix=-darwin-$(uname -m)
 
 # The pokes are taken: the file is moved aside first, so one that comes during this run starts
 # another.
@@ -34,9 +43,11 @@ if [ -n "${CLAUDIA_UPDATE_TRIGGER:-}" ] && mv "$CLAUDIA_UPDATE_TRIGGER" "$CLAUDI
 	rm -f "$CLAUDIA_UPDATE_TRIGGER.taken"
 fi
 pushed=$(grep -oE '^main [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
-mapfile -t stages < <(grep -oE '^stage [0-9a-f]{40}$' <<<"$lines" | cut -d' ' -f2 | sort -u || true)
+# The staged trees the poke named, space-separated (hex only, so word splitting is safe).
+stages=$(grep -oE '^stage [0-9a-f]{40}$' <<<"$lines" | cut -d' ' -f2 | sort -u | tr '\n' ' ' || true)
 
 for t in curl tar node cosign; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
+[ "$os" = Darwin ] && [ $mode = shared ] && { echo "--shared is Linux only (systemd, /srv/claudia)" >&2; exit 1; }
 
 if [ $mode = shared ]; then
 	[ "$(id -u)" = 0 ] || { echo "--shared runs as root" >&2; exit 1; }
@@ -73,7 +84,7 @@ fetch() {
 		return 2
 	fi
 	mkdir -p "$into"
-	tar -xzf "$d/$name" -C "$into" --no-same-owner
+	tar --no-same-owner -xzf "$d/$name" -C "$into"
 	rm -rf "$d"
 }
 
@@ -82,9 +93,20 @@ from_release() {
 	fetch "https://github.com/$repo/releases/download/tree-$1" "$2" "$stage_identity" "$3"
 }
 
+# copy_deps <from> <to>: a folder copied as hard links (Linux), else as APFS clones (macOS: cp -c),
+# else as plain copies; a failed try leaves nothing behind for the next.
+copy_deps() {
+	cp -al "$1" "$2" 2>/dev/null && return 0
+	rm -rf "$2"
+	cp -ac "$1" "$2" 2>/dev/null && return 0
+	rm -rf "$2"
+	cp -a "$1" "$2"
+}
+
 # deps_for <into>: the node_modules the code in <into> names (deps.txt: its lockfile's hash), from
 # $work/deps when an earlier build had the same lockfile, else downloaded once (claudia-deps-<hash>
-# of the same release) and kept there; hard-linked in, so a cached one costs no space or time.
+# of the same release, this platform's) and kept there; hard-linked or cloned in, so a cached one
+# costs no space or time.
 deps_for() {
 	local into=$1 t=$2 deps rc=0
 	deps=$(cat "$into/deps.txt" 2>/dev/null || true)
@@ -92,22 +114,23 @@ deps_for() {
 	mkdir -p "$work/deps"
 	if [ ! -f "$work/deps/$deps/deps.txt" ]; then
 		rm -rf "$work/deps/$deps.new"
-		from_release "$t" "claudia-deps-$deps.tar.gz" "$work/deps/$deps.new" || rc=$?
+		from_release "$t" "claudia-deps-$deps$deps_suffix.tar.gz" "$work/deps/$deps.new" || rc=$?
 		[ $rc = 0 ] || { rm -rf "$work/deps/$deps.new"; return $rc; }
 		[ "$(cat "$work/deps/$deps.new/deps.txt" 2>/dev/null)" = "$deps" ] || { echo "the node_modules ${deps:0:7} say another lockfile" >&2; rm -rf "$work/deps/$deps.new"; return 2; }
 		mv "$work/deps/$deps.new" "$work/deps/$deps"
 		echo "fetched node_modules ${deps:0:7} (the lockfile changed)"
 	fi
 	touch "$work/deps/$deps"
-	cp -al "$work/deps/$deps/node_modules" "$into/node_modules" 2>/dev/null || cp -a "$work/deps/$deps/node_modules" "$into/node_modules"
+	copy_deps "$work/deps/$deps/node_modules" "$into/node_modules"
 }
 
 # build_of <tree> <into>: the tree's build: its code bundle (a few MB) and the node_modules it names;
-# a release made before the split has only the whole build (claudia-tree-<tree>), taken then.
+# a release made before the split has only the whole build (claudia-tree-<tree>), taken then (on
+# Linux only: its node_modules are Linux's).
 build_of() {
 	local rc=0
 	from_release "$1" "claudia-code-$1.tar.gz" "$2" || rc=$?
-	if [ $rc = 1 ]; then
+	if [ $rc = 1 ] && [ -z "$deps_suffix" ]; then
 		rc=0
 		from_release "$1" "claudia-tree-$1.tar.gz" "$2" || rc=$?
 		return $rc
@@ -121,7 +144,7 @@ build_of() {
 # that one is tried again for up to a minute before it counts as not published.
 fetch_tree() {
 	local rc i tries=1
-	[[ " ${stages[*]} " == *" $1 "* ]] && tries=12
+	case " $stages " in *" $1 "*) tries=12 ;; esac
 	for ((i = 1; i <= tries; i++)); do
 		rc=0
 		build_of "$1" "$2" || rc=$?
@@ -181,9 +204,15 @@ install_main() {
 		mv "$tmp/x" "$dest.new"
 		[ -d "$dest" ] && mv "$dest" "$dest.old"
 		mv "$dest.new" "$dest"
-		# Changed units are read again; the hosts keep running.
-		systemctl --user daemon-reload
-		systemctl --user restart claudia-front.service claudia-runner.service
+		if [ "$os" = Darwin ]; then
+			# The agents are written again from the new release; the front and the runner restart,
+			# the hosts and this update agent keep running (deploy/macos/install.sh).
+			bash "$dest/deploy/macos/install.sh" --update
+		else
+			# Changed units are read again; the hosts keep running.
+			systemctl --user daemon-reload
+			systemctl --user restart claudia-front.service claudia-runner.service
+		fi
 	fi
 	echo "Claudia is at ${want:0:7}; host code changes wait for a host restart by hand"
 	have=$want
@@ -201,7 +230,7 @@ if [ "$have" != "$want" ]; then
 fi
 
 # The trees the poke named, fetched ahead so their merge only swaps; the newest two are kept.
-for t in "${stages[@]}"; do
+for t in $stages; do
 	[ "$t" = "$tree" ] && [ "$have" = "$want" ] && continue
 	[ -f "$staged/$t/tree.txt" ] && continue
 	rc=0
@@ -213,8 +242,19 @@ for t in "${stages[@]}"; do
 	esac
 	rm -rf "$staged/$t.new"
 done
-find "$staged" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +3 | cut -d' ' -f2- | xargs -r rm -rf
+# keep_newest <folder>: the two folders in it changed last stay, the rest go (their names are git
+# trees or lockfile hashes, plain hex, so ls's lines are safe; ls -t sorts by modification time on
+# GNU and BSD alike, as find -printf '%T@' did).
+keep_newest() {
+	local n=0 name
+	for name in $(ls -1t "$1"); do
+		[ -d "$1/$name" ] || continue
+		n=$((n + 1))
+		[ $n -le 2 ] || rm -rf "${1:?}/$name"
+	done
+}
+keep_newest "$staged"
 # The node_modules of the two lockfiles used last stay (an install hard-links them, so it keeps its own).
 if [ -d "$work/deps" ]; then
-	find "$work/deps" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +3 | cut -d' ' -f2- | xargs -r rm -rf
+	keep_newest "$work/deps"
 fi

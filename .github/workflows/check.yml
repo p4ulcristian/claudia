@@ -5,8 +5,10 @@
 # - build: all five release builds;
 # - bundle: what was built, packed as one tarball keyed by the git tree it was built from (out/,
 #   production node_modules for linux-x64, deploy/, package.json, tree.txt), uploaded as the run's
-#   artifact `bundle`. stage.yml signs and publishes it once this check is green, so a merge of an
-#   up-to-date PR finds its build ready (README, Hub operations: following main).
+#   artifact `bundle`, and the same node_modules for a Mac (darwin-arm64: the Agent SDK's Claude
+#   Code binary is per platform) as the artifact `bundle-darwin-arm64`. stage.yml signs and
+#   publishes them once this check is green, so a merge of an up-to-date PR finds its build ready
+#   (README, Hub operations: following main).
 # A pull request is checked at its head commit (not GitHub's merge preview): the bundle's tree is
 # then the head's, which stage.yml checks against GitHub's own record of the run.
 name: check
@@ -96,5 +98,26 @@ jobs:
         with:
           name: bundle
           path: dist/claudia-*.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+      # A Mac (deploy/macos) runs the same code with its own node_modules, from the same lockfile:
+      # claudia-deps-<lockfile hash>-darwin-arm64. Its own artifact, so a stage.yml that does not
+      # know it yet takes `bundle` as before.
+      - name: Bundle the Mac's node_modules
+        run: |
+          deps=$(cat dist/pkg/deps.txt)
+          mkdir -p dist/darwin/pkg
+          cp package.json package-lock.json dist/darwin/pkg/
+          echo "$deps" > dist/darwin/pkg/deps.txt
+          (cd dist/darwin/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --os=darwin --cpu=arm64 && rm package.json package-lock.json)
+          test -x dist/darwin/pkg/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude
+          tar -czf "dist/darwin/claudia-deps-$deps-darwin-arm64.tar.gz" -C dist/darwin/pkg ./node_modules ./deps.txt
+          ls -l dist/darwin/*.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-darwin-arm64
+          path: dist/darwin/claudia-deps-*-darwin-arm64.tar.gz
           retention-days: 7
           if-no-files-found: error

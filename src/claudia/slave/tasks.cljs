@@ -251,6 +251,13 @@
 
 (defonce ^:private output-files (atom {}))
 
+(defn- task-bases
+  "The folders Claude Code may keep shell output in: claude-<uid> in the temp folder, os.tmpdir()
+  (TMPDIR) or /tmp. On Linux both are /tmp; on a Mac TMPDIR is a folder of its own, so both are
+  looked in."
+  []
+  (distinct (map #(path/join % (str "claude-" (.getuid js/process))) [(os/tmpdir) "/tmp"])))
+
 (defn- output-file
   "A shell task's output file: the notification names it once it ends; Claude Code writes it from the
   start at <tmp>/claude-<uid>/<folder>/<session>/tasks/<task>.output."
@@ -258,11 +265,12 @@
   (or (:output t)
       (get @output-files (:id t))
       (when (and (re-matches id-ok (str (:id t))) (re-matches id-ok (str chat)))
-        (let [base (path/join (os/tmpdir) (str "claude-" (.getuid js/process)))
-              found (some (fn [d]
-                            (let [f (path/join base d chat "tasks" (str (:id t) ".output"))]
-                              (when (fs/existsSync f) f)))
-                          (try (vec (fs/readdirSync base)) (catch :default _ [])))]
+        (let [found (some (fn [base]
+                            (some (fn [d]
+                                    (let [f (path/join base d chat "tasks" (str (:id t) ".output"))]
+                                      (when (fs/existsSync f) f)))
+                                  (try (vec (fs/readdirSync base)) (catch :default _ []))))
+                          (task-bases))]
           (when found (swap! output-files assoc (:id t) found))
           found))))
 

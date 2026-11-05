@@ -2,7 +2,8 @@
   "The same numbers on macOS, which has no /proc (README decision 12): pure functions over what its
   own tools print (vm_stat, sysctl vm.swapusage, netstat -ibn, ioreg, mount, ps) and over Node's
   os.cpus(), shaped like claudia.node.proc's so one sampler serves both."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.node.proc :as proc]))
 
 (defn- num-of [s] (let [n (js/Number s)] (if (js/isNaN n) 0 n)))
 
@@ -63,19 +64,42 @@
 
 (def real-fs #{"apfs" "hfs" "exfat" "msdos" "ntfs"})
 
+(defn- mount-line
+  "One mount line (`/dev/disk3s5 on /System/Volumes/Data (apfs, local, nobrowse)`) as {:source :mount
+  :fs :hidden}, hidden when Finder does not show it (nobrowse); nil for another line."
+  [line]
+  (when-let [[_ source mount fs opts] (re-matches #"^(\S+) on (.+) \((\w+)([^()]*)\)$" line)]
+    {:source source :mount mount :fs fs :hidden (boolean (re-find #"\bnobrowse\b" opts))}))
+
+(defn- container-row
+  "A container's row: its shortest mount point Finder shows, with every volume's mount point to add
+  up (:volumes); nil when it shows none (the boot firmware's container)."
+  [ms]
+  (when-let [shown (first (sort-by (juxt (comp count :mount) :mount) (remove :hidden ms)))]
+    (assoc (select-keys shown [:source :mount :fs]) :volumes (mapv :mount ms))))
+
 (defn disk-mounts
   "mount's lines as the filesystems worth a row: one per APFS container or partition (the volumes of
-  a container share its space), the shortest mount point kept."
+  a container share its space)."
   [text]
-  (->> (for [line (str/split-lines text)
-             :let [[_ source mount fs] (re-matches #"^(\S+) on (.+) \((\w+)[,)].*$" line)]
-             :when (and fs (real-fs fs))]
-         {:source source :mount mount :fs fs :key (or (re-find #"disk\d+" source) source)})
-       (group-by :key)
+  (->> (keep mount-line (str/split-lines text))
+       (filter #(real-fs (:fs %)))
+       (group-by #(or (re-find #"disk\d+" (:source %)) (:source %)))
        vals
-       (map #(dissoc (first (sort-by (juxt (comp count :mount) :mount) %)) :key))
+       (keep container-row)
        (sort-by :mount)
        vec))
+
+(defn container-space
+  "A container's space from its volumes' statfs numbers ({:bsize :blocks :bfree :bavail} each). APFS
+  gives every volume the container's size and free space but counts in blocks - bfree only that
+  volume's own files (statfs of / alone counts only the sealed system volume), so used is the
+  volumes' sum, size and avail the container's."
+  [volumes]
+  (let [spaces (map proc/disk-space volumes)]
+    {:size (apply max 0 (map :size spaces))
+     :used (reduce + (map :used spaces))
+     :avail (apply max 0 (map :avail spaces))}))
 
 (defn ps-rows
   "ps -axo pid=,ppid=,rss=,command= as [{:pid :ppid :rss (bytes) :kind}], kind as

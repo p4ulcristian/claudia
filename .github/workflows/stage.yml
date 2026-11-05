@@ -3,8 +3,10 @@
 # push to main, this takes the run's `bundle` (built from one git tree) and publishes:
 # - the slave release on the GitHub release tree-<tree>: claudia-tree-<tree>.tar.gz (the whole
 #   build) and the same in two, claudia-code-<tree>.tar.gz and claudia-deps-<lockfile hash>.tar.gz
-#   (servers download node_modules only when the lockfile changed), each with its cosign keyless
-#   signature bundle (<file>.sigstore.json);
+#   (servers download node_modules only when the lockfile changed), and a Mac's node_modules,
+#   claudia-deps-<lockfile hash>-darwin-arm64.tar.gz (the check's artifact bundle-darwin-arm64;
+#   added to a release made before it was there), each with its cosign keyless signature bundle
+#   (<file>.sigstore.json);
 # - the hub's image: ghcr.io/<owner>/claudia-hub:tree-<tree>, put together from the bundle by COPY
 #   only (deploy/hub.Dockerfile; one with RUN is refused, so none of the bundle's code runs here),
 #   signed keyless with the annotation tree=<tree>.
@@ -59,6 +61,10 @@ jobs:
           echo "tree=$tree" >> "$GITHUB_OUTPUT"
           if gh release view "tree-$tree" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release=done" >> "$GITHUB_OUTPUT"
+            if gh release view "tree-$tree" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
+              grep -q -- '-darwin-arm64\.tar\.gz$'; then
+              echo "darwin=done" >> "$GITHUB_OUTPUT"
+            fi
           fi
           if docker manifest inspect "$IMAGE:tree-$tree" >/dev/null 2>&1; then
             echo "image=done" >> "$GITHUB_OUTPUT"
@@ -66,7 +72,7 @@ jobs:
           echo "tree $tree (commit $HEAD_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download the bundle
-        if: steps.tree.outputs.release != 'done' || steps.tree.outputs.image != 'done'
+        if: steps.tree.outputs.release != 'done' || steps.tree.outputs.image != 'done' || steps.tree.outputs.darwin != 'done'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bundle
@@ -74,9 +80,20 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # A check run made before check.yml packed it has none: the release goes out without it.
+      - name: Download the Mac's node_modules
+        if: steps.tree.outputs.darwin != 'done'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bundle-darwin-arm64
+          path: dist-darwin
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Check the bundle
         id: bundle
-        if: steps.tree.outputs.release != 'done' || steps.tree.outputs.image != 'done'
+        if: steps.tree.outputs.release != 'done' || steps.tree.outputs.image != 'done' || steps.tree.outputs.darwin != 'done'
         env:
           TREE: ${{ steps.tree.outputs.tree }}
         run: |
@@ -95,6 +112,17 @@ jobs:
           diff -r dist/pkg dist/split > /dev/null || { echo "code + node_modules differ from the whole build" >&2; exit 1; }
           rm -rf dist/split
           echo "deps=$deps" >> "$GITHUB_OUTPUT"
+          # The Mac's node_modules: from the same lockfile, holding the darwin-arm64 Claude Code.
+          mac="dist-darwin/claudia-deps-$deps-darwin-arm64.tar.gz"
+          if [ -f "$mac" ]; then
+            [ "$(ls dist-darwin)" = "$(basename "$mac")" ] || { echo "the Mac's bundle is not $(basename "$mac"): $(ls dist-darwin)" >&2; exit 1; }
+            mkdir dist/mac
+            tar -xzf "$mac" -C dist/mac --no-same-owner
+            [ "$(cat dist/mac/deps.txt)" = "$deps" ] || { echo "the Mac's node_modules say another lockfile" >&2; exit 1; }
+            [ -x dist/mac/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude ] || { echo "the Mac's node_modules hold no darwin-arm64 Claude Code" >&2; exit 1; }
+            rm -rf dist/mac
+            echo "mac=$mac" >> "$GITHUB_OUTPUT"
+          fi
           if grep -qiE '^[[:space:]]*RUN([[:space:]]|$)' dist/pkg/deploy/hub.Dockerfile; then
             echo "deploy/hub.Dockerfile has RUN: refused (the image is put together by COPY only)" >&2; exit 1
           fi
@@ -109,9 +137,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TREE: ${{ steps.tree.outputs.tree }}
           DEPS: ${{ steps.bundle.outputs.deps }}
+          MAC: ${{ steps.bundle.outputs.mac }}
         run: |
           files=()
-          for f in "dist/claudia-tree-$TREE.tar.gz" "dist/claudia-code-$TREE.tar.gz" "dist/claudia-deps-$DEPS.tar.gz"; do
+          for f in "dist/claudia-tree-$TREE.tar.gz" "dist/claudia-code-$TREE.tar.gz" "dist/claudia-deps-$DEPS.tar.gz" ${MAC:+"$MAC"}; do
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
             cosign verify-blob --bundle "$f.sigstore.json" \
               --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$f"
@@ -122,6 +151,21 @@ jobs:
             --notes "Slave release of git tree ${TREE} (checked at ${HEAD_SHA}), signed by this repository's stage workflow: the whole build, and the same as its code and its node_modules (by lockfile ${DEPS})." \
             "${files[@]}"
           echo "release: tree-$TREE" >> "$GITHUB_STEP_SUMMARY"
+
+      # A release made before the Mac's node_modules were packed (or by a stage.yml that did not know
+      # them) gets them now.
+      - name: Add the Mac's node_modules to the release
+        if: steps.tree.outputs.release == 'done' && steps.tree.outputs.darwin != 'done' && steps.bundle.outputs.mac != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TREE: ${{ steps.tree.outputs.tree }}
+          MAC: ${{ steps.bundle.outputs.mac }}
+        run: |
+          cosign sign-blob --yes --bundle "$MAC.sigstore.json" "$MAC"
+          cosign verify-blob --bundle "$MAC.sigstore.json" \
+            --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$MAC"
+          gh release upload "tree-$TREE" --repo "$GITHUB_REPOSITORY" "$MAC" "$MAC.sigstore.json"
+          echo "release: tree-$TREE + $(basename "$MAC")" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.tree.outputs.image != 'done'
