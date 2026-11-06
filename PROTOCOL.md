@@ -207,7 +207,7 @@ e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. 
 | `POST /api/chats/:id/uploads?name=<file name>` (body: the file, up to 100 MB) | `{ path, name, size, type }`: saved as `uploads/<id>/<name>` in `RUNNER_DATA` (`-2` before the extension when taken). `:id` is the id the page used: a new chat's own uuid before `created` |
 | `GET /api/chats/:id/uploads/:name` | the file, as a download |
 | `GET /api/chats/:id/sent/:msg/:n` | the n-th image the user message `msg` sent (from the session file) |
-| `GET /api/chats/:id/shown/:step` | the image a `show_image` step (its tool-use id) showed |
+| `GET /api/chats/:id/shown/:step` | the image a `show_image` step (its tool-use id) showed, or the video a `show_video` step showed (a `Range` header gets `206` with that part) |
 | `POST /api/chats/:id/fork` `{ at? }` | `{ id }`: a new chat holding this one up to the end of the turn of user message `at` (default: the last finished turn); same folder, picture copied, a colour of its own; 409 with `{ error }` when it can't |
 | `POST /api/chats/:id/explain` `{ step }` (a tool-use id) | `{ text }`: Haiku's 2-3 plain sentences on what that step does (or waits on) |
 | `PATCH /api/chats/:id` `{ title?, archived?, color? }` | `{ ok }`; `title` (≤ 200) is the session's own custom title (`renameSession`); `color`: one of the chat colours, `"ash"` (passive: remembers the colour it had) or `"wake"` (back to that colour, else a fresh one) |
@@ -316,7 +316,8 @@ folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
 A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`) and
 `queued: true` while Claude Code hasn't taken it in (sent during a turn; the `msg` without it, or
-the turn's end, says it was); a `show_image` step has `image: true` (`GET /api/chats/:chat/shown/<id>`).
+the turn's end, says it was); a `show_image` step has `image: true` and a `show_video` step `video: true`
+(both from `GET /api/chats/:chat/shown/<id>`).
 A tool step also has the TypeScript Claudia's `label` (`Draw`, `Folder`, `Ask`, `Bash`, `workspace
 show_image`), `title` (one line: `picture: <title>`, a file's name, a command's description),
 `detail` (its input as JSON, ≤ 4000) and `result?` (`{ error, text ≤ 4000 }`).

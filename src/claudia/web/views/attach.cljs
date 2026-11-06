@@ -181,3 +181,14 @@
   "A picture Claude showed in the chat (show_image); a click shows it big."
   [server chat step-id]
   [:f> shown-image-view server chat step-id])
+
+(defn- shown-video-view [server chat step-id]
+  (let [view @(rf/subscribe [:view])]
+    [:video.shown-video {:src (ops/api-url server (str "chats/" chat "/shown/" step-id) view)
+                         :controls true :plays-inline true :preload "metadata"}]))
+
+(defn shown-video
+  "A video Claude showed in the chat (show_video), played in place; the player's own full screen
+  shows it big."
+  [server chat step-id]
+  [:f> shown-video-view server chat step-id])

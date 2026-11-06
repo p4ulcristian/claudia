@@ -91,6 +91,9 @@
           {:k :steps :id 3 :tools [{:id 3 :role "tool" :image true}]}
           {:k :shown :tool {:id 3 :role "tool" :image true}}]
          (steps/blocks [{:role "user"} {:id 1 :role "tool"} {:id 2 :role "tool"} {:id 3 :role "tool" :image true}])))
+  (is (= [{:k :steps :id 4 :tools [{:id 4 :role "tool" :video true}]}
+          {:k :shown :tool {:id 4 :role "tool" :video true}}]
+         (steps/blocks [{:id 4 :role "tool" :video true}])))
   (is (= "old" (steps/step-summary {:title "old" :summary "new"})))
   (is (= "new" (steps/step-summary {:summary "new"})))
   (is (= "out" (steps/step-result {:text "out"})))

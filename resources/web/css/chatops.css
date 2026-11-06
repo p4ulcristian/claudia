@@ -247,6 +247,7 @@ a.file-chip:hover { border-color: var(--accent); }
 .sent-media { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .msg.shown img { display: block; max-width: 100%; max-height: 360px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
 .msg.shown img + img { margin-top: 6px; }
+.msg.shown video.shown-video { display: block; width: 100%; max-width: 640px; max-height: 420px; border-radius: 8px; border: 1px solid var(--line); background: #000; }
 .sent-thumb { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .sent-thumb img { display: block; max-width: min(220px, 100%); max-height: 220px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
 /* A picture shown big over the page. */
