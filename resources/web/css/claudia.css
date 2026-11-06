@@ -597,3 +597,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .sys-chip b { font-weight: 500; color: var(--fg); }
 .sys-chip.amber { color: var(--amber); }
 .sys-chip.red { color: var(--red); }
+
+/* Full screen where the browser has none for elements (Safari on the iPhone): the element fills the
+   window (claudia.web.fullscreen). */
+.claudia-full { position: fixed !important; inset: 0; z-index: 40; margin: 0 !important; width: auto !important; height: auto !important; max-height: none !important;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-sizing: border-box; }
+html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }

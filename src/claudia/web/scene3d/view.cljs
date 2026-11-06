@@ -168,7 +168,8 @@
      (when (seq legend) [legend-view legend])
      (when (and (pos? story-len) (neg? idx) (not playing) (false? autoplay))
        [:button.primary.s3-bigplay {:on-click #((story-api api :play))} [icon :play] " Play the story"])
-     (when (and (seq sub) (>= idx 0)) [:div.s3-sub sub])
+     ;; Always there while a story is: on a phone it is a row under the stage that keeps its height.
+     (when (pos? story-len) [:div.s3-sub (when (>= idx 0) sub)])
      (when (seq error) [:p.s3-error error])
      (when (and panel (> solids 1)) [overlap-panel state api])
      [:div.s3-bar
