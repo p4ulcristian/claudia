@@ -16,6 +16,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.search :as search]
             [claudia.slave.uploads :as uploads]
+            [claudia.slave.shown :as shown]
             [claudia.slave.video :as video]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.http :as h]
@@ -305,6 +306,7 @@
   (store/open! data-dir)
   (uploads/set-root! data-dir)
   (video/set-root! data-dir)
+  (shown/set-root! data-dir)
   (search/open! data-dir)
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))

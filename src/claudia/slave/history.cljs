@@ -47,6 +47,7 @@
       "mcp__workspace__set_folder" (str "folder " (shown-path (str (:path i)) nil))
       "mcp__workspace__run_with_secret" (str "secret: " (short-text (:reason i) 80))
       "mcp__workspace__show_image" (str "image " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
+      "mcp__workspace__show_video" (str "video " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       (if (str/starts-with? tool "mcp__")
         (str/join " " (rest (str/split tool #"__")))
         tool))))
@@ -146,7 +147,9 @@
            :label (tool-label (:name b)) :title (tool-title (:name b) (:input b))
            :detail (text/fit (js/JSON.stringify (clj->js (:input b)) nil 2) 4000)}
     ;; the page shows the image from GET /api/chats/:id/shown/<this id>
-    (= "mcp__workspace__show_image" (:name b)) (assoc :image true)))
+    (= "mcp__workspace__show_image" (:name b)) (assoc :image true)
+    ;; …and the video from the same address
+    (= "mcp__workspace__show_video" (:name b)) (assoc :video true)))
 
 (defn read-assistant
   "One assistant API message's content blocks -> [Msgs counts]. counts: API message id -> text blocks

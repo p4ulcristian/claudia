@@ -20,8 +20,9 @@
   (* 64 1024 1024))
 
 (def ^:private passed-request-headers
-  "The only browser headers a front gets (besides the hub's own X-Claudia-*)."
-  ["content-type" "content-length" "accept"])
+  "The only browser headers a front gets (besides the hub's own X-Claudia-*). range: a video Claude
+  showed plays in parts (Safari asks for nothing else)."
+  ["content-type" "content-length" "accept" "range"])
 
 (def ^:private dropped-response-headers
   "Hop-by-hop headers belong to one connection, not the answer; and a front never sets cookies on

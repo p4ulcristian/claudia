@@ -15,11 +15,11 @@
 
 (defn blocks
   "The messages as the page shows them: runs of tool steps folded into one group; a step that showed
-  a picture stands on its own, its picture after it."
+  a picture or a video stands on its own, what it showed after it."
   [msgs]
   (reduce (fn [out m]
             (cond
-              (and (= "tool" (:role m)) (:image m))
+              (and (= "tool" (:role m)) (or (:image m) (:video m)))
               (conj out {:k :steps :id (:id m) :tools [m]} {:k :shown :tool m})
               (= "tool" (:role m))
               (if (= :steps (:k (peek out)))

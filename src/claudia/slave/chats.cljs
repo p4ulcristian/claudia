@@ -26,6 +26,7 @@
             [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
+            [claudia.slave.shown :as shown]
             [claudia.slave.store :as store]
             [claudia.slave.tasks :as tasks]
             [claudia.slave.tools :as tools]
@@ -362,6 +363,18 @@
     (or (answers/image-refusal file-path mime stat)
         (answers/image-shown (path/basename file-path) (.toString (fs/readFileSync file-path) "base64") mime caption))))
 
+(defn- show-video
+  "A video file into the chat: copied into the runner's data folder (claudia.slave.shown), the
+  result names the copy; the page plays it under the step. Claude gets the text only."
+  [id {p :path caption :caption}]
+  (let [file-path (path/resolve (or (:folder (store/chat id)) cwd) (answers/home-path p (os/homedir)))
+        stat (try (let [s (fs/statSync file-path)] {:file? (.isFile s) :size (.-size s)}) (catch :default _ nil))]
+    (if-let [why (shown/video-refusal file-path stat)]
+      (answers/refusal why)
+      (-> (shown/store! id file-path)
+          (.then #(answers/text-result (shown/video-answer (path/basename file-path) % caption)))
+          (.catch #(answers/refusal (str "Could not keep the video: " (.-message %))))))))
+
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
@@ -370,6 +383,7 @@
     ["workspace" "set_folder"] (set-folder id (:path args))
     ["workspace" "run_with_secret"] (secret-ask id args)
     ["workspace" "show_image"] (show-image id args)
+    ["workspace" "show_video"] (show-video id args)
     (throw (js/Error. (str "No tool " server "/" tool)))))
 
 (defn- ask! [id entry] (js/Promise. (fn [done] (add-ask! id (assoc entry :resolve done)))))

@@ -300,7 +300,9 @@
   [ck i b {:keys [running last-i] :as marks}]
   (case (:k b)
     :steps ^{:key (str "s" (:id b))} [steps/steps ck (:tools b) (and running (= i last-i))]
-    :shown ^{:key (str "shown-" (:id (:tool b)))} [:div.msg.claude.shown [attach/shown-image (first ck) (second ck) (:id (:tool b))]]
+    :shown ^{:key (str "shown-" (:id (:tool b)))} [:div.msg.claude.shown
+                                                   [(if (:video (:tool b)) attach/shown-video attach/shown-image)
+                                                    (first ck) (second ck) (:id (:tool b))]]
     (msg-row ck i (:m b) marks)))
 
 (defn- working-line [state since]

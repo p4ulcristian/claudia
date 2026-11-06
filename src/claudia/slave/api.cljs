@@ -16,6 +16,7 @@
             [claudia.slave.projects :as projects]
             [claudia.slave.reach :as reach]
             [claudia.slave.search :as search]
+            [claudia.slave.shown :as shown]
             [claudia.slave.store :as store]
             [claudia.slave.tasks :as tasks]
             [claudia.slave.tokens :as tokens]
@@ -186,6 +187,44 @@
       (.then (fn [t] (some #(image-of-line % want) (str/split-lines t))))
       (.catch (fn [_] nil))))
 
+(defn- result-text
+  "A tool_result block's text (its content is text, or blocks of which some are text)."
+  [^js b]
+  (let [c (.-content b)]
+    (if (array? c)
+      (str/join "\n" (keep #(when (= "text" (.-type ^js %)) (.-text ^js %)) c))
+      (str c))))
+
+(defn video-of-line
+  "The stored video's key (claudia.slave.shown) the tool result for tool use `tool` names in a
+  session file line, or nil."
+  [line tool]
+  (when (str/includes? line tool)
+    (let [^js e (try (js/JSON.parse line) (catch :default _ nil))
+          content (some-> e .-message .-content)]
+      (when (and e (= "user" (.-type e)) (array? content))
+        (some (fn [^js b]
+                (when (and (= "tool_result" (.-type b)) (= tool (.-tool_use_id b)))
+                  (shown/key-in (result-text b))))
+              content)))))
+
+(defn- find-video
+  "Promise of the stored video's key the show_video step `tool` showed, or nil."
+  [id tool]
+  (-> (.readFile (.-promises fs) (history/session-file chats/cwd id) "utf8")
+      (.then (fn [t] (some #(video-of-line % tool) (str/split-lines t))))
+      (.catch (fn [_] nil))))
+
+(defn- shown-reply
+  "A step's picture, or its video (in ranges when asked)."
+  [^js req ^js res id step]
+  (.then (find-image id {:tool step})
+         (fn [im]
+           (if im
+             (image-reply res im)
+             (.then (find-video id step)
+                    #(if % (shown/serve! req res id %) (io/send-json res 404 {:error "Nothing shown there."})))))))
+
 ;; ---- chat operations ----
 
 (defn- fork-chat [req id]
@@ -336,7 +375,7 @@
       :upload (uploads/save! req res id (.get q "name"))
       :download (uploads/serve! res id a)
       :sent (.then (find-image id {:uuid a :n (js/Number b)}) #(image-reply res %))
-      :shown (.then (find-image id {:tool a}) #(image-reply res %))
+      :shown (shown-reply req res id a)
       :fork (reply (fork-chat req id))
       :explain (reply (explain-step req id))
       :patch-chat (reply (patch-chat req id)))))

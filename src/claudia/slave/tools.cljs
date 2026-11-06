@@ -50,7 +50,7 @@ When a command needs a password or token, never ask the user to paste it into th
 A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists.
 
 ## Images in the chat
-To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. Markdown image links in your reply do not load."))
+To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load."))
 
 (def form-help
   "form -> [when fields], word for word as the TypeScript Claudia's src/forms.ts, in its order."
@@ -206,6 +206,9 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
   {:show_image {:description "Show a picture file in the chat (png, jpeg, gif or webp, up to 5 MB): a screenshot, a rendered image, a photo. The user sees it under your steps and you see it too. Use it when the user asks you to send or show an image; a diagram or explanation still goes in the picture on the right."
                 :inputSchema (obj ["path"] (array-map :path (s "The image file (absolute, ~/…, or relative to the working folder)")
                                                       :caption (s "A few words about it")))}
+   :show_video {:description "Show a video file in the chat (mp4, m4v, webm or mov, up to 1 GB): a screen recording, a rendered clip. The user plays it under your steps; you don't see it (show a frame with show_image when you need to look). The file is copied and kept with the chat."
+                :inputSchema (obj ["path"] (array-map :path (s "The video file (absolute, ~/…, or relative to the working folder)")
+                                                      :caption (s "A few words about it")))}
    :set_folder {:description "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                 :inputSchema (obj ["path"] {:path (s "The project's root folder")})}
    :run_with_secret {:description "Run one shell command that needs a secret from 1Password, without you ever seeing the secret. The user is asked in Claudia to allow it (or to paste the value); the command then runs with sh -c in the working folder, with the value in the environment variable env_name only. Every occurrence of the value in the output is replaced by [secret]. Refused if the user says no or does not answer within 10 minutes."
@@ -223,4 +226,4 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 
 (def allowed-tools
   ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
-   "mcp__workspace__show_image" "mcp__workspace__run_with_secret"])
+   "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"])
