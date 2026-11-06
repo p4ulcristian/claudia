@@ -4,7 +4,7 @@
 .f-tool:disabled { opacity: 0.4; cursor: default; }
 .f-scene3d { position: relative; border: 2px solid var(--line); border-radius: 10px; background: var(--bg2); overflow: hidden; }
 .s3-stage { position: relative; height: 440px; touch-action: none; }
-.f-scene3d:fullscreen { border: 0; border-radius: 0; }
+.f-scene3d:fullscreen, .f-scene3d.claudia-full { border: 0; border-radius: 0; }
 .s3-grip { height: 14px; cursor: ns-resize; touch-action: none; position: relative; border-top: 1px solid var(--line); }
 .s3-grip::after { content: ""; position: absolute; left: 50%; top: 5px; width: 38px; height: 3px; margin-left: -19px; border-radius: 2px; background: var(--muted); opacity: 0.6; }
 .s3-grip:hover::after { opacity: 1; }
@@ -43,7 +43,8 @@
 
 
 .s3-bigplay { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); font-size: 17px; padding: 10px 22px; z-index: 4; }
-.s3-sub { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); max-width: min(82%, 720px); text-align: center; font: 700 17px/1.35 var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 88%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; pointer-events: none; z-index: 3; }
+.s3-sub { position: absolute; left: 0; right: 0; bottom: 56px; width: fit-content; margin: 0 auto; max-width: min(82%, 720px); text-align: center; font: 700 17px/1.35 var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 88%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; pointer-events: none; z-index: 3; }
+.s3-sub:empty { display: none; }
 .s3-ic { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .f-scene3d .f-tool, .f-scene3d .s3-x, .s3-bigplay { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .s3-legend { position: absolute; left: 10px; top: 8px; display: flex; flex-direction: column; gap: 3px; font: 700 13px var(--hand); color: var(--fg); background: color-mix(in srgb, var(--bg2) 80%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; pointer-events: none; z-index: 2; }
@@ -61,7 +62,16 @@
 .s3-tip { position: absolute; bottom: 26px; transform: translateX(-50%); max-width: 280px; width: max-content; font: 700 13px/1.3 var(--hand); color: var(--fg); background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; box-shadow: 0 4px 14px #0008; pointer-events: none; z-index: 6; }
 .s3-left { flex: 1 1 0; min-width: 0; }
 .s3-story { flex: 1 1 auto; }
-@media (max-width: 679px) { .s3-bar { flex-wrap: wrap; justify-content: flex-end; } .s3-left { flex-basis: 100%; } .s3-sub { bottom: 122px; } }
+/* Phones (upright or sideways): the narration and the controls are rows under the stage, so nothing
+   covers the scene. */
+@media (max-width: 679px), (max-height: 500px) {
+  .f-scene3d { display: flex; flex-direction: column; }
+  .s3-stage { flex: 1 1 auto; min-height: 0; }
+  .s3-sub, .s3-sub:empty { position: static; order: 1; display: flex; align-items: center; justify-content: center; width: auto; max-width: none; min-height: calc(3 * 1.35em + 16px); margin: 0; padding: 8px 12px; font-size: 15px; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+  .s3-bar { position: static; order: 2; padding: 4px 8px 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .s3-left { flex-basis: 100%; }
+  .s3-grip { order: 3; }
+}
 .f-scene3d .s3-making { color: var(--accent); cursor: default; pointer-events: auto; }
 .f-scene3d .s3-video-new { color: var(--green); background: color-mix(in srgb, var(--green) 18%, transparent); }
 /* A finished video playing over the page, with Download. */
