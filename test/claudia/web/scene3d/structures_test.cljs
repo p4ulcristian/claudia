@@ -8,7 +8,10 @@
    {:id "sacrum" :name "Sacrum" :latin "Os sacrum" :side nil :system "skeletal" :tags ["Pelvis"] :file "skeletal/sacrum.glb"}
    {:id "adductor-longus.r" :name "Adductor longus" :latin "Adductor longus" :side "r" :system "muscular" :tags ["Medial compartment of thigh" "Obturator nerve" "Right lower limb"] :file "muscular/adductor-longus.r.glb"}
    {:id "gracilis-muscle.r" :name "Gracilis muscle" :latin "Musculus gracilis" :side "r" :system "muscular" :tags ["Obturator nerve"] :file "muscular/gracilis-muscle.r.glb"}
-   {:id "adductor-longus.or" :name "Adductor longus" :latin "Adductor longus" :side "r" :system "attachment" :kind "origin" :tags [] :file "attachment/adductor-longus.or.glb"}])
+   {:id "adductor-longus.or" :name "Adductor longus" :latin "Adductor longus" :side "r" :system "attachment" :kind "origin" :tags [] :file "attachment/adductor-longus.or.glb"}
+   {:id "obturator-nerve.r" :name "Obturator nerve" :latin "Nervus obturatorius" :side "r" :system "nervous" :shape "lines" :tags ["Obturator nerve"] :file "nervous/obturator-nerve.r.json"}
+   {:id "adductor-minimus.r" :name "(Adductor minimus)" :side "r" :system "muscular" :tags [] :file "muscular/adductor-minimus.r.glb"}
+   {:id "biceps-femoris-long-head.r" :name "Biceps femoris long head" :side "r" :system "muscular" :tags [] :file "muscular/b.glb"}])
 
 (defn- ids [part] (mapv :id (structures/structures-of index part)))
 
@@ -20,13 +23,19 @@
     (is (= ["femur.l"] (ids {:ref "os femoris" :side "left"})))
     (is (= ["sacrum"] (ids {:ref "sacrum" :side "right"})))
     (is (= ["gracilis-muscle.r"] (ids {:ref "gracilis"}))))
-  (testing "by a tag: a nerve's territory, a region"
-    (is (= ["adductor-longus.r" "gracilis-muscle.r"] (ids {:ref "Obturator nerve"})))
+  (testing "a name wins over a tag: the obturator nerve itself, not its territory"
+    (is (= ["obturator-nerve.r"] (ids {:ref "Obturator nerve"}))))
+  (testing "by a tag when no structure has that name: a region"
+    (is (= ["adductor-longus.r" "gracilis-muscle.r"] (ids {:ref "Obturator nerve" :system "muscular"})))
     (is (= ["femur.r" "adductor-longus.r"] (ids {:ref "right lower limb"}))))
   (testing "attachment patches only when asked for; several refs at once"
     (is (= ["adductor-longus.r"] (ids {:ref "adductor longus"})))
     (is (= ["adductor-longus.or"] (ids {:ref "adductor longus" :system "attachment"})))
     (is (= ["femur.r" "sacrum"] (ids {:ref ["femur" "sacrum"] :side "r"})))))
+
+(deftest bracketed-and-partial-names
+  (is (= ["adductor-minimus.r"] (ids {:ref "adductor minimus"})))
+  (is (= ["biceps-femoris-long-head.r"] (ids {:ref "biceps femoris"}))))
 
 (deftest a-part-becomes-its-structures
   (let [one (structures/expand {:id "thigh" :shape "anatomy" :ref "femur" :pos [0 1 0]} (take 1 index))
@@ -39,7 +48,7 @@
       (is (= [nil nil] (mapv :label two))))
     (testing "an attachment patch is coloured and noted by its kind"
       (is (= ["#e0453c" "Adductor longus, origin, right"]
-             ((juxt :color :note) (first (structures/expand {:id "o" :ref "x"} [(last index)]))))))))
+             ((juxt :color :note) (first (structures/expand {:id "o" :ref "x"} (filter #(= "adductor-longus.or" (:id %)) index)))))))))
 
 (deftest nerves-and-vessels-are-tubes
   (let [nerve {:id "obturator-nerve.r" :name "Obturator nerve" :latin "Nervus obturatorius" :side "r" :system "nervous" :shape "lines" :tags [] :file "nervous/obturator-nerve.r.json"}

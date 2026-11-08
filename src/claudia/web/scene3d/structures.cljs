@@ -16,7 +16,11 @@
   :shape (lines, or none for a mesh) :file :centre :size}."
   (:require [clojure.string :as str]))
 
-(defn- norm [s] (-> (str s) str/lower-case str/trim (str/replace #"\s+" " ")))
+(defn- norm
+  "A name as compared: lower case, brackets dropped (Z-Anatomy brackets the parts of a bigger
+  structure: \"(Adductor minimus)\"), spaces single."
+  [s]
+  (-> (str s) str/lower-case (str/replace #"[()]" "") str/trim (str/replace #"\s+" " ")))
 
 (defn- names-of
   "Every name a structure answers to: its id, English name (also without \"muscle\"), Latin."
@@ -29,21 +33,29 @@
     ("left" "l") #{"l" nil}
     #{"r" "l" nil}))
 
-(defn- named? [ref st]
-  (let [r (norm ref)]
-    (or (contains? (names-of st) r) (some #(= r (norm %)) (:tags st)))))
+(defn- by-ref
+  "The structures (of sts) one ref names: those with that name; else, when none, those with that
+  tag (a region, a nerve's territory); else those whose name starts with it."
+  [ref sts]
+  (let [r (norm ref)
+        named (filter #(contains? (names-of %) r) sts)
+        tagged (filter (fn [st] (some #(= r (norm %)) (:tags st))) sts)]
+    (cond (seq named) named
+          (seq tagged) tagged
+          :else (filter (fn [st] (some #(str/starts-with? % (str r " ")) (names-of st))) sts))))
 
 (defn structures-of
-  "The index's structures a part names (in index order): matched by any of its refs, on its side,
-  in its systems (attachment patches only when asked for)."
+  "The index's structures a part names (in index order): on its side, in its systems (attachment
+  patches only when asked for), named by any of its refs (a name before a tag)."
   [index {:keys [ref side system]}]
   (let [refs (if (sequential? ref) ref [ref])
-        systems (set (if (sequential? system) system (when system [system])))]
-    (filterv (fn [st]
-               (and (some #(named? % st) refs)
-                    (contains? (sides side) (:side st))
-                    (if (seq systems) (contains? systems (:system st)) (not= "attachment" (:system st)))))
-             index)))
+        systems (set (if (sequential? system) system (when system [system])))
+        candidates (filter (fn [st]
+                             (and (contains? (sides side) (:side st))
+                                  (if (seq systems) (contains? systems (:system st)) (not= "attachment" (:system st)))))
+                           index)
+        hit (set (map :id (mapcat #(by-ref % candidates) refs)))]
+    (filterv #(hit (:id %)) candidates)))
 
 (def ^:private colours
   {"skeletal" "#e8dcc4" "muscular" "#b8524a" "nervous" "#e6c84a" "joints" "#c9c0ad"

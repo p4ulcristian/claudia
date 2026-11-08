@@ -18,6 +18,7 @@
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.scene3d.data :as data]
             [claudia.web.scene3d.ink :as ink]
+            [claudia.web.shot-wait :as shot-wait]
             [claudia.web.scene3d.anatomy :as anatomy]
             [claudia.web.scene3d.callouts :as callouts]
             [claudia.web.scene3d.labels :as labels]
@@ -848,14 +849,22 @@
                             (fn [a] (assoc prep :parts (:parts a)
                                         :errors (concat (map #(str "code: " %) (:errors prep)) (map #(str "anatomy: " %) (:errors a)))))))))]))
 
+(defn- hold-first-build!
+  "A screenshot waits for the scene's first build (load-and-build! ends this hold)."
+  [^js st]
+  (set! (.-holding st) true)
+  (shot-wait/hold!))
+
 (defn- load-and-build!
   "The person model, the real code and the anatomy load, then the scene is built."
   [{:keys [^js st] :as sc} d extra current?]
   (let [all (vec (filter map? (concat (data/lst (:parts d)) (data/lst (:parts extra)))))]
-    ;; The screenshot waits while some scene is still loading.
-    (set! (.-__scene3dLoading js/window) (inc (or (.-__scene3dLoading js/window) 0)))
+    (shot-wait/hold!)
     (-> (prepared sc d all)
-        (.finally #(set! (.-__scene3dLoading js/window) (dec (.-__scene3dLoading js/window))))
+        (.finally (fn []
+                    (shot-wait/release!)
+                    ;; The scene's first build is done (or failed): its start's hold ends too.
+                    (when (.-holding st) (set! (.-holding st) false) (shot-wait/release!))))
         (.then (fn [[people {:keys [parts faces errors]}]]
                  (when (current?)
                    (when (seq errors) (ui! sc :error (str (first errors))))
@@ -1614,6 +1623,7 @@
   (let [{:keys [^js st] :as sc} (make-scene el ui data0 video)
         input (listen! sc)]
     (set! (.-reader st) rd)
+    (hold-first-build! st)
     (when video
       (set! (.-sMuted st) (empty? (:seconds video)))
       (set! (.-sAutoplay st) true))

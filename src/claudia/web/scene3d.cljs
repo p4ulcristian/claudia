@@ -3,7 +3,8 @@
   so pictures without a 3D scene cost nothing. Explain on a part asks Claude in the open chat."
   (:require [re-frame.core :as rf]
             [reagent.core :as r]
-            [shadow.lazy :as lazy]))
+            [shadow.lazy :as lazy]
+            [claudia.web.shot-wait :as shot-wait]))
 
 (def ^:private lazy-view (lazy/loadable claudia.web.scene3d.view/scene3d))
 
@@ -26,6 +27,7 @@
       (string? ok) [:p.f-note (str "The 3D view did not load: " ok)]
       :else (do (when-not ok
                   (reset! loaded :loading)
+                  (shot-wait/hold-module!)
                   (-> (lazy/load lazy-view)
                       (.then #(reset! loaded :ready))
                       (.catch #(reset! loaded (str (or (.-message %) %))))))
