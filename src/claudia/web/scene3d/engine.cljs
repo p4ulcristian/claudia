@@ -18,6 +18,7 @@
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.scene3d.data :as data]
             [claudia.web.scene3d.ink :as ink]
+            [claudia.web.scene3d.anatomy :as anatomy]
             [claudia.web.scene3d.callouts :as callouts]
             [claudia.web.scene3d.labels :as labels]
             [claudia.web.scene3d.maths :as m]
@@ -56,6 +57,7 @@
     (case (:shape p)
       "group" (THREE/BufferGeometry.)
       "person" (THREE/BufferGeometry.)
+      "anatomy" (or (anatomy/geometry (:file p) (when (:lines p) (:radius p))) (THREE/BufferGeometry.))
       "sphere" (THREE/SphereGeometry. 0.5 40 24)
       "cylinder" (THREE/CylinderGeometry. 0.5 0.5 1 40)
       "rod" (THREE/CylinderGeometry. 1 1 1 16)
@@ -834,17 +836,29 @@
             (fn [e] (ui! sc :error (str "person model: " (.-message e))) nil))
     (js/Promise.resolve nil)))
 
+(defn- prepared
+  "Promise of [people {:parts :faces :errors}]: the person model, the real code (cities, code
+  slabs, texts) and the anatomy models (claudia.web.scene3d.anatomy) the parts need."
+  [{:keys [^js st el] :as sc} d all]
+  (js/Promise.all
+   #js [(load-people sc all)
+        (-> (sources/prepare el (.-reader st) d all text-canvas)
+            (.then (fn [{:keys [parts] :as prep}]
+                     (.then (anatomy/prepare parts)
+                            (fn [a] (assoc prep :parts (:parts a)
+                                        :errors (concat (map #(str "code: " %) (:errors prep)) (map #(str "anatomy: " %) (:errors a)))))))))]))
+
 (defn- load-and-build!
-  "The person model and the real code (cities, code slabs, texts) load, then the scene is built."
-  [{:keys [^js st el] :as sc} d extra current?]
+  "The person model, the real code and the anatomy load, then the scene is built."
+  [{:keys [^js st] :as sc} d extra current?]
   (let [all (vec (filter map? (concat (data/lst (:parts d)) (data/lst (:parts extra)))))]
-    ;; The screenshot waits while some scene is still reading its code.
+    ;; The screenshot waits while some scene is still loading.
     (set! (.-__scene3dLoading js/window) (inc (or (.-__scene3dLoading js/window) 0)))
-    (-> (js/Promise.all #js [(load-people sc all) (sources/prepare el (.-reader st) d all text-canvas)])
+    (-> (prepared sc d all)
         (.finally #(set! (.-__scene3dLoading js/window) (dec (.-__scene3dLoading js/window))))
         (.then (fn [[people {:keys [parts faces errors]}]]
                  (when (current?)
-                   (when (seq errors) (ui! sc :error (str "code: " (first errors))))
+                   (when (seq errors) (ui! sc :error (str (first errors))))
                    (set! (.-faces st) faces)
                    (build! sc d extra parts people)))))))
 

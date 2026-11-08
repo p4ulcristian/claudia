@@ -11,6 +11,7 @@
             ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.node.anatomy :as anatomy]
             [claudia.node.http :as io]
             [claudia.shared.csp :as csp]
             [claudia.shared.protocol :as p]
@@ -30,6 +31,10 @@
                         "/Applications/Chromium.app/Contents/MacOS/Chromium"])
 
 (def web-dir (path/join h/checkout "out" "web"))
+
+(def ^:private anatomy-dir
+  "Where the anatomy models this server's renders use are kept once fetched."
+  (path/join (or (.. js/process -env -XDG_CACHE_HOME) (path/join (.. js/process -env -HOME) ".cache")) "claudia" "anatomy"))
 
 (defn available?
   "The page is built in this checkout (the render page is one of its modes)."
@@ -89,6 +94,7 @@
     (cond
       (= url "/") (do (.writeHead res 200 #js {"content-type" "text/html; charset=utf-8"}) (.end res page))
       (= url "/api/source") (source-reply req res)
+      (str/starts-with? url "/anatomy/") (anatomy/serve! res (subs url 9) anatomy-dir)
       (and file (fs/existsSync file))
       ;; frame.html with its own policy (sandboxed, inline scripts and the CDN), as the hub sends it.
       (do (.writeHead res 200 (clj->js (merge {"content-type" (get types (path/extname file) "application/octet-stream")}

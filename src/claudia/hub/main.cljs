@@ -18,6 +18,7 @@
             [claudia.hub.systems :as systems]
             [claudia.hub.videos :as videos]
             [claudia.hub.narrate :as narrate]
+            [claudia.node.anatomy :as anatomy]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
@@ -165,7 +166,7 @@
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
       :else (server-call res person email server-name what))))
 
-(defn- on-request [web-root ^js req ^js res]
+(defn- on-request [{:keys [web-root data-dir]} ^js req ^js res]
   (let [[pathname query] (split-url (.-url req))]
     (cond
       (str/starts-with? pathname "/s/")
@@ -176,6 +177,9 @@
 
       (str/starts-with? pathname "/hub/")
       (hub-api req res pathname)
+
+      (str/starts-with? pathname "/anatomy/")
+      (anatomy/serve! res (subs pathname 9) (path/join data-dir "anatomy"))
 
       :else
       (web/serve web-root req res pathname))))
@@ -256,6 +260,6 @@
 (defn main [& _args]
   (let [s (settings env)]
     (start-parts! s)
-    (let [^js server (http/createServer (partial on-request (:web-root s)))
+    (let [^js server (http/createServer (partial on-request s))
           beat (pass/heartbeat!)]
       (listen! server s (stopper server beat)))))
