@@ -8,6 +8,7 @@
             [re-frame.core :as rf]
             [reagent.core :as r]
             [claudia.web.fullscreen :as fs]
+            [claudia.web.shot-wait :as shot-wait]
             [claudia.web.scene3d.bar :as bar]
             [claudia.web.scene3d.engine :as engine]
             [claudia.web.scene3d.icons :refer [icon]]
@@ -211,6 +212,8 @@
                              (reset! unlisten (fs/on-change! #(swap! ui assoc :full (fs/full? @host))))
                              (let [{:keys [data server chat video on-video]} (r/props this)
                                    a (engine/start! @host ui data (sources/reader server chat) video)]
+                               ;; The scene now holds the screenshot itself: the module's hold ends.
+                               (shot-wait/release-module!)
                                (reset! api a)
                                (when on-video (on-video (maker/make a @host (:seconds video) data)))))
       :component-did-update (fn [this [_ old]]

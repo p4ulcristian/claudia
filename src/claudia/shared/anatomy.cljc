@@ -6,7 +6,7 @@
   (:require [clojure.string :as str]))
 
 (def repo "p4ulcristian/claudia-anatomy")
-(def version "v1.0.0")
+(def version "v1.0.3")
 
 (defn path-ok?
   "Whether rel (after /anatomy/) is a file of this version: its index or one structure (a GLB
