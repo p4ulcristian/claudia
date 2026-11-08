@@ -10,7 +10,7 @@
   Every step below takes it; the numbers come from claudia.web.scene3d.maths and .data."
   (:require ["three" :as THREE]
             ["three/examples/jsm/controls/OrbitControls.js" :refer [OrbitControls]]
-            ["three/examples/jsm/renderers/CSS2DRenderer.js" :refer [CSS2DObject CSS2DRenderer]]
+            ["three/examples/jsm/renderers/CSS2DRenderer.js" :refer [CSS2DRenderer]]
             ["three/examples/jsm/environments/RoomEnvironment.js" :refer [RoomEnvironment]]
             [claudia.shared.narration :as narration]
             [claudia.web.scene3d.clock :as clock]
@@ -18,7 +18,8 @@
             [claudia.web.scene3d.codepaint :as codepaint]
             [claudia.web.scene3d.data :as data]
             [claudia.web.scene3d.ink :as ink]
-            [claudia.web.scene3d.labels :as label-layout]
+            [claudia.web.scene3d.callouts :as callouts]
+            [claudia.web.scene3d.labels :as labels]
             [claudia.web.scene3d.maths :as m]
             [claudia.web.scene3d.overlap :as overlap]
             [claudia.web.scene3d.person :as person]
@@ -169,13 +170,14 @@
   (set-xyz! (.-scale m) scale)
   (.setFromUnitVectors (.-quaternion m) UP (v3 dir)))
 
-(defn- show-arrow! [{:keys [segs tip dashes ^js label]} show]
+(defn- show-arrow! [{:keys [segs tip dashes on]} show]
   (doseq [^js piece (concat segs [tip] dashes)] (set! (.-visible piece) show))
-  (when label (set! (.-visible label) show)))
+  (reset! on show))
 
 (defn- lay-arrow!
-  "Puts the arrow's pieces on its path: the segments, the head, the dashes, the label halfway."
-  [{:keys [segs tip dashes ^js label]} pts total seconds]
+  "Puts the arrow's pieces on its path: the segments, the head, the dashes, the label's anchor
+  halfway."
+  [{:keys [segs tip dashes ^js anchor]} pts total seconds]
   (let [head (m/arrow-head total)]
     (doseq [[s {:keys [pos len dir]}] (map vector segs (m/arrow-segments pts head))]
       (place-piece! s pos [1 len 1] dir))
@@ -184,7 +186,7 @@
     (doseq [[i dash] (map-indexed vector dashes)]
       (let [{:keys [pos dir]} (m/dash-at pts total head i (count dashes) seconds)]
         (place-piece! dash pos [1 0.2 1] dir)))
-    (when label (set-xyz! (.-position label) (:p (m/along pts (/ total 2)))))))
+    (set-xyz! anchor (:p (m/along pts (/ total 2))))))
 
 (defn- update-arrow!
   "An arrow follows its ends; seconds (when given) move its dashes on."
@@ -199,10 +201,9 @@
 
 (defn- set-arrow!
   "How far an arrow has appeared (0..1)."
-  [{:keys [k ^js mat ^js label] :as arrow} v]
+  [{:keys [k ^js mat] :as arrow} v]
   (reset! k v)
   (set! (.-opacity mat) v)
-  (when label (set! (.. label -element -style -opacity) (str v)))
   (update-arrow! arrow))
 
 (defn- add-meshes!
@@ -210,11 +211,15 @@
   [^js root geo mat n]
   (vec (for [_ (range n)] (let [piece (THREE/Mesh. (geo) mat)] (.add root piece) piece))))
 
-(defn- arrow-label [^js root a ^js color]
+(defn- callout-layer [^js host] (.querySelector host ".s3-callouts"))
+
+(defn- arrow-label
+  "An arrow's label, in the callout layer (its anchor is the arrow's middle)."
+  [host a ^js color]
   (when (:label a)
-    (let [l (CSS2DObject. (label-el (str (:label a)) nil (str "#" (.getHexString color))))]
-      (.add (.. l -element -classList) "arrow")
-      (.add root l)
+    (let [l (label-el (str (:label a)) nil (str "#" (.getHexString color)))]
+      (.add (.-classList l) "arrow")
+      (callouts/add! (callout-layer host) l)
       l)))
 
 (defn- make-arrow
@@ -230,8 +235,8 @@
         tip (first (add-meshes! root #(THREE/ConeGeometry. 0.35 1 16) mat 1))
         dashes (add-meshes! root #(THREE/CylinderGeometry. 0.06 0.06 1 10) mat (if flow? 16 0))
         arrow {:id (str (or (:id a) "")) :flows? flow? :spec a :via via :by-id by-id :mat mat
-               :segs segs :tip tip :dashes dashes :label (arrow-label root a color)
-               :k (atom 1) :now (atom 0)}]
+               :segs segs :tip tip :dashes dashes :label (arrow-label host a color)
+               :anchor (THREE/Vector3.) :on (atom false) :k (atom 1) :now (atom 0)}]
     (update-arrow! arrow)
     arrow))
 
@@ -261,7 +266,7 @@
     (mesh-reveal! e k)))
 
 (defn- mesh-reveal!
-  "How far a part has appeared (0 hidden .. 1 there): a fade, with its label and outline. dim fades
+  "How far a part has appeared (0 hidden .. 1 there): a fade, with its outline. dim fades
   the part back (the spotlight leaves the others faint); lit thickens its outline."
   [^js e k]
   (set! (.-k e) k)
@@ -279,10 +284,6 @@
         (when-let [o (.-outline e)] (ink/set-outline! o k dim (.-lit e) op))
         (doseq [^js c (.-children mesh)]
           (cond
-            (instance? CSS2DObject c)
-            (do (set! (.-visible c) (and (> k 0.05) (> dim 0.5)))
-                (set! (.. c -element -style -opacity) (str k))
-                (.toggle (.. c -element -classList) "s3-noted" (boolean (.-notes e))))
             (.. c -userData -face) (let [^js fm (.-material c)]
                                      (set! (.-opacity fm) (* k dim))
                                      (set! (.-transparent fm) (< (* k dim) 1)))
@@ -399,12 +400,33 @@
   (.add mesh (THREE/LineSegments. (THREE/EdgesGeometry. (.-geometry mesh) 30)
                                   (THREE/LineBasicMaterial. #js {:color 0x000000 :transparent true :opacity 0.35}))))
 
-(defn- add-label! [^js e p]
-  (let [^js mesh (.-mesh e)]
-    (.computeBoundingBox (.-geometry mesh))
-    (let [l (CSS2DObject. (label-el (str (:label p)) (:note p) (str "#" (.getHexString (.. mesh -material -color)))))]
-      (.add mesh l)
-      (set! (.-label e) l))))
+(defn- nearest-vertex
+  "The point of geometry g nearest c (both local)."
+  [^js g ^js c]
+  (let [^js pos (.. g -attributes -position)
+        v (THREE/Vector3.)]
+    (reduce (fn [[best d] i]
+              (.fromBufferAttribute v pos i)
+              (let [di (.distanceToSquared v c)] (if (< di d) [(.clone v) di] [best d])))
+            [(.clone c) js/Infinity] (range (.-count pos)))))
+
+(defn- anchor-of
+  "Where a part's callout line ends (local to its mesh): the centre of a plain shape, else the
+  point of its geometry nearest the centre (the centre of a bent tube can lie off it)."
+  [^js mesh p]
+  (let [^js g (.-geometry mesh)
+        _ (.computeBoundingBox g)
+        c (.getCenter (.-boundingBox g) (THREE/Vector3.))]
+    (if (or (= "text" (:shape p)) (contains? shared-geometry (:shape p "box")))
+      c
+      (first (nearest-vertex g c)))))
+
+(defn- add-label! [host ^js e p]
+  (let [^js mesh (.-mesh e)
+        l (label-el (str (:label p)) (:note p) (str "#" (.getHexString (.. mesh -material -color))))]
+    (callouts/add! (callout-layer host) l)
+    (set! (.-anchor e) (anchor-of mesh p))
+    (set! (.-label e) l)))
 
 (def ^:private hidden-material
   (let [m (THREE/MeshBasicMaterial.)] (set! (.-visible m) false) m))
@@ -428,7 +450,7 @@
                    :outline nil :label nil :lift js/NaN :person nil :poseKey nil}]
     (when (data/outline? p style) (add-outline! e))
     (when (data/edges? p style (contains? ink/presets (:material p))) (add-edges! mesh))
-    (when (and (:label p) (not= "group" (:shape p))) (add-label! e p))
+    (when (and (:label p) (not= "group" (:shape p))) (add-label! host e p))
     e))
 
 (defn- attach-people!
@@ -478,31 +500,11 @@
     (make-batches! host @by-id)
     by-id))
 
-(def ^:private lc (THREE/Vector3.))
-(def ^:private lb (THREE/Box3.))
-
-(defn- place-label!
-  "A part's label sits above its centre by half its height, measured once upright, so a turning part
-  does not swing its label around."
-  [^js e]
-  (let [^js l (.-label e)
-        ^js mesh (.-mesh e)]
-    (when (and l (.-visible mesh))
-      (if-let [p (.-person e)]
-        (.copy (.-position l) (.worldToLocal mesh ((:label-point p) lc)))
-        (let [^js box (.. mesh -geometry -boundingBox)]
-          (when (js/isNaN (.-lift e))
-            (set! (.-lift e) (+ 0.2 (/ (.-y (.getSize (.applyMatrix4 (.copy lb box) (.-matrixWorld mesh)) lc)) 2))))
-          (.localToWorld mesh (.getCenter box lc))
-          (set! (.-y lc) (+ (.-y lc) (.-lift e)))
-          (.copy (.-position l) (.worldToLocal mesh lc)))))))
-
 (defn- dispose! [^js root]
   (.traverse root (fn [^js o]
                     (some-> (.-geometry o) .dispose)
                     (let [mat (.-material o)]
-                      (if (array? mat) (doseq [^js x mat] (.dispose x)) (some-> ^js mat .dispose)))
-                    (when (instance? CSS2DObject o) (.remove (.-element o)))))
+                      (if (array? mat) (doseq [^js x mat] (.dispose x)) (some-> ^js mat .dispose)))))
   (.clear root))
 
 ;; ---- slabs floating over parts ----
@@ -627,7 +629,8 @@
        :world nil :faces {} :raised nil :reader nil
        :focus #{} :cam nil :checker nil :flagged "" :bad #{} :chosen nil
        :frames 0 :scanSeconds scan-seconds
-       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0})
+       :t 0 :last 0 :rate (speeds 2) :on true :visible true :token 0 :raf 0
+       :labelFocus #{} :labelShows #{} :hover nil :hoverAt 0 :cTick 0 :mrect nil})
 
 (defn- make-scene
   "Everything a running scene holds. video: {:seconds {[instruction text] seconds}} when a video is
@@ -642,15 +645,16 @@
         controls (make-controls camera labels)]
     (merge lights
            {:el el :stage stage :ui ui :scene scene :camera camera :renderer renderer :labels labels
+            :callouts (callouts/make! stage)
             :root root :controls controls :st (initial-state ui data0)
             :by-id (atom {}) :k-of (atom {}) :fades (atom []) :dim-target (atom {})
-            :ever-seen (atom #{}) :shifts (atom {}) :pressed (atom nil)
+            :ever-seen (atom #{}) :pressed (atom nil)
             :narrator (if video (voice/given (:seconds video)) (voice/make))
             :voice-ready (if video (js/Promise.resolve true) (voice/available?))})))
 
 ;; ---- the running scene's steps ----
 
-(declare draw! tick! move-parts! build! new-story! start-step!)
+(declare draw! tick! move-parts! build! new-story! start-step! pickable)
 
 (defn- want!
   "Draw on the next frame (once). A video's maker draws every frame itself."
@@ -662,10 +666,11 @@
 (defn- diagram? [{:keys [^js st]}] (= "diagram" (.-style st)))
 (defn- update-arrows! [{:keys [^js st]}] (doseq [a (.-arrows st)] (update-arrow! a)))
 
-(defn- size! [{:keys [^js stage ^js renderer ^js labels ^js camera] :as sc}]
+(defn- size! [{:keys [^js stage ^js renderer ^js labels ^js camera callouts] :as sc}]
   (let [w (.-clientWidth stage) h (.-clientHeight stage)]
     (.setSize renderer w h)
     (.setSize labels w h)
+    (callouts/size! callouts w h)
     (.set (.-value ^js ink/viewport) (max w 1) (max h 1))
     (set! (.-aspect camera) (/ w (max h 1)))
     (.updateProjectionMatrix camera)
@@ -869,7 +874,8 @@
 
 (defn- build!
   "The parts, arrows and overlap checker from the data and what the script built."
-  [{:keys [^js st ^js root el by-id k-of fades ever-seen] :as sc} d extra all people]
+  [{:keys [^js st ^js root el by-id k-of fades ever-seen callouts] :as sc} d extra all people]
+  (callouts/clear! callouts)
   (dispose! root)
   (reset! by-id @(build-parts el root (filterv map? all) (.-style st) people (.-faces st)))
   (.updateMatrixWorld root true)
@@ -1059,12 +1065,21 @@
         (repaint-face! sc id marks))))
   (want! sc))
 
+(defn- label-step!
+  "Which labels a step shows: the parts and arrows it focuses on, and the ones it brings in (nil:
+  no step)."
+  [{:keys [^js st] :as sc} step]
+  (let [ids (all-ids sc)]
+    (set! (.-labelFocus st) (if step (set (filter #(story/matches-any? (:focus step) %) ids)) #{}))
+    (set! (.-labelShows st) (if step (set (filter #(story/matches-any? (:show step) %) ids)) #{}))))
+
 (defn- show-step!
-  "What step n shows: parts on, poses, the focus and spotlight, the camera."
+  "What step n shows: parts on, poses, the focus and spotlight, the labels, the camera."
   [{:keys [^js st] :as sc} n step animate?]
   (apply-story-state! sc n animate?)
   (pose-people! sc n (if animate? (:move step) 0))
   (set! (.-focus st) (focus-of sc step))
+  (label-step! sc step)
   (set-spotlight! sc)
   (when (empty? (.-focus st)) (paint! sc))
   (mark-step! sc step)
@@ -1159,6 +1174,7 @@
   (set! (.-sIdx st) -1)
   (ui! sc :idx -1 :sub "")
   (set! (.-focus st) #{})
+  (label-step! sc nil)
   (set-spotlight! sc)
   (paint! sc))
 
@@ -1169,6 +1185,7 @@
   (apply-story-state! sc (.-sIdx st) false)
   (pose-people! sc (.-sIdx st) 0)
   (set! (.-focus st) (if (>= (.-sIdx st) 0) (focus-of sc (nth steps (.-sIdx st))) #{}))
+  (label-step! sc (when (>= (.-sIdx st) 0) (nth steps (.-sIdx st))))
   (set-spotlight! sc)
   (voice-state! sc d steps)
   (when (and (not= false (:autoplay d)) (not (.-sAutoplay st)) (neg? (.-sIdx st)))
@@ -1185,31 +1202,6 @@
     (if (empty? steps) (clear-story! sc) (keep-story! sc d steps))))
 
 ;; ---- one frame ----
-
-(defn- forget-shifts!
-  "Labels gone from the page lose their shift."
-  [shifts els]
-  (let [present (set els)]
-    (doseq [[^js x] @shifts :when (not (present x))]
-      (swap! shifts dissoc x)
-      (set! (.. x -style -translate) ""))))
-
-(defn- rect-of [^js x]
-  (let [r (.getBoundingClientRect x)]
-    {:left (.-left r) :right (.-right r) :top (.-top r) :bottom (.-bottom r)}))
-
-(defn- declutter!
-  "Labels that would sit on each other move apart, easing frame by frame. -> whether still easing."
-  [{:keys [^js labels shifts]}]
-  (let [els (filterv #(not= "none" (.. ^js % -style -display))
-                     (array-seq (.querySelectorAll (.-domElement labels) ".s3-label")))
-        _ (forget-shifts! shifts els)
-        moved (label-layout/targets (mapv rect-of els) (map #(get @shifts %) els))]
-    (doseq [[^js x s] (map vector els moved)]
-      (let [s (label-layout/ease s)]
-        (swap! shifts assoc x s)
-        (set! (.. x -style -translate) (label-layout/translate (:y s)))))
-    (boolean (some label-layout/easing? moved))))
 
 (defn- script-frame!
   "The script's clock runs while the scene plays and shows. -> whether it ran."
@@ -1262,11 +1254,98 @@
     (doseq [a (.-arrows st) :when (:flows? a)] (update-arrow! a (/ wall 1000)))
     true))
 
-(defn- render! [{:keys [^js scene ^js camera ^js renderer ^js labels by-id]}]
+(defn- render! [{:keys [^js scene ^js camera ^js renderer]}]
   (.updateMatrixWorld scene)
-  (doseq [[_ e] @by-id] (place-label! e))
-  (.render renderer scene camera)
-  (.render labels scene camera))
+  (.render renderer scene camera))
+
+;; ---- callouts ----
+
+(def ^:private occluder (THREE/Raycaster.))
+(def ^:private max-callouts 24)
+
+(defn- screen-of
+  "A world point on a stage w by h: [x y] in pixels, or nil when it is behind the camera."
+  [^js camera ^js v w h]
+  (let [^js s (.project (.clone v) camera)]
+    (when (< (.-z s) 1) [(* (/ (+ (.-x s) 1) 2) w) (* (/ (- 1 (.-y s)) 2) h)])))
+
+(defn- hidden-behind?
+  "Whether a visible, opaque mesh (not one of own) lies between the camera and v."
+  [^js camera meshes own ^js v]
+  (let [dir (.sub (.clone v) (.-position camera))
+        dist (.length dir)]
+    (.set occluder (.-position camera) (.normalize dir))
+    (set! (.-far occluder) (* dist 0.985))
+    (boolean (some (fn [^js h]
+                     (let [^js o (.-object h) ^js mat (.-material o)]
+                       (and (not (own o)) (.-visible o) (not (array? mat)) (>= (.-opacity mat) 0.95))))
+                   (array-seq (.intersectObjects occluder meshes false))))))
+
+(defn- part-callouts
+  "The parts' labels: {:id :el :anchor (world) :k :own}."
+  [by-id]
+  (for [[id ^js e] by-id :let [^js l (.-label e)] :when l]
+    (let [p (.-person e)
+          v (if p ((:label-point p) (THREE/Vector3.)) (.localToWorld (.-mesh e) (.clone (.-anchor e))))]
+      (.toggle (.-classList l) "s3-noted" (boolean (.-notes e)))
+      {:id id :el l :anchor v :k (if (> (.-dim e) 0.5) (.-k e) 0)
+       :own (set (if p (:meshes p) [(.-mesh e)]))})))
+
+(defn- arrow-callouts
+  "The arrows' labels: {:id :el :anchor :k :own}."
+  [arrows]
+  (for [{:keys [id label anchor k on segs tip]} arrows :when label]
+    {:id id :el label :anchor anchor :k (if @on @k 0) :own (set (cons tip segs))}))
+
+(defn- model-rect
+  "The scene's box on the screen: {:left :right :top :bottom} (pixels, inside the stage)."
+  [{:keys [^js root ^js camera]} w h]
+  (let [^js b (.setFromObject (THREE/Box3.) root)
+        lo (.-min b) hi (.-max b)
+        pts (keep #(screen-of camera % w h)
+                  (for [x [(.-x lo) (.-x hi)] y [(.-y lo) (.-y hi)] z [(.-z lo) (.-z hi)]] (THREE/Vector3. x y z)))]
+    (if (empty? pts)
+      {:left (* 0.3 w) :right (* 0.7 w) :top 0 :bottom h}
+      {:left (max 0 (apply min (map first pts))) :right (min w (apply max (map first pts)))
+       :top (max 0 (apply min (map second pts))) :bottom (min h (apply max (map second pts)))})))
+
+(defn- callout-item
+  "A label to show, with its anchor on the screen, or nil (not wanted, not there, off the stage,
+  or behind something solid)."
+  [{:keys [^js camera]} meshes want w h {:keys [id el anchor k own]}]
+  (when (and (> k 0.05) (labels/wanted? want id))
+    (when-let [[x y] (screen-of camera anchor w h)]
+      (when (and (< -1 x (inc w)) (< -1 y (inc h)) (not (hidden-behind? camera meshes own anchor)))
+        {:id id :el el :x x :y y :opacity (min 1 k)
+         :color (let [c (.getPropertyValue (.-style ^js el) "--c")] (if (seq c) c "#888"))}))))
+
+(defn- obstacles
+  "What labels must keep clear of, as rects on the stage: the legend, the subtitles, the bar."
+  [^js el ^js stage]
+  (let [^js sr (.getBoundingClientRect stage)]
+    (for [sel [".s3-legend" ".s3-sub" ".s3-bar"]
+          :let [^js x (.querySelector el sel)]
+          :when x
+          :let [^js r (.getBoundingClientRect x)]
+          :when (pos? (.-width r))]
+      {:left (- (.-left r) (.-left sr)) :right (- (.-right r) (.-left sr))
+       :top (- (.-top r) (.-top sr)) :bottom (- (.-bottom r) (.-top sr))})))
+
+(defn- callouts-frame!
+  "The labels for this frame: which show, where their columns stand, their leader lines. -> whether
+  any label still eases into place."
+  [{:keys [^js st ^js stage el callouts by-id] :as sc}]
+  (let [w (.-clientWidth stage) h (.-clientHeight stage)
+        tick (inc (.-cTick st))
+        _ (set! (.-cTick st) tick)
+        _ (when (or (nil? (.-mrect st)) (zero? (mod tick 3))) (set! (.-mrect st) (model-rect sc w h)))
+        all (concat (part-callouts @by-id) (arrow-callouts (.-arrows st)))
+        want {:story? (boolean (seq (.-steps st))) :focus (.-labelFocus st) :shows (.-labelShows st)
+              :hover (.-hover st)}
+        meshes (pickable @by-id)
+        items (vec (take max-callouts (keep #(callout-item sc meshes want w h %) all)))
+        shown (set (map :el items))]
+    (callouts/frame! callouts items (remove shown (map :el all)) (.-mrect st) w h (obstacles el stage))))
 
 (defn- draw!
   "One frame: the script, fades, people, camera, focus pulse, dims, flows, the orbit, then drawing
@@ -1284,7 +1363,7 @@
         flowing (flow-frame! sc wall)
         turning (.update controls)
         _ (render! sc)
-        easing (declutter! sc)]
+        easing (callouts-frame! sc)]
     (when (or ticking fading posing flying pulsing dimming flowing turning easing) (want! sc))))
 
 ;; ---- input ----
@@ -1403,6 +1482,22 @@
 
 (defn- press! [{:keys [pressed]} ^js e] (reset! pressed [(.-clientX e) (.-clientY e)]))
 
+(defn- hover!
+  "The part under the pointer shows its label (looked up at most every 60 ms, not while dragging)."
+  [{:keys [^js st ^js root by-id pressed] :as sc} ^js e]
+  (let [now (js/performance.now)]
+    (when (and (nil? @pressed) (> (- now (.-hoverAt st)) 60))
+      (set! (.-hoverAt st) now)
+      (.updateMatrixWorld root true)
+      (let [hit (best-hit @by-id (hits-at sc (pickable @by-id) (.-clientX e) (.-clientY e)))
+            id (when hit (str (.. ^js hit -object -userData -id)))]
+        (when (not= id (.-hover st))
+          (set! (.-hover st) id)
+          (want! sc))))))
+
+(defn- unhover! [{:keys [^js st] :as sc}]
+  (when (.-hover st) (set! (.-hover st) nil) (want! sc)))
+
 (defn- release!
   "A click is a press and release in place; dragging to turn is not."
   [{:keys [pressed] :as sc} ^js e]
@@ -1415,6 +1510,7 @@
   "The scene's listeners and observers. -> what destroy! removes."
   [{:keys [el ^js stage ^js labels ^js controls ^js st] :as sc}]
   (let [input {:wheel #(wheel! sc %) :down #(press! sc %) :click #(release! sc %)
+               :move #(hover! sc %) :leave #(unhover! sc)
                :ro (js/ResizeObserver. #(size! sc))
                :io (js/IntersectionObserver.
                     (fn [entries] (set! (.-visible st) (.-isIntersecting ^js (aget entries 0))) (want! sc)))}]
@@ -1423,20 +1519,24 @@
     (.addEventListener stage "wheel" (:wheel input) #js {:passive false :capture true})
     (.addEventListener (.-domElement labels) "pointerdown" (:down input))
     (.addEventListener (.-domElement labels) "click" (:click input))
+    (.addEventListener (.-domElement labels) "pointermove" (:move input))
+    (.addEventListener (.-domElement labels) "pointerleave" (:leave input))
     (.observe ^js (:ro input) el)
     (.observe ^js (:io input) el)
     input))
 
 (defn- destroy!
   "Stops everything and frees the GPU's and the page's resources."
-  [{:keys [^js st ^js stage ^js labels ^js controls ^js env ^js pmrem ^js renderer root narrator] :as sc}
-   {:keys [wheel down click ^js ro ^js io]}]
+  [{:keys [^js st ^js stage ^js labels ^js controls ^js env ^js pmrem ^js renderer root narrator callouts] :as sc}
+   {:keys [wheel down click move leave ^js ro ^js io]}]
   (set! (.-token st) (inc (.-token st)))
   (js/cancelAnimationFrame (.-raf st))
   (.disconnect ro)
   (.disconnect io)
   (.removeEventListener (.-domElement labels) "pointerdown" down)
   (.removeEventListener (.-domElement labels) "click" click)
+  (.removeEventListener (.-domElement labels) "pointermove" move)
+  (.removeEventListener (.-domElement labels) "pointerleave" leave)
   (.removeEventListener stage "wheel" wheel #js {:capture true})
   (.dispose controls)
   (.dispose env)
@@ -1447,7 +1547,9 @@
   (dispose! root)
   (.dispose renderer)
   (.remove (.-domElement renderer))
-  (.remove (.-domElement labels)))
+  (.remove (.-domElement labels))
+  (.remove (:layer callouts))
+  (.remove (:canvas callouts)))
 
 (defn- set-style! [{:keys [^js st] :as sc} s]
   (when (not= s (.-style st))

@@ -2,36 +2,71 @@
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.scene3d.labels :as labels]))
 
-(defn- rect [left top] {:left left :right (+ left 50) :top top :bottom (+ top 20)})
+(deftest which-labels-show
+  (testing "without a story, all of them"
+    (is (labels/wanted? {:story? false} "femur")))
+  (testing "in a story: the step's focus, else what it brings in, and the part under the pointer"
+    (is (labels/wanted? {:story? true :focus #{"femur"}} "femur"))
+    (is (not (labels/wanted? {:story? true :focus #{"femur"} :shows #{"tibia"}} "tibia")))
+    (is (labels/wanted? {:story? true :focus #{} :shows #{"tibia"}} "tibia"))
+    (is (labels/wanted? {:story? true :focus #{"femur"} :hover "tibia"} "tibia"))
+    (testing "an overview step (no focus, nothing brought in) shows every label"
+      (is (labels/wanted? {:story? true :focus #{} :shows #{}} "tibia")))))
 
-(deftest labels-apart-stay-put
-  (is (= [{:y 0 :to 0 :side 0} {:y 0 :to 0 :side 0}]
-         (labels/targets [(rect 0 0) (rect 100 0)] [nil nil]))))
+(deftest a-side-for-each-label
+  (is (= :left (labels/side-of 100 {:left 200 :right 600})))
+  (is (= :right (labels/side-of 450 {:left 200 :right 600}))))
 
-(deftest a-label-on-another-moves-off-it
-  (testing "the lower one moves down below the first (3 px apart)"
-    (is (= [{:y 0 :to 0 :side 0} {:y 0 :to 18 :side 1}]
-           (labels/targets [(rect 0 0) (rect 10 5)] [nil nil]))))
-  (testing "the higher one moves up"
-    (is (= {:y 0 :to -18 :side -1}
-           (second (labels/targets [(rect 0 10) (rect 10 5)] [nil nil])))))
-  (testing "a shifted label is placed from where it would sit unshifted"
-    (is (= {:y 23 :to 18 :side 1}
-           (second (labels/targets [(rect 0 0) (rect 10 28)] [nil {:y 23 :to 23 :side 1}])))))
-  (testing "never more than 90 px"
-    (is (= 90 (:to (second (labels/targets [{:left 0 :right 50 :top 0 :bottom 300} (rect 10 160)] [nil nil])))))
-    (is (every? #(<= -90 (:to %) 90) (labels/targets (mapv #(rect 0 %) (range 100)) (repeat nil))))))
+(deftest a-column-never-overlaps
+  (testing "labels where they want to be when there is room"
+    (is (= [50 100] (labels/stack [50 100] [20 20] 0 400))))
+  (testing "two that want the same height are pushed apart, gap between them"
+    (is (= [50 76] (labels/stack [50 50] [20 20] 0 400))))
+  (testing "pushed past the bottom, the column moves up"
+    (is (= [354 380] (labels/stack [385 390] [20 20] 0 390))))
+  (testing "not fitting at all, they stack down from the top"
+    (is (= [10 36 62] (labels/stack [10 10 10] [20 20 20] 0 40)))))
 
-(deftest clear-of-gives-up-after-ten-moves
-  (let [placed (vec (for [i (range 20)] {:left 0 :right 50 :top (* i 21) :bottom (+ (* i 21) 20)}))
-        [dy side] (labels/clear-of (rect 0 0) 0 20 0 placed)]
-    (is (= 1 side))
-    (is (pos? dy))))
+(deftest columns-stand-beside-the-model
+  (is (= {:left-x 182 :right-x 618} (labels/columns {:left 200 :right 600} 1000 {:left 80 :right 90})))
+  (testing "a model filling the stage leaves the columns at its edges"
+    (is (= {:left-x 98 :right-x 892} (labels/columns {:left 0 :right 1000} 1000 {:left 80 :right 90})))))
 
-(deftest shifts-ease-and-snap
-  (is (= {:y 2.5 :to 10} (labels/ease {:y 0 :to 10})))
-  (is (= {:y 10 :to 10} (labels/ease {:y 9.7 :to 10})))
-  (is (labels/easing? {:y 0 :to 10}))
-  (is (not (labels/easing? {:y 9.7 :to 10})))
-  (is (= "" (labels/translate 0)))
-  (is (= "0 -12.3px" (labels/translate -12.34))))
+(deftest the-layout
+  (let [items [{:id "a" :x 300 :y 100 :w 80 :h 20} {:id "b" :x 500 :y 100 :w 60 :h 20}]
+        placed (labels/layout items {:left 250 :right 550 :top 50 :bottom 350} 1000 400 [])]
+    (is (= {:side :left :cy 100 :top 90 :left 152} (placed "a")))
+    (is (= {:side :right :cy 100 :top 90 :left 568} (placed "b")))))
+
+(deftest leader-lines
+  (is (= [[300 100] [246 100] [232 100]]
+         (labels/leader {:x 300 :y 100} {:side :left :left 152 :cy 100} 80)))
+  (is (= [[500 100] [554 100] [568 100]]
+         (labels/leader {:x 500 :y 100} {:side :right :left 568 :cy 100} 60))))
+
+(deftest easing-into-place
+  (is (= 100 (labels/ease nil 100)))
+  (is (= 100 (labels/ease 99.8 100)))
+  (is (= 30 (labels/ease 0 100))))
+
+(deftest a-column-keeps-clear-of-legend-and-subtitles
+  (let [legend {:left 10 :right 200 :top 10 :bottom 150}
+        sub {:left 150 :right 850 :top 300 :bottom 380}]
+    (testing "a column under the legend starts below it and ends above the subtitles"
+      (is (= {:top 156 :bottom 294} (labels/span 100 190 400 [legend sub]))))
+    (testing "a column clear of both reaches the stage's margins"
+      (is (= {:top 18 :bottom 382} (labels/span 880 990 400 [legend sub]))))))
+
+(deftest a-full-column-hands-labels-over
+  (let [it (fn [id x] {:id id :x x :y 100 :w 50 :h 20})]
+    (testing "too many on the left: the ones nearest the middle cross over"
+      (is (= {:left [(it "a" 10)] :right [(it "c" 300) (it "b" 20)]}
+             (labels/balance {:left [(it "a" 10) (it "b" 20)] :right [(it "c" 300)]} {:left 30 :right 200}))))
+    (testing "both full: nothing moves"
+      (is (= {:left [(it "a" 10) (it "b" 20)] :right [(it "c" 300)]}
+             (labels/balance {:left [(it "a" 10) (it "b" 20)] :right [(it "c" 300)]} {:left 30 :right 20}))))))
+
+(deftest labels-that-do-not-fit-are-left-out
+  (let [items (for [i (range 5)] {:id (str i) :x 10 :y 50 :w 40 :h 20})
+        placed (labels/layout items {:left 300 :right 700 :top 0 :bottom 100} 1000 100 [{:left 900 :right 1000 :top 0 :bottom 100}])]
+    (is (= 2 (count placed)))))

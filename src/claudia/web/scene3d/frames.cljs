@@ -1,12 +1,12 @@
 (ns claudia.web.scene3d.frames
   "A video's pictures, made off screen: right after the engine draws a frame, paint! puts it on a
-  canvas of its own (the page's background, the 3D drawing, then the labels, the legend and the
+  canvas of its own (the page's background, the 3D drawing, the callouts' leader lines, then the labels, the legend and the
   subtitles as the page shows them; not the bar), and jpeg hands it over."
   (:require [claudia.web.scene3d.paint :as paint]
             [claudia.web.scene3d.video :as video]))
 
 (def ^:private max-side 1920)
-(def ^:private overlays [".s3-labels" ".s3-legend" ".s3-sub"])
+(def ^:private overlays [".s3-callouts" ".s3-legend" ".s3-sub"])
 
 (defn- opaque-background
   "The colour behind the stage: the first ancestor's background that is not see-through."
@@ -42,6 +42,8 @@
     (.fillRect ctx 0 0 vw vh)
     (.setTransform ctx scale 0 0 scale x y)
     (.drawImage ctx gl 0 0 (.-width sr) (.-height sr))
+    (when-let [^js leaders (.querySelector el ".s3-leaders")]
+      (.drawImage ctx leaders 0 0 (.-width sr) (.-height sr)))
     (doseq [sel overlays]
       (when-let [o-el (.querySelector el sel)] (paint/el! ctx o-el o 1)))))
 
