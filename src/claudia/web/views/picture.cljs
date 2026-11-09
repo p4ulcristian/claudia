@@ -1,8 +1,7 @@
 (ns claudia.web.views.picture
   "The right half: the open chat's picture, a canvas of blocks top to bottom (two half blocks side by
   side), or the timeline; the view switch over it and the stepper under the picture; the folded edge. No title on the board: the title
-  names a picture only in the bar's scrubber. Desktop: the form row is the right rail beside it
-  (right-rail); phone: a row at the top of the picture screen."
+  names a picture only in the bar's scrubber."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -82,8 +81,8 @@
 
 ;; ---- the picture ----
 
-(defn- blocks-view [{:keys [blocks p live? cols kept-ids gone keep! unkeep!]}]
-  [:div.picture.blocks {:class (when (pos? cols) (str "cols-" cols))}
+(defn- blocks-view [{:keys [blocks p live? kept-ids gone keep! unkeep!]}]
+  [:div.picture.blocks
    (for [b blocks
          :let [kept? (and live? (some #{(:id b)} kept-ids))]]
      ^{:key (:id b)}
@@ -100,9 +99,8 @@
 
 (defn picture-view
   "A scene's blocks. k: the chat it belongs to; live?: it is the chat's live picture (forms that
-  write, templates and kept blocks work only there); cols: 0 = Claude's layout, 1-3 = every block
-  one cell in that many columns."
-  [{:keys [scene k live? cols]}]
+  write, templates and kept blocks work only there)."
+  [{:keys [scene k live?]}]
   (let [prev (h/use-ref nil)
         ;; A files block the user clicked in stays on the live picture when Claude's draw removes it,
         ;; until the user closes it. Kept per chat, for this page.
@@ -116,7 +114,7 @@
         blocks (pure/with-gone (:blocks scene) kept-ids gone (.-current copies))]
     (cond
       (seq blocks)
-      (blocks-view {:blocks blocks :p p :live? live? :cols cols :kept-ids kept-ids :gone gone
+      (blocks-view {:blocks blocks :p p :live? live? :kept-ids kept-ids :gone gone
                     :keep! (fn [id] (set-kept #(pure/kept-with % k id)))
                     :unkeep! (fn [id]
                                (set! (.-current copies) (dissoc (.-current copies) id))
@@ -126,14 +124,6 @@
       (old-picture scene p)
 
       :else [empty-state])))
-
-;; ---- the right rail (desktop): this chat's forms ----
-
-(defn right-rail
-  "The rail beside the picture, mirroring the chats rail: the form row in a column (its contents:
-  claudia.web.views.codeforms/form-rail; nothing on phones, where the row tops the picture)."
-  []
-  [:nav.rail.right-rail {:aria-label "Forms"} [:f> codeforms/form-rail]])
 
 ;; ---- the pane ----
 
@@ -148,8 +138,7 @@
         phone? (db/phone?)
         ;; The picture shown: the live one, or an earlier one from the history (read only).
         scene (:scene hist)
-        asks (get-in oc [:state :asks])
-        cols (get-in oc [:state :pictureSettings :cols] 0)]
+        asks (get-in oc [:state :asks])]
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
       [:section.right
@@ -157,10 +146,8 @@
        (if (= view :timeline)
          [:div.right-tl [:f> timeline/timeline-view oc]]
          [:div.right-scroll
-          (when (and phone? (:server oc) (not ro))
-            [:f> codeforms/picture-tools oc])
           [:div.stage {:class (when (:viewing? hist) "past")}
-           [:f> picture-view {:scene scene :k (:ck oc) :cols cols
+           [:f> picture-view {:scene scene :k (:ck oc)
                               :live? (and (not (:viewing? hist)) (not ro))}]]])
        (when (and (:chat oc) (= view :picture))
          [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])

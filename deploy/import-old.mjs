@@ -5,7 +5,7 @@
 // The chats themselves are Claude Code's session files, which both read; what moves is everything
 // the old store kept beside them: which sessions are Claudia chats (archived or not, folder, colour,
 // the colour a passive chat had), every turn's picture (the picture history), every turn's file
-// changes, the templates, each chat's picture settings (form row, columns), model and effort, how
+// changes, the templates, each chat's model and effort, how
 // its last turn ended and when it was last seen. Running it again only adds what is missing: rows
 // already here are kept as they are, except a chat's live picture, which follows the old store's
 // newest picture unless this Claudia drew a newer one.
@@ -22,8 +22,6 @@ if (!oldPath || !dataDir || !cwd) {
 
 const COLORS = new Set(["burgundy", "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan",
   "sky", "blue", "indigo", "violet", "purple", "magenta", "pink", "brown", "ash"]);
-// The old form row said "use" for what this one calls "required".
-const FORM_STATE = { use: "required", required: "required", off: "off" };
 
 const old = new DatabaseSync(oldPath, { readOnly: true });
 const has = (t) => !!old.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
@@ -52,9 +50,7 @@ db.exec(`PRAGMA journal_mode = WAL;
     path TEXT NOT NULL, before TEXT, after TEXT, added INTEGER NOT NULL, removed INTEGER NOT NULL,
     status TEXT NOT NULL, skipped TEXT, at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS templates (name TEXT PRIMARY KEY COLLATE NOCASE, html TEXT NOT NULL,
-    parts TEXT NOT NULL DEFAULT '{}', description TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, forms TEXT NOT NULL DEFAULT '{}',
-    cols INTEGER NOT NULL DEFAULT 0, forms_seen TEXT);`);
+    parts TEXT NOT NULL DEFAULT '{}', description TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);`);
 
 const n = { chats: 0, pictures: 0, changes: 0, templates: 0, settings: 0, scenes: 0 };
 db.exec("BEGIN");
@@ -112,18 +108,12 @@ for (const t of all("templates", "SELECT * FROM templates")) {
   n.templates += insertTemplate.run(t.name, t.html, t.parts || "{}", t.description || "", t.updated_at).changes;
 }
 
-// Each chat's picture settings (form row, columns) and its model and effort.
-const insertSettings = db.prepare("INSERT OR IGNORE INTO chat_settings (id, forms, cols, forms_seen) VALUES (?, ?, ?, NULL)");
+// Each chat's model and effort.
 const haveKv = db.prepare("SELECT 1 FROM kv WHERE chat = ? AND key = 'settings'");
 const insertKv = db.prepare("INSERT INTO kv (chat, key, value) VALUES (?, 'settings', ?)");
 for (const [id, s] of settings) {
   if (!here.has(id)) continue;
-  let forms = {};
-  try {
-    for (const [f, v] of Object.entries(JSON.parse(s.forms || "{}"))) if (FORM_STATE[v]) forms[f] = FORM_STATE[v];
-  } catch {}
-  n.settings += insertSettings.run(id, JSON.stringify(forms), s.cols ?? 0).changes;
-  if ((s.model || s.effort) && !haveKv.get(id)) insertKv.run(id, JSON.stringify({ model: s.model ?? null, effort: s.effort ?? null }));
+  if ((s.model || s.effort) && !haveKv.get(id)) n.settings += insertKv.run(id, JSON.stringify({ model: s.model ?? null, effort: s.effort ?? null })).changes;
 }
 
 db.exec("COMMIT");

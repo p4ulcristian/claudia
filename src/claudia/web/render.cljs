@@ -18,7 +18,7 @@
   ;; As the user sees it, without the title (the board has none).
   [:section.render-stage
    [:div.stage {:style {:padding-bottom 18}}
-    [:f> picture/picture-view {:scene scene :k :render :live? false :cols 0}]]])
+    [:f> picture/picture-view {:scene scene :k :render :live? false}]]])
 
 (defn- video-stage
   "One 3D scene filling the window, making a video: seconds, its clips' lengths; on-video gets the maker."

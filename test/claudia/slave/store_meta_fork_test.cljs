@@ -1,5 +1,9 @@
 (ns claudia.slave.store-meta-fork-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require ["node:fs" :as fs]
+            ["node:os" :as os]
+            ["node:path" :as path]
+            ["node:sqlite" :refer [DatabaseSync]]
+            [cljs.test :refer [deftest is]]
             [claudia.slave.fork :as fork]
             [claudia.slave.meta :as meta]
             [claudia.slave.store :as store]
@@ -11,6 +15,23 @@
   (is (= ["UPDATE chats SET title = ?, stopped = ? WHERE id = ?" ["T" 1 "c"]]
          (store/update-statement "c" {:title "T" :stopped true :nope 1})))
   (is (nil? (store/update-statement "c" {:id "x" :nope 1})) "the id is never set"))
+
+(deftest chat-settings-move-into-kv-and-go
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-store-"))
+        old (DatabaseSync. (path/join dir "claudia.db"))]
+    (.exec old "CREATE TABLE chat_settings (id TEXT PRIMARY KEY, forms TEXT NOT NULL DEFAULT '{}',
+                  cols INTEGER NOT NULL DEFAULT 0, forms_seen TEXT);
+                INSERT INTO chat_settings VALUES ('a', '{\"files\":\"required\"}', 2, '{\"chart\":\"x1\"}');
+                INSERT INTO chat_settings VALUES ('b', '{}', 0, NULL);")
+    (.close old)
+    (store/open! dir)
+    (is (= {:chart "x1"} (store/forms-seen "a")))
+    (is (nil? (store/forms-seen "b")))
+    (store/save-forms-seen! "b" {"git" "y2"})
+    (is (= {:git "y2"} (store/forms-seen "b")))
+    (store/open! dir)
+    (is (= {:chart "x1"} (store/forms-seen "a")) "opening again changes nothing")
+    (fs/rmSync dir #js {:recursive true :force true})))
 
 ;; meta
 

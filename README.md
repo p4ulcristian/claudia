@@ -88,6 +88,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     WireGuard address only, and a pf anchor (`deploy/macos/guard.sh`, root) lets its port in only
     from the hub's tunnel address, as the nft rule does on Linux. Instead of: a Linux VM on the Mac,
     or building node_modules on the Mac itself.
+14. Claude chooses every block (2026-11-09): the per-chat form row is gone: the right rail on
+    desktops, the row over the picture on phones, the column picker, required and off kinds,
+    questions off, and the auto files/git/clojure blocks. The draw tool offers every form not deleted
+    in the Forms window, and Claude picks the kinds and the layout. `chat_settings` moved its one
+    kept value (the forms a chat's Claude last heard of) into `kv` as `formsSeen` and was dropped.
+    Why: 8 of 177 chats on one server ever set the row in three weeks; the forms themselves are
+    to be cut down next. Instead of: keeping the row, or keeping it on phones only.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
@@ -148,9 +155,8 @@ clojure and calls need `clj-kondo` on the runner). Forms are described in `claud
 into the page's own files and loaded on first use, each grammar when its language is first shown; the editor is CodeMirror 6. Templates
 (`save_template`, `templates`, "save as template" on a freeform badge) live in the runner's SQLite.
 Built-in forms can be deleted and restored in the Forms window (per profile; Claude's draw tool
-leaves them out). Each chat has a form row (allowed -> required -> off per kind, questions allowed <-> off) and a
-column count (auto, 1, 2, 3) for its picture. Claude Code cuts long tool descriptions, so the forms'
-data is also in the system prompt.
+leaves them out). Claude picks the kinds and the layout of every picture itself (decision 14).
+Claude Code cuts long tool descriptions, so the forms' data is also in the system prompt.
 
 ## Build
 

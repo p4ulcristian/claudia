@@ -177,7 +177,7 @@
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
 /* Chalk lines: each places its own ::before 2px past the line on every side. */
-.edge-line::before, .f-arrow::before, .f-timeline::before, .right-rail::after {
+.edge-line::before, .f-arrow::before, .f-timeline::before {
   content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
 }
 .edge-line::before, .f-arrow::before { inset: -2px; }
@@ -240,9 +240,6 @@
 .split.folded { grid-template-columns: minmax(340px, 1fr) 16px; }
 .split.folded > .left { max-width: none; }
 
-/* ---------- The right rail (desktop): this chat's forms, beside the picture ---------- */
-.rail.right-rail { position: relative; width: 64px; flex: none; display: flex; flex-direction: column; min-height: 0; padding: calc(46px + var(--top-safe, 0px)) 0 14px; background: var(--bg2); }
-.rail.right-rail::after { right: auto; top: 8px; bottom: 8px; left: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 
 /* ---------- The timeline (one feed of every step, a rail per agent) ---------- */
 .right-tl { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -326,7 +323,6 @@
 
 /* ---------- Phones (under 680px): the picture is a screen over the chat ---------- */
 @media (max-width: 679px) {
-  .rail.right-rail { display: none; }
   .split > .right { background: var(--bg); }
   .rbar-zone { padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
   .tl-detail { margin-left: 14px; }
@@ -343,5 +339,3 @@ html.render #root { height: auto; }
 .rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 /* Folded: only the edge line between the chat and the rail. */
 .split.folded > .left::after { display: none; }
-/* The phone's picture has the form row only; the Forms window opens from Settings (as the old one did). */
-.right-scroll > .forms-btn { display: none; }

@@ -1,6 +1,6 @@
 (ns claudia.web.views.shell
   "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Desktop: the rail of chat circles
-  | the chat column | a 6 px divider | the picture | the forms rail; the full chat list (and Settings
+  | the chat column | a 6 px divider | the picture; the full chat list (and Settings
   in its place) opens over the rail as a drawer. Phone (under 680 px): three full screens, list ->
   chat -> picture, one shown at a time."
   (:require [re-frame.core :as rf]
@@ -124,8 +124,6 @@
     [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]]
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
    (split-view m)
-   ;; The right rail, mirroring the chats rail: this chat's forms (claudia.web.views.picture/right-rail).
-   (when-not phone? [picture/right-rail])
    [gallery]
    [admin/dialog]])
 

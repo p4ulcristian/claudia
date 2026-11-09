@@ -299,7 +299,7 @@
         t)))
 
 (defn set-scene!
-  "A chat's picture changed by the page (the editor, the form row): kept, saved (also as the picture
+  "A chat's picture changed by the page (the editor): kept, saved (also as the picture
   of the turn that drew it, src/chat.ts userBlock), sent."
   [id s]
   (swap-chat! id assoc :scene s)
@@ -420,7 +420,6 @@
   [id rpc {tool :name :keys [input toolUseID title description]}]
   (let [ask-id (or toolUseID (str (random-uuid)))]
     (cond
-      (and (= tool "AskUserQuestion") (codeforms/off? id "questions")) answers/questions-off
       (= tool "AskUserQuestion")
       (ask! id {:ask {:id ask-id :kind "question" :questions (:questions input)} :input input :rpc rpc})
       (= tool "ExitPlanMode")
@@ -565,7 +564,7 @@
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
 (defn- prompt-version [] (session/hash36 (codeforms/prompt-for)))
-(defn- tools-version [id] (session/hash36 (js/JSON.stringify (clj->js (codeforms/mcp-for id)))))
+(defn- tools-version [] (session/hash36 (js/JSON.stringify (clj->js (codeforms/mcp-for)))))
 
 (defn- close-session! [id]
   (hostlink/send! {:op "close" :id id})
@@ -584,19 +583,14 @@
   starts again after its turn."
   [id]
   (when (:live (st id))
-    (let [mcp (codeforms/mcp-for id)
-          v (tools-version id)]
+    (let [mcp (codeforms/mcp-for)
+          v (tools-version)]
       (-> (hostlink/control! id "setMcp" mcp)
           (.then (fn [_] (store/kv! id "session" (assoc (store/kv id "session") :tools v)))
                  (fn [e]
                    (js/console.error (str "[" (subs id 0 8) "] tools not swapped (" (text/error-text e) "); restarting after this turn"))
                    (swap-chat! id assoc :stale true)
                    (restart-if-stale! id)))))))
-
-(defn tools-changed!
-  "The chat's form row changed: its live session gets the new tools now."
-  [id]
-  (swap-tools! id))
 
 (defn prefs-changed!
   "A form deleted or restored (the profile's prefs): every live chat gets the new draw tool now, and
@@ -780,7 +774,7 @@
     (when busy (swap-chat! cid assoc :since (or (:since (st cid)) (js/Date.now))))
     (set-running! cid (boolean busy))
     (when-not was
-      (when (not= (:tools kept) (tools-version cid)) (swap-tools! cid))
+      (when (not= (:tools kept) (tools-version)) (swap-tools! cid))
       (when (not= (:prompt kept) (prompt-version))
         (swap-chat! cid assoc :stale true)
         (restart-if-stale! cid)))))
@@ -814,7 +808,7 @@
   (let [s (settings id)]
     (session/start-spec {:cwd cwd :id id :resume? resume? :env child-env
                          :prompt (codeforms/prompt-for) :allowed tools/allowed-tools
-                         :model (:model s) :effort (:effort s) :mcp (codeforms/mcp-for id)
+                         :model (:model s) :effort (:effort s) :mcp (codeforms/mcp-for)
                          :edit-tools changes/edit-tools :worktrees? (worktree/on?)})))
 
 (defn- start-session!
@@ -822,7 +816,7 @@
   [id resume? t account]
   (hostlink/send! {:op "start" :id id :spec (start-spec id resume? (run-env t))})
   (codeforms/forms-seen-now! id)
-  (store/kv! id "session" {:account account :tools (tools-version id) :prompt (prompt-version)})
+  (store/kv! id "session" {:account account :tools (tools-version) :prompt (prompt-version)})
   (swap-chat! id assoc :live true :account account :stale false :final-counts {}))
 
 (defn- ensure-session!
@@ -848,8 +842,8 @@
     (swap-chat! id turns/with-sent msg)
     (store/kv! id "turn" (:id msg))
     (note-msg! id msg)
-    ;; A changed form row and the forms news go with this message, as a reminder the chat doesn't
-    ;; show (the news only to a session that ran with the old tools).
+    ;; The forms news goes with this message, as a reminder the chat doesn't show (only to a
+    ;; session that ran with the old tools).
     (hostlink/send! (cond-> {:op "send" :id id :text (take-moved-note! id (codeforms/take-note! id message was-live?)) :uuid (:id msg)}
                       (seq images) (assoc :images images)))
     (set-running! id true)))
@@ -900,8 +894,7 @@
      :scene (current-scene id)
      :running (boolean (:running s))
      :since (:since s)
-     :asks (vec (map :ask (vals (:asks s))))
-     :pictureSettings (codeforms/chat-settings id)}))
+     :asks (vec (map :ask (vals (:asks s))))}))
 
 (defn snapshot
   "Promise of the chat frame: the session file's history with this turn's live Msgs and the sent

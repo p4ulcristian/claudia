@@ -177,17 +177,11 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 
 (defn picture-mcp
   "The picture server's tools (src/prompt.ts pictureMcp). forms: the forms on offer here and now
-  (deleted, not on this runner and switched off in the chat left out); required: the kinds the
-  chat's form row made required; freeform-off: the row switched freeform off."
-  [forms required freeform-off]
+  (deleted and not on this runner left out)."
+  [forms]
   {:draw {:description (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.\n\n"
                             "Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:\n"
-                            (help-lines forms)
-                            (when (seq required)
-                              (str "\n\nIn this chat the user made REQUIRED: " (str/join ", " required)
-                                   " (green in the form row). The picture always holds at least one block of each; a change that takes the last one away is refused. Other kinds stay allowed."))
-                            (when (some #{"freeform"} required) " Freeform required means: be creative, build interactive pages where they help.")
-                            (when freeform-off "\n\nFreeform is switched off for this chat: no html blocks or templates; use graphs and forms."))
+                            (help-lines forms))
           :inputSchema (draw-schema forms)}
    :templates {:description "List the saved templates (freeform blocks kept by name): name, description, parts."
                :inputSchema {:type "object" :properties {} :additionalProperties false}}

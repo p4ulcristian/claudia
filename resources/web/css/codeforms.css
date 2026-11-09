@@ -1,14 +1,14 @@
-/* The code forms (files, git, editor, flow), templates, the Forms gallery and the per-chat form row,
+/* The code forms (files, git, editor, flow), templates, the Forms gallery,
    in the board's chalk (DESIGN.md). Loaded after claudia.css. */
 
 /* Chalked outlines: the colour (--ink) through the baked mask (--ring), as in claudia.css. */
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
-.form-dot::before, .col-btn::before, .f-kind::before {
+.f-kind::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring);
 }
 .f-ln.hot::before { content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none); }
-.form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 .f-note { color: var(--muted); }
 
 .tpl-save { order: -1; font: 700 12px var(--hand); color: var(--muted); opacity: 0; transition: opacity 0.15s; }
@@ -234,51 +234,8 @@
 .g-entry.deleted { opacity: 0.45; }
 .g-entry.deleted:hover { opacity: 0.8; }
 .tpl-delete.restore:hover { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
-.form-row .form-dots { display: contents; }
-/* The right rail: the forms in a column (like the chats rail), the column picker at its foot. */
-.right-rail { padding-bottom: 14px; }
-.right-rail::after { right: auto; left: 0; }
-.form-rail { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.form-rail .form-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 6px 0 16px; }
-/* The user's tools (files, git, clojure): blue, their own group above the column picker; lit while in the picture. */
-.form-row .form-tools { display: contents; }
-.form-rail .form-tools { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--line); }
-.form-dot.tool { color: var(--blue); }
-.form-dot.tool { background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.form-dot.tool.required { color: var(--blue); background: color-mix(in srgb, var(--blue) 26%, transparent); box-shadow: 0 0 12px 1px color-mix(in srgb, var(--blue) 55%, transparent); }
-.form-rail .col-pick { margin: 0; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--line); }
-.form-rail .form-peek { top: 0; left: auto; right: calc(100% + 10px); z-index: 20; width: 460px; max-width: calc(100vw - 100px); }
-.form-row { position: sticky; top: 0; z-index: 6; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 14px; margin: 0 0 6px; background: color-mix(in oklch, var(--bg2) 92%, transparent); backdrop-filter: blur(4px); border-bottom: 1.5px dashed color-mix(in srgb, var(--line) 70%, transparent); }
-.form-dot { position: relative; width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--muted); isolation: isolate; transition: transform 0.12s; --ring: var(--chalk-c30-18); --ink: currentColor; }
-.form-dot svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.form-dot:hover { transform: scale(1.1); color: var(--fg); }
-.form-dot.required { color: var(--green); background: color-mix(in srgb, var(--green) 22%, transparent); --ring: var(--chalk-c30-22); }
-.form-dot.off { opacity: 0.4; }
-.form-dot.off::after { content: ""; position: absolute; left: 3px; right: 3px; top: 50%; border-top: 2px solid var(--red); transform: rotate(-40deg); }
-.form-peek { position: absolute; top: 46px; left: 10px; width: min(460px, calc(100% - 20px)); padding: 12px 14px; border-radius: 12px; background: var(--board); box-shadow: 0 12px 40px rgb(0 0 0 / 0.45); border: 1px solid var(--line); pointer-events: none; }
-.form-peek-head { display: flex; align-items: baseline; gap: 10px; }
-.form-peek-head b { font: 700 19px var(--hand); }
-.form-peek-state { font: 700 13px var(--hand); color: var(--muted); }
-.form-peek-state.required { color: var(--green); }
-.form-peek-state.off { color: var(--red); }
-.form-peek p { margin: 4px 0 8px; color: var(--muted); font-size: 12.5px; }
-.form-peek-sample { max-height: 240px; overflow: hidden; }
-.form-peek-hint { margin: 8px 0 0 !important; font: 700 12px var(--hand) !important; }
 .f-sketch { margin-left: 10px; font: 700 12px var(--hand); color: var(--amber); }
 
-/* Columns per chat (form row, right end). Every block is one cell; fewer columns when the pane is narrow. */
-.picture.blocks.cols-1 { grid-template-columns: minmax(0, 1fr); }
-.picture.blocks.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.picture.blocks.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.picture.blocks[class*="cols-"] > .block { grid-column: auto; }
-.picture.blocks.cols-1 > .block { grid-column: 1 / -1; }
-@container (max-width: 899px) { .picture.blocks.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .col-btn.c3 { display: none; } }
-@container (max-width: 559px) { .picture.blocks.cols-2, .picture.blocks.cols-3 { grid-template-columns: minmax(0, 1fr); } .col-pick { display: none; } }
-.col-pick { margin-left: auto; display: flex; gap: 4px; flex: none; }
-.col-btn { height: 26px; min-width: 30px; padding: 0 6px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); font: 700 13px var(--hand); position: relative; isolation: isolate; --ring: var(--chalk-r7-15); --ink: var(--line); }
-.col-btn:hover { color: var(--fg); }
-.col-btn.on { color: var(--fg); --ink: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.col-btn svg { width: 20px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
 .f-kind { flex: none; font: 700 12px var(--hand); padding: 0 8px; border-radius: 8px; position: relative; isolation: isolate; --ring: var(--chalk-r8-15); --ink: currentColor; }
 .f-kind::before { opacity: 0.8; }
 .f-kind.real { color: var(--green); }
@@ -324,9 +281,6 @@
 .code-chip { display: inline-flex; align-items: baseline; gap: 8px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--line); font: 12px var(--mono); color: var(--fg); }
 .code-chip:hover, .code-chip.on { border-color: var(--accent); }
 
-/* The picture header: the Forms button and the form row under the title. */
-.picture-head { flex-wrap: wrap; }
-.form-tools { display: flex; gap: 10px; }
 .gallery .g-sample .form-view { width: 100%; }
 
 .code-chip .add { color: var(--green); }
@@ -488,4 +442,3 @@ button.cl-fn:hover { text-decoration: underline; }
 .ca-box b em { font: 700 11px var(--hand); font-style: normal; color: var(--amber); white-space: nowrap; }
 .ca-box span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9.5px var(--mono); color: var(--muted); }
 .ca-cut { text-align: center; }
-.picture-head > .form-row { flex: 1 0 100%; }

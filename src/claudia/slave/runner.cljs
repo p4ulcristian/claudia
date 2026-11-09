@@ -152,13 +152,6 @@
     (chats/set-scene! chat scene)
     (when (seq text) (wake-with! chat text nil))))
 
-;; The form row and the columns of this chat's picture.
-(defmethod on-chat-frame "picture_settings" [_ f chat]
-  (let [{:keys [settings scene]} (codeforms/set-settings chat (chats/scene-of chat) (chats/chat-folder chat) f)]
-    (when scene (chats/set-scene! chat scene))
-    (when (some? (:forms f)) (chats/tools-changed! chat))
-    (emit chat {:type "picture_settings" :chat chat :settings settings})))
-
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))
     :unknown (send! c {:type "error" :text (str "Unknown frame " frame-type ".")})

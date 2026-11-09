@@ -246,7 +246,6 @@ Page → runner:
 | `seen` | `chat` | the person looked at its last turn |
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
-| `picture_settings` | `chat`, `forms?`, `cols?` | the chat's form row (`{ <kind>: "required" \| "off" }`, kinds = forms plus `graph`, `freeform`, `questions`; left out = allowed) and its picture's columns (0 = Claude's layout, 1-3) |
 | `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
 | `settings` | `chat`, `model?`, `effort?` (null = the person's default) | the chat's model and effort: kept, used on its next start, and given to a live session at once |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
@@ -270,7 +269,6 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `error` | `chat?`, `text` |
-| `picture_settings` | `chat`, `settings: { forms, cols }` (also in `chat` as `pictureSettings`) |
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
@@ -408,10 +406,10 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 | `GET /api/chats/<id>/git?repo&limit?&branches?&fp?` | `{ fp, commits, head, currentBranch, detached, dirty, branches, more }`, or `{ same: true }` while `fp` is the repo's; only a `repo` a git block of the chat's picture names; 404 without `git` in `CLAUDIA_FORMS` |
 | `…/git?repo&commit=<rev or WORKING>&file?` | `{ meta, files, diff, stats, truncated? }`; with `file`, `{ diff }` of that file |
 
-The draw tool goes through the chat's form row: kinds switched off are refused; a change that takes
-the last block of a required kind away is refused whole; a required `files`/`git` puts Claudia's own
-block (`auto-files`, `auto-git`, the chat's folder) on the picture. The form row's change is told to
-Claude once, in a `<system-reminder>` after the text of the next message (with the forms news). `templates` and `save_template` are
+Claude picks every kind of block itself: there are no per-chat choices. The draw tool refuses only
+forms deleted in the Forms window (a session started before the delete still lists them); changes
+to the forms are told to Claude once, in a `<system-reminder>` after the text of the next message
+(the forms news). `templates` and `save_template` are
 tools of the `picture` server; a block `{ id, template: "<name>", parts? }` is drawn from the template.
 A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
 
