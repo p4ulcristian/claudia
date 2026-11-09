@@ -52,12 +52,21 @@
       (let [re (js/RegExp. (str "(" (str/join "|" (map #(str/replace % #"[.*+?^${}()|\[\]\\]" "\\$&") ws)) ")") "gi")]
         (into [:<>] (map-indexed (fn [i p] (if (odd? i) ^{:key i} [:mark p] p)) (.split (str text) re)))))))
 
+(defn elsewhere-mark
+  "Two windows, one behind the other: this chat is open in another tab of this browser."
+  []
+  [:span.cs-elsewhere {:data-tip "Open in another tab" :aria-label "Open in another tab"}
+   [:svg {:viewBox "0 0 16 16" :aria-hidden true}
+    [:rect {:x 1.5 :y 5 :width 9.5 :height 8 :rx 1.5}]
+    [:path {:d "M5 5V3.5A1.5 1.5 0 0 1 6.5 2h7A1.5 1.5 0 0 1 15 3.5v5a1.5 1.5 0 0 1-1.5 1.5H11"}]]])
+
 (defn- row-view
   [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click tag project?]
                                                 :or {line2? true}}]
   (let [k [server id]
-        [kind text] (when line2? (pure/second-line row))]
-    [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen")]
+        [kind text] (when line2? (pure/second-line row))
+        elsewhere? (contains? @(rf/subscribe [:open-elsewhere]) k)]
+    [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen") (when elsewhere? "elsewhere")]
                               :style {"--chat" (chat-color-var color)}
                               :on-click (or on-click #(pick! k active? %))
                               :on-context-menu #(chatmenu/open-at! k %)}
@@ -69,6 +78,7 @@
        (when multi? [chat/server-mark server])
        (when project? [:span.cs-project (pure/project-label row)])
        (when tag [:span.cs-tag tag])
+       (when elsewhere? [elsewhere-mark])
        [:span.when (or when-text (ago (:at row)))]]
       (when line2? [:span.cs-l2 {:class kind} (if (str/blank? text) " " text)])]]))
 
