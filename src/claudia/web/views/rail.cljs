@@ -15,6 +15,7 @@
             [claudia.web.views.settings :as settings]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.systems :as systems]
+            [claudia.web.views.tearoff :as tearoff]
             [claudia.web.views.usage :as usage]))
 
 (defn- use-slide!
@@ -97,7 +98,8 @@
          [:f> plan-menu {:box box :saved saved :account account :close #(set-menu false)}])])))
 
 (defn- rail-chat
-  "A chat's circle with its title (and its server on the hub)."
+  "A chat's circle with its title (and its server on the hub); dragged out of the window, the chat
+  opens in a window of its own."
   [{:keys [rows i open multi? ro projects elsewhere]} {:keys [server id title color off folder] :as r}]
   (let [k [server id]
         steps-back? #(sidebar-pure/passive? % elsewhere open)
@@ -105,7 +107,8 @@
         project (:name (get projects [server folder]))
         label @(rf/subscribe [:server-label server])
         elsewhere? (contains? elsewhere k)]
-    [:button.rail-chat {:data-slide (str server "/" id)
+    [:button.rail-chat (merge (tearoff/drag-props k)
+                              {:data-slide (str server "/" id)
                         :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
                                 (when passive? "passive")
                                 (when (and passive? (not (some-> (get rows (dec i)) steps-back?))) "first")
@@ -117,7 +120,7 @@
                         :data-tip-color (sidebar/chat-color-var color)
                         :aria-label title
                         :on-click #(sidebar/pick! k (= k open) %)
-                        :on-context-menu #(chatmenu/open-at! k %)}
+                        :on-context-menu #(chatmenu/open-at! k %)})
      [dot/chat-dot r (and (not ro) (:unseen r) (not= k open))]
      [:span.rail-name title]
      (when multi? [:span.rail-server label])]))
