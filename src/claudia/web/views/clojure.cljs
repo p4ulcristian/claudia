@@ -518,7 +518,7 @@
 
 (defn source-view [{:keys [code row lang]}]
   (let [tokens (shiki/use-tokens code (or lang "clj") false)]
-    (into [:pre.cl-src]
+    (into [:pre.cl-src {:class (when (shiki/clojure? (or lang "clj")) "nowrap")}]
           (map-indexed (fn [i l]
                          ^{:key i}
                          (into [:div [:span.cl-no (+ (or row 1) i)]]

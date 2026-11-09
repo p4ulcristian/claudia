@@ -16,3 +16,7 @@
     (is (nil? (shiki/lang-file index "brainfudge")))
     (is (nil? (shiki/lang-file index "")))
     (is (nil? (shiki/lang-file index nil)))))
+
+(deftest clojure?-names-every-clojure-language
+  (is (every? shiki/clojure? ["clj" "cljs" "cljc" "edn" "bb" "clojure" "Clojure" "CLJ"]))
+  (is (not-any? shiki/clojure? ["js" "sql" "md" "" nil])))

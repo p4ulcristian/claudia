@@ -145,7 +145,7 @@
     [:div.f-code {:class (when (:diff data) "is-diff")}
      (code-head file lang rows (some false? shown) opened set-opened copied copy)
      (when (:error data) [:p.f-note.f-code-err (:error data)])
-     (into [:div.f-lines]
+     (into [:div.f-lines {:class (when (shiki/clojure? lang) "nowrap")}]
            (mapcat (fn [[kind i j]]
                      (if (= kind :fold)
                        [(fold-button i j set-opened)]
