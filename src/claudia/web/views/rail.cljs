@@ -107,7 +107,7 @@
         project (:name (get projects [server folder]))
         label @(rf/subscribe [:server-label server])
         elsewhere? (contains? elsewhere k)]
-    [:button.rail-chat (merge (tearoff/drag-props k)
+    [:button.rail-chat (merge (tearoff/drag-props k #(tearoff/move-on! k open rows elsewhere))
                               {:data-slide (str server "/" id)
                         :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
                                 (when passive? "passive")

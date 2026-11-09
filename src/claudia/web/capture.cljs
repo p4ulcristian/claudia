@@ -4,6 +4,10 @@
   frame without asking again; when the user stops sharing, the next circle asks again."
   (:require [claudia.web.circle :as circle]))
 
+;; How long a frame takes from a paint to the capture's video (ms); also covers the sharing bar
+;; showing up the first time.
+(def ^:private settle-ms 300)
+
 ;; {:stream MediaStream :video <video> playing it}, or nil before the first circle.
 (defonce ^:private shared (atom nil))
 
@@ -44,15 +48,14 @@
           (.then (fn [stream] (.then (playing stream) (fn [v] (reset! shared {:stream stream :video v})))))))))
 
 (defn- next-frame
-  "Promise resolved once the video shows a frame painted after now (the chalk line is in it)."
+  "Promise of the video once the tab's frame holds what is painted now (the chalk line): two paints,
+  then time for the capture to deliver them. The video is off screen, where requestVideoFrameCallback
+  may never fire, so this waits by the clock."
   [^js v]
   (js/Promise.
    (fn [ok]
      (js/requestAnimationFrame
-      (fn [] (js/requestAnimationFrame
-              (fn [] (if (.-requestVideoFrameCallback v)
-                       (.requestVideoFrameCallback v (fn [] (.requestVideoFrameCallback v (fn [] (ok v)))))
-                       (js/setTimeout #(ok v) 120)))))))))
+      (fn [] (js/requestAnimationFrame (fn [] (js/setTimeout #(ok v) settle-ms))))))))
 
 (defn- crop-blob
   "Promise of a PNG Blob of the window box `zone` cut from the video's frame."
