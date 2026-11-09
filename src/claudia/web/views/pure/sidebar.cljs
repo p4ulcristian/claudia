@@ -9,10 +9,84 @@
   [s]
   (str/lower-case (str/trim (str s))))
 
-(defn by-title
-  "The rows whose title holds q (a search-key); all of them for an empty q."
+(defn project-key
+  "The project a row is filed under: its project's root, \"\" for none."
+  [row]
+  (or (get-in row [:project :root]) ""))
+
+(defn project-label
+  "A row's project as its tag and chip say it."
+  [row]
+  (or (get-in row [:project :name]) "No project"))
+
+(defn- holds? [s q] (str/includes? (str/lower-case (str s)) q))
+
+(defn project-holds?
+  "Whether the row's project name holds q (a search-key)."
+  [row q]
+  (boolean (and (seq q) (get-in row [:project :name]) (holds? (get-in row [:project :name]) q))))
+
+(defn matching
+  "The rows whose title or project name holds q (a search-key); all of them for an empty q."
   [rows q]
-  (if (seq q) (filter #(str/includes? (str/lower-case (str (:title %))) q) rows) rows))
+  (if (seq q) (filter #(or (holds? (:title %) q) (project-holds? % q)) rows) rows))
+
+(defn in-project
+  "The rows of the project chip k (a project-key; nil: all)."
+  [rows k]
+  (if (nil? k) rows (filter #(= k (project-key %)) rows)))
+
+(defn project-chips
+  "The archived list's project chips, [{:key :label :count}]: most chats first, then by name; the
+  chats with no project last."
+  [rows]
+  (->> (group-by project-key rows)
+       (map (fn [[k rs]] {:key k :label (project-label (first rs)) :count (count rs)}))
+       (sort-by (juxt #(= "" (:key %)) (comp - :count) (comp str/lower-case :label)))
+       vec))
+
+(defn with-project-finds
+  "The search's finds ({server [Found]}) with every row whose project name holds q added (no hits)
+  when the search did not find it already."
+  [found rows q]
+  (let [have (set (for [[server fs] found, f fs] [server (:id f)]))]
+    (reduce (fn [acc r]
+              (if (or (have [(:server r) (:id r)]) (not (project-holds? r q)))
+                acc
+                (update acc (:server r) (fnil conj []) {:id (:id r) :count 0 :hits []})))
+            found rows)))
+
+(defn- day-start [ms]
+  (let [d (js/Date. ms)] (.getTime (js/Date. (.getFullYear d) (.getMonth d) (.getDate d)))))
+
+(defn days-ago
+  "How many calendar days (local) before now t is."
+  [t now]
+  (js/Math.round (/ (- (day-start now) (day-start t)) 86400000)))
+
+(defn- month-label [t now]
+  (let [d (js/Date. t)]
+    (str (.toLocaleDateString d "en-US" #js {:month "long"})
+         (when (not= (.getFullYear d) (.getFullYear (js/Date. now))) (str " " (.getFullYear d))))))
+
+(defn time-section
+  "The archived list's section for a chat last active at t: Today, Yesterday, Past 7 days, Past 2
+  weeks, then its month (with the year when it is not now's)."
+  [t now]
+  (let [n (days-ago (or t 0) now)]
+    (cond (<= n 0) "Today"
+          (= n 1) "Yesterday"
+          (< n 7) "Past 7 days"
+          (< n 14) "Past 2 weeks"
+          :else (month-label (or t 0) now))))
+
+(defn in-sections
+  "items newest first (at-of: an item's time), cut into [section items] by time-section, in order."
+  [items at-of now]
+  (let [section #(time-section (at-of %) now)]
+    (->> (sort-by #(- (or (at-of %) 0)) items)
+         (partition-by section)
+         (mapv (fn [part] [(section (first part)) (vec part)])))))
 
 (defn passive-last
   "Passive (ash) chats last, each part in its own order."

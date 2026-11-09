@@ -1,6 +1,6 @@
 (ns claudia.web.views.chatmenu
   "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (16 colours, or
-  passive ash, which remembers the colour it had), rename, fork, archive."
+  passive ash, which remembers the colour it had), rename, fork, move to another project, archive."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -68,7 +68,35 @@
                                       "Escape" (do (.stopPropagation e) (set-renaming false))
                                       nil))}])
 
-(defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming]}]
+(defn- move-item [label n on? on-click]
+  [:button.cm-item.cm-project {:role "menuitem" :class (when on? "on") :on-click on-click}
+   [:span.l label] (when n [:span.n n])])
+
+(defn- move-input [k targets act set-text]
+  [:input.cm-rename {:auto-focus true :placeholder "Project name or folder path"
+                     :on-change #(set-text (.. % -target -value))
+                     :on-key-down (fn [e]
+                                    (when (= "Enter" (.-key e))
+                                      (when-let [f (pure/typed-folder targets (.. e -currentTarget -value))]
+                                        ((act #(rf/dispatch [:chat/folder k f]))))))}])
+
+(defn- move-panel
+  "Move to project: this server's projects (most chats first, the chat's own marked), a typed
+  project name or folder path, or no project."
+  [k row act set-moving]
+  (let [[text set-text] (h/use-state "")
+        targets (pure/move-targets @(rf/subscribe [:all-rows]) (first k) text)
+        current (get-in row [:project :root])]
+    [:<>
+     [:button.cm-item.cm-back {:role "menuitem" :on-click #(set-moving false)} "‹ Move to project"]
+     [move-input k targets act set-text]
+     (for [{root :key label :label n :count} (take 12 targets)]
+       ^{:key root}
+       [move-item label n (= root current) (act #(rf/dispatch [:chat/folder k root]))])
+     (when (:folder row)
+       [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(rf/dispatch [:chat/folder k ""]))} "No project"])]))
+
+(defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming set-moving]}]
   [:<>
    (if (= color "ash")
      [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:ops/color k "wake"]))} "Make active"]
@@ -81,6 +109,7 @@
                      :on-click #(rf/dispatch [:ops/fork k nil])}
     (if forking "Forking…" "Fork chat")]
    (when error [:div.cm-error error])
+   [:button.cm-item {:role "menuitem" :on-click #(set-moving true)} "Move to project…"]
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:chat/archive k (not archived)]))}
     (if archived "Unarchive" "Archive")]])
 
@@ -88,14 +117,18 @@
   (let [box (h/use-ref nil)
         [pos set-pos] (h/use-state {:left x :top y})
         [renaming set-renaming] (h/use-state false)
+        [moving set-moving] (h/use-state false)
         close #(rf/dispatch [:ops/menu nil])
         act (fn [f] (fn [] (f) (close)))]
-    (use-in-view! box x y set-pos [x y renaming error])
+    (use-in-view! box x y set-pos [x y renaming moving error])
     (use-dismiss! (inside-of box) close)
     [:div.chat-menu {:ref #(set! (.-current box) %) :style pos :role "menu" :on-context-menu #(.preventDefault %)}
      [:div.cm-title (:title row)]
-     (swatches k (:color row) act)
-     (menu-items m row {:close close :act act :renaming renaming :set-renaming set-renaming})]))
+     (if moving
+       [:f> move-panel k row act set-moving]
+       [:<>
+        (swatches k (:color row) act)
+        (menu-items m row {:close close :act act :renaming renaming :set-renaming set-renaming :set-moving set-moving})])]))
 
 (defn chat-menu []
   (let [m @(rf/subscribe [:menu])

@@ -45,6 +45,7 @@
    :server-me {}           ; server -> its GET /api/me
    :settings? false        ; Settings in the sidebar's place
    :archived? false        ; the list shows archived chats
+   :project-filter nil     ; the archived list's project chip: a project root, "" = no project, nil = all
    :all-sessions? (stored "claudia.allSessions" false)
    :sessions {}            ; server -> ~/Work sessions that are not chats
    :search nil             ; {:text :found {server [Found]}}

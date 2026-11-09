@@ -136,7 +136,7 @@
 
 (defn rail []
   (let [{:keys [text]} @(rf/subscribe [:search])
-        rows (sidebar-pure/passive-last (sidebar-pure/by-title @(rf/subscribe [:rows]) (sidebar-pure/search-key text)))
+        rows (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text)))
         ro @(rf/subscribe [:read-only?])
         m {:rows rows :open @(rf/subscribe [:open]) :multi? @(rf/subscribe [:multi-server?]) :ro ro
            :projects @(rf/subscribe [:projects])}

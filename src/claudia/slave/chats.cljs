@@ -23,6 +23,7 @@
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.meta :as meta]
             [claudia.slave.pictures :as pictures]
+            [claudia.slave.projects :as projects]
             [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
@@ -121,7 +122,9 @@
   hub's clock may differ)."
   []
   (let [t (js/Date.now)]
-    (mapv #(view/row % (st (:id %)) (tasks/working (:id %)) t) (store/chats))))
+    (mapv #(assoc (view/row % (st (:id %)) (tasks/working (:id %)) t)
+                  :project (projects/root-name (:folder %) cwd))
+          (store/chats))))
 
 (defn- note-msg!
   "A new or changed Msg of this turn: kept (so a chat opened mid-turn has it) and sent."
@@ -352,6 +355,28 @@
                                    (sh-out "git" ["-C" folder "status" "--short" "--branch"])])
               (.then (fn [[md md2 status]]
                        (answers/folder-answer folder (or (not-empty md) (not-empty md2)) status))))))))
+
+(defn move-folder!
+  "The person moves the chat to another project: p (absolute, ~/…, or relative to the working folder)
+  becomes its folder, blank: no folder. Claude hears of it with the next message (take-moved-note!).
+  An error frame when there is no folder at p."
+  [id p]
+  (let [folder (when-not (str/blank? p) (path/resolve cwd (answers/home-path (str/trim p) (os/homedir))))]
+    (cond
+      (and folder (not (nfs/dir? folder))) (emit! id {:type "error" :text (str "No folder at " folder ".")})
+      (= folder (:folder (store/chat id))) nil
+      :else (do (store/update! id {:folder folder})
+                (store/kv! id "moved" {:folder folder})
+                (when folder (changes/folder-set! id folder (:running (st id))))
+                (changed!)))))
+
+(defn- take-moved-note!
+  "The text with the note of the person's last move of the chat (move-folder!) after it, said once."
+  [id text]
+  (if-let [{:keys [folder]} (store/kv id "moved")]
+    (do (store/kv! id "moved" nil)
+        (str text "\n\n<system-reminder>" (answers/moved-note folder cwd) "</system-reminder>"))
+    text))
 
 (defn- show-image
   "An image file into the chat (src/chat.ts showImage): the result carries it, so it is saved with
@@ -825,7 +850,7 @@
     (note-msg! id msg)
     ;; A changed form row and the forms news go with this message, as a reminder the chat doesn't
     ;; show (the news only to a session that ran with the old tools).
-    (hostlink/send! (cond-> {:op "send" :id id :text (codeforms/take-note! id message was-live?) :uuid (:id msg)}
+    (hostlink/send! (cond-> {:op "send" :id id :text (take-moved-note! id (codeforms/take-note! id message was-live?)) :uuid (:id msg)}
                       (seq images) (assoc :images images)))
     (set-running! id true)))
 

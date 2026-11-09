@@ -40,7 +40,9 @@
   (is (= 58 (projects/logo-score "logo.png" 2)))
   (is (nil? (projects/logo-score "readme.md" 0)))
   (is (= "b" (projects/best-logo [{:path "a" :score 1} {:path "b" :score 5} {:path "c" :score 5}])))
-  (is (nil? (projects/best-logo []))))
+  (is (nil? (projects/best-logo [])))
+  (is (nil? (projects/root-name nil "/w")) "no folder, no project")
+  (is (nil? (projects/root-name "rel/x" "/w")) "only absolute folders"))
 
 (deftest agent-branches-parse
   (let [h (apply str (repeat 40 "a"))]

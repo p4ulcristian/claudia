@@ -115,7 +115,11 @@
 
 (rf/reg-event-db :ops/settings (fn [db [_ on]] (assoc db :settings? on :screen (if (db/phone?) :list (:screen db)))))
 
-(rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :settings? false :search nil)))
+(rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :settings? false :search nil :project-filter nil)))
+
+;; The archived list's project chip: a project's root, "" for the chats with no project, nil for all.
+(rf/reg-event-db :ops/project-filter (fn [db [_ k]] (assoc db :project-filter k)))
+(rf/reg-sub :project-filter (fn [db] (:project-filter db)))
 
 (rf/reg-event-fx
  :ops/all-sessions
@@ -167,8 +171,11 @@
 (rf/reg-event-fx
  :ops/search-now
  (fn [{:keys [db]} [_ text]]
-   (if (< (count (str/trim (str text))) 2)
-     {:db (assoc-in db [:search :found] nil)}
+   (cond
+     ;; Typed over, or the search closed (a chat picked) while it waited.
+     (not= text (get-in db [:search :text])) nil
+     (< (count (str/trim (str text))) 2) {:db (assoc-in db [:search :found] nil)}
+     :else
      {:db (assoc-in db [:search :found] {})
       :fx (vec (for [s (keys (:servers db))]
                  [:api/call {:url (api-url s (search-path text (:archived? db)) (:view db))

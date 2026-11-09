@@ -242,6 +242,7 @@ Page → runner:
 | `deny` | `chat`, `ask` | refuses a secret or permit ask |
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
+| `folder` | `chat`, `folder` (absolute, `~/…`, or relative to the runner's working folder; empty or null: no project) | the chat's working folder; Claude hears of it with the next message; `error` when no folder is there |
 | `seen` | `chat` | the person looked at its last turn |
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
@@ -281,7 +282,7 @@ Runner → page:
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
-`Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
+`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
 secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;

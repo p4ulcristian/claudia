@@ -73,17 +73,32 @@
 
 (defn- find-logo [root] (best-logo (logo-candidates root 0)))
 
+(defn- remembered
+  "What found gives for folder, kept in cache (an atom of folder -> {:at :project}) for a while."
+  [cache folder found]
+  (let [hit (get @cache folder)]
+    (if (and hit (< (- (js/Date.now) (:at hit)) rescan-ms))
+      (:project hit)
+      (let [project (found)]
+        (swap! cache assoc folder {:at (js/Date.now) :project project})
+        project))))
+
+(defonce ^:private roots (atom {}))
+
+(defn root-name
+  "{:name :root} of a working folder's project, without its logo (the chat list's project of each
+  chat), or nil for no folder."
+  [folder work]
+  (when (and (string? folder) (path/isAbsolute folder))
+    (remembered roots folder #(root-of folder work))))
+
 (defn project-of
   "{:name :root :logo (path or nil)} for a working folder, or nil."
   [folder work]
   (when (and (string? folder) (path/isAbsolute folder) (dir? folder))
-    (let [hit (get @by-folder folder)]
-      (if (and hit (< (- (js/Date.now) (:at hit)) rescan-ms))
-        (:project hit)
-        (let [{:keys [root] project-name :name} (root-of folder work)
-              project {:name project-name :root root :logo (find-logo root)}]
-          (swap! by-folder assoc folder {:at (js/Date.now) :project project})
-          project)))))
+    (remembered by-folder folder
+                #(let [{:keys [root] project-name :name} (root-name folder work)]
+                   {:name project-name :root root :logo (find-logo root)}))))
 
 (def ^:private types
   {".svg" "image/svg+xml" ".png" "image/png" ".webp" "image/webp" ".ico" "image/x-icon"})

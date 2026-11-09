@@ -84,10 +84,46 @@
   (is (nil? (settings/servers-hint [{:label "A"}] [{:label "A"}])))
   (is (= [[nil "My chats"] ["ann" "Ann's chats"]] (settings/whose-items ["ann"]))))
 
+(def ^:private projected
+  [{:server "s" :id "1" :title "Logo" :at 3 :project {:name "iris" :root "/w/iris"}}
+   {:server "s" :id "2" :title "Menu" :at 1 :project {:name "claudia" :root "/w/claudia"}}
+   {:server "s" :id "3" :title "Chips" :at 2 :project {:name "claudia" :root "/w/claudia"}}
+   {:server "s" :id "4" :title "Misc" :at 0}])
+
+(deftest projects-of-the-list
+  (is (= "/w/iris" (sidebar/project-key (first projected))))
+  (is (= "" (sidebar/project-key (last projected))))
+  (is (= "No project" (sidebar/project-label (last projected))))
+  (is (= ["2" "3"] (map :id (sidebar/matching projected (sidebar/search-key "CLAU")))) "a project name matches")
+  (is (= ["1"] (map :id (sidebar/matching projected "logo"))))
+  (is (= ["2" "3"] (map :id (sidebar/in-project projected "/w/claudia"))))
+  (is (= ["4"] (map :id (sidebar/in-project projected ""))))
+  (is (= 4 (count (sidebar/in-project projected nil))))
+  (is (= [{:key "/w/claudia" :label "claudia" :count 2} {:key "/w/iris" :label "iris" :count 1}
+          {:key "" :label "No project" :count 1}]
+         (sidebar/project-chips projected)))
+  (is (= {"s" [{:id "3" :count 2} {:id "2" :count 0 :hits []}]}
+         (sidebar/with-project-finds {"s" [{:id "3" :count 2}]} projected "claudia"))
+      "chats of a matching project join the search's finds once"))
+
+(deftest time-sections
+  (let [now (.getTime (js/Date. 2026 10 9 15 0))
+        at (fn [m d] (.getTime (js/Date. 2026 m d 12 0)))]
+    (is (= 0 (sidebar/days-ago (.getTime (js/Date. 2026 10 9 0 5)) now)))
+    (is (= "Today" (sidebar/time-section (at 10 9) now)))
+    (is (= "Yesterday" (sidebar/time-section (at 10 8) now)))
+    (is (= "Past 7 days" (sidebar/time-section (at 10 3) now)))
+    (is (= "Past 2 weeks" (sidebar/time-section (at 10 1) now)))
+    (is (= "October" (sidebar/time-section (at 9 20) now)))
+    (is (= "December 2025" (sidebar/time-section (.getTime (js/Date. 2025 11 1)) now)))
+    (is (= [["Today" [{:at (at 10 9)}]] ["October" [{:at (at 9 20)} {:at (at 9 2)}]]]
+           (sidebar/in-sections [{:at (at 9 2)} {:at (at 10 9)} {:at (at 9 20)}] :at now))
+        "newest first, one section per run")))
+
 (deftest list-and-rail
   (let [rows [{:title "Fix login" :color "ash"} {:title "Build page"} {:title "fix CSS"}]]
-    (is (= ["Fix login" "fix CSS"] (map :title (sidebar/by-title rows (sidebar/search-key " FIX ")))))
-    (is (= 3 (count (sidebar/by-title rows ""))))
+    (is (= ["Fix login" "fix CSS"] (map :title (sidebar/matching rows (sidebar/search-key " FIX ")))))
+    (is (= 3 (count (sidebar/matching rows ""))))
     (is (= ["Build page" "fix CSS" "Fix login"] (map :title (sidebar/passive-last rows)))))
   (is (= "now" (sidebar/ago-text 0 30000)))
   (is (= "5m" (sidebar/ago-text 0 300000)))
@@ -99,6 +135,14 @@
   (is (= "No match." (sidebar/empty-note "x" true))))
 
 (deftest menus
+  (let [rows [{:server "a" :project {:name "iris" :root "/w/iris"}} {:server "a" :project {:name "claudia" :root "/w/claudia"}}
+              {:server "a" :project {:name "claudia" :root "/w/claudia"}} {:server "b" :project {:name "x" :root "/w/x"}} {:server "a"}]]
+    (is (= ["/w/claudia" "/w/iris"] (map :key (menu/move-targets rows "a" ""))) "this server's projects, most chats first")
+    (is (= ["/w/iris"] (map :key (menu/move-targets rows "a" "IR"))))
+    (is (= "/w/iris" (menu/typed-folder (menu/move-targets rows "a" "ir") "ir")) "one project left: that one")
+    (is (= "~/Work/new" (menu/typed-folder [] " ~/Work/new ")))
+    (is (= "apps/new" (menu/typed-folder [{:key "/w/apps"}] "apps/new")) "a path stays a path")
+    (is (nil? (menu/typed-folder [] "  "))))
   (is (= {:left 6 :top 50} (menu/menu-pos 0 50 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))

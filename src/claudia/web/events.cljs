@@ -241,9 +241,11 @@
 ;; ---- navigation ----
 
 (defn on-chat-screen
-  "The chat screen, with the drawer, the rail search and Settings closed."
+  "The chat screen, with the drawer, the rail search and Settings closed, and the list back to the
+  chats: a chat picked from the archived ones or a search leaves those behind."
   [db]
-  (assoc db :screen :chat :sidebar? false :rail-search? false :settings? false))
+  (assoc db :screen :chat :sidebar? false :rail-search? false :settings? false
+         :archived? false :search nil :project-filter nil))
 
 (defn switch-frames
   "Moving from the open chat prev to k: close prev (when it is a chat), open k's chat (when it has one)."
@@ -401,6 +403,12 @@
        (sort-by list-order)
        first
        :k))
+
+(rf/reg-event-fx
+ :chat/folder
+ ;; Move to project: the chat's working folder (blank: no project).
+ (fn [_ [_ [s c] folder]]
+   {:ws/send [s {:type "folder" :chat c :folder (str/trim (str folder))}]}))
 
 (rf/reg-event-fx
  :chat/archive

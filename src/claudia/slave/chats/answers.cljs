@@ -59,6 +59,16 @@
   [p home]
   (str/replace (str p) #"^~(?=/|$)" home))
 
+(defn moved-note
+  "What Claude hears after the person moved the chat to folder (nil: out of any project; work: where
+  the chat runs)."
+  [folder work]
+  (if folder
+    (str "The person moved this chat to the project folder " folder
+         ". Work there from now on: run commands there (cd " folder " && …) and call set_folder with it before you work.")
+    (str "The person took this chat out of its project folder. It works in " work
+         " again until you call set_folder with a project.")))
+
 (defn folder-answer
   "set_folder's answer (src/chat.ts folderTool): the folder, its CLAUDE.md (nil: none) and its git
   status (nil: not a repository; the first 40 lines)."
