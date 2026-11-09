@@ -6,6 +6,7 @@
             [claudia.web.tip :as tip]
             [claudia.web.native :as native]
             [claudia.web.presence :as presence]
+            [claudia.web.tabs :as tabs]
             [reagent.dom.client :as rdc]
             [claudia.web.chalk :as chalk]
             [claudia.web.chatops]
@@ -47,6 +48,7 @@
       (rf/dispatch [:chat/check-seen])))
   (rf/dispatch-sync [:init])
   (presence/start!)
+  (tabs/start!)
   (native/start!)
   (mount!))
 

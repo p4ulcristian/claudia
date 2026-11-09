@@ -21,6 +21,7 @@
    :servers {}             ; name -> {:status :connecting|:open|:closed, :rows {chat-id Row}, :hello? bool}
    :chats {}               ; [server chat] -> {:title :folder :messages [Msg] :scene :running :asks [Ask] :error}
    :open nil               ; [server chat] of the open chat, or nil (a new chat)
+   :tabs {}                ; other tabs of this browser: tab id -> {:open [server chat] :view} (claudia.web.tabs)
    :screen :list           ; phone only: :list | :chat | :picture
    :sidebar? false         ; desktop: the full list open as a drawer over the rail (never kept)
    :rail-search? false     ; the drawer was opened by the rail's search: Escape folds it back

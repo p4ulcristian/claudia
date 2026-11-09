@@ -102,15 +102,17 @@
   (let [k [server id]
         passive? (= "ash" color)
         project (:name (get projects [server folder]))
-        label @(rf/subscribe [:server-label server])]
+        label @(rf/subscribe [:server-label server])
+        elsewhere? (contains? @(rf/subscribe [:open-elsewhere]) k)]
     [:button.rail-chat {:data-slide (str server "/" id)
-                        :class [(when (= k open) "on") (when off "off")
+                        :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
                                 (when passive? "passive")
                                 (when (and passive? (not= "ash" (:color (get rows (dec i))))) "first")
                                 (when (and passive? (= i (dec (count rows)))) "last")]
                         :style {"--chat" (sidebar/chat-color-var color)}
                         :data-tip (str title (when project (str " · " project))
-                                       (when multi? (str " · " label (when off " is off"))))
+                                       (when multi? (str " · " label (when off " is off")))
+                                       (when elsewhere? " · open in another tab"))
                         :data-tip-color (sidebar/chat-color-var color)
                         :aria-label title
                         :on-click #(sidebar/pick! k (= k open) %)
