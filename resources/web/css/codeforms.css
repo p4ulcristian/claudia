@@ -47,6 +47,11 @@
 .f-ln .num { padding: 0 8px 0 12px; text-align: right; color: color-mix(in srgb, var(--muted) 60%, transparent); user-select: none; }
 .f-ln .sign { text-align: center; user-select: none; font-weight: 700; }
 .f-ln code { display: block; padding: 0 14px 0 calc(4px + 2ch); text-indent: -2ch; white-space: pre-wrap; overflow-wrap: anywhere; color: #d4d4d4; font-size: inherit; }
+/* Clojure never wraps: its lines scroll sideways, as one block (every row as wide as the widest),
+   so its shape stays as written. Notes and folds stay in view, as wide as the code's window. */
+.f-lines.nowrap { display: grid; grid-template-columns: minmax(100%, max-content); overflow-x: auto; container-type: inline-size; }
+.f-lines.nowrap .f-ln code { white-space: pre; overflow-wrap: normal; }
+.f-lines.nowrap .f-pin, .f-lines.nowrap .f-fold { position: sticky; left: 0; width: 100cqw; box-sizing: border-box; }
 .f-ln.add { background: color-mix(in srgb, var(--green) 14%, transparent); }
 .f-ln.add .sign, .f-ln.add .num { color: var(--green); }
 .f-ln.del { background: color-mix(in srgb, var(--red) 14%, transparent); }
@@ -393,6 +398,8 @@ button.cl-fn:hover { text-decoration: underline; }
 .cl-vdoc { font: 12px/1.4 var(--sans); color: var(--muted); white-space: pre-wrap; margin: 1px 0 2px; }
 .cl-mark { font: 700 14px var(--hand); margin: 2px 0; }
 .cl-src { margin: 6px 0 4px; padding: 8px 10px; border-radius: 8px; background: color-mix(in oklch, var(--board) 55%, #000); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.cl-src.nowrap { white-space: pre; word-break: normal; overflow-x: auto; }
+.cl-src.nowrap > div { width: max-content; min-width: 100%; }
 .cl-no { display: inline-block; width: 3.2em; color: color-mix(in srgb, var(--muted) 70%, transparent); user-select: none; }
 .cl-group { margin: 4px 0 8px; }
 .cl-ns { font: 700 14px var(--hand); color: var(--muted); }
@@ -424,6 +431,8 @@ button.cl-fn:hover { text-decoration: underline; }
 .ca-ln.marked { background: color-mix(in srgb, var(--mk) 16%, transparent); box-shadow: inset 3px 0 0 var(--mk); }
 .ca-no { flex: none; width: 3.4em; padding-right: 0.8em; text-align: right; color: color-mix(in srgb, var(--muted) 65%, transparent); user-select: none; }
 .ca-tx { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ca-code.nowrap { display: grid; grid-template-columns: minmax(100%, max-content); overflow-x: auto; }
+.ca-code.nowrap .ca-tx { white-space: pre; overflow-wrap: normal; }
 .ca-call { font: inherit; color: var(--blue) !important; font-weight: 700; text-decoration: underline dotted; text-underline-offset: 3px; border-radius: 3px; }
 .ca-call span { color: inherit !important; }
 .ca-call:hover { background: var(--blue-bg); }

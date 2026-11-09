@@ -29,6 +29,7 @@
             ["@codemirror/legacy-modes/mode/lua" :refer [lua]]
             [clojure.string :as str]
             [reagent.hooks :as h]
+            [claudia.web.shiki :as shiki]
             [claudia.web.ws :as ws]))
 
 (defn- legacy [mode] #(.define StreamLanguage mode))
@@ -48,7 +49,11 @@
      "toml" (legacy toml) "rb" (legacy ruby) "ruby" (legacy ruby) "swift" (legacy swift) "lua" (legacy lua)}))
 
 (defn- lang-key [f] (str/lower-case (or (:lang f) (last (str/split (str (:name f)) #"\.")) "")))
-(defn- lang-of [f] (if-let [l (get langs (lang-key f))] (l) #js []))
+(defn- lang-of
+  "File f's language and wrapping: long lines wrap, except Clojure's, which scroll sideways."
+  [f]
+  #js [(if-let [l (get langs (lang-key f))] (l) #js [])
+       (if (shiki/clojure? (lang-key f)) #js [] (.-lineWrapping EditorView))])
 
 ;; VS Code's Dark+ colours, as in the files form.
 (def ^:private dark-plus
@@ -159,7 +164,7 @@
                   :extensions
                   #js [(lineNumbers) (highlightActiveLineGutter) (highlightActiveLine) (drawSelection) (history)
                        (indentOnInput) (bracketMatching) (closeBrackets) (highlightSelectionMatches)
-                       (syntaxHighlighting dark-plus) (.of lang (lang-of f)) theme (.-lineWrapping EditorView)
+                       (syntaxHighlighting dark-plus) (.of lang (lang-of f)) theme
                        (.of (.-access m) (access-of editable))
                        (.of keymap (.concat #js [#js {:key "Mod-Enter" :run (fn [] ((.-send m)) true)}]
                                             closeBracketsKeymap defaultKeymap searchKeymap historyKeymap #js [indentWithTab]))

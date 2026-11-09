@@ -18,6 +18,12 @@
 ;; Names Shiki doesn't know but files use.
 (def ^:private alias {"cljs" "clojure" "cljc" "clojure" "edn" "clojure" "bb" "clojure" "mts" "ts" "cts" "ts" "h" "c"})
 
+(defn clojure?
+  "Whether a language name (or a file's extension) is Clojure: Clojure code never wraps, its lines
+  scroll sideways instead, so its shape stays as written."
+  [lang]
+  (contains? #{"clojure" "clj"} (let [l (some-> lang str str/lower-case)] (get alias l l))))
+
 (defonce ^:private loaded (atom nil)) ; Promise of {:hl highlighter :index name -> grammar file}
 
 ;; The :shiki module hands its highlighter maker over as it loads (claudia.web.shiki.lib), rather

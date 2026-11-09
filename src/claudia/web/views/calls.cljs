@@ -239,7 +239,7 @@
         shown (when (> (count lines) long-n) (shown-rows d (map :line line-marks)))
         line (fn [k] (let [row (+ (:row d) k)]
                        ^{:key k} [line-view row (nth lines k) (shiki/line tokens k) (get by-row row []) open on-call line-marks]))]
-    (into [:div.ca-code]
+    (into [:div.ca-code {:class (when (shiki/clojure? (or (:lang d) "clj")) "nowrap")}]
           (mapcat (fn [[kind i j row]]
                     (case kind
                       :fold [^{:key (str "f" i)} [:button.ca-fold {:type "button" :on-click #(set-unfolded (conj unfolded row))}
