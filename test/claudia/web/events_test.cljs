@@ -94,8 +94,9 @@
   (is (= [{:id 2}] (ev/remove-ask [{:id 1} {:id 2}] 1))))
 
 (deftest navigation
-  (is (= {:screen :chat :sidebar? false :rail-search? false :settings? false}
-         (ev/on-chat-screen {:sidebar? true :settings? true})))
+  (is (= {:screen :chat :sidebar? false :rail-search? false :settings? false
+          :archived? false :search nil :project-filter nil}
+         (ev/on-chat-screen {:sidebar? true :settings? true :archived? true :search {:text "x"} :project-filter "/w/a"})))
   (is (= [["s" {:type "close" :chat "a"}] ["t" {:type "open" :chat "b"}]] (ev/switch-frames ["s" "a"] ["t" "b"])))
   (is (= [["t" {:type "open" :chat "b"}]] (ev/switch-frames nil ["t" "b"])))
   (is (= [] (ev/switch-frames nil nil))))

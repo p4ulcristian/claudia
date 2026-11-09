@@ -11,4 +11,6 @@
          (subs/list-rows servers false #{})))
   (is (= ["2"] (map :id (subs/list-rows servers true #{}))))
   (is (= ["1"] (map :id (subs/list-rows servers false #{"b"}))))
-  (is (= ["3" "2" "1"] (map :id (subs/list-rows servers :any #{})))))
+  (is (= ["3" "2" "1"] (map :id (subs/list-rows servers :any #{}))))
+  (is (= ["3" "2" "1"] (map :id (subs/list-rows servers false #{} ["a" "2"]))) "the open archived chat stays in the chats list")
+  (is (= ["2"] (map :id (subs/list-rows servers true #{} ["a" "1"]))) "the open chat never joins the archived list"))

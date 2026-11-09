@@ -38,16 +38,25 @@
 (rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
 (rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))
 
+(defn- in-list?
+  "Whether row r shows in the list: archived ones only in the archived list (archived? true), save the
+  open chat (open: [server chat]), which the chats list keeps while it is open; every chat for
+  archived? :any."
+  [r archived? open]
+  (or (= :any archived?)
+      (= archived? (boolean (:archived r)))
+      (and (false? archived?) (= open [(:server r) (:id r)]))))
+
 (defn list-rows
-  "Every shown server's chats in one list, each with its :server and :off (its socket not open);
-  archived ones only in the archived list (archived? true), every chat for archived? :any. In the order the chats were started (the TypeScript
-  Claudia's list): a new chat sits last."
-  [servers archived? hidden]
+  "Every shown server's chats in one list, each with its :server and :off (its socket not open),
+  those in-list? only. In the order the chats were started (the TypeScript Claudia's list): a new chat
+  sits last."
+  [servers archived? hidden & [open]]
   (->> servers
        (remove (fn [[s]] (hidden s)))
        (mapcat (fn [[s {:keys [rows status]}]]
                  (map #(assoc % :server s :off (not= :open status)) (vals rows))))
-       (filter #(or (= :any archived?) (= archived? (boolean (:archived %)))))
+       (filter #(in-list? % archived? open))
        (sort-by events/list-order)))
 
 (rf/reg-sub
@@ -55,7 +64,8 @@
  :<- [:servers]
  :<- [:archived-mode?]
  :<- [:hidden-server-set]
- (fn [[servers archived? hidden]] (list-rows servers archived? hidden)))
+ :<- [:open]
+ (fn [[servers archived? hidden open]] (list-rows servers archived? hidden open)))
 
 (rf/reg-sub
  :all-rows

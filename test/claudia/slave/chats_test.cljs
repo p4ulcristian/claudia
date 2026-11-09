@@ -133,6 +133,8 @@
     (is (re-find #"no CLAUDE.md" t))
     (is (re-find #"not a git repository" t)))
   (is (re-find #"<claude-md path=\"/w/CLAUDE.md\">\nrules" (get-in (answers/folder-answer "/w" "rules" "## main\n") [:content 0 :text])))
+  (is (re-find #"moved this chat to the project folder /w/app\. Work there" (answers/moved-note "/w/app" "/w")))
+  (is (re-find #"It works in /w again" (answers/moved-note nil "/w")))
   (is (:isError (answers/image-refusal "/a.txt" nil {:file? true :size 1})))
   (is (:isError (answers/image-refusal "/a.png" "image/png" nil)))
   (is (:isError (answers/image-refusal "/a.png" "image/png" {:file? true :size 6000000})))

@@ -17,7 +17,7 @@
      :clj  (throw (ex-info "write-json is ClojureScript only" {}))))
 
 (def page->runner
-  #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "seen"
+  #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "folder" "seen"
     "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send" "picture_settings"})
 
 (def runner->page
