@@ -318,11 +318,12 @@
 
 (rf/reg-event-fx
  :ops/attach
- ;; Files added to the composer (picker, paste, drop); files: a JS array of File.
- (fn [{:keys [db]} [_ draft-key files]]
+ ;; Files added to the composer (picker, paste, drop, a circle on the picture); files: a JS array of
+ ;; File; extra: what each item carries besides (a circle's :circle).
+ (fn [{:keys [db]} [_ draft-key files extra]]
    (let [db (with-upload-id db draft-key (events/new-uuid))
          [server chat] (upload-target db draft-key)
-         items (vec (for [f files] {:id (events/new-uuid) :name (.-name ^js f) :size (.-size ^js f) :busy true}))]
+         items (vec (for [f files] (merge extra {:id (events/new-uuid) :name (.-name ^js f) :size (.-size ^js f) :busy true})))]
      {:db (update-in db [:attach draft-key] (fnil into []) items)
       :ops/read-files {:draft-key draft-key :server server :chat chat
                        :pairs (mapv vector items files)}})))

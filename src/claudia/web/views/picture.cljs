@@ -7,6 +7,7 @@
             [reagent.hooks :as h]
             [claudia.web.db :as db]
             [claudia.web.md :as md]
+            [claudia.web.views.circle :as circle]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.forms :as forms]
             [claudia.web.views.frame :as frame]
@@ -24,6 +25,16 @@
   (let [{:keys [server chat]} @(rf/subscribe [:open-chat])]
     {:server server :chat chat :block (:id block) :title (:name block) :live (boolean (and server chat live?))}))
 
+(defn- block-attrs
+  "A block's section: its width and kind; its id, name and form as data (what a circle on the picture
+  names, claudia.web.views.circle)."
+  [block kept on-touch]
+  {:data-block (:id block) :data-name (:name block) :data-kind (:kind block) :data-form (:form block)
+   :class [(str "w-" (if (= "half" (:width block)) "half" "full"))
+           (str "k-" (:kind block))
+           (when (= kept :gone) "kept-gone")]
+   :on-click-capture (when-not kept on-touch)})
+
 (defn block-view
   "One block. hot: the last draw changed it (a new glow per draw, seq); kept: :here or :gone for a
   files block the user clicked in (it stays on the picture until closed)."
@@ -32,10 +43,7 @@
    (let [ctx (block-ctx block live?)
          hot (or (contains? changed (:id block))
                  (some #(str/starts-with? (str %) (str (:id block) ":")) changed))]
-     [:section.block {:class [(str "w-" (if (= "half" (:width block)) "half" "full"))
-                              (str "k-" (:kind block))
-                              (when (= kept :gone) "kept-gone")]
-                      :on-click-capture (when-not kept on-touch)}
+     [:section.block (block-attrs block kept on-touch)
       ;; A new glow per change; the block itself stays mounted (an html block keeps its page loaded).
       (when hot ^{:key seq-no} [:span.block-glow])
       [:div.block-head
@@ -148,7 +156,10 @@
          [:div.right-scroll
           [:div.stage {:class (when (:viewing? hist) "past")}
            [:f> picture-view {:scene scene :k (:ck oc)
-                              :live? (and (not (:viewing? hist)) (not ro))}]]])
+                              :live? (and (not (:viewing? hist)) (not ro))}]
+           ;; Circling with the right button: on the live picture of an open chat.
+           (when (and (:ck oc) (not (:viewing? hist)) (not ro) (not phone?))
+             ^{:key (str (:ck oc))} [circle/layer (:ck oc)])]])
        (when (and (:chat oc) (= view :picture))
          [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
        (when (seq asks)
