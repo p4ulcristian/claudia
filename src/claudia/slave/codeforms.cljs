@@ -439,35 +439,7 @@
         (when data
           {:scene (with-block-data scene block data) :text text})))))
 
-;; ---- the form row: per chat, each kind allowed (default), required or off ------------------------
-
-(def kinds-extra
-  "Kinds in the form row that are not forms: graphs, freeform pages, questions."
-  ["graph" "freeform" "questions"])
-
-(def auto-forms
-  "Forms that need no thinking: turned required, Claudia puts the chat folder's block on the picture."
-  {"files" {:k :root :name "Project files"}
-   "git" {:k :repo :name "History"}
-   "clojure" {:k :root :name "Namespaces"}})
-
-(defn- choices
-  "A chat's form row choices with string keys (JSON made them keywords)."
-  [settings]
-  (into {} (for [[k v] (:forms settings) :when (#{"required" "off"} v)] [(if (keyword? k) (subs (str k) 1) (str k)) v])))
-
-(defn chat-settings
-  "A chat's settings as the page gets them: {:forms {kind choice} :cols n}."
-  [id]
-  (let [s (store/settings id)] {:forms (choices s) :cols (:cols s)}))
-
-(defn off? [id kind] (= "off" (get (choices (store/settings id)) kind)))
-
-(defn- off-set
-  "The kinds a chat can't draw: switched off in its form row, or deleted in the Forms window."
-  [ch]
-  (into (set (for [[k v] ch :when (= v "off")] k)) (hidden-forms)))
-(defn- required-kinds [ch] (vec (for [[k v] ch :when (and (= v "required") (not= k "questions"))] k)))
+;; ---- the forms Claude hears of ------------------------------------------------------------------
 
 (defn- kind-of-block [b]
   (case (:kind b) "form" (:form b) "html" "freeform" "graph"))
@@ -477,12 +449,16 @@
         (or (some? (:html b)) (:template b)) "freeform"
         :else (if-let [k (known-block scene (:id b))] (kind-of-block k) (if (= "html" (:kind b)) "freeform" "graph"))))
 
+(defn- offered
+  "The forms the draw tool offers: this runner's, less the ones deleted in the Forms window."
+  []
+  (vec (remove (hidden-forms) all-forms)))
+
 (defn- forms-now
   "The forms a chat can draw now (src/chat.ts formsNow), in the draw tool's order, each with a
   fingerprint of how it is described: compared with what the chat's Claude last saw."
-  [ch]
-  (let [off (into (hidden-forms) (off-set ch))]
-    (apply array-map (mapcat (fn [f] [f (tools/fingerprint f)]) (remove off all-forms)))))
+  []
+  (apply array-map (mapcat (fn [f] [f (tools/fingerprint f)]) (offered))))
 
 (defn- forms-news
   "What changed in the forms since the chat's Claude last heard (seen nil: the whole list once)."
@@ -505,85 +481,37 @@
   "The chat's Claude hears of the forms as they stand now: the news since it last did (or nil), and
   they are kept as what it saw (src/chat.ts seeForms)."
   [id]
-  (let [st (store/settings id)
-        now (forms-now (choices st))
-        news (forms-news (:forms-seen st) now)]
-    (store/save-settings! id (assoc st :forms-seen now))
+  (let [now (forms-now)
+        news (forms-news (store/forms-seen id) now)]
+    (store/save-forms-seen! id now)
     news))
 
 (defn forms-seen-now!
   "A session starts: its tools are the forms as they stand, so it knows them (no news)."
   [id]
-  (let [st (store/settings id)]
-    (store/save-settings! id (assoc st :forms-seen (forms-now (choices st))))))
-
-(defn- kind-name [f]
-  (case f
-    "freeform" "freeform (your own HTML page)"
-    "graph" "graphs (circles, boxes, arrows)"
-    "questions" "questions (AskUserQuestion buttons: decide yourself instead)"
-    (str "the " f " form")))
-
-(defn forms-note
-  "What the form row now asks, in words for Claude."
-  [ch]
-  (let [req (required-kinds ch)
-        off (vec (for [[k v] ch :when (= v "off")] k))]
-    (str/join " " (remove nil?
-                          [(when (seq req)
-                             (str "The user made these REQUIRED in Claudia's form row: " (str/join ", " (map kind-name req))
-                                  ". The picture must always hold at least one block of each: add " (if (> (count req) 1) "them" "it")
-                                  " now where missing; draw refuses a change that takes the last one away. Every other kind not switched off stays allowed"
-                                  (when (some #{"freeform"} req) "; freeform required means: be creative, build an interactive page where it helps") "."))
-                           (when (seq off)
-                             (str "Switched OFF: " (str/join ", " (map kind-name off)) "; don't use " (if (> (count off) 1) "them" "it") " (draw refuses)."))
-                           (when (and (empty? req) (empty? off)) "The user reset Claudia's form row: choose forms yourself again.")]))))
-
-;; chat id -> the form row note waiting for the next message (said once, hidden from the chat).
-(defonce pending-notes (atom {}))
-
-(defonce ^:private noted (atom #{}))
-
-(defn- note-after-start!
-  "After a runner start, choices made in the form row are said again with the first message."
-  [id]
-  (when-not (@noted id)
-    (swap! noted conj id)
-    (let [ch (choices (store/settings id))]
-      (when (and (seq ch) (not (contains? @pending-notes id)))
-        (swap! pending-notes assoc id (forms-note ch))))))
+  (store/save-forms-seen! id (forms-now)))
 
 (defn take-note!
   "The text to send to Claude for a typed message (src/chat.ts send): the forms news (live? true: a
-  session already ran with the old tools) and the form row's note go with it as a reminder after
-  the text, said once and hidden from the chat."
+  session already ran with the old tools) goes with it as a reminder after the text, hidden from
+  the chat."
   [id text live?]
-  (note-after-start! id)
-  (let [news (when live? (see-forms! id))
-        row (get @pending-notes id)
-        note (not-empty (str/join " " (remove str/blank? [news row])))]
-    (swap! pending-notes dissoc id)
-    (if note (str text "\n\n<system-reminder>" note "</system-reminder>") text)))
-
-(defn- offered
-  "The forms a chat's draw tool offers: this runner's, less the deleted ones and the row's off ones."
-  [ch]
-  (let [off (into (hidden-forms) (off-set ch))]
-    (vec (remove off all-forms))))
+  (if-let [news (when live? (see-forms! id))]
+    (str text "\n\n<system-reminder>" news "</system-reminder>")
+    text))
 
 (defn mcp-for
-  "The tools for a chat (src/chat.ts tools): the draw tool's forms and description follow its form row."
-  [id]
-  (let [ch (choices (store/settings id))]
-    {:picture (tools/picture-mcp (offered ch) (required-kinds ch) (contains? (off-set ch) "freeform"))
-     :workspace tools/workspace-mcp}))
+  "The tools for a chat (src/chat.ts tools): the draw tool offers this runner's forms, less the
+  deleted ones."
+  []
+  {:picture (tools/picture-mcp (offered))
+   :workspace tools/workspace-mcp})
 
 (defn prompt-for
   "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then every form this runner
-  offers with its data, since Claude Code cuts long tool descriptions. Not per chat: a change of the
-  form row reaches Claude through the tools and a reminder, without a new prompt."
+  offers with its data, since Claude Code cuts long tool descriptions."
   []
-  (str tools/system-append "\n\n" (tools/forms-prompt (vec (remove (hidden-forms) all-forms)))))
+  (str tools/system-append "\n\n" (tools/forms-prompt (offered))))
 
 (defn- touches?
   "Whether a block of a draw call draws something (one only moved, renamed or resized does not)."
@@ -591,109 +519,33 @@
   (or (:form b) (:data b) (some? (:html b)) (:template b) (:parts b) (:kind b)))
 
 (defn- without-hidden
-  "A draw call's input without what the chat can't draw (hidden: those kinds): {:input :refused}."
+  "A draw call's input without the forms deleted in the Forms window (hidden): {:input :refused}.
+  A session started before the delete still has them in its draw tool."
   [scene input hidden]
   (let [refused (for [b (:blocks input) :when (and (touches? b) (hidden (kind-of-call scene b)))]
                   (kind-of-call scene b))
-        blocks (filterv #(not (and (touches? %) (hidden (kind-of-call scene %)))) (:blocks input))
-        graph-off (and (hidden "graph") (or (seq (:nodes input)) (seq (:edges input)) (seq (:groups input))))]
-    {:input (cond-> (assoc input :blocks blocks) graph-off (dissoc :nodes :edges :groups))
-     :refused (cond-> (vec refused) graph-off (conj "graph"))}))
-
-(defn- auto-blocks-back
-  "Claudia's block of a required auto form is the user's: Claude's clear or removeBlocks doesn't
-  take it off (its last copy comes back, last). The blocks to put back into drawn scene s."
-  [scene s ch hidden folder]
-  (for [[f {:keys [k] nm :name}] auto-forms
-        :let [bid (str "auto-" f)]
-        :when (and (= "required" (ch f)) (not (hidden f)) (some #{f} all-forms)
-                   (not (some #(= (:id %) bid) (:blocks s))))]
-    (or (known-block scene bid) {:id bid :kind "form" :form f :name nm :data {k folder}})))
-
-(defn- them-or-it [xs] (if (> (count xs) 1) "them" "it"))
+        blocks (filterv #(not (and (touches? %) (hidden (kind-of-call scene %)))) (:blocks input))]
+    {:input (assoc input :blocks blocks)
+     :refused (vec refused)}))
 
 (defn draw-text
   "What Claude hears after a draw: the picture now and every note about what was not drawn."
-  [s {:keys [news missing refused absent notes]}]
+  [s {:keys [news missing refused notes]}]
   (str "Picture updated: " (scene/describe s)
        (when news (str "\n\n" news))
        (when (seq missing) (str ". No template named " (str/join ", " (map #(str "\"" % "\"") missing)) " (see the templates tool)."))
-       (when (seq refused) (str ". Not drawn: " (str/join ", " (distinct refused)) ": switched off by the user; use another kind"))
-       (when (seq absent) (str ". Still missing, required by the user in this chat: " (str/join ", " absent) "; add " (them-or-it absent) "."))
+       (when (seq refused) (str ". Not drawn: " (str/join ", " (distinct refused)) ": the user deleted that form; use another kind"))
        (when (seq notes) (str "\n\nNot drawn, kept for the user:\n" (str/join "\n\n" notes)))))
 
-(defn lost-error
-  "The refusal of a draw that takes the last block of required kinds (lost) away."
-  [lost]
-  (str "Not drawn: this change takes the last " (str/join ", " lost) " block out of the picture, and the user made "
-       (if (> (count lost) 1) "those" "that") " required in this chat (form row). Keep one, or put a new one in the same call."))
-
-(defn- required-check
-  "The required kinds (less hidden ones) as {:lost (in scene, gone from s) :absent (not in s)}."
-  [scene s ch hidden]
-  (let [req (filterv #(not (hidden %)) (required-kinds ch))
-        had (set (map kind-of-block (:blocks scene)))
-        has (set (map kind-of-block (:blocks s)))]
-    {:lost (filterv #(and (had %) (not (has %))) req)
-     :absent (filterv #(not (has %)) req)}))
-
 (defn draw
-  "One draw call on a chat's scene, through the form row and the code forms (src/chat.ts draw):
-  {:scene :changed :text} (the text for Claude) or {:error text}."
+  "One draw call on a chat's scene, through the code forms (src/chat.ts draw): {:scene :changed
+  :text} (the text for Claude) or {:error text}."
   [id scene input folder]
-  (let [ch (choices (store/settings id))
-        hidden (into (hidden-forms) (off-set ch))
-        {prepared :input notes :notes missing :missing} (prepare scene input folder)
-        {allowed :input refused :refused} (without-hidden scene prepared hidden)
+  (let [{prepared :input notes :notes missing :missing} (prepare scene input folder)
+        {allowed :input refused :refused} (without-hidden scene prepared (hidden-forms))
         {s :scene changed :changed error :error} (scene/apply-draw scene allowed all-forms)]
     (if error
       {:error error}
-      (let [back (auto-blocks-back scene s ch hidden folder)
-            s (update s :blocks into back)
-            {:keys [lost absent]} (required-check scene s ch hidden)]
-        (if (seq lost)
-          {:error (lost-error lost)}
-          {:scene s
-           :changed (into (vec changed) (map :id back))
-           :text (draw-text s {:news (see-forms! id) :missing missing :refused refused :absent absent :notes notes})})))))
-
-(defn- auto-added
-  "Blocks of auto forms turned required now (before -> now choices) that the scene lacks."
-  [scene folder before now]
-  (for [[f {:keys [k] nm :name}] auto-forms
-        :let [bid (str "auto-" f)]
-        :when (and (= "required" (now f)) (not= "required" (before f)) (some #{f} all-forms)
-                   (not (known-block scene bid)))]
-    {:id bid :kind "form" :form f :name nm :data {k folder}}))
-
-(defn- auto-gone
-  "Ids of blocks that leave: auto forms no longer required, and blocks of kinds turned off."
-  [scene before now]
-  (set (concat (for [[f _] auto-forms :when (and (= "required" (before f)) (not= "required" (now f)))] (str "auto-" f))
-               (for [b (:blocks scene) :when (and (= "off" (now (kind-of-block b))) (not= "off" (before (kind-of-block b))))] (:id b)))))
-
-(defn- settings-note
-  "The form row's note for Claude, with the auto blocks Claudia put on the picture (add)."
-  [now add]
-  (str (forms-note now)
-       (when (seq add) (str " Claudia already put " (str/join ", " (map #(str "a " (:form %) " block (id " (:id %) ": " (:name %) ")") add))
-                            " on the picture; update or keep " (them-or-it add) ", don't draw " (them-or-it add) " again."))))
-
-(defn set-settings
-  "The page changed a chat's form row or columns: {:settings (for the page) :scene (new, or nil)}.
-  A form turned required that needs no thinking (files, git) shows its block at once; a kind
-  turned off leaves the picture."
-  [id scene folder {:keys [forms cols]}]
-  (let [st (store/settings id)
-        before (choices st)
-        now (if (some? forms) (choices {:forms forms}) before)
-        cols (if (some? cols) (max 0 (min 3 (or (js/parseInt cols) 0))) (:cols st))]
-    (store/save-settings! id (assoc st :forms now :cols cols))
-    (if-not (some? forms)
-      {:settings {:forms now :cols cols} :scene nil}
-      (let [add (auto-added scene folder before now)
-            gone (auto-gone scene before now)]
-        (swap! pending-notes assoc id (settings-note now add))
-        {:settings {:forms now :cols cols}
-         :scene (when (or (seq add) (seq gone))
-                  (update scene :blocks #(into (filterv (fn [b] (not (gone (:id b)))) %) add)))}))))
+      {:scene s
+       :changed (vec changed)
+       :text (draw-text s {:news (see-forms! id) :missing missing :refused refused :notes notes})})))

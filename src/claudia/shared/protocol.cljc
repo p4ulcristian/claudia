@@ -18,11 +18,11 @@
 
 (def page->runner
   #{"hello" "open" "close" "new" "send" "stop" "answer" "secret" "deny" "rename" "archive" "folder" "seen"
-    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send" "picture_settings"})
+    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send"})
 
 (def runner->page
   #{"chats" "chat" "created" "msg" "delta" "scene" "turn" "ask" "asked" "error"
-    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older" "picture_settings"
+    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older"
     ;; The working line's note (Thinking, Retrying…, Compacting); no note: plain working.
     "status"})
 

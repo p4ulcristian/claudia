@@ -42,13 +42,8 @@
                 description TEXT NOT NULL DEFAULT '',
                 at INTEGER NOT NULL
               );
-              CREATE TABLE IF NOT EXISTS chat_settings (
-                id TEXT PRIMARY KEY,
-                forms TEXT NOT NULL DEFAULT '{}',
-                cols INTEGER NOT NULL DEFAULT 0,
-                forms_seen TEXT
-              );
-              -- Small per-chat values as JSON (chat '' = the profile's own): settings, tasks, limits.
+              -- Small per-chat values as JSON (chat '' = the profile's own): settings, tasks, limits,
+              -- formsSeen (the forms the chat's Claude last heard of).
               CREATE TABLE IF NOT EXISTS kv (
                 chat TEXT NOT NULL,
                 key TEXT NOT NULL,
@@ -93,11 +88,23 @@
     (doseq [[c sql] added-columns :when (not (have c))]
       (.exec d (str "ALTER TABLE chats ADD COLUMN " sql)))))
 
+(defn- drop-chat-settings!
+  "The per-chat form row is gone (2026-11-09): chat_settings' only kept value, the forms a chat's
+  Claude last heard of, moves into kv as formsSeen, and the table goes."
+  [^js d]
+  (when (.get (.prepare d "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_settings'"))
+    (.exec d "BEGIN;
+              INSERT OR IGNORE INTO kv (chat, key, value)
+                SELECT id, 'formsSeen', forms_seen FROM chat_settings WHERE forms_seen IS NOT NULL;
+              DROP TABLE chat_settings;
+              COMMIT;")))
+
 (defn open! [dir]
   (fs/mkdirSync dir #js {:recursive true})
   (let [d (DatabaseSync. (path/join dir "claudia.db"))]
     (.exec d schema)
     (add-missing-columns! d)
+    (drop-chat-settings! d)
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -169,19 +176,6 @@
 
 (defn delete-template! [template-name] (.run (stmt "DELETE FROM templates WHERE name = ?") template-name))
 
-;; A chat's picture settings: the form row's choices ({form "required"|"off"}), the columns (0 =
-;; Claude's layout, 1-3) and the forms its Claude last heard of (nil: not told yet).
-
-(defn settings [id]
-  (let [^js r (.get (stmt "SELECT * FROM chat_settings WHERE id = ?") id)]
-    {:forms (or (some-> r .-forms p/read-json) {})
-     :cols (or (some-> r .-cols) 0)
-     :forms-seen (some-> r .-forms_seen p/read-json)}))
-
-(defn save-settings! [id {:keys [forms cols forms-seen]}]
-  (.run (stmt "INSERT INTO chat_settings (id, forms, cols, forms_seen) VALUES (?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET forms = excluded.forms, cols = excluded.cols, forms_seen = excluded.forms_seen")
-        id (p/write-json (or forms {})) (or cols 0) (some-> forms-seen p/write-json)))
 ;; kv ---------------------------------------------------------------------------------------------
 
 (defn kv
@@ -203,6 +197,12 @@
     (.run (stmt "INSERT INTO kv (chat, key, value) VALUES (?, ?, ?)
                  ON CONFLICT (chat, key) DO UPDATE SET value = excluded.value")
           chat-id k (p/write-json v))))
+
+;; The forms a chat's Claude last heard of ({form fingerprint}; nil: not told yet).
+
+(defn forms-seen [id] (kv id "formsSeen"))
+
+(defn save-forms-seen! [id seen] (kv! id "formsSeen" seen))
 
 ;; changes ----------------------------------------------------------------------------------------
 

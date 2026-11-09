@@ -41,10 +41,6 @@
      :description (or (not-empty description) (history/tool-title tool input))
      :detail (text/fit (js/JSON.stringify (clj->js input) nil 2) 2000)}))
 
-(def questions-off
-  "The answer to AskUserQuestion in a chat with questions switched off."
-  {:behavior "deny" :message "The user switched questions off in Claudia for this chat. Don't ask with buttons: decide with your best judgment and say in one line what you chose and why."})
-
 (defn draw-answer
   "The draw tool's answer: what changed, and a screenshot of the picture as it looks now, so Claude
   sees its own drawing; one that failed is said in the text, never the draw's failure."

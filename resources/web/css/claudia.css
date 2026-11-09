@@ -58,10 +58,9 @@ code, pre { font-family: var(--mono); }
 
 /* ---------- Layout ----------
    The chats rail's column is always --rail-w (wide enough for a chat's name and server under its
-   circle); the full list opens over the page as a drawer. The forms rail on the right stays 64px. */
-.app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr 64px; grid-template-rows: minmax(0, 1fr); height: 100%; }
+   circle); the full list opens over the page as a drawer. */
+.app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .app > main { grid-column: 2; }
-.app > .right-rail { grid-column: 3; }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
 .app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
@@ -316,8 +315,6 @@ code, pre { font-family: var(--mono); }
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 10px; background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
 .sidebar::after, .rail::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.right-rail { padding-bottom: 14px; }
-.right-rail::after { right: auto; left: 0; }
 .rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 22px; }
 /* A chat on the rail: its circle, its title under it (two lines at most), then its server's name. */
 .rail-chat { align-self: stretch; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; position: relative; }
@@ -401,7 +398,7 @@ code, pre { font-family: var(--mono); }
    --chalk-c = a button's outline colour. */
 .explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
-.form-dot::before, .col-btn::before, .f-kind::before, .rail-server::before, .server-mark::before, .new-on button::before,
+.f-kind::before, .rail-server::before, .server-mark::before, .new-on button::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
 .view-switch::before, .view-switch button.on::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
@@ -445,7 +442,7 @@ code, pre { font-family: var(--mono); }
 .menu-toggle:hover { background: none; }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
 /* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
-.rail-forms svg, .form-dot svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
+.rail-forms svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 
 @keyframes breathe { 50% { opacity: 0.35; } }
 @keyframes blink { 50% { opacity: 0; } }
@@ -483,7 +480,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .back-to-list { display: none; }
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
-  .menu-toggle, .divider, .backdrop, .right-rail { display: none; }
+  .menu-toggle, .divider, .backdrop { display: none; }
   .app, .app.no-sidebar { display: block; position: relative; overflow: hidden; overflow: clip; }
   .sidebar-slot, .app:not(.no-sidebar) .sidebar-slot, .split > .left, .split > .right { position: absolute; inset: 0; width: auto; box-shadow: none; transition: transform 0.32s var(--screen-ease), visibility 0s; }
   .split { display: contents; }

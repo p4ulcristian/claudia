@@ -108,9 +108,8 @@
   (is (nil? (codeforms/with-template {:id "b"} nil)))
   (is (= {:id "b" :template "T" :html "<p>" :parts {:a "1" :b "2"} :name "T"}
          (codeforms/with-template {:id "b" :parts {:b "2"}} {:name "T" :html "<p>" :parts {:a "1" :b "1"}})))
-  (is (re-find #"takes the last graph block" (codeforms/lost-error ["graph"])))
-  (is (= "Picture updated: The picture is empty.. Not drawn: graph: switched off by the user; use another kind"
-         (codeforms/draw-text {:blocks []} {:refused ["graph" "graph"]}))))
+  (is (= "Picture updated: The picture is empty.. Not drawn: git: the user deleted that form; use another kind"
+         (codeforms/draw-text {:blocks []} {:refused ["git" "git"]}))))
 
 (deftest clojure-index-from-analysis
   (let [a (clj->js {"namespace-definitions" [{:name "a.core" :filename "src/a/core.clj" :doc "A."}

@@ -6,7 +6,7 @@
   them in CLAUDIA_FORMS (claudia.slave.codeforms).")
 
 (def order
-  "Every form, in the order the gallery and the form row show them."
+  "Every form, in the order the gallery shows them."
   ["pipeline" "timeline" "compare" "chart" "stats" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
 
 (def specs
@@ -235,7 +235,7 @@
     (str "- " n ": " use-when " Data: " fields ".")))
 
 (def base
-  "The forms that are not code forms, for the gallery and the form row: {:label :when :sample}."
+  "The forms that are not code forms, for the gallery: {:label :when :sample}."
   {
    "pipeline" {:label "Pipeline"
     :when "Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
