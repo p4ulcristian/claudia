@@ -61,12 +61,13 @@
     [:path {:d "M5 5V3.5A1.5 1.5 0 0 1 6.5 2h7A1.5 1.5 0 0 1 15 3.5v5a1.5 1.5 0 0 1-1.5 1.5H11"}]]])
 
 (defn- row-view
-  [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click tag project?]
+  [{:keys [id server title color off] :as row} {:keys [active? done? multi? read-only? title-view when-text line2? on-click tag project? passive? first-passive?]
                                                 :or {line2? true}}]
   (let [k [server id]
         [kind text] (when line2? (pure/second-line row))
         elsewhere? (contains? @(rf/subscribe [:open-elsewhere]) k)]
-    [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen") (when elsewhere? "elsewhere")]
+    [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen") (when elsewhere? "elsewhere")
+                                      (when passive? "passive") (when first-passive? "first")]
                               :style {"--chat" (chat-color-var color)}
                               :on-click (or on-click #(pick! k active? %))
                               :on-context-menu #(chatmenu/open-at! k %)}
@@ -216,20 +217,28 @@
          [row-view r {:active? (= open k) :multi? multi? :read-only? ro :project? true
                       :on-click #(rf/dispatch [:nav/open k])}]))]))
 
-(defn- chat-rows [{:keys [shown open multi? ro new-pending? q archived?]}]
-  [:<>
-   (for [r shown
-         :let [k [(:server r) (:id r)]]]
-     ^{:key (row-key r)}
-     [row-view r {:active? (= open k) :multi? multi? :read-only? ro
-                  :tag (when (:archived r) "archived")
-                  :done? (and (not ro) (:unseen r) (not= open k))}])
-   (when new-pending?
-     [:div.chat-row.cs-row.active.cs-new
-      [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
-      [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
-   (when (and (empty? shown) (not new-pending?))
-     [:p.muted.small.cs-empty (pure/empty-note q archived?)])])
+(defn- chat-rows
+  "The chats list: passive chats (ash, or open in another tab) last and dimmed, a dashed line over
+  the first of them, as on the rail."
+  [{:keys [shown open multi? ro new-pending? q archived?]}]
+  (let [elsewhere @(rf/subscribe [:open-elsewhere])
+        passive? #(pure/passive? % elsewhere open)
+        rows (pure/passive-last shown elsewhere open)]
+    [:<>
+     (for [[i r] (map-indexed vector rows)
+           :let [k [(:server r) (:id r)]]]
+       ^{:key (row-key r)}
+       [row-view r {:active? (= open k) :multi? multi? :read-only? ro
+                    :passive? (passive? r)
+                    :first-passive? (and (passive? r) (not (some-> (get rows (dec i)) passive?)))
+                    :tag (when (:archived r) "archived")
+                    :done? (and (not ro) (:unseen r) (not= open k))}])
+     (when new-pending?
+       [:div.chat-row.cs-row.active.cs-new
+        [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
+        [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
+     (when (and (empty? shown) (not new-pending?))
+       [:p.muted.small.cs-empty (pure/empty-note q archived?)])]))
 
 (defn- use-search-focus! [search-ref rail-search?]
   (h/use-effect

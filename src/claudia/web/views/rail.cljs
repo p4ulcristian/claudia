@@ -98,16 +98,17 @@
 
 (defn- rail-chat
   "A chat's circle with its title (and its server on the hub)."
-  [{:keys [rows i open multi? ro projects]} {:keys [server id title color off folder] :as r}]
+  [{:keys [rows i open multi? ro projects elsewhere]} {:keys [server id title color off folder] :as r}]
   (let [k [server id]
-        passive? (= "ash" color)
+        steps-back? #(sidebar-pure/passive? % elsewhere open)
+        passive? (steps-back? r)
         project (:name (get projects [server folder]))
         label @(rf/subscribe [:server-label server])
-        elsewhere? (contains? @(rf/subscribe [:open-elsewhere]) k)]
+        elsewhere? (contains? elsewhere k)]
     [:button.rail-chat {:data-slide (str server "/" id)
                         :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
                                 (when passive? "passive")
-                                (when (and passive? (not= "ash" (:color (get rows (dec i))))) "first")
+                                (when (and passive? (not (some-> (get rows (dec i)) steps-back?))) "first")
                                 (when (and passive? (= i (dec (count rows)))) "last")]
                         :style {"--chat" (sidebar/chat-color-var color)}
                         :data-tip (str title (when project (str " · " project))
@@ -138,10 +139,13 @@
 
 (defn rail []
   (let [{:keys [text]} @(rf/subscribe [:search])
-        rows (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text)))
+        open @(rf/subscribe [:open])
+        elsewhere @(rf/subscribe [:open-elsewhere])
+        rows (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text))
+                                        elsewhere open)
         ro @(rf/subscribe [:read-only?])
-        m {:rows rows :open @(rf/subscribe [:open]) :multi? @(rf/subscribe [:multi-server?]) :ro ro
-           :projects @(rf/subscribe [:projects])}
+        m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :ro ro
+           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere}
         box (h/use-ref nil)]
     (use-slide! box (str/join "," (map #(str (:server %) "/" (:id %)) rows)))
     [:nav.rail {:aria-label "Chats"}
