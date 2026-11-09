@@ -78,17 +78,27 @@
   (assoc base :kind "finished" :event (str "turn:" (:id t))
          :body (if (:failed t) "Ended with an error" (one-line-fit (or (not-empty (str (:reply t))) "Finished") 200))))
 
+(defn- alarm-notice [base a]
+  (assoc base :kind "alarm" :event (str "alarm:" (:id a)) :body (one-line-fit (or (not-empty (str (:text a))) "Alarm") 200)))
+
+(defn- news-alarm?
+  "An alarm on the row is news: recent, and rung after the person's first phone."
+  [a since now]
+  (boolean (and (string? (:id a)) (number? (:ago a)) (< (:ago a) fresh-ms) (>= (- now (:ago a)) since))))
+
 (defn- chat-notices [server r since now]
   (let [base {:server server :chat (:id r) :title (one-line-fit (or (not-empty (str (:title r))) "Chat") 80)}]
-    (cond-> (mapv #(ask-notice base %) (:asks r))
+    (cond-> (into (mapv #(ask-notice base %) (:asks r))
+                  (for [a (:alarms r) :when (news-alarm? a since now)] (alarm-notice base a)))
       (news-turn? r since now) (conj (finished-notice base (:lastTurn r))))))
 
 (defn notices-of
   "The events a server's list holds for its person now (the TypeScript Claudia's src/hub/push.ts
   noticesOf). since: when they got their first phone (a turn that ended before that is not news to
-  it). A Row's `asks` are its open asks ({id kind text}); `lastTurn` how its last turn ended
-  ({id ago stopped failed reply}). Not told: a turn the person stopped, one whose agents still work
-  (told once the last ends), one they have seen since it ended."
+  it). A Row's `asks` are its open asks ({id kind text}); `alarms` the alarms the person asked
+  Claude for ({id text ago}); `lastTurn` how its last turn ended ({id ago stopped failed reply}).
+  Not told: a turn the person stopped, one whose agents still work (told once the last ends), one
+  they have seen since it ended."
   [server rows since now]
   (vec (for [r rows
              :when (and (chat-id? (:id r)) (not (:archived r)))
@@ -97,7 +107,8 @@
 
 (defn payload-of
   "What the phone gets: a plain alert Apple can read and, sealed with the phone's key in enc, the real
-  title and body, which the app's extension shows instead. url: the chat's address on the hub."
+  title and body, which the app's extension shows instead (and, for kind \"alarm\", rings as an
+  AlarmKit alarm). url: the chat's address on the hub."
   [n device-key badge]
   {:aps {:alert {:title "Claudia" :body "New message"}
          :mutable-content 1
@@ -302,6 +313,13 @@
                  (still-matters? email newest))
         (alert! email newest)))))
 
+(defn split-news
+  "News as {:send [notice] :hold [notice]}: while the person works at a desktop page (present?)
+  alerts are held, except an alarm, which they asked for."
+  [news present?]
+  (let [{send true hold false} (group-by #(or (= "alarm" (:kind %)) (not present?)) news)]
+    {:send (vec send) :hold (vec hold)}))
+
 (defn- tell! [email server rows]
   ;; Still let in, and still with a phone (the grid may have changed since the last sync).
   (let [devices (store/devices email)]
@@ -310,9 +328,9 @@
       (let [since (apply min (map :added-at devices))
             news (remove #(store/told? email (:server %) (:chat %) (:event %))
                          (notices-of server rows since (js/Date.now)))]
-        (if (presence/present? email)
-          (hold! email news)
-          (doseq [n news :when (store/claim! email (:server n) (:chat n) (:event n))]
+        (let [{:keys [send hold]} (split-news news (presence/present? email))]
+          (hold! email hold)
+          (doseq [n send :when (store/claim! email (:server n) (:chat n) (:event n))]
             (alert! email n)))
         (changed! email)))))
 

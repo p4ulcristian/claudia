@@ -1,8 +1,8 @@
 (ns claudia.slave.tools
   "What Claude is told: the system prompt's Claudia part and the tools the runner serves (their
   descriptions and input schemas, as plain JSON Schema for the host). Word for word as the
-  TypeScript Claudia's src/prompt.ts and src/forms.ts; this version adds the Secrets section and
-  run_with_secret."
+  TypeScript Claudia's src/prompt.ts and src/forms.ts; this version adds the Secrets and Alarms
+  sections, run_with_secret and alarm."
   (:require [clojure.string :as str]))
 
 (def system-append
@@ -45,6 +45,9 @@ The chat runs in ~/Work. When you start working in a project, call mcp__workspac
 
 ## Secrets
 When a command needs a password or token, never ask the user to paste it into the chat and never read it yourself. Call mcp__workspace__run_with_secret with the 1Password reference (op://vault/item/field), the environment variable name, the reason and the command: the user allows it in Claudia, the command runs with the value in that variable only, and the value is replaced by [secret] in the output you get.
+
+## Alarms
+When the user asks you to alarm them (\"alarm me when the deploy is done\", \"ring my phone when you finish\"), call mcp__workspace__alarm once, at that moment, with one short line saying what happened: their iPhone rings like an alarm. Only when the user asked for an alarm in this chat; never on your own, never for anything else.
 
 ## Progress bars
 A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists.
@@ -202,7 +205,7 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                       :description (s "One line: what it shows and when to use it")))}})
 
 (def workspace-mcp
-  "The workspace server's tools (src/prompt.ts WORKSPACE_MCP, this version adds run_with_secret)."
+  "The workspace server's tools (src/prompt.ts WORKSPACE_MCP, this version adds run_with_secret and alarm)."
   {:show_image {:description "Show a picture file in the chat (png, jpeg, gif or webp, up to 5 MB): a screenshot, a rendered image, a photo. The user sees it under your steps and you see it too. Use it when the user asks you to send or show an image; a diagram or explanation still goes in the picture on the right."
                 :inputSchema (obj ["path"] (array-map :path (s "The image file (absolute, ~/…, or relative to the working folder)")
                                                       :caption (s "A few words about it")))}
@@ -211,6 +214,8 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                                       :caption (s "A few words about it")))}
    :set_folder {:description "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                 :inputSchema (obj ["path"] {:path (s "The project's root folder")})}
+   :alarm {:description "Ring the user's iPhone like an alarm (full screen, through the silent switch and Focus, until they stop it), with one short line. Only when the user asked in this chat to be alarmed, and once, at the moment they asked for (\"alarm me when the build is done\": when it is done). Never on your own, never as a plain notification."
+           :inputSchema (obj ["text"] {:text (s "One short line the alarm shows, e.g. \"The deploy is done\"")})}
    :run_with_secret {:description "Run one shell command that needs a secret from 1Password, without you ever seeing the secret. The user is asked in Claudia to allow it (or to paste the value); the command then runs with sh -c in the working folder, with the value in the environment variable env_name only. Every occurrence of the value in the output is replaced by [secret]. Refused if the user says no or does not answer within 10 minutes."
                      :inputSchema (obj ["ref" "env_name" "reason" "command"]
                                        (array-map :ref (s "The 1Password reference: op://<vault>/<item>/<field>")
@@ -226,4 +231,5 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 
 (def allowed-tools
   ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
-   "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"])
+   "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"
+   "mcp__workspace__alarm"])

@@ -156,7 +156,9 @@ newest limits heard (`claude_token_limits`); `GET /hub/claude-tokens` gives each
 The hub watches each server for each person with a phone over that front's `/ws` (as the person,
 `hello`, then every `chats`). A push alert: `{ aps: { alert: { title: "Claudia", body: "New message" },
 mutable-content: 1, badge, thread-id: "<server>/<chat>", interruption-level }, enc, url: "/c/<server>/<chat>",
-server, chat, kind: finished|ask|permission }`, `enc` = base64 of nonce (12) ‖ AES-256-GCM ciphertext
+server, chat, kind: finished|ask|permission|alarm }` (`interruption-level`: `active` for finished,
+else `time-sensitive`; an `alarm` also rings as an AlarmKit alarm on iOS 26 and later, the app's
+Notification Service Extension scheduling it with the opened body as its title), `enc` = base64 of nonce (12) ‖ AES-256-GCM ciphertext
 of `{ title, body }` ‖ tag (16). Live Activity attributes type: `ClaudiaSummaryAttributes`, content
 state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title, server, chat, since, kind }`.
 
@@ -284,7 +286,9 @@ Runner → page:
 `Row`: `{ id, title, folder, color, running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
-secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;
+secret's reason, or "<tool>: <description>"), ago }], alarms: [{ id, text, ago }], agents, settling,
+lastTurn, runningFor }`; `alarms` = the alarms Claude rang with the workspace `alarm` tool (the person
+asked for them) in the last 10 minutes, for the hub to ring once each (the runner keeps them in memory only);
 `agents` = how many agents and background shells Claude started still run. `lastTurn` = `{ id (the
 result's uuid), ago, stopped, failed, reply (the start of the reply, plain text; "" unless it
 succeeded) }` or null; `runningFor` = ms since the turn began while the chat works (its turn or its

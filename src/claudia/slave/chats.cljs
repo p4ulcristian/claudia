@@ -375,6 +375,19 @@
           (.then #(answers/text-result (shown/video-answer (path/basename file-path) % caption)))
           (.catch #(answers/refusal (str "Could not keep the video: " (.-message %))))))))
 
+(defn- alarm!
+  "The person asked for an alarm and Claude rings it: the chat's row carries it to the hub, which
+  rings their iPhones once."
+  [id {:keys [text]}]
+  (let [line (text/fit (text/one-line text) 200)
+        now (js/Date.now)]
+    (if (str/blank? line)
+      (answers/refusal "The alarm needs a text: one short line saying what happened.")
+      (do (swap-chat! id update :alarms view/with-alarm {:id (str (random-uuid)) :text line :at now} now)
+          (changed!)
+          (answers/text-result (str "Alarm handed to Claudia's hub: it rings the user's iPhones that have the Claudia app"
+                                    " (as an alarm on iOS 26 and later, else as a notification)."))))))
+
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
@@ -384,6 +397,7 @@
     ["workspace" "run_with_secret"] (secret-ask id args)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
+    ["workspace" "alarm"] (alarm! id args)
     (throw (js/Error. (str "No tool " server "/" tool)))))
 
 (defn- ask! [id entry] (js/Promise. (fn [done] (add-ask! id (assoc entry :resolve done)))))

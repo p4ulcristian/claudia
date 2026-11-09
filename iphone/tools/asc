@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# App Store Connect API call with the key from the local config: iphone/tools/asc GET /v1/apps
+set -euo pipefail
+set -a; . "${CLAUDIA_IOS_CONFIG:-$HOME/.config/claudia-ios}/env"; set +a
+exec uv run -q --with pyjwt --with cryptography "$(dirname "$0")/asc.py" "$@"
