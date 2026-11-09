@@ -82,6 +82,10 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .cs-project { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--blue); }
 /* Open in another tab of this browser (claudia.web.tabs): a dashed ring round the chat's circle, and two windows by the title. */
 .chat-row.elsewhere .rail-dot, .rail-chat.elsewhere .rail-dot { outline: 1.5px dashed color-mix(in srgb, var(--chat, var(--grey)) 70%, transparent); outline-offset: 2px; }
+.cs-row.passive { opacity: 0.55; }
+.cs-row.passive:hover, .cs-row.passive.active { opacity: 1; }
+.cs-row.passive.first { margin-top: 10px; position: relative; }
+.cs-row.passive.first::before { content: ""; position: absolute; left: 10px; right: 10px; top: -6px; border-top: 1.5px dashed var(--line); }
 .cs-elsewhere { flex: none; display: grid; place-items: center; width: 15px; height: 15px; color: var(--muted); }
 .cs-elsewhere svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
 .cs-tag { flex: none; font: 700 11px var(--hand); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }

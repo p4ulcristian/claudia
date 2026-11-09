@@ -125,6 +125,13 @@
     (is (= ["Fix login" "fix CSS"] (map :title (sidebar/matching rows (sidebar/search-key " FIX ")))))
     (is (= 3 (count (sidebar/matching rows ""))))
     (is (= ["Build page" "fix CSS" "Fix login"] (map :title (sidebar/passive-last rows)))))
+  (let [rows [{:server "s" :id "a" :color "ash"} {:server "s" :id "b"} {:server "s" :id "c"} {:server "s" :id "d"}]
+        elsewhere #{["s" "b"] ["s" "c"]}]
+    (is (= ["c" "d" "a" "b"] (map :id (sidebar/passive-last rows elsewhere ["s" "c"])))
+        "open in another tab steps back, unless it is open here too")
+    (is (true? (sidebar/passive? {:server "s" :id "b"} elsewhere nil)))
+    (is (false? (sidebar/passive? {:server "s" :id "b"} elsewhere ["s" "b"])))
+    (is (true? (sidebar/passive? {:color "ash"} #{} nil))))
   (is (= "now" (sidebar/ago-text 0 30000)))
   (is (= "5m" (sidebar/ago-text 0 300000)))
   (is (nil? (sidebar/ago-text 0 (* 8 86400000))))

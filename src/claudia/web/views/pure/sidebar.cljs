@@ -88,10 +88,20 @@
          (partition-by section)
          (mapv (fn [part] [(section (first part)) (vec part)])))))
 
+(defn passive?
+  "A chat that steps back (dimmed, at the bottom): coloured passive ash, or open in another tab of
+  this browser (elsewhere: [server chat] keys) while not the chat open here (open)."
+  [row elsewhere open]
+  (let [k [(:server row) (:id row)]]
+    (or (= "ash" (:color row))
+        (and (contains? elsewhere k) (not= k open)))))
+
 (defn passive-last
-  "Passive (ash) chats last, each part in its own order."
-  [rows]
-  (vec (concat (remove #(= "ash" (:color %)) rows) (filter #(= "ash" (:color %)) rows))))
+  "Passive chats last (passive?), each part in its own order."
+  ([rows] (passive-last rows #{} nil))
+  ([rows elsewhere open]
+   (let [p #(passive? % elsewhere open)]
+     (vec (concat (remove p rows) (filter p rows))))))
 
 (defn ago-text
   "How long ago t was at now: now, 5m, 3h, 2d; nil past a week (the date shows then)."
