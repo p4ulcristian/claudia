@@ -17,7 +17,8 @@
 (def fonts-url
   "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap")
 
-;; The page tells its height (and that it is ready for parts); Claudia sends parts.
+;; The page tells its height (and that it is ready for parts); Claudia sends parts. The right
+;; button's press and moves go up to Claudia (circling on the picture, claudia.web.views.circle).
 (def ^:private bridge
   "<script>(()=>{
 const post=()=>parent.postMessage({claudiaPageHeight:Math.ceil(Math.max(document.body.scrollHeight,document.documentElement.scrollHeight))},'*');
@@ -26,6 +27,11 @@ let first=null;
 addEventListener('message',(e)=>{if(e.source!==parent||!e.data||!e.data.claudiaParts)return;if(document.readyState==='loading')first=e.data.claudiaParts;else put(e.data.claudiaParts);});
 addEventListener('DOMContentLoaded',()=>{put(first);new ResizeObserver(post).observe(document.body);parent.postMessage({claudiaReady:true},'*');});
 addEventListener('load',post);
+let chalk=false;const fwd=(k,e)=>parent.postMessage({claudiaChalk:k,x:e.clientX,y:e.clientY},'*');
+addEventListener('pointerdown',(e)=>{if(e.button!==2||e.shiftKey||e.pointerType!=='mouse')return;chalk=true;e.preventDefault();e.stopPropagation();try{document.documentElement.setPointerCapture(e.pointerId)}catch(_){}fwd('down',e);},true);
+addEventListener('pointermove',(e)=>{if(chalk)fwd('move',e);},true);
+addEventListener('pointerup',(e)=>{if(chalk&&e.button===2){chalk=false;fwd('up',e);}},true);
+addEventListener('contextmenu',(e)=>{if(!e.shiftKey)e.preventDefault();},true);
 })();</script>")
 
 (defn- head []
