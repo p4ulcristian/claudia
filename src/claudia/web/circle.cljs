@@ -1,6 +1,5 @@
 (ns claudia.web.circle
-  "Circling on the picture or in the chat (right button held, a chalk line), as plain data: the
-  line's points, the zone it encloses, the crop of a tab capture frame, and the note that tells
+  "Circling over the window (a chalk line between two right clicks), as plain data: the line's points, the zone it encloses, the crop of a tab capture frame, and the note that tells
   Claude what was circled."
   (:require [clojure.string :as str]))
 
@@ -78,7 +77,7 @@
   (str (if (seq block-name) (str "\"" block-name "\"") "a block")
        " (" (or (not-empty form) kind) ", id " id ")"))
 
-(def ^:private where {"chat" "in the chat"})
+(def ^:private where {"chat" "in the chat" "app" "across the chat and the picture"})
 
 (defn note
   "What a circle tells Claude, before its image (n: its place among the images sent): where it was
@@ -94,11 +93,18 @@
   [items]
   (filterv :circle items))
 
-(defn lines-on
-  "The points of the draft's circles drawn on surface (\"picture\" or \"chat\"; an older circle
-  without one was on the picture)."
-  [items surface]
-  (into [] (comp (keep :circle) (filter #(= surface (or (:surface %) "picture"))) (map :points)) items))
+(defn- overlaps? [a b]
+  (boolean (and a b (< (:x a) (+ (:x b) (:w b))) (< (:x b) (+ (:x a) (:w a)))
+                (< (:y a) (+ (:y b) (:h b))) (< (:y b) (+ (:y a) (:h a))))))
+
+(defn surface
+  "Where zone z lies, given the chat's box and the picture's box (nil when not there): \"chat\",
+  \"picture\" or \"app\" (both, or neither)."
+  [z chat picture]
+  (let [c? (overlaps? z chat) p? (overlaps? z picture)]
+    (cond (and c? (not p?)) "chat"
+          (and p? (not c?)) "picture"
+          :else "app")))
 
 (defn with-notes
   "The draft's attachments with every circle's note written, numbered by its image's place among

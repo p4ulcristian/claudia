@@ -12,7 +12,6 @@
             [claudia.web.md :as md]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
-            [claudia.web.views.circle :as circle]
             [claudia.web.views.changes :as changes]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.pure.chat :as pure]
@@ -328,8 +327,6 @@
         running (:running state)]
     [:div.messages {:ref #(set! (.-current (:box scroll)) %)
                     :on-scroll (on-scroll scroll ck first-id state)}
-     ;; Circling in the chat with the right button.
-     [circle/layer "chat" ck]
      (when (:more state)
        [:div.muted.small.older-line (if (:loading-older state) "Loading earlier messages…" "")])
      (when (and (empty? msgs) (empty? outbox) (not running) (or pending? (:loaded state)))

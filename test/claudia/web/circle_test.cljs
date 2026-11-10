@@ -41,15 +41,17 @@
          (circle/outermost ["Both windows know" "✓ Both windows know Already there" "Already there" "PR #110" "PR #110"])))
   (is (= ["a paragraph with x in it"] (circle/outermost ["x" "a paragraph with x in it"]))))
 
-(deftest circles-sit-on-their-surface
-  (let [items [{:circle {:points [[1 1]]}} {:circle {:points [[2 2]] :surface "chat"}} {:id 3}
-               {:circle {:points [[3 3]] :surface "picture"}}]]
-    (is (= [[[1 1]] [[3 3]]] (circle/lines-on items "picture")))
-    (is (= [[[2 2]]] (circle/lines-on items "chat")))))
+(deftest a-zone-lies-in-the-chat-the-picture-or-both
+  (let [chat {:x 0 :y 0 :w 400 :h 1000} picture {:x 500 :y 0 :w 1100 :h 1000}]
+    (is (= "chat" (circle/surface {:x 10 :y 10 :w 100 :h 100} chat picture)))
+    (is (= "picture" (circle/surface {:x 600 :y 10 :w 100 :h 100} chat picture)))
+    (is (= "app" (circle/surface {:x 300 :y 10 :w 400 :h 100} chat picture)))
+    (is (= "picture" (circle/surface {:x 600 :y 10 :w 100 :h 100} nil picture)))))
 
 (deftest the-note-names-blocks-and-texts
   (is (= "[Circled on the picture: image 2 below]" (circle/note 2 {})))
   (is (= "[Circled in the chat: image 1 below; under the chalk: \"hi\"]" (circle/note 1 {:surface "chat" :texts ["hi"]})))
+  (is (= "[Circled across the chat and the picture: image 1 below]" (circle/note 1 {:surface "app"})))
   (is (= (str "[Circled on the picture: image 1 below; on \"Plan\" (pipeline, id flow), a block (graph, id g)"
               "; under the chalk: \"Go\" · \"Ship it\"]")
          (circle/note 1 {:blocks [{:id "flow" :name "Plan" :kind "form" :form "pipeline"} {:id "g" :kind "graph"}]
