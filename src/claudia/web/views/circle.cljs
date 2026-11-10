@@ -1,8 +1,8 @@
 (ns claudia.web.views.circle
   "Circling over the whole window: a right click starts a chalk line, the pointer draws it, a left
   click ends it (and does nothing else). The circled zone becomes an image in the draft (claudia.web.capture takes it
-  from the shared tab), with what lies under the chalk; the line stays on screen until the draft is
-  sent or the image removed. Shift + right click opens the browser's menu, and so does a right click
+  from the shared tab), with what lies under the chalk; the line is wiped once the image is in the
+  draft. Shift + right click opens the browser's menu, and so does a right click
   in a text field. Escape drops the line. While a
   line is drawn the freeform frames let the pointer through (body.chalking), and a frame forwards
   its right press (claudia.web.views.frame's bridge), since its page swallows it."
@@ -12,8 +12,9 @@
             [claudia.web.circle :as circle]
             [claudia.web.db :as db]))
 
-;; A right click here keeps the browser's menu (paste, spelling).
-(def ^:private text-field "input, textarea, select, [contenteditable]")
+;; A right click here keeps its own menu: the browser's (paste, spelling) in a text field, Claudia's
+;; on a chat's circle in the rail or its row in the list.
+(def ^:private own-menu "input, textarea, select, [contenteditable], .rail-chat, .chat-row")
 
 (defn- box-of [^js el]
   (let [r (.getBoundingClientRect el)]
@@ -69,8 +70,8 @@
 (defn- chalking! [on?]
   (.toggle (.-classList js/document.body) "chalking" on?))
 
-(defn- in-text-field? [^js e]
-  (boolean (some-> (.-target e) (.closest text-field))))
+(defn- on-own-menu? [^js e]
+  (boolean (some-> (.-target e) (.closest own-menu))))
 
 (defn- line-ops
   "What the line does: start at a point, add a point, finish (take it when drawn), drop it. live: a
@@ -88,12 +89,12 @@
                    (take! (.-current dk) pts (fn [] (set-pending (fn [ps] (vec (remove #{pts} ps)))))))))}))
 
 (defn- begin!
-  "A right press at (x, y) starts a line, unless one is being drawn already or it is in a text
-  field (text-field?). Returns whether the press was ours (its menu is cancelled): a right press
+  "A right press at (x, y) starts a line, unless one is being drawn already or it is on something
+  with a menu of its own (own-menu?). Returns whether the press was ours (its menu is cancelled): a right press
   while drawing is ours too, and changes nothing."
-  [live {:keys [start]} x y text-field?]
+  [live {:keys [start]} x y own-menu?]
   (cond (.-current live) true
-        text-field? false
+        own-menu? false
         :else (do (start x y) true)))
 
 (defn- listeners
@@ -105,7 +106,7 @@
                    (case (.-button e)
                      2 (when (= "mouse" (.-pointerType e))
                          (let [mine? (and (not (.-shiftKey e))
-                                          (begin! live ops (.-clientX e) (.-clientY e) (in-text-field? e)))]
+                                          (begin! live ops (.-clientX e) (.-clientY e) (on-own-menu? e)))]
                            (set! (.-current armed) mine?)
                            (when mine? (.preventDefault e) (.stopPropagation e))))
                      0 (when (.-current live)
@@ -161,16 +162,15 @@
   (let [live (h/use-ref nil)
         dk (h/use-ref draft-key)
         [drawing set-line] (h/use-state nil)
-        [pending set-pending] (h/use-state [])
-        kept (map :points (keep :circle @(rf/subscribe [:attach draft-key])))]
+        [pending set-pending] (h/use-state [])]
     (set! (.-current dk) draft-key)
     (h/use-effect (fn [] (listen! live (line-ops live dk set-line set-pending))) [])
     [:svg.circle-layer {:aria-hidden true}
-     (for [[i pts] (map-indexed vector (concat kept pending))] ^{:key i} [line pts "kept"])
+     (for [[i pts] (map-indexed vector pending)] ^{:key i} [line pts "kept"])
      (when drawing [line drawing "drawing"])]))
 
 (defn layer
-  "The chalk over the whole window: the line being drawn and the draft's circles. Not on a phone (no
+  "The chalk over the whole window: the line being drawn, and lines whose image is being taken. Not on a phone (no
   right button) nor on another profile's chats (read only)."
   [draft-key]
   (when-not (or (db/phone?) @(rf/subscribe [:read-only?]))
