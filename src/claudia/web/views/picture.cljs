@@ -24,16 +24,6 @@
   (let [{:keys [server chat]} @(rf/subscribe [:open-chat])]
     {:server server :chat chat :block (:id block) :title (:name block) :live (boolean (and server chat live?))}))
 
-(defn- block-attrs
-  "A block's section: its width and kind; its id, name and form as data (what a circle on the picture
-  names, claudia.web.views.circle)."
-  [block kept on-touch]
-  {:data-block (:id block) :data-name (:name block) :data-kind (:kind block) :data-form (:form block)
-   :class [(str "w-" (if (= "half" (:width block)) "half" "full"))
-           (str "k-" (:kind block))
-           (when (= kept :gone) "kept-gone")]
-   :on-click-capture (when-not kept on-touch)})
-
 (defn block-view
   "One block. hot: the last draw changed it (a new glow per draw, seq); kept: :here or :gone for a
   files block the user clicked in (it stays on the picture until closed)."
@@ -42,7 +32,10 @@
    (let [ctx (block-ctx block live?)
          hot (or (contains? changed (:id block))
                  (some #(str/starts-with? (str %) (str (:id block) ":")) changed))]
-     [:section.block (block-attrs block kept on-touch)
+     [:section.block {:class [(str "w-" (if (= "half" (:width block)) "half" "full"))
+                              (str "k-" (:kind block))
+                              (when (= kept :gone) "kept-gone")]
+                      :on-click-capture (when-not kept on-touch)}
       ;; A new glow per change; the block itself stays mounted (an html block keeps its page loaded).
       (when hot ^{:key seq-no} [:span.block-glow])
       [:div.block-head

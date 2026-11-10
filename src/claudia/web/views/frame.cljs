@@ -17,8 +17,7 @@
 (def fonts-url
   "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap")
 
-;; The page tells its height (and that it is ready for parts); Claudia sends parts. The right
-;; button's press goes up to Claudia (circling on the picture, claudia.web.views.circle).
+;; The page tells its height (and that it is ready for parts); Claudia sends parts.
 (def ^:private bridge
   "<script>(()=>{
 const post=()=>parent.postMessage({claudiaPageHeight:Math.ceil(Math.max(document.body.scrollHeight,document.documentElement.scrollHeight))},'*');
@@ -27,8 +26,6 @@ let first=null;
 addEventListener('message',(e)=>{if(e.source!==parent||!e.data||!e.data.claudiaParts)return;if(document.readyState==='loading')first=e.data.claudiaParts;else put(e.data.claudiaParts);});
 addEventListener('DOMContentLoaded',()=>{put(first);new ResizeObserver(post).observe(document.body);parent.postMessage({claudiaReady:true},'*');});
 addEventListener('load',post);
-addEventListener('pointerdown',(e)=>{if(e.button!==2||e.shiftKey||e.pointerType!=='mouse')return;e.preventDefault();e.stopPropagation();parent.postMessage({claudiaChalk:'down',x:e.clientX,y:e.clientY},'*');},true);
-addEventListener('contextmenu',(e)=>{if(!e.shiftKey)e.preventDefault();},true);
 })();</script>")
 
 (defn- head []

@@ -2,7 +2,6 @@
   (:require [re-frame.core :as rf]
             [clojure.string :as str]
             [claudia.shared.files :as files]
-            [claudia.web.circle :as circle]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]))
 
@@ -326,11 +325,9 @@
 (defn outgoing
   "What a send carries, from the draft's attachments (files uploaded, named by <claudia-file> tags
   after the text; images; notes) and the typed text: sent (what goes to the runner, which adds the
-  files' tags), text (with the tags: what the outbox holds, as the runner's echo will) and extra.
-  A circle's note (what was circled on the picture) is written here, numbered by its image."
+  files' tags), text (with the tags: what the outbox holds, as the runner's echo will) and extra."
   [attach typed]
-  (let [attach (circle/with-notes attach)
-        sent-files (keep :file attach)
+  (let [sent-files (keep :file attach)
         images (vec (mapcat :images attach))
         sent (str/join "\n\n" (filter seq (concat (keep :note attach) [(str/trim (or typed ""))])))]
     {:sent sent
