@@ -13,6 +13,7 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.circle :as circle]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.settings :as settings]
@@ -111,7 +112,8 @@
    [chatmenu/chat-menu]
    [chatmenu/context-menu]
    (when-not settings-shown? [settings/github-prompt])
-   [:f> attach/drop-zone draft-key (not ro)]])
+   [:f> attach/drop-zone draft-key (not ro)]
+   [circle/layer draft-key]])
 
 (defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")

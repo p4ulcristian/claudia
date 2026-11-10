@@ -7,7 +7,6 @@
             [reagent.hooks :as h]
             [claudia.web.db :as db]
             [claudia.web.md :as md]
-            [claudia.web.views.circle :as circle]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.forms :as forms]
             [claudia.web.views.frame :as frame]
@@ -156,10 +155,7 @@
          [:div.right-scroll
           [:div.stage {:class (when (:viewing? hist) "past")}
            [:f> picture-view {:scene scene :k (:ck oc)
-                              :live? (and (not (:viewing? hist)) (not ro))}]
-           ;; Circling with the right button: on the live picture of an open chat.
-           (when (and (:ck oc) (not (:viewing? hist)))
-             [circle/layer "picture" (:ck oc)])]])
+                              :live? (and (not (:viewing? hist)) (not ro))}]]])
        (when (and (:chat oc) (= view :picture))
          [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
        (when (seq asks)
