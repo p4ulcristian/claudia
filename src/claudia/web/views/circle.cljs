@@ -1,9 +1,9 @@
 (ns claudia.web.views.circle
-  "Circling over the whole window: a right click starts a chalk line, the pointer draws it, the next
-  right click ends it. The circled zone becomes an image in the draft (claudia.web.capture takes it
+  "Circling over the whole window: a right click starts a chalk line, the pointer draws it, a left
+  click ends it (and does nothing else). The circled zone becomes an image in the draft (claudia.web.capture takes it
   from the shared tab), with what lies under the chalk; the line stays on screen until the draft is
   sent or the image removed. Shift + right click opens the browser's menu, and so does a right click
-  in a text field (unless a line is being drawn: that click ends it). Escape drops the line. While a
+  in a text field. Escape drops the line. While a
   line is drawn the freeform frames let the pointer through (body.chalking), and a frame forwards
   its right press (claudia.web.views.frame's bridge), since its page swallows it."
   (:require [re-frame.core :as rf]
@@ -87,24 +87,38 @@
                    (set-pending #(conj % pts))
                    (take! (.-current dk) pts (fn [] (set-pending (fn [ps] (vec (remove #{pts} ps)))))))))}))
 
-(defn- toggle!
-  "A right press at (x, y): ends the line being drawn, or starts one unless it is in a text field
-  (text-field?). Returns whether the press was ours (its menu is cancelled)."
-  [live {:keys [start finish]} x y text-field?]
-  (cond (.-current live) (do (finish) true)
+(defn- begin!
+  "A right press at (x, y) starts a line, unless one is being drawn already or it is in a text
+  field (text-field?). Returns whether the press was ours (its menu is cancelled): a right press
+  while drawing is ours too, and changes nothing."
+  [live {:keys [start]} x y text-field?]
+  (cond (.-current live) true
         text-field? false
         :else (do (start x y) true)))
 
 (defn- listeners
-  "The window's listeners (capture phase: a 3D scene never sees the right button's press). armed: a
-  ref, true from a press that was ours until its menu event."
-  [live armed {:keys [add cancel] :as ops}]
+  "The window's listeners (capture phase: a 3D scene never sees the press). armed: a ref, true from
+  a right press that was ours until its menu event; swallow: a ref, true from the left press that
+  ended a line until its click, which then does nothing else."
+  [live armed swallow {:keys [add cancel finish] :as ops}]
   {"pointerdown" (fn [^js e]
-                   (when (and (= 2 (.-button e)) (= "mouse" (.-pointerType e)))
-                     (let [mine? (and (not (.-shiftKey e))
-                                      (toggle! live ops (.-clientX e) (.-clientY e) (in-text-field? e)))]
-                       (set! (.-current armed) mine?)
-                       (when mine? (.preventDefault e) (.stopPropagation e)))))
+                   (case (.-button e)
+                     2 (when (= "mouse" (.-pointerType e))
+                         (let [mine? (and (not (.-shiftKey e))
+                                          (begin! live ops (.-clientX e) (.-clientY e) (in-text-field? e)))]
+                           (set! (.-current armed) mine?)
+                           (when mine? (.preventDefault e) (.stopPropagation e))))
+                     0 (when (.-current live)
+                         (set! (.-current swallow) true)
+                         (finish)
+                         (.preventDefault e)
+                         (.stopPropagation e))
+                     nil))
+   "click" (fn [^js e]
+             (when (.-current swallow)
+               (set! (.-current swallow) false)
+               (.preventDefault e)
+               (.stopPropagation e)))
    "pointermove" (fn [^js e] (add (.-clientX e) (.-clientY e)))
    "keydown" (fn [^js e] (when (= "Escape" (.-key e)) (cancel)))
    "contextmenu" (fn [^js e]
@@ -124,13 +138,13 @@
     (when (= "down" (some-> (.-data e) .-claudiaChalk))
       (when-let [fb (frame-box (.-source e))]
         (let [{:keys [x y]} (circle/from-frame {:kind "down" :x (.. e -data -x) :y (.. e -data -y)} fb)]
-          (toggle! live ops x y false))))))
+          (begin! live ops x y false))))))
 
 (defn- listen!
   "Installs the listeners; returns what removes them."
   [live ops]
   (let [armed #js {:current false}
-        ls (listeners live armed ops)
+        ls (listeners live armed #js {:current false} ops)
         on-msg (frame-listener live ops)]
     (doseq [[t f] ls] (js/window.addEventListener t f true))
     (js/window.addEventListener "message" on-msg)
