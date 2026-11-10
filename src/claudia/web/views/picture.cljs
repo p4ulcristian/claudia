@@ -158,8 +158,8 @@
            [:f> picture-view {:scene scene :k (:ck oc)
                               :live? (and (not (:viewing? hist)) (not ro))}]
            ;; Circling with the right button: on the live picture of an open chat.
-           (when (and (:ck oc) (not (:viewing? hist)) (not ro) (not phone?))
-             ^{:key (str (:ck oc))} [circle/layer (:ck oc)])]])
+           (when (and (:ck oc) (not (:viewing? hist)))
+             [circle/layer "picture" (:ck oc)])]])
        (when (and (:chat oc) (= view :picture))
          [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
        (when (seq asks)

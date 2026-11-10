@@ -1,6 +1,7 @@
 (ns claudia.web.circle
-  "Circling on the picture (right button held, a chalk line), as plain data: the line's points, the
-  zone it encloses, the crop of a tab capture frame, and the note that tells Claude what was circled."
+  "Circling on the picture or in the chat (right button held, a chalk line), as plain data: the
+  line's points, the zone it encloses, the crop of a tab capture frame, and the note that tells
+  Claude what was circled."
   (:require [clojure.string :as str]))
 
 ;; A right press that moves less than this (CSS px) is a click, not a circle.
@@ -9,8 +10,8 @@
 (def pad 16)
 ;; Texts under the chalk named in the note, at most.
 (def ^:private max-texts 12)
-;; A text longer than this is a container's, not a label's.
-(def ^:private max-text-length 120)
+;; A text longer than this is a whole column's, not what was circled.
+(def ^:private max-text-length 300)
 
 (defn travel
   "How far the line strays from its first point (CSS px)."
@@ -61,19 +62,29 @@
     [(+ x (* w (/ (+ i 0.5) n))) (+ y (* h (/ (+ j 0.5) n)))]))
 
 (defn label-text
-  "An element's own short text, trimmed and on one line; nil when empty or too long to be a label."
+  "An element's text, trimmed and on one line; nil when empty or too long to be what was circled."
   [s]
   (let [t (str/trim (str/replace (str s) #"\s+" " "))]
     (when (and (seq t) (<= (count t) max-text-length)) t)))
+
+(defn outermost
+  "Texts without those another of them holds: a card's text holds its label's and its note's, a
+  paragraph's its code words', so only the card and the paragraph stay."
+  [texts]
+  (let [ts (distinct texts)]
+    (filterv (fn [t] (not-any? #(and (not= % t) (str/includes? % t)) ts)) ts)))
 
 (defn- block-line [{:keys [id kind form] block-name :name}]
   (str (if (seq block-name) (str "\"" block-name "\"") "a block")
        " (" (or (not-empty form) kind) ", id " id ")"))
 
+(def ^:private where {"chat" "in the chat"})
+
 (defn note
-  "What a circle tells Claude, before its image: circle n, the blocks it touches and the texts under it."
-  [n {:keys [blocks texts]}]
-  (str "[Circled on the picture: image " n " below"
+  "What a circle tells Claude, before its image (n: its place among the images sent): where it was
+  drawn (the picture or the chat), the blocks it touches and the texts under it."
+  [n {:keys [surface blocks texts]}]
+  (str "[Circled " (get where surface "on the picture") ": image " n " below"
        (when (seq blocks) (str "; on " (str/join ", " (map block-line blocks))))
        (when (seq texts) (str "; under the chalk: " (str/join " · " (map #(str "\"" % "\"") (take max-texts texts)))))
        "]"))
@@ -82,6 +93,12 @@
   "The draft's circles: its attachments that came from the chalk, in order."
   [items]
   (filterv :circle items))
+
+(defn lines-on
+  "The points of the draft's circles drawn on surface (\"picture\" or \"chat\"; an older circle
+  without one was on the picture)."
+  [items surface]
+  (into [] (comp (keep :circle) (filter #(= surface (or (:surface %) "picture"))) (map :points)) items))
 
 (defn with-notes
   "The draft's attachments with every circle's note written, numbered by its image's place among

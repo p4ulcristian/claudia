@@ -1,34 +1,53 @@
 (ns claudia.web.views.circle
-  "Circling on the picture: hold the right button and draw; on release the circled zone becomes an
-  image in the draft (claudia.web.capture takes it from the shared tab), with what lies under the
-  chalk, and the chalk line stays on the picture until the draft is sent or the image removed.
-  Shift + right click opens the browser's menu. A freeform block's frame forwards the right
-  button's moves (claudia.web.views.frame's bridge), since its page swallows them."
+  "Circling on the picture or in the chat: hold the right button and draw; on release the circled
+  zone becomes an image in the draft (claudia.web.capture takes it from the shared tab), with what
+  lies under the chalk, and the chalk line stays where it was drawn until the draft is sent or the
+  image removed. Shift + right click opens the browser's menu, and so does a right click in a text
+  field. A freeform block's frame forwards the right button's moves (claudia.web.views.frame's
+  bridge), since its page swallows them."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.capture :as capture]
-            [claudia.web.circle :as circle]))
+            [claudia.web.circle :as circle]
+            [claudia.web.db :as db]))
+
+;; Where circles are drawn. The layer sits in the surface's content (its stage: the picture's
+;; .stage, the chat's .messages); pane: where its listeners go; start: where a press starts a line;
+;; seen: what shows of it.
+(def ^:private surfaces
+  {"picture" {:pane ".right" :start ".right" :seen ".right-scroll"}
+   "chat" {:pane ".left" :start ".messages" :seen ".messages"}})
+
+;; A right click here keeps the browser's menu (paste, spelling).
+(def ^:private text-field "input, textarea, select, [contenteditable]")
 
 (defn- box-of [^js el]
   (let [r (.getBoundingClientRect el)]
     {:x (.-left r) :y (.-top r) :w (.-width r) :h (.-height r)}))
 
-(defn- seen-box
-  "The window box where the picture shows: its scroll pane cut to the window."
+(defn- origin
+  "Where the stage's content starts in the window: its box, less what it scrolled itself (the chat
+  scrolls its own content; the picture's stage moves inside its scroller)."
   [^js stage]
-  (let [pane (or (.closest stage ".right-scroll") stage)]
-    (circle/clip (box-of pane) 0 {:x 0 :y 0 :w js/window.innerWidth :h js/window.innerHeight})))
+  (let [{:keys [x y]} (box-of stage)]
+    {:x (- x (.-scrollLeft stage)) :y (- y (.-scrollTop stage))}))
+
+(defn- seen-box
+  "The window box where the stage shows: its scroller cut to the window."
+  [^js stage seen-sel]
+  (let [scroller (or (.closest stage seen-sel) stage)]
+    (circle/clip (box-of scroller) 0 {:x 0 :y 0 :w js/window.innerWidth :h js/window.innerHeight})))
 
 (defn- on-screen
   "Stage points in the window's coordinates."
   [^js stage points]
-  (let [{:keys [x y]} (box-of stage)]
+  (let [{:keys [x y]} (origin stage)]
     (circle/shift points x y)))
 
 (defn- zone
   "The window box of a line on stage, padded, cut to what shows; nil when out of sight."
-  [^js stage points]
-  (when-let [seen (seen-box stage)]
+  [^js stage seen-sel points]
+  (when-let [seen (seen-box stage seen-sel)]
     (circle/clip (circle/bbox (on-screen stage points)) circle/pad seen)))
 
 (defn- block-of [^js el]
@@ -40,12 +59,17 @@
   (some #(when (and (.contains stage %) (not (.closest ^js % ".circle-layer"))) %)
         (array-seq (js/document.elementsFromPoint x y))))
 
+(defn- text-of
+  "An element's text as shown (line breaks where the layout breaks); SVG text has only textContent."
+  [^js el]
+  (or (.-innerText el) (.-textContent el)))
+
 (defn- under
-  "What lies under the circle: the blocks it touches and the short texts there."
+  "What lies under the circle: the blocks it touches and the texts there (the outermost of each)."
   [^js stage z]
-  (let [els (keep #(top-in-stage stage %) (circle/grid z 7))]
+  (let [els (distinct (keep #(top-in-stage stage %) (circle/grid z 7)))]
     {:blocks (vec (distinct (keep block-of els)))
-     :texts (vec (distinct (keep #(circle/label-text (.-textContent ^js %)) els)))}))
+     :texts (circle/outermost (keep #(circle/label-text (text-of %)) els))}))
 
 (defn- failed [^js e]
   (if (= "NotAllowedError" (.-name e))
@@ -53,10 +77,12 @@
     (str "The circle could not be taken: " (.-message e))))
 
 (defn- take!
-  "A finished line: its image goes to the draft (draft-key), then the line leaves pending."
-  [^js stage draft-key points done]
-  (let [info (assoc (under stage (or (zone stage points) (circle/bbox (on-screen stage points)))) :points points)]
-    (-> (capture/shot #(zone stage points))
+  "A finished line on surface: its image goes to the draft (draft-key), then the line leaves pending."
+  [^js stage surface draft-key points done]
+  (let [seen-sel (:seen (surfaces surface))
+        z (or (zone stage seen-sel points) (circle/bbox (on-screen stage points)))
+        info (assoc (under stage z) :points points :surface surface)]
+    (-> (capture/shot #(zone stage seen-sel points))
         (.then (fn [file] (rf/dispatch [:ops/attach draft-key #js [file] {:circle info}])))
         (.catch (fn [e] (rf/dispatch [:ops/error (failed e)])))
         (.finally done))))
@@ -64,12 +90,12 @@
 ;; ---- the pointer ----
 
 (defn- stage-point [^js stage x y]
-  (let [b (box-of stage)] [(- x (:x b)) (- y (:y b))]))
+  (let [o (origin stage)] [(- x (:x o)) (- y (:y o))]))
 
 (defn- pointer
   "What the right button does, on stage: start, add, end (take it when a line was drawn), cancel.
   live: a ref of the line drawn now; set-line and set-pending redraw."
-  [^js stage dk live set-line set-pending]
+  [^js stage surface dk live set-line set-pending]
   (let [put! (fn [pts] (set! (.-current live) pts) (set-line pts))]
     {:start (fn [x y] (put! [(stage-point stage x y)]))
      :add (fn [x y] (when-let [pts (.-current live)] (put! (conj pts (stage-point stage x y)))))
@@ -79,16 +105,22 @@
               (put! nil)
               (when (circle/drawn? pts)
                 (set-pending #(conj % pts))
-                (take! stage (.-current dk) pts (fn [] (set-pending (fn [ps] (vec (remove #{pts} ps)))))))))}))
+                (take! stage surface (.-current dk) pts (fn [] (set-pending (fn [ps] (vec (remove #{pts} ps)))))))))}))
 
-(defn- right-press? [^js e]
-  (and (= 2 (.-button e)) (not (.-shiftKey e)) (= "mouse" (.-pointerType e))))
+(defn- in-text-field? [^js e]
+  (boolean (some-> (.-target e) (.closest text-field))))
+
+(defn- right-press?
+  "A right press that starts a line: not with Shift, not in a text field, inside start-sel."
+  [^js e start-sel]
+  (and (= 2 (.-button e)) (not (.-shiftKey e)) (= "mouse" (.-pointerType e))
+       (not (in-text-field? e)) (some? (some-> (.-target e) (.closest start-sel)))))
 
 (defn- pane-listeners
-  "The right pane's listeners (capture phase: a 3D scene never sees the right button's press)."
-  [^js pane live {:keys [start add end cancel]}]
+  "The pane's listeners (capture phase: a 3D scene never sees the right button's press)."
+  [^js pane start-sel live {:keys [start add end cancel]}]
   {"pointerdown" (fn [^js e]
-                   (when (right-press? e)
+                   (when (right-press? e start-sel)
                      (.preventDefault e)
                      (.stopPropagation e)
                      (.setPointerCapture pane (.-pointerId e))
@@ -96,7 +128,9 @@
    "pointermove" (fn [^js e] (when (.-current live) (add (.-clientX e) (.-clientY e))))
    "pointerup" (fn [^js e] (when (and (.-current live) (= 2 (.-button e))) (.stopPropagation e) (end)))
    "pointercancel" (fn [_] (cancel))
-   "contextmenu" (fn [^js e] (when-not (.-shiftKey e) (.preventDefault e)))})
+   "contextmenu" (fn [^js e]
+                   (when-not (or (.-shiftKey e) (in-text-field? e) (not (.closest (.-target e) start-sel)))
+                     (.preventDefault e)))})
 
 (defn- frame-box
   "The window box of the pane's frame whose window is src, or nil."
@@ -114,10 +148,11 @@
           (case kind "down" (start x y) "move" (add x y) "up" (end) nil))))))
 
 (defn- listen!
-  "Installs the listeners; returns what removes them."
-  [^js stage live handlers]
-  (let [pane (or (.closest stage ".right") stage)
-        ls (pane-listeners pane live handlers)
+  "Installs the listeners of surface's pane; returns what removes them."
+  [^js stage surface live handlers]
+  (let [{:keys [start] pane-sel :pane} (surfaces surface)
+        pane (or (.closest stage pane-sel) stage)
+        ls (pane-listeners pane start live handlers)
         on-msg (frame-listener pane handlers)]
     (doseq [[t f] ls] (.addEventListener pane t f true))
     (js/window.addEventListener "message" on-msg)
@@ -129,24 +164,26 @@
 (defn- line [pts cls]
   [:path {:class cls :d (circle/path-d pts)}])
 
-(defn- layer-view [draft-key]
+(defn- layer-view [surface draft-key]
   (let [svg (h/use-ref nil)
         live (h/use-ref nil)
         dk (h/use-ref draft-key)
         [drawing set-line] (h/use-state nil)
         [pending set-pending] (h/use-state [])
-        kept (map (comp :points :circle) (circle/circles @(rf/subscribe [:attach draft-key])))]
+        kept (circle/lines-on @(rf/subscribe [:attach draft-key]) surface)]
     (set! (.-current dk) draft-key)
     (h/use-effect
      (fn []
        (let [stage (.-parentElement ^js (.-current svg))]
-         (listen! stage live (pointer stage dk live set-line set-pending))))
+         (listen! stage surface live (pointer stage surface dk live set-line set-pending))))
      [])
     [:svg.circle-layer {:ref #(set! (.-current svg) %) :aria-hidden true}
      (for [[i pts] (map-indexed vector (concat kept pending))] ^{:key i} [line pts "kept"])
      (when drawing [line drawing "drawing"])]))
 
 (defn layer
-  "The chalk over the live picture: the line being drawn and the draft's circles."
-  [draft-key]
-  [:f> layer-view draft-key])
+  "The chalk over surface (\"picture\" or \"chat\"): the line being drawn and the draft's circles
+  drawn there. Not on a phone (no right button) nor on another profile's chats (read only)."
+  [surface draft-key]
+  (when-not (or (db/phone?) @(rf/subscribe [:read-only?]))
+    ^{:key (str surface draft-key)} [:f> layer-view surface draft-key]))
