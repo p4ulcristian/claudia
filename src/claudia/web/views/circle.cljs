@@ -117,9 +117,11 @@
        (not (in-text-field? e)) (some? (some-> (.-target e) (.closest start-sel)))))
 
 (defn- pane-listeners
-  "The pane's listeners (capture phase: a 3D scene never sees the right button's press)."
-  [^js pane start-sel live {:keys [start add end cancel]}]
+  "The pane's listeners (capture phase: a 3D scene never sees the right button's press). armed: a
+  ref, true from a press that started a line until its menu event."
+  [^js pane start-sel live armed {:keys [start add end cancel]}]
   {"pointerdown" (fn [^js e]
+                   (set! (.-current armed) (right-press? e start-sel))
                    (when (right-press? e start-sel)
                      (.preventDefault e)
                      (.stopPropagation e)
@@ -128,8 +130,12 @@
    "pointermove" (fn [^js e] (when (.-current live) (add (.-clientX e) (.-clientY e))))
    "pointerup" (fn [^js e] (when (and (.-current live) (= 2 (.-button e))) (.stopPropagation e) (end)))
    "pointercancel" (fn [_] (cancel))
+   ;; A press that started a line owns its menu event: with the pointer captured, Chrome sends it to
+   ;; the pane itself (outside the chat's start zone), on press (Linux) or release (macOS, Windows).
    "contextmenu" (fn [^js e]
-                   (when-not (or (.-shiftKey e) (in-text-field? e) (not (.closest (.-target e) start-sel)))
+                   (when (or (.-current armed)
+                             (not (or (.-shiftKey e) (in-text-field? e) (not (.closest (.-target e) start-sel)))))
+                     (set! (.-current armed) false)
                      (.preventDefault e)))})
 
 (defn- frame-box
@@ -152,7 +158,7 @@
   [^js stage surface live handlers]
   (let [{:keys [start] pane-sel :pane} (surfaces surface)
         pane (or (.closest stage pane-sel) stage)
-        ls (pane-listeners pane start live handlers)
+        ls (pane-listeners pane start live #js {:current false} handlers)
         on-msg (frame-listener pane handlers)]
     (doseq [[t f] ls] (.addEventListener pane t f true))
     (js/window.addEventListener "message" on-msg)
