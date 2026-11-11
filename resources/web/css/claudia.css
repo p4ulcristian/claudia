@@ -119,10 +119,14 @@ code, pre { font-family: var(--mono); }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
-.plan-pick { position: relative; flex: none; display: grid; }
-.plan-mark { padding: 1px 9px; border: 1.5px solid currentColor; border-radius: 11px; color: var(--muted); font: 700 13px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }
-.plan-mark:hover, .plan-mark[aria-expanded="true"] { color: var(--fg); }
-.plan-list { position: absolute; top: 30px; left: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.plan-pick { position: relative; flex: none; }
+.plan-pill { display: flex; align-items: center; gap: 14px; padding: 3px 16px 5px 10px; border: 1.5px solid var(--line); border-radius: 18px; }
+.plan-pill .ring { width: 24px; height: 24px; }
+.plan-owner { color: var(--fg); font: 700 15px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }
+.plan-owner:hover, .plan-owner[aria-expanded="true"] { color: var(--accent); }
+.plan-rings { display: flex; align-items: center; gap: 14px; }
+.plan-rings:empty { display: none; }
+.plan-list { position: absolute; top: 38px; left: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .plan-item { display: grid; gap: 1px; padding: 6px; border-radius: 7px; text-align: left; white-space: nowrap; }
 .plan-item + .plan-item { border-top: 1px dashed var(--line); border-radius: 0 0 7px 7px; }

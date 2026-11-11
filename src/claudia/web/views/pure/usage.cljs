@@ -90,6 +90,14 @@
           :five (limit-of limits "five_hour") :week (limit-of limits "seven_day")
           :heard-at (if live? (:at live) (:heardAt t))})))
 
+(defn ring-percent
+  "What a limit's ring shows: its percent, 0 once its window has reset since it was heard, nil
+  without one."
+  [l now]
+  (cond (nil? l) nil
+        (reset-since? l now) 0
+        :else (:percent l)))
+
 (defn hours-left
   "Time left in hours (\"52 h\"), in minutes within the last hour (\"45 min\"), \"now\" when none."
   [ms]

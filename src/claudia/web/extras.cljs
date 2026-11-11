@@ -19,10 +19,11 @@
 (defmethod events/on-frame "context" [db server {:keys [chat context]}]
   {:db (assoc-in db [:chats [server chat] :context] context)})
 
-(defmethod events/on-frame "settings" [db server {:keys [chat settings model commands]}]
+(defmethod events/on-frame "settings" [db server {:keys [chat settings model effort commands]}]
   {:db (update-in db [:chats [server chat]]
                   (fn [s] (cond-> (assoc s :settings settings)
                             model (assoc :model model)
+                            effort (assoc :effort effort)
                             commands (assoc :commands commands))))})
 
 (defmethod events/on-frame "meta" [db server f]

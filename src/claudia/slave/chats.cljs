@@ -444,7 +444,19 @@
                            (store/update! id {:folder root})
                            (changed!)))))))))
 
+(declare settings)
+
+(defn- note-effort!
+  "The effort the session's turn runs with (a hook's input says it): the page shows it next to the
+  model."
+  [id input]
+  (let [level (get-in input [:effort :level])]
+    (when (and (string? level) (not= level (:effort-now (st id))))
+      (swap-chat! id assoc :effort-now level)
+      (emit! id {:type "settings" :settings (settings id) :model (:model (st id)) :effort level}))))
+
 (defn- on-hook [id {:keys [event input]}]
+  (note-effort! id input)
   (case event
     "PreToolUse" (changes/before-edit! id (:tool_input input))
     "PostToolUse" (do (worktree/report! (store/chat id) input)
@@ -479,7 +491,7 @@
         t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
     (if (seq t) t (throw (js/Error. "No Claude token yet: add one in Settings (bottom left).")))))
 
-(declare settings close-session!)
+(declare close-session!)
 
 (defn token-of
   "The token chat id runs on: the saved one picked for it (README decision 16), else the one in use
@@ -568,7 +580,7 @@
     (when (:live (st id))
       (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
       (when (contains? m :effort) (quiet (hostlink/control! id "applyFlagSettings" {:effortLevel (:effort s)}))))
-    (emit! id {:type "settings" :settings s :model (:model (st id))})))
+    (emit! id {:type "settings" :settings s :model (:model (st id)) :effort (:effort-now (st id))})))
 
 (defn- read-context!
   "The chat's context use (tokens of its window), after a turn and at its start."
@@ -931,6 +943,7 @@
      :changes (store/changes id)
      :settings (settings id)
      :model (:model s)
+     :effort (:effort-now s)
      :commands (:commands s)
      :context (or (:context s) (store/kv id "context"))
      :messages (view/chat-msgs hist s)
