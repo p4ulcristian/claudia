@@ -15,7 +15,8 @@
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.sidebar :as pure]
             [claudia.web.views.pure.words :as words]
-            [claudia.web.views.settings :as settings]))
+            [claudia.web.views.settings :as settings]
+            [claudia.web.views.logotools :as logotools]))
 
 (def ^:private chat-colors (set words/colours-with-ash))
 
@@ -167,6 +168,7 @@
   [:<>
    [:header.cs-head
     [settings/title-menu]
+    [logotools/tools]
     [settings/gear-button]
     (when (and (not ro) (not phone?))
       [:button.cs-icon.cs-add {:aria-label "New chat" :data-tip "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])}
