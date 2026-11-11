@@ -1,20 +1,19 @@
 (ns claudia.web.views.rail
-  "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): + for a new chat, the
-  search, then a circle per chat with its title under it; passive
-  (ash) chats last, above a chalk line. At its foot: the Systems popup (claudia.web.views.systems), sounds, the usage rings
-  (the Forms window stays in Settings; a chat's Claude subscription is picked in its header). Circles
+  "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): under Claudia's face
+  the sounds and 2D/3D switches (claudia.web.views.logotools), + for a new chat, then a circle per
+  chat with its title under it; passive (ash) chats last, above a chalk line. At its foot: the
+  Systems popup (claudia.web.views.systems). Circles
   slide to their new places when the order changes; a new one grows in."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
-            [claudia.web.alerts :as alerts]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.systems :as systems]
             [claudia.web.views.tearoff :as tearoff]
-            [claudia.web.world :as world]))
+            [claudia.web.views.logotools :as logotools]))
 
 (defn- use-slide!
   "Each [data-slide] child of box is measured after every change of order and animated from where
@@ -41,13 +40,6 @@
          (set! (.-current seen) nil))
        nil)
      [order])))
-
-(defn- speaker [on?]
-  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-   [:path {:d "M3 8h3l4-3.5v11L6 12H3z"}]
-   (if on?
-     [:path {:d "M13 7.5c1 1.4 1 3.6 0 5M15.4 5.5c2 2.5 2 6.5 0 9"}]
-     [:path {:d "M13.5 8l4 4M17.5 8l-4 4"}])])
 
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
@@ -76,20 +68,10 @@
      [dot/chat-dot r (and (not ro) (:unseen r) (not= k open))]
      [:span.rail-name title]]))
 
-(defn- sound-button [sounds?]
-  [:button.rail-forms.rail-sound {:class (when sounds? "on")
-                                  :data-tip (if sounds? "Sounds on: click to mute" "Sounds off: click to hear when a chat finishes or waits")
-                                  :aria-label "Sounds" :aria-pressed (boolean sounds?)
-                                  :on-click #(alerts/set-sounds! (not sounds?))}
-   [speaker sounds?]])
-
 (defn- rail-top [ro]
   [:<>
    (when-not ro
-     [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])
-   [:button.rail-dot.add.rail-search {:data-tip "Search chats" :aria-label "Search chats"
-                                      :on-click #(rf/dispatch [:sidebar/search])}
-    [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 8.5 :cy 8.5 :r 5}] [:path {:d "M12.3 12.3L17 17"}]]]])
+     [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])])
 
 (defn rail []
   (let [{:keys [text]} @(rf/subscribe [:search])
@@ -103,12 +85,10 @@
         box (h/use-ref nil)]
     (use-slide! box (str/join "," (map #(str (:server %) "/" (:id %)) rows)))
     [:nav.rail {:aria-label "Chats"}
+     [logotools/tools]
      [:div.rail-dots {:ref #(set! (.-current box) %)}
       (rail-top ro)
       (for [[i r] (map-indexed vector rows)]
         ^{:key (str (:server r) "/" (:id r))}
         [rail-chat (assoc m :i i) r])]
-     [world/world-button]
-     [:f> systems/systems-button]
-     (sound-button (:sounds @alerts/on))
-]))
+     [:f> systems/systems-button]]))

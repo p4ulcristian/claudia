@@ -1,6 +1,6 @@
 (ns claudia.web.world
   "The 3D world (whole-window mode): every server an island round the gate's lighthouse, every chat a
-  robot in its colour at its project's building. The rail's globe or Alt+W opens and closes it. A
+  robot in its colour at its project's building. The 2D/3D switch by Claudia's face (claudia.web.views.logotools) or Alt+W opens and closes it. A
   click on a robot's screen opens its chat in a panel beside the world (the robot and its screen
   stay and are highlighted), a click on an island's board its server's Systems card. Escape, × or a
   click elsewhere closes it; Escape without a panel leaves the world. three.js and the engine load
@@ -10,7 +10,9 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [shadow.lazy :as lazy]
+            [claudia.web.face.view :as face]
             [claudia.web.views.chat :as chat]
+            [claudia.web.views.logotools :as logotools]
             [claudia.web.views.systems :as systems]
             [claudia.web.world.state :as state]))
 
@@ -85,7 +87,10 @@
   [:div.world {:role "application" :aria-label "World"}
    [canvas]
    [:div.world-bar
-    [:button.world-back {:on-click #(rf/dispatch [:world/toggle false]) :data-tip "Back to the chats (Alt+W)"} "← Chats"]
+    [:button.world-logo {:on-click #(rf/dispatch [:world/toggle false]) :data-tip "Back to the chats (Alt+W)"
+                         :aria-label "Back to the chats"}
+     [:f> face/face]]
+    [logotools/tools]
     [:span.world-title "World"]]
    [legend]
    (when @(rf/subscribe [:world/panel]) [panel])])
@@ -95,15 +100,3 @@
   []
   (keys!)
   (when @(rf/subscribe [:world?]) [world-screen]))
-
-(defn- globe-icon []
-  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-   [:circle {:cx 10 :cy 10 :r 7}]
-   [:path {:d "M3 10h14M10 3c2.2 2 2.2 12 0 14M10 3c-2.2 2-2.2 12 0 14"}]])
-
-(defn world-button
-  "The rail's globe: opens the world."
-  []
-  [:button.rail-forms.rail-world {:data-tip "World: your chats as robots (Alt+W)" :aria-label "World"
-                                  :on-click #(rf/dispatch [:world/toggle true])}
-   [globe-icon]])

@@ -343,7 +343,19 @@ code, pre { font-family: var(--mono); }
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 10px; background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
 .sidebar::after, .rail::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 0 22px; }
+/* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
+.logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.rail > .logo-tools { padding: 4px 0 8px; }
+.lt-sound { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--muted); opacity: 0.7; }
+.lt-sound.on { color: var(--accent); opacity: 1; }
+.lt-sound svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.lt-dim { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.lt-dim button { padding: 1px 6px; font: 700 12px var(--hand); color: var(--muted); }
+.lt-dim button:hover { color: var(--fg); }
+.lt-dim button.on { background: var(--panel); color: var(--accent); }
+/* The rail's circles are smaller than the list's, so more chats fit. */
+.rail .rail-dot { zoom: 0.8; }
+.rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; gap: 11px; padding: 6px 0 22px; }
 /* A chat on the rail: its circle, its title under it (two lines at most), then its server's name. */
 .rail-chat { align-self: stretch; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; position: relative; }
 /* Usage when the sidebar is closed: small chalk rings at the rail's foot, details in the hover bubble. */
@@ -375,8 +387,6 @@ code, pre { font-family: var(--mono); }
    chats they run a few times when they appear, then rest. */
 .rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i) { animation-iteration-count: infinite; }
 .rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
-.rail-search { margin-top: -10px; } /* 8px under the +, not the rail's 18px gap */
-.rail-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .chalk-defs { position: absolute; width: 0; height: 0; }
 /* Rail: the chat's title under its circle, plain and readable, cut after two lines (the hover
    bubble has it whole); the circle holds the project. */
@@ -401,8 +411,6 @@ code, pre { font-family: var(--mono); }
 .rail-forms { display: grid; place-items: center; width: 34px; height: 30px; margin: 0 auto 6px; color: var(--muted); }
 .rail-forms:hover { color: var(--fg); }
 .rail-forms svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.rail-sound { color: var(--muted); opacity: 0.7; }
-.rail-sound.on { color: var(--accent); opacity: 1; }
 
 /* ---------- The hub: one list over several servers ----------
    A server's mark is a small chalk chip (its label's first letter); a server that is off greys its chats. */
