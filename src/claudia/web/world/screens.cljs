@@ -4,10 +4,11 @@
   is drawn once into a slot of one canvas atlas (redrawn only when its text changes, the atlas sent
   to the card at most every 0.4 s) and shown by one InstancedMesh whose node material reads its slot
   by a per-instance offset, so all screens are one draw call. Screens face the camera, move apart so
-  none covers another (claudia.web.world.stack, worked out ten times a second), and the one whose
-  chat is open is hidden (it flew out)."
+  none covers another (claudia.web.world.stack, worked out ten times a second); the one whose chat
+  is open is drawn bigger with a glowing frame behind it."
   (:require ["three/webgpu" :as THREE]
             ["three/tsl" :as tsl]
+            [claudia.web.world.atlas :as atlas]
             [claudia.web.world.motion :as motion]
             [claudia.web.world.robots :as robots]
             [claudia.web.world.screen-text :as st]
@@ -57,6 +58,12 @@
     (.setColorAt m 0 (THREE/Color.))
     m))
 
+(defn place-halo!
+  "The halo just behind a sign whose matrix is m (nil: none selected)."
+  [^js halo ^js m]
+  (set! (.-visible halo) (some? m))
+  (when m (.multiplyMatrices (.-matrix halo) m (.makeTranslation (THREE/Matrix4.) 0 0 -0.04))))
+
 (defn make
   "The screens' atlas, texture, InstancedMesh and beams, added to scene."
   [^js scene]
@@ -64,13 +71,14 @@
         tex (make-texture canvas)
         slot-attr (THREE/InstancedBufferAttribute. (js/Float32Array. (* 2 capacity)) 2)
         mesh (THREE/InstancedMesh. (THREE/PlaneGeometry. width height) (screen-material tex slot-attr) capacity)
-        beams (make-beams)]
+        beams (make-beams)
+        halo (atlas/make-halo width height)]
     (set! (.-count mesh) 0)
     (set! (.-frustumCulled mesh) false)
-    (.add scene mesh) (.add scene beams)
+    (.add scene mesh) (.add scene beams) (.add scene halo)
     #js {:canvas canvas :ctx (doto (.getContext canvas "2d") (.setTransform sharp 0 0 sharp 0 0)) :tex tex :mesh mesh :beams beams :slotAttr slot-attr
          :slots {} :drawn (js/Map.) :moves (js/Map.) :targets {} :laidOut 0 :list #js [] :dirty false :uploaded 0 :yaw 0
-         :hidden nil :hovered nil}))
+         :selected nil :hovered nil :halo halo}))
 
 ;; ---- drawing a screen ----
 
@@ -199,9 +207,8 @@
       (set! (.-uploaded rt) now))))
 
 (defn- scale-of [^js rt r [x y z] ^js cam-pos]
-  (cond (= (:id r) (.-hidden rt)) 0
-        :else (* (st/far-scale (.distanceTo cam-pos (.set ^js (.-v scratch) x y z)))
-                 (if (= (:id r) (.-hovered rt)) 1.1 1))))
+  (* (st/far-scale (.distanceTo cam-pos (.set ^js (.-v scratch) x y z)))
+     (cond (= (:id r) (.-selected rt)) 1.25 (= (:id r) (.-hovered rt)) 1.1 :else 1)))
 
 (defn- page-box
   "Screen c (world centre, drawn at scale) as a page box in px, y up, with its distance; nil behind
@@ -229,7 +236,7 @@
   [^js rt ^js camera h placed]
   (let [now (js/performance.now)]
     (when (> (- now (.-laidOut rt)) 100)
-      (set! (.-targets rt) (target-moves camera h (remove #(zero? (nth % 2)) placed)))
+      (set! (.-targets rt) (target-moves camera h placed))
       (set! (.-laidOut rt) now))
     (.-targets rt)))
 
@@ -262,9 +269,12 @@
   (set! (.-yaw rt) (motion/damp-angle (.-yaw rt) cam-yaw 4 dt))
   (let [placed (placed-screens rt robots-rt camera)
         targets (laid-out! rt camera h placed)]
+    (place-halo! (.-halo rt) nil)
     (doseq [[i [r c scale]] (map-indexed vector placed)
-            :let [mc (moved! rt (:id r) c (targets (:id r)) dt)]]
-      (.setMatrixAt ^js (.-mesh rt) i (screen-matrix rt mc scale (.-m scratch)))
+            :let [mc (moved! rt (:id r) c (targets (:id r)) dt)
+                  m (screen-matrix rt mc scale (.-m scratch))]]
+      (.setMatrixAt ^js (.-mesh rt) i m)
+      (when (= (:id r) (.-selected rt)) (place-halo! (.-halo rt) m))
       (write-beam! rt i (or (robots/position robots-rt (:id r)) [0 -100 0]) mc scale))
     (doseq [^js m [(.-mesh rt) (.-beams rt)]]
       (set! (.-count m) (count placed))
@@ -278,27 +288,3 @@
     (set! (.-boundingSphere mesh) nil)
     (when-let [^js hit (first (.intersectObject raycaster mesh false))]
       (aget (.-list rt) (.-instanceId hit)))))
-
-(defn rect
-  "Where robot id's screen is (or would be, while hidden) on the page: {:left :top :width :height}
-  in px (canvas-rect: the canvas's client rect), or nil without a screen."
-  [^js rt ^js robots-rt id ^js camera ^js canvas-rect]
-  (when-let [r (first (filter #(= id (:id %)) (.-list rt)))]
-    (let [c (moved rt (screen-centre (robots/position robots-rt id) r) (or (.get ^js (.-moves rt) id) [0 0]))
-          m (screen-matrix rt c (st/far-scale (.distanceTo (.-position camera) (THREE/Vector3. (c 0) (c 1) (c 2))))
-                           (THREE/Matrix4.))
-          pts (for [sx [-0.5 0.5] sy [-0.5 0.5]]
-                (.project (.applyMatrix4 (THREE/Vector3. (* sx width) (* sy height) 0) m) camera))
-          xs (map #(* (.-width canvas-rect) (/ (inc (.-x ^js %)) 2)) pts)
-          ys (map #(* (.-height canvas-rect) (/ (- 1 (.-y ^js %)) 2)) pts)]
-      {:left (+ (.-left canvas-rect) (apply min xs)) :top (+ (.-top canvas-rect) (apply min ys))
-       :width (- (apply max xs) (apply min xs)) :height (- (apply max ys) (apply min ys))})))
-
-(defn snapshot
-  "A copy of robot id's screen as a canvas of its own, or nil."
-  [^js rt id]
-  (when-let [n (get (.-slots rt) id)]
-    (let [w (* sharp slot-w) h (* sharp slot-h)
-          c (doto (js/document.createElement "canvas") (set! -width w) (set! -height h))]
-      (.drawImage (.getContext c "2d") (.-canvas rt) (* w (mod n cols)) (* h (quot n cols)) w h 0 0 w h)
-      c)))

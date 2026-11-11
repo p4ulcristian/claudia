@@ -71,6 +71,26 @@
     (set! (.-frustumCulled m) false)
     m))
 
+(defn- selection-ring
+  "The glowing ring on the ground under the selected robot (its chat is open)."
+  []
+  (let [m (THREE/Mesh. (doto (THREE/RingGeometry. 0.85 1.15 48) (.rotateX (- (/ js/Math.PI 2))))
+                       (basic {:color 0xffc247 :transparent true :opacity 0.9 :depthWrite false}))]
+    (set! (.-visible m) false)
+    m))
+
+(defn- place-ring!
+  "The ring under the selected robot, breathing; hidden without one."
+  [^js rt t]
+  (let [^js ring (.-ring rt)
+        id (.-selected rt)
+        ^js s (when id (.get ^js (.-states rt) id))
+        r (when s (first (filter #(= id (:id %)) (.-list rt))))]
+    (set! (.-visible ring) (some? r))
+    (when r
+      (.set (.-position ring) (.-x s) (+ (:ground r) 0.06) (.-z s))
+      (let [k (* size (+ 1 (* 0.08 (js/Math.sin (* 4 t)))))] (.set (.-scale ring) k 1 k)))))
+
 (defn make
   "Every part's InstancedMesh added to scene (parts: the robot's geometries by name; width: the
   outline's width node); the robots' runtime (a JS object the frame loop moves)."
@@ -79,9 +99,10 @@
         meshes (into {} (map (fn [s] [(:id s) (instanced (:geo s) (:mat s) (:tint s))]) specs))
         meshes (assoc meshes :outline (outline (:body meshes) width))
         shadow (instanced (doto (THREE/PlaneGeometry. 1.1 1.1) (.rotateX (- (/ js/Math.PI 2)))) (shadow-material) false)
-        mark (instanced (mark-geometry) (basic {:color 0xffc23d}) false)]
-    (doseq [^js m (concat (vals meshes) [shadow mark])] (.add scene m))
-    #js {:specs specs :meshes meshes :shadow shadow :mark mark
+        mark (instanced (mark-geometry) (basic {:color 0xffc23d}) false)
+        ring (selection-ring)]
+    (doseq [^js m (concat (vals meshes) [shadow mark ring])] (.add scene m))
+    #js {:specs specs :meshes meshes :shadow shadow :mark mark :ring ring :selected nil
          :list #js [] :states (js/Map.) :seeded false}))
 
 (defn- eye-colour [state]
@@ -205,6 +226,7 @@
             ^js s (.get states (:id r))]
         (write-parts! rt i (body-matrix s (step! s r t dt)) r t (.-phase s))
         (write-shadow-and-mark! rt i s r cam-yaw)))
+    (place-ring! rt t)
     (doseq [^js m (concat (vals (.-meshes rt)) [(.-shadow rt) (.-mark rt)])]
       (set! (.. m -instanceMatrix -needsUpdate) true))))
 

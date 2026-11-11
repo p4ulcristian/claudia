@@ -14,6 +14,15 @@
       (set! -opacityNode (.-a sample))
       (set! -alphaTest 0.5))))
 
+(defn make-halo
+  "The glowing frame behind the selected screen or board (w x h: what it frames)."
+  [w h]
+  (let [m (THREE/Mesh. (THREE/PlaneGeometry. (* 1.08 w) (+ h (* 0.08 w)))
+                       (THREE/MeshBasicNodeMaterial. #js {:color 0xffc247 :side THREE/DoubleSide}))]
+    (set! (.-matrixAutoUpdate m) false)
+    (set! (.-visible m) false)
+    m))
+
 (def sharp "Canvas pixels per drawing unit: text stays crisp up close." 1.5)
 
 (defn make
@@ -31,7 +40,7 @@
     (.add scene mesh)
     #js {:canvas canvas :ctx (doto (.getContext canvas "2d") (.setTransform sharp 0 0 sharp 0 0)) :tex tex :mesh mesh
          :slotAttr slot-attr :drawn #js [] :items #js [] :dirty false :uploaded 0 :pxW px-w :pxH px-h
-         :cols cols :rows rows :width width :height (* width (/ px-h px-w))}))
+         :cols cols :rows rows :width width :height (* width (/ px-h px-w)) :selected nil}))
 
 (defn sync!
   "Signs for items (up to the atlas's slots): slot n redrawn by (draw! ctx x y w h item) when
@@ -52,12 +61,17 @@
     (set! (.-items rt) (to-array shown))))
 
 (defn frame!
-  "Every sign placed by (matrix-of item) (a Matrix4); the atlas sent to the card at most twice a
-  second."
-  [^js rt matrix-of]
+  "Every sign placed by (matrix-of item) (a Matrix4), the one whose :id is selected framed by halo (a
+  mesh, or nil); the atlas sent to the card at most twice a second."
+  [^js rt matrix-of selected ^js halo]
   (let [items (.-items rt) now (js/performance.now)]
+    (when halo (set! (.-visible halo) false))
     (dotimes [n (alength items)]
-      (.setMatrixAt ^js (.-mesh rt) n (matrix-of (aget items n))))
+      (let [item (aget items n) ^js m (matrix-of item)]
+        (.setMatrixAt ^js (.-mesh rt) n m)
+        (when (and halo (= selected (:id item)))
+          (set! (.-visible halo) true)
+          (.multiplyMatrices (.-matrix halo) m (.makeTranslation (THREE/Matrix4.) 0 0 -0.04)))))
     (set! (.. rt -mesh -count) (alength items))
     (set! (.. rt -mesh -instanceMatrix -needsUpdate) true)
     (when (and (.-dirty rt) (> (- now (.-uploaded rt)) 500))
@@ -82,30 +96,3 @@
   (let [sc scratch]
     (.set ^js (.-e sc) tilt (js/Math.atan2 (- (.-x cam) x) (- (.-z cam) z)) 0 "YXZ")
     (.compose ^js (.-m sc) (.set ^js (.-v sc) x y z) (.setFromEuler ^js (.-q sc) (.-e sc)) (.-s sc))))
-
-(defn- index-of [^js rt id]
-  (let [items (.-items rt)]
-    (first (filter #(= id (:id (aget items %))) (range (alength items))))))
-
-(defn rect
-  "Where the sign of item id is on the page: {:left :top :width :height} px (canvas-rect: the
-  canvas's client rect), or nil."
-  [^js rt id ^js camera ^js canvas-rect]
-  (when-let [n (index-of rt id)]
-    (let [m (THREE/Matrix4.)
-          _ (.getMatrixAt ^js (.-mesh rt) n m)
-          pts (for [sx [-0.5 0.5] sy [-0.5 0.5]]
-                (.project (.applyMatrix4 (THREE/Vector3. (* sx (.-width rt)) (* sy (.-height rt)) 0) m) camera))
-          xs (map #(* (.-width canvas-rect) (/ (inc (.-x ^js %)) 2)) pts)
-          ys (map #(* (.-height canvas-rect) (/ (- 1 (.-y ^js %)) 2)) pts)]
-      {:left (+ (.-left canvas-rect) (apply min xs)) :top (+ (.-top canvas-rect) (apply min ys))
-       :width (- (apply max xs) (apply min xs)) :height (- (apply max ys) (apply min ys))})))
-
-(defn snapshot
-  "A copy of item id's sign as a canvas of its own, or nil."
-  [^js rt id]
-  (when-let [n (index-of rt id)]
-    (let [w (* sharp (.-pxW rt)) h (* sharp (.-pxH rt))
-          c (doto (js/document.createElement "canvas") (set! -width w) (set! -height h))]
-      (.drawImage (.getContext c "2d") (.-canvas rt) (* w (mod n (.-cols rt))) (* h (quot n (.-cols rt))) w h 0 0 w h)
-      c)))
