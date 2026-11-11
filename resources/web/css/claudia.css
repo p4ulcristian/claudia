@@ -122,12 +122,15 @@ code, pre { font-family: var(--mono); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
 .plan-pick { position: relative; flex: none; }
-.plan-pill { display: flex; align-items: center; gap: 14px; padding: 3px 16px 5px 10px; border: 1.5px solid var(--line); border-radius: 18px; }
-.plan-pill .ring { width: 24px; height: 24px; }
+.plan-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 7px 18px 6px; border: 1.5px solid var(--line); border-radius: 22px; }
+.plan-row { display: flex; align-items: center; justify-content: center; gap: 16px; padding-right: 8px; }
+.plan-row:empty { display: none; }
+.plan-picks { gap: 4px; padding-right: 0; }
+.plan-pill .ring { width: 26px; height: 26px; }
 .plan-pill.can { cursor: pointer; }
 .plan-pill.can:hover, .plan-pill[aria-expanded="true"] { border-color: var(--muted); }
 .plan-owner { color: var(--fg); font: 700 15px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }
-.plan-list { position: absolute; top: 38px; right: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.plan-list { position: absolute; top: calc(100% + 6px); right: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .plan-item { display: grid; gap: 1px; padding: 6px; border-radius: 7px; text-align: left; white-space: nowrap; }
 .plan-item + .plan-item { border-top: 1px dashed var(--line); border-radius: 0 0 7px 7px; }

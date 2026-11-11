@@ -137,8 +137,9 @@
 
 (defn- plan-pill
   "The chat's Claude subscription (README decision 16) and its meters in one pill: whose plan the
-  chat runs on, the chat's context (right click: compact), that plan's 5-hour and week use. A click
-  anywhere on the pill opens the saved plans; a pick applies at once."
+  chat runs on, the chat's context (right click: compact), that plan's 5-hour and week use, and
+  under them the chat's model and effort. A click on the pill (not on those two) opens the saved
+  plans; a pick applies at once."
   [{:keys [ck server state] :as oc} ro]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
@@ -147,20 +148,21 @@
         on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
         {:keys [five week]} (plan-limits on plans)
         can? (and (seq plans) (not ro))
-        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) ".plan-list"))) (set-open not)))
+        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) ".plan-list, .pick"))) (set-open not)))
         pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
     (use-closes-away! box open #(set-open false))
     (use-tokens!)
-    (when (or on five week (:context state))
-      [:div.plan-pick.plan-pill
-       {:ref #(set! (.-current box) %) :class (when can? "can") :role (when can? "button") :tab-index (when can? 0)
-        :aria-haspopup "true" :aria-expanded open :title "Claude subscription of this chat"
-        :on-click toggle :on-key-down #(when (= "Enter" (.-key %)) (toggle %))}
-       (when on [:span.plan-owner (:name on)])
-       [usage/context-ring (assoc oc :pending? true)]
-       (limit-ring "five_hour" "5-hour" five now)
-       (limit-ring "seven_day" "Week" week now)
-       (when open [:f> plan-list plans on pick])])))
+    [:div.plan-pick.plan-pill
+     {:ref #(set! (.-current box) %) :class (when can? "can") :role (when can? "button") :tab-index (when can? 0)
+      :aria-haspopup "true" :aria-expanded open :title "Claude subscription of this chat"
+      :on-click toggle :on-key-down #(when (= "Enter" (.-key %)) (toggle %))}
+     [:div.plan-row
+      (when on [:span.plan-owner (:name on)])
+      [usage/context-ring (assoc oc :pending? true)]
+      (limit-ring "five_hour" "5-hour" five now)
+      (limit-ring "seven_day" "Week" week now)]
+     [:div.plan-row.plan-picks [usage/pickers oc]]
+     (when open [:f> plan-list plans on pick])]))
 
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
 
@@ -498,7 +500,8 @@
 (defn- toolbar [{:keys [picker draft-key oc running text attached send!]}]
   (let [busy? (some :busy attached)]
     [:div.toolbar
-     [:div.tools [usage/pickers oc]]
+     ;; A chat's model and effort are picked in its header's pill; a new chat's, here.
+     [:div.tools (when-not (:ck oc) [usage/pickers oc])]
      [:input {:type "file" :multiple true :hidden true :ref #(set! (.-current picker) %)
               :on-change (fn [e] (attach/add-files! draft-key (.. e -target -files)) (set! (.. e -target -value) ""))}]
      [:button.icon.attach {:title "Add files, photos or videos" :aria-label "Add files, photos or videos"
