@@ -1,6 +1,6 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (the title
-  that renames itself, server and folder, the chat's Claude subscription, the colour dot), the messages (Markdown, tool
+  that renames itself with its server under it, the folder, the chat's Claude subscription, the colour dot), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -194,11 +194,9 @@
    (when renamable? [:span.pencil {:aria-hidden true} "✎"])])
 
 (defn- head-chips
-  "After the title: the server, the working folder, whether the server is there."
-  [{:keys [server row state status]} label folder]
+  "After the title: the working folder, whether the server is there."
+  [{:keys [status]} label folder]
   [:<>
-   (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
-     [:span.folder-chip.server-chip {:title (str "On " label)} label])
    (when (seq folder)
      [:span.folder-chip {:title (str "Working folder: " folder)} (words/clip (format/tilde folder) 28)])
    (cond (= :closed status) [:span.offline (str label " is off")]
@@ -218,7 +216,10 @@
                       (when-let [t (and chat (pure/new-title typed title))] (rf/dispatch [:chat/rename ck t])))]
         [:header.chat-head {:class (when color "colored")}
          [back-to-list]
-         (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
+         [:div.head-title
+          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
+          (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
+            [:span.head-server {:title (str "On " label)} label])]
          (head-chips oc label folder)
          (when chat [:f> plan-pill oc ro])
          (when-not ro [:f> colour-picker ck color])]))))

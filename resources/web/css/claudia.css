@@ -89,7 +89,9 @@ code, pre { font-family: var(--mono); }
 /* ---------- Chat ---------- */
 .left { container-type: inline-size; }
 .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 58px; }
-.chat-head h1 { font: 700 22px/1.25 var(--hand); padding-bottom: 6px; margin: 0; flex: 1 1 auto; min-width: min(40%, 200px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.head-title { flex: 1 1 auto; min-width: min(40%, 200px); display: flex; flex-direction: column; }
+.head-server { margin-top: -4px; font: 500 11.5px var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-head h1 { font: 700 22px/1.25 var(--hand); padding-bottom: 6px; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
 /* The chat title renames itself: click it; a chalk pencil shows on hover. */
 .chat-head h1 .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline 3px var(--accent); text-underline-offset: 6px; padding-bottom: 6px; }
@@ -373,10 +375,7 @@ code, pre { font-family: var(--mono); }
   font: 600 10.5px/1.25 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
 .rail-chat.on .rail-name, .rail-chat:hover .rail-name { color: var(--fg); }
 /* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
-.rail-server { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px 1px; border-radius: 6px; font: 700 11.5px/1.1 var(--hand); color: var(--muted); position: relative; isolation: isolate; pointer-events: none;
   background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
-.rail-chat.on .rail-server, .rail-chat:hover .rail-server { color: var(--fg); }
-.rail-chat.off .rail-server { text-decoration: line-through; }
 .rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
 .rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
 /* The chat's project: a small chalk tag at the circle's bottom right. */
@@ -517,7 +516,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .back-to-list .count.waiting { background: var(--amber); color: #000; }
   /* The header: Chats, colour and title on one line; the pill on a second line. */
   .chat-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
-  .chat-head h1 { flex: 1 1 0; min-width: 0; }
+  .head-title { flex: 1 1 0; min-width: 0; }
   .chat-head .act { order: 5; flex-basis: 100%; margin-left: 0; }
   .chat-head .act-pill { width: fit-content; }
   /* iOS zooms into any field with text under 16px when it gets focus. */

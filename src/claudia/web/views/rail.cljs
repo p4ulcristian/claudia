@@ -1,6 +1,6 @@
 (ns claudia.web.views.rail
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): + for a new chat, the
-  search, then a circle per chat with its title under it and, on the hub, its server's name; passive
+  search, then a circle per chat with its title under it; passive
   (ash) chats last, above a chalk line. At its foot: the Systems popup (claudia.web.views.systems), sounds, the usage rings
   (the Forms window stays in Settings; a chat's Claude subscription is picked in its header). Circles
   slide to their new places when the order changes; a new one grows in."
@@ -50,8 +50,8 @@
      [:path {:d "M13.5 8l4 4M17.5 8l-4 4"}])])
 
 (defn- rail-chat
-  "A chat's circle with its title (and its server on the hub); dragged out of the window, the chat
-  opens in a window of its own."
+  "A chat's circle with its title (its server in the hover text on the hub; the chat's header
+  shows it under the title); dragged out of the window, the chat opens in a window of its own."
   [{:keys [rows i open multi? ro projects elsewhere]} {:keys [server id title color off folder] :as r}]
   (let [k [server id]
         steps-back? #(sidebar-pure/passive? % elsewhere open)
@@ -74,8 +74,7 @@
                         :on-click #(sidebar/pick! k (= k open) %)
                         :on-context-menu #(chatmenu/open-at! k %)})
      [dot/chat-dot r (and (not ro) (:unseen r) (not= k open))]
-     [:span.rail-name title]
-     (when multi? [:span.rail-server label])]))
+     [:span.rail-name title]]))
 
 (defn- sound-button [sounds?]
   [:button.rail-forms.rail-sound {:class (when sounds? "on")
