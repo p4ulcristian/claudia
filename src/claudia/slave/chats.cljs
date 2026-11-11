@@ -133,7 +133,7 @@
   (swap-chat! id update :turn view/with-msg msg)
   (emit! id {:type "msg" :msg msg}))
 
-(declare arm-idle! turn-id! restart-if-stale!)
+(declare arm-idle! turn-id! restart-if-stale! send-text!)
 
 (defn- idle-out!
   "The quiet while is over: the chat's Claude Code goes, unless work it started still runs."
@@ -535,13 +535,19 @@
   [id]
   (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
 
+(def ^:private plan-continue-text
+  "Continue where you stopped: this chat now runs on another Claude subscription.")
+
 (defn- plan-picked!
   "Another plan was picked for the chat: its session ends now, so its next message starts on the
-  new token; while its turn runs, right after that turn."
+  new token. While its turn runs, that turn is stopped at once, and the chat goes on by itself on
+  the new token (restart-if-stale!)."
   [id]
   (when (:live (st id))
     (if (:running (st id))
-      (swap-chat! id assoc :plan-changed true)
+      (do (swap-chat! id assoc :plan-changed true :plan-continue true)
+          (drop-asks! id true "The chat moved to another Claude subscription.")
+          (hostlink/send! {:op "interrupt" :id id}))
       (close-session! id))))
 
 (defn set-settings! [id m]
@@ -588,18 +594,20 @@
 
 (defn- close-session! [id]
   (hostlink/send! {:op "close" :id id})
-  (swap-chat! id assoc :live false :stale false :plan-changed false)
+  (swap-chat! id assoc :live false :stale false :plan-changed false :plan-continue false)
   (tasks/session-gone! id))
 
 (defn- restart-if-stale!
   "A session started with other tools (that couldn't be swapped) or other instructions starts again
   (resumed, same conversation) once its turn and the work it started are done; one whose chat got
-  another plan during its turn, once that turn is done."
+  another plan during its turn, once that turn is stopped: that chat then goes on by itself on the
+  new token."
   [id]
   (let [s (st id)]
     (when (and (:live s) (not (:running s))
                (or (:plan-changed s) (and (:stale s) (not (tasks/running-any? id)))))
-      (close-session! id))))
+      (close-session! id)
+      (when (:plan-continue s) (send-text! id plan-continue-text)))))
 
 (defn- swap-tools!
   "Hands a live session the tools as they stand now (src/chat.ts swapTools); one that refuses them
