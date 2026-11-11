@@ -49,7 +49,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
-| runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ name, by, at }` |
+| runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ key, name, by, at }`. Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
 | runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (e.g. `home`) |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
@@ -112,7 +112,7 @@ files are served without either check (they hold no data). The hub listens on `H
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
 `/s/<server>/api/update-check`, `/s/<server>/api/claude-token/current`,
-`/s/<server>/api/claude-token/limits` and `/s/<server>/api/system` are refused (404): only
+`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits` and `/s/<server>/api/system` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -144,7 +144,10 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `POST /hub/claude-token/use` `{ name }` | person | the same shape: in use on every server; 404 no such name |
 | `DELETE /hub/claude-tokens/:name` | person | the same shape; 409 for the one in use |
 
-Claude tokens (README decision 10): one in use for every server. The hub seals each saved token
+Claude tokens (README decisions 10 and 16): every saved one on every server, one of them in use (the
+default: what a chat without its own pick runs on). The hub brings each front's saved tokens along
+the same minute and after each save or removal: `GET /api/claude-token/saved`, then `PUT` with all
+of them when the keys, names or save times differ. The hub seals each saved token
 (AES-256-GCM, the folded name as AAD, base64 of nonce (12) ‖ ciphertext ‖ tag (16)) under
 `HUB_TOKEN_KEY_FILE`, and brings every server along: `GET /api/claude-token/current` on its front,
 then `PUT` with the token when the name or `at` differ; after each save or switch (the answer waits
@@ -166,8 +169,10 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 |---|---|
 | `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
 | `POST /api/update-check` `{ main?, stage? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`main <commit>`, `stage <tree>`, else `check <time>`), 202; 501 when unset |
-| `GET /api/claude-token/current` | the front, the hub only: `{ name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
-| `PUT /api/claude-token/current` `{ name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
+| `GET /api/claude-token/current` | the front, the hub only: `{ key, name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
+| `GET /api/claude-token/saved` | the front, the hub only: `{ tokens: [{ key, name, at }] }`, the saved tokens kept here, never a token |
+| `PUT /api/claude-token/saved` `{ tokens: [{ key, name, at, token }] }` | the front, the hub only: the whole set, written over the one kept here (a token no longer in it is deleted); answers like GET; 400 when one is not a key (`[a-z0-9-]{1,24}`), a name, a time and a Claude token |
+| `PUT /api/claude-token/current` `{ key, name, by, at, token }` | the front, the hub only: written over `CLAUDIA_TOKEN_FILE` and its note (an idle session starts again on it with its next message); answers like GET |
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
 | `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
@@ -247,7 +252,7 @@ Page → runner:
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
 | `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
-| `settings` | `chat`, `model?`, `effort?` (null = the person's default) | the chat's model and effort: kept, used on its next start, and given to a live session at once |
+| `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
 | `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 | `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
@@ -272,8 +277,8 @@ Runner → page:
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
-| `settings` | `chat`, `settings: { model, effort }`, `model?` (the model the session runs), `commands?` (its slash command names) |
-| `meta` | `limits: [Limit]`, `limitsAt` (ms, when they were heard, or null), `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (whose token, from Settings, or null); sent after `chats` on `hello` and on every change |
+| `settings` | `chat`, `settings: { model, effort, plan }`, `model?` (the model the session runs), `commands?` (its slash command names) |
+| `meta` | `limits: [Limit]`, `limitsAt` (ms, when they were heard, or null), `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (whose token, from Settings, or null), `plans: [{ key, name }]` (the saved tokens a chat can be put on), `planKey` (the key of the one in use, or null); sent after `chats` on `hello` and on every change |
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 | `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |

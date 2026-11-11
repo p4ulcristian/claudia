@@ -9,6 +9,13 @@
   [t]
   (str "token-" (subs (sha256-hex (str t)) 0 8)))
 
+(defn settings-with
+  "A chat's settings with the change m laid over them (model, effort, plan); a plan that is not one
+  of the saved tokens' keys is no pick (nil)."
+  [settings m saved-keys]
+  (update (merge settings (select-keys m [:model :effort :plan]))
+          :plan #(when (some #{%} saved-keys) %)))
+
 (defn hash36
   "A short name for a text (its SHA-256's start in base 36): a version of the tools or the prompt."
   [s]

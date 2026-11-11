@@ -119,6 +119,14 @@ code, pre { font-family: var(--mono); }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
+.plan-pick { position: relative; flex: none; display: grid; }
+.plan-mark { display: grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid currentColor; border-radius: 50%; color: var(--muted); font: 700 11px var(--hand); letter-spacing: 0.02em; }
+button.plan-mark:hover, .plan-pick [aria-expanded="true"] { color: var(--fg); }
+.plan-list { position: absolute; top: 28px; left: -6px; z-index: 30; display: grid; gap: 2px; min-width: 200px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.plan-item { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 7px; text-align: left; white-space: nowrap; }
+.plan-item:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.plan-item.on, .plan-item.on .plan-mark { color: var(--accent); }
 
 .messages { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-wrap: anywhere; padding: 18px 18px 120px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.6; }
 .messages > * { flex-shrink: 0; }

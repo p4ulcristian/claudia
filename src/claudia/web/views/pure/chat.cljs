@@ -108,3 +108,10 @@
   [view]
   (let [v (str view)]
     (str (if (seq v) (str (words/capital v) "'s chat") "Someone else's chat") " · read only")))
+
+(defn chat-plan
+  "The saved plan ({:key :name}) a chat runs on: its pick when that is saved on its server, else the
+  server's default (default-key); nil when neither is among plans."
+  [plans picked default-key]
+  (let [by-key (into {} (map (juxt :key identity)) plans)]
+    (or (by-key picked) (by-key default-key))))

@@ -98,3 +98,11 @@
   (is (= "new" (steps/step-summary {:summary "new"})))
   (is (= "out" (steps/step-result {:text "out"})))
   (is (= "Read, Bash" (steps/group-names [{:tool "Read"} {:tool "Bash"} {:tool "Read"}]))))
+
+(deftest chat-plan-is-the-pick-else-the-default
+  (let [plans [{:key "paul" :name "Paul"} {:key "peter" :name "Peter"}]]
+    (is (= {:key "peter" :name "Peter"} (chat/chat-plan plans "peter" "paul")))
+    (is (= {:key "paul" :name "Paul"} (chat/chat-plan plans nil "paul")))
+    (is (= {:key "paul" :name "Paul"} (chat/chat-plan plans "gone" "paul")) "a pick no longer saved")
+    (is (nil? (chat/chat-plan plans nil nil)))
+    (is (nil? (chat/chat-plan [] "paul" "paul")))))

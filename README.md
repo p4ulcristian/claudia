@@ -137,6 +137,16 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     live view of every chat), shapes built in code, or a texture array per screen (its layers mixed
     on the WebGL 2 path).
 
+16. Each chat has its own Claude subscription (2026-11-11): the chat's header shows whose plan it
+    runs on (initials, next to the colour dot) and a click picks another saved one; the pick is
+    kept with the chat and applies on its next message (its Claude Code starts again on that
+    token). For that the hub sends every saved token to each server (`<token file>.d/<key>`, names
+    in `<token file>.saved.json`), not only the one in use. The one in use (decision 10) is now the
+    default: a new chat starts on it and stays on it, and a chat without a pick (made before this,
+    or its pick was removed) runs on it. The default is set in Settings; the rail's button that
+    switched every chat at once is gone. Instead of: one token for every chat of every person,
+    where one person's switch moved everyone's chats.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

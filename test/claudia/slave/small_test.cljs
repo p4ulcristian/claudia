@@ -1,6 +1,9 @@
 (ns claudia.slave.small-test
   "The slave programs' small pure helpers, on plain data."
   (:require [cljs.test :refer [deftest is]]
+            ["node:fs" :as fs]
+            ["node:os" :as os]
+            ["node:path" :as path]
             [claudia.slave.agentgit :as agentgit]
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
@@ -138,3 +141,34 @@
                                                {:kind "form" :form "files" :data {:root "/b"}}
                                                {:kind "form" :form "scene3d" :data {}}]})))
   (is (= #{} (render/scene-roots {}))))
+
+(deftest the-hubs-saved-tokens-are-checked-before-they-are-written
+  (let [t (str "sk-ant-oat01-" (apply str (repeat 30 "a")))]
+    (is (= [{:key "paul" :name "Paul" :at 1 :token t}]
+           (tokens/clean-saved [{:key "paul" :name "Paul" :at 1 :token (str " " t "\n") :more 1}])))
+    (is (= [] (tokens/clean-saved [])))
+    (is (nil? (tokens/clean-saved nil)))
+    (is (nil? (tokens/clean-saved [{:key "../x" :name "Paul" :at 1 :token t}])) "a key is a file name")
+    (is (nil? (tokens/clean-saved [{:key "paul" :name "Paul" :at 1 :token "x"}])))
+    (is (nil? (tokens/clean-saved [{:key "paul" :name "" :at 1 :token t}])))))
+
+(deftest saved-tokens-are-kept-one-file-each-and-the-gone-ones-deleted
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-tokens-"))
+        before (.-CLAUDIA_TOKEN_FILE (.-env js/process))
+        t (fn [c] (str "sk-ant-oat01-" (apply str (repeat 30 c))))
+        row (fn [k n c] {:key k :name n :at 1 :token (t c)})]
+    (set! (.-CLAUDIA_TOKEN_FILE (.-env js/process)) (path/join dir "claude-token"))
+    (try
+      (is (= [] (tokens/saved)))
+      (is (= {:tokens [{:key "paul" :name "Paul" :at 1} {:key "peter" :name "Peter" :at 1}]}
+             (tokens/write-saved! {:tokens [(row "paul" "Paul" "a") (row "peter" "Peter" "b")]})))
+      (is (= (t "b") (tokens/saved-token "peter")))
+      (is (nil? (tokens/saved-token "ananda")))
+      (is (nil? (tokens/saved-token nil)))
+      (is (= {:tokens [{:key "peter" :name "Peter" :at 1}]} (tokens/write-saved! {:tokens [(row "peter" "Peter" "b")]})))
+      (is (nil? (tokens/saved-token "paul")))
+      (is (= ["peter"] (vec (fs/readdirSync (path/join dir "claude-token.d")))))
+      (is (:error (tokens/write-saved! {:tokens [{:key "x"}]})))
+      (finally
+        (if before (set! (.-CLAUDIA_TOKEN_FILE (.-env js/process)) before) (js-delete (.-env js/process) "CLAUDIA_TOKEN_FILE"))
+        (fs/rmSync dir #js {:recursive true :force true})))))

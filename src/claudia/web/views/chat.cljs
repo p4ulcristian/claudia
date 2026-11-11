@@ -1,6 +1,6 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (colour dot,
-  the title that renames itself, server and folder, the changes pill), the messages (Markdown, tool
+  the chat's Claude subscription, the title that renames itself, server and folder, the changes pill), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -15,6 +15,7 @@
             [claudia.web.views.changes :as changes]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.pure.chat :as pure]
+            [claudia.web.views.pure.menu :as menu]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
@@ -91,6 +92,33 @@
                          :on-click #(set-open not) :title "Chat colour" :aria-haspopup "true" :aria-expanded open}]
      (when open (palette color pick))]))
 
+(defn- plan-list [plans on pick]
+  [:div.plan-list {:role "menu"}
+   [:div.plan-title "This chat's Claude subscription"]
+   (for [{k :key n :name} plans]
+     ^{:key k}
+     [:button.plan-item {:role "menuitemradio" :aria-checked (= k (:key on)) :class (when (= k (:key on)) "on")
+                         :on-click #(pick k)}
+      [:span.plan-mark (menu/initials n)] (str n "'s plan")])])
+
+(defn- plan-picker
+  "A chat's Claude subscription (README decision 16): its initials in the header open the saved
+  ones; a pick applies on the chat's next message. Nothing while the server keeps no saved tokens."
+  [ck server state]
+  (let [[open set-open] (h/use-state false)
+        box (h/use-ref nil)
+        {:keys [plans planKey]} @(rf/subscribe [:meta server])
+        on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
+        pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
+    (use-closes-away! box open #(set-open false))
+    (when (seq plans)
+      [:div.plan-pick {:ref #(set! (.-current box) %)}
+       [:button.plan-mark {:on-click #(set-open not) :aria-haspopup "true" :aria-expanded open
+                           :title (str "Claude subscription of this chat"
+                                       (when on (str ": " (:name on) "'s plan")))}
+        (if on (menu/initials (:name on)) "?")]
+       (when open (plan-list plans on pick))])))
+
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
 
 (defn- back-to-list []
@@ -149,6 +177,7 @@
         [:header.chat-head {:class (when color "colored")}
          [back-to-list]
          (when-not ro [:f> colour-picker ck color])
+         (when (and chat (not ro)) [:f> plan-picker ck server state])
          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
          (head-chips oc label folder)]))))
 

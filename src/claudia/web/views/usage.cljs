@@ -65,7 +65,7 @@
 
 (defn- pop-row [{token-name :name :keys [in-use five week heard-at]} now]
   [:div.lp-row {:class (when in-use "on") :data-tip (str "Heard " (pure/freshness heard-at now))}
-   [:div.lp-name token-name (when in-use [:span.lp-use "in use"])]
+   [:div.lp-name token-name (when in-use [:span.lp-use "default"])]
    [pop-meter "Week" week now]
    [pop-meter "5-hour" five now]])
 
@@ -138,7 +138,7 @@
 (defn- account-pick [account saved plan]
   (cond
     (and account (> (count saved) 1))
-    [:label.pick.m-account {:title "Switch the Claude subscription for every chat on every server (applies on each chat's next message)"}
+    [:label.pick.m-account {:title "The default Claude subscription: what a new chat starts on (each chat's own is picked in its header)"}
      [:select {:value account
                :on-change #(rf/dispatch [:ops/put-now {:url "/hub/claude-token/use"
                                                        :method "POST" :body {:name (.. % -target -value)}

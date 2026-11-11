@@ -155,3 +155,10 @@
     (is (= "m" (get-in spec [:options :model])))
     (is (not (contains? (:options spec) :effort)))
     (is (= "Edit|Bash" (get-in spec [:hooks :PostToolUse 0 :matcher])))))
+
+(deftest a-chats-settings-take-a-saved-plan-only
+  (let [s {:model nil :effort nil :plan "paul"}]
+    (is (= {:model "m" :effort nil :plan "paul"} (session/settings-with s {:model "m"} ["paul" "peter"])))
+    (is (= {:model nil :effort nil :plan "peter"} (session/settings-with s {:plan "peter" :other 1} ["paul" "peter"])))
+    (is (nil? (:plan (session/settings-with s {:plan "gone"} ["paul" "peter"]))))
+    (is (nil? (:plan (session/settings-with s {:plan nil} ["paul"]))))))

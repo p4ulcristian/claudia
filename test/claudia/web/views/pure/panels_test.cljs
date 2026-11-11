@@ -154,9 +154,6 @@
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))
   (is (= "P" (menu/initials " Paul ")))
-  (is (= "No Claude subscription saved yet · click to add a token" (menu/plan-tip nil [] [])))
-  (is (= "Paul's Claude subscription, on every server · not yet on box (off) · click to switch"
-         (menu/plan-tip "Paul" [{:label "box" :ok false}] ["Paul" "Ananda"])))
   (is (= "155k" (menu/k-tokens 155000))))
 
 (deftest changes-of-the-turn
