@@ -10,7 +10,6 @@
             ["three/examples/jsm/controls/MapControls.js" :refer [MapControls]]
             [claudia.web.world.atmosphere :as atmo]
             [claudia.web.world.boards :as boards]
-            [claudia.web.world.budget :as budget]
             [claudia.web.world.chalk :as chalk]
             [claudia.web.world.geo :as geo]
             [claudia.web.world.health :as health]
@@ -23,17 +22,12 @@
 
 ;; ---- making it ----
 
-(defn- scale-cap
-  "The sharpest the world is drawn: the screen's own pixels, at most 1.5 per CSS pixel."
-  []
-  (min js/devicePixelRatio 1.5))
-
 (defn- make-renderer
-  "WebGPU where the browser has it, else WebGL 2; force-webgl? after a WebGPU device was lost. Starts
-  at one pixel per CSS pixel; the budget raises or lowers it (claudia.web.world.budget)."
+  "WebGPU where the browser has it, else WebGL 2; force-webgl? after a WebGPU device was lost. Drawn
+  at the screen's own sharpness (at most two pixels per CSS pixel)."
   [^js host force-webgl?]
   (let [r (THREE/WebGPURenderer. #js {:antialias true :forceWebGL (boolean force-webgl?)})]
-    (.setPixelRatio r (min 1 (scale-cap)))
+    (.setPixelRatio r (min js/devicePixelRatio 2))
     (.setSize r (max 1 (.-clientWidth host)) (max 1 (.-clientHeight host)))
     (set! (.-toneMapping r) THREE/ACESFilmicToneMapping)
     (.appendChild host (.-domElement r))
@@ -75,7 +69,7 @@
          :robots (robots/make scene (first (:robot pieces)) (.-width u)) :screens (screens/make scene)
          :boards (boards/make scene) :signs (signs/make scene) :still (make-still scene u)
          :handlers handlers :plan nil :robotList [] :stats (js/Map.) :hot [] :packetList [] :curves []
-         :radius 30 :last nil :frames #js [] :budgetAt 0 :focus nil :inset 0 :offset 0 :pointer nil :down nil
+         :radius 30 :last nil :coveredAt nil :focus nil :inset 0 :offset 0 :pointer nil :down nil
          :raycaster (THREE/Raycaster.)}))
 
 ;; ---- the plan ----
@@ -208,6 +202,21 @@
   [^js w id]
   (screens/rect (.-screens w) (.-robots w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
 
+(defn board-rect
+  "Where island id's board is on the page (px), or nil: its Systems card flies out of it and back."
+  [^js w id]
+  (boards/rect (.-boards w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
+
+(defn screen-image
+  "A copy of robot id's screen as a canvas (the picture that flies before the chat is drawn), or nil."
+  [^js w id]
+  (screens/snapshot (.-screens w) id))
+
+(defn board-image
+  "A copy of island id's board as a canvas, or nil."
+  [^js w id]
+  (boards/snapshot (.-boards w) id))
+
 (defn- pick-at
   "What is under the pointer: {:robot r :rect} (a robot or its screen), {:island id :kind}, or nil
   (the sky)."
@@ -221,7 +230,7 @@
     (if-let [r (or (screens/pick (.-screens w) rc) (robots/pick (.-robots w) rc))]
       {:robot r :rect (screen-rect w (:id r))}
       (if-let [isl (boards/pick (.-boards w) rc)]
-        {:island (:id isl) :kind (name (:kind isl))}
+        {:board (:id isl) :rect (board-rect w (:id isl))}
         (when-let [^js hit (first (.intersectObjects rc (.. w -still -colliders -children) false))]
           {:island (.. hit -object -userData -island) :kind (.. hit -object -userData -kind)})))))
 
@@ -245,18 +254,16 @@
       (let [cw (max 1 (.-clientWidth host)) ch (max 1 (.-clientHeight host))]
         (.setViewOffset cam cw ch off 0 cw ch)))))
 
-(defn- keep-budget!
-  "Once a second, the resolution scale for the frames just drawn."
-  [^js w ms dt]
-  (let [^js frames (.-frames w)]
-    (when (pos? dt) (.push frames (* 1000 dt)))
-    (when (> (- ms (.-budgetAt w)) 1000)
-      (let [^js r (.-renderer w)
-            now-scale (.getPixelRatio r)
-            next-scale (budget/next-scale now-scale (vec frames) (scale-cap))]
-        (when (not= next-scale now-scale) (.setPixelRatio r next-scale))
-        (set! (.-frames w) #js [])
-        (set! (.-budgetAt w) ms)))))
+(def ^:private covered-fps
+  "How often the world is drawn while a panel covers most of it (after the view's glide)."
+  12)
+
+(defn- skip-frame?
+  "While a panel has covered the world for more than 1.5 s, only covered-fps frames a second are
+  drawn: the panel, not the world, is what is being looked at."
+  [^js w t]
+  (let [since (.-coveredAt w)]
+    (and since (> (- t since) 1.5) (< (- t (or (.-last w) 0)) (/ 1 covered-fps)))))
 
 (defn- keep-outline!
   "The chalk outline stays outline-px wide on screen at the view's distance."
@@ -266,12 +273,10 @@
           (chalk/outline-width (.distanceTo (.-position cam) (.. w -controls -target)) (.-fov cam)
                                (.. w -host -clientHeight)))))
 
-(defn- frame! [^js w ms]
-  (let [t (/ ms 1000)
-        dt (if (.-last w) (min motion/max-dt (- t (.-last w))) 0)
+(defn- draw-frame! [^js w t]
+  (let [dt (if (.-last w) (min motion/max-dt (- t (.-last w))) 0)
         ^js host (.-host w)]
     (set! (.-last w) t)
-    (keep-budget! w ms dt)
     (hover! w)
     (robots/frame! (.-robots w) t dt (.getAzimuthalAngle (.-controls w)))
     (screens/frame! (.-screens w) (.-robots w) (.-camera w) (.-clientHeight host) (.getAzimuthalAngle (.-controls w)) dt)
@@ -286,6 +291,10 @@
     (.update (.-controls w))
     (keep-outline! w)
     (.render (.-renderer w) (.-scene w) (.-camera w))))
+
+(defn- frame! [^js w ms]
+  (when-not (skip-frame? w (/ ms 1000))
+    (draw-frame! w (/ ms 1000))))
 
 ;; ---- pointer, size, life ----
 
@@ -324,13 +333,15 @@
                    (.setAnimationLoop renderer #(frame! w %))
                    w))))))
 
-(defn focus!
-  "The robot the view follows (its chat is open, its screen hidden: it flew out), or nil; inset: the width in px the
-  chat panel covers on the right."
-  [^js w id inset]
-  (set! (.-focus w) id)
-  (set! (.. w -screens -hidden) id)
-  (set! (.-inset w) (if id inset 0)))
+(defn panel!
+  "A panel over the world's right side: inset px wide (0: none); follow: the robot whose chat it
+  shows (the view glides to it, its screen hidden: it flew out), or nil (the Systems card). While
+  covered, the world is drawn at covered-fps."
+  [^js w {:keys [follow inset]}]
+  (set! (.-focus w) follow)
+  (set! (.. w -screens -hidden) follow)
+  (set! (.-inset w) (or inset 0))
+  (set! (.-coveredAt w) (when (pos? (or inset 0)) (or (.-coveredAt w) (.-last w)))))
 
 (defn stop! [^js w]
   (.setAnimationLoop (.-renderer w) nil)

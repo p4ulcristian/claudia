@@ -1,15 +1,17 @@
 (ns claudia.web.world
   "The 3D world (whole-window mode): every server an island round the gate's lighthouse, every chat a
-  robot in its colour at its project's building. The rail's globe or Alt+W opens and closes it; a
-  click on a robot opens its chat in a panel over the world, a click on a server's island starts a
-  new chat there; Escape closes the panel, then the world. three.js and the engine load on first use
-  (the :world module)."
+  robot in its colour at its project's building. The rail's globe or Alt+W opens and closes it. A
+  click on a robot's screen opens its chat in a panel over the world, a click on an island's board
+  its server's Systems card: a picture of the screen or board flies to the panel's place first, the
+  real content is drawn once it has landed. Escape, × or a click elsewhere flies it back; Escape
+  without a panel leaves the world. three.js and the engine load on first use (the :world module)."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.core :as r]
             [reagent.hooks :as h]
             [shadow.lazy :as lazy]
             [claudia.web.views.chat :as chat]
+            [claudia.web.views.systems :as systems]
             [claudia.web.world.link :as link]
             [claudia.web.world.state :as state]))
 
@@ -20,37 +22,46 @@
 ;; ---- state ----
 
 (rf/reg-event-db :world/toggle (fn [db [_ open?]] (state/toggled db open?)))
-(rf/reg-event-db :world/chat (fn [db [_ open?]] (assoc db :world-chat? (boolean open?))))
+(rf/reg-event-db :world/close (fn [db _] (dissoc db :world-panel :world-from)))
 (rf/reg-event-fx :world/pick (fn [{:keys [db]} [_ p]] (state/pick-fx db p)))
-(declare close-chat!)
-(rf/reg-fx :world/close-chat (fn [_] (close-chat!)))
+(declare close-panel!)
+(rf/reg-fx :world/close-panel (fn [_] (close-panel!)))
 (rf/reg-sub :world? (fn [db] (boolean (:world? db))))
-(rf/reg-sub :world-chat? (fn [db] (boolean (:world-chat? db))))
+(rf/reg-sub :world/panel (fn [db] (:world-panel db)))
 (rf/reg-sub :world/focus (fn [db] (state/focus-id db)))
 (rf/reg-sub :world/from (fn [db] (:world-from db)))
 
-;; ---- the chat's flight out of its screen and back ----
+;; ---- a panel's flight out of its screen or board and back ----
 
 (defn- box [^js el]
   (let [r (.getBoundingClientRect el)] {:left (.-left r) :top (.-top r) :width (.-width r) :height (.-height r)}))
 
 (defn- fly!
-  "Animates the panel el between screen rect and its own place: :out of the screen, or back :in."
+  "Animates the panel el between rect (a screen's or a board's) and its own place: :out of it, or
+  back :in. Only the transform and opacity change, so the compositor alone draws the flight."
   [^js el rect way]
-  (let [at-screen #js {:transform (state/fly-transform rect (box el)) :opacity 0.5 :borderRadius "28px"}
+  (let [at-rect #js {:transform (state/fly-transform rect (box el)) :opacity 0.6 :borderRadius "28px"}
         at-home #js {:transform "none" :opacity 1}]
-    (.animate el (if (= way :out) #js [at-screen at-home] #js [at-home at-screen])
-              #js {:duration (if (= way :out) 460 340) :easing "cubic-bezier(.2,.8,.2,1)" :fill "forwards"})))
+    (.animate el (if (= way :out) #js [at-rect at-home] #js [at-home at-rect])
+              #js {:duration (if (= way :out) 420 320) :easing "cubic-bezier(.2,.8,.2,1)" :fill "forwards"})))
 
-(defn- close-chat!
-  "The panel flies back into its robot's screen, then closes (at once when there is no screen)."
+(defn- target-rect
+  "Where the open panel's screen or board is now, or nil."
+  [{:keys [kind target]}]
+  (when-let [f (get @link/api (if (= kind :stats) :board-rect :screen-rect))]
+    (f target)))
+
+(defn- close-panel!
+  "The panel flies back into its screen or board (its picture over it again), then closes; at once
+  when there is nothing to fly into."
   []
-  (let [id (state/focus-id @rdb/app-db)
-        el (js/document.querySelector ".world-chat")
-        rect (when-let [f (:screen-rect @link/api)] (f id))]
+  (let [panel (:world-panel @rdb/app-db)
+        ^js el (js/document.querySelector ".world-panel")
+        rect (target-rect panel)]
     (if (and el rect)
-      (.then (.-finished (fly! el rect :in)) #(rf/dispatch [:world/chat false]))
-      (rf/dispatch [:world/chat false]))))
+      (do (.add (.-classList el) "closing")
+          (.then (.-finished (fly! el rect :in)) #(rf/dispatch [:world/close])))
+      (rf/dispatch [:world/close]))))
 
 ;; ---- keys ----
 
@@ -60,7 +71,7 @@
     (when action
       (.preventDefault e)
       (cond (= action :toggle) (rf/dispatch [:world/toggle])
-            (:world-chat? db) (close-chat!)
+            (:world-panel db) (close-panel!)
             :else (rf/dispatch [:world/toggle false])))))
 
 (defn- keys! []
@@ -85,22 +96,49 @@
                       (.catch #(reset! loaded (str (or (.-message %) %))))))
                 [:p.world-error "Loading the world…"]))))
 
-(defn- chat-panel
-  "The open chat over the world; it flies out of its robot's screen when it opens."
+(defn- picture-of
+  "The flying picture of the panel's screen or board (a canvas), or nil."
+  [{:keys [kind target]}]
+  (when-let [f (get @link/api (if (= kind :stats) :board-image :screen-image))]
+    (f target)))
+
+(defn- use-flight!
+  "Flies the panel el out of from (a rect, or nil: no flight) with the screen's or board's picture in
+  ghost; true once it has landed (then the real content is drawn)."
+  [el ghost from panel]
+  (let [[landed? set-landed] (h/use-state (nil? from))]
+    (h/use-layout-effect
+     (fn []
+       (when (and from (.-current el))
+         (when-let [pic (picture-of panel)] (.appendChild ^js (.-current ghost) pic))
+         (.then (.-finished (fly! (.-current el) from :out)) #(set-landed true)))
+       nil)
+     [])
+    landed?))
+
+(defn- stats-content [{:keys [target]}]
+  (let [label @(rf/subscribe [:server-label target])]
+    [:div.world-stats
+     [:f> systems/machine-card {:title (if (= target "gate") "gate" label) :url (state/stats-url target)}]]))
+
+(defn- panel
+  "The panel over the world: the open chat or a server's Systems card."
   []
   (let [el (h/use-ref nil)
-        from @(rf/subscribe [:world/from])]
-    (h/use-layout-effect (fn [] (when (and from (.-current el)) (fly! (.-current el) from :out)) nil) [])
-    [:div.world-chat {:role "dialog" :aria-label "Chat" :ref #(set! (.-current el) %)}
-     [:button.world-chat-close {:aria-label "Close the chat (Escape)" :data-tip "Close (Escape)"
-                                :on-click close-chat!} "×"]
-     [chat/chat-pane]]))
+        ghost (h/use-ref nil)
+        p @(rf/subscribe [:world/panel])
+        landed? (use-flight! el ghost @(rf/subscribe [:world/from]) p)]
+    [:div.world-panel {:role "dialog" :aria-label (if (= :stats (:kind p)) "Systems" "Chat")
+                       :class [(name (:kind p)) (when landed? "landed")] :ref #(set! (.-current el) %)}
+     [:div.world-ghost {:ref #(set! (.-current ghost) %)}]
+     [:button.world-panel-close {:aria-label "Close (Escape)" :data-tip "Close (Escape)" :on-click close-panel!} "×"]
+     (when landed? (if (= :stats (:kind p)) [stats-content p] [chat/chat-pane]))]))
 
 (defn- legend []
   [:div.world-legend
    [:span [:i.working] "working"] [:span [:i.waiting] "waiting on you"]
    [:span [:i.done] "done, not seen"] [:span [:i.idle] "idle"]
-   [:span.hint "Click a screen to open its chat · Escape puts it back · click an island for a new chat there"]])
+   [:span.hint "Click a screen for its chat · a board for its server · Escape puts it back · an island: new chat"]])
 
 (defn- world-screen []
   [:div.world {:role "application" :aria-label "World"}
@@ -109,8 +147,8 @@
     [:button.world-back {:on-click #(rf/dispatch [:world/toggle false]) :data-tip "Back to the chats (Alt+W)"} "← Chats"]
     [:span.world-title "World"]]
    [legend]
-   (when @(rf/subscribe [:world-chat?])
-     ^{:key (str @(rf/subscribe [:world/focus]))} [:f> chat-panel])])
+   (when-let [p @(rf/subscribe [:world/panel])]
+     ^{:key (str (:kind p) "/" (:target p))} [:f> panel])])
 
 (defn overlay
   "The world over the whole window while it is open; Alt+W and Escape always listened for."

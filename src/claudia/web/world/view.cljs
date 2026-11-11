@@ -31,9 +31,9 @@
     [w error]))
 
 (defn- panel-width
-  "How much of the window's right side the chat panel covers (its width and its margin), 0 without it."
+  "How much of the window's right side the panel covers (its width and its margin), 0 without it."
   []
-  (if-let [^js el (js/document.querySelector ".world-chat")]
+  (if-let [^js el (js/document.querySelector ".world-panel")]
     ;; offsetLeft, not the client rect: the panel may be mid-flight (transformed).
     (- js/window.innerWidth (.-offsetLeft el))
     0))
@@ -63,11 +63,14 @@
         [w error] (use-engine! host)
         servers @(rf/subscribe [:server-list])
         rows @(rf/subscribe [:all-rows])
-        focus @(rf/subscribe [:world/focus])]
+        focus @(rf/subscribe [:world/focus])
+        panel @(rf/subscribe [:world/panel])]
     (h/use-effect (fn [] (when w (engine/update! w servers rows)) nil) [w servers rows])
-    (h/use-effect (fn [] (when w (engine/focus! w focus (panel-width))) nil) [w focus])
+    (h/use-effect (fn [] (when w (engine/panel! w {:follow focus :inset (when panel (panel-width))})) nil)
+                  [w focus panel])
     (h/use-effect (fn []
-                    (when w (reset! link/api {:screen-rect #(engine/screen-rect w %)}))
+                    (when w (reset! link/api {:screen-rect #(engine/screen-rect w %) :board-rect #(engine/board-rect w %)
+                                              :screen-image #(engine/screen-image w %) :board-image #(engine/board-image w %)}))
                     #(reset! link/api nil))
                   [w])
     [:div.world-canvas {:ref #(set! (.-current host) %)}
