@@ -92,7 +92,8 @@
 
 (defn effort-shown
   "The effort a chat without a picked one runs with: what its session said (running), else what a
-  session of its model said before (kept: [{:model :effort}]), else nil."
+  session of a chat with the same picked model said before (kept: [{:model :effort}]; model: the
+  chat's picked model, \"\" for none), else nil."
   [running kept model]
   (or running (some #(when (= model (:model %)) (:effort %)) kept)))
 

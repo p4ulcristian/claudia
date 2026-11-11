@@ -155,7 +155,7 @@
        (when (seq efforts)
          (effort-pick efforts settings
                       (pure/effort-shown (:effort state) (:defaultEfforts server-meta)
-                                         (or (not-empty (:model state)) (:defaultModel server-meta)))
+                                         (or (:model settings) ""))
                       put!))])))
 
 ;; ---- the / menu ----
