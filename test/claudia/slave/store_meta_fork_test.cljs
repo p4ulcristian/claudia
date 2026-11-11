@@ -108,3 +108,8 @@
     (is (= 2 (count hunks)) "a hunk past the limit is left out")
     (is (= ["+y"] (:lines (second hunks))))
     (is (true? cut))))
+
+(deftest a-models-default-effort-replaces-its-kept-one
+  (is (= [{:model "a" :effort "high"}] (meta/with-default-effort nil "a" "high")))
+  (is (= [{:model "b" :effort "low"} {:model "a" :effort "max"}]
+         (meta/with-default-effort [{:model "a" :effort "high"} {:model "b" :effort "low"}] "a" "max"))))

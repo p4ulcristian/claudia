@@ -453,6 +453,8 @@
   (let [level (get-in input [:effort :level])]
     (when (and (string? level) (not= level (:effort-now (st id))))
       (swap-chat! id assoc :effort-now level)
+      (when (and (nil? (:effort (settings id))) (seq (:model (st id))))
+        (meta/note-default-effort! (:model (st id)) level))
       (emit! id {:type "settings" :settings (settings id) :model (:model (st id)) :effort level}))))
 
 (defn- on-hook [id {:keys [event input]}]

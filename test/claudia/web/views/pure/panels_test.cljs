@@ -254,3 +254,9 @@
   (is (= 56 (usage/ring-percent {:percent 56 :resetsAt 2000} 1000)))
   (is (= 0 (usage/ring-percent {:percent 56 :resetsAt 500} 1000)))
   (is (nil? (usage/ring-percent nil 1000))))
+
+(deftest the-effort-shown-without-a-pick
+  (let [kept [{:model "claude-fable-5-2" :effort "high"}]]
+    (is (= "max" (usage/effort-shown "max" kept "claude-fable-5-2")))
+    (is (= "high" (usage/effort-shown nil kept "claude-fable-5-2")))
+    (is (nil? (usage/effort-shown nil kept "claude-opus-5-5")))))

@@ -170,6 +170,21 @@
           (.catch (fn [e] (js/console.error "meta probe:" (text/error-text e))))
           (.finally (fn [] (.close q) (reset! probing false)))))))
 
+(defn with-default-effort
+  "The kept default efforts ([{:model :effort}]: the effort a model runs with when a chat picks
+  none) with model's set to level."
+  [known model level]
+  (conj (vec (remove #(= model (:model %)) known)) {:model model :effort level}))
+
+(defn note-default-effort!
+  "A session of a chat without a picked effort runs model with level: kept, and the pages hear it."
+  [model level]
+  (let [known (vec (store/kv "" "defaultEfforts"))
+        fresh (with-default-effort known model level)]
+    (when (not= (set known) (set fresh))
+      (store/kv! "" "defaultEfforts" fresh)
+      (@on-change @state))))
+
 (defn plans-changed!
   "The saved tokens or the one in use changed: the pages get the meta frame again."
   []
@@ -190,5 +205,6 @@
          :type "meta"
          :account (some->> (:account @state) (str "token-"))
          :accountLabel (account-label)
+         :defaultEfforts (vec (store/kv "" "defaultEfforts"))
          :plans (mapv #(select-keys % [:key :name]) (tokens/saved))
          :planKey (:key (tokens/current))))
