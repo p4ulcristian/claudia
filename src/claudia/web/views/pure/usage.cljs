@@ -90,6 +90,29 @@
           :five (limit-of limits "five_hour") :week (limit-of limits "seven_day")
           :heard-at (if live? (:at live) (:heardAt t))})))
 
+(defn hours-left
+  "Time left in hours (\"52 h\"), in minutes within the last hour (\"45 min\"), \"now\" when none."
+  [ms]
+  (cond (<= ms 0) "now"
+        (< ms 3600000) (str (js/Math.ceil (/ ms 60000)) " min")
+        :else (str (js/Math.round (/ ms 3600000)) " h")))
+
+(defn limit-text
+  "One limit of a plan as a line: \"Week 56% · resets in 52 h\"; 0% once its window has reset since
+  it was heard; \"not heard yet\" without one."
+  [label l now]
+  (cond (nil? l) (str label " not heard yet")
+        (reset-since? l now) (str label " 0%")
+        :else (str label " " (:percent l) "%"
+                   (when (:resetsAt l) (str " · resets in " (hours-left (- (:resetsAt l) now)))))))
+
+(defn plan-rows
+  "The plans a chat can be put on ([{:key :name}]) with their week and 5-hour Limits, from the
+  popup's rows (token-rows) by name."
+  [plans rows]
+  (let [by-name (into {} (map (juxt :name identity)) rows)]
+    (vec (for [p plans] (merge p (select-keys (by-name (:name p)) [:week :five]))))))
+
 (defn commands-of
   "The chat's slash commands: its own (the SDK's init) with the descriptions the probe read, else the
   probe's list."

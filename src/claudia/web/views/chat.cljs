@@ -15,7 +15,7 @@
             [claudia.web.views.changes :as changes]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.menu :as menu]
+            [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
@@ -92,18 +92,31 @@
                          :on-click #(set-open not) :title "Chat colour" :aria-haspopup "true" :aria-expanded open}]
      (when open (palette color pick))]))
 
-(defn- plan-list [plans on pick]
-  [:div.plan-list {:role "menu"}
-   [:div.plan-title "This chat's Claude subscription"]
-   (for [{k :key n :name} plans]
-     ^{:key k}
-     [:button.plan-item {:role "menuitemradio" :aria-checked (= k (:key on)) :class (when (= k (:key on)) "on")
-                         :on-click #(pick k)}
-      [:span.plan-mark (menu/initials n)] (str n "'s plan")])])
+(defn- plan-limit [label l now]
+  [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
+   (usage-pure/limit-text label l now)])
+
+(defn- plan-list
+  "The saved plans with their week and 5-hour use (what the hub last heard) and the hours until
+  each resets."
+  [plans on pick]
+  (let [now (hooks/use-now)
+        tokens @(rf/subscribe [:tokens])
+        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) @(rf/subscribe [:live-limits]))]
+    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
+    [:div.plan-list {:role "menu"}
+     [:div.plan-title "This chat's Claude subscription"]
+     (for [{k :key n :name :keys [week five]} (usage-pure/plan-rows plans rows)]
+       ^{:key k}
+       [:button.plan-item {:role "menuitemradio" :aria-checked (= k (:key on)) :class (when (= k (:key on)) "on")
+                           :on-click #(pick k)}
+        [:span.plan-name n]
+        (plan-limit "Week" week now)
+        (plan-limit "5-hour" five now)])]))
 
 (defn- plan-picker
-  "A chat's Claude subscription (README decision 16): its initials in the header open the saved
-  ones; a pick applies on the chat's next message. Nothing while the server keeps no saved tokens."
+  "A chat's Claude subscription (README decision 16): its name in the header opens the saved
+  ones with their usage; a pick applies on the chat's next message. Nothing while the server keeps no saved tokens."
   [ck server state]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
@@ -114,10 +127,9 @@
     (when (seq plans)
       [:div.plan-pick {:ref #(set! (.-current box) %)}
        [:button.plan-mark {:on-click #(set-open not) :aria-haspopup "true" :aria-expanded open
-                           :title (str "Claude subscription of this chat"
-                                       (when on (str ": " (:name on) "'s plan")))}
-        (if on (menu/initials (:name on)) "?")]
-       (when open (plan-list plans on pick))])))
+                           :title "Claude subscription of this chat"}
+        (if on (:name on) "?")]
+       (when open [:f> plan-list plans on pick])])))
 
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
 
