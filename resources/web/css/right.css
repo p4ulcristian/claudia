@@ -166,6 +166,10 @@
 .f-bar { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; -webkit-mask-box-image: var(--chalk-bar35); -webkit-mask-box-image-outset: 2px; }
 .f-bar i { display: block; height: 100%; background: var(--tile, var(--green)); }
 
+.f-notes { --box: var(--line); padding: 14px 18px; font-size: 14.5px; line-height: 1.55; }
+.f-notes-title { margin: 0 0 8px; font: 700 20px/1.2 var(--hand); }
+.f-notes .md :is(h1, h2, h3, h4) { margin: 14px 0 6px; font: 700 17px/1.25 var(--hand); }
+
 .f-chart { width: 100%; min-height: 60px; }
 .f-chart .vega-embed { width: 100%; }
 .f-chart svg .mark-rect path, .f-chart svg .mark-line path, .f-chart svg .mark-area path { mask: url(#chalk-grain); }

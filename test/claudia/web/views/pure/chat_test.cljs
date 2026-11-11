@@ -112,3 +112,29 @@
   (is (= "claudia" (chat/project-label nil "/home/x/Work/tools/claudia")))
   (is (= "No project" (chat/project-label nil nil)))
   (is (= "No project" (chat/project-label "" ""))))
+
+(deftest texts-fold-into-the-steps
+  (let [msgs [{:id "u1" :role "user"}
+              {:id "a1" :role "assistant" :text "Reading the runner."}
+              {:id "t1" :role "tool"}
+              {:id "a2" :role "assistant" :text "Found it."}
+              {:id "t2" :role "tool"}
+              {:id "a3" :role "assistant" :text "Done."}
+              {:id "u2" :role "user"}
+              {:id "b1" :role "assistant" :text "Looking."}
+              {:id "t3" :role "tool"}
+              {:id "b2" :role "assistant" :text "Still looking."}]]
+    (testing "of an ended turn every text but the last folds"
+      (is (= #{"a1" "a2" "b1"} (steps/folded-ids msgs false))))
+    (testing "the running turn keeps its texts, but for one marked aside"
+      (is (= #{"a1" "a2"} (steps/folded-ids msgs true)))
+      (is (= #{"a1" "a2" "b1"} (steps/folded-ids (assoc-in msgs [7 :aside] true) true))))
+    (testing "folded texts join the steps around them in one group"
+      (is (= [[:msg nil] [:steps ["a1" "t1" "a2" "t2"]] [:msg nil] [:msg nil] [:steps ["b1" "t3"]] [:msg nil]]
+             (map (juxt :k #(when (:tools %) (mapv :id (:tools %))))
+                  (steps/blocks msgs (steps/folded-ids msgs false))))))
+    (testing "what a group holds"
+      (is (= "2 steps, 2 notes" (steps/group-count (subvec msgs 1 5))))
+      (is (= "1 step" (steps/group-count [{:role "tool"}])))
+      (is (= "1 note" (steps/group-count [{:role "assistant"}])))
+      (is (= "Bash" (steps/group-names [{:role "assistant"} {:role "tool" :tool "Bash"}]))))))

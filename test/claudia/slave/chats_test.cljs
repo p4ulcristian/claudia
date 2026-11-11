@@ -4,7 +4,8 @@
             [claudia.slave.chats.session :as session]
             [claudia.slave.chats.titles :as titles]
             [claudia.slave.chats.turns :as turns]
-            [claudia.slave.chats.view :as view]))
+            [claudia.slave.chats.view :as view]
+            [claudia.slave.tools :as tools]))
 
 ;; Titles -----------------------------------------------------------------------------------------
 
@@ -179,3 +180,28 @@
     (is (= peter (session/limits-key-of "token-e64a2b0e" [paul peter])))
     (is (nil? (session/limits-key-of "token-00000000" [paul peter])) "a token no longer known")
     (is (nil? (session/limits-key-of nil [paul peter])))))
+
+;; The chat's reply limit ---------------------------------------------------------------------------
+
+(deftest stop-verdict-hands-a-long-reply-back
+  (let [long-reply (apply str (repeat (inc tools/reply-limit) "a"))
+        at-limit (apply str (repeat tools/reply-limit "a"))]
+    (testing "a reply within the limit ends the turn; spaces around it do not count"
+      (is (= {:continue true} (turns/stop-verdict "Done." 0)))
+      (is (= {:continue true} (turns/stop-verdict (str "  " at-limit "\n") 0)))
+      (is (= {:continue true} (turns/stop-verdict nil 0))))
+    (testing "a reply over the limit goes back, with its length and the limit"
+      (let [v (turns/stop-verdict long-reply 0)]
+        (is (= "block" (:decision v)))
+        (is (re-find (re-pattern (str "has " (inc tools/reply-limit))) (:reason v)))))
+    (testing "handed back reply-sends times, then it stays"
+      (is (= "block" (:decision (turns/stop-verdict long-reply (dec tools/reply-sends)))))
+      (is (= {:continue true} (turns/stop-verdict long-reply tools/reply-sends))))))
+
+(deftest the-prompt-names-the-reply-limit-and-the-notes-form
+  (is (re-find (re-pattern (str "never over " tools/reply-limit " characters")) tools/system-append))
+  (is (contains? tools/form-help "notes")))
+
+(deftest last-replies-are-the-texts-after-the-last-step
+  (is (= ["b" "a"] (map :id (turns/last-replies [{:id "t" :role "tool"} {:id "a" :role "assistant"} {:id "b" :role "assistant"}]))))
+  (is (= [] (turns/last-replies [{:id "a" :role "assistant"} {:id "t" :role "tool"}]))))

@@ -7,7 +7,7 @@
 
 (def order
   "Every form, in the order the gallery shows them."
-  ["pipeline" "timeline" "compare" "chart" "stats" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
+  ["pipeline" "timeline" "compare" "chart" "stats" "notes" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
 
 (def specs
   "code form name -> {:label :when :fields :sample :opt-in}, in the gallery's order."
@@ -272,6 +272,10 @@
     :sample {:tiles [{:id "five" :label "5-hour used" :value "85%" :progress 0.85 :color "amber"}
                      {:id "week" :label "Week used" :value "15%" :progress 0.15}
                      {:id "reset" :label "Resets in" :value "34m"}]}}
+   "notes" {:label "Notes"
+    :when "Prose the user has to read and that no graph or other form can show: an explanation, a summary, reasoning, a draft, the long version of a short chat reply. Markdown."
+    :sample {:title "Why the build got slower"
+             :text "The test build now compiles **every** namespace, not only the changed ones.\n\n- The cache folder moved in the last update.\n- The old path is still in `shadow-cljs.edn`.\n\nPointing the cache at the new folder brings the build back to about 40 seconds."}}
    "scene3d" {:label "3D scene"
     :when "Something best understood as a shape in space that the user can rotate and zoom: an architecture with layers, a mechanism, a building, a molecule, a product, a map with height. Predefined shapes placed in 3D, arrows between them, labels. Pick it when depth or a free viewpoint helps; a flat graph is better for plain boxes and arrows."
     :sample {:parts [{:id "app" :shape "box" :pos [0 3.6 0] :size [3 0.6 2] :color "blue" :label "App"}

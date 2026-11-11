@@ -147,6 +147,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     switched every chat at once is gone. Instead of: one token for every chat of every person,
     where one person's switch moved everyone's chats.
 
+17. The chat has a hard length limit (2026-11-12): a turn's final reply may have at most 400
+    characters (`claudia.slave.tools/reply-limit`). The runner checks it in the Stop hook: a longer
+    reply is handed back to Claude (at most twice per turn; after that it stays) with the request to
+    put what needs more room into the picture, and the page folds the handed-back reply into the
+    steps. Prose has a form of its own on the right, `notes` (Markdown). Once a turn has ended, the
+    page folds every text Claude wrote before the turn's last one (status lines between tool calls)
+    into the step group, where one click shows them, so each turn leaves one short reply in the chat
+    (`claudia.web.views.pure.steps/folded-ids`).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
