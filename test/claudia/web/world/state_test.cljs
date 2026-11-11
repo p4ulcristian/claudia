@@ -14,7 +14,14 @@
     (is (= [[:dispatch [:nav/open ["home" "a"]]]] (:fx robot-fx))))
   (is (= [[:dispatch [:new/server "home"]] [:dispatch [:nav/new]]]
          (:fx (world/pick-fx {} {:island "home" :kind "server"}))))
-  (is (= {} (world/pick-fx {} {:island "gate" :kind "gate"}))))
+  (is (= {} (world/pick-fx {} {:island "gate" :kind "gate"})))
+  (is (= {} (world/pick-fx {} nil)) "the sky"))
+
+(deftest a-click-beside-the-open-chat-closes-it
+  (is (= {:world/close-chat true} (world/pick-fx {:world-chat? true} nil)))
+  (is (= {:world/close-chat true} (world/pick-fx {:world-chat? true} {:island "home" :kind "server"})))
+  (is (= [[:dispatch [:nav/open ["home" "b"]]]]
+         (:fx (world/pick-fx {:world-chat? true} {:robot {:key ["home" "b"]}})))))
 
 (deftest the-view-follows-the-open-chat-only-while-its-panel-is-open
   (is (= "home/a" (world/focus-id {:open ["home" "a"] :world-chat? true})))

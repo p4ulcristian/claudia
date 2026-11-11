@@ -1,0 +1,3 @@
+# World models
+
+`make-models.py` builds every model of the world mode from scratch (islands, buildings, the lighthouse, the robot, trees, rocks) with seeded randomness and writes them as glTF binaries to `resources/web/world/models/`, ambient occlusion baked into each file's vertex colours (COLOR_0). Run it from the repository's root with Blender 5.2 or newer: `blender --background --factory-startup --python tools/world/make-models.py`; add `-- --preview /tmp/world-models-preview.png` to also render a contact sheet of every piece in cel bands with a chalk outline (EEVEE). The same script always writes the same files, so edit the script, never the `.glb` files.

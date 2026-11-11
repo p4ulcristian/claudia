@@ -11,10 +11,12 @@
 
 (defn pick-fx
   "What a click in the world does: a robot (or its screen) opens its chat in the panel, flying out of
-  the screen's rect on the page; a server's island starts a new chat there; the gate does nothing."
+  the screen's rect on the page; anything else closes an open chat (it flies back); else a server's
+  island starts a new chat there; the gate and the sky do nothing. pick: nil for the sky."
   [db {:keys [robot rect island kind]}]
   (cond
     robot {:db (assoc db :world-chat? true :world-from rect) :fx [[:dispatch [:nav/open (:key robot)]]]}
+    (:world-chat? db) {:world/close-chat true}
     (and island (= kind "server")) {:db (assoc db :world-chat? true)
                                     :fx [[:dispatch [:new/server island]] [:dispatch [:nav/new]]]}
     :else {}))

@@ -1,9 +1,11 @@
 (ns claudia.web.world.screens
   "Each robot's chat as a screen floating over it (a hologram from its antenna): the chat's title in
   its colour, the start of the last reply or the open question, and what it is doing. Every screen
-  is drawn once into a slot of one canvas atlas (redrawn only when its text changes) and shown by one
-  InstancedMesh whose node material reads its slot by a per-instance offset, so all screens are one
-  draw call. Screens turn to face the camera; the one whose chat is open is hidden (it flew out)."
+  is drawn once into a slot of one canvas atlas (redrawn only when its text changes, the atlas sent
+  to the card at most every 0.4 s) and shown by one InstancedMesh whose node material reads its slot
+  by a per-instance offset, so all screens are one draw call. Screens face the camera, move apart so
+  none covers another (claudia.web.world.stack, worked out ten times a second), and the one whose
+  chat is open is hidden (it flew out)."
   (:require ["three/webgpu" :as THREE]
             ["three/tsl" :as tsl]
             [claudia.web.world.motion :as motion]
@@ -26,10 +28,10 @@
 
 (defn- screen-material [^js tex ^js slot-attr]
   (let [^js sample (tsl/texture tex (.add (.mul (tsl/uv) (tsl/vec2 (/ 1 cols) (/ 1 rows))) (tsl/instancedBufferAttribute slot-attr)))]
-    (doto (THREE/MeshBasicNodeMaterial. #js {:transparent true :side THREE/DoubleSide})
+    (doto (THREE/MeshBasicNodeMaterial. #js {:side THREE/DoubleSide})
       (set! -colorNode (.-rgb sample))
       (set! -opacityNode (.-a sample))
-      (set! -alphaTest 0.4))))
+      (set! -alphaTest 0.5))))
 
 (defn- make-atlas []
   (let [canvas (js/document.createElement "canvas")]
@@ -66,7 +68,7 @@
     (set! (.-frustumCulled mesh) false)
     (.add scene mesh) (.add scene beams)
     #js {:canvas canvas :ctx (.getContext canvas "2d") :tex tex :mesh mesh :beams beams :slotAttr slot-attr
-         :slots {} :drawn (js/Map.) :moves (js/Map.) :list #js [] :dirty false :uploaded 0 :yaw 0
+         :slots {} :drawn (js/Map.) :moves (js/Map.) :targets {} :laidOut 0 :list #js [] :dirty false :uploaded 0 :yaw 0
          :hidden nil :hovered nil}))
 
 ;; ---- drawing a screen ----
@@ -101,6 +103,17 @@
   (set! (.-font ctx) (str weight " " size "px " font))
   (fn [s] (.-width (.measureText ctx s))))
 
+(defn- title-bar!
+  "The chat's title, and on the right the project it works on (iron-rainbow, claudia…)."
+  [^js ctx x y inner r]
+  (let [project (when (:project r) (first (st/wrap (measure ctx 24 700) 170 1 (:project r))))
+        room (if project (- inner (.-width (.measureText ctx project)) 24) inner)]
+    (text! ctx (first (st/wrap (measure ctx 34 700) room 1 (or (:title r) "Chat"))) (+ x 30) (+ y 44) 34 700 "#11141c")
+    (when project
+      (set! (.-textAlign ctx) "right")
+      (text! ctx project (+ x 30 inner) (+ y 46) 24 700 "rgba(17,20,28,0.7)")
+      (set! (.-textAlign ctx) "start"))))
+
 (defn- draw-slot!
   "Screen n: robot r's chat, in its colour (CSS)."
   [^js ctx n r colour now]
@@ -109,7 +122,7 @@
         [status status-colour] (st/status r now)]
     (draw-frame! ctx x y colour)
     (set! (.-textBaseline ctx) "middle")
-    (text! ctx (first (st/wrap (measure ctx 34 700) inner 1 (or (:title r) "Chat"))) (+ x 30) (+ y 44) 34 700 "#11141c")
+    (title-bar! ctx x y inner r)
     (doseq [[i line] (map-indexed vector (st/wrap (measure ctx 27 400) inner 4 (st/body r)))]
       (text! ctx line (+ x 30) (+ y 116 (* 38 i)) 27 400 "#e6ebf3"))
     (text! ctx status (+ x 30) (+ y 278) 27 700 status-colour)))
@@ -170,7 +183,7 @@
   "The beam from robot i's antenna (robot at p) to the bottom of its screen (centre c, scale)."
   [^js rt i [x y z] [cx cy cz] scale]
   (let [sc scratch
-        ^js from (THREE/Vector3. x (+ y (* 1.05 robots/size)) z)
+        ^js from (THREE/Vector3. x (+ y robots/tip-height) z)
         ^js dir (.sub (THREE/Vector3. cx (- cy (* scale (/ height 2))) cz) from)
         len (max 0.01 (.length dir))]
     (.setFromUnitVectors ^js (.-q sc) up-axis (.normalize dir))
@@ -209,6 +222,16 @@
     (zipmap (map :id boxes)
             (map (fn [b [dx dy]] [(/ dx (:ppu b)) (/ dy (:ppu b))]) boxes (stack/moves boxes 8)))))
 
+(defn- laid-out!
+  "The screens' moves (claudia.web.world.stack), worked out again at most ten times a second: they
+  glide toward them, so a tenth of a second late is never seen."
+  [^js rt ^js camera h placed]
+  (let [now (js/performance.now)]
+    (when (> (- now (.-laidOut rt)) 100)
+      (set! (.-targets rt) (target-moves camera h (remove #(zero? (nth % 2)) placed)))
+      (set! (.-laidOut rt) now))
+    (.-targets rt)))
+
 (defn- placed-screens
   "[robot centre scale] of each screen before lifting."
   [^js rt ^js robots-rt ^js camera]
@@ -237,7 +260,7 @@
   [^js rt ^js robots-rt ^js camera h cam-yaw dt]
   (set! (.-yaw rt) (motion/damp-angle (.-yaw rt) cam-yaw 4 dt))
   (let [placed (placed-screens rt robots-rt camera)
-        targets (target-moves camera h (remove #(zero? (nth % 2)) placed))]
+        targets (laid-out! rt camera h placed)]
     (doseq [[i [r c scale]] (map-indexed vector placed)
             :let [mc (moved! rt (:id r) c (targets (:id r)) dt)]]
       (.setMatrixAt ^js (.-mesh rt) i (screen-matrix rt mc scale (.-m scratch)))

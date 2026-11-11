@@ -19,10 +19,6 @@
 .world-legend i.idle { background: #d9f6ff; opacity: 0.6; }
 .world-legend .hint { color: #b9c2d3; }
 
-.world-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.world-label { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; translate: -50% -100%; }
-.world-label.gate, .world-label.server { translate: -50% -50%; padding: 3px 12px; border-radius: 99px; background: rgb(255 253 246 / 0.88); color: #2b2f3a; font: 700 15px var(--hand); box-shadow: 0 3px 12px rgb(0 0 0 / 0.25); }
-.world-label.robot { max-width: 180px; overflow: hidden; text-overflow: ellipsis; padding: 2px 9px; border-radius: 8px; background: rgb(20 24 36 / 0.72); color: #f3f6fb; font: 12px var(--sans); border-left: 3px solid var(--label, #9aa0a8); }
 
 .world-chat { position: absolute; top: 14px; right: 14px; bottom: 14px; width: min(560px, 46vw); display: flex; flex-direction: column; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 16px 48px rgb(0 0 0 / 0.45); overflow: hidden; transform-origin: 0 0; will-change: transform; }
 .world-chat > .left { flex: 1; min-height: 0; }

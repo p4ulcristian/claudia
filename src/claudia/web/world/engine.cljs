@@ -1,58 +1,82 @@
 (ns claudia.web.world.engine
   "The world in three.js: a WebGPURenderer (WebGL 2 where the browser has no WebGPU) with node
-  materials, driven by setAnimationLoop. The still world is two merged meshes rebuilt only when the
-  servers or projects change; robots, clouds, packets and windows are InstancedMeshes moved every
-  frame. One running world is a JS object `w`; start! makes it, update! hands it the plan, stop!
-  frees it."
+  materials in a chalk look (claudia.web.world.chalk), driven by setAnimationLoop. The still world
+  (the Blender pieces placed by the plan) is one merged mesh, its outline and the bridges, rebuilt
+  only when the servers or projects change; robots, screens, boards, clouds, smoke and packets are
+  InstancedMeshes moved every frame. Each server's health (claudia.web.world.health) colours its
+  island and fills its board. One running world is a JS object `w`; start! makes it, update! hands it
+  the chats, stats! a server's numbers, stop! frees it."
   (:require ["three/webgpu" :as THREE]
-            ["three/examples/jsm/controls/OrbitControls.js" :refer [OrbitControls]]
+            ["three/examples/jsm/controls/MapControls.js" :refer [MapControls]]
             [claudia.web.world.atmosphere :as atmo]
+            [claudia.web.world.boards :as boards]
+            [claudia.web.world.budget :as budget]
+            [claudia.web.world.chalk :as chalk]
             [claudia.web.world.geo :as geo]
-            [claudia.web.world.labels :as labels]
+            [claudia.web.world.health :as health]
+            [claudia.web.world.models :as models]
             [claudia.web.world.motion :as motion]
             [claudia.web.world.plan :as plan]
             [claudia.web.world.robots :as robots]
-            [claudia.web.world.screens :as screens]))
+            [claudia.web.world.screens :as screens]
+            [claudia.web.world.signs :as signs]))
 
 ;; ---- making it ----
 
+(defn- scale-cap
+  "The sharpest the world is drawn: the screen's own pixels, at most 1.5 per CSS pixel."
+  []
+  (min js/devicePixelRatio 1.5))
+
 (defn- make-renderer
-  "WebGPU where the browser has it, else WebGL 2; force-webgl? after a WebGPU device was lost."
+  "WebGPU where the browser has it, else WebGL 2; force-webgl? after a WebGPU device was lost. Starts
+  at one pixel per CSS pixel; the budget raises or lowers it (claudia.web.world.budget)."
   [^js host force-webgl?]
   (let [r (THREE/WebGPURenderer. #js {:antialias true :forceWebGL (boolean force-webgl?)})]
-    (.setPixelRatio r (min js/devicePixelRatio 1.5))
+    (.setPixelRatio r (min 1 (scale-cap)))
     (.setSize r (max 1 (.-clientWidth host)) (max 1 (.-clientHeight host)))
     (set! (.-toneMapping r) THREE/ACESFilmicToneMapping)
     (.appendChild host (.-domElement r))
     r))
 
-(defn- make-controls [^js camera ^js dom]
-  (doto (OrbitControls. camera dom)
+(defn- make-controls
+  "Map-style: a drag (one finger) slides the world and it glides on after letting go, the wheel (or a
+  pinch) zooms toward the pointer; no turning, the view keeps its angle."
+  [^js camera ^js dom]
+  (doto (MapControls. camera dom)
+    (set! -enableRotate false)
     (set! -enableDamping true)
-    (set! -dampingFactor 0.08)
-    (set! -maxPolarAngle 1.32)
-    (set! -minDistance 5)
-    (set! -screenSpacePanning false)))
+    (set! -dampingFactor 0.06)
+    (set! -zoomToCursor true)
+    (set! -minDistance 8)
+    (set! -screenSpacePanning false)
+    (set! -touches #js {:ONE (.-PAN THREE/TOUCH) :TWO (.-DOLLY_PAN THREE/TOUCH)})))
 
-(defn- make-still [^js scene]
-  (let [lit (THREE/Mesh. (THREE/BufferGeometry.) (THREE/MeshLambertNodeMaterial. #js {:vertexColors true :flatShading true}))
+(defn- make-still
+  "The still world's meshes (empty until the plan comes): lit pieces, their chalk outline (the same
+  geometry), the glowing bridges, and invisible cylinders to click islands by."
+  [^js scene ^js u]
+  (let [lit (THREE/Mesh. (THREE/BufferGeometry.) (chalk/world-material u))
+        outline (THREE/Mesh. (THREE/BufferGeometry.) (chalk/outline-material (.-width u)))
         glow (THREE/Mesh. (THREE/BufferGeometry.) (THREE/MeshBasicNodeMaterial. #js {:vertexColors true}))
         colliders (THREE/Group.)]
-    (set! (.-visible lit) false) (set! (.-visible glow) false)
-    (.add scene lit) (.add scene glow) (.add scene colliders)
-    #js {:lit lit :glow glow :colliders colliders}))
+    (doseq [^js m [lit outline glow]] (set! (.-visible m) false) (.add scene m))
+    (.add scene colliders)
+    #js {:lit lit :outline outline :glow glow :colliders colliders}))
 
-(defn- make-world [^js host ^js renderer handlers]
+(defn- make-world [^js host ^js renderer handlers pieces]
   (let [scene (THREE/Scene.)
-        camera (THREE/PerspectiveCamera. 38 (/ (max 1 (.-clientWidth host)) (max 1 (.-clientHeight host))) 0.5 2000)]
-    #js {:host host :renderer renderer :scene scene :camera camera
+        camera (THREE/PerspectiveCamera. 38 (/ (max 1 (.-clientWidth host)) (max 1 (.-clientHeight host))) 2 1500)
+        u (chalk/make-uniforms)]
+    #js {:host host :renderer renderer :scene scene :camera camera :models pieces :uniforms u
          :controls (make-controls camera (.-domElement renderer))
          :sky (atmo/make-sky! scene) :clouds (atmo/make-clouds! scene) :beam (atmo/make-beam! scene)
-         :packets (atmo/make-packets! scene) :windows (atmo/make-windows! scene)
-:robots (robots/make scene) :screens (screens/make scene) :still (make-still scene) :layer (labels/make-layer host)
-         :handlers handlers :plan nil :packetList [] :curves [] :windowIds []
-         :radius 30 :last nil :focus nil :inset 0 :offset 0 :hovered nil :pointer nil :down nil
-         :raycaster (THREE/Raycaster.) :v (THREE/Vector3.)}))
+         :packets (atmo/make-packets! scene) :smoke (atmo/make-smoke! scene)
+         :robots (robots/make scene (first (:robot pieces)) (.-width u)) :screens (screens/make scene)
+         :boards (boards/make scene) :signs (signs/make scene) :still (make-still scene u)
+         :handlers handlers :plan nil :robotList [] :stats (js/Map.) :hot [] :packetList [] :curves []
+         :radius 30 :last nil :frames #js [] :budgetAt 0 :focus nil :inset 0 :offset 0 :pointer nil :down nil
+         :raycaster (THREE/Raycaster.)}))
 
 ;; ---- the plan ----
 
@@ -82,17 +106,17 @@
 (defn- rebuild-still!
   "A new still world (servers or projects changed)."
   [^js w p]
-  (let [{:keys [lit glow]} (geo/still-world p)
+  (let [{:keys [lit outline glow]} (geo/still-world p (.-models w))
         ^js still (.-still w)
         r (world-radius (:islands p))
         first? (nil? (.-plan w))]
-    (.dispose (.. still -lit -geometry)) (.dispose (.. still -glow -geometry))
+    (doseq [^js m [(.-lit still) (.-outline still) (.-glow still)]] (.dispose (.-geometry m)))
     (set! (.. still -lit -geometry) lit)
+    (set! (.. still -outline -geometry) outline)
     (set! (.. still -glow -geometry) glow)
-    (set! (.. still -lit -visible) true) (set! (.. still -glow -visible) true)
+    (doseq [^js m [(.-lit still) (.-outline still) (.-glow still)]] (set! (.-visible m) true))
     (replace-colliders! (.-colliders still) (:islands p))
     (set! (.-curves w) (mapv geo/bridge-curve (:bridges p)))
-    (set! (.-windowIds w) (atmo/place-windows! (.-windows w) (geo/window-matrices (:buildings p))))
     (set! (.-radius w) r)
     (set! (.-plan w) p)
     (atmo/tune-sky! (.-sky w) r)
@@ -105,14 +129,48 @@
     (memoize (fn [c] (let [v (.trim (.getPropertyValue style (str "--c-" c)))]
                        (THREE/Color. (if (seq v) v "#9aa0a8")))))))
 
-(defn- label-items
-  "The islands' names (the robots' chats are on their screens)."
-  [^js w]
-  (for [{:keys [id label kind]} (:islands (.-plan w))]
-    {:id (str "i:" id) :text label :kind kind}))
-
 (defn- working-by-server [robot-list]
   (frequencies (keep #(when (= :working (:state %)) (first (:key %))) robot-list)))
+
+(defn- info-of
+  "An island's {:status :load} from its server's last numbers (the gate without numbers: the hub,
+  up since this page loaded)."
+  [^js w id]
+  (if-let [{:keys [sample error at]} (.get ^js (.-stats w) id)]
+    {:status (health/status {:sample sample :error error :age (- (js/Date.now) (or at 0))})
+     :load (health/load-of sample)}
+    {:status (if (= id "gate") :free :asking) :load nil}))
+
+(defn- set-at! [^js arr i f]
+  (when (< i (alength arr)) (f (aget arr i))))
+
+(defn- paint-islands!
+  "Each island's grass and greyness from its server's health; the overworked ones smoke."
+  [^js w islands infos]
+  (let [^js u (.-uniforms w)]
+    (doseq [[i {:keys [status]}] (map-indexed vector infos)]
+      (set-at! (.. u -grass -array) i #(.setHex ^js % (health/grass status)))
+      (when (< i chalk/max-islands) (aset (.. u -dead -array) i (health/dead status))))
+    (set! (.-hot w) (vec (keep (fn [[isl info]] (when (= :overworked (:status info)) isl)) (map vector islands infos))))))
+
+(defn- light-windows!
+  "Windows lit in buildings where a chat works."
+  [^js w buildings working]
+  (let [^js lit (.. w -uniforms -lit -array)]
+    (doseq [[j b] (map-indexed vector (take chalk/max-buildings buildings))]
+      (aset lit j (if (contains? working (:id b)) 1 0)))))
+
+(defn- apply-health!
+  "Islands, boards and the bridges' traffic from the servers' health and the robots."
+  [^js w]
+  (let [islands (:islands (.-plan w))
+        infos (mapv #(info-of w (:id %)) islands)
+        dead (set (keep (fn [[isl info]] (when (= :dead (:status info)) (:id isl))) (map vector islands infos)))
+        robot-list (.-robotList w)]
+    (paint-islands! w islands infos)
+    (boards/sync! (.-boards w) islands #(info-of w %))
+    (set! (.-packetList w) (atmo/packets (vec (remove dead (map :to (:bridges (.-plan w)))))
+                                         (working-by-server robot-list)))))
 
 (defn update!
   "Hands the world what to show: the servers (/hub/me) and every chat's row (with :server)."
@@ -123,24 +181,20 @@
     (let [colour-of (chat-colours)]
       (robots/sync! (.-robots w) robot-list colour-of)
       (screens/sync! (.-screens w) robot-list colour-of))
-    (atmo/light-windows! (.-windows w) (.-windowIds w) (plan/working-buildings robot-list))
-    (set! (.-packetList w) (atmo/packets (mapv :to (:bridges p)) (working-by-server robot-list)))
-    (labels/sync! (.-layer w) (label-items w))))
+    (set! (.-robotList w) robot-list)
+    (light-windows! w (:buildings p) (plan/working-buildings robot-list))
+    (signs/sync! (.-signs w) (:buildings p) (plan/working-buildings robot-list))
+    (apply-health! w)))
+
+(defn stats!
+  "A server's (or the gate's) latest numbers: {:sample} on an answer, {:error} when it failed."
+  [^js w id {:keys [sample error]}]
+  (let [^js m (.-stats w)
+        old (.get m id)]
+    (.set m id (if sample {:sample sample :at (js/Date.now)} (assoc old :error error)))
+    (when (.-plan w) (apply-health! w))))
 
 ;; ---- every frame ----
-
-(defn- island-point
-  "Where an island's name hangs: on its rim nearest the camera, like a sign, under its screens."
-  [^js w id]
-  (when-let [{:keys [pos radius]} (first (filter #(= id (:id %)) (:islands (.-plan w))))]
-    (let [[x y z] pos
-          ^js cam (.. w -camera -position)
-          dx (- (.-x cam) x) dz (- (.-z cam) z)
-          d (max 0.001 (js/Math.hypot dx dz))]
-      [(+ x (* radius (/ dx d))) (- y 0.2) (+ z (* radius (/ dz d)))])))
-
-(defn- label-point [^js w id]
-  (island-point w (subs id 2)))
 
 (defn- follow-focus!
   "While a robot's chat is open, the view's centre glides to it."
@@ -155,7 +209,8 @@
   (screens/rect (.-screens w) (.-robots w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
 
 (defn- pick-at
-  "What is under the pointer: {:robot r} or {:island id}, or nil."
+  "What is under the pointer: {:robot r :rect} (a robot or its screen), {:island id :kind}, or nil
+  (the sky)."
   [^js w [px py]]
   (let [^js rc (.-raycaster w)
         ^js dom (.. w -renderer -domElement)
@@ -165,15 +220,16 @@
                     (.-camera w))
     (if-let [r (or (screens/pick (.-screens w) rc) (robots/pick (.-robots w) rc))]
       {:robot r :rect (screen-rect w (:id r))}
-      (when-let [^js hit (first (.intersectObjects rc (.. w -still -colliders -children) false))]
-        {:island (.. hit -object -userData -island) :kind (.. hit -object -userData -kind)}))))
+      (if-let [isl (boards/pick (.-boards w) rc)]
+        {:island (:id isl) :kind (name (:kind isl))}
+        (when-let [^js hit (first (.intersectObjects rc (.. w -still -colliders -children) false))]
+          {:island (.. hit -object -userData -island) :kind (.. hit -object -userData -kind)})))))
 
 (defn- hover! [^js w]
   (when-let [pt (.-pointer w)]
     (set! (.-pointer w) nil)
     (let [id (some-> (pick-at w pt) :robot :id)]
       (set! (.. w -renderer -domElement -style -cursor) (if id "pointer" ""))
-      (set! (.-hovered w) id)
       (set! (.. w -screens -hovered) id))))
 
 (defn- shift-view!
@@ -189,23 +245,47 @@
       (let [cw (max 1 (.-clientWidth host)) ch (max 1 (.-clientHeight host))]
         (.setViewOffset cam cw ch off 0 cw ch)))))
 
+(defn- keep-budget!
+  "Once a second, the resolution scale for the frames just drawn."
+  [^js w ms dt]
+  (let [^js frames (.-frames w)]
+    (when (pos? dt) (.push frames (* 1000 dt)))
+    (when (> (- ms (.-budgetAt w)) 1000)
+      (let [^js r (.-renderer w)
+            now-scale (.getPixelRatio r)
+            next-scale (budget/next-scale now-scale (vec frames) (scale-cap))]
+        (when (not= next-scale now-scale) (.setPixelRatio r next-scale))
+        (set! (.-frames w) #js [])
+        (set! (.-budgetAt w) ms)))))
+
+(defn- keep-outline!
+  "The chalk outline stays outline-px wide on screen at the view's distance."
+  [^js w]
+  (let [^js cam (.-camera w)]
+    (set! (.. w -uniforms -width -value)
+          (chalk/outline-width (.distanceTo (.-position cam) (.. w -controls -target)) (.-fov cam)
+                               (.. w -host -clientHeight)))))
+
 (defn- frame! [^js w ms]
   (let [t (/ ms 1000)
         dt (if (.-last w) (min motion/max-dt (- t (.-last w))) 0)
         ^js host (.-host w)]
     (set! (.-last w) t)
+    (keep-budget! w ms dt)
     (hover! w)
     (robots/frame! (.-robots w) t dt (.getAzimuthalAngle (.-controls w)))
     (screens/frame! (.-screens w) (.-robots w) (.-camera w) (.-clientHeight host) (.getAzimuthalAngle (.-controls w)) dt)
     (atmo/tick-clouds! (.-clouds w) t (.-radius w))
     (atmo/tick-beam! (.-beam w) t)
     (atmo/tick-packets! (.-packets w) (.-curves w) (.-packetList w) t)
+    (atmo/tick-smoke! (.-smoke w) (.-hot w) t)
+    (boards/frame! (.-boards w) (.-camera w))
+    (signs/frame! (.-signs w) (.-camera w))
     (follow-focus! w dt)
     (shift-view! w dt)
     (.update (.-controls w))
-    (.render (.-renderer w) (.-scene w) (.-camera w))
-    (labels/place! (.-layer w) (.-camera w) (.-clientWidth host) (.-clientHeight host)
-                   #(label-point w %) (.-v w))))
+    (keep-outline! w)
+    (.render (.-renderer w) (.-scene w) (.-camera w))))
 
 ;; ---- pointer, size, life ----
 
@@ -218,7 +298,7 @@
                        (fn [^js e]
                          (let [[dx dy] (map - (xy e) (or (.-down w) [-99 -99]))]
                            (when (< (js/Math.hypot dx dy) 6)
-                             (when-let [p (pick-at w (xy e))] ((:on-pick (.-handlers w)) p))))))))
+                             ((:on-pick (.-handlers w)) (pick-at w (xy e)))))))))
 
 (defn- on-resize! [^js w]
   (let [ro (js/ResizeObserver.
@@ -236,9 +316,9 @@
   [^js host {:keys [force-webgl? on-lost] :as handlers}]
   (let [renderer (make-renderer host force-webgl?)]
     (set! (.-onDeviceLost renderer) (fn [_] (on-lost)))
-    (-> (.init renderer)
-        (.then (fn []
-                 (let [w (make-world host renderer handlers)]
+    (-> (js/Promise.all #js [(.init renderer) (models/load!)])
+        (.then (fn [[_ pieces]]
+                 (let [w (make-world host renderer handlers pieces)]
                    (on-pointer! w)
                    (on-resize! w)
                    (.setAnimationLoop renderer #(frame! w %))
@@ -257,5 +337,4 @@
   (some-> ^js (.-ro w) (.disconnect))
   (.dispose (.-controls w))
   (.dispose (.-renderer w))
-  (.remove (.. w -renderer -domElement))
-  (.remove (.-layer w)))
+  (.remove (.. w -renderer -domElement)))

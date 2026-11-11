@@ -100,25 +100,38 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     back). The gate is an island with a lighthouse in the middle, every server the person may use an
     island on a ring round it joined by a bridge, every project a building on its server's island,
     and every chat (not archived, not ash) a hovering robot in its chat colour at its project's door
-    (no project: the island's square). Over each robot floats its chat's screen, a hologram from its
-    antenna: the title in the chat's colour, the open question while it waits, else the start of the
-    last reply, and what it does (working, waiting on you, done, idle, offline). Screens face the
-    camera, far ones are drawn up to 1.4 times bigger, and screens that would cover each other on the
-    page move apart every frame (nearest first stays; each moves up, left or right, the shortest way
-    clear: `claudia.web.world.stack`). A click on a screen (or its robot) flies the real chat panel
-    out of that screen to its place on the right and the view glides to the robot; Escape or × flies
-    it back into the screen. A click on a server's island starts a new chat there. Layout, motion,
-    screen text and stacking are pure data (`claudia.web.world.plan`, `.motion`, `.screen-text`,
-    `.stack`, `.state`); the engine is three.js's WebGPURenderer (WebGL 2 where WebGPU is missing or
-    its device is lost) with node materials and TSL: the still world is two merged meshes with
-    vertex colours; robots, screens, beams, clouds, windows and packets are InstancedMeshes; every
-    screen is a slot of one canvas atlas (redrawn only when its text changes, uploaded at most every
-    0.4 s) read by a per-instance uv offset, so all screens are one draw call. Its own module
-    (`out/web/js/world.js`) on top of the 3D module, which holds three.js's core, so WebGPU comes from
-    the same sources (`three/src/Three.WebGPU.js`), not a second copy. Instead of: real chat pages
-    placed in 3D (CSS3D: always drawn over the world, no fog, heavy with many chats), the scene3d
-    form (a picture Claude draws per chat, not a live view of every chat), or WebGLRenderer with
-    classic materials.
+    (no project: the island's square), its name on a sign over it (lit while one of its chats works),
+    and the project's name also on each of its chats' screens. The pieces (islands, buildings, the lighthouse, trees, rocks,
+    the robot) are made in Blender by `tools/world/make-models.py` (deterministic; edit the script,
+    never the files) into `resources/web/world/models/*.glb` (about 270 KB), with ambient occlusion
+    baked into their vertex colours, and drawn in Claudia's chalk look: cel shading in three bands, a
+    faint chalk grain fixed to the world and a chalk outline (back faces pushed out a fixed number of
+    screen pixels; thin surfaces such as grass and windows left out of it). Over each robot floats its
+    chat's screen (title in the chat's colour, the open question or the start of the last reply,
+    what it does); screens face the camera, are drawn up to 1.4 times bigger far away, and move
+    apart every frame so none covers another (`claudia.web.world.stack`). A drag slides the world
+    and it glides on after letting go, the wheel zooms toward the pointer; the view never turns. A
+    click on a screen (or its robot) flies the real chat panel out of that screen and the view glides
+    to the robot; a click anywhere else in the world, Escape or × flies it back in; with no chat
+    open, a click on a server's island starts a new chat there. Every island has a board on its
+    cliff with the server's CPU, memory and GPU (the Systems popup's calls, every 2 s while the
+    world is open; the gate's for admins) and one word for it (`claudia.web.world.health`): free
+    (lush grass), busy (drying), overworked (scorched, smoking: CPU 85%, memory 90% or GPU 90% and
+    over) or offline (the whole island grey, no traffic on its bridge). Layout, motion, screen
+    text, stacking, health and the resolution budget are pure data (`claudia.web.world.plan`,
+    `.motion`, `.screen-text`, `.stack`, `.health`, `.budget`, `.state`, `.look`). The engine is
+    three.js's WebGPURenderer (WebGL 2 where WebGPU is missing or its device is lost) with node
+    materials in TSL: the still world is one merged mesh whose vertices carry their island and
+    building (grass colour, greyness and lit windows come from uniform arrays, no material per
+    island), its outline and the bridges; robots, screens, boards, beams, clouds, smoke and packets
+    are InstancedMeshes; screens, boards and signs are slots of canvas atlases redrawn only when their text
+    changes (`claudia.web.world.atlas` for boards and signs). It draws at one pixel per CSS pixel and the budget (`.budget`) moves that between 0.6
+    and 1.5 by how late frames come. Its own module (`out/web/js/world.js`) on top of the 3D module,
+    which holds three.js's core, so WebGPU comes from the same sources (`three/src/Three.WebGPU.js`),
+    not a second copy. Instead of: real chat pages placed in 3D (CSS3D: always drawn over the
+    world, no fog, heavy with many chats), the scene3d form (a picture Claude draws per chat, not a
+    live view of every chat), shapes built in code, or a texture array per screen (its layers mixed
+    on the WebGL 2 path).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

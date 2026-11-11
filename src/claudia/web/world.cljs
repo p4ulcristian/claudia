@@ -22,6 +22,8 @@
 (rf/reg-event-db :world/toggle (fn [db [_ open?]] (state/toggled db open?)))
 (rf/reg-event-db :world/chat (fn [db [_ open?]] (assoc db :world-chat? (boolean open?))))
 (rf/reg-event-fx :world/pick (fn [{:keys [db]} [_ p]] (state/pick-fx db p)))
+(declare close-chat!)
+(rf/reg-fx :world/close-chat (fn [_] (close-chat!)))
 (rf/reg-sub :world? (fn [db] (boolean (:world? db))))
 (rf/reg-sub :world-chat? (fn [db] (boolean (:world-chat? db))))
 (rf/reg-sub :world/focus (fn [db] (state/focus-id db)))
