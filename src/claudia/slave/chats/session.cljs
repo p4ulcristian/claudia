@@ -16,6 +16,15 @@
   (update (merge settings (select-keys m [:model :effort :plan]))
           :plan #(when (some #{%} saved-keys) %)))
 
+(defn restart?
+  "Whether a chat's live session starts again before its next message goes in: its token
+  (token-account) is another than the one it runs on and no turn runs. After a plan was picked for
+  the chat (:plan-changed) always; after the token in use here was replaced only when no work the
+  session started still runs (working: how many), which a restart would end."
+  [{:keys [live running account plan-changed]} token-account working]
+  (boolean (and live (not running) (not= token-account account)
+                (or plan-changed (and (some? account) (zero? working))))))
+
 (defn hash36
   "A short name for a text (its SHA-256's start in base 36): a version of the tools or the prompt."
   [s]

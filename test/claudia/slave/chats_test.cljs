@@ -162,3 +162,14 @@
     (is (= {:model nil :effort nil :plan "peter"} (session/settings-with s {:plan "peter" :other 1} ["paul" "peter"])))
     (is (nil? (:plan (session/settings-with s {:plan "gone"} ["paul" "peter"]))))
     (is (nil? (:plan (session/settings-with s {:plan nil} ["paul"]))))))
+
+(deftest a-session-starts-again-on-another-token
+  (let [s {:live true :running false :account "token-a"}]
+    (is (session/restart? s "token-b" 0))
+    (is (not (session/restart? s "token-a" 0)) "the same token")
+    (is (not (session/restart? (assoc s :running true) "token-b" 0)) "never during a turn")
+    (is (not (session/restart? (assoc s :live false) "token-b" 0)))
+    (is (not (session/restart? s "token-b" 2)) "a replaced token waits for the session's work")
+    (is (session/restart? (assoc s :plan-changed true) "token-b" 2) "a picked plan does not wait")
+    (is (not (session/restart? (assoc s :account nil) "token-b" 0)))
+    (is (session/restart? (assoc s :account nil :plan-changed true) "token-b" 0))))

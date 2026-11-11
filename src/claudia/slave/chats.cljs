@@ -479,7 +479,7 @@
         t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
     (if (seq t) t (throw (js/Error. "No Claude token yet: add one in Settings (bottom left).")))))
 
-(declare settings)
+(declare settings close-session!)
 
 (defn token-of
   "The token chat id runs on: the saved one picked for it (README decision 16), else the one in use
@@ -535,10 +535,21 @@
   [id]
   (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
 
+(defn- plan-picked!
+  "Another plan was picked for the chat: its session ends now, so its next message starts on the
+  new token; while its turn runs, right after that turn."
+  [id]
+  (when (:live (st id))
+    (if (:running (st id))
+      (swap-chat! id assoc :plan-changed true)
+      (close-session! id))))
+
 (defn set-settings! [id m]
-  (let [s (session/settings-with (settings id) m (map :key (tokens/saved)))
+  (let [before (settings id)
+        s (session/settings-with before m (map :key (tokens/saved)))
         quiet #(.catch % (fn [_]))]
     (store/kv! id "settings" s)
+    (when (not= (:plan before) (:plan s)) (plan-picked! id))
     ;; A live session takes them now too.
     (when (:live (st id))
       (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
@@ -577,15 +588,18 @@
 
 (defn- close-session! [id]
   (hostlink/send! {:op "close" :id id})
-  (swap-chat! id assoc :live false :stale false)
+  (swap-chat! id assoc :live false :stale false :plan-changed false)
   (tasks/session-gone! id))
 
 (defn- restart-if-stale!
   "A session started with other tools (that couldn't be swapped) or other instructions starts again
-  (resumed, same conversation) once its turn and the work it started are done."
+  (resumed, same conversation) once its turn and the work it started are done; one whose chat got
+  another plan during its turn, once that turn is done."
   [id]
-  (when (and (:stale (st id)) (:live (st id)) (not (:running (st id))) (not (tasks/running-any? id)))
-    (close-session! id)))
+  (let [s (st id)]
+    (when (and (:live s) (not (:running s))
+               (or (:plan-changed s) (and (:stale s) (not (tasks/running-any? id)))))
+      (close-session! id))))
 
 (defn- swap-tools!
   "Hands a live session the tools as they stand now (src/chat.ts swapTools); one that refuses them
@@ -829,17 +843,16 @@
   (hostlink/send! {:op "start" :id id :spec (start-spec id resume? (run-env t))})
   (codeforms/forms-seen-now! id)
   (store/kv! id "session" {:account account :tools (tools-version) :prompt (prompt-version)})
-  (swap-chat! id assoc :live true :account account :stale false :final-counts {}))
+  (swap-chat! id assoc :live true :account account :stale false :plan-changed false :final-counts {}))
 
 (defn- ensure-session!
   "The chat's Claude Code, started (or resumed) on the chat's token. The token was replaced or
-  another one picked since its session started: it starts again on the new one (not while work it
-  started still runs, which that would end)."
+  another one picked since its session started: it starts again on the new one
+  (session/restart?)."
   [id]
   (let [t (token-of id)
         account (session/account-of t)]
-    (when (and (:live (st id)) (not (:running (st id))) (zero? (tasks/working id))
-               (some? (:account (st id))) (not= account (:account (st id))))
+    (when (session/restart? (st id) account (tasks/working id))
       (close-session! id))
     (if (:live (st id))
       (js/Promise.resolve nil)
