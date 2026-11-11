@@ -68,14 +68,19 @@
     (is (= "home|/w/ir" (:building (by-id "home/a"))))
     (is (= "home" (:building (by-id "home/c"))) "no project: the island's square")
     (is (= ["home" "a"] (:key (by-id "home/a"))))
+    (is (= 0 (:row (by-id "home/a"))))
     (is (> (dist (:spot (by-id "home/a")) (:spot (by-id "home/b"))) 0.9))
     (is (= #{"home|/w/ir"} (plan/working-buildings rs)))))
 
-(deftest spots-fill-rows-of-four
-  (let [ss (map #(plan/spot [0 0 0] 0 % 6) (range 6))]
+(deftest spots-fill-rows-of-three-a-screen-apart
+  (let [ss (vec (map #(plan/spot [0 0 0] 0 % 6) (range 6)))]
     (is (= 6 (count (distinct ss))))
     (testing "the first row is centred across the place"
-      (is (< (js/Math.abs (+ (last (first ss)) (last (nth ss 3)))) 1e-9)))))
+      (is (< (js/Math.abs (+ (last (ss 0)) (last (ss 2)))) 1e-9)))
+    (testing "neighbours stand wider apart than a screen"
+      (is (> (dist (ss 0) (ss 1)) 4.2)))
+    (testing "the second row is shifted half a step"
+      (is (> (js/Math.abs (- (last (ss 3)) (last (ss 0)))) 1)))))
 
 (deftest sky-blends-between-hours
   (is (= (plan/sky 0) (plan/sky 24)))
