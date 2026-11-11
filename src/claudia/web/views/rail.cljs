@@ -14,7 +14,6 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.systems :as systems]
             [claudia.web.views.tearoff :as tearoff]
-            [claudia.web.views.usage :as usage]
             [claudia.web.world :as world]))
 
 (defn- use-slide!
@@ -113,4 +112,4 @@
      [world/world-button]
      [:f> systems/systems-button]
      (sound-button (:sounds @alerts/on))
-     [:f> usage/rail-meters]]))
+]))

@@ -114,21 +114,52 @@
         (plan-limit "Week" week now)
         (plan-limit "5-hour" five now)])]))
 
-(defn- plan-picker
-  "A chat's Claude subscription (README decision 16): its name in the header opens the saved
-  ones with their usage; a pick applies on the chat's next message. Nothing while the server keeps no saved tokens."
-  [ck server state]
+(defn- plan-limits
+  "The 5-hour and week Limits of the plan a chat runs on (on; none saved: the server's own plan)."
+  [on plans]
+  (let [tokens @(rf/subscribe [:tokens])
+        live @(rf/subscribe [:live-limits])
+        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) live)]
+    (if on
+      (some #(when (= (:key on) (:key %)) %) (usage-pure/plan-rows plans rows))
+      {:five (usage-pure/limit-of (:limits live) "five_hour")
+       :week (usage-pure/limit-of (:limits live) "seven_day")})))
+
+(defn- limit-ring [k label l now]
+  (when-let [p (usage-pure/ring-percent l now)]
+    [usage/ring {:short (usage-pure/short-name k) :percent p :tip (usage-pure/limit-text label l now)}]))
+
+(defn- use-tokens!
+  "The hub's saved tokens with their limits, loaded now and every minute."
+  []
+  (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens])
+                  (let [t (js/setInterval #(rf/dispatch [:ops/load-tokens]) 60000)] #(js/clearInterval t)))
+                []))
+
+(defn- plan-pill
+  "The chat's Claude subscription (README decision 16) and its meters in one pill: whose plan the
+  chat runs on, the chat's context (a click compacts), that plan's 5-hour and week use. A click on
+  the name or the plan's rings opens the saved plans; a pick applies at once."
+  [{:keys [ck server state] :as oc} ro]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
+        now (hooks/use-now)
         {:keys [plans planKey]} @(rf/subscribe [:meta server])
         on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
+        {:keys [five week]} (plan-limits on plans)
+        toggle #(when (and (seq plans) (not ro)) (set-open not))
         pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
     (use-closes-away! box open #(set-open false))
-    (when (seq plans)
-      [:div.plan-pick {:ref #(set! (.-current box) %)}
-       [:button.plan-mark {:on-click #(set-open not) :aria-haspopup "true" :aria-expanded open
-                           :title "Claude subscription of this chat"}
-        (if on (:name on) "?")]
+    (use-tokens!)
+    (when (or on five week (:context state))
+      [:div.plan-pick.plan-pill {:ref #(set! (.-current box) %)}
+       (when on [:button.plan-owner {:on-click toggle :aria-haspopup "true" :aria-expanded open
+                                     :title "Claude subscription of this chat"}
+                 (:name on)])
+       [usage/context-ring (cond-> oc ro (assoc :pending? true))]
+       [:button.plan-rings {:on-click toggle :aria-label "Usage of this chat's Claude subscription"}
+        (limit-ring "five_hour" "5-hour" five now)
+        (limit-ring "seven_day" "Week" week now)]
        (when open [:f> plan-list plans on pick])])))
 
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
@@ -189,7 +220,7 @@
         [:header.chat-head {:class (when color "colored")}
          [back-to-list]
          (when-not ro [:f> colour-picker ck color])
-         (when (and chat (not ro)) [:f> plan-picker ck server state])
+         (when chat [:f> plan-pill oc ro])
          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
          (head-chips oc label folder)]))))
 

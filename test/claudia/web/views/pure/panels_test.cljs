@@ -249,3 +249,8 @@
     (is (= [{:key "paul" :name "Paul" :week {:percent 5} :five nil} {:key "new" :name "New"}]
            (usage/plan-rows [{:key "paul" :name "Paul"} {:key "new" :name "New"}]
                             [{:name "Paul" :in-use true :week {:percent 5} :five nil :heard-at 1}])))))
+
+(deftest a-limits-ring-shows-zero-once-its-window-has-reset
+  (is (= 56 (usage/ring-percent {:percent 56 :resetsAt 2000} 1000)))
+  (is (= 0 (usage/ring-percent {:percent 56 :resetsAt 500} 1000)))
+  (is (nil? (usage/ring-percent nil 1000))))
