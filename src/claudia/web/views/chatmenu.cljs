@@ -80,21 +80,27 @@
                                       (when-let [f (pure/typed-folder targets (.. e -currentTarget -value))]
                                         ((act #(rf/dispatch [:chat/folder k f]))))))}])
 
-(defn- move-panel
-  "Move to project: this server's projects (most chats first, the chat's own marked), a typed
-  project name or folder path, or no project."
-  [k row act set-moving]
+(defn project-list
+  "The projects a chat can move to: this server's (most chats first, the chat's own marked), a
+  typed project name or folder path, or no project. act: what wraps a pick (it closes the menu)."
+  [k row act]
   (let [[text set-text] (h/use-state "")
         targets (pure/move-targets @(rf/subscribe [:all-rows]) (first k) text)
         current (get-in row [:project :root])]
     [:<>
-     [:button.cm-item.cm-back {:role "menuitem" :on-click #(set-moving false)} "‹ Move to project"]
      [move-input k targets act set-text]
      (for [{root :key label :label n :count} (take 12 targets)]
        ^{:key root}
        [move-item label n (= root current) (act #(rf/dispatch [:chat/folder k root]))])
      (when (:folder row)
        [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(rf/dispatch [:chat/folder k ""]))} "No project"])]))
+
+(defn- move-panel
+  "Move to project: back to the menu, then the projects."
+  [k row act set-moving]
+  [:<>
+   [:button.cm-item.cm-back {:role "menuitem" :on-click #(set-moving false)} "‹ Move to project"]
+   [:f> project-list k row act]])
 
 (defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming set-moving]}]
   [:<>
@@ -125,7 +131,7 @@
     [:div.chat-menu {:ref #(set! (.-current box) %) :style pos :role "menu" :on-context-menu #(.preventDefault %)}
      [:div.cm-title (:title row)]
      (if moving
-       [:f> move-panel k row act set-moving]
+       [move-panel k row act set-moving]
        [:<>
         (swatches k (:color row) act)
         (menu-items m row {:close close :act act :renaming renaming :set-renaming set-renaming :set-moving set-moving})])]))
