@@ -171,8 +171,8 @@
           (.finally (fn [] (.close q) (reset! probing false)))))))
 
 (defn with-default-effort
-  "The kept default efforts ([{:model :effort}]: the effort a model runs with when a chat picks
-  none) with model's set to level."
+  "The kept default efforts ([{:model :effort}]: the effort a chat runs with when it picks none,
+  by the model picked for it, \"\" for none) with model's set to level."
   [known model level]
   (conj (vec (remove #(= model (:model %)) known)) {:model model :effort level}))
 
