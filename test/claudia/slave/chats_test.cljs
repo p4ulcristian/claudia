@@ -173,3 +173,9 @@
     (is (session/restart? (assoc s :plan-changed true) "token-b" 2) "a picked plan does not wait")
     (is (not (session/restart? (assoc s :account nil) "token-b" 0)))
     (is (session/restart? (assoc s :account nil :plan-changed true) "token-b" 0))))
+
+(deftest limits-are-kept-under-the-token-the-session-runs-on
+  (let [paul "8716b2446a8e5549" peter "e64a2b0ee27b1109"]
+    (is (= peter (session/limits-key-of "token-e64a2b0e" [paul peter])))
+    (is (nil? (session/limits-key-of "token-00000000" [paul peter])) "a token no longer known")
+    (is (nil? (session/limits-key-of nil [paul peter])))))

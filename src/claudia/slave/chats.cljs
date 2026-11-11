@@ -490,6 +490,14 @@
 ;; claudia-progress (bin/) is on the PATH of every chat's commands.
 (def ^:private bin-dir (path/resolve (if (exists? js/__dirname) js/__dirname (js/process.cwd)) ".." "bin"))
 
+(defn- session-limits-key
+  "Where the limits heard from chat id's session are kept: the hash of the token that session was
+  started on (not the chat's pick, which may have changed since), or nil when it is not known."
+  [id]
+  (let [known (concat (keep #(tokens/saved-token (:key %)) (tokens/saved))
+                      (try [(token)] (catch :default _ nil)))]
+    (session/limits-key-of (:account (st id)) (map meta/token-key known))))
+
 (defn- run-env
   "The environment chats run with: the runner's own, the token (read on every start, so a new token
   takes effect with the next session) and Claudia's helpers on the PATH. Without a token: the one
@@ -784,7 +792,7 @@
       "result" (turn-end! id m)
       "command_lifecycle" (take-in! id (:command_uuid m) (:state m))
       "system" (on-system-msg! id m)
-      "rate_limit_event" (do (try (meta/note-limits! (token-of id) (:rate_limit_info m))
+      "rate_limit_event" (do (try (meta/note-limits! (session-limits-key id) (:rate_limit_info m))
                                   (catch :default _ nil))
                              (probe-soon! 4000))
       nil)))

@@ -25,6 +25,12 @@
   (boolean (and live (not running) (not= token-account account)
                 (or plan-changed (and (some? account) (zero? working))))))
 
+(defn limits-key-of
+  "Where the limits of the token a session runs on are kept: among hashes (the known tokens') the
+  one its account names (\"token-<the hash's first 8>\"), or nil when it is none of them."
+  [account hashes]
+  (when account (some #(when (= account (str "token-" (subs % 0 8))) %) hashes)))
+
 (defn hash36
   "A short name for a text (its SHA-256's start in base 36): a version of the tools or the prompt."
   [s]
