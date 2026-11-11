@@ -133,7 +133,7 @@
   (swap-chat! id update :turn view/with-msg msg)
   (emit! id {:type "msg" :msg msg}))
 
-(declare arm-idle! turn-id! restart-if-stale!)
+(declare arm-idle! turn-id! restart-if-stale! send-text!)
 
 (defn- idle-out!
   "The quiet while is over: the chat's Claude Code goes, unless work it started still runs."
@@ -490,6 +490,14 @@
 ;; claudia-progress (bin/) is on the PATH of every chat's commands.
 (def ^:private bin-dir (path/resolve (if (exists? js/__dirname) js/__dirname (js/process.cwd)) ".." "bin"))
 
+(defn- session-limits-key
+  "Where the limits heard from chat id's session are kept: the hash of the token that session was
+  started on (not the chat's pick, which may have changed since), or nil when it is not known."
+  [id]
+  (let [known (concat (keep #(tokens/saved-token (:key %)) (tokens/saved))
+                      (try [(token)] (catch :default _ nil)))]
+    (session/limits-key-of (:account (st id)) (map meta/token-key known))))
+
 (defn- run-env
   "The environment chats run with: the runner's own, the token (read on every start, so a new token
   takes effect with the next session) and Claudia's helpers on the PATH. Without a token: the one
@@ -535,13 +543,19 @@
   [id]
   (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
 
+(def ^:private plan-continue-text
+  "Continue where you stopped: this chat now runs on another Claude subscription.")
+
 (defn- plan-picked!
   "Another plan was picked for the chat: its session ends now, so its next message starts on the
-  new token; while its turn runs, right after that turn."
+  new token. While its turn runs, that turn is stopped at once, and the chat goes on by itself on
+  the new token (restart-if-stale!)."
   [id]
   (when (:live (st id))
     (if (:running (st id))
-      (swap-chat! id assoc :plan-changed true)
+      (do (swap-chat! id assoc :plan-changed true :plan-continue true)
+          (drop-asks! id true "The chat moved to another Claude subscription.")
+          (hostlink/send! {:op "interrupt" :id id}))
       (close-session! id))))
 
 (defn set-settings! [id m]
@@ -588,18 +602,20 @@
 
 (defn- close-session! [id]
   (hostlink/send! {:op "close" :id id})
-  (swap-chat! id assoc :live false :stale false :plan-changed false)
+  (swap-chat! id assoc :live false :stale false :plan-changed false :plan-continue false)
   (tasks/session-gone! id))
 
 (defn- restart-if-stale!
   "A session started with other tools (that couldn't be swapped) or other instructions starts again
   (resumed, same conversation) once its turn and the work it started are done; one whose chat got
-  another plan during its turn, once that turn is done."
+  another plan during its turn, once that turn is stopped: that chat then goes on by itself on the
+  new token."
   [id]
   (let [s (st id)]
     (when (and (:live s) (not (:running s))
                (or (:plan-changed s) (and (:stale s) (not (tasks/running-any? id)))))
-      (close-session! id))))
+      (close-session! id)
+      (when (:plan-continue s) (send-text! id plan-continue-text)))))
 
 (defn- swap-tools!
   "Hands a live session the tools as they stand now (src/chat.ts swapTools); one that refuses them
@@ -776,7 +792,7 @@
       "result" (turn-end! id m)
       "command_lifecycle" (take-in! id (:command_uuid m) (:state m))
       "system" (on-system-msg! id m)
-      "rate_limit_event" (do (try (meta/note-limits! (token-of id) (:rate_limit_info m))
+      "rate_limit_event" (do (try (meta/note-limits! (session-limits-key id) (:rate_limit_info m))
                                   (catch :default _ nil))
                              (probe-soon! 4000))
       nil)))

@@ -93,10 +93,9 @@
 
 (defn note-limits!
   "A rate_limit_event's info: every window it carries (unifiedWindows), else its one window."
-  [token info]
-  (let [k (token-key token)
-        fresh (event-limits info)]
-    (when (seq fresh)
+  [k info]
+  (let [fresh (event-limits info)]
+    (when (and k (seq fresh))
       (let [m (keep-limits! k (merge-limits (:limits (kept-of k)) fresh))]
         (when (= k (:account @state)) (publish! m))
         (when (nil? (:account @state)) (publish! (assoc m :account k)))))))
