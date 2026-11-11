@@ -1,21 +1,24 @@
 (ns claudia.web.world.robots
-  "The robots, one per chat, drawn instanced: each part (body, visor, eyes, antenna, jet, shadow,
-  the waiting mark) is one InstancedMesh for every robot, so a hundred robots cost as much as one.
-  Each robot keeps its own motion (claudia.web.world.motion) in a JS object; every frame writes the
-  parts' matrices once."
+  "The robots, one per chat, drawn instanced: each part of the Blender robot (body, visor, eyes,
+  antenna, tip, jet; claudia.web.world.models), the body's chalk outline, the shadow and the waiting
+  mark is one InstancedMesh for every robot, so a hundred robots cost as much as one. Each robot keeps
+  its own motion (claudia.web.world.motion) in a JS object; every frame writes the parts' matrices
+  once (the outline shares the body's)."
   (:require ["three/webgpu" :as THREE]
             ["three/tsl" :as tsl]
             ["three/examples/jsm/utils/BufferGeometryUtils.js" :as bgu]
+            [claudia.web.world.chalk :as chalk]
             [claudia.web.world.motion :as motion]
             [claudia.web.world.plan :as plan]))
 
 (def capacity 512)
 
 (def size
-  "How much bigger a robot is than its parts as written (a robot is then about 1.6 tall)."
-  1.5)
+  "How much bigger a robot is than in Blender (1.08 tall there, about 1.4 in the world)."
+  1.3)
 
-(defn- toon [opts] (THREE/MeshToonNodeMaterial. (clj->js opts)))
+(def tip-height "The antenna tip's height over the robot's centre, in the world." (* 0.66 size))
+
 (defn- basic [opts] (THREE/MeshBasicNodeMaterial. (clj->js opts)))
 
 (defn- shadow-material
@@ -31,23 +34,23 @@
   (bgu/mergeGeometries #js [(.translate (THREE/BoxGeometry. 0.1 0.32 0.1) 0 0.13 0)
                             (.translate (THREE/BoxGeometry. 0.1 0.1 0.1) 0 -0.16 0)]))
 
-(defn- local [x y z & [rx]]
-  (.compose (THREE/Matrix4.) (THREE/Vector3. x y z)
-            (.setFromEuler (THREE/Quaternion.) (THREE/Euler. (or rx 0) 0 0))
-            (THREE/Vector3. 1 1 1)))
+(defn- pivot
+  "A scale of (sx sy sz) about point [x y z] of the robot (eyes blink about their middle, the jet
+  flickers from its top)."
+  [[x y z]]
+  {:to (.makeTranslation (THREE/Matrix4.) x y z) :back (.makeTranslation (THREE/Matrix4.) (- x) (- y) (- z))})
 
 (defn- part-specs
-  "Each part: its geometry, material, where it sits on the robot, whether it takes a colour per robot."
-  []
-  [{:id :body :geo (THREE/CapsuleGeometry. 0.3 0.32 6 16) :mat (toon {}) :at (local 0 0 0) :tint true}
-   {:id :visor :geo (THREE/BoxGeometry. 0.44 0.25 0.12) :mat (toon {:color 0x161a24}) :at (local 0 0.13 0.23)}
-   {:id :eyes :geo (bgu/mergeGeometries #js [(.translate (THREE/BoxGeometry. 0.075 0.095 0.02) -0.095 0 0)
-                                             (.translate (THREE/BoxGeometry. 0.075 0.095 0.02) 0.095 0 0)])
-    :mat (basic {}) :at (local 0 0.135 0.295) :tint true}
-   {:id :stem :geo (THREE/CylinderGeometry. 0.016 0.016 0.24 5) :mat (toon {:color 0x8d939e}) :at (local 0 0.55 0)}
-   {:id :tip :geo (THREE/SphereGeometry. 0.065 12 8) :mat (basic {}) :at (local 0 0.69 0) :tint true}
-   {:id :jet :geo (THREE/ConeGeometry. 0.13 0.26 12 1 true) :mat (basic {:color 0x9fdcff :transparent true :opacity 0.8})
-    :at (local 0 -0.52 0 js/Math.PI)}])
+  "Each part: its Blender geometry, material, whether it takes a colour per robot, a pivot it scales
+  about."
+  [parts]
+  [{:id :body :geo (parts "body") :mat (chalk/piece-material) :tint true}
+   {:id :visor :geo (parts "visor") :mat (chalk/piece-material)}
+   {:id :eyes :geo (parts "eyes") :mat (basic {}) :tint true :pivot (pivot [0 0.07 0.3])}
+   {:id :antenna :geo (parts "antenna") :mat (chalk/piece-material)}
+   {:id :tip :geo (parts "tip") :mat (chalk/piece-material) :tint true}
+   {:id :jet :geo (parts "jet") :mat (chalk/glow-material {:transparent true :opacity 0.85 :side THREE/DoubleSide})
+    :pivot (pivot [0 -0.41 0])}])
 
 (defn- instanced
   "An InstancedMesh for every robot; tint? gives it a colour per robot (set before the first draw, so
@@ -59,11 +62,22 @@
     (when tint? (.setColorAt m 0 (THREE/Color. 0xffffff)))
     m))
 
+(defn- outline
+  "The bodies' chalk outline, moved by the bodies' own matrices (width: a uniform node, world units)."
+  [^js body ^js width]
+  (let [m (THREE/InstancedMesh. (.-geometry body) (chalk/outline-material (.div width size)) capacity)]
+    (set! (.-instanceMatrix m) (.-instanceMatrix body))
+    (set! (.-count m) 0)
+    (set! (.-frustumCulled m) false)
+    m))
+
 (defn make
-  "Every part's InstancedMesh added to scene; the robots' runtime (a JS object the frame loop moves)."
-  [^js scene]
-  (let [specs (part-specs)
+  "Every part's InstancedMesh added to scene (parts: the robot's geometries by name; width: the
+  outline's width node); the robots' runtime (a JS object the frame loop moves)."
+  [^js scene parts ^js width]
+  (let [specs (part-specs parts)
         meshes (into {} (map (fn [s] [(:id s) (instanced (:geo s) (:mat s) (:tint s))]) specs))
+        meshes (assoc meshes :outline (outline (:body meshes) width))
         shadow (instanced (doto (THREE/PlaneGeometry. 1.1 1.1) (.rotateX (- (/ js/Math.PI 2)))) (shadow-material) false)
         mark (instanced (mark-geometry) (basic {:color 0xffc23d}) false)]
     (doseq [^js m (concat (vals meshes) [shadow mark])] (.add scene m))
@@ -151,13 +165,21 @@
     (.compose ^js (.-m sc) (.set ^js (.-v sc) (.-x s) (.-y s) (.-z s))
               (.setFromEuler ^js (.-q sc) (.-e sc)) (.set ^js (.-s sc) size size size))))
 
+(defn- squash
+  "How a part scales this frame: the eyes blink (shut while off), the jet flickers."
+  [id r t phase]
+  (case id
+    :eyes (if (= :off (:state r)) 0.2 (motion/blink t phase))
+    :jet (+ 0.8 (* 0.35 (js/Math.sin (+ (* 31 t) phase))))
+    1))
+
 (defn- write-parts! [^js rt i ^js body r t phase]
-  (doseq [{:keys [id at]} (.-specs rt)
-          :let [^js p (.multiplyMatrices ^js (.-p scratch) body at)]]
-    (case id
-      :eyes (.multiply p (.makeScale ^js (.-k scratch) 1 (if (= :off (:state r)) 0.2 (motion/blink t phase)) 1))
-      :jet (.multiply p (.makeScale ^js (.-k scratch) 1 (+ 0.8 (* 0.35 (js/Math.sin (+ (* 31 t) phase)))) 1))
-      nil)
+  (doseq [{id :id about :pivot} (.-specs rt)
+          :let [^js p (.copy ^js (.-p scratch) body)]]
+    (when about
+      (.multiply p (:to about))
+      (.multiply p (.makeScale ^js (.-k scratch) 1 (squash id r t phase) 1))
+      (.multiply p (:back about)))
     (.setMatrixAt ^js (get (.-meshes rt) id) i p)))
 
 (defn- write-shadow-and-mark! [^js rt i ^js s r cam-yaw]

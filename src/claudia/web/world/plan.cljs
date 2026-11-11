@@ -154,6 +154,7 @@
   {:id (str (:server row) "/" (:id row)) :key [(:server row) (:id row)]
    :title (:title row) :color (:color row) :state (robot-state row)
    :preview (:preview row) :ask (:text (first (:asks row))) :at (:at row)
+   :project (get-in row [:project :name])
    :row (quot j per-row)
    :island (:id (:island place)) :building (:key place)
    :ground (second (:pos (:island place)))

@@ -59,8 +59,7 @@
 
 (defn make-clouds! [^js scene]
   (let [m (THREE/InstancedMesh. (THREE/IcosahedronGeometry. 1 1)
-                                (THREE/MeshLambertNodeMaterial. #js {:color 0xffffff :flatShading true
-                                                                     :transparent true :opacity 0.92})
+                                (THREE/MeshLambertNodeMaterial. #js {:color 0xffffff :flatShading true})
                                 (* puffs-per-cloud cloud-count))]
     (set! (.-frustumCulled m) false)
     (.add scene m)
@@ -144,32 +143,38 @@
     (set! (.-count m) n)
     (set! (.. m -instanceMatrix -needsUpdate) true)))
 
-;; ---- windows ----
+;; ---- smoke over overworked servers ----
 
-(def ^:private lit-window 0xffd37a)
-(def ^:private dark-window 0x2d3646)
+(def ^:private puffs-per-island 7)
+(def ^:private smoke-capacity (* 8 puffs-per-island))
 
-(defn make-windows! [^js scene]
-  (let [m (THREE/InstancedMesh. (THREE/BoxGeometry. 0.34 0.4 0.05) (THREE/MeshBasicNodeMaterial.) 256)]
+(defn make-smoke! [^js scene]
+  (let [m (THREE/InstancedMesh. (THREE/IcosahedronGeometry. 1 1)
+                                (THREE/MeshLambertNodeMaterial. #js {:color 0xd6d0c8 :flatShading true})
+                                smoke-capacity)]
     (set! (.-count m) 0)
-    (.setColorAt m 0 (THREE/Color.))
+    (set! (.-frustumCulled m) false)
     (.add scene m)
     m))
 
-(defn place-windows!
-  "Every building's windows; ids: the building id of each, in order (for light-windows!)."
-  [^js m window-list]
-  (let [n (min 256 (count window-list))]
-    (dotimes [k n] (.setMatrixAt m k (second (nth window-list k))))
-    (set! (.-count m) n)
-    (set! (.. m -instanceMatrix -needsUpdate) true)
-    (set! (.-boundingSphere m) nil)
-    (mapv first (take n window-list))))
+(defn smoke-puff
+  "Puff j over an island at [x y z] (seed: the island's id) at time t: [x y z scale]; each rises,
+  swells and fades out, then starts again."
+  [[x y z] seed j t]
+  (let [h (plan/hash01 (str seed "/smoke" j))
+        u (mod (+ (* 0.18 t) (/ j puffs-per-island) h) 1)
+        a (* 2 js/Math.PI h)]
+    [(+ x (* 2.5 (js/Math.cos a)) (* 1.2 u)) (+ y 1.5 (* 9 u)) (+ z (* 2.5 (js/Math.sin a)))
+     (* 1.3 (js/Math.sin (* js/Math.PI u)))]))
 
-(defn light-windows!
-  "Windows of buildings in working lit, the others dark."
-  [^js m ids working]
-  (let [lit (THREE/Color. lit-window) dark (THREE/Color. dark-window)]
-    (doseq [[k id] (map-indexed vector ids)]
-      (.setColorAt m k (if (contains? working id) lit dark)))
-    (some-> (.-instanceColor m) (set! -needsUpdate true))))
+(defn tick-smoke!
+  "Smoke over every island in hot (islands of the plan that are overworked)."
+  [^js m hot t]
+  (let [^js mx (.-m scratch)
+        puffs (for [isl (take 8 hot) j (range puffs-per-island)] (smoke-puff (:pos isl) (:id isl) j t))]
+    (doseq [[k [x y z s]] (map-indexed vector puffs)]
+      (.makeScale mx s s s)
+      (.setPosition mx x y z)
+      (.setMatrixAt m k mx))
+    (set! (.-count m) (count puffs))
+    (set! (.. m -instanceMatrix -needsUpdate) true)))

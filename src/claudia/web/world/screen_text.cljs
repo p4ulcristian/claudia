@@ -58,7 +58,7 @@
 (defn content-key
   "What the screen shows, to redraw only when it changes (idle times move on the minute)."
   [r now]
-  [(:title r) (:color r) (:state r) (body r) (first (status r now))])
+  [(:title r) (:project r) (:color r) (:state r) (body r) (first (status r now))])
 
 (defn slots
   "Atlas slots for robot ids (in order): kept ones stay where they are, new ones take the lowest free
