@@ -24,10 +24,15 @@
                             :prepend "var shadow_esm_import = function (url) { return import(url); };\n"}
                      :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}
                      :shiki {:entries [claudia.web.shiki.lib] :depends-on #{:main}}
-                     :chart {:entries [claudia.web.chart] :depends-on #{:main}}}
+                     :chart {:entries [claudia.web.chart] :depends-on #{:main}}
+                     ;; The 3D world (claudia.web.world): on the 3D module, which already holds three.js.
+                     :world {:entries [claudia.web.world.view] :depends-on #{:scene3d}}}
            ;; libsodium's and QuickJS's Node paths (fs, crypto) are never taken in a browser.
            ;; three's CommonJS build (the one picked by default) is deprecated and calls
            ;; process.emitWarning, which a browser lacks: three and three-mesh-bvh come as modules.
            :js-options {:resolve {"node:fs" false "crypto" false "fs" false "path" false
                                   "three" {:target :npm :require "three/src/Three.js"}
+                                  ;; WebGPU and TSL from the same sources, so the core is shared, not a second copy.
+                                  "three/webgpu" {:target :npm :require "three/src/Three.WebGPU.js"}
+                                  "three/tsl" {:target :npm :require "three/src/Three.TSL.js"}
                                   "three-mesh-bvh" {:target :file :file "node_modules/three-mesh-bvh/build/index.module.js"}}}}}}

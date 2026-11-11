@@ -18,7 +18,8 @@
             [claudia.web.views.settings :as settings]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.pure.shell :as pure]
-            [claudia.web.views.sidebar :as sidebar]))
+            [claudia.web.views.sidebar :as sidebar]
+            [claudia.web.world :as world]))
 
 (defn- chat-colour!
   "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\")."
@@ -125,7 +126,8 @@
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
    (split-view m)
    [gallery]
-   [admin/dialog]])
+   [admin/dialog]
+   [:f> world/overlay]])
 
 (defn app []
   (let [screen @(rf/subscribe [:screen])
