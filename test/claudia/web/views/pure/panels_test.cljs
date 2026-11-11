@@ -236,3 +236,16 @@
             {:name "New" :in-use false :five nil :week nil :heard-at nil}]
            (usage/token-rows tokens "Ana" {:limits [(week 74)] :at 20})))
     (is (= (week 40) (:week (first (usage/token-rows tokens "Ana" {:limits [(week 74)] :at 5})))))))
+
+(deftest a-plans-limits-as-lines-for-the-picker
+  (let [hour 3600000]
+    (is (= "52 h" (usage/hours-left (* 52 hour))))
+    (is (= "45 min" (usage/hours-left (* 45 60000))))
+    (is (= "now" (usage/hours-left 0)))
+    (is (= "Week 56% · resets in 52 h" (usage/limit-text "Week" {:percent 56 :resetsAt (+ 1000 (* 52 hour))} 1000)))
+    (is (= "Week 0%" (usage/limit-text "Week" {:percent 56 :resetsAt 500} 1000)) "reset since it was heard")
+    (is (= "Week 12%" (usage/limit-text "Week" {:percent 12} 1000)))
+    (is (= "5-hour not heard yet" (usage/limit-text "5-hour" nil 1000)))
+    (is (= [{:key "paul" :name "Paul" :week {:percent 5} :five nil} {:key "new" :name "New"}]
+           (usage/plan-rows [{:key "paul" :name "Paul"} {:key "new" :name "New"}]
+                            [{:name "Paul" :in-use true :week {:percent 5} :five nil :heard-at 1}])))))
