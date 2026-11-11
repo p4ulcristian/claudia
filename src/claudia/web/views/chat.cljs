@@ -1,6 +1,6 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (colour dot,
-  the chat's Claude subscription, the title that renames itself, server and folder, the changes pill), the messages (Markdown, tool
+  the chat's Claude subscription, the title that renames itself, server and folder), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -12,7 +12,6 @@
             [claudia.web.md :as md]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
-            [claudia.web.views.changes :as changes]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.usage :as usage-pure]
@@ -138,8 +137,8 @@
 
 (defn- plan-pill
   "The chat's Claude subscription (README decision 16) and its meters in one pill: whose plan the
-  chat runs on, the chat's context (a click compacts), that plan's 5-hour and week use. A click on
-  the name or the plan's rings opens the saved plans; a pick applies at once."
+  chat runs on, the chat's context (right click: compact), that plan's 5-hour and week use. A click
+  anywhere on the pill opens the saved plans; a pick applies at once."
   [{:keys [ck server state] :as oc} ro]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
@@ -147,19 +146,20 @@
         {:keys [plans planKey]} @(rf/subscribe [:meta server])
         on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
         {:keys [five week]} (plan-limits on plans)
-        toggle #(when (and (seq plans) (not ro)) (set-open not))
+        can? (and (seq plans) (not ro))
+        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) ".plan-list"))) (set-open not)))
         pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
     (use-closes-away! box open #(set-open false))
     (use-tokens!)
     (when (or on five week (:context state))
-      [:div.plan-pick.plan-pill {:ref #(set! (.-current box) %)}
-       (when on [:button.plan-owner {:on-click toggle :aria-haspopup "true" :aria-expanded open
-                                     :title "Claude subscription of this chat"}
-                 (:name on)])
-       [usage/context-ring (cond-> oc ro (assoc :pending? true))]
-       [:button.plan-rings {:on-click toggle :aria-label "Usage of this chat's Claude subscription"}
-        (limit-ring "five_hour" "5-hour" five now)
-        (limit-ring "seven_day" "Week" week now)]
+      [:div.plan-pick.plan-pill
+       {:ref #(set! (.-current box) %) :class (when can? "can") :role (when can? "button") :tab-index (when can? 0)
+        :aria-haspopup "true" :aria-expanded open :title "Claude subscription of this chat"
+        :on-click toggle :on-key-down #(when (= "Enter" (.-key %)) (toggle %))}
+       (when on [:span.plan-owner (:name on)])
+       [usage/context-ring (assoc oc :pending? true)]
+       (limit-ring "five_hour" "5-hour" five now)
+       (limit-ring "seven_day" "Week" week now)
        (when open [:f> plan-list plans on pick])])))
 
 (def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
@@ -194,14 +194,13 @@
    (when renamable? [:span.pencil {:aria-hidden true} "✎"])])
 
 (defn- head-chips
-  "After the title: the server, the working folder, the changes pill, whether the server is there."
-  [{:keys [ck server chat pending? row state status]} label folder]
+  "After the title: the server, the working folder, whether the server is there."
+  [{:keys [server row state status]} label folder]
   [:<>
    (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
      [:span.folder-chip.server-chip {:title (str "On " label)} label])
    (when (seq folder)
      [:span.folder-chip {:title (str "Working folder: " folder)} (words/clip (format/tilde folder) 28)])
-   (when (and chat (not pending?)) [changes/pill ck state folder])
    (cond (= :closed status) [:span.offline (str label " is off")]
          (not= :open status) [:span.offline "reconnecting…"])])
 
