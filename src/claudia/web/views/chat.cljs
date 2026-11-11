@@ -1,6 +1,6 @@
 (ns claudia.web.views.chat
-  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (colour dot,
-  the chat's Claude subscription, the title that renames itself, server and folder), the messages (Markdown, tool
+  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (the title
+  that renames itself, server and folder, the chat's Claude subscription, the colour dot), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -218,10 +218,10 @@
                       (when-let [t (and chat (pure/new-title typed title))] (rf/dispatch [:chat/rename ck t])))]
         [:header.chat-head {:class (when color "colored")}
          [back-to-list]
-         (when-not ro [:f> colour-picker ck color])
-         (when chat [:f> plan-pill oc ro])
          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
-         (head-chips oc label folder)]))))
+         (head-chips oc label folder)
+         (when chat [:f> plan-pill oc ro])
+         (when-not ro [:f> colour-picker ck color])]))))
 
 ;; ---- messages ----
 

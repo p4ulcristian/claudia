@@ -111,7 +111,7 @@ code, pre { font-family: var(--mono); }
 .color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
 .color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
 .color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
-.palette { position: absolute; top: 24px; left: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.palette { position: absolute; top: 24px; right: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
@@ -125,7 +125,7 @@ code, pre { font-family: var(--mono); }
 .plan-pill.can { cursor: pointer; }
 .plan-pill.can:hover, .plan-pill[aria-expanded="true"] { border-color: var(--muted); }
 .plan-owner { color: var(--fg); font: 700 15px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }
-.plan-list { position: absolute; top: 38px; left: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.plan-list { position: absolute; top: 38px; right: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .plan-item { display: grid; gap: 1px; padding: 6px; border-radius: 7px; text-align: left; white-space: nowrap; }
 .plan-item + .plan-item { border-top: 1px dashed var(--line); border-radius: 0 0 7px 7px; }
