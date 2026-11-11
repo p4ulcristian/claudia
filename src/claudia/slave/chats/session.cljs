@@ -66,5 +66,6 @@
            ;; After an edit: a chat with no folder gets the edited file's project. Edits and commands
            ;; inside Eye on Rainbow's worktrees are reported (where configured).
            :PostToolUse [{:matcher (if worktrees? (str edit-tools "|Bash") edit-tools)}]
-           ;; The end of every turn: its input says the effort the turn ran with.
+           ;; The end of every turn: its input says the effort the turn ran with, and its final reply
+           ;; (one over the chat's limit is handed back).
            :Stop [{}]}})

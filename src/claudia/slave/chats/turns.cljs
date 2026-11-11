@@ -4,7 +4,8 @@
   (:require [clojure.string :as str]
             [claudia.shared.text :as text]
             [claudia.slave.chats.titles :as titles]
-            [claudia.slave.history :as history]))
+            [claudia.slave.history :as history]
+            [claudia.slave.tools :as tools]))
 
 (defn turn-outcome
   "How a result message m ended the turn: {:error (nil when it succeeded) :row (the chat's columns:
@@ -20,6 +21,21 @@
      :row (cond-> {:ended now :last_turn (or (:uuid m) fallback-id)
                    :stopped stopped :failed (boolean (and (not stopped) error)) :reply reply}
             ok (assoc :preview reply))}))
+
+(defn stop-verdict
+  "What the Stop hook answers for a turn whose final reply is reply (nil: none): a reply over the
+  limit is handed back to Claude (sent: how often this turn's already was), up to
+  tools/reply-sends times; else the turn ends."
+  [reply sent]
+  (let [n (count (str/trim (str reply)))]
+    (if (and (> n tools/reply-limit) (< sent tools/reply-sends))
+      {:decision "block" :reason (tools/too-long-reason n)}
+      {:continue true})))
+
+(defn last-replies
+  "The texts Claude ended the turn's Msgs with (after its last step), newest first."
+  [turn]
+  (vec (take-while #(= "assistant" (:role %)) (rseq (vec turn)))))
 
 (defn user-text
   "A user message's content as its text (its text blocks joined)."

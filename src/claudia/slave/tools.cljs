@@ -10,7 +10,7 @@
 # Claudia
 
 You are running inside Claudia. The screen has two halves:
-- Left: the chat. Talk there like a friend: short, plain, one to three sentences. No headings, tables, long lists or walls of text in the chat. Don't describe or point at the picture (\"the cards on the right cover…\"): the user sees it.
+- Left: the chat. Talk there like a friend: short, plain, one to three sentences, never over 400 characters. A final reply over 400 characters is hidden and handed back to you to shorten, so put what needs more room into the picture before you answer. No headings, tables, long lists or walls of text in the chat. Don't describe or point at the picture (\"the cards on the right cover…\"): the user sees it.
 - Right: the picture, which you control with the draw tool (mcp__picture__draw). The explaining lives there: what you are doing, how things connect, the plan, the options, what you found. Show most of it; say only a little.
 
 The picture is a canvas of blocks, top to bottom (two \"half\" blocks sit side by side). There are three kinds, and each block wears a badge with its kind and its name:
@@ -31,7 +31,7 @@ How to draw well:
 - Groups put related things in one frame (a server, a file, a phase).
 - Keep a graph to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note. Use more graph blocks for separate views (the flow, the data), not one crowded graph.
 
-Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the files form (the file opened, lines highlighted, notes pinned), never in freeform HTML. There are no text cards: anything to read goes in a graph's notes or an HTML block, kept short. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
+Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the files form (the file opened, lines highlighted, notes pinned), never in freeform HTML. Plain prose to read goes in the notes form, not in freeform HTML. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
 To change a freeform block, don't resend it: mark what will change with data-part=\"name\" (a number, a row, a status line) and send only parts: { name: \"<new markup>\" }. Send html again only when the layout itself changes.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
@@ -52,6 +52,22 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
 ## Images in the chat
 To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load."))
 
+(def reply-limit
+  "The most characters a turn's final reply may have in the chat (the system prompt names it too)."
+  400)
+
+(def reply-sends
+  "How many times one turn's over-long reply is handed back to Claude; after that it stays."
+  2)
+
+(defn too-long-reason
+  "What Claude is told when its reply of n characters is handed back."
+  [n]
+  (str "Claudia's chat holds at most " reply-limit " characters per reply; this reply has " n
+       " and is hidden from the chat. Put what needs more room into the picture with the draw tool"
+       " (a graph or a form; the notes form for prose), then answer again in at most " reply-limit
+       " characters. Do not mention this message."))
+
 (def form-help
   "form -> [when fields], word for word as the TypeScript Claudia's src/forms.ts, in its order."
   (array-map
@@ -70,6 +86,9 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
    "stats"
    ["A few numbers that matter right now, big: usage, counts, durations, a progress."
     "tiles: [{ id, label, value, note?, progress?: 0..1, color? }]"]
+   "notes"
+   ["Prose the user has to read and that no graph or other form can show: an explanation, a summary, reasoning, a draft, the long version of a short chat reply. Markdown (headings, lists, bold, links, tables). As short as the content allows; a graph or another form comes first when one fits."
+    "title?, text (Markdown; sent whole each time)"]
    "files"
    ["A project's files as a tree the user can browse and open: where things live, what a change touched, which files matter, and any code to show: open the file (file) with the lines that matter highlighted (lines) and short notes pinned to lines (notes) instead of explaining in the chat; code that isn't on disk (a proposal, a snippet) goes in sketch. Read live from disk (git status shown), so it stays current; you send only the folder and what to point out. For files that don't exist yet (a planned layout, a sketch of a library), send sketch: alone it is a made-up tree; with root it adds planned files to the real one. Each is labelled for the user (on disk / sketch / planned), so never present made-up files as real."
     "root? (a folder: absolute, ~/…, or relative to the working folder; default the working folder), file? (the selected file, relative to root: shown open, whole, with only the folders down to it unfolded; without it the first marked file is selected), lines?: [line numbers or \"a-b\" ranges to highlight in that file; it scrolls to the first], notes?: [{ id, line, text, color? }] pinned under lines of that file, marks?: [{ id, path (relative to root), note?, color? }] files or folders to point out. Planned files: sketch: [{ path (relative to root when root is given), code?, status? }] (folders come from the paths), title? (what a root-less sketch is); marks work the same"]

@@ -323,6 +323,10 @@ A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/
 `queued: true` while Claude Code hasn't taken it in (sent during a turn; the `msg` without it, or
 the turn's end, says it was); a `show_image` step has `image: true` and a `show_video` step `video: true`
 (both from `GET /api/chats/:chat/shown/<id>`).
+An assistant message has `aside: true` when it was the turn's final reply and went over the chat's
+limit (`claudia.slave.tools/reply-limit` characters): the Stop hook handed it back to Claude to
+shorten, and the page folds it into the steps. Once a turn has ended the page folds every text of
+it but the last into the steps (`claudia.web.views.pure.steps/folded-ids`).
 A tool step also has the TypeScript Claudia's `label` (`Draw`, `Folder`, `Ask`, `Bash`, `workspace
 show_image`), `title` (one line: `picture: <title>`, a file's name, a command's description),
 `detail` (its input as JSON, ≤ 4000) and `result?` (`{ error, text ≤ 4000 }`).
@@ -343,7 +347,7 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
 (`"graph"`, `"html"`, `"form"`), `width` (`"full"`/`"half"`) and:
 - graph: `nodes: [{ id, label, shape, color, note, group, state }]`, `edges: [{ from, to, label, dashed, color }]`, `groups: [{ id, label, color }]`
 - html: `html`, `parts: { name: markup }`
-- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`, `scene3d`, and the code forms `files`, `editor`, `flow`, opt-in `git`, `clojure`, `calls`), `data` (as the draw tool's description says; `claudia.shared.forms`).
+- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`, `notes`, `scene3d`, and the code forms `files`, `editor`, `flow`, opt-in `git`, `clojure`, `calls`), `data` (as the draw tool's description says; `claudia.shared.forms`).
   A picture holds one `scene3d` block: a new one takes the old one's place (or goes where its `before`
   says) and every other `scene3d` block leaves; redrawing the same id keeps its place and merges its data.
 

@@ -1,6 +1,6 @@
 (ns claudia.web.views.steps
   "Claude's tool steps, as the TypeScript Claudia's chat showed them (web/chat.tsx): runs of steps
-  folded into groups, a step that showed a picture on its own; each step can be explained in plain
+  folded into groups (with the texts Claude wrote between them, once the turn has ended), a step that showed a picture on its own; each step can be explained in plain
   words (Haiku, on the side)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -48,11 +48,16 @@
          (when (and @open (or detail result))
            (step-detail t result))]))))
 
+(defn- said
+  "A text of Claude's folded into the group: a status line, or a reply handed back to be shortened."
+  [{:keys [text]}]
+  [:li.step-said [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]])
+
 (defn- steps-head [open tools current]
   (let [errors (count (filter :error tools))]
     [:button.steps-head {:on-click #(swap! open not)}
      [:span.chev {:class (when @open "open")} "›"]
-     [:span (str (count tools) (if (= 1 (count tools)) " step" " steps"))]
+     [:span (pure/group-count tools)]
      [:span.muted (if current
                     (str (tool-label (:tool current)) " " (pure/step-summary current))
                     (pure/group-names tools))]
@@ -64,7 +69,7 @@
   [_ck _tools _live?]
   (let [open (r/atom false)]
     (fn [ck tools live?]
-      (let [current (when live? (peek tools))]
+      (let [current (when (and live? (not= "assistant" (:role (peek tools)))) (peek tools))]
         [:div.steps {:class (when live? "busy")}
          [:div.steps-head-line
           (steps-head open tools current)
@@ -74,7 +79,10 @@
              (when @(rf/subscribe [:explain (conj ck (:id current))])
                [:div.explain-under [explain-note ck (:id current)]])])]
          (when @open
-           [:ul (for [t tools] ^{:key (:id t)} [step ck t (and live? (= t current))])])]))))
+           [:ul (for [t tools]
+                  (if (= "assistant" (:role t))
+                    ^{:key (:id t)} [said t]
+                    ^{:key (:id t)} [step ck t (and live? (= t current))]))])]))))
 
 (defn transcript
   "A subagent's messages, in the same compact form as the main chat."

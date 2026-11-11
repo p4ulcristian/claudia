@@ -1,10 +1,12 @@
 (ns claudia.web.views.forms
-  "The predefined forms, drawn in the board's chalk: pipeline, timeline, compare, chart, stats.
+  "The predefined forms, drawn in the board's chalk: pipeline, timeline, compare, chart, stats, notes.
   Data shapes as the draw tool describes them (PROTOCOL.md)."
   (:require [clojure.string :as str]
             [reagent.hooks :as h]
             [shadow.lazy :as lazy]
+            [reagent.core :as r]
             [claudia.web.hooks :as hooks]
+            [claudia.web.md :as md]
             [claudia.shared.forms :as forms]
             [claudia.web.scene3d :as scene3d]))
 
@@ -88,6 +90,13 @@
         [:span.f-bar [:i {:style {:width (str (* 100 (max 0 (min 1 (:progress t)))) "%")}}]])
       (when (:note t) [:span.f-note (:note t)])])])
 
+(defn- notes
+  "Prose as Markdown, on one chalk card."
+  [data]
+  [:div.f-notes.chalk-box
+   (when (seq (:title data)) [:h3.f-notes-title (:title data)])
+   [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html (str (:text data))))}]])
+
 ;; Charts are Vega-Lite (the :chart module, loaded the first time one is drawn), themed to the board.
 (def ^:private lazy-embed (lazy/loadable claudia.web.chart/embed))
 
@@ -149,5 +158,6 @@
      "compare" [compare-form data]
      "chart" [:f> chart data]
      "stats" [stats data]
+     "notes" [notes data]
      "scene3d" [scene3d/scene3d-form data block-id]
      [:p.f-note (str "Unknown form \"" form "\".")])])

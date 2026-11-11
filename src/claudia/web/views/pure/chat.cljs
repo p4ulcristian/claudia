@@ -49,10 +49,11 @@
   running turn started from."
   [{:keys [messages running]}]
   (let [msgs (vec messages)
-        queued (filterv :queued msgs)]
+        queued (filterv :queued msgs)
+        shown (if (seq queued) (filterv (complement :queued) msgs) msgs)]
     {:msgs msgs
      :queued queued
-     :blocks (steps/blocks (if (seq queued) (filterv (complement :queued) msgs) msgs))
+     :blocks (steps/blocks shown (steps/folded-ids shown running))
      :last-user (when running (:id (last (filter #(and (= "user" (:role %)) (not (:queued %))) msgs))))}))
 
 (defn user-marks

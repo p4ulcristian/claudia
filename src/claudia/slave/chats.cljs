@@ -457,9 +457,20 @@
         (meta/note-default-effort! (or (:model (settings id)) "") level))
       (emit! id {:type "settings" :settings (settings id) :model (:model (st id)) :effort level}))))
 
+(defn- on-stop!
+  "The turn wants to end: a final reply over the chat's limit is handed back to Claude."
+  [id input]
+  (let [verdict (turns/stop-verdict (:last_assistant_message input) (or (:reply-sends (st id)) 0))]
+    (when (:decision verdict)
+      (swap-chat! id update :reply-sends (fnil inc 0))
+      ;; The page folds a text marked aside into the steps at once.
+      (doseq [msg (turns/last-replies (:turn (st id)))] (note-msg! id (assoc msg :aside true))))
+    verdict))
+
 (defn- on-hook [id {:keys [event input]}]
   (note-effort! id input)
   (case event
+    "Stop" (on-stop! id input)
     "PreToolUse" (changes/before-edit! id (:tool_input input))
     "PostToolUse" (do (worktree/report! (store/chat id) input)
                       (folder-from-edit! id input)
@@ -705,7 +716,7 @@
     ;; and the reply's start.
     (store/update! id row)
     (drop-asks! id true "The turn ended.")
-    (swap-chat! id assoc :partial nil :stream-counts {} :final-counts {})
+    (swap-chat! id assoc :partial nil :stream-counts {} :final-counts {} :reply-sends 0)
     (when (and error (not stopped)) (emit! id {:type "error" :text error}))
     ;; A turn that ended took in everything sent during it (a send not taken in starts the next).
     (doseq [[sent-id msg] (:unsaved (st id)) :when (:queued msg)] (take-in! id sent-id "started"))
@@ -812,7 +823,7 @@
       nil)))
 
 (defn- ended! [id error]
-  (swap-chat! id assoc :live false :partial nil)
+  (swap-chat! id assoc :live false :partial nil :reply-sends 0)
   (tasks/session-gone! id)
   (drop-asks! id false nil)
   (when error (emit! id {:type "error" :text error}))
