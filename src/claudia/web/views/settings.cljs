@@ -185,7 +185,8 @@
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
 
 (defn switch-token!
-  "Every server onto the saved token called n (the hub writes it into each one's token file)."
+  "The saved token called n becomes the default on every server (the hub writes it into each one's
+  token file): what a new chat starts on and a chat without a pick runs on."
   [n]
   (rf/dispatch [:ops/put-now {:url "/hub/claude-token/use" :method "POST" :body {:name n}
                               :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}]))
@@ -220,9 +221,9 @@
 (defn- in-use-note [tokens in-use]
   [:p.small
    (if in-use
-     [:<> "In use: " [:b in-use] ", switched by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."]
+     [:<> "Default: " [:b in-use] ", set by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."]
      "None saved yet.")
-   " A switch applies to every chat on its next message."])
+   " A new chat starts on the default and stays on it; each chat's own is picked in its header."])
 
 (defn- save-token-form []
   [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
@@ -238,7 +239,7 @@
      (when (seq (:tokens tokens))
        [:div.choice
         (for [t (:tokens tokens)] ^{:key (:name t)} [token-row t in-use])])
-     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving switches every server to it."]
+     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving makes it the default."]
      [save-token-form]]))
 
 (defn- claude-subscription

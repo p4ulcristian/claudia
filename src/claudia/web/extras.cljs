@@ -26,7 +26,7 @@
                             commands (assoc :commands commands))))})
 
 (defmethod events/on-frame "meta" [db server f]
-  {:db (assoc-in db [:meta server] (select-keys f [:limits :limitsAt :models :commands :defaultModel]))})
+  {:db (assoc-in db [:meta server] (select-keys f [:limits :limitsAt :models :commands :defaultModel :plans :planKey]))})
 
 (defmethod events/on-frame "agent" [db server {:keys [chat agent] :as f}]
   {:db (assoc-in db [:agent-detail [server chat agent]] (dissoc f :type :chat :agent))})

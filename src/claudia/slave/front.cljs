@@ -100,6 +100,15 @@
     "PUT" (.then (io/read-json req 65536) #(token-answer res (tokens/write-current! %)))
     (io/send-json res 405 {:error "GET or PUT"})))
 
+(defn- token-saved
+  "The hub's own calls about every saved Claude token (README decision 16): GET which are kept here
+  (no tokens), PUT the hub's whole set. No caller: only the hub reaches this listener."
+  [^js req ^js res]
+  (case (.-method req)
+    "GET" (io/send-json res 200 {:tokens (tokens/saved)})
+    "PUT" (.then (io/read-json req 262144) #(token-answer res (tokens/write-saved! %)))
+    (io/send-json res 405 {:error "GET or PUT"})))
+
 (defn newest-heard
   "The runners' kept limits ({token key {:limits :at}} each) as one map, the newest per token."
   [answers]
@@ -151,6 +160,7 @@
       (= url "/api/update-check")
       (if (= "POST" (.-method req)) (update-check req res) (io/send-json res 405 {:error "POST only"}))
       (= url "/api/claude-token/current") (token-current req res)
+      (= url "/api/claude-token/saved") (token-saved req res)
       (= url "/api/claude-token/limits") (token-limits req res)
       (= url "/api/system") (system-sample req res)
       status (io/send-json res status {:error error})

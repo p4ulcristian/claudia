@@ -8,7 +8,8 @@
             ["node:fs" :as fs]
             [claudia.node.env :as env]
             [claudia.shared.text :as text]
-            [claudia.slave.store :as store]))
+            [claudia.slave.store :as store]
+            [claudia.slave.tokens :as tokens]))
 
 (def ^:private labels
   {"five_hour" "5-hour" "seven_day" "Week" "seven_day_opus" "Week, Opus" "seven_day_sonnet" "Week, Sonnet"})
@@ -170,6 +171,11 @@
           (.catch (fn [e] (js/console.error "meta probe:" (text/error-text e))))
           (.finally (fn [] (.close q) (reset! probing false)))))))
 
+(defn plans-changed!
+  "The saved tokens or the one in use changed: the pages get the meta frame again."
+  []
+  (@on-change @state))
+
 (defn- account-label
   "Whose token is in use (the saved token's name from Settings, src/account.ts label), or nil."
   []
@@ -184,4 +190,6 @@
   (assoc (select-keys @state [:limits :limitsAt :models :commands :defaultModel])
          :type "meta"
          :account (some->> (:account @state) (str "token-"))
-         :accountLabel (account-label)))
+         :accountLabel (account-label)
+         :plans (mapv #(select-keys % [:key :name]) (tokens/saved))
+         :planKey (:key (tokens/current))))

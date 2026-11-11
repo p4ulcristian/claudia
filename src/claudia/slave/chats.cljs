@@ -22,6 +22,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.meta :as meta]
+            [claudia.slave.tokens :as tokens]
             [claudia.slave.pictures :as pictures]
             [claudia.slave.projects :as projects]
             [claudia.slave.render :as render]
@@ -478,16 +479,23 @@
         t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
     (if (seq t) t (throw (js/Error. "No Claude token yet: add one in Settings (bottom left).")))))
 
+(declare settings)
+
+(defn token-of
+  "The token chat id runs on: the saved one picked for it (README decision 16), else the one in use
+  here (no pick, or its pick is no longer saved)."
+  [id]
+  (or (tokens/saved-token (:plan (settings id))) (token)))
+
 ;; claudia-progress (bin/) is on the PATH of every chat's commands.
 (def ^:private bin-dir (path/resolve (if (exists? js/__dirname) js/__dirname (js/process.cwd)) ".." "bin"))
 
 (defn- run-env
   "The environment chats run with: the runner's own, the token (read on every start, so a new token
-  takes effect with the next session) and Claudia's helpers on the PATH."
-  ([] (run-env (token)))
-  ([t]
-   (meta/use-token! t)
-   (session/run-env (.-env js/process) t bin-dir)))
+  takes effect with the next session) and Claudia's helpers on the PATH. Without a token: the one
+  in use here, whose limits the meters then show."
+  ([] (let [t (token)] (meta/use-token! t) (run-env t)))
+  ([t] (session/run-env (.-env js/process) t bin-dir)))
 
 (defonce ^:private probe-timer (atom nil))
 
@@ -522,12 +530,13 @@
     (swap! agent-timers assoc id (js/setTimeout #(agents-changed! id) 250))))
 
 (defn settings
-  "The chat's model and effort (nil = the user's default), applied on its next start."
+  "The chat's model and effort (nil = the user's default) and its plan (a saved token's key; nil =
+  the token in use here), applied on its next start."
   [id]
-  (merge {:model nil :effort nil} (select-keys (store/kv id "settings") [:model :effort])))
+  (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
 
 (defn set-settings! [id m]
-  (let [s (merge (settings id) (select-keys m [:model :effort]))
+  (let [s (session/settings-with (settings id) m (map :key (tokens/saved)))
         quiet #(.catch % (fn [_]))]
     (store/kv! id "settings" s)
     ;; A live session takes them now too.
@@ -604,13 +613,16 @@
     (swap-tools! id)))
 
 (defn- watch-token!
-  "Someone switched the token in Settings: the new plan's limits show now (runner.ts watch)."
+  "Someone switched the token in Settings: the new plan's limits show now (runner.ts watch). The
+  saved tokens changed: the pages get the new list."
   []
   (when-let [f (env/env "CLAUDIA_TOKEN_FILE")]
     (try (fs/watch (path/dirname f)
                    (fn [_ file]
                      (when (= file (path/basename f))
-                       (try (meta/use-token! (token)) (catch :default _ nil)))))
+                       (try (meta/use-token! (token)) (catch :default _ nil)))
+                     (when (#{(str (path/basename f) ".json") (str (path/basename f) ".saved.json")} file)
+                       (meta/plans-changed!))))
          (catch :default e (js/console.error "token watch:" (text/error-text e))))))
 
 (defn init!
@@ -750,7 +762,7 @@
       "result" (turn-end! id m)
       "command_lifecycle" (take-in! id (:command_uuid m) (:state m))
       "system" (on-system-msg! id m)
-      "rate_limit_event" (do (try (meta/note-limits! (token) (:rate_limit_info m))
+      "rate_limit_event" (do (try (meta/note-limits! (token-of id) (:rate_limit_info m))
                                   (catch :default _ nil))
                              (probe-soon! 4000))
       nil)))
@@ -820,11 +832,11 @@
   (swap-chat! id assoc :live true :account account :stale false :final-counts {}))
 
 (defn- ensure-session!
-  "The chat's Claude Code, started (or resumed) on the token in use. The token was replaced since its
-  session started: it starts again on the new one (not while work it started still runs, which that
-  would end)."
+  "The chat's Claude Code, started (or resumed) on the chat's token. The token was replaced or
+  another one picked since its session started: it starts again on the new one (not while work it
+  started still runs, which that would end)."
   [id]
-  (let [t (token)
+  (let [t (token-of id)
         account (session/account-of t)]
     (when (and (:live (st id)) (not (:running (st id))) (zero? (tasks/working id))
                (some? (:account (st id))) (not= account (:account (st id))))
@@ -866,6 +878,8 @@
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (least-used-colour)})
+    ;; A new chat stays on the plan in use now: a later switch of that one moves no chat.
+    (when-let [k (:key (tokens/current))] (store/kv! id "settings" (assoc (settings id) :plan k)))
     (changed!)
     (send-text! id message images)
     id))

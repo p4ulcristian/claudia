@@ -129,7 +129,7 @@
 (defmethod on-chat-frame "folder" [_ f chat] (chats/move-folder! chat (:folder f)))
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
-(defmethod on-chat-frame "settings" [_ f chat] (chats/set-settings! chat (select-keys f [:model :effort])))
+(defmethod on-chat-frame "settings" [_ f chat] (chats/set-settings! chat (select-keys f [:model :effort :plan])))
 
 (defmethod on-chat-frame "agent" [c f chat]
   (.then (chats/agent-detail chat (str (:agent f)))

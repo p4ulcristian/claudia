@@ -36,7 +36,8 @@
   (is (nil? (tokens/pick-problem true "ananda" ["paul" "ananda"] "paul" true))))
 
 (deftest a-server-is-written-only-when-it-differs
-  (is (tokens/same-token? {:name "Paul" :at 5} {:name "Paul" :at 5 :key "paul"}))
+  (is (tokens/same-token? {:key "paul" :name "Paul" :at 5} {:name "Paul" :at 5 :key "paul"}))
+  (is (not (tokens/same-token? {:name "Paul" :at 5} {:name "Paul" :at 5 :key "paul"})) "a note without its key is written again")
   (is (not (tokens/same-token? {:name "Paul" :at 4} {:name "Paul" :at 5})))
   (is (= {:ok true :name "Paul" :at 5 :error nil :checked 9} (tokens/sync-record [200 {:name "Paul" :at 5}] 9)))
   (is (= {:ok false :name nil :at nil :error "answered 404" :checked 9} (tokens/sync-record [404 {}] 9)))
@@ -63,3 +64,11 @@
                :h4 {:limits [{:key "five_hour" :percent 1}] :at nil}}]
     (is (= [["paul" [{:key "seven_day" :percent 40}] 9] ["ana" [{:key "five_hour" :percent 1}] 0]]
            (tokens/heard-rows {"h1" "paul" "h3" "ana" "h4" "ana"} heard)))))
+
+(deftest saved-tokens-are-compared-without-their-text
+  (let [saved [{:key "peter" :name "Peter" :saved-at 2 :saved-by "x"} {:key "paul" :name "Paul" :saved-at 1}]]
+    (is (= [{:key "paul" :name "Paul" :at 1} {:key "peter" :name "Peter" :at 2}] (tokens/saved-rows saved)))
+    (is (tokens/same-saved? [{:key "peter" :name "Peter" :at 2} {:key "paul" :name "Paul" :at 1}] saved))
+    (is (not (tokens/same-saved? [{:key "paul" :name "Paul" :at 1}] saved)) "one missing")
+    (is (not (tokens/same-saved? [{:key "peter" :name "Peter" :at 9} {:key "paul" :name "Paul" :at 1}] saved)) "one replaced")
+    (is (tokens/same-saved? nil []))))

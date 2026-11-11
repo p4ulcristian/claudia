@@ -6,7 +6,9 @@
   hub makes): at once after a save or a switch, and every minute for a server that missed it (off,
   new, reinstalled). The same minute it collects each server's last heard usage limits per token
   (GET /api/claude-token/limits, by a hash of the token) and keeps the newest for each saved token,
-  for the page's popup of every token's limits. Anyone signed in may save, switch or remove one; nobody can read one back.
+  for the page's popup of every token's limits. Every saved token goes to each server the same way
+  (PUT /api/claude-token/saved, README decision 16), so each chat runs on the one picked for it; the
+  one in use is what a chat without a pick runs on. Anyone signed in may save, switch or remove one; nobody can read one back.
   Without a key file the hub keeps no tokens and leaves the servers' token files alone."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
@@ -90,9 +92,9 @@
 ;; ---- the servers' fronts ----
 
 (defn same-token?
-  "Whether a server already runs on the token in use (same name and same switch time)."
+  "Whether a server already runs on the token in use (same key, name and switch time)."
   [have in-use]
-  (and (= (:name have) (:name in-use)) (= (:at have) (:at in-use))))
+  (and (= (:key have) (:key in-use)) (= (:name have) (:name in-use)) (= (:at have) (:at in-use))))
 
 (defn sync-record
   "What a look at a server found, from its last answer [status body] at time now."
@@ -106,7 +108,7 @@
   "Promise of [status body]: the token in use written to the server."
   [server in-use]
   (-> (front/call server "PUT" "/api/claude-token/current"
-                  {:name (:name in-use) :by (:by in-use) :at (:at in-use)
+                  {:key (:key in-use) :name (:name in-use) :by (:by in-use) :at (:at in-use)
                    :token (unseal @key-bytes (:key in-use) (store/claude-token-sealed (:key in-use)))}
                   5000)
       (.then (fn [[status body :as answer]]
@@ -121,6 +123,37 @@
                (if (or (not= 200 status) (same-token? have in-use)) answer (write-token! server in-use))))
       (.then #(swap! synced assoc (:name server) (sync-record % (js/Date.now))))
       (.catch (fn [e] (swap! synced assoc (:name server) {:ok false :error (.-message e) :checked (js/Date.now)})))))
+
+(defn saved-rows
+  "The saved tokens as a server keeps them, without the tokens: [{:key :name :at}] by key."
+  [saved]
+  (vec (sort-by :key (for [t saved] {:key (:key t) :name (:name t) :at (:saved-at t)}))))
+
+(defn same-saved?
+  "Whether a server keeps exactly the saved tokens (have: its [{:key :name :at}])."
+  [have saved]
+  (= (vec (sort-by :key (map #(select-keys % [:key :name :at]) have))) (saved-rows saved)))
+
+(defn- write-saved!
+  "Promise of [status body]: every saved token written to the server."
+  [server saved]
+  (front/call server "PUT" "/api/claude-token/saved"
+              {:tokens (for [t (saved-rows saved)]
+                         (assoc t :token (unseal @key-bytes (:key t) (store/claude-token-sealed (:key t)))))}
+              5000))
+
+(defn- sync-saved!
+  "Makes one server's saved tokens the hub's: asks which it keeps, writes them all when they differ."
+  [server]
+  (let [saved (store/claude-tokens)]
+    (-> (front/call server "GET" "/api/claude-token/saved" nil 5000)
+        (.then (fn [[status have]]
+                 (when (and (= 200 status) (not (same-saved? (:tokens have) saved)))
+                   (.then (write-saved! server saved)
+                          (fn [[wrote _]]
+                            (when (= 200 wrote)
+                              (js/console.log (str "tokens: " (:name server) " keeps the " (count saved) " saved"))))))))
+        (.catch (fn [e] (js/console.error (str "tokens: saved to " (:name server) ": " (.-message e))))))))
 
 (defn heard-rows
   "A server's kept limits ({token hash {:limits :at}}) as [key limits at] of saved tokens, by
@@ -153,7 +186,7 @@
 
 (defn- sync-all []
   (if-let [in-use (when (on?) (store/claude-token-use))]
-    (js/Promise.all (into-array (mapcat (fn [s] [(sync-server! s in-use) (collect-limits! s)]) (config/all-servers))))
+    (js/Promise.all (into-array (mapcat (fn [s] [(sync-server! s in-use) (sync-saved! s) (collect-limits! s)]) (config/all-servers))))
     (js/Promise.resolve nil)))
 
 (defn sync!
@@ -236,6 +269,7 @@
         on (on?)]
     (or (pick-problem on k (when on (saved-keys)) (when on (:key (store/claude-token-use))) true)
         (do (store/drop-claude-token! k)
+            (sync!)
             (js/console.log (str "tokens: \"" raw-name "\" removed by " (:email person)))
             [200 (state person)]))))
 

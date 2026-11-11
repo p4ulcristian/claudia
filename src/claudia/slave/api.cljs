@@ -236,16 +236,17 @@
         (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
         (.catch (fn [e] {:error (.-message e) :status 409})))))
 
-(defn- claude-token []
-  (let [f (.-CLAUDIA_TOKEN_FILE (.-env js/process))]
-    (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))))
+(defn- claude-token
+  "The token chat id runs on, or nil when there is none here."
+  [id]
+  (try (chats/token-of id) (catch :default _ nil)))
 
 (defn- explain-step [req id]
   (if-not (known? id)
     no-chat
     (.then (io/read-json req max-body)
            (fn [{:keys [step]}]
-             (let [token (claude-token)]
+             (let [token (claude-token id)]
                (cond (not (string? step)) {:error "step: a tool call's id"}
                      (not (seq token)) {:error "No Claude token on this runner." :status 503}
                      :else (.then (explain/explain chats/cwd id step token
