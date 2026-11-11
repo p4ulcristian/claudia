@@ -10,6 +10,7 @@
             [reagent.hooks :as h]
             [shadow.lazy :as lazy]
             [claudia.web.views.chat :as chat]
+            [claudia.web.world.link :as link]
             [claudia.web.world.state :as state]))
 
 (def ^:private lazy-view (lazy/loadable claudia.web.world.view/world-view))
@@ -24,6 +25,30 @@
 (rf/reg-sub :world? (fn [db] (boolean (:world? db))))
 (rf/reg-sub :world-chat? (fn [db] (boolean (:world-chat? db))))
 (rf/reg-sub :world/focus (fn [db] (state/focus-id db)))
+(rf/reg-sub :world/from (fn [db] (:world-from db)))
+
+;; ---- the chat's flight out of its screen and back ----
+
+(defn- box [^js el]
+  (let [r (.getBoundingClientRect el)] {:left (.-left r) :top (.-top r) :width (.-width r) :height (.-height r)}))
+
+(defn- fly!
+  "Animates the panel el between screen rect and its own place: :out of the screen, or back :in."
+  [^js el rect way]
+  (let [at-screen #js {:transform (state/fly-transform rect (box el)) :opacity 0.5 :borderRadius "28px"}
+        at-home #js {:transform "none" :opacity 1}]
+    (.animate el (if (= way :out) #js [at-screen at-home] #js [at-home at-screen])
+              #js {:duration (if (= way :out) 460 340) :easing "cubic-bezier(.2,.8,.2,1)" :fill "forwards"})))
+
+(defn- close-chat!
+  "The panel flies back into its robot's screen, then closes (at once when there is no screen)."
+  []
+  (let [id (state/focus-id @rdb/app-db)
+        el (js/document.querySelector ".world-chat")
+        rect (when-let [f (:screen-rect @link/api)] (f id))]
+    (if (and el rect)
+      (.then (.-finished (fly! el rect :in)) #(rf/dispatch [:world/chat false]))
+      (rf/dispatch [:world/chat false]))))
 
 ;; ---- keys ----
 
@@ -32,9 +57,9 @@
         action (state/key-action {:alt? (.-altKey e) :code (.-code e)} (:world? db))]
     (when action
       (.preventDefault e)
-      (rf/dispatch (cond (= action :toggle) [:world/toggle]
-                         (:world-chat? db) [:world/chat false]
-                         :else [:world/toggle false])))))
+      (cond (= action :toggle) (rf/dispatch [:world/toggle])
+            (:world-chat? db) (close-chat!)
+            :else (rf/dispatch [:world/toggle false])))))
 
 (defn- keys! []
   (h/use-effect
@@ -58,17 +83,22 @@
                       (.catch #(reset! loaded (str (or (.-message %) %))))))
                 [:p.world-error "Loading the world…"]))))
 
-(defn- chat-panel []
-  [:div.world-chat {:role "dialog" :aria-label "Chat"}
-   [:button.world-chat-close {:aria-label "Close the chat (Escape)" :data-tip "Close (Escape)"
-                              :on-click #(rf/dispatch [:world/chat false])} "×"]
-   [chat/chat-pane]])
+(defn- chat-panel
+  "The open chat over the world; it flies out of its robot's screen when it opens."
+  []
+  (let [el (h/use-ref nil)
+        from @(rf/subscribe [:world/from])]
+    (h/use-layout-effect (fn [] (when (and from (.-current el)) (fly! (.-current el) from :out)) nil) [])
+    [:div.world-chat {:role "dialog" :aria-label "Chat" :ref #(set! (.-current el) %)}
+     [:button.world-chat-close {:aria-label "Close the chat (Escape)" :data-tip "Close (Escape)"
+                                :on-click close-chat!} "×"]
+     [chat/chat-pane]]))
 
 (defn- legend []
   [:div.world-legend
    [:span [:i.working] "working"] [:span [:i.waiting] "waiting on you"]
    [:span [:i.done] "done, not seen"] [:span [:i.idle] "idle"]
-   [:span.hint "Click a robot for its chat · click an island for a new chat there"]])
+   [:span.hint "Click a screen to open its chat · Escape puts it back · click an island for a new chat there"]])
 
 (defn- world-screen []
   [:div.world {:role "application" :aria-label "World"}
@@ -77,7 +107,8 @@
     [:button.world-back {:on-click #(rf/dispatch [:world/toggle false]) :data-tip "Back to the chats (Alt+W)"} "← Chats"]
     [:span.world-title "World"]]
    [legend]
-   (when @(rf/subscribe [:world-chat?]) [chat-panel])])
+   (when @(rf/subscribe [:world-chat?])
+     ^{:key (str @(rf/subscribe [:world/focus]))} [:f> chat-panel])])
 
 (defn overlay
   "The world over the whole window while it is open; Alt+W and Escape always listened for."

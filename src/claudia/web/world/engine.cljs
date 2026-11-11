@@ -11,7 +11,8 @@
             [claudia.web.world.labels :as labels]
             [claudia.web.world.motion :as motion]
             [claudia.web.world.plan :as plan]
-            [claudia.web.world.robots :as robots]))
+            [claudia.web.world.robots :as robots]
+            [claudia.web.world.screens :as screens]))
 
 ;; ---- making it ----
 
@@ -48,8 +49,8 @@
          :controls (make-controls camera (.-domElement renderer))
          :sky (atmo/make-sky! scene) :clouds (atmo/make-clouds! scene) :beam (atmo/make-beam! scene)
          :packets (atmo/make-packets! scene) :windows (atmo/make-windows! scene)
-         :robots (robots/make scene) :still (make-still scene) :layer (labels/make-layer host)
-         :handlers handlers :plan nil :robot-list [] :packet-list [] :curves [] :window-ids []
+:robots (robots/make scene) :screens (screens/make scene) :still (make-still scene) :layer (labels/make-layer host)
+         :handlers handlers :plan nil :packetList [] :curves [] :windowIds []
          :radius 30 :last nil :focus nil :inset 0 :offset 0 :hovered nil :pointer nil :down nil
          :raycaster (THREE/Raycaster.) :v (THREE/Vector3.)}))
 
@@ -73,8 +74,8 @@
 (defn- frame-camera!
   "The first view: the whole world from above and in front."
   [^js w r]
-  (.set (.. w -camera -position) 0 (* 1.05 r) (* 1.95 r))
-  (.set (.. w -controls -target) 0 -1 (* 0.1 r))
+  (.set (.. w -camera -position) 0 (* 0.95 r) (* 1.75 r))
+  (.set (.. w -controls -target) 0 2 (* 0.1 r))
   (set! (.. w -controls -maxDistance) (* 4.5 r))
   (.update (.-controls w)))
 
@@ -91,7 +92,7 @@
     (set! (.. still -lit -visible) true) (set! (.. still -glow -visible) true)
     (replace-colliders! (.-colliders still) (:islands p))
     (set! (.-curves w) (mapv geo/bridge-curve (:bridges p)))
-    (set! (.-window-ids w) (atmo/place-windows! (.-windows w) (geo/window-matrices (:buildings p))))
+    (set! (.-windowIds w) (atmo/place-windows! (.-windows w) (geo/window-matrices (:buildings p))))
     (set! (.-radius w) r)
     (set! (.-plan w) p)
     (atmo/tune-sky! (.-sky w) r)
@@ -104,13 +105,11 @@
     (memoize (fn [c] (let [v (.trim (.getPropertyValue style (str "--c-" c)))]
                        (THREE/Color. (if (seq v) v "#9aa0a8")))))))
 
-(defn- label-items [^js w robot-list]
-  (concat
-   (for [{:keys [id label kind]} (:islands (.-plan w))]
-     {:id (str "i:" id) :text label :kind kind})
-   (for [{:keys [id title state color]} robot-list
-         :when (or (= :waiting state) (= id (.-hovered w)) (= id (.-focus w)))]
-     {:id id :text title :kind :robot :color (str "var(--c-" color ")")})))
+(defn- label-items
+  "The islands' names (the robots' chats are on their screens)."
+  [^js w]
+  (for [{:keys [id label kind]} (:islands (.-plan w))]
+    {:id (str "i:" id) :text label :kind kind}))
 
 (defn- working-by-server [robot-list]
   (frequencies (keep #(when (= :working (:state %)) (first (:key %))) robot-list)))
@@ -121,22 +120,27 @@
   (let [p (plan/world servers rows)
         robot-list (plan/robots p rows)]
     (when (not= p (.-plan w)) (rebuild-still! w p))
-    (robots/sync! (.-robots w) robot-list (chat-colours))
-    (atmo/light-windows! (.-windows w) (.-window-ids w) (plan/working-buildings robot-list))
-    (set! (.-packet-list w) (atmo/packets (mapv :to (:bridges p)) (working-by-server robot-list)))
-    (set! (.-robot-list w) robot-list)
-    (labels/sync! (.-layer w) (label-items w robot-list))))
+    (let [colour-of (chat-colours)]
+      (robots/sync! (.-robots w) robot-list colour-of)
+      (screens/sync! (.-screens w) robot-list colour-of))
+    (atmo/light-windows! (.-windows w) (.-windowIds w) (plan/working-buildings robot-list))
+    (set! (.-packetList w) (atmo/packets (mapv :to (:bridges p)) (working-by-server robot-list)))
+    (labels/sync! (.-layer w) (label-items w))))
 
 ;; ---- every frame ----
 
-(defn- island-point [^js w id]
-  (when-let [{:keys [pos kind]} (first (filter #(= id (:id %)) (:islands (.-plan w))))]
-    (let [[x y z] pos] [x (+ y (if (= kind :gate) 6.3 3.6)) z])))
+(defn- island-point
+  "Where an island's name hangs: on its rim nearest the camera, like a sign, under its screens."
+  [^js w id]
+  (when-let [{:keys [pos radius]} (first (filter #(= id (:id %)) (:islands (.-plan w))))]
+    (let [[x y z] pos
+          ^js cam (.. w -camera -position)
+          dx (- (.-x cam) x) dz (- (.-z cam) z)
+          d (max 0.001 (js/Math.hypot dx dz))]
+      [(+ x (* radius (/ dx d))) (- y 0.2) (+ z (* radius (/ dz d)))])))
 
 (defn- label-point [^js w id]
-  (if (.startsWith id "i:")
-    (island-point w (subs id 2))
-    (when-let [[x y z] (robots/position (.-robots w) id)] [x (+ y 0.95) z])))
+  (island-point w (subs id 2)))
 
 (defn- follow-focus!
   "While a robot's chat is open, the view's centre glides to it."
@@ -144,6 +148,11 @@
   (when-let [[x y z] (some->> (.-focus w) (robots/position (.-robots w)))]
     (let [^js tg (.. w -controls -target)]
       (.set tg (motion/damp (.-x tg) x 2.5 dt) (motion/damp (.-y tg) (- y 0.6) 2.5 dt) (motion/damp (.-z tg) z 2.5 dt)))))
+
+(defn screen-rect
+  "Where robot id's screen is on the page (px), or nil: the chat panel flies out of it and back in."
+  [^js w id]
+  (screens/rect (.-screens w) (.-robots w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
 
 (defn- pick-at
   "What is under the pointer: {:robot r} or {:island id}, or nil."
@@ -154,8 +163,8 @@
     (.setFromCamera rc (THREE/Vector2. (dec (* 2 (/ (- px (.-left rect)) (.-width rect))))
                                        (- 1 (* 2 (/ (- py (.-top rect)) (.-height rect)))))
                     (.-camera w))
-    (if-let [r (robots/pick (.-robots w) rc)]
-      {:robot r}
+    (if-let [r (or (screens/pick (.-screens w) rc) (robots/pick (.-robots w) rc))]
+      {:robot r :rect (screen-rect w (:id r))}
       (when-let [^js hit (first (.intersectObjects rc (.. w -still -colliders -children) false))]
         {:island (.. hit -object -userData -island) :kind (.. hit -object -userData -kind)}))))
 
@@ -164,9 +173,8 @@
     (set! (.-pointer w) nil)
     (let [id (some-> (pick-at w pt) :robot :id)]
       (set! (.. w -renderer -domElement -style -cursor) (if id "pointer" ""))
-      (when (not= id (.-hovered w))
-        (set! (.-hovered w) id)
-        (labels/sync! (.-layer w) (label-items w (.-robot-list w)))))))
+      (set! (.-hovered w) id)
+      (set! (.. w -screens -hovered) id))))
 
 (defn- shift-view!
   "Moves the picture left by half the panel's width (gliding), so the followed robot stays in the
@@ -188,9 +196,10 @@
     (set! (.-last w) t)
     (hover! w)
     (robots/frame! (.-robots w) t dt (.getAzimuthalAngle (.-controls w)))
+    (screens/frame! (.-screens w) (.-robots w) (.-camera w) (.-clientHeight host) (.getAzimuthalAngle (.-controls w)) dt)
     (atmo/tick-clouds! (.-clouds w) t (.-radius w))
     (atmo/tick-beam! (.-beam w) t)
-    (atmo/tick-packets! (.-packets w) (.-curves w) (.-packet-list w) t)
+    (atmo/tick-packets! (.-packets w) (.-curves w) (.-packetList w) t)
     (follow-focus! w dt)
     (shift-view! w dt)
     (.update (.-controls w))
@@ -236,12 +245,12 @@
                    w))))))
 
 (defn focus!
-  "The robot the view follows (its chat is open, its name shown), or nil; inset: the width in px the
+  "The robot the view follows (its chat is open, its screen hidden: it flew out), or nil; inset: the width in px the
   chat panel covers on the right."
   [^js w id inset]
   (set! (.-focus w) id)
-  (set! (.-inset w) (if id inset 0))
-  (labels/sync! (.-layer w) (label-items w (.-robot-list w))))
+  (set! (.. w -screens -hidden) id)
+  (set! (.-inset w) (if id inset 0)))
 
 (defn stop! [^js w]
   (.setAnimationLoop (.-renderer w) nil)

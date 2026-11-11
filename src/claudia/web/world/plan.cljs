@@ -36,9 +36,10 @@
   (get-in row [:project :root]))
 
 (defn island-radius
-  "An island grows with its buildings."
-  [n-buildings]
-  (+ 5 (* 1.6 (js/Math.sqrt n-buildings))))
+  "An island grows with its buildings and its robots (each robot stands under its own screen)."
+  [n-buildings n-robots]
+  (max (+ 5 (* 1.6 (js/Math.sqrt n-buildings)))
+       (+ 4 (* 3.4 (js/Math.sqrt n-robots)))))
 
 (defn ring-distance
   "How far the server islands sit from the gate: clear of the gate and of each other."
@@ -67,9 +68,10 @@
                                           distinct (sort-by first) vec)])))))
 
 (defn islands
-  "The gate, then a server island per server (in the order given), each sized for its projects."
-  [servers projects]
-  (let [radii (mapv #(island-radius (count (get projects (:name %)))) servers)
+  "The gate, then a server island per server (in the order given), each sized for its projects and
+  its robots (robot-counts: server -> how many)."
+  [servers projects robot-counts]
+  (let [radii (mapv #(island-radius (count (get projects (:name %))) (get robot-counts (:name %) 0)) servers)
         dist (ring-distance (count servers) (reduce max gate-radius radii))]
     (into [{:id "gate" :label "gate" :kind :gate :radius gate-radius :pos [0 0 0] :angle 0}]
           (map-indexed (fn [i s] (server-island s i (count servers) dist (radii i))) servers))))
@@ -111,24 +113,29 @@
 (defn world
   "The fixed part of the world (changes when servers or projects come and go)."
   [servers rows]
-  (let [projects (projects-by-server (shown-rows rows))
-        isl (islands servers projects)]
+  (let [shown (shown-rows rows)
+        projects (projects-by-server shown)
+        isl (islands servers projects (frequencies (map :server shown)))]
     {:islands isl :buildings (buildings isl projects) :bridges (bridges isl)}))
 
 (defn- door
   "The spot in front of a building, toward its island's middle."
   [isl b]
-  (polar (:pos isl) (:angle b) (- (* 0.62 (:radius isl)) (/ (first (:size b)) 2) 1.6)))
+  (polar (:pos isl) (:angle b) (- (* 0.62 (:radius isl)) (/ (first (:size b)) 2) 2.2)))
+
+(def per-row
+  "Robots side by side at one place; more go in rows nearer the island's middle."
+  3)
 
 (defn spot
   "Where robot j of k at one place stands: in a row across the place (out: the angle from the
-  island's middle toward the place), later rows nearer the middle."
+  island's middle toward the place), later rows nearer the middle and shifted half a step, so the
+  screens over them don't hide each other."
   [[x y z] out j k]
-  (let [per-row 4
-        row (quot j per-row)
+  (let [row (quot j per-row)
         in-row (min per-row (- k (* row per-row)))
-        side (* 1.35 (- (mod j per-row) (/ (dec in-row) 2)))
-        back (* 1.35 row)]
+        side (* 4.6 (+ (- (mod j per-row) (/ (dec in-row) 2)) (if (odd? row) 0.5 0)))
+        back (* 3.4 row)]
     [(- (+ x (* side (- (js/Math.sin out)))) (* back (js/Math.cos out)))
      y
      (- (+ z (* side (js/Math.cos out))) (* back (js/Math.sin out)))]))
@@ -146,6 +153,8 @@
 (defn- robot [row place j k]
   {:id (str (:server row) "/" (:id row)) :key [(:server row) (:id row)]
    :title (:title row) :color (:color row) :state (robot-state row)
+   :preview (:preview row) :ask (:text (first (:asks row))) :at (:at row)
+   :row (quot j per-row)
    :island (:id (:island place)) :building (:key place)
    :ground (second (:pos (:island place)))
    :out (:out place)

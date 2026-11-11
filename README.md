@@ -100,18 +100,25 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     back). The gate is an island with a lighthouse in the middle, every server the person may use an
     island on a ring round it joined by a bridge, every project a building on its server's island,
     and every chat (not archived, not ash) a hovering robot in its chat colour at its project's door
-    (no project: the island's square). A robot works (bright eyes, lit windows, more packets on its
-    bridge), waits on you (a pulsing "!" and its name), is done and unseen (green eyes, drifting) or
-    idles; a robot of a server that is not connected sinks and greys. A click on a robot opens its chat
-    in a panel over the world and the view glides to it; a click on a server's island starts a new
-    chat there. Layout and motion are pure data (`claudia.web.world.plan`, `.motion`); the engine is
-    three.js's WebGPURenderer (WebGL 2 where WebGPU is missing or its device is lost) with node
-    materials and TSL: the still world is two merged meshes with vertex colours, robots, clouds,
-    windows and packets are InstancedMeshes, the sky is a TSL gradient by the hour, labels are HTML.
-    Its own module (`out/web/js/world.js`) on top of the 3D module, which holds three.js's core, so
-    WebGPU comes from the same sources (`three/src/Three.WebGPU.js`), not a second copy. Instead of:
-    the scene3d form (a picture Claude draws, one per chat, not a live view of every chat), or
-    WebGLRenderer with classic materials.
+    (no project: the island's square). Over each robot floats its chat's screen, a hologram from its
+    antenna: the title in the chat's colour, the open question while it waits, else the start of the
+    last reply, and what it does (working, waiting on you, done, idle, offline). Screens face the
+    camera, far ones are drawn up to 1.4 times bigger, and screens that would cover each other on the
+    page move apart every frame (nearest first stays; each moves up, left or right, the shortest way
+    clear: `claudia.web.world.stack`). A click on a screen (or its robot) flies the real chat panel
+    out of that screen to its place on the right and the view glides to the robot; Escape or × flies
+    it back into the screen. A click on a server's island starts a new chat there. Layout, motion,
+    screen text and stacking are pure data (`claudia.web.world.plan`, `.motion`, `.screen-text`,
+    `.stack`, `.state`); the engine is three.js's WebGPURenderer (WebGL 2 where WebGPU is missing or
+    its device is lost) with node materials and TSL: the still world is two merged meshes with
+    vertex colours; robots, screens, beams, clouds, windows and packets are InstancedMeshes; every
+    screen is a slot of one canvas atlas (redrawn only when its text changes, uploaded at most every
+    0.4 s) read by a per-instance uv offset, so all screens are one draw call. Its own module
+    (`out/web/js/world.js`) on top of the 3D module, which holds three.js's core, so WebGPU comes from
+    the same sources (`three/src/Three.WebGPU.js`), not a second copy. Instead of: real chat pages
+    placed in 3D (CSS3D: always drawn over the world, no fog, heavy with many chats), the scene3d
+    form (a picture Claude draws per chat, not a live view of every chat), or WebGLRenderer with
+    classic materials.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
