@@ -135,7 +135,7 @@
   [:label.pick.effort {:title (str "Effort: " (or (:effort settings) (some-> running (str " (your default)")) "your default"))}
    [:select {:value (or (:effort settings) "")
              :on-change #(put! {:effort (not-empty (.. % -target -value))})}
-    [:option {:value ""} (or (when-not (:effort settings) running) "default effort")]
+    [:option {:value ""} (or (when-not (:effort settings) running) "…")]
     (for [e efforts] ^{:key e} [:option {:value e} e])]])
 
 (defn pickers
@@ -152,7 +152,11 @@
     (when (and (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
       [:<>
        (model-pick models settings running put!)
-       (when (seq efforts) (effort-pick efforts settings (:effort state) put!))])))
+       (when (seq efforts)
+         (effort-pick efforts settings
+                      (pure/effort-shown (:effort state) (:defaultEfforts server-meta)
+                                         (or (not-empty (:model state)) (:defaultModel server-meta)))
+                      put!))])))
 
 ;; ---- the / menu ----
 

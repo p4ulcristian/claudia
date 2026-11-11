@@ -90,6 +90,12 @@
           :five (limit-of limits "five_hour") :week (limit-of limits "seven_day")
           :heard-at (if live? (:at live) (:heardAt t))})))
 
+(defn effort-shown
+  "The effort a chat without a picked one runs with: what its session said (running), else what a
+  session of its model said before (kept: [{:model :effort}]), else nil."
+  [running kept model]
+  (or running (some #(when (= model (:model %)) (:effort %)) kept)))
+
 (defn ring-percent
   "What a limit's ring shows: its percent, 0 once its window has reset since it was heard, nil
   without one."
