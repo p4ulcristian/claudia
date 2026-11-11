@@ -1,6 +1,6 @@
 (ns claudia.web.extras
   "The page's side of agents, changes and meters: their frames, events and subscriptions.
-  app-db gets :meta (server -> {:limits :models :commands}), :agent-view ([server chat] -> agent id,
+  app-db gets :meta (server -> {:limits :models :commands :defaultModel}), :agent-view ([server chat] -> agent id,
   \"\" = the list), :agent-detail ([server chat agent] -> the runner's answer), :diffs ([server chat
   change] -> {:before :after}) and :slash-pick; each chat's state gets :agents :changes :settings
   :model :commands :context."
@@ -26,7 +26,7 @@
                             commands (assoc :commands commands))))})
 
 (defmethod events/on-frame "meta" [db server f]
-  {:db (assoc-in db [:meta server] (select-keys f [:limits :limitsAt :models :commands]))})
+  {:db (assoc-in db [:meta server] (select-keys f [:limits :limitsAt :models :commands :defaultModel]))})
 
 (defmethod events/on-frame "agent" [db server {:keys [chat agent] :as f}]
   {:db (assoc-in db [:agent-detail [server chat agent]] (dissoc f :type :chat :agent))})
