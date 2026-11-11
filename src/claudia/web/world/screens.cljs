@@ -13,8 +13,9 @@
             [claudia.web.world.screen-text :as st]
             [claudia.web.world.stack :as stack]))
 
-(def ^:private slot-w 512)
+(def ^:private slot-w "A screen's width in drawing units (its pixels: times sharp)." 512)
 (def ^:private slot-h 320)
+(def sharp "Canvas pixels per drawing unit: text stays crisp up close." 1.5)
 (def ^:private cols 4)
 (def ^:private rows 8)
 (def capacity (* cols rows))
@@ -35,8 +36,8 @@
 
 (defn- make-atlas []
   (let [canvas (js/document.createElement "canvas")]
-    (set! (.-width canvas) (* cols slot-w))
-    (set! (.-height canvas) (* rows slot-h))
+    (set! (.-width canvas) (* sharp cols slot-w))
+    (set! (.-height canvas) (* sharp rows slot-h))
     canvas))
 
 (defn- make-texture [^js canvas]
@@ -67,7 +68,7 @@
     (set! (.-count mesh) 0)
     (set! (.-frustumCulled mesh) false)
     (.add scene mesh) (.add scene beams)
-    #js {:canvas canvas :ctx (.getContext canvas "2d") :tex tex :mesh mesh :beams beams :slotAttr slot-attr
+    #js {:canvas canvas :ctx (doto (.getContext canvas "2d") (.setTransform sharp 0 0 sharp 0 0)) :tex tex :mesh mesh :beams beams :slotAttr slot-attr
          :slots {} :drawn (js/Map.) :moves (js/Map.) :targets {} :laidOut 0 :list #js [] :dirty false :uploaded 0 :yaw 0
          :hidden nil :hovered nil}))
 
@@ -292,3 +293,12 @@
           ys (map #(* (.-height canvas-rect) (/ (- 1 (.-y ^js %)) 2)) pts)]
       {:left (+ (.-left canvas-rect) (apply min xs)) :top (+ (.-top canvas-rect) (apply min ys))
        :width (- (apply max xs) (apply min xs)) :height (- (apply max ys) (apply min ys))})))
+
+(defn snapshot
+  "A copy of robot id's screen as a canvas of its own, or nil."
+  [^js rt id]
+  (when-let [n (get (.-slots rt) id)]
+    (let [w (* sharp slot-w) h (* sharp slot-h)
+          c (doto (js/document.createElement "canvas") (set! -width w) (set! -height h))]
+      (.drawImage (.getContext c "2d") (.-canvas rt) (* w (mod n cols)) (* h (quot n cols)) w h 0 0 w h)
+      c)))

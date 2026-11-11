@@ -3,7 +3,7 @@
   the camera, lit while one of its chats works (claudia.web.world.atlas)."
   (:require [claudia.web.world.atlas :as atlas]))
 
-(def ^:private spec {:px-w 512 :px-h 96 :cols 2 :rows 48 :width 4.6})
+(def ^:private spec {:px-w 512 :px-h 96 :cols 2 :rows 32 :width 4.6})
 
 (defn make [scene] (atlas/make scene spec))
 

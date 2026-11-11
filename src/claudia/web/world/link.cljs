@@ -3,5 +3,6 @@
   module) for: the world's view registers it while it runs.")
 
 (defonce api
-  ;; {:screen-rect (fn [robot-id] {:left :top :width :height} or nil)} while a world runs, else nil.
+  ;; While a world runs: {:screen-rect (fn [robot-id] {:left :top :width :height} or nil),
+  ;; :board-rect (fn [island-id] …), :screen-image / :board-image (fn [id] canvas or nil)}; else nil.
   (atom nil))

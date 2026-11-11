@@ -101,8 +101,9 @@
           (not sample) "asking…"
           :else (pure/age-text age))]])
 
-(defn- card
-  "One machine's card, asking url every 2 s while it is shown."
+(defn machine-card
+  "One machine's card (in the Systems popup, and big over the world), asking url every 2 s while it is
+  shown."
   [{:keys [title url]}]
   (let [[{:keys [sample got-at]} set-got] (h/use-state {})
         now (hooks/use-now)
@@ -129,10 +130,10 @@
     [:div.chat-menu.systems-pop {:ref #(set! (.-current menu) %) :role "dialog" :aria-label "Systems"
                                  :style (place (.-current box))}
      [:div.cm-title "Systems"]
-     (when (:admin me) [:f> card {:title "gate" :url "/hub/gate/system"}])
+     (when (:admin me) [:f> machine-card {:title "gate" :url "/hub/gate/system"}])
      (for [s (:servers me)]
        ^{:key (:name s)}
-       [:f> card {:title (or (:label s) (:name s)) :url (str "/hub/servers/" (js/encodeURIComponent (:name s)) "/system")}])]))
+       [:f> machine-card {:title (or (:label s) (:name s)) :url (str "/hub/servers/" (js/encodeURIComponent (:name s)) "/system")}])]))
 
 (defn systems-button
   "The rail's computer: opens the Systems popup."

@@ -62,3 +62,13 @@
   "The island whose board is under the raycaster, or nil."
   [rt raycaster]
   (atlas/pick rt raycaster))
+
+(defn rect
+  "Where island id's board is on the page (px), or nil."
+  [rt id camera canvas-rect]
+  (atlas/rect rt id camera canvas-rect))
+
+(defn snapshot
+  "A copy of island id's board as a canvas, or nil."
+  [rt id]
+  (atlas/snapshot rt id))

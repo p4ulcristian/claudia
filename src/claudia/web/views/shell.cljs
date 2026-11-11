@@ -114,17 +114,24 @@
    (when-not settings-shown? [settings/github-prompt])
    [:f> attach/drop-zone draft-key (not ro)]])
 
-(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key] :as m}]
-  [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
-                     (when narrow? "narrow") (when ro "read-only")]
-             :data-screen (name screen)}
-   [asks/modal]
+(defn- chats-view
+  "The rail or list and the chat with its picture: not drawn at all while the world covers them
+  (the world shows its own chat), so opening a chat there renders it once."
+  [{:keys [phone? shown? settings-shown?] :as m}]
+  [:<>
    (menu-toggle shown?)
    [:div.sidebar-slot
     (when (and (not shown?) (not phone?)) [:f> rail/rail])
     [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]]
+   (split-view m)])
+
+(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key world?] :as m}]
+  [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
+                     (when narrow? "narrow") (when ro "read-only")]
+             :data-screen (name screen)}
+   [asks/modal]
+   (when-not world? (chats-view m))
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
-   (split-view m)
    [gallery]
    [admin/dialog]
    [:f> world/overlay]])
@@ -138,6 +145,7 @@
         ro @(rf/subscribe [:read-only?])
         {:keys [settings?]} @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
+        world? @(rf/subscribe [:world?])
         phone? (hooks/use-media "(max-width: 679px)")
         narrow? (hooks/use-media "(max-width: 1099px)")
         [chat-w set-chat-w] (h/use-state stored-width)
@@ -145,7 +153,7 @@
         shown? (if phone? (= screen :list) drawer?)]
     (chat-colour! color)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world?
                :chat-w chat-w :set-chat-w set-chat-w
                :shown? shown? :settings-shown? (and shown? settings?)
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))
