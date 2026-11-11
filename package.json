@@ -48,7 +48,7 @@
     "quickjs-emscripten-core": "^0.32.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "shadow-cljs": "3.5.11",
+    "shadow-cljs": "3.5.13",
     "shiki": "4.6.0",
     "three": "^0.187.0",
     "three-mesh-bvh": "^0.9.17",
