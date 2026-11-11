@@ -127,6 +127,12 @@ code, pre { font-family: var(--mono); }
 .plan-row:empty { display: none; }
 .plan-picks { gap: 4px; padding-right: 0; }
 .plan-pill .ring { width: 26px; height: 26px; }
+.proj-pick { position: relative; flex: none; }
+.proj-btn { display: flex; align-items: center; gap: 8px; padding: 2px 4px; border-radius: 8px; font: 700 15px var(--hand); color: var(--fg); }
+.proj-btn:not(:disabled):hover, .proj-btn[aria-expanded="true"] { color: var(--accent); }
+.proj-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-pop { position: absolute; top: calc(100% + 10px); right: -6px; z-index: 30; display: grid; gap: 2px; width: 236px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); cursor: default; }
+.proj-pop .palette { position: static; padding: 2px 6px 10px; border: 0; box-shadow: none; background: none; }
 .plan-pill.can { cursor: pointer; }
 .plan-pill.can:hover, .plan-pill[aria-expanded="true"] { border-color: var(--muted); }
 .plan-owner { color: var(--fg); font: 700 15px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }

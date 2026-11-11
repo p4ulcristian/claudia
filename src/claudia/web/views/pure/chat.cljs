@@ -115,3 +115,11 @@
   [plans picked default-key]
   (let [by-key (into {} (map (juxt :key identity)) plans)]
     (or (by-key picked) (by-key default-key))))
+
+(defn project-label
+  "What the header's project picker shows: the project's name, else the working folder's last
+  part, else \"No project\"."
+  [project-name folder]
+  (or (not-empty project-name)
+      (not-empty (last (str/split (str folder) #"/")))
+      "No project"))

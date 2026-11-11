@@ -106,3 +106,9 @@
     (is (= {:key "paul" :name "Paul"} (chat/chat-plan plans "gone" "paul")) "a pick no longer saved")
     (is (nil? (chat/chat-plan plans nil nil)))
     (is (nil? (chat/chat-plan [] "paul" "paul")))))
+
+(deftest the-project-pickers-label
+  (is (= "Claudia" (chat/project-label "Claudia" "/home/x/Work/tools/claudia")))
+  (is (= "claudia" (chat/project-label nil "/home/x/Work/tools/claudia")))
+  (is (= "No project" (chat/project-label nil nil)))
+  (is (= "No project" (chat/project-label "" ""))))
