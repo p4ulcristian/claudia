@@ -111,13 +111,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     what it does); screens face the camera, are drawn up to 1.4 times bigger far away, and move
     apart every frame so none covers another (`claudia.web.world.stack`). A drag slides the world
     and it glides on after letting go, the wheel zooms toward the pointer; the view never turns. A
-    click on a screen (or its robot) flies the real chat panel out of that screen and the view glides
-    to the robot; a click on an island's board flies that server's Systems card out the same way
-    (the popup's card, big). The flight carries a picture of the screen or board (only transform
-    and opacity change), and the real chat or card is drawn once it has landed. A click anywhere
-    else in the world, Escape or × flies it back in; with no panel open, a click on a server's
-    island starts a new chat there. While the world is open Claudia's own chat view is not drawn at
-    all (the world shows the chat), and while a panel covers it the world draws 12 frames a second. Every island has a board on its
+    click on a screen (or its robot) opens the real chat in a panel beside the world, and the view
+    glides so the robot stays in the part the panel leaves free; the robot gets a glowing ring and
+    its screen is drawn bigger with a glowing frame (no flight from 3D to 2D: the world stays as it
+    is). A click on an island's board opens that server's Systems card (the popup's card, big) the
+    same way, the board framed. Escape, × or a click anywhere else in the world closes it; with no
+    panel open, a click on a server's island starts a new chat there. While the world is open
+    Claudia's own chat view is not drawn at all (the world shows the chat). Every island has a board on its
     cliff with the server's CPU, memory and GPU (the Systems popup's calls, every 2 s while the
     world is open; the gate's for admins) and one word for it (`claudia.web.world.health`): free
     (lush grass), busy (drying), overworked (scorched, smoking: CPU 85%, memory 90% or GPU 90% and

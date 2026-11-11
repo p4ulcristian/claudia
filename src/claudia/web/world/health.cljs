@@ -6,16 +6,34 @@
 (defn- percent [used total]
   (when (and used total (pos? total)) (js/Math.round (* 100 (/ used total)))))
 
+(defn- sum-of [k gpus]
+  (some->> (seq (keep k gpus)) (reduce +)))
+
 (defn load-of
-  "{:cpu :mem :gpu} in percent (nil when the sample has none: no GPU, no sample)."
+  "{:cpu :mem :gpu :vram} in percent, :cores, and the sizes behind them in bytes (:mem-used
+  :mem-total :vram-used :vram-total; every card's memory summed); nil where the sample has none
+  (no GPU, no sample)."
   [sample]
   (when sample
-    {:cpu (some-> (get-in sample [:cpu :all :busy]) js/Math.round)
-     :mem (percent (get-in sample [:memory :used]) (get-in sample [:memory :total]))
-     :gpu (some->> (seq (keep :util (:gpus sample))) (apply max) js/Math.round)}))
+    (let [{:keys [used total]} (:memory sample)
+          gpus (:gpus sample)
+          vram-used (sum-of :memUsed gpus)
+          vram-total (sum-of :memTotal gpus)]
+      {:cpu (some-> (get-in sample [:cpu :all :busy]) js/Math.round)
+       :cores (some-> (get-in sample [:cpu :cores]) seq count)
+       :mem (percent used total) :mem-used used :mem-total total
+       :gpu (some->> (seq (keep :util gpus)) (apply max) js/Math.round)
+       :vram (percent vram-used vram-total) :vram-used vram-used :vram-total vram-total})))
 
-(defn- over? [{:keys [cpu mem gpu]} [c m g]]
-  (or (and cpu (>= cpu c)) (and mem (>= mem m)) (and gpu (>= gpu g))))
+(defn gb-text
+  "used / total in GB, short: \"24 / 62 GB\", one decimal under 10 GB (\"5.9 / 16 GB\")."
+  [used total]
+  (when (and used total)
+    (let [gb (fn [b] (let [g (/ b 1e9)] (if (< g 10) (.toFixed g 1) (str (js/Math.round g)))))]
+      (str (gb used) " / " (gb total) " GB"))))
+
+(defn- over? [{:keys [cpu mem gpu vram]} [c m g]]
+  (or (and cpu (>= cpu c)) (and mem (>= mem m)) (and gpu (>= gpu g)) (and vram (>= vram m))))
 
 (def stale-ms
   "A sample this old with the server failing since counts as no answer."

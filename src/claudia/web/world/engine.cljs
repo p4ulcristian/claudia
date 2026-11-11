@@ -69,7 +69,7 @@
          :robots (robots/make scene (first (:robot pieces)) (.-width u)) :screens (screens/make scene)
          :boards (boards/make scene) :signs (signs/make scene) :still (make-still scene u)
          :handlers handlers :plan nil :robotList [] :stats (js/Map.) :hot [] :packetList [] :curves []
-         :radius 30 :last nil :coveredAt nil :focus nil :inset 0 :offset 0 :pointer nil :down nil
+         :radius 30 :last nil :focus nil :inset 0 :offset 0 :pointer nil :down nil
          :raycaster (THREE/Raycaster.)}))
 
 ;; ---- the plan ----
@@ -197,29 +197,9 @@
     (let [^js tg (.. w -controls -target)]
       (.set tg (motion/damp (.-x tg) x 2.5 dt) (motion/damp (.-y tg) (- y 0.6) 2.5 dt) (motion/damp (.-z tg) z 2.5 dt)))))
 
-(defn screen-rect
-  "Where robot id's screen is on the page (px), or nil: the chat panel flies out of it and back in."
-  [^js w id]
-  (screens/rect (.-screens w) (.-robots w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
-
-(defn board-rect
-  "Where island id's board is on the page (px), or nil: its Systems card flies out of it and back."
-  [^js w id]
-  (boards/rect (.-boards w) id (.-camera w) (.getBoundingClientRect (.. w -renderer -domElement))))
-
-(defn screen-image
-  "A copy of robot id's screen as a canvas (the picture that flies before the chat is drawn), or nil."
-  [^js w id]
-  (screens/snapshot (.-screens w) id))
-
-(defn board-image
-  "A copy of island id's board as a canvas, or nil."
-  [^js w id]
-  (boards/snapshot (.-boards w) id))
-
 (defn- pick-at
-  "What is under the pointer: {:robot r :rect} (a robot or its screen), {:island id :kind}, or nil
-  (the sky)."
+  "What is under the pointer: {:robot r} (a robot or its screen), {:board id}, {:island id :kind}, or
+  nil (the sky)."
   [^js w [px py]]
   (let [^js rc (.-raycaster w)
         ^js dom (.. w -renderer -domElement)
@@ -228,9 +208,9 @@
                                        (- 1 (* 2 (/ (- py (.-top rect)) (.-height rect)))))
                     (.-camera w))
     (if-let [r (or (screens/pick (.-screens w) rc) (robots/pick (.-robots w) rc))]
-      {:robot r :rect (screen-rect w (:id r))}
+      {:robot r}
       (if-let [isl (boards/pick (.-boards w) rc)]
-        {:board (:id isl) :rect (board-rect w (:id isl))}
+        {:board (:id isl)}
         (when-let [^js hit (first (.intersectObjects rc (.. w -still -colliders -children) false))]
           {:island (.. hit -object -userData -island) :kind (.. hit -object -userData -kind)})))))
 
@@ -253,17 +233,6 @@
       (.clearViewOffset cam)
       (let [cw (max 1 (.-clientWidth host)) ch (max 1 (.-clientHeight host))]
         (.setViewOffset cam cw ch off 0 cw ch)))))
-
-(def ^:private covered-fps
-  "How often the world is drawn while a panel covers most of it (after the view's glide)."
-  12)
-
-(defn- skip-frame?
-  "While a panel has covered the world for more than 1.5 s, only covered-fps frames a second are
-  drawn: the panel, not the world, is what is being looked at."
-  [^js w t]
-  (let [since (.-coveredAt w)]
-    (and since (> (- t since) 1.5) (< (- t (or (.-last w) 0)) (/ 1 covered-fps)))))
 
 (defn- keep-outline!
   "The chalk outline stays outline-px wide on screen at the view's distance."
@@ -293,8 +262,7 @@
     (.render (.-renderer w) (.-scene w) (.-camera w))))
 
 (defn- frame! [^js w ms]
-  (when-not (skip-frame? w (/ ms 1000))
-    (draw-frame! w (/ ms 1000))))
+  (draw-frame! w (/ ms 1000)))
 
 ;; ---- pointer, size, life ----
 
@@ -334,14 +302,15 @@
                    w))))))
 
 (defn panel!
-  "A panel over the world's right side: inset px wide (0: none); follow: the robot whose chat it
-  shows (the view glides to it, its screen hidden: it flew out), or nil (the Systems card). While
-  covered, the world is drawn at covered-fps."
-  [^js w {:keys [follow inset]}]
-  (set! (.-focus w) follow)
-  (set! (.. w -screens -hidden) follow)
-  (set! (.-inset w) (or inset 0))
-  (set! (.-coveredAt w) (when (pos? (or inset 0)) (or (.-coveredAt w) (.-last w)))))
+  "A panel over the world's right side, inset px wide (0: none): the view slides left by half of it
+  and, while it shows a chat, glides to follow its robot. selected: {:robot id} (its ring and its
+  screen, bigger and framed, are highlighted) or {:board id} (that board framed), or nil."
+  [^js w {:keys [inset selected]}]
+  (set! (.-focus w) (:robot selected))
+  (set! (.. w -screens -selected) (:robot selected))
+  (set! (.. w -robots -selected) (:robot selected))
+  (set! (.. w -boards -selected) (:board selected))
+  (set! (.-inset w) (or inset 0)))
 
 (defn stop! [^js w]
   (.setAnimationLoop (.-renderer w) nil)

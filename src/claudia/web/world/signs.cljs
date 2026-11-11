@@ -40,4 +40,4 @@
   (let [[x y z] pos] [x (+ y (* 1.2 (first size) 1.55) 0.7) z]))
 
 (defn frame! [rt ^js camera]
-  (atlas/frame! rt #(atlas/facing (spot %) (.-position camera) -0.2)))
+  (atlas/frame! rt #(atlas/facing (spot %) (.-position camera) -0.2) nil nil))
