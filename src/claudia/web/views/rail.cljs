@@ -16,7 +16,8 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.systems :as systems]
             [claudia.web.views.tearoff :as tearoff]
-            [claudia.web.views.usage :as usage]))
+            [claudia.web.views.usage :as usage]
+            [claudia.web.world :as world]))
 
 (defn- use-slide!
   "Each [data-slide] child of box is measured after every change of order and animated from where
@@ -157,6 +158,7 @@
       (for [[i r] (map-indexed vector rows)]
         ^{:key (str (:server r) "/" (:id r))}
         [rail-chat (assoc m :i i) r])]
+     [world/world-button]
      [:f> systems/systems-button]
      (sound-button (:sounds @alerts/on))
      (when-not ro [:f> plan-button])

@@ -96,6 +96,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Why: 8 of 177 chats on one server ever set the row in three weeks; the forms themselves are
     to be cut down next. Instead of: keeping the row, or keeping it on phones only.
 
+15. The world (2026-11-11): a whole-window 3D mode (the rail's globe or Alt+W; Escape or "Chats" goes
+    back). The gate is an island with a lighthouse in the middle, every server the person may use an
+    island on a ring round it joined by a bridge, every project a building on its server's island,
+    and every chat (not archived, not ash) a hovering robot in its chat colour at its project's door
+    (no project: the island's square). A robot works (bright eyes, lit windows, more packets on its
+    bridge), waits on you (a pulsing "!" and its name), is done and unseen (green eyes, drifting) or
+    idles; a robot of a server that is not connected sinks and greys. A click on a robot opens its chat
+    in a panel over the world and the view glides to it; a click on a server's island starts a new
+    chat there. Layout and motion are pure data (`claudia.web.world.plan`, `.motion`); the engine is
+    three.js's WebGPURenderer (WebGL 2 where WebGPU is missing or its device is lost) with node
+    materials and TSL: the still world is two merged meshes with vertex colours, robots, clouds,
+    windows and packets are InstancedMeshes, the sky is a TSL gradient by the hour, labels are HTML.
+    Its own module (`out/web/js/world.js`) on top of the 3D module, which holds three.js's core, so
+    WebGPU comes from the same sources (`three/src/Three.WebGPU.js`), not a second copy. Instead of:
+    the scene3d form (a picture Claude draws, one per chat, not a live view of every chat), or
+    WebGLRenderer with classic materials.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

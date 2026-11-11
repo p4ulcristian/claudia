@@ -1,0 +1,31 @@
+/* The 3D world (claudia.web.world): over the whole window, under the questions' modal (40). */
+.world { position: fixed; inset: 0; z-index: 35; background: #1d2547; overflow: hidden; }
+.world-canvas { position: absolute; inset: 0; }
+.world-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.world-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: var(--fg); font: 18px var(--hand); }
+
+.world-bar { position: absolute; top: 14px; left: 16px; display: flex; align-items: center; gap: 14px; pointer-events: none; }
+.world-bar > * { pointer-events: auto; }
+.world-back { padding: 6px 14px; border-radius: 99px; border: 1px solid rgb(255 255 255 / 0.25); background: rgb(20 24 36 / 0.55); color: #f3f1ea; font: 600 15px var(--hand); backdrop-filter: blur(6px); }
+.world-back:hover { background: rgb(20 24 36 / 0.8); }
+.world-title { font: 700 24px var(--hand); color: #fffdf6; text-shadow: 0 2px 10px rgb(0 0 0 / 0.45); }
+
+.world-legend { position: absolute; left: 16px; bottom: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; max-width: 60vw; padding: 7px 14px; border-radius: 12px; background: rgb(20 24 36 / 0.5); color: #e9edf5; font: 13px var(--sans); backdrop-filter: blur(6px); pointer-events: none; }
+.world-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.world-legend i { width: 9px; height: 9px; border-radius: 3px; }
+.world-legend i.working { background: #8ff3ff; box-shadow: 0 0 8px #8ff3ff; }
+.world-legend i.waiting { background: #ffd36b; box-shadow: 0 0 8px #ffd36b; }
+.world-legend i.done { background: #8dffb0; }
+.world-legend i.idle { background: #d9f6ff; opacity: 0.6; }
+.world-legend .hint { color: #b9c2d3; }
+
+.world-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.world-label { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; translate: -50% -100%; }
+.world-label.gate, .world-label.server { padding: 3px 12px; border-radius: 99px; background: rgb(255 253 246 / 0.88); color: #2b2f3a; font: 700 15px var(--hand); box-shadow: 0 3px 12px rgb(0 0 0 / 0.25); }
+.world-label.robot { max-width: 180px; overflow: hidden; text-overflow: ellipsis; padding: 2px 9px; border-radius: 8px; background: rgb(20 24 36 / 0.72); color: #f3f6fb; font: 12px var(--sans); border-left: 3px solid var(--label, #9aa0a8); }
+
+.world-chat { position: absolute; top: 14px; right: 14px; bottom: 14px; width: min(560px, 46vw); display: flex; flex-direction: column; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 16px 48px rgb(0 0 0 / 0.45); overflow: hidden; animation: world-chat-in 0.28s cubic-bezier(.2, .8, .3, 1); }
+.world-chat > .left { flex: 1; min-height: 0; }
+.world-chat-close { position: absolute; top: 10px; right: 12px; z-index: 2; width: 30px; height: 30px; border-radius: 50%; font-size: 20px; line-height: 1; color: var(--muted); }
+.world-chat-close:hover { background: var(--panel); color: var(--fg); }
+@keyframes world-chat-in { from { opacity: 0; transform: translateX(24px); } }
