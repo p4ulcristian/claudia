@@ -138,7 +138,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     on the WebGL 2 path).
 
 16. Each chat has its own Claude subscription (2026-11-11): the chat's header shows whose plan it
-    runs on (initials, next to the colour dot) and a click picks another saved one; the pick is
+    runs on (its name, after the project) and a click on the header's pill picks another saved one; the pick is
     kept with the chat and applies on its next message (its Claude Code starts again on that
     token). For that the hub sends every saved token to each server (`<token file>.d/<key>`, names
     in `<token file>.saved.json`), not only the one in use. The one in use (decision 10) is now the

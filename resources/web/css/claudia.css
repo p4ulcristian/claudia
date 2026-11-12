@@ -88,31 +88,47 @@ code, pre { font-family: var(--mono); }
 
 /* ---------- Chat ---------- */
 .left { container-type: inline-size; }
-.chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-height: 58px; }
-.head-title { flex: 1 1 auto; min-width: min(40%, 200px); display: flex; flex-direction: column; }
-.head-server { margin-top: -4px; font: 500 11.5px var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-head h1 { font: 700 22px/1.25 var(--hand); padding-bottom: 6px; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
-/* The chat title renames itself: click it; a chalk pencil shows on hover. */
-.chat-head h1 .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline 3px var(--accent); text-underline-offset: 6px; padding-bottom: 6px; }
+/* The header is one pill, tinted with the chat's colour (--chat; a chat without one: neutral). One
+   line when the chat column is wide; two (the names, then the meters) when it is not. */
+.chat-head { display: flex; align-items: center; padding: 8px 12px; min-height: 58px; }
+.head-pill { position: relative; flex: 1 1 auto; min-width: 0; min-height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 4px 12px; padding: 5px 18px; border-radius: 999px;
+  background: color-mix(in srgb, var(--chat, transparent) 13%, var(--panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat, var(--muted)) 35%, transparent); transition: box-shadow 0.15s; }
+.head-pill.can { cursor: pointer; }
+.head-pill.can:hover, .head-pill[aria-expanded="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat, var(--muted)) 70%, transparent); }
+.head-title { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.head-server { flex: none; max-width: 30%; font: 500 11.5px var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The chat title renames itself: click it. */
+.chat-head h1 { flex: 0 1 auto; font: 700 19px/1.3 var(--hand); margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-head h1.renamable { cursor: text; }
-.chat-head h1 .pencil { flex: none; font: 400 16px var(--hand); color: var(--muted); opacity: 0; transition: opacity 0.15s; text-decoration: none; }
-.chat-head h1.renamable:hover .pencil { opacity: 0.8; }
-.title-edit { flex: 1; font: 700 20px var(--hand); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 3px 8px; outline: none; }
+.title-edit { flex: 1; min-width: 0; font: 700 18px var(--hand); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 1px 8px; outline: none; }
+/* The server's state: turning arrows while reconnecting, a power sign when it is off. */
+.head-state { flex: none; align-self: center; display: grid; width: 16px; height: 16px; color: var(--amber); }
+.head-state.off { color: var(--red); }
+.head-state svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.head-state.reconnecting svg { animation: ag-spin 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .head-state.reconnecting svg { animation: none; } }
+/* The meters: project and plan, then the rings, then model and effort, a hairline between the groups. */
+.head-meters { flex: none; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.head-rings, .head-picks { display: flex; align-items: center; min-width: 0; }
+.head-rings { flex: none; gap: 14px; padding-right: 8px; }
+.head-picks { flex: 0 1 auto; gap: 2px; }
+.head-picks .pick.effort { flex: none; }
+.head-rings:empty, .head-picks:empty { display: none; }
+.head-rings::before, .head-picks::before { content: ""; flex: none; width: 1px; height: 16px; background: var(--line); }
+.head-picks::before { margin-right: 8px; }
+/* Quiet rings: grey while use is low, amber and red (agents.css) when it is high. */
+.head-pill .ring { width: 22px; height: 22px; }
+.head-pill .r-num { font-size: 9px; }
+.head-pill .ring.ok .r-fill { stroke: var(--grey); }
 .icon { width: 30px; height: 30px; border-radius: 7px; color: var(--muted); display: grid; place-items: center; }
 .icon:hover { background: var(--panel); color: var(--fg); }
-.offline { color: var(--amber); font-size: 12px; }
 /* Working folder (and server) in the chat header: quiet mono text; the folder gives way first. */
 .folder-chip { font: 500 11.5px var(--mono); color: var(--muted); border: 0; border-radius: 0; padding: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
 .chat-head .folder-chip { flex: 0 4 auto; min-width: 0; }
 .server-chip { font-family: var(--sans); }
 @container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
 
-/* Chat colour: a dot in the header, the palette under it. */
-.color-pick { position: relative; flex: none; display: grid; }
-.color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line); }
-.color-dot.none { background: transparent; border: 1.5px dashed var(--muted); box-shadow: none; }
-.color-dot:hover { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--muted); }
+/* Chat colour: the palette, opened from the header's project picker. */
 .palette { position: absolute; top: 24px; right: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
@@ -121,21 +137,37 @@ code, pre { font-family: var(--mono); }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .swatch.none { border: 1.5px dashed var(--muted); position: relative; }
 .swatch.none::after { content: ""; position: absolute; inset: 11px 3px; border-top: 1.5px solid var(--muted); transform: rotate(-45deg); }
-.plan-pick { position: relative; flex: none; }
-.plan-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 7px 18px 6px; border: 1.5px solid var(--line); border-radius: 22px; }
-.plan-row { display: flex; align-items: center; justify-content: center; gap: 16px; padding-right: 8px; }
-.plan-row:empty { display: none; }
-.plan-picks { gap: 4px; padding-right: 0; }
-.plan-pill .ring { width: 26px; height: 26px; }
-.proj-pick { position: relative; flex: none; }
-.proj-btn { display: flex; align-items: center; gap: 8px; padding: 2px 4px; border-radius: 8px; font: 700 15px var(--hand); color: var(--fg); }
+.plan-pick { position: relative; }
+.proj-pick { position: relative; flex: 0 100 auto; min-width: 44px; }
+.proj-btn { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px; border-radius: 8px; font: 600 13px var(--sans); color: var(--fg); }
 .proj-btn:not(:disabled):hover, .proj-btn[aria-expanded="true"] { color: var(--accent); }
-.proj-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-name { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The project's face (claudia.web.views.dot), small before its name. */
+.proj-btn .rail-logo { flex: none; width: 16px; height: 16px; border-radius: 4px; }
+.proj-btn .rail-tag { flex: none; display: grid; place-items: center; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 3px; border-radius: 8px; box-shadow: inset 0 0 0 1px currentColor; font-size: 9px; }
+.proj-btn .rail-blank { flex: none; margin: 0 5px; }
 .proj-pop { position: absolute; top: calc(100% + 10px); right: -6px; z-index: 30; display: grid; gap: 2px; width: 236px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); cursor: default; }
 .proj-pop .palette { position: static; padding: 2px 6px 10px; border: 0; box-shadow: none; background: none; }
-.plan-pill.can { cursor: pointer; }
-.plan-pill.can:hover, .plan-pill[aria-expanded="true"] { border-color: var(--muted); }
-.plan-owner { color: var(--fg); font: 700 15px var(--hand); letter-spacing: 0.02em; white-space: nowrap; }
+.plan-owner { flex: none; color: var(--muted); font: 500 12.5px var(--sans); white-space: nowrap; }
+/* A chat column too narrow for one line: the names on the first, the meters on the second. */
+@container (max-width: 860px) {
+  .head-pill { flex-wrap: wrap; padding: 6px 12px; border-radius: 16px; }
+  .head-title { flex-basis: 100%; }
+  .head-meters { flex: 1 1 100%; }
+  .head-meters .proj-pick { margin-right: auto; }
+  .proj-pop { right: auto; left: -6px; }
+}
+/* A phone-wide column: the server's name and the plan's owner show in the plan list only. */
+@container (max-width: 679px) {
+  .head-server, .plan-owner { display: none; }
+  .chat-head { padding: 8px; }
+  .head-pill { padding: 6px 10px; }
+  .head-meters { gap: 6px; }
+  .head-rings { gap: 11px; padding-right: 6px; }
+  .head-picks::before { margin-right: 4px; }
+  /* No native arrow on the pickers here: its room goes to the project's name. */
+  .head-picks select { appearance: none; -webkit-appearance: none; padding: 2px 4px; }
+}
 .plan-list { position: absolute; top: calc(100% + 6px); right: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .plan-item { display: grid; gap: 1px; padding: 6px; border-radius: 7px; text-align: left; white-space: nowrap; }
@@ -511,7 +543,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* ---------- Phones (under 680px) ----------
    Three full screens, list -> chat -> picture: the next one slides over the one before, which waits
    30% to the left under it (claudia.web.swipe follows the finger). */
-.back-to-list { display: none; }
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
   .menu-toggle, .divider, .backdrop { display: none; }
@@ -528,13 +559,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .app[data-screen="picture"] .split > .left { transform: translateX(-30%); }
   .chat-row { min-height: 44px; }
   .chat-row .t { font-size: 15px; }
-  .back-to-list { display: flex; align-items: center; gap: 2px; flex: none; margin-left: -8px; padding: 4px 6px 4px 0; color: var(--accent); font: 700 17px var(--hand); }
-  .back-to-list svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-  .back-to-list .count { display: grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--on-hue); font: 700 11px var(--sans); }
-  .back-to-list .count.waiting { background: var(--amber); color: #000; }
-  /* The header: Chats, colour and title on one line; the pill on a second line. */
-  .chat-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
-  .head-title { flex: 1 1 0; min-width: 0; }
+  .chat-head { flex-wrap: wrap; gap: 4px 8px; }
   .chat-head .act { order: 5; flex-basis: 100%; margin-left: 0; }
   .chat-head .act-pill { width: fit-content; }
   /* iOS zooms into any field with text under 16px when it gets focus. */

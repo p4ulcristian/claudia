@@ -51,25 +51,31 @@
  (fn [db]
    (project-tags (keep (fn [[_ p]] (:name p)) (:projects db)))))
 
+(defn project-face
+  "A project's face: its logo, else its short tag, else a small dot for a folder without a project.
+  The chat's circle and the chat header's project picker draw it."
+  [_server _folder]
+  (let [broken (r/atom false)]
+    (fn [server folder]
+      (let [project (when (seq folder) @(rf/subscribe [:project server folder]))
+            view @(rf/subscribe [:view])
+            tags @(rf/subscribe [:project-tags])]
+        (when (and (seq folder) (nil? project)) (rf/dispatch [:ops/project server folder]))
+        (cond
+          (and (:logo project) (not @broken))
+          [:img.rail-logo {:src (ops/logo-url view server folder) :alt "" :on-error #(reset! broken true)}]
+          (:name project) [:span.rail-tag (get tags (:name project) "")]
+          :else [:span.rail-blank {:aria-hidden true}])))))
+
 (defn chat-dot
   "row: a list row with :server. done?: finished since you looked (never in a read-only view, never
   the open chat)."
-  [_row _done?]
-  (let [broken (r/atom false)]
-    (fn [{:keys [server folder waiting running agents] :as _row} done?]
-      (let [project (when (seq folder) @(rf/subscribe [:project server folder]))
-            view @(rf/subscribe [:view])
-            tags @(rf/subscribe [:project-tags])
-            agents (or agents 0)
-            state (cond waiting :waiting running :thinking done? :done)]
-        (when (and (seq folder) (nil? project)) (rf/dispatch [:ops/project server folder]))
-        [:span.rail-dot
-         (cond
-           (and (:logo project) (not @broken))
-           [:img.rail-logo {:src (ops/logo-url view server folder) :alt "" :on-error #(reset! broken true)}]
-           (:name project) [:span.rail-tag (get tags (:name project) "")]
-           :else [:span.rail-blank {:aria-hidden true}])
-         (if (and (not waiting) (not running) (pos? agents))
-           [agents/agents-ring agents]
-           [state-badge state])
-         [moons (if running agents 0)]]))))
+  [{:keys [server folder waiting running agents]} done?]
+  (let [agents (or agents 0)
+        state (cond waiting :waiting running :thinking done? :done)]
+    [:span.rail-dot
+     [project-face server folder]
+     (if (and (not waiting) (not running) (pos? agents))
+       [agents/agents-ring agents]
+       [state-badge state])
+     [moons (if running agents 0)]]))

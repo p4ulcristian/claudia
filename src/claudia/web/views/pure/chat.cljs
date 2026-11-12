@@ -17,13 +17,12 @@
     (or (index-where #(= msg-id (:turn %)) pictures)
         (last (keep-indexed (fn [i p] (when (or (nil? next-at) (< (:at p 0) next-at)) i)) pictures)))))
 
-(defn others-count
-  "For the Chats button: the other chats (not the open one, not off) waiting on the person, and those
-  finished unseen (none in a read-only view)."
-  [rows open read-only?]
-  (let [others (remove #(or (= open [(:server %) (:id %)]) (:off %)) rows)]
-    {:waiting (count (filter :waiting others))
-     :done (if read-only? 0 (count (filter #(and (not (:waiting %)) (:unseen %)) others)))}))
+(defn server-state
+  "What the header shows of a server's connection (status): :off when it is closed, nil when it is
+  open, :reconnecting for anything else."
+  [status]
+  (cond (= :closed status) :off
+        (not= :open status) :reconnecting))
 
 (defn new-title
   "The typed title, trimmed, when it is a new one; else nil."
