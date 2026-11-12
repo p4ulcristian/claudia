@@ -1,6 +1,6 @@
 (ns claudia.slave.api
   "The runner's HTTP calls beyond /api/me and the vault read (PROTOCOL.md, \"Runner HTTP: chat
-  operations\"): the delegate API another program on this machine uses (Eye on Rainbow's Gus),
+  operations\"):
   uploads, search, fork, explain, the limits kept per token (the front collects them for the hub), the working folder's project, all ~/Work sessions, the chat
   menu's changes, and Settings' tokens."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
@@ -18,7 +18,6 @@
             [claudia.slave.search :as search]
             [claudia.slave.shown :as shown]
             [claudia.slave.store :as store]
-            [claudia.slave.tasks :as tasks]
             [claudia.slave.tokens :as tokens]
             [claudia.slave.uploads :as uploads]))
 
@@ -27,11 +26,6 @@
 (defn- known? [id] (and (string? id) (some? (store/chat id))))
 
 (def ^:private max-body (* 1024 1024))
-
-(defn text-of
-  "A request body's text, trimmed, when it is 1 to 20000 characters; else nil."
-  [body]
-  (let [t (:text body)] (when (string? t) (let [t (str/trim t)] (when (<= 1 (count t) 20000) t)))))
 
 (defn- reply-promise [^js res answer]
   (-> answer
@@ -45,80 +39,6 @@
 (defn least-used-colour [] (chats/least-used-colour))
 
 (def ^:private no-chat (js/Promise.resolve {:error "no such chat" :status 404}))
-
-;; ---- the delegate API (decision 16 of the TypeScript Claudia) ----
-
-(defn- delegate [req]
-  (-> (io/read-json req max-body)
-      (.then (fn [b]
-               (if-let [t (text-of b)]
-                 {:id (chats/new-chat! t nil)}
-                 {:error "text: 1 to 20000 characters"})))))
-
-(defn- send-to [req id]
-  (-> (io/read-json req max-body)
-      (.then (fn [b]
-               (let [t (text-of b)]
-                 (cond (not t) {:error "text: 1 to 20000 characters"}
-                       (not (known? id)) {:error "no such chat" :status 404}
-                       :else (do (store/update! id {:archived false})
-                                 (chats/wake! id)
-                                 (chats/send-text! id t)
-                                 (changed!)
-                                 {:ok true})))))))
-
-(defn answers-for
-  "The answers to an ask: the same text for each of its questions, keyed by the question."
-  [ask t]
-  (into {} (for [q (:questions ask)] [(keyword (:question q)) t])))
-
-(defn- answer [req id]
-  (-> (io/read-json req max-body)
-      (.then (fn [b]
-               (let [t (text-of b)
-                     open (->> (vals (:asks (get @chats/state id))) (map :ask) (filter #(= "question" (:kind %))))]
-                 (cond (not t) {:error "text: 1 to 20000 characters"}
-                       (empty? open) {:error "no open question in this chat" :status 409}
-                       :else (do (doseq [a open] (chats/answer! id (:id a) (answers-for a t)))
-                                 {:ok true :answered (count open)})))))))
-
-(def unknown-state
-  {:known false :running false :waiting false :asks [] :last "" :step "" :steps 0 :since nil :agents 0})
-
-(defn- newest-step
-  "The newest message of a turn as a progress line: \"<tool>: <title>\" or the start of what it said."
-  [newest]
-  (let [cut #(subs % 0 (min 160 (count %)))]
-    (case (:role newest)
-      "tool" (cut (str (or (:label newest) (:tool newest)) ": " (or (:title newest) (:summary newest))))
-      "assistant" (cut (first (str/split-lines (str (:text newest)))))
-      "")))
-
-(defn turn-state
-  "How a known chat stands, from its snapshot and the number of agents it left working."
-  [{:keys [messages running asks since]} agents]
-  (let [msgs (vec messages)
-        last-user (or (last (keep-indexed #(when (= "user" (:role %2)) %1) msgs)) -1)
-        turn (subvec msgs (inc last-user))]
-    {:known true
-     :running (boolean running)
-     :waiting (boolean (seq asks))
-     :asks (vec (for [a asks :when (= "question" (:kind a))] (select-keys a [:id :questions])))
-     :last (str/join "\n\n" (keep #(when (= "assistant" (:role %)) (:text %)) turn))
-     :step (newest-step (peek turn))
-     :steps (count (filter #(= "tool" (:role %)) turn))
-     :since (when (and running since) (.toISOString (js/Date. since)))
-     :agents agents}))
-
-(defn- state-of
-  "How a chat stands, for whoever started it from outside (runner.ts /api/chats/:id/state): working,
-  waiting on a question, its last answer (the text after the last message sent), and the newest step
-  (\"<tool>: <title>\" or the start of what it said), tool count and start of this turn for a
-  progress line, and how many agents it left working."
-  [id]
-  (if-not (known? id)
-    (js/Promise.resolve unknown-state)
-    (.then (chats/snapshot id) #(turn-state % (tasks/working id)))))
 
 ;; ---- all ~/Work sessions ----
 
@@ -315,8 +235,7 @@
 
 (def ^:private api-routes
   "[method [\"api\" name] parts] -> operation, for /api/<name>[/...]."
-  {["POST" ["api" "delegate"] 2] :delegate
-   ["GET" ["api" "search"] 2] :search
+  {["GET" ["api" "search"] 2] :search
    ["GET" ["api" "limits"] 2] :limits
    ["GET" ["api" "sessions"] 2] :sessions
    ["GET" ["api" "project"] 2] :project
@@ -329,10 +248,7 @@
 
 (def ^:private chat-routes
   "[method op] -> operation, for /api/chats/:id[/op/a/b]."
-  {["POST" "send"] :send
-   ["POST" "answer"] :answer
-   ["GET" "state"] :state
-   ["POST" "uploads"] :upload
+  {["POST" "uploads"] :upload
    ["GET" "uploads"] :download
    ["GET" "sent"] :sent
    ["GET" "shown"] :shown
@@ -359,7 +275,6 @@
         [_ _ id _ a b] parts]
     (case op
       :read-only (io/send-json res 403 {:error "Read only."})
-      :delegate (reply (delegate req))
       :search (io/send-json res 200 {:found (search/search (or (.get q "q") "") (search-rows (.get q "archived")))})
       :sessions (reply (sessions))
       :limits (io/send-json res 200 {:tokens (meta/heard)})
@@ -370,9 +285,6 @@
       :github (reply (.then (tokens/github-user) (fn [u] {:user u})))
       :set-github (reply (.then (io/read-json req max-body) #(tokens/set-github-token! (:token %))))
       :adopt (reply (adopt (nth parts 2)))
-      :send (reply (send-to req id))
-      :answer (reply (answer req id))
-      :state (reply (state-of id))
       :upload (uploads/save! req res id (.get q "name"))
       :download (uploads/serve! res id a)
       :sent (.then (find-image id {:uuid a :n (js/Number b)}) #(image-reply res %))
