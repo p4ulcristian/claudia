@@ -1,6 +1,7 @@
 (ns claudia.web.views.chat
-  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (the title
-  that renames itself with its server under it, the folder, the chat's Claude subscription, the colour dot), the messages (Markdown, tool
+  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (one pill
+  in the chat's colour: the title that renames itself, its server and the server's state, the project
+  with its logo, the chat's Claude subscription, its meters, model and effort), the messages (Markdown, tool
   steps folded into groups, streamed text, the working line) and the composer."
   (:require [clojure.string :as str]
             [claudia.web.hooks :as hooks]
@@ -13,6 +14,7 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.codesend :as codesend]
+            [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
@@ -88,9 +90,9 @@
    [:f> chatmenu/project-list ck row (fn [f] (fn [] (f) (close)))]])
 
 (defn- project-picker
-  "The chat's project and colour in one: the colour dot and the project's name (its folder's when
-  it is in no project); a click opens the palette and this server's projects."
-  [ck row color folder ro]
+  "The chat's project and colour in one: the project's small logo (dot/project-face) and its name
+  (its folder's when it is in no project); a click opens the palette and this server's projects."
+  [{:keys [ck server row]} folder ro]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
         label (pure/project-label (get-in row [:project :name]) folder)]
@@ -98,10 +100,9 @@
     [:div.proj-pick {:ref #(set! (.-current box) %)}
      [:button.proj-btn {:disabled ro :on-click #(set-open not) :aria-haspopup "true" :aria-expanded open
                         :title (str "Project and colour of this chat" (when (seq folder) (str " · " folder)))}
-      [:span.color-dot {:class (when-not color "none")
-                        :style {:background (when (some #{color} colours) (str "var(--c-" color ")"))}}]
+      [dot/project-face server folder]
       [:span.proj-name label]]
-     (when open (project-pop ck row color #(set-open false)))]))
+     (when open (project-pop ck row (:color row) #(set-open false)))]))
 
 (defn- plan-limit [label l now]
   [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
@@ -147,93 +148,97 @@
                   (let [t (js/setInterval #(rf/dispatch [:ops/load-tokens]) 60000)] #(js/clearInterval t)))
                 []))
 
-(defn- plan-pill
-  "The chat's Claude subscription (README decision 16) and its meters in one pill: whose plan the
-  chat runs on, the chat's context (right click: compact), that plan's 5-hour and week use, and
-  under them the chat's model and effort. A click on the pill (not on those two) opens the saved
-  plans; a pick applies at once."
-  [{:keys [ck server state row] :as oc} ro]
+;; ---- the header ----
+
+(rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
+
+(defn- title-edit [title rename! cancel!]
+  [:input.title-edit {:default-value title :auto-focus true
+                      :on-blur #(rename! (.. % -target -value))
+                      :on-key-down #(case (.-key %)
+                                      "Enter" (rename! (.. % -currentTarget -value))
+                                      "Escape" (cancel!)
+                                      nil)}])
+
+(defn- title-line
+  "The title; with edit! (a renamable chat) a click on it renames."
+  [title edit!]
+  [:h1 {:class (when edit! "renamable") :title (when edit! "Click to rename") :on-click edit!}
+   [:span.t title]])
+
+(def ^:private state-paths
+  {:off ["M12 3v8" "M6.5 6.5a8 8 0 1 0 11 0"]
+   :reconnecting ["M20 12a8 8 0 0 0-14-5.3L4 9" "M4 4v5h5" "M4 12a8 8 0 0 0 14 5.3l2-2.3" "M20 20v-5h-5"]})
+
+(defn- state-icon
+  "Whether the server is there: a power sign when it is off, turning arrows while the page
+  reconnects, nothing when it is connected."
+  [status label]
+  (when-let [s (pure/server-state status)]
+    (let [tip (if (= :off s) (str label " is off") "reconnecting…")]
+      [:span.head-state {:class (name s) :role "img" :aria-label tip :data-tip tip}
+       [:svg {:viewBox "0 0 24 24" :aria-hidden true}
+        (for [d (state-paths s)] ^{:key d} [:path {:d d}])]])))
+
+(defn- head-names
+  "The title (a click renames it), the server's name when there are several, and the server's state."
+  [{:keys [ck server chat row state status]} ro]
+  (let [[editing set-editing] (h/use-state false)
+        title (or (:title row) (:title state) "New chat")
+        label @(rf/subscribe [:server-label server])
+        rename! (fn [typed]
+                  (set-editing false)
+                  (when-let [t (and chat (pure/new-title typed title))] (rf/dispatch [:chat/rename ck t])))]
+    [:div.head-title
+     (if editing
+       (title-edit title rename! #(set-editing false))
+       (title-line title (when (and row (not ro)) #(set-editing true))))
+     (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
+       [:span.head-server {:title (str "On " label)} label])
+     (state-icon status label)]))
+
+(defn- head-meters
+  "After the names: the project, whose plan the chat runs on, the chat's context (right click:
+  compact) with that plan's 5-hour and week use, and the chat's model and effort."
+  [{:keys [row state] :as oc} on {:keys [five week]} now ro]
+  [:div.head-meters
+   [:f> project-picker oc (or (:folder row) (:folder state)) ro]
+   (when on [:span.plan-owner {:title "Claude subscription of this chat"} (:name on)])
+   [:span.head-rings
+    [usage/context-ring (assoc oc :pending? true)]
+    (limit-ring "five_hour" "5-hour" five now)
+    (limit-ring "seven_day" "Week" week now)]
+   [:span.head-picks [usage/pickers oc]]])
+
+(def ^:private own-clicks
+  "What in the pill has its own click, so a click there does not open the plans."
+  ".plan-list, .pick, .proj-pick, h1, .title-edit")
+
+(defn- head-pill
+  "The whole header in one pill, tinted with the chat's colour: the names (head-names) and the
+  meters (head-meters). The chat's Claude subscription is README decision 16: a click on the pill
+  (not on own-clicks) opens the saved plans; a pick applies at once."
+  [{:keys [ck server state row chat] :as oc} ro]
   (let [[open set-open] (h/use-state false)
         box (h/use-ref nil)
         now (hooks/use-now)
         {:keys [plans planKey]} @(rf/subscribe [:meta server])
         on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
-        {:keys [five week]} (plan-limits on plans)
-        can? (and (seq plans) (not ro))
-        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) ".plan-list, .pick, .proj-pick"))) (set-open not)))
+        can? (and chat (seq plans) (not ro))
+        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) own-clicks))) (set-open not)))
         pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
     (use-closes-away! box open #(set-open false))
     (use-tokens!)
-    [:div.plan-pick.plan-pill
+    [:div.plan-pick.head-pill
      {:ref #(set! (.-current box) %) :class (when can? "can") :role (when can? "button") :tab-index (when can? 0)
-      :aria-haspopup "true" :aria-expanded open :title "Claude subscription of this chat"
+      :style {"--chat" (words/colour-var (:color row))} :aria-haspopup "true" :aria-expanded open
       :on-click toggle :on-key-down #(when (= "Enter" (.-key %)) (toggle %))}
-     [:div.plan-row
-      [:f> project-picker ck row (:color row) (or (:folder row) (:folder state)) ro]
-      (when on [:span.plan-owner (:name on)])
-      [usage/context-ring (assoc oc :pending? true)]
-      (limit-ring "five_hour" "5-hour" five now)
-      (limit-ring "seven_day" "Week" week now)]
-     [:div.plan-row.plan-picks [usage/pickers oc]]
+     [:f> head-names oc ro]
+     (when chat (head-meters oc on (plan-limits on plans) now ro))
      (when open [:f> plan-list plans on pick])]))
 
-(def ^:private back-icon [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
-
-(defn- back-to-list []
-  (let [rows @(rf/subscribe [:rows])
-        open @(rf/subscribe [:open])
-        ro @(rf/subscribe [:read-only?])
-        {:keys [waiting done]} (pure/others-count rows open ro)]
-    [:button.back-to-list {:on-click #(rf/dispatch [:nav/list]) :aria-label "Chats"}
-     back-icon "Chats"
-     (when (pos? (+ waiting done))
-       [:span.count {:class (when (pos? waiting) "waiting")} (+ waiting done)])]))
-
-(rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
-
-;; ---- the header ----
-
-(defn- title-edit [editing title rename!]
-  [:input.title-edit {:default-value title :auto-focus true
-                      :on-blur #(rename! (.. % -target -value))
-                      :on-key-down #(case (.-key %)
-                                      "Enter" (rename! (.. % -currentTarget -value))
-                                      "Escape" (reset! editing false)
-                                      nil)}])
-
-(defn- title-line [editing title renamable?]
-  [:h1 {:class (when renamable? "renamable")
-        :title (when renamable? "Click to rename")
-        :on-click #(when renamable? (reset! editing true))}
-   [:span.t title]
-   (when renamable? [:span.pencil {:aria-hidden true} "✎"])])
-
-(defn- head-chips
-  "After the title: whether the server is there."
-  [{:keys [status]} label]
-  [:<>
-   (cond (= :closed status) [:span.offline (str label " is off")]
-         (not= :open status) [:span.offline "reconnecting…"])])
-
-(defn- header [_oc]
-  (let [editing (r/atom false)]
-    (fn [{:keys [ck server chat row state] :as oc}]
-      (let [title (or (:title row) (:title state) "New chat")
-            ro @(rf/subscribe [:read-only?])
-            label @(rf/subscribe [:server-label server])
-            color (:color row)
-            renamable? (and row (not ro))
-            rename! (fn [typed]
-                      (reset! editing false)
-                      (when-let [t (and chat (pure/new-title typed title))] (rf/dispatch [:chat/rename ck t])))]
-        [:header.chat-head {:class (when color "colored")}
-         [back-to-list]
-         [:div.head-title
-          (if @editing (title-edit editing title rename!) (title-line editing title renamable?))
-          (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
-            [:span.head-server {:title (str "On " label)} label])]
-         (head-chips oc label)
-         (when chat [:f> plan-pill oc ro])]))))
+(defn- header [oc]
+  [:header.chat-head [:f> head-pill oc @(rf/subscribe [:read-only?])]])
 
 ;; ---- messages ----
 
@@ -544,12 +549,8 @@
       (message-box parts)
       (toolbar parts)]]))
 
-(defn- new-chat-head [ro]
-  [:header.chat-head
-   [back-to-list]
-   ;; A new chat's colour comes with it once it is made (the runner picks one).
-   (when-not ro [:div.color-pick [:span.color-dot.none {:title "Chat colour: once the chat has started"}]])
-   [:h1 [:span.t "New chat"]]])
+(def ^:private new-chat-head
+  [:header.chat-head [:div.head-pill [:div.head-title [:h1 [:span.t "New chat"]]]]])
 
 (defn- pane-body [oc me me-error]
   (cond
@@ -580,7 +581,7 @@
     [:section.left
      (if oc
        ^{:key (str (:ck oc))} [header oc]
-       (new-chat-head ro))
+       new-chat-head)
      (when oc [:f> agents/chips oc])
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
      (pane-body oc me me-error)

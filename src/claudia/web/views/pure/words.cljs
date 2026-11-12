@@ -12,6 +12,11 @@
   "The chat colours and passive ash, last."
   (conj chat-colours "ash"))
 
+(defn colour-var
+  "The CSS variable of a chat colour (\"var(--c-teal)\"); nil for anything that is not one."
+  [c]
+  (when (some #{c} colours-with-ash) (str "var(--c-" c ")")))
+
 (defn capital
   "The word with its first letter upper case: \"paul\" -> \"Paul\"."
   [s]

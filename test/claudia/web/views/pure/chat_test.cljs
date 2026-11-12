@@ -13,11 +13,17 @@
       (is (= 1 (chat/turn-picture [{:turn "y" :at 5} {:turn "x" :at 15} {:turn "z" :at 25}] msgs "a"))))
     (is (nil? (chat/turn-picture [] msgs "a")))))
 
-(deftest others-count-leaves-out-the-open-and-the-off-chats
-  (let [rows [{:server "s" :id "1" :waiting true} {:server "s" :id "2" :unseen true}
-              {:server "s" :id "3" :unseen true :off true} {:server "s" :id "4" :waiting true}]]
-    (is (= {:waiting 1 :done 1} (chat/others-count rows ["s" "4"] false)))
-    (is (= {:waiting 1 :done 0} (chat/others-count rows ["s" "4"] true)))))
+(deftest server-state-off-reconnecting-or-nothing
+  (is (= :off (chat/server-state :closed)))
+  (is (nil? (chat/server-state :open)))
+  (is (= :reconnecting (chat/server-state :connecting)))
+  (is (= :reconnecting (chat/server-state nil))))
+
+(deftest colour-var-only-for-chat-colours
+  (is (= "var(--c-teal)" (words/colour-var "teal")))
+  (is (= "var(--c-ash)" (words/colour-var "ash")))
+  (is (nil? (words/colour-var "url(x)")))
+  (is (nil? (words/colour-var nil))))
 
 (deftest new-title-only-when-new
   (is (= "B" (chat/new-title "  B " "A")))

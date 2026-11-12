@@ -18,9 +18,7 @@
             [claudia.web.views.settings :as settings]
             [claudia.web.views.logotools :as logotools]))
 
-(def ^:private chat-colors (set words/colours-with-ash))
-
-(defn chat-color-var [c] (when (chat-colors c) (str "var(--c-" c ")")))
+(def chat-color-var words/colour-var)
 
 (defn ago
   "How long ago: now, 5m, 3h, 2d, then the date (Oct 3)."

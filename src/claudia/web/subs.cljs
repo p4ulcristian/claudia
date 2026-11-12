@@ -112,8 +112,3 @@
  :<- [:open-chat]
  (fn [oc] (get-in oc [:row :color])))
 
-(rf/reg-sub
- :waiting-count
- ;; Chats that wait on the person (an open question), for the phone's back button.
- :<- [:rows]
- (fn [rows] (count (filter :waiting rows))))

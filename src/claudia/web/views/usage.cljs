@@ -1,5 +1,5 @@
 (ns claudia.web.views.usage
-  "Meters and the model: the chalk ring the chat header's plan pill is made of (the chat's context,
+  "Meters and the model: the chalk ring in the chat header's pill (the chat's context,
   a click runs /compact; its plan's 5-hour and week usage: claudia.web.views.chat), Settings' bars
   with their reset countdown, the model and effort pickers in the composer, and the / command menu."
   (:require [re-frame.core :as rf]
