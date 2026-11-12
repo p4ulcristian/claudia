@@ -110,3 +110,27 @@
   (is (nil? (push/chats-of "{\"type\":\"chat\",\"chats\":[]}")))
   (is (nil? (push/chats-of "{\"type\":\"chats\",\"chats\":{}}")))
   (is (nil? (push/chats-of "not json"))))
+
+(deftest notices-of-rings-fresh-alarms-once-each
+  (let [rows [{:id "c1" :title "Deploy" :alarms [{:id "a1" :text "The deploy\nis done" :ago 1000}
+                                                 {:id "a2" :text "Old" :ago (* 11 60000)}
+                                                 {:id "a3" :text "" :ago 10}]}
+              {:id "c2" :archived true :alarms [{:id "a4" :text "Archived" :ago 10}]}]]
+    (is (= [{:server "s" :chat "c1" :title "Deploy" :kind "alarm" :event "alarm:a1" :body "The deploy is done"}
+            {:server "s" :chat "c1" :title "Deploy" :kind "alarm" :event "alarm:a3" :body "Alarm"}]
+           (push/notices-of "s" rows 0 now)))
+    (testing "an alarm rung before the first phone is not news"
+      (is (= [] (push/notices-of "s" [{:id "c1" :alarms [{:id "a1" :text "x" :ago 1000}]}] now now))))))
+
+(deftest payload-of-an-alarm-is-time-sensitive-and-says-its-kind
+  (let [p (push/payload-of {:server "s" :chat "c1" :kind "alarm" :title "Deploy" :body "Done"}
+                           (.toString (js/Buffer.alloc 32 1) "base64") 2)]
+    (is (= "alarm" (:kind p)))
+    (is (= "time-sensitive" (get-in p [:aps :interruption-level])))
+    (is (= 1 (get-in p [:aps :mutable-content])))))
+
+(deftest split-news-holds-all-but-alarms-while-present
+  (let [ask {:kind "ask" :event "ask:q1"}
+        alarm {:kind "alarm" :event "alarm:a1"}]
+    (is (= {:send [alarm] :hold [ask]} (push/split-news [ask alarm] true)))
+    (is (= {:send [ask alarm] :hold []} (push/split-news [ask alarm] false)))))

@@ -58,6 +58,17 @@
         (is (= [{:id "k" :kind "permit" :ago 50 :text "Plan: d"}] (:asks row)))
         (is (= 100 (:runningFor row)))))))
 
+(deftest alarms-on-the-row
+  (let [m 60000]
+    (testing "a new alarm is added; ones older than ten minutes go"
+      (is (= [{:id "b" :at (* 5 m)} {:id "c" :at (* 12 m)}]
+             (view/with-alarm [{:id "a" :at 0} {:id "b" :at (* 5 m)}] {:id "c" :at (* 12 m)} (* 12 m)))))
+    (testing "the hub gets the fresh ones as ago"
+      (is (= [{:id "b" :text "y" :ago (* 7 m)}]
+             (view/alarm-rows [{:id "a" :text "x" :at 0} {:id "b" :text "y" :at (* 5 m)}] (* 12 m))))
+      (is (= [{:id "a" :text "x" :ago 10}] (:alarms (view/row {:id "c"} {:alarms [{:id "a" :text "x" :at 390}]} 0 400))))
+      (is (= [] (:alarms (view/row {:id "c"} {} 0 400)))))))
+
 (deftest with-msg-replaces-or-adds
   (is (= [{:id 1 :t "new"} {:id 2}] (view/with-msg [{:id 1} {:id 2}] {:id 1 :t "new"})))
   (is (= [{:id 1} {:id 3}] (view/with-msg [{:id 1}] {:id 3})))

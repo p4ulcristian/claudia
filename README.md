@@ -172,7 +172,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   `HUB_PEERS_DIR`, the gate's root helper adds the peer and answers in `HUB_APPLIED_DIR`; the server
   fetches its address with the secret). A hub without `HUB_WG_POOL` shows pairing as unavailable.
 - **Push**: the hub tells a person's iPhones (APNs, token auth with jose; `HUB_APNS_DRY_RUN=1` logs
-  instead) when a chat of theirs finished a turn, asks a question, or waits on a secret. It learns
+  instead) when a chat of theirs finished a turn, asks a question, waits on a secret, or rings an
+  alarm the person asked Claude for (the workspace `alarm` tool: the iPhone app rings it through
+  AlarmKit, full screen through the silent switch and Focus; it is never held while they are at a
+  desktop page). It learns
   that like the page does: one socket per person with a phone and server the grid allows, as that
   person (their own chats only). Alert texts are sealed (AES-256-GCM, node:crypto) under the key the
   app made; every alert carries the badge (waiting plus finished-unseen chats across servers); a

@@ -29,6 +29,21 @@
            "permit" (str/join ": " (remove str/blank? [(:tool a) (:description a)]))
            (get-in a [:questions 0 :question]))})
 
+(def alarm-ms
+  "How long an alarm stays on the chat's row for the hub to ring (it rings once: the hub remembers)."
+  (* 10 60000))
+
+(defn with-alarm
+  "The chat's alarms ({id text at}) with a new one added, those older than alarm-ms at now dropped."
+  [alarms alarm now]
+  (conj (filterv #(< (- now (:at %)) alarm-ms) alarms) alarm))
+
+(defn alarm-rows
+  "The alarms still fresh at t, for the hub: {id text ago}."
+  [alarms t]
+  (vec (for [a alarms :let [ago (- t (:at a))] :when (< ago alarm-ms)]
+         {:id (:id a) :text (:text a) :ago ago})))
+
 (defn- last-turn
   "When and how the last turn ended, for the hub's pushes (ended: its time, t: now); nil before one."
   [r ended t]
@@ -66,7 +81,9 @@
      :ended ended
      :lastTurn (last-turn r ended t)
      :runningFor (when (and working (:since s)) (- t (:since s)))
-     :asks (mapv #(ask-row % t) entries)}))
+     :asks (mapv #(ask-row % t) entries)
+     ;; Alarms the person asked Claude for (the workspace alarm tool), rung by the hub.
+     :alarms (alarm-rows (:alarms s) t)}))
 
 (defn with-msg
   "The turn's Msgs with msg in: replacing the one with its id, else added (the newest 400 kept)."
