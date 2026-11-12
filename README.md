@@ -156,6 +156,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     into the step group, where one click shows them, so each turn leaves one short reply in the chat
     (`claudia.web.views.pure.steps/folded-ids`).
 
+18. No chat is driven from outside the page (2026-11-12): the delegate API (`POST /api/delegate`,
+    `POST /api/chats/:id/send`, `POST /api/chats/:id/answer`, `GET /api/chats/:id/state`) is gone.
+    Chats are started, written to and answered by a person in the page (the socket's `new`, `send`
+    and `answer`). Instead of: other programs and other chats starting chats in a person's list.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

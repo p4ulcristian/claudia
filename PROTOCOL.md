@@ -201,15 +201,11 @@ subagent's: made from the call's input), cut at 5000 lines.
 
 ## Runner HTTP: chat operations (`/api/…`)
 
-Answered by the runner (through the front, or straight on its socket by a program the socket lets in,
-e.g. Eye on Rainbow's Gus). A read-only caller gets 403 for anything but `GET`. `:id` = a chat id.
+Answered by the runner (through the front). No call starts a chat, sends a message into one, answers
+its questions or reads how it stands: that is the page's socket only (README decision 18). A read-only caller gets 403 for anything but `GET`. `:id` = a chat id.
 
 | Call | Answer |
 |---|---|
-| `POST /api/delegate` `{ text }` (1 to 20000 characters) | `{ id }`: a new chat of this profile with the text sent, in its list like any other |
-| `GET /api/chats/:id/state` | `{ known, running, waiting, asks: [{ id, questions }] (open questions), last (the replies after the last user message), step (the newest step: "<label>: <title>" or the first line of the newest reply, ≤ 160 characters), steps (tool calls this turn), since (ISO time the running turn started, or null), agents (agents and background shells still working) }` |
-| `POST /api/chats/:id/send` `{ text }` | `{ ok }`: a message into the chat (queued if a turn runs; unarchives it); 404 for no such chat |
-| `POST /api/chats/:id/answer` `{ text }` | `{ ok, answered }`: the text answers every open question (as if typed into "Other"); 409 when none is open |
 | `POST /api/chats/:id/uploads?name=<file name>` (body: the file, up to 100 MB) | `{ path, name, size, type }`: saved as `uploads/<id>/<name>` in `RUNNER_DATA` (`-2` before the extension when taken). `:id` is the id the page used: a new chat's own uuid before `created` |
 | `GET /api/chats/:id/uploads/:name` | the file, as a download |
 | `GET /api/chats/:id/sent/:msg/:n` | the n-th image the user message `msg` sent (from the session file) |

@@ -1,6 +1,6 @@
 (ns claudia.slave.servers-test
   "The runner's routing, the forms' preparation and the reads' parsers, on plain data."
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
             [claudia.slave.clojure :as clojure]
@@ -35,8 +35,11 @@
   (is (nil? (runner/request-op "POST" "/api/chats/x/send" "x" "send" true))))
 
 (deftest api-routes-calls
-  (is (= :delegate (api/route "POST" ["api" "delegate"] false)))
-  (is (= :read-only (api/route "POST" ["api" "delegate"] true)))
+  (testing "no call starts, messages, answers or reads a chat from outside the page"
+    (is (nil? (api/route "POST" ["api" "delegate"] false)))
+    (is (nil? (api/route "POST" ["api" "chats" "c" "send"] false)))
+    (is (nil? (api/route "POST" ["api" "chats" "c" "answer"] false)))
+    (is (nil? (api/route "GET" ["api" "chats" "c" "state"] false))))
   (is (= :read-only (api/route "GET" ["api" "github"] true)))
   (is (= :project-logo (api/route "GET" ["api" "project" "logo"] false)))
   (is (= :adopt (api/route "POST" ["api" "sessions" "x" "y"] false)))
@@ -46,12 +49,6 @@
   (is (nil? (api/route "GET" ["api" "nothing"] false))))
 
 (deftest api-chat-state-and-updates
-  (is (= "hi" (api/text-of {:text "  hi "})))
-  (is (nil? (api/text-of {:text " "})))
-  (is (= {:a "yes" :b "yes"} (api/answers-for {:questions [{:question "a"} {:question "b"}]} "yes")))
-  (is (= {:known true :running false :waiting false :asks [] :last "done" :step "done" :steps 1 :since nil :agents 2}
-         (api/turn-state {:messages [{:role "user"} {:role "tool" :tool "Bash" :title "ls"} {:role "assistant" :text "done"}]}
-                         2)))
   (is (= {:color "ash" :prev_color "red"} (api/chat-update {:color "ash"} {:color "red"} ["red"] (fn [] "new"))))
   (is (= {:color "red" :prev_color nil} (api/chat-update {:color "wake"} {:prev-color "red"} [] (fn [] "new"))))
   (is (= {:color "new" :prev_color nil :archived true} (api/chat-update {:color "wake" :archived true} {} [] (fn [] "new"))))
