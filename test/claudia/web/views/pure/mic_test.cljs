@@ -21,3 +21,10 @@
 (deftest bars-ease
   (is (= [0.6 0.8] (mic/eased [0 1] [1 0])))
   (is (= [0.6] (mic/eased nil [1]))))
+
+(deftest a-drag-right-adds-anything-else-sends
+  (is (= :send (mic/gesture 0)))
+  (is (= :send (mic/gesture -120)))
+  (is (= :send (mic/gesture (dec mic/drag-px))))
+  (is (= :add (mic/gesture mic/drag-px)))
+  (is (= :add (mic/gesture 200))))

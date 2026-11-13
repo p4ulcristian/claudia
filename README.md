@@ -138,11 +138,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     on the WebGL 2 path).
 
 16. Each chat has its own Claude subscription (2026-11-11): the chat's header shows whose plan it
-    runs on (its name, after the project) and a click on the header's pill picks another saved one; the pick is
+    runs on (row 2, decision 22) and a click on it picks another saved one; the pick is
     kept with the chat and applies on its next message (its Claude Code starts again on that
     token). For that the hub sends every saved token to each server (`<token file>.d/<key>`, names
     in `<token file>.saved.json`), not only the one in use. The one in use (decision 10) is now the
-    default: a new chat starts on it and stays on it, and a chat without a pick (made before this,
+    default: a new chat starts on it unless its header picked another, and stays on it; a chat without a pick (made before this,
     or its pick was removed) runs on it. The default is set in Settings; the rail's button that
     switched every chat at once is gone. Instead of: one token for every chat of every person,
     where one person's switch moved everyone's chats.
@@ -175,16 +175,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     mid-screen on a 13" iPad). Hold it and talk: 48 bars round it follow the voice; let go and the
     clip (WebM, or MP4 in Safari and the iPhone app) goes to the hub (`POST /hub/listen`), which
     passes it to a speech-to-text service with OpenAI's transcription shape (`HUB_LISTEN_URL`,
-    token in `HUB_LISTEN_TOKEN_FILE`); the text joins the draft and nothing is sent: Send stays
-    the person's. While there is something to send, Send sits right above the mic (touch screens;
-    with a mouse it stays in the toolbar), so talking, reading and sending stay under one thumb.
+    token in `HUB_LISTEN_TOKEN_FILE`). Letting go sends (2026-11-14): the draft with the heard
+    text goes at once, whether the finger let go in place or dragged left; dragged right (40 px
+    or more), the text only joins the draft, to be read and changed before Send. While the mic is
+    held, "← send" and "add to message →" float over the messages just above the composer
+    (nothing moves), the one letting go would do lit. Heard text that is empty sends nothing.
+    Send is one button at the composer's right end (Stop there while Claude works and nothing is
+    typed); the Send that sat above the mic is gone.
     A tap only says to hold it. The mic shows only where the browser can record and
     the hub has a listen service. Instead of: a mic beside Send (out of a thumb's reach on a
     tablet), Send turning into a mic (no talking once the box has text), a corner button over the
     picture, or Apple's on-device speech (app only, weaker on names). Files:
     `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
 
-21. Talking mode (2026-11-13): a speaker in the composer's toolbar turns it on and off, per device
+21. Talking mode (2026-11-13): a speaker in the chat's header (row 1, decision 22) turns it on and off, per device
     (localStorage), for whichever chat is open. It only ever speaks what arrives while the person
     watches: the final reply of a turn that ended by itself (not the working messages, not a
     stopped turn) and Claude's questions, in the chat on screen, with the page in front; read by
@@ -198,6 +202,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     opening by itself). Files: `src/claudia/web/speech.cljs`, `src/claudia/web/views/talk.cljs`,
     `src/claudia/web/views/pure/talk.cljs`; `src/claudia/web/voice.cljs` is the one fetch of the
     hub's voice (the 3D narrator uses it too).
+
+22. The chat's header holds every setting (2026-11-14): one panel in the chat's colour, three
+    rows, the same for a new chat and a started one. Row 1: the title (a click renames it), the
+    server's state, talking mode and Archive. Row 2: the computer it runs on, whose Claude
+    subscription (decision 16), the project (with the chat's colour). Row 3: model and effort,
+    then the context, 5-hour and week rings. A new chat picks all of them before its first
+    message, and they go with the `new` frame, so the first turn already runs on them (before,
+    model and effort followed `created`, after the first turn had begun). Once started, the
+    computer is fixed and every other pick changes the chat. The composer keeps only writing and
+    sending, one row centred: the mic, Attach, the message, Send. Instead of: the computer above
+    the composer and model and effort in its toolbar (settings spread over two places, account
+    and project not settable before the chat existed), or a header that folds into a pill once
+    the chat starts (two layouts to learn). Files: `src/claudia/web/views/head.cljs`,
+    `src/claudia/web/views/chat.cljs`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

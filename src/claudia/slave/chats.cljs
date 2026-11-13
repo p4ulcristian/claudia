@@ -958,14 +958,16 @@
       (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)})))))
 
 (defn new-chat!
-  "Starts a chat with its first message; returns its id (the Claude Code session id)."
-  [message folder & [images]]
-  (let [id (str (random-uuid))]
+  "Starts a chat with its first message; returns its id (the Claude Code session id). picks: the
+  model, effort and plan chosen before it was made, in place before its first turn starts."
+  [message folder images picks]
+  (let [id (str (random-uuid))
+        ;; A new chat stays on the plan in use now unless one was picked: a later switch of that one moves no chat.
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) picks (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (least-used-colour)})
-    ;; A new chat stays on the plan in use now: a later switch of that one moves no chat.
-    (when-let [k (:key (tokens/current))] (store/kv! id "settings" (assoc (settings id) :plan k)))
+    (when (some some? (vals s)) (store/kv! id "settings" s))
     (changed!)
     (send-text! id message images)
     id))

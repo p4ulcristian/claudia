@@ -1,8 +1,7 @@
 (ns claudia.web.views.chat
-  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header (one pill
-  in the chat's colour: the title that renames itself, its server and the server's state, the project
-  with its logo, the chat's Claude subscription, its meters, model and effort), the messages (Markdown, tool
-  steps folded into groups, streamed text, the working line) and the composer."
+  "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
+  (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
+  the working line) and the composer (the mic, Attach, the message and one Send)."
   (:require [clojure.string :as str]
             [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
@@ -12,18 +11,15 @@
             [claudia.web.md :as md]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
-            [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.codesend :as codesend]
-            [claudia.web.views.dot :as dot]
+            [claudia.web.views.head :as head]
             [claudia.web.views.mic :as mic]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.usage :as usage-pure]
+            [claudia.web.views.pure.mic :as mic-pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
-
-(def ^:private colours words/colours-with-ash)
 
 (defn server-mark [server]
   (let [label @(rf/subscribe [:server-label server])
@@ -46,201 +42,7 @@
        {:db (assoc-in db [:viewing-msg k] msg-id)
         :fx [[:dispatch [:picture/pick idx]]]}))))
 
-;; ---- small parts ----
-
-(defn archive-icon
-  "A box with a lid; the arrow points out of it for Unarchive."
-  [out?]
-  [:svg {:width 16 :height 16 :viewBox "0 0 16 16" :fill "none" :stroke "currentColor" :stroke-width 1.5
-         :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
-   [:rect {:x 1.5 :y 2.5 :width 13 :height 3.5 :rx 0.8}]
-   [:path {:d "M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6"}]
-   (if out? [:path {:d "M8 12V8.2M6.3 9.8 8 8.1l1.7 1.7"}] [:path {:d "M6.3 9h3.4"}])])
-
-(defn- use-closes-away!
-  "While open, a pointer down outside box or Escape calls close."
-  [box open close]
-  (h/use-effect
-   (fn []
-     (when open
-       (let [away (fn [e] (when-not (some-> (.-current box) (.contains (.-target e))) (close)))
-             esc (fn [e] (when (= "Escape" (.-key e)) (close)))]
-         (js/window.addEventListener "pointerdown" away)
-         (js/window.addEventListener "keydown" esc)
-         #(do (js/window.removeEventListener "pointerdown" away)
-              (js/window.removeEventListener "keydown" esc)))))
-   [open]))
-
-(defn- palette [color pick]
-  [:div.palette {:role "menu"}
-   (for [c colours]
-     ^{:key c}
-     [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
-                      :style {:background (str "var(--c-" c ")")}
-                      :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
-                      :on-click #(pick c)}])
-   [:button.swatch.none {:class (when-not color "on") :title "No colour" :aria-label "No colour"
-                         :on-click #(pick nil)}]])
-
-(defn- project-pop
-  "The palette and the projects the chat can move to; a pick of either closes it."
-  [ck row color close]
-  [:div.proj-pop {:role "menu"}
-   [:div.plan-title "Colour"]
-   (palette color (fn [c] (rf/dispatch [:ops/color ck c]) (close)))
-   [:div.plan-title "Project"]
-   [:f> chatmenu/project-list ck row (fn [f] (fn [] (f) (close)))]])
-
-(defn- project-picker
-  "The chat's project and colour in one: the project's small logo (dot/project-face) and its name
-  (its folder's when it is in no project); a click opens the palette and this server's projects."
-  [{:keys [ck server row]} folder ro]
-  (let [[open set-open] (h/use-state false)
-        box (h/use-ref nil)
-        label (pure/project-label (get-in row [:project :name]) folder)]
-    (use-closes-away! box open #(set-open false))
-    [:div.proj-pick {:ref #(set! (.-current box) %)}
-     [:button.proj-btn {:disabled ro :on-click #(set-open not) :aria-haspopup "true" :aria-expanded open
-                        :title (str "Project and colour of this chat" (when (seq folder) (str " · " folder)))}
-      [dot/project-face server folder]
-      [:span.proj-name label]]
-     (when open (project-pop ck row (:color row) #(set-open false)))]))
-
-(defn- plan-limit [label l now]
-  [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
-   (usage-pure/limit-text label l now)])
-
-(defn- plan-list
-  "The saved plans with their week and 5-hour use (what the hub last heard) and the hours until
-  each resets."
-  [plans on pick]
-  (let [now (hooks/use-now)
-        tokens @(rf/subscribe [:tokens])
-        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) @(rf/subscribe [:live-limits]))]
-    (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
-    [:div.plan-list {:role "menu"}
-     [:div.plan-title "This chat's Claude subscription"]
-     (for [{k :key n :name :keys [week five]} (usage-pure/plan-rows plans rows)]
-       ^{:key k}
-       [:button.plan-item {:role "menuitemradio" :aria-checked (= k (:key on)) :class (when (= k (:key on)) "on")
-                           :on-click #(pick k)}
-        [:span.plan-name n]
-        (plan-limit "Week" week now)
-        (plan-limit "5-hour" five now)])]))
-
-(defn- plan-limits
-  "The 5-hour and week Limits of the plan a chat runs on (on; none saved: the server's own plan)."
-  [on plans]
-  (let [tokens @(rf/subscribe [:tokens])
-        live @(rf/subscribe [:live-limits])
-        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) live)]
-    (if on
-      (some #(when (= (:key on) (:key %)) %) (usage-pure/plan-rows plans rows))
-      {:five (usage-pure/limit-of (:limits live) "five_hour")
-       :week (usage-pure/limit-of (:limits live) "seven_day")})))
-
-(defn- limit-ring [k label l now]
-  (when-let [p (usage-pure/ring-percent l now)]
-    [usage/ring {:short (usage-pure/short-name k) :percent p :tip (usage-pure/limit-text label l now)}]))
-
-(defn- use-tokens!
-  "The hub's saved tokens with their limits, loaded now and every minute."
-  []
-  (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens])
-                  (let [t (js/setInterval #(rf/dispatch [:ops/load-tokens]) 60000)] #(js/clearInterval t)))
-                []))
-
-;; ---- the header ----
-
 (rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
-
-(defn- title-edit [title rename! cancel!]
-  [:input.title-edit {:default-value title :auto-focus true
-                      :on-blur #(rename! (.. % -target -value))
-                      :on-key-down #(case (.-key %)
-                                      "Enter" (rename! (.. % -currentTarget -value))
-                                      "Escape" (cancel!)
-                                      nil)}])
-
-(defn- title-line
-  "The title; with edit! (a renamable chat) a click on it renames."
-  [title edit!]
-  [:h1 {:class (when edit! "renamable") :title (when edit! "Click to rename") :on-click edit!}
-   [:span.t title]])
-
-(def ^:private state-paths
-  {:off ["M12 3v8" "M6.5 6.5a8 8 0 1 0 11 0"]
-   :reconnecting ["M20 12a8 8 0 0 0-14-5.3L4 9" "M4 4v5h5" "M4 12a8 8 0 0 0 14 5.3l2-2.3" "M20 20v-5h-5"]})
-
-(defn- state-icon
-  "Whether the server is there: a power sign when it is off, turning arrows while the page
-  reconnects, nothing when it is connected."
-  [status label]
-  (when-let [s (pure/server-state status)]
-    (let [tip (if (= :off s) (str label " is off") "reconnecting…")]
-      [:span.head-state {:class (name s) :role "img" :aria-label tip :data-tip tip}
-       [:svg {:viewBox "0 0 24 24" :aria-hidden true}
-        (for [d (state-paths s)] ^{:key d} [:path {:d d}])]])))
-
-(defn- head-names
-  "The title (a click renames it), the server's name when there are several, and the server's state."
-  [{:keys [ck server chat row state status]} ro]
-  (let [[editing set-editing] (h/use-state false)
-        title (or (:title row) (:title state) "New chat")
-        label @(rf/subscribe [:server-label server])
-        rename! (fn [typed]
-                  (set-editing false)
-                  (when-let [t (and chat (pure/new-title typed title))] (rf/dispatch [:chat/rename ck t])))]
-    [:div.head-title
-     (if editing
-       (title-edit title rename! #(set-editing false))
-       (title-line title (when (and row (not ro)) #(set-editing true))))
-     (when (and @(rf/subscribe [:multi-server?]) server (or row (seq (:messages state))))
-       [:span.head-server {:title (str "On " label)} label])
-     (state-icon status label)]))
-
-(defn- head-meters
-  "After the names: the project, whose plan the chat runs on, the chat's context (right click:
-  compact) with that plan's 5-hour and week use, and the chat's model and effort."
-  [{:keys [row state] :as oc} on {:keys [five week]} now ro]
-  [:div.head-meters
-   [:f> project-picker oc (or (:folder row) (:folder state)) ro]
-   (when on [:span.plan-owner {:title "Claude subscription of this chat"} (:name on)])
-   [:span.head-rings
-    [usage/context-ring (assoc oc :pending? true)]
-    (limit-ring "five_hour" "5-hour" five now)
-    (limit-ring "seven_day" "Week" week now)]
-   [:span.head-picks [usage/pickers oc]]])
-
-(def ^:private own-clicks
-  "What in the pill has its own click, so a click there does not open the plans."
-  ".plan-list, .pick, .proj-pick, h1, .title-edit")
-
-(defn- head-pill
-  "The whole header in one pill, tinted with the chat's colour: the names (head-names) and the
-  meters (head-meters). The chat's Claude subscription is README decision 16: a click on the pill
-  (not on own-clicks) opens the saved plans; a pick applies at once."
-  [{:keys [ck server state row chat] :as oc} ro]
-  (let [[open set-open] (h/use-state false)
-        box (h/use-ref nil)
-        now (hooks/use-now)
-        {:keys [plans planKey]} @(rf/subscribe [:meta server])
-        on (pure/chat-plan plans (get-in state [:settings :plan]) planKey)
-        can? (and chat (seq plans) (not ro))
-        toggle (fn [^js e] (when (and can? (not (.closest (.-target e) own-clicks))) (set-open not)))
-        pick (fn [k] (rf/dispatch [:chat/settings ck {:plan k}]) (set-open false))]
-    (use-closes-away! box open #(set-open false))
-    (use-tokens!)
-    [:div.plan-pick.head-pill
-     {:ref #(set! (.-current box) %) :class (when can? "can") :role (when can? "button") :tab-index (when can? 0)
-      :style {"--chat" (words/colour-var (:color row))} :aria-haspopup "true" :aria-expanded open
-      :on-click toggle :on-key-down #(when (= "Enter" (.-key %)) (toggle %))}
-     [:f> head-names oc ro]
-     (when chat (head-meters oc on (plan-limits on plans) now ro))
-     (when open [:f> plan-list plans on pick])]))
-
-(defn- header [oc]
-  [:header.chat-head [:f> head-pill oc @(rf/subscribe [:read-only?])]])
 
 ;; ---- messages ----
 
@@ -452,37 +254,27 @@
 
 ;; ---- composer ----
 
-(defn- new-chat-on
-  "Where a new chat starts: by the composer of an empty chat. Only servers with a profile can be picked."
-  []
-  (let [servers @(rf/subscribe [:server-list])
-        current @(rf/subscribe [:new-server])
-        all @(rf/subscribe [:servers])]
-    (when (> (count servers) 1)
-      [:div.new-on {:role "radiogroup" :aria-label "Start this chat on"}
-       [:span.muted "New chat on"]
-       (for [{server-name :name :keys [label]} servers
-             :let [off? (= :closed (get-in all [server-name :status]))]]
-         ^{:key server-name}
-         [:button {:role "radio" :aria-checked (= server-name current)
-                   :class [(when (= server-name current) "on") (if off? "off" "up")]
-                   :data-tip (if off? (str label " is off") (str "Start it on " label))
-                   :on-click #(rf/dispatch [:new/server server-name])}
-          [:span.server-mark {:aria-hidden true} (words/initial label)]
-          label
-          (when off? [:span.sf-note "off"])])])))
-
 (def ^:private clip-path "M14.5 9.5l-5.3 5.3a3.2 3.2 0 0 1-4.5-4.5l6-6a2.1 2.1 0 0 1 3 3l-5.8 5.8a1 1 0 0 1-1.4-1.4l5.2-5.2")
 
 (defn- send-fn
-  "The composer's send: a typed message while Claude asks answers the question; else it goes."
-  [draft-key text oc attached]
-  (fn []
+  "The composer's send of text: a message typed while Claude asks answers the question; else it goes."
+  [draft-key oc attached]
+  (fn [text]
     (let [ask (first (get-in oc [:state :asks]))]
       (if-let [answers (pure/typed-answer ask (str/trim (str text)) attached)]
         (do (rf/dispatch [:ask/answer (:ck oc) (:id ask) answers])
             (rf/dispatch [:draft/set draft-key ""]))
         (rf/dispatch [:composer/send text])))))
+
+(defn- heard-fn
+  "What the mic's heard text does: dragged right (:add) it joins the draft; else the draft with it
+  is sent (latest: a ref to the draft as typed now, so typing during hearing is kept)."
+  [draft-key latest attached send-text!]
+  (fn [heard dir]
+    (let [text (mic-pure/with-heard (.-current latest) heard)]
+      (if (and (= dir :send) (pure/sendable? text attached))
+        (do (rf/dispatch [:draft/set draft-key text]) (send-text! text))
+        (rf/dispatch [:draft/heard draft-key heard])))))
 
 (defn- use-grow!
   "The message box grows with its text, up to 260 px."
@@ -509,54 +301,48 @@
                                (.preventDefault e)
                                (send!)))}])
 
-(defn- archive-button [ck row]
-  (if (:archived row)
-    [:button.icon.archive {:title "Unarchive" :on-click #(rf/dispatch [:chat/archive ck false])} [archive-icon true]]
-    [:button.icon.archive {:title "Archive" :on-click #(rf/dispatch [:chat/archive ck true])} [archive-icon false]]))
+(defn- attach-button [{:keys [picker draft-key]}]
+  [:<>
+   [:input {:type "file" :multiple true :hidden true :ref #(set! (.-current picker) %)
+            :on-change (fn [e] (attach/add-files! draft-key (.. e -target -files)) (set! (.. e -target -value) ""))}]
+   [:button.icon.attach {:title "Add files, photos or videos" :aria-label "Add files, photos or videos"
+                         :on-click #(some-> (.-current picker) .click)}
+    [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d clip-path}]]]])
 
-(defn- toolbar [{:keys [picker draft-key oc running text attached send!]}]
-  (let [busy? (some :busy attached)]
-    [:div.toolbar
-     ;; A chat's model and effort are picked in its header's pill; a new chat's, here.
-     [:div.tools (when-not (:ck oc) [usage/pickers oc])]
-     [:input {:type "file" :multiple true :hidden true :ref #(set! (.-current picker) %)
-              :on-change (fn [e] (attach/add-files! draft-key (.. e -target -files)) (set! (.. e -target -value) ""))}]
-     [talk/toggle]
-     [:button.icon.attach {:title "Add files, photos or videos" :aria-label "Add files, photos or videos"
-                           :on-click #(some-> (.-current picker) .click)}
-      [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d clip-path}]]]
-     (when (and (:row oc) (not @(rf/subscribe [:read-only?])))
-       (archive-button (:ck oc) (:row oc)))
-     (when running
-       [:button.stop {:title "Stop (Esc)" :on-click #(rf/dispatch [:chat/stop])} "Stop"])
-     [:button.send.primary {:disabled (not (pure/sendable? text attached))
-                            :title (if busy? "Wait until the files are sent" "Send (Enter)")
-                            :on-click send!}
-      "Send"]]))
+(defn- send-button
+  "The one button at the row's end: Stop while Claude works and nothing is typed; else Send."
+  [{:keys [running text attached send!]}]
+  (if (and running (not (pure/sendable? text attached)) (empty? attached))
+    [:button.stop {:title "Stop (Esc)" :on-click #(rf/dispatch [:chat/stop])} "Stop"]
+    [:button.send.primary {:disabled (not (pure/sendable? text attached))
+                           :title (if (some :busy attached) "Wait until the files are sent" "Send (Enter)")
+                           :on-click send!}
+     "Send"]))
 
 (defn- composer [{:keys [draft-key oc] :as props}]
   (let [ref (h/use-ref nil)
         picker (h/use-ref nil)
+        latest (h/use-ref "")
         text @(rf/subscribe [:draft draft-key])
         server-meta @(rf/subscribe [:meta (or (:server oc) @(rf/subscribe [:new-server]))])
         items (usage/matches text oc server-meta)
         pick (min @(rf/subscribe [:slash-pick]) (max 0 (dec (count items))))
         attached @(rf/subscribe [:attach draft-key])
+        send-text! (send-fn draft-key oc attached)
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
-                     :send! (send-fn draft-key text oc attached))]
+                     :send! #(send-text! text))]
+    (set! (.-current latest) text)
     (use-grow! ref text)
     (h/use-effect (fn [] (some-> (.-current ref) .focus) nil) [(str draft-key)])
     [:div.composer
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      [:f> mic/button draft-key {:send! (:send! parts) :sendable? (pure/sendable? text attached)}]
+      [:f> mic/button (heard-fn draft-key latest attached send-text!)]
       [:div.input-row
+       (attach-button parts)
        (message-box parts)
-       (toolbar parts)]]]))
-
-(def ^:private new-chat-head
-  [:header.chat-head [:div.head-pill [:div.head-title [:h1 [:span.t "New chat"]]]]])
+       (send-button parts)]]]))
 
 (defn- pane-body [oc me me-error]
   (cond
@@ -567,16 +353,13 @@
     :else [:div.messages hello]))
 
 (defn- pane-foot [oc me ro]
-  (let [started? (and oc (or (:row oc) (seq (get-in oc [:state :messages])) (:pending? oc)))]
-    (if ro
-      [:div.read-only-note (pure/read-only-note @(rf/subscribe [:view]))]
-      (when (and me (seq (:servers me)))
-        [:<>
-         (when-not started? [new-chat-on])
-         [:f> composer {:draft-key (if oc (:ck oc) :new)
-                        :running (get-in oc [:state :running])
-                        :asking (seq (get-in oc [:state :asks]))
-                        :oc oc}]]))))
+  (if ro
+    [:div.read-only-note (pure/read-only-note @(rf/subscribe [:view]))]
+    (when (and me (seq (:servers me)))
+      [:f> composer {:draft-key (if oc (:ck oc) :new)
+                     :running (get-in oc [:state :running])
+                     :asking (seq (get-in oc [:state :asks]))
+                     :oc oc}])))
 
 (defn chat-pane []
   (let [oc @(rf/subscribe [:open-chat])
@@ -585,9 +368,7 @@
         error @(rf/subscribe [:error])
         ro @(rf/subscribe [:read-only?])]
     [:section.left
-     (if oc
-       ^{:key (str (:ck oc))} [header oc]
-       new-chat-head)
+     ^{:key (str (:ck oc))} [head/header oc]
      (when oc [:f> agents/chips oc])
      [talk/guard (str (:ck oc))]
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])

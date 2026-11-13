@@ -234,7 +234,7 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?` | starts a chat with that first message; runner answers `created { chat, id }` then events |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |

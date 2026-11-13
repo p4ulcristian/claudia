@@ -178,17 +178,21 @@
       (= (:open db) [server id]) (assoc :open k))))
 
 (defn created-frames
-  "Open the new chat; a model or effort picked before the chat was made goes with it now."
-  [db server chat]
-  (cond-> [[server {:type "open" :chat chat}]]
-    (seq (:new-settings db)) (conj [server (merge {:type "settings" :chat chat} (:new-settings db))])))
+  "Open the new chat (what was picked before it was made went with `new`)."
+  [server chat]
+  [[server {:type "open" :chat chat}]])
+
+(defn new-picks
+  "What a new chat's header picked, as `new` carries it: model, effort, plan and folder, those set."
+  [new-settings]
+  (into {} (filter (comp some? val)) (update (select-keys new-settings [:model :effort :plan :folder]) :folder not-empty)))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text]} (get-in db [:pending-new id])]
     (let [was-open? (= (:open db) [server id])]
       {:db (created-db db server chat id text)
        :history/replace (if was-open? [server chat] (fx/parse-path js/location.pathname))
-       :ws/send-all (created-frames db server chat)})
+       :ws/send-all (created-frames server chat)})
     {:db db}))
 
 (defmethod on-frame "msg" [db server {:keys [chat msg]}]
@@ -325,7 +329,8 @@
 (rf/reg-event-fx
  :new/server
  (fn [{:keys [db]} [_ server]]
-   {:db (assoc db :new-server server) :store ["claudia.newServer" server]}))
+   ;; A folder is one server's: picking another computer drops it.
+   {:db (-> db (assoc :new-server server) (update :new-settings dissoc :folder)) :store ["claudia.newServer" server]}))
 
 (rf/reg-event-db
  :error/dismiss
@@ -397,7 +402,7 @@
              (dissoc :new-upload-id)
              (assoc :new-server server))
      :store ["claudia.newServer" server]
-     :ws/send [server (merge {:type "new" :id id :text sent} extra)]}))
+     :ws/send [server (merge {:type "new" :id id :text sent} (new-picks (:new-settings db)) extra)]}))
 
 (rf/reg-event-fx
  :composer/send

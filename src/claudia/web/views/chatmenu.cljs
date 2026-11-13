@@ -72,35 +72,41 @@
   [:button.cm-item.cm-project {:role "menuitem" :class (when on? "on") :on-click on-click}
    [:span.l label] (when n [:span.n n])])
 
-(defn- move-input [k targets act set-text]
+(defn- move-input [targets pick act set-text]
   [:input.cm-rename {:auto-focus true :placeholder "Project name or folder path"
                      :on-change #(set-text (.. % -target -value))
                      :on-key-down (fn [e]
                                     (when (= "Enter" (.-key e))
                                       (when-let [f (pure/typed-folder targets (.. e -currentTarget -value))]
-                                        ((act #(rf/dispatch [:chat/folder k f]))))))}])
+                                        ((act #(pick f))))))}])
 
 (defn project-list
-  "The projects a chat can move to: this server's (most chats first, the chat's own marked), a
-  typed project name or folder path, or no project. act: what wraps a pick (it closes the menu)."
-  [k row act]
+  "The projects of server a chat can go to (most chats first, current marked), a typed project
+  name or folder path, or no project (none?: offered). pick gets the folder (\"\": no project);
+  act: what wraps a pick (it closes the menu)."
+  [{:keys [server current none? pick act]}]
   (let [[text set-text] (h/use-state "")
-        targets (pure/move-targets @(rf/subscribe [:all-rows]) (first k) text)
-        current (get-in row [:project :root])]
+        targets (pure/move-targets @(rf/subscribe [:all-rows]) server text)]
     [:<>
-     [move-input k targets act set-text]
+     [move-input targets pick act set-text]
      (for [{root :key label :label n :count} (take 12 targets)]
        ^{:key root}
-       [move-item label n (= root current) (act #(rf/dispatch [:chat/folder k root]))])
-     (when (:folder row)
-       [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(rf/dispatch [:chat/folder k ""]))} "No project"])]))
+       [move-item label n (= root current) (act #(pick root))])
+     (when none?
+       [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(pick ""))} "No project"])]))
+
+(defn chat-projects
+  "project-list for the chat k (row: its row): a pick moves it."
+  [k row act]
+  [:f> project-list {:server (first k) :current (get-in row [:project :root]) :none? (boolean (:folder row))
+                     :pick #(rf/dispatch [:chat/folder k %]) :act act}])
 
 (defn- move-panel
   "Move to project: back to the menu, then the projects."
   [k row act set-moving]
   [:<>
    [:button.cm-item.cm-back {:role "menuitem" :on-click #(set-moving false)} "‹ Move to project"]
-   [:f> project-list k row act]])
+   [chat-projects k row act]])
 
 (defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming set-moving]}]
   [:<>

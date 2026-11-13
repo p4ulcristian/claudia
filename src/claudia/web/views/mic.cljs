@@ -1,8 +1,8 @@
 (ns claudia.web.views.mic
   "The composer's mic: a 56 px round button at the composer's left end, under the left thumb of a
-  tablet held in landscape. Hold it and talk: bars round it follow the voice; let go and the hub
-  hears the clip, and the text joins the draft (nothing is sent: Send stays yours). A tap only says
-  to hold it. Shown only where the browser can record and the hub has a listen service."
+  tablet held in landscape. Hold it and talk: bars round it follow the voice, and two arrows float
+  over the messages. Let go (in place or dragged left) and the hub hears the clip and the draft
+  with the text is sent; dragged right, the text only joins the draft. A tap only says to hold it. Shown only where the browser can record and the hub has a listen service."
   (:require [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
             [claudia.web.views.pure.mic :as pure]
@@ -63,38 +63,48 @@
          (some-> (.-current canvas) wipe!))))
    [phase]))
 
-(defn- heard! [draft-key set-phase clip]
+(defn- heard! [on-heard set-phase dir clip]
   (set-phase :hearing)
   (-> (mic/hear clip)
-      (.then #(rf/dispatch [:draft/heard draft-key %]))
+      (.then #(on-heard % dir))
       (.catch #(rf/dispatch [:mic/failed (.-message %)]))
       (.finally #(set-phase :idle))))
 
 (defn- press!
   "Pointer down: the microphone goes on (the first time the browser asks for it)."
-  [^js e {:keys [hold live set-phase]}]
+  [^js e {:keys [hold live set-phase set-dir]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (speech/stop!)   ; it never talks over you
     (let [p (mic/start!)]
-      (set! (.-current hold) {:t0 (js/performance.now) :p p})
+      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p})
+      (set-dir :send)
       (set-phase :recording)
       (-> p
           (.then #(set! (.-current live) %))
           (.catch (fn [err] (rf/dispatch [:mic/failed (.-message err)]) (set-phase :idle)))))))
 
+(defn- drag!
+  "Pointer move while held: the side the finger is on chooses what letting go does."
+  [^js e {:keys [hold set-dir]}]
+  (when-let [{:keys [x0]} (.-current hold)]
+    (let [dir (pure/gesture (- (.-clientX e) x0))]
+      (set! (.-current hold) (assoc (.-current hold) :dir dir))
+      (set-dir dir))))
+
 (defn- release!
-  "Pointer up: a hold long enough is heard; a tap is dropped and says to hold."
-  [{:keys [hold live set-phase draft-key]}]
-  (when-let [{:keys [t0 p]} (.-current hold)]
+  "Pointer up: a hold long enough is heard and sent (or, dragged right, added to the message); a
+  tap is dropped and says to hold."
+  [{:keys [hold live set-phase on-heard]}]
+  (when-let [{:keys [t0 p dir]} (.-current hold)]
     (set! (.-current hold) nil)
     (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)]
       (.then p (fn [s]
                  (set! (.-current live) nil)
                  (if tap?
                    (do (mic/discard! s) (set-phase :tap))
-                   (.then (mic/stop! s) #(heard! draft-key set-phase %))))))))
+                   (.then (mic/stop! s) #(heard! on-heard set-phase dir %))))))))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
@@ -108,31 +118,42 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
-(defn- thumb-send
-  "Send right above the mic while there is something to send: under the same thumb (decision 20)."
-  [{:keys [send! sendable?]}]
-  (when sendable?
-    [:button.thumb-send {:type "button" :aria-label "Send" :on-click send!} "Send"]))
+(defn- guide
+  "While held: two arrows floating over the messages just above the composer (nothing moves),
+  the one letting go would do lit."
+  [dir]
+  [:div.mic-guide {:aria-hidden true}
+   [:span.mic-way.send {:class (when (= dir :send) "on")} "\u2190 send"]
+   [:span.mic-way.add {:class (when (= dir :add) "on")} "add to message \u2192"]])
 
-(defn- view [{:keys [phase canvas] :as parts}]
-  [:div.mic {:class (name phase)}
+(defn- core
+  "The button with its bars, and the hint after a tap."
+  [{:keys [phase canvas] :as parts}]
+  [:div.mic-core
    [:canvas.mic-bars {:ref #(set! (.-current canvas) %) :aria-hidden true
                       :width (* size (or js/devicePixelRatio 1)) :height (* size (or js/devicePixelRatio 1))}]
-   [:button.mic-button {:type "button" :aria-label "Hold to talk" :data-tip "Hold to talk"
+   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go to send, drag right to add to the message"
+                        :data-tip "Hold to talk: let go sends, drag right adds to the message"
                         :disabled (= phase :hearing)
                         :on-pointer-down #(press! % parts)
+                        :on-pointer-move #(drag! % parts)
                         :on-pointer-up #(release! parts)
                         :on-pointer-cancel #(release! parts)
                         :on-context-menu #(.preventDefault %)}
     icon]
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
 
+(defn- view [{:keys [phase dir] :as parts}]
+  [:div.mic {:class (name phase)}
+   (when (= phase :recording) (guide dir))
+   (core parts)])
+
 (defn button
-  "The mic for the draft draft-key with Send above it (send! and sendable? from the composer), or
-  nothing where the mic cannot work."
-  [draft-key sending]
+  "The mic, or nothing where the mic cannot work. on-heard gets the heard text and :send or :add."
+  [on-heard]
   (let [[ok set-ok] (h/use-state false)
         [phase set-phase] (h/use-state :idle)
+        [dir set-dir] (h/use-state :send)
         hold (h/use-ref nil)
         live (h/use-ref nil)
         canvas (h/use-ref nil)]
@@ -140,6 +161,5 @@
     (use-bars! canvas live phase)
     (use-tap-hint! phase set-phase)
     (when ok
-      [:div.mic-col
-       (thumb-send sending)
-       (view {:phase phase :canvas canvas :hold hold :live live :set-phase set-phase :draft-key draft-key})])))
+      (view {:phase phase :dir dir :canvas canvas :hold hold :live live
+             :set-phase set-phase :set-dir set-dir :on-heard on-heard}))))
