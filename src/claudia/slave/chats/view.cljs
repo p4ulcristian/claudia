@@ -3,6 +3,12 @@
   the chat list's rows, a new chat's colour, and a chat's messages with its live turn laid over."
   (:require [clojure.string :as str]))
 
+(defn keeps-session?
+  "An open chat keeps its Claude Code process, so other sessions can always message it: one in the
+  list (not archived) and not passive (ash). Archived and passive chats let theirs go when idle."
+  [row]
+  (boolean (and row (not (:archived row)) (not= "ash" (:color row)))))
+
 (defn least-worn
   "The colours the other chats in the list (not archived, not except) wear least."
   [colours chats except]

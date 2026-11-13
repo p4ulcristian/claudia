@@ -191,6 +191,7 @@
              {:error "no such chat" :status 404}
              (do (when (string? title) (chats/rename! id title))
                  (store/update! id (chat-update b (store/chat id) chats/chat-colors #(chats/least-used-colour id)))
+                 (chats/session-follows-row! id)
                  (changed!)
                  {:ok true})))))
 

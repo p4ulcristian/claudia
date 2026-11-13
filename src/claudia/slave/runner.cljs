@@ -125,7 +125,10 @@
 (defmethod on-chat-frame "secret" [c f chat] (chats/secret! chat (:ask f) (:sealed f) (:profile c)))
 (defmethod on-chat-frame "deny" [c f chat] (chats/deny! chat (:ask f) (:profile c)))
 (defmethod on-chat-frame "rename" [_ f chat] (chats/rename! chat (:title f)))
-(defmethod on-chat-frame "archive" [_ f chat] (store/update! chat {:archived (boolean (:archived f))}) (chats-changed))
+(defmethod on-chat-frame "archive" [_ f chat]
+  (store/update! chat {:archived (boolean (:archived f))})
+  (chats/session-follows-row! chat)
+  (chats-changed))
 (defmethod on-chat-frame "folder" [_ f chat] (chats/move-folder! chat (:folder f)))
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
