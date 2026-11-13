@@ -3,6 +3,7 @@
   drop zone over the whole window, pasting files, and in the messages the file chips (download) and
   the images a message sent or a show_image step showed."
   (:require [re-frame.core :as rf]
+            [claudia.web.views.zoom :as zoom]
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
@@ -120,17 +121,6 @@
 
 ;; ---- in the messages ----
 
-(defn img-big
-  "A picture shown big over the page; a click (or Escape) closes it."
-  [src close]
-  (h/use-effect
-   (fn []
-     (let [k (fn [e] (when (= "Escape" (.-key e)) (close)))]
-       (js/window.addEventListener "keydown" k)
-       #(js/window.removeEventListener "keydown" k)))
-   [])
-  [:div.img-big {:on-click close} [:img {:src src :alt ""}]])
-
 (defn file-chips
   "A sent message's files: name and size; a click downloads it from the chat's server."
   [server _chat sent]
@@ -162,7 +152,7 @@
      (for [i (range n)]
        ^{:key i}
        [:button.sent-thumb {:title "Photo" :on-click #(set-big (src i))} [retrying-img (src i) {}]])
-     (when big [:f> img-big big #(set-big nil)])]))
+     (when big [:f> zoom/image-big big #(set-big nil)])]))
 
 (defn sent-images
   "The photos (and video frames) a message sent, small; a click shows one big."
@@ -175,7 +165,7 @@
         src (ops/api-url server (str "chats/" chat "/shown/" step-id) view)]
     [:<>
      [retrying-img src {:on-click #(set-big src)}]
-     (when big [:f> img-big big #(set-big nil)])]))
+     (when big [:f> zoom/image-big big #(set-big nil)])]))
 
 (defn shown-image
   "A picture Claude showed in the chat (show_image); a click shows it big."

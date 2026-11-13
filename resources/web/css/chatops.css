@@ -268,10 +268,13 @@ a.file-chip:hover { border-color: var(--accent); }
 .msg.shown video.shown-video { display: block; width: 100%; max-width: 640px; max-height: 420px; border-radius: 8px; border: 1px solid var(--line); background: #000; }
 .sent-thumb { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .sent-thumb img { display: block; max-width: min(220px, 100%); max-height: 220px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
-/* A picture shown big over the page. */
-.img-big { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 3vh 3vw; background: rgb(0 0 0 / 0.82); cursor: zoom-out; animation: confirm-in 0.12s ease-out; }
-.img-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6);
+/* A picture shown big over the page, zoomable (views/zoom.cljs): the zoom is a transform on the img. */
+.img-big { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 3vh 3vw; background: rgb(0 0 0 / 0.82); cursor: zoom-in; animation: confirm-in 0.12s ease-out; touch-action: none; overscroll-behavior: contain; user-select: none; -webkit-user-select: none; }
+.img-big.zoomed { cursor: grab; }
+.img-big.zoomed:active { cursor: grabbing; }
+.img-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6); transform-origin: center; will-change: transform; -webkit-user-drag: none; -webkit-touch-callout: none;
   background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
+.img-big-close { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 14px; z-index: 91; width: 44px; height: 44px; border-radius: 50%; background: rgb(0 0 0 / 0.55); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
 
 /* Code sent from an editor block, in the user's bubble. */
 .code-sent { margin-top: 4px; }

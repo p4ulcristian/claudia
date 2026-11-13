@@ -3,9 +3,8 @@
   open on click, a file opens in place as code. Marks point files out; git status shows as a
   letter; sketched (planned) files are labelled as not on disk."
   (:require [clojure.string :as str]
+            [claudia.web.views.zoom :as zoom]
             [reagent.hooks :as h]
-            ["react-dom" :as react-dom]
-            [reagent.core :as r]
             [claudia.web.api :as api]
             [claudia.web.views.code :as code]))
 
@@ -62,19 +61,6 @@
                             [:b (:label p)]
                             [:button.crumb {:type "button" :on-click #(go (:path p))} (:label p)])])
                        parts))))
-
-(defn image-big
-  "An image over the whole window; a click or Escape closes it."
-  [src close]
-  (h/use-effect
-   (fn []
-     (let [k (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (close)))]
-       (js/window.addEventListener "keydown" k true)
-       #(js/window.removeEventListener "keydown" k true)))
-   [])
-  (react-dom/createPortal
-   (r/as-element [:div.img-big {:on-click close :role "dialog" :aria-label "Image"} [:img {:src src :alt ""}]])
-   js/document.body))
 
 (defn ancestors-of [p]
   (let [parts (str/split p #"/")]
@@ -416,7 +402,7 @@
          (if (and (:live pl) (not (:chat ctx)))
            [[:p.f-note (not-readable-note root (:opened0 pl) data)]]
            (map #(row-view % ctx) rows)))
-   (when big [:f> image-big big #(set-big nil)])])
+   (when big [:f> zoom/image-big big #(set-big nil)])])
 
 (defn files-form
   "ctx: {:server :chat} of the picture's chat (nil in the gallery)."
