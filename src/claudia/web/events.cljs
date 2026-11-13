@@ -4,7 +4,8 @@
             [claudia.shared.files :as files]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
-            [claudia.web.views.pure.mic :as mic]))
+            [claudia.web.views.pure.mic :as mic]
+            [claudia.web.views.pure.talk :as talk]))
 
 ;; ---- helpers ----
 
@@ -215,11 +216,21 @@
     (not running) (-> (dissoc :note)
                       (update :messages (fn [ms] (mapv #(dissoc % :streaming) ms))))))
 
+(defn turn-speech
+  "What a turn's end says in talking mode: the final reply, only for the chat on screen and a turn
+  that ended by itself (nil otherwise)."
+  [db k running stopped]
+  (when (and (not running) (not stopped) (talk/speaks? db k))
+    (some-> (talk/turn-reply (get-in db [:chats k :messages])) talk/speakable)))
+
 (defmethod on-frame "turn" [db server {:keys [chat running stopped]}]
-  {:db (-> db
-           (update-in [:chats [server chat]] chat-after-turn running stopped)
-           (update-in [:turn-since [server chat]] running-since running (js/Date.now)))
-   :fx [[:dispatch [:chat/check-seen]]]})
+  (let [k [server chat]
+        said (turn-speech db k running stopped)]
+    {:db (-> db
+             (update-in [:chats k] chat-after-turn running stopped)
+             (update-in [:turn-since k] running-since running (js/Date.now)))
+     :fx (cond-> [[:dispatch [:chat/check-seen]]]
+           said (conj [:speech/say said]))}))
 
 (defn remove-ask
   "The asks without the one with this id."
@@ -227,7 +238,10 @@
   (vec (remove #(= (:id %) id) asks)))
 
 (defmethod on-frame "ask" [db server {:keys [chat ask]}]
-  {:db (update-in db [:chats [server chat] :asks] #(conj (remove-ask % (:id ask)) ask))})
+  (let [k [server chat]
+        said (when (talk/speaks? db k) (some-> (talk/ask-text ask) talk/speakable))]
+    (cond-> {:db (update-in db [:chats k :asks] #(conj (remove-ask % (:id ask)) ask))}
+      said (assoc :fx [[:speech/say said]]))))
 
 (defmethod on-frame "asked" [db server {:keys [chat ask]}]
   {:db (-> db
@@ -327,6 +341,15 @@
  :draft/heard
  ;; The mic's text joins the draft as it is now (typed on while it was being heard).
  (fn [db [_ k heard]] (update-in db [:drafts k] mic/with-heard heard)))
+
+(rf/reg-event-fx
+ :talk/toggle
+ ;; Talking mode on or off for this device; off is silence at once.
+ (fn [{:keys [db]} _]
+   (let [on? (not (:talk? db))]
+     {:db (assoc db :talk? on?)
+      :store ["claudia.talk" on?]
+      :fx (if on? [] [[:speech/stop]])})))
 
 (rf/reg-event-db
  :mic/failed

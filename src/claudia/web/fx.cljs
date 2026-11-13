@@ -5,6 +5,7 @@
             [claudia.shared.protocol :as protocol]
             [claudia.web.db :as db]
             [claudia.web.secret :as secret]
+            [claudia.web.speech :as speech]
             [claudia.web.ws :as ws]))
 
 ;; ---- routes: / and /c/<server>/<chat> ----
@@ -32,6 +33,8 @@
  (fn [k] (js/history.replaceState nil "" (path-of k))))
 
 (rf/reg-fx :store (fn [[k v]] (db/store! k v)))
+(rf/reg-fx :speech/say speech/say!)
+(rf/reg-fx :speech/stop (fn [_] (speech/stop!)))
 
 ;; ---- HTTP (same origin; the gate's login cookie goes along) ----
 

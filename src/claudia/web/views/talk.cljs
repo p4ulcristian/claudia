@@ -1,0 +1,54 @@
+(ns claudia.web.views.talk
+  "Talking mode's controls (README decision 21): the speaker in the composer's toolbar turns it on
+  and off for this device; while it is on, each of Claude's replies has a small play button; the
+  guard silences the voice when the open chat changes. Shown only when the hub has a voice."
+  (:require [claudia.web.speech :as speech]
+            [claudia.web.views.pure.talk :as pure]
+            [claudia.web.voice :as voice]
+            [re-frame.core :as rf]
+            [reagent.hooks :as h]))
+
+(defn- use-voice?
+  "Whether the hub has a voice (false until known)."
+  []
+  (let [[ok set-ok] (h/use-state false)]
+    (h/use-effect (fn [] (.then (voice/available?) set-ok) nil) [])
+    ok))
+
+(def ^:private speaker-path "M4 9h3l5-4v14l-5-4H4z")
+
+(defn- speaker [on?]
+  [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
+         :stroke-linecap "round" :stroke-linejoin "round"}
+   [:path {:d speaker-path}]
+   (if on?
+     [:path {:d "M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"}]
+     [:path {:d "M16 10l4 4M20 10l-4 4"}])])
+
+(defn- toggle-view []
+  (let [on? @(rf/subscribe [:talk?])]
+    (when (use-voice?)
+      [:button.icon.talk-toggle {:type "button" :aria-pressed on? :class (when on? "on")
+                                 :aria-label "Talking mode" :data-tip (if on? "Talking mode on: replies are read aloud" "Talking mode off")
+                                 :on-click (fn [] (when-not on? (speech/unlock!)) (rf/dispatch [:talk/toggle]))}
+       [speaker on?]])))
+
+(defn toggle "The toolbar's talking mode switch." [] [:f> toggle-view])
+
+(defn say-button
+  "A reply's play button while talking mode is on."
+  [text]
+  (when @(rf/subscribe [:talk?])
+    (when-let [said (pure/speakable text)]
+      [:button.say-reply {:type "button" :aria-label "Read aloud" :data-tip "Read aloud"
+                          :on-click (fn [] (speech/unlock!) (speech/say! said))}
+       [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M8 5v14l11-7z" :fill "currentColor"}]]])))
+
+(defn- guard-view [k]
+  (h/use-effect (fn [] #(speech/stop!)) [k])
+  nil)
+
+(defn guard
+  "Silences the voice when the chat on screen changes (k: the open chat as a string)."
+  [k]
+  [:f> guard-view k])

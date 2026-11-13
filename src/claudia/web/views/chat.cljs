@@ -16,6 +16,7 @@
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.mic :as mic]
+            [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
@@ -382,7 +383,8 @@
     "user" ^{:key id} [user-msg ck m (pure/user-marks m marks)]
     "note" ^{:key (str "note-" id "-" i)} [:pre.note-line text]
     ^{:key id} [:div.msg.claude {:data-at (first (str/split (str id) #":")) :class (when streaming "streaming")}
-                [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]]))
+                [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
+                (when-not streaming [talk/say-button text])]))
 
 (defn- feed-row
   "One block of the feed: a run of steps, a picture a step showed, or a message."
@@ -519,6 +521,7 @@
      [:div.tools (when-not (:ck oc) [usage/pickers oc])]
      [:input {:type "file" :multiple true :hidden true :ref #(set! (.-current picker) %)
               :on-change (fn [e] (attach/add-files! draft-key (.. e -target -files)) (set! (.. e -target -value) ""))}]
+     [talk/toggle]
      [:button.icon.attach {:title "Add files, photos or videos" :aria-label "Add files, photos or videos"
                            :on-click #(some-> (.-current picker) .click)}
       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d clip-path}]]]
@@ -586,6 +589,7 @@
        ^{:key (str (:ck oc))} [header oc]
        new-chat-head)
      (when oc [:f> agents/chips oc])
+     [talk/guard (str (:ck oc))]
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
      (pane-body oc me me-error)
      (pane-foot oc me ro)

@@ -39,6 +39,7 @@
    :view-at 0              ; when the right view last changed (a picture newer than it, behind the timeline, is new)
    :folded-at (if (stored "claudia.folded" false) (js/Date.now) 0) ; the right half folded since (0: shown)
    :error nil
+   :talk? (stored "claudia.talk" false) ; talking mode: the open chat's replies read aloud (this device)
 
    ;; claudia.web.chatops
    :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil
