@@ -48,3 +48,11 @@
   "Promise of the JSON answer to method on u, with body (data or nil); rejects like fetch-json."
   [method u body]
   (fetch-json u (call-opts method body)))
+
+(defn post-blob
+  "Promise of the JSON answer to POSTing blob as the body (its type as content-type); rejects like
+  fetch-json."
+  [u ^js blob]
+  (fetch-json u {:method "POST" :headers {"content-type" (or (not-empty (.-type blob)) "application/octet-stream")
+                                          "accept" "application/json"}
+                 :body blob}))

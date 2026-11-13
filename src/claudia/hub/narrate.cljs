@@ -15,7 +15,7 @@
   (:require [claudia.node.audio :as audio]
             [claudia.node.crypto :refer [sha256-hex]]
             [claudia.node.http :as io]
-            [claudia.node.env :refer [env]]
+            [claudia.node.env :as env]
             [claudia.shared.text :as text]
             ["fs/promises" :as fsp]
             ["path" :as path]
@@ -34,17 +34,7 @@
 
 (defn start! [data-dir] (reset! cache-dir (path/join data-dir "narration")))
 
-(defn- config
-  "A promise of {:url :token} or nil."
-  []
-  (let [url (env "HUB_TTS_URL")
-        file (env "HUB_TTS_TOKEN_FILE")]
-    (-> (if file
-          (-> (fsp/readFile file "utf8") (.then str/trim) (.catch (fn [_] nil)))
-          (js/Promise.resolve (env "HUB_TTS_TOKEN")))
-        (.then (fn [token]
-                 (when (and url (not (str/blank? token)))
-                   {:url (str/replace url #"/$" "") :token token}))))))
+(defn- config "A promise of {:url :token} or nil." [] (env/service "HUB_TTS"))
 
 (defn- speak [{:keys [url token]} ^js form]
   (-> (js/fetch (str url "/v1/audio/speech")

@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [claudia.shared.files :as files]
             [claudia.web.db :as db]
-            [claudia.web.fx :as fx]))
+            [claudia.web.fx :as fx]
+            [claudia.web.views.pure.mic :as mic]))
 
 ;; ---- helpers ----
 
@@ -321,6 +322,15 @@
 (rf/reg-event-db
  :draft/set
  (fn [db [_ k text]] (assoc-in db [:drafts k] text)))
+
+(rf/reg-event-db
+ :draft/heard
+ ;; The mic's text joins the draft as it is now (typed on while it was being heard).
+ (fn [db [_ k heard]] (update-in db [:drafts k] mic/with-heard heard)))
+
+(rf/reg-event-db
+ :mic/failed
+ (fn [db [_ message]] (assoc db :error (str "Mic: " message))))
 
 (defn outgoing
   "What a send carries, from the draft's attachments (files uploaded, named by <claudia-file> tags

@@ -3,7 +3,8 @@
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
-  (:require [claudia.hub.narrate :as narrate]
+  (:require [claudia.hub.listen :as listen]
+            [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
             [claudia.shared.text :as text]
             [clojure.string :as str]
@@ -367,6 +368,7 @@
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
+                 (= pathname "/hub/listen") (listen/call req res)
                  (= pathname "/hub/gate/system")
                  (cond (not admin?) (fail res 403 "admins only")
                        (not= "GET" (.-method req)) (fail res 405 "GET only")
