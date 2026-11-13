@@ -24,8 +24,7 @@
             [claudia.slave.pictures :as pictures]
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
-            [claudia.slave.store :as store]
-            [claudia.slave.timeline :as timeline]))
+            [claudia.slave.store :as store]))
 
 (def ^:private env (.-env js/process))
 (def socket-path (or (.-RUNNER_SOCKET env) (str (or (.-XDG_RUNTIME_DIR env) "/tmp") "/claudia-runner.sock")))
@@ -163,7 +162,7 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan]))]
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color]))]
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})
@@ -209,31 +208,14 @@
                          (.end res png))
                      (io/send-json res 503 {:error error}))))))))
 
-(defn- timeline-reply
-  "GET /api/chats/:id/timeline?v= (same version: {same, now}) and /timeline/:lane/:step."
-  [^js req ^js res id sub]
-  (let [fail #(io/send-json res 500 {:error (str (or (.-message %) %))})]
-    (if (= sub "timeline")
-      (-> (timeline/timeline chats/cwd id (boolean (:running (get @chats/state id))))
-          (.then (fn [^js t]
-                   (cond (nil? t) (io/send-json res 404 {:error "No session file yet."})
-                         (= (.-v t) (query-param req "v")) (io/send-json res 200 {:same true :now (.-now t)})
-                         :else (io/send-json res 200 t))))
-          (.catch fail))
-      (let [[_ lane step] (re-matches #"timeline/([^/]+)/([^/]+)" sub)]
-        (-> (timeline/detail chats/cwd id (js/decodeURIComponent lane) (js/decodeURIComponent step))
-            (.then #(if % (io/send-json res 200 %) (io/send-json res 404 {:error "No such step."})))
-            (.catch fail))))))
-
 (defn request-op
   "Which of the runner's own calls a request is (url without its query; chat-id and sub from
-  /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png, :timeline,
+  /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png,
   :me, :secret-read, or nil (the forms' and the API's calls, then not found)."
   [method url chat-id sub chat-known]
   (cond
     (and chat-id (= "GET" method) (not chat-known)) :no-chat
     (and chat-id (= sub "picture.png") (= "GET" method)) :picture-png
-    (and chat-id (re-matches #"timeline(/[^/]+/[^/]+)?" sub) (= "GET" method)) :timeline
     (and (= url "/api/me") (= "GET" method)) :me
     (and (= url "/api/secret/read") (= "POST" method)) :secret-read))
 
@@ -250,7 +232,6 @@
     (case (request-op (.-method req) url chat-id sub (and chat-id (known? chat-id)))
       :no-chat (io/send-json res 404 {:error "No such chat."})
       :picture-png (picture-png req res chat-id)
-      :timeline (timeline-reply req res chat-id sub)
       :me (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                                  :version h/version :commit h/commit})
       :secret-read (secret-read req res who)

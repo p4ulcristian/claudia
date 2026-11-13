@@ -26,6 +26,12 @@
 
 (defn on? [] (some? @key-bytes))
 
+(defn sealing-key
+  "The sealing key (a 32-byte Buffer), nil without HUB_TOKEN_KEY_FILE; GitHub logins are sealed
+  under it too (claudia.hub.github-login)."
+  []
+  @key-bytes)
+
 ;; ---- names and tokens (pure) ----
 
 (defn fold

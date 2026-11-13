@@ -369,10 +369,11 @@
         ro @(rf/subscribe [:read-only?])]
     [:section.left
      ^{:key (str (:ck oc))} [head/header oc]
-     (when oc [:f> agents/chips oc])
      [talk/guard (str (:ck oc))]
      (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
      (pane-body oc me me-error)
+     ;; Background work (agents, long commands) sits right above the composer.
+     (when oc [:f> agents/chips oc])
      (pane-foot oc me ro)
      (when-let [aid (and oc @(rf/subscribe [:agent-view (:ck oc)]))]
        [agents/screen oc aid])]))

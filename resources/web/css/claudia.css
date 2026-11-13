@@ -68,8 +68,8 @@ code, pre { font-family: var(--mono); }
 .menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 10px 2px; }
-.divider:hover { --ink: var(--accent); width: 3px; margin: 10px 1.5px; }
+.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px; }
+.divider:hover { --ink: var(--accent); width: 3px; margin: 0 1.5px; }
 .split.folded > .divider { visibility: hidden; }
 .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
 
@@ -90,7 +90,7 @@ code, pre { font-family: var(--mono); }
 .left { container-type: inline-size; }
 /* The header (views/head.cljs): one panel tinted with the chat's colour (--chat; none: neutral),
    three rows: names and switches; computer, account, project; model, effort and rings. */
-.chat-head { padding: 8px 12px; }
+.chat-head { padding: var(--edge-t) 12px 8px; }
 .head-panel { position: relative; display: grid; gap: 6px; padding: 8px 14px; border-radius: 14px;
   background: color-mix(in srgb, var(--chat, transparent) 13%, var(--panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat, var(--muted)) 35%, transparent); }
 .head-row { display: flex; align-items: center; gap: 6px 14px; min-width: 0; min-height: 30px; }
@@ -100,10 +100,19 @@ code, pre { font-family: var(--mono); }
 .chat-head h1.renamable { cursor: text; }
 .title-edit { flex: 1; min-width: 0; font: 700 18px var(--hand); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 1px 8px; outline: none; }
 .head-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.head-lab { flex: none; color: var(--muted); font-size: 11.5px; }
-.head-val, .head-btn { font: 600 13px var(--sans); color: var(--fg); white-space: nowrap; }
-.head-btn { padding: 2px 4px; border-radius: 8px; }
-.head-btn:not(:disabled):hover, .head-btn[aria-expanded="true"] { color: var(--accent); }
+.head-ico { flex: none; width: 16px; height: 16px; color: var(--muted); }
+/* Every pick in the header is a pill button, so it reads as one; a fixed value (a started chat's
+   computer) has a dashed edge and no hover. */
+.head-btn, .head-panel .proj-btn, .head-panel .pick select, .head-val { box-sizing: border-box; height: 28px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 11px; border-radius: 999px; font: 600 12.5px var(--sans); color: var(--fg); white-space: nowrap; max-width: 100%;
+  background: var(--bg); border: 1px solid var(--line); transition: border-color 0.12s, color 0.12s; }
+.head-panel .pick select { width: auto; padding-right: 6px; cursor: pointer; }
+.head-val { border-style: dashed; background: transparent; }
+.head-btn:not(:disabled):hover, .head-btn[aria-expanded="true"], .head-panel .proj-btn:not(:disabled):hover, .head-panel .proj-btn[aria-expanded="true"],
+.head-panel .pick select:hover, .head-panel .pick select:focus { border-color: var(--accent); color: var(--fg); background: var(--bg); outline: none; }
+.head-panel .pick.model { max-width: 200px; }
+.head-panel .pick.effort { max-width: 110px; }
+.head-picks { gap: 6px; }
 /* The server's state: turning arrows while reconnecting, a power sign when it is off. */
 .head-state { flex: none; align-self: center; display: grid; width: 16px; height: 16px; color: var(--amber); }
 .head-state.off { color: var(--red); }
@@ -111,7 +120,7 @@ code, pre { font-family: var(--mono); }
 .head-state.reconnecting svg { animation: ag-spin 1.6s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .head-state.reconnecting svg { animation: none; } }
 /* Row 3: model and effort on the left, the rings on the right. */
-.head-picks { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.head-picks { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
 .head-picks .pick.effort { flex: none; }
 .head-rings { flex: none; display: flex; align-items: center; gap: 14px; }
 /* Quiet rings: grey while use is low, amber and red (agents.css) when it is high. */
@@ -145,6 +154,12 @@ code, pre { font-family: var(--mono); }
 .proj-btn .rail-tag { flex: none; display: grid; place-items: center; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 3px; border-radius: 8px; box-shadow: inset 0 0 0 1px currentColor; font-size: 9px; }
 .proj-btn .rail-blank { flex: none; margin: 0 5px; }
 .proj-pop { position: absolute; top: calc(100% + 8px); left: -6px; z-index: 30; display: grid; gap: 2px; width: 236px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); cursor: default; }
+/* Where the chat works, at the top of the project popup: the full path, then its computer. */
+.proj-pop { width: 300px; max-height: calc(100vh - 140px); overflow-y: auto; overscroll-behavior: contain; }
+.where { display: grid; gap: 8px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px dashed var(--line); }
+.where-path { font: 500 12px/1.4 var(--mono); color: var(--fg); overflow-wrap: anywhere; user-select: all; }
+.where-machine { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.where-machine b { font: 700 15px var(--hand); color: var(--fg); }
 .proj-pop .palette { position: static; padding: 2px 6px 10px; border: 0; box-shadow: none; background: none; }
 /* A phone-wide column: tighter. */
 @container (max-width: 679px) {
@@ -183,8 +198,8 @@ code, pre { font-family: var(--mono); }
 @media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
 .msg.claude { padding: 0 2px; }
 /* Talking mode (views/talk.cljs): the header's speaker, a reply's play button. */
-.talk-toggle svg { width: 19px; height: 19px; }
-.talk-toggle.on { color: var(--accent); }
+.talk-toggle svg, .sound-toggle svg { width: 19px; height: 19px; }
+.talk-toggle.on, .sound-toggle.on { color: var(--accent); }
 .say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }
@@ -274,8 +289,8 @@ code, pre { font-family: var(--mono); }
 .note-line { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--bg2); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 
 /* The composer sits under a chalk line. */
-.composer { position: relative; background: none; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
-.composer::before { content: ""; position: absolute; top: -2px; left: 12px; right: 12px; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.composer { position: relative; background: none; padding: 12px 14px var(--edge-b); }
+.composer::before { content: ""; position: absolute; top: -2px; left: 0; right: 0; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .input-row { display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 0; border-radius: 6px; padding: 6px; }
 /* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
 .talk-row { display: flex; align-items: center; gap: 10px; }
@@ -371,12 +386,12 @@ code, pre { font-family: var(--mono); }
 .sf-note { font-size: 10px; color: var(--amber); font-weight: 600; }
 .sf-note.warn { color: var(--red); }
 
-/* The picture, the bar under it, the timeline and the right rail: right.css. */
+/* The picture, the bar under it and the right rail: right.css. */
 
 /* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
-.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 10px; background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
-.sidebar::after, .rail::after { content: ""; position: absolute; top: 8px; bottom: 8px; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.sidebar::after, .rail::after { content: ""; position: absolute; top: 0; bottom: 0; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .rail > .logo-tools { padding: 4px 0 8px; }
@@ -467,7 +482,7 @@ code, pre { font-family: var(--mono); }
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .f-kind::before, .rail-server::before, .server-mark::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
-.view-switch::before, .view-switch button.on::before, .rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
+.rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -479,7 +494,7 @@ code, pre { font-family: var(--mono); }
 /* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .view-switch, .view-switch button.on, .rbar-chip, .act-pill {
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .rbar-chip, .act-pill {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
   --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
@@ -495,8 +510,6 @@ code, pre { font-family: var(--mono); }
 .stop { --chalk-c: var(--red); }
 .input-row .primary, .input-row .stop { --ring: var(--chalk-r7-2); }
 .prompt-actions button.primary { --chalk-c: var(--accent); }
-.view-switch { --chalk-bg: var(--bg); --ring: var(--chalk-r9-2); }
-.view-switch button.on { --chalk-bg: var(--panel2); --ring: var(--chalk-r7-2); }
 .rbar-chip { --ring: var(--chalk-r12-2); }
 .rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
 .act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
@@ -531,13 +544,16 @@ code, pre { font-family: var(--mono); }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; overscroll-behavior: none; }
 body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .app { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+/* One bottom line for the whole window: the composer's row, the picture's bar and the settings gear
+   all end --edge-b above the bottom (the home bar's room included) and share --foot-h, centred. */
+:root { --edge-b: calc(12px + env(safe-area-inset-bottom)); --foot-h: 56px; --edge-t: 10px; }
 /* A Home Screen app: iOS 26 lays its own blurred band over the status bar and about 16px below it. */
 @media (display-mode: standalone) { :root { --top-safe: calc(env(safe-area-inset-top) + 16px); } }
 .split { padding-top: var(--top-safe); box-sizing: border-box; }
 .rail { padding-top: calc(46px + var(--top-safe)); }
 .sidebar { padding-top: calc(14px + var(--top-safe)); }
 @media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
-.menu-toggle { top: calc(10px + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); }
+.menu-toggle { top: calc(var(--edge-t) + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 
@@ -660,3 +676,30 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .claudia-full { position: fixed !important; inset: 0; z-index: 40; margin: 0 !important; width: auto !important; height: auto !important; max-height: none !important;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-sizing: border-box; }
 html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
+
+/* ---------- The settings menu (views/menu.cljs): a gear at the bottom left, its menu beside it ---------- */
+.mn-gear { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--muted); }
+.mn-gear:hover, .mn-gear.on { color: var(--fg); background: var(--panel); }
+.mn-gear svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.rail > .mn-gear { margin: 8px auto; }
+.cs-foot { flex: none; height: var(--foot-h); display: flex; align-items: center; }
+.chat-menu.mn-pop { width: 290px; padding: 8px; gap: 2px; }
+.mn-plan { display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: var(--bg2); text-align: left; margin-bottom: 4px; }
+.mn-plan:hover { background: var(--panel2); }
+.mn-plan-name { display: flex; align-items: center; justify-content: space-between; font: 700 16px var(--hand); color: var(--fg); }
+.mn-limit { display: grid; gap: 3px; }
+.mn-limit-text { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mn-bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.mn-bar i { display: block; height: 100%; background: var(--green); border-radius: 3px; }
+.mn-limit.amber .mn-bar i { background: var(--amber); }
+.mn-limit.red .mn-bar i { background: var(--red); }
+.mn-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; text-align: left; font-size: 13.5px; color: var(--fg); }
+.mn-item:hover { background: var(--panel2); }
+.mn-icon { flex: none; display: grid; place-items: center; width: 20px; color: var(--muted); }
+.mn-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mn-label { flex: 1; min-width: 0; display: grid; }
+.mn-note { font-size: 11px; color: var(--muted); }
+.mn-chev { flex: none; width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mn-sep { border-top: 1px dashed var(--line); margin: 4px 6px; }
+.mn-switches .st-row { padding: 8px; }
+.mn-foot { padding: 6px 8px 2px; font-size: 11px; color: var(--muted); }

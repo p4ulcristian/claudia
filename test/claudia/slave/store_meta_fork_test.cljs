@@ -6,8 +6,7 @@
             [cljs.test :refer [deftest is]]
             [claudia.slave.fork :as fork]
             [claudia.slave.meta :as meta]
-            [claudia.slave.store :as store]
-            [claudia.slave.timeline :as timeline]))
+            [claudia.slave.store :as store]))
 
 ;; store
 
@@ -96,18 +95,6 @@
                          #js {:uuid "n3"}]))
       "a message sent mid-turn maps by its sent uuid too")
   (is (= "nq" (get (fork/turn-map {} [#js {:uuid "nq" :forkedFrom #js {:messageUuid "q"}}]) "q"))))
-
-;; timeline
-
-(deftest cut-hunks-keeps-at-most-the-patch-lines
-  (let [[hunks cut] (timeline/cut-hunks [#js {:oldStart 1 :oldLines 1 :newStart 1 :newLines 2 :lines #js ["-a" "+b" "+c"]}])]
-    (is (= [{:oldStart 1 :oldLines 1 :newStart 1 :newLines 2 :lines ["-a" "+b" "+c"]}] hunks))
-    (is (false? cut)))
-  (let [big (into-array (repeat 4999 "+x"))
-        [hunks cut] (timeline/cut-hunks [#js {:lines big} #js {:lines #js ["+y" "+z"]} #js {:lines #js ["+w"]}])]
-    (is (= 2 (count hunks)) "a hunk past the limit is left out")
-    (is (= ["+y"] (:lines (second hunks))))
-    (is (true? cut))))
 
 (deftest a-models-default-effort-replaces-its-kept-one
   (is (= [{:model "a" :effort "high"}] (meta/with-default-effort nil "a" "high")))

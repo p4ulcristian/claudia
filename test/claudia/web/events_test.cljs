@@ -1,5 +1,6 @@
 (ns claudia.web.events-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.shared.colours :as colours]
             [claudia.shared.files :as files]
             [claudia.web.events :as ev]))
 
@@ -81,8 +82,16 @@
     (is (= ["s" "x"] (:open (ev/created-db (assoc d :open ["s" "x"]) "s" "c" "p" "hi"))))
     (is (= [["s" {:type "open" :chat "c"}]] (ev/created-frames "s" "c")))))
 
+(deftest a-new-chat-gets-a-colour-at-once
+  (is (= "c" (get-in (ev/with-fresh-colour {:new-settings {:color "c"}}) [:new-settings :color])))
+  (let [rows {"1" {:id "1" :color "red"}}
+        picked (get-in (ev/with-fresh-colour {:me {:servers [{:name "s"}]} :servers {"s" {:rows rows}}}) [:new-settings :color])]
+    (is (some #{picked} colours/chat-colours))
+    (is (not= "red" picked))))
+
 (deftest a-new-chat-carries-its-picks
   (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
+  (is (= {:color "teal"} (ev/new-picks {:color "teal"})))
   (is (= {} (ev/new-picks {:folder ""})))
   (is (= {} (ev/new-picks nil)))
   (is (= ["s" {:type "new" :id "id" :text "hi" :effort "high"}]

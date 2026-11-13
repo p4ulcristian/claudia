@@ -181,23 +181,14 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `PUT /api/chats/:id/videos/:vid/voice` `{ clips: [{ text, instruction, pcm }], error? }` | the narrator's clips (pcm: base64 of 16-bit mono PCM at 24 kHz) for a video waiting for them; it is queued. 409 when that video waits for none |
 | `GET /api/chats/:id/videos?block=&fp=` | `{ fp, videos: [{ id, block, title, state, progress, error, seconds, at }] }` newest first (state: voice, queued, render, encode, done, failed; videos being made are lost when the runner restarts); `{ same: true }` when nothing changed since fp |
 | `GET /api/chats/:id/videos/:vid.mp4` | the finished video (`video/mp4`, as an attachment named after the scene's title); 404 when there is none |
-| `GET /api/chats/:id/timeline?v=` | `{ v, now, lanes: [Lane] }` from the session files; `{ same: true, now }` when `v` is still the version; 404 before the session file exists |
-| `GET /api/chats/:id/timeline/:lane/:step` | one step in full: `{ k: "tool", name, input, output, error, truncated, patch }` or `{ k: "text", text, truncated }` |
 
 `Sample` (README decision 12; sizes and speeds in bytes and bytes per second, shares in percent):
-`{ at, age (ms since it was read, when answered), window (ms the use covers), uptime (s),
+`{ at, age (ms since it was read, when answered), window (ms the use covers), uptime (s), host: { name, os (os-release's PRETTY_NAME; macOS and its version), kernel, arch },
 cpu: { model, load: [1, 5, 15 min], all: Share, cores: [Share] }, memory: { total, available, used,
 cached, swapTotal, swapUsed }, disks: [{ mount, fs, source, size, used, avail }], io: { read, write },
 net: { rx, tx }, temps: [{ name, label, c }], gpus: [{ index, name, util, memUsed, memTotal, temp, power }],
 claudia: [{ kind: front|runner|host|chats|hub, count, rss }] }`; `Share` = `{ busy, user, sys, iowait, steal }`
 (busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null. On macOS iowait and steal are 0, `temps` is empty, and a disk is an APFS container (its volumes' files summed).
-
-`Lane`: `{ id ("main" or the subagent's id), title, kind ("main" or the agent type), parent, toolUseId, start, end,
-running, events: [Step] }`, the chat first, then each agent under the lane that started it. `Step`:
-`{ k: "tool", id, name, title, start, end?, error?, agent? (the lane this Agent call started), diff?: { added, removed } }`
-or `{ k: "text" | "user" | "note", id, at, text }` (text cut at 300 characters). `patch`: `{ file, created, cut,
-hunks: [{ oldStart, oldLines, newStart, newLines, lines }] }` from Claude Code's saved structuredPatch (a
-subagent's: made from the call's input), cut at 5000 lines.
 
 ## Runner HTTP: chat operations (`/api/…`)
 

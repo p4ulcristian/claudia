@@ -85,3 +85,14 @@
   "A temperature's colour: amber from 80 °C, red from 90 °C."
   [c]
   (cond (>= c 90) "red" (>= c 80) "amber" :else "ok"))
+
+(defn machine-lines
+  "What the project popup says of a chat's computer from its sample: the system, the kernel and
+  architecture, the processor and its cores, the memory, the uptime. A part not reported is left out."
+  [{:keys [host cpu memory uptime]}]
+  (vec (remove nil?
+               [(:os host)
+                (when (:kernel host) (str "kernel " (:kernel host) (when (:arch host) (str " · " (:arch host)))))
+                (when (:model cpu) (str (:model cpu) (when (seq (:cores cpu)) (str " · " (count (:cores cpu)) " cores"))))
+                (when (:total memory) (str (bytes-text (:total memory)) " memory"))
+                (when uptime (str "up " (uptime-text uptime)))])))

@@ -2,7 +2,7 @@
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): under Claudia's face
   the sounds and 2D/3D switches (claudia.web.views.logotools), + for a new chat, then a circle per
   chat with its title under it; passive (ash) chats last, above a chalk line. At its foot: the
-  Systems popup (claudia.web.views.systems). Circles
+  settings gear (claudia.web.views.menu). Circles
   slide to their new places when the order changes; a new one grows in."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -11,7 +11,7 @@
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.sidebar :as sidebar]
-            [claudia.web.views.systems :as systems]
+            [claudia.web.views.menu :as menu]
             [claudia.web.views.tearoff :as tearoff]
             [claudia.web.views.logotools :as logotools]))
 
@@ -91,4 +91,4 @@
       (for [[i r] (map-indexed vector rows)]
         ^{:key (str (:server r) "/" (:id r))}
         [rail-chat (assoc m :i i) r])]
-     [:f> systems/systems-button]]))
+     [:f> menu/button]]))

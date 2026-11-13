@@ -1,6 +1,7 @@
 (ns claudia.web.db
   "The page's state, one map. Chats are keyed by [server chat] everywhere: two servers may in
-  principle hand out the same chat id.")
+  principle hand out the same chat id."
+  (:require [claudia.shared.colours :as colours]))
 
 (def phone-width
   "Under this many CSS px wide the page is three full screens (list, chat, picture)."
@@ -35,8 +36,6 @@
    :pictures {}            ; [server chat] -> [{:turn :title :at}], oldest first; the last is live
    :viewing {}             ; [server chat] -> turn of the earlier picture shown (none: the live one)
    :past-scenes {}         ; [server chat turn] -> Scene of an earlier picture, fetched once
-   :right-view (if (= "timeline" (stored "claudia.right" "picture")) :timeline :picture)
-   :view-at 0              ; when the right view last changed (a picture newer than it, behind the timeline, is new)
    :folded-at (if (stored "claudia.folded" false) (js/Date.now) 0) ; the right half folded since (0: shown)
    :error nil
    :talk? (stored "claudia.talk" false) ; talking mode: the open chat's replies read aloud (this device)
@@ -55,4 +54,5 @@
    :projects {}            ; [server folder] -> {:name :logo}
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
-   :tokens nil :github {} :github-prompt nil})
+   :tokens nil :github-login nil
+   :new-settings {:color (rand-nth colours/chat-colours)}})  ; a new chat's picks; its colour from the start

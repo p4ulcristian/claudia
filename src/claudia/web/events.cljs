@@ -1,6 +1,7 @@
 (ns claudia.web.events
   (:require [re-frame.core :as rf]
             [clojure.string :as str]
+            [claudia.shared.colours :as colours]
             [claudia.shared.files :as files]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
@@ -183,9 +184,21 @@
   [[server {:type "open" :chat chat}]])
 
 (defn new-picks
-  "What a new chat's header picked, as `new` carries it: model, effort, plan and folder, those set."
+  "What a new chat's header picked, as `new` carries it: model, effort, plan, folder and colour, those set."
   [new-settings]
-  (into {} (filter (comp some? val)) (update (select-keys new-settings [:model :effort :plan :folder]) :folder not-empty)))
+  (into {} (filter (comp some? val)) (update (select-keys new-settings [:model :effort :plan :folder :color]) :folder not-empty)))
+
+(defn fresh-colour
+  "A new chat's colour as soon as it opens: random among those server's chats (rows) wear least."
+  [rows]
+  (rand-nth (colours/least-worn colours/chat-colours rows nil)))
+
+(defn with-fresh-colour
+  "db with a colour for the new chat on its new server, unless it has one."
+  [db]
+  (cond-> db
+    (not (get-in db [:new-settings :color]))
+    (assoc-in [:new-settings :color] (fresh-colour (vals (get-in db [:servers (default-server db) :rows]))))))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text]} (get-in db [:pending-new id])]
@@ -287,7 +300,7 @@
  :nav/new
  (fn [{:keys [db]} _]
    (let [[ps pc] (:open db)]
-     {:db (assoc (on-chat-screen db) :open nil)
+     {:db (with-fresh-colour (assoc (on-chat-screen db) :open nil))
       :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
       :history/push nil})))
 

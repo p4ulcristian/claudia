@@ -21,3 +21,9 @@
     (is (= "CPU X" (get-in s [:cpu :model])))
     (is (= {:rx 2000 :tx 1000} (:net s)))
     (is (= {:read 512 :write 0} (:io s)))))
+
+(deftest the-systems-name-from-os-release
+  (is (= "Arch Linux" (system/os-name "NAME=\"Arch Linux\"\nPRETTY_NAME=\"Arch Linux\"\nID=arch\n")))
+  (is (= "Flatcar Container Linux by Kinvolk 4152.2.3" (system/os-name "NAME=\"Flatcar\"\nPRETTY_NAME=\"Flatcar Container Linux by Kinvolk 4152.2.3\"")))
+  (is (= "Debian" (system/os-name "NAME=Debian\n")))
+  (is (nil? (system/os-name ""))))

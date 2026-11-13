@@ -1,6 +1,6 @@
 (ns claudia.web.views.systems
-  "The Systems popup (README decision 12): a computer on the rail, above the sounds; a click opens a
-  card per server the person may use (and the gate, for admins), each asking its own numbers every
+  "The Systems popup (README decision 12): Machines in the settings menu (claudia.web.views.menu)
+  opens a card per server the person may use (and the gate, for admins), each asking its own numbers every
   2 s while open: every core's use split into user, system, steal and waiting on disk, memory,
   swap, disks, disk and network speed, temperatures, NVIDIA cards and Claudia's own processes. A
   card older than 8 s greys; a server that does not answer says so."
@@ -11,7 +11,7 @@
             [claudia.web.views.pure.systems :as pure]
             [claudia.web.views.usage :as usage]))
 
-(defn- computer-icon []
+(defn computer-icon []
   [:svg {:viewBox "0 0 20 20" :aria-hidden true}
    [:rect {:x 2.5 :y 3.5 :width 15 :height 10 :rx 1.5}]
    [:path {:d "M7 17h6M10 13.5V17"}]])
@@ -122,7 +122,9 @@
   (let [p (usage/pop-place box true)]
     (assoc p :max-height (- js/innerHeight (:bottom p) 6))))
 
-(defn- popup [{:keys [box close]}]
+(defn popup
+  "The Systems popup beside box (the settings gear); close closes it."
+  [{:keys [box close]}]
   (let [menu (h/use-ref nil)
         me @(rf/subscribe [:me])]
     (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t)) (some-> (.-current box) (.contains t))))
@@ -134,16 +136,3 @@
      (for [s (:servers me)]
        ^{:key (:name s)}
        [:f> machine-card {:title (or (:label s) (:name s)) :url (str "/hub/servers/" (js/encodeURIComponent (:name s)) "/system")}])]))
-
-(defn systems-button
-  "The rail's computer: opens the Systems popup."
-  []
-  (let [[open? set-open] (h/use-state false)
-        box (h/use-ref nil)]
-    [:<>
-     [:button.rail-forms.rail-systems {:ref #(set! (.-current box) %) :class (when open? "on")
-                                       :data-tip (when-not open? "Systems: CPU, memory, disks of every server")
-                                       :aria-label "Systems" :aria-haspopup "dialog" :aria-expanded open?
-                                       :on-click #(set-open (not open?))}
-      [computer-icon]]
-     (when open? [:f> popup {:box box :close #(set-open false)}])]))

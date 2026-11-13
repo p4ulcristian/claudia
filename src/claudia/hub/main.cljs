@@ -19,6 +19,7 @@
             [claudia.hub.videos :as videos]
             [claudia.hub.narrate :as narrate]
             [claudia.node.anatomy :as anatomy]
+            [claudia.hub.github-login :as github-login]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
@@ -95,6 +96,8 @@
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
     ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
     (#{"/api/update-check" "/api/claude-token/current" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
+    ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
+    (#{"/api/github" "/api/github/token"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
@@ -218,7 +221,8 @@
   (narrate/start! data-dir)
   (github/start!)
   (push/start!)
-  (tokens/start!))
+  (tokens/start!)
+  (github-login/start!))
 
 (defn- exit!
   "The store closes last, once no request can reach it any more, then the process exits."

@@ -1,6 +1,6 @@
 (ns claudia.web.views.picture
   "The right half: the open chat's picture, a canvas of blocks top to bottom (two half blocks side by
-  side), or the timeline; the view switch over it and the stepper under the picture; the folded edge. No title on the board: the title
+  side), the stepper under it, the folded edge. No title on the board: the title
   names a picture only in the bar's scrubber."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -13,8 +13,7 @@
             [claudia.web.views.graph :as graph]
             [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
-            [claudia.web.views.snapshot :as snapshot]
-            [claudia.web.views.timeline :as timeline]))
+            [claudia.web.views.snapshot :as snapshot]))
 
 ;; ---- one block ----
 
@@ -132,7 +131,6 @@
   []
   (let [oc @(rf/subscribe [:open-chat])
         hist @(rf/subscribe [:picture-history])
-        view @(rf/subscribe [:right-view])
         fold @(rf/subscribe [:fold-state])
         ro @(rf/subscribe [:read-only?])
         phone? (db/phone?)
@@ -142,14 +140,11 @@
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
       [:section.right
-       (when (:chat oc) [rightbar/top])
-       (if (= view :timeline)
-         [:div.right-tl [:f> timeline/timeline-view oc]]
-         [:div.right-scroll
-          [:div.stage {:class (when (:viewing? hist) "past")}
-           [:f> picture-view {:scene scene :k (:ck oc)
-                              :live? (and (not (:viewing? hist)) (not ro))}]]])
-       (when (and (:chat oc) (= view :picture))
+       [:div.right-scroll
+        [:div.stage {:class (when (:viewing? hist) "past")}
+         [:f> picture-view {:scene scene :k (:ck oc)
+                            :live? (and (not (:viewing? hist)) (not ro))}]]]
+       (when (:chat oc)
          [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
        (when (seq asks)
          [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}

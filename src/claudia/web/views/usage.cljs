@@ -1,27 +1,13 @@
 (ns claudia.web.views.usage
-  "Meters and the model: the chalk ring in the chat header's pill (the chat's context,
-  a click runs /compact; its plan's 5-hour and week usage: claudia.web.views.chat), Settings' bars
-  with their reset countdown, the model and effort pickers in the composer, and the / command menu."
+  "Meters and the model: the chalk rings in the chat's header (the chat's context, a click runs
+  /compact; its plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside
+  a button (pop-place), the model and effort pickers in the header, and the / command menu."
   (:require [re-frame.core :as rf]
-            [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.usage :as pure]))
 
 (def ^:private k-tokens pure/k-tokens)
 (def pretty-model pure/pretty-model)
 (def ^:private level pure/level)
-(def ^:private countdown pure/countdown)
-
-(defn- reset-label
-  "When a limit resets: \"today 14:30\", \"tomorrow 09:00\", \"Thu 23 Oct, 09:00\"."
-  [ms]
-  (let [d (js/Date. ms)
-        hh-mm (.toLocaleTimeString d js/undefined #js {:hour "2-digit" :minute "2-digit"})
-        day #(.getTime (js/Date. (.getFullYear %) (.getMonth %) (.getDate %)))
-        days (js/Math.round (/ (- (day d) (day (js/Date.))) 86400000))]
-    (case days
-      0 (str "today " hh-mm)
-      1 (str "tomorrow " hh-mm)
-      (str (.toLocaleDateString d js/undefined #js {:weekday "short" :day "numeric" :month "short"}) ", " hh-mm))))
 
 (def ^:private compact-icon
   "M17 7.5v6m-3.2-3.2 3.2 3.2 3.2-3.2M17 26.5v-6m-3.2 3.2 3.2-3.2 3.2 3.2M10.5 17h13")
@@ -49,59 +35,6 @@
     (if beside?
       {:left (+ (.-right rc) 8) :bottom (max 6 (- js/innerHeight (.-bottom rc)))}
       {:left (max 6 (.-left rc)) :top (+ (.-bottom rc) 6)})))
-
-(defn- meter [{:keys [label percent title]} & children]
-  (into [:div.meter {:class (level percent) :title title}
-         [:span.m-label label]
-         [:span.m-bar [:span {:style {:width (str (min 100 percent) "%")}}]]
-         [:span.m-num (str percent "%")]]
-        children))
-
-(defn- context-meter [context]
-  [:div.meter {:class (level (:percent context))
-               :title (str "This chat: " (k-tokens (:used context)) " of " (k-tokens (:max context)) " tokens ("
-                           (pretty-model (:model context)) ") · right click to compact")
-               :on-context-menu (fn [^js e] (.preventDefault e)
-                                  (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}
-   [:span.m-label "Context"]
-   [:span.m-bar [:span {:style {:width (str (min 100 (:percent context)) "%")}}]]
-   [:span.m-num (str (:percent context) "%")]])
-
-(defn- account-pick [account saved plan]
-  (cond
-    (and account (> (count saved) 1))
-    [:label.pick.m-account {:title "The default Claude subscription: what a new chat starts on (each chat's own is picked in its header)"}
-     [:select {:value account
-               :on-change #(rf/dispatch [:ops/put-now {:url "/hub/claude-token/use"
-                                                       :method "POST" :body {:name (.. % -target -value)}
-                                                       :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}])}
-      (when-not (some #{account} saved) [:option {:value ""} plan])
-      (for [n saved] ^{:key n} [:option {:value n} (str n "'s plan")])]]
-    account [:span.m-account {:title "Add or switch tokens in Settings"} plan]))
-
-(defn- limit-meter [l plan now]
-  [meter {:label (:label l) :percent (:percent l) :title (str plan ", " (:label l) " limit: " (:percent l) "% used")}
-   (when (:resetsAt l)
-     [:span.m-reset "resets " (reset-label (:resetsAt l)) " " [:b (str "in " (countdown (- (:resetsAt l) now)))]])])
-
-(defn plan-meters
-  "Settings' meters: the open chat's Context bar (right click: compact), whose plan the chats run
-  on (a select with two saved tokens or more), each limit as a bar with when it resets and a
-  ticking countdown. Nothing until there is a context or a limit."
-  [server]
-  (let [limits (:limits @(rf/subscribe [:meta server]))
-        oc @(rf/subscribe [:open-chat])
-        context (get-in oc [:state :context])
-        tokens @(rf/subscribe [:tokens])
-        account (get-in tokens [:inUse :name])
-        plan (if account (str account "'s plan") "Plan")
-        now (hooks/use-now)]
-    (when (or context (seq limits))
-      [:div.meters
-       (when context (context-meter context))
-       (account-pick account (map :name (:tokens tokens)) plan)
-       (for [l limits]
-         ^{:key (:key l)} [limit-meter l plan now])])))
 
 (defn context-ring
   "The open chat's context use; a click compacts it (not while a turn runs)."

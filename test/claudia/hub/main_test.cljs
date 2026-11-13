@@ -32,6 +32,8 @@
   (is (= 404 (:status (main/path-problem nil false nil nil))))
   (is (= 400 (:status (main/path-problem "/api/../x" false nil nil))))
   (is (= 404 (:status (main/path-problem "/api/update-check" false nil nil))))
+  (is (= 404 (:status (main/path-problem "/api/github" false nil nil))))
+  (is (= 404 (:status (main/path-problem "/api/github/token" false nil nil))))
   (is (= {:status 400 :error "view: give it once"} (main/path-problem "/api/x" false nil "view: give it once")))
   (is (= 403 (:status (main/path-problem "/api/secret/k" false "paul" nil))))
   (is (nil? (main/path-problem "/api/secret/k" false nil nil))))

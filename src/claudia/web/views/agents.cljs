@@ -1,5 +1,5 @@
 (ns claudia.web.views.agents
-  "The work Claude started beside the chat (README decision 25): chips under the chat's title for the
+  "The work Claude started beside the chat (README decision 25): chips right above the composer for the
   running subagents and background shells (+N more, finished and failed folded into one chip), the
   list of every one of them, and one agent's view in the chat column (‹ Back, its facts, tabs Steps /
   Files / Prompt / Report; a shell: Output / Command). Stop on hover. The rail's third state (turn

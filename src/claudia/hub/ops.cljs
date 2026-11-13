@@ -2,6 +2,7 @@
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…),
+  each person's GitHub login (/hub/github-login),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.listen :as listen]
             [claudia.hub.narrate :as narrate]
@@ -11,6 +12,7 @@
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
+            [claudia.hub.github-login :as github-login]
             [claudia.hub.live :as live]
             [claudia.hub.pairing :as pairing]
             [claudia.hub.presence :as presence]
@@ -329,6 +331,18 @@
                 (fail res 400 "bad name"))
       (fail res 404 "not found"))))
 
+;; GitHub logins (claudia.hub.github-login) --------------------------------------------------------
+
+(defn- github-login-call
+  "GET /hub/github-login (the caller's login and their servers); PUT /hub/github-login {token}."
+  [^js req ^js res email]
+  (let [person {:email email}]
+    (case (.-method req)
+      "GET" (io/send-json res 200 (github-login/state person))
+      "PUT" (.then (with-body req #(github-login/save! person (:token %)))
+                   (fn [[status body]] (io/send-json res status body)))
+      (fail res 405 "GET or PUT"))))
+
 ;; Entry points -----------------------------------------------------------------------------------
 
 (defn open-call?
@@ -375,6 +389,7 @@
                        :else (systems/gate-sample res))
                  (str/starts-with? pathname "/hub/claude-token")
                  (token-call req res pathname email)
+                 (= pathname "/hub/github-login") (github-login-call req res email)
                  :else (fail res 404 "not found"))))
       (.catch (fn [e]
                 (js/console.error (str "hub: " pathname ": " (.-message e)))

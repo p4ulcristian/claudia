@@ -109,13 +109,24 @@
             :on-change #(on-change (.. % -target -checked))}]
    [:span.st-knob]])
 
-(defn toggles
-  "The two switches (Settings)."
+(defn popups-switch
+  "The Desktop popups switch (the settings menu)."
   []
-  (let [{:keys [sounds popups]} @on]
-    [:<>
-     [switch-row sounds set-sounds! "Sounds" "when a chat finishes or waits on you"]
-     [switch-row popups set-popups! "Desktop popups" nil]]))
+  [switch-row (:popups @on) set-popups! "Desktop popups" "when a chat finishes or waits on you"])
+
+(def ^:private bell-path "M6 9.5a6 6 0 0 1 12 0c0 4.6 1.8 6.2 1.8 6.2H4.2S6 14.1 6 9.5M10 19a2 2 0 0 0 4 0")
+
+(defn sounds-button
+  "The chat header's bell: the sounds when a chat finishes or waits on you, on or off."
+  []
+  (let [on? (boolean (:sounds @on))]
+    [:button.icon.sound-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Sounds"
+                                :data-tip (if on? "Sounds on: a chime when a chat finishes or waits" "Sounds off")
+                                :on-click #(set-sounds! (not on?))}
+     [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
+            :stroke-linecap "round" :stroke-linejoin "round"}
+      [:path {:d bell-path}]
+      (when-not on? [:path {:d "M4 4l16 16"}])]]))
 
 ;; ---- watching the chat lists ----
 

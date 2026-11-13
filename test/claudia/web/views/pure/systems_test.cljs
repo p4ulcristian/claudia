@@ -34,3 +34,10 @@
   (is (= "7% · 1000 MiB / 24.0 GiB · 41 °C · 31 W"
          (pure/gpu-text {:util 7 :memUsed (* 1000 1048576) :memTotal (* 24576 1048576) :temp 41 :power 30.5})))
   (is (= "" (pure/gpu-text {}))))
+
+(deftest the-project-popup-names-the-machine
+  (is (= ["Arch Linux" "kernel 7.2.15 · x64" "AMD Ryzen 9 · 2 cores" "16.0 GiB memory" "up 1 d 0 h"]
+         (pure/machine-lines {:host {:os "Arch Linux" :kernel "7.2.15" :arch "x64"}
+                              :cpu {:model "AMD Ryzen 9" :cores [{} {}]}
+                              :memory {:total (* 16 1024 1024 1024)} :uptime 86400})))
+  (is (= [] (pure/machine-lines {}))))

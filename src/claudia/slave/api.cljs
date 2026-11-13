@@ -245,6 +245,7 @@
    ["PATCH" ["api" "prefs"] 2] :set-prefs
    ["GET" ["api" "github"] 2] :github
    ["PUT" ["api" "github"] 2] :set-github
+   ["GET" ["api" "github"] 3] :github-token
    ["POST" ["api" "sessions"] 4] :adopt})
 
 (def ^:private chat-routes
@@ -285,6 +286,7 @@
       :set-prefs (reply (set-prefs req))
       :github (reply (.then (tokens/github-user) (fn [u] {:user u})))
       :set-github (reply (.then (io/read-json req max-body) #(tokens/set-github-token! (:token %))))
+      :github-token (if (= "token" (nth parts 2)) (reply (tokens/github-token)) (io/send-json res 404 {:error "not found"}))
       :adopt (reply (adopt (nth parts 2)))
       :upload (uploads/save! req res id (.get q "name"))
       :download (uploads/serve! res id a)
