@@ -176,7 +176,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     clip (WebM, or MP4 in Safari and the iPhone app) goes to the hub (`POST /hub/listen`), which
     passes it to a speech-to-text service with OpenAI's transcription shape (`HUB_LISTEN_URL`,
     token in `HUB_LISTEN_TOKEN_FILE`); the text joins the draft and nothing is sent: Send stays
-    the person's. A tap only says to hold it. The mic shows only where the browser can record and
+    the person's. While there is something to send, Send sits right above the mic (touch screens;
+    with a mouse it stays in the toolbar), so talking, reading and sending stay under one thumb.
+    A tap only says to hold it. The mic shows only where the browser can record and
     the hub has a listen service. Instead of: a mic beside Send (out of a thumb's reach on a
     tablet), Send turning into a mic (no talking once the box has text), a corner button over the
     picture, or Apple's on-device speech (app only, weaker on names). Files:

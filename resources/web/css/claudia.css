@@ -289,6 +289,10 @@ code, pre { font-family: var(--mono); }
 /* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
 .talk-row { display: flex; align-items: flex-end; gap: 10px; }
 .talk-row > .input-row { flex: 1; min-width: 0; }
+.mic-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.thumb-send { width: 56px; height: 44px; border-radius: 12px; background: var(--accent); color: var(--bg2); font-weight: 700; font-size: 14px; touch-action: manipulation; }
+/* With a mouse, Send stays in the toolbar (and Enter). */
+@media (pointer: fine) { .thumb-send { display: none; } }
 .mic { position: relative; flex: none; width: 56px; height: 56px; }
 .mic-bars { position: absolute; left: 50%; top: 50%; width: 160px; height: 160px; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
 .mic-button { position: relative; z-index: 4; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;

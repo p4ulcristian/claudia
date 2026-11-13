@@ -96,6 +96,12 @@
   (when (and ask (= "question" (:kind ask)) (seq text) (empty? attached))
     (into {} (map (fn [q] [(:question q) text]) (:questions ask)))))
 
+(defn sendable?
+  "Whether the composer can send: text or an attachment, and no attachment still on its way."
+  [text attached]
+  (boolean (and (or (not (str/blank? text)) (seq attached))
+                (not (some :busy attached)))))
+
 (defn placeholder
   "The composer's placeholder."
   [asking running]

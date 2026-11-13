@@ -106,6 +106,12 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
+(defn- thumb-send
+  "Send right above the mic while there is something to send: under the same thumb (decision 20)."
+  [{:keys [send! sendable?]}]
+  (when sendable?
+    [:button.thumb-send {:type "button" :aria-label "Send" :on-click send!} "Send"]))
+
 (defn- view [{:keys [phase canvas] :as parts}]
   [:div.mic {:class (name phase)}
    [:canvas.mic-bars {:ref #(set! (.-current canvas) %) :aria-hidden true
@@ -120,8 +126,9 @@
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
 
 (defn button
-  "The mic for the draft draft-key, or nothing where it cannot work."
-  [draft-key]
+  "The mic for the draft draft-key with Send above it (send! and sendable? from the composer), or
+  nothing where the mic cannot work."
+  [draft-key sending]
   (let [[ok set-ok] (h/use-state false)
         [phase set-phase] (h/use-state :idle)
         hold (h/use-ref nil)
@@ -131,4 +138,6 @@
     (use-bars! canvas live phase)
     (use-tap-hint! phase set-phase)
     (when ok
-      (view {:phase phase :canvas canvas :hold hold :live live :set-phase set-phase :draft-key draft-key}))))
+      [:div.mic-col
+       (thumb-send sending)
+       (view {:phase phase :canvas canvas :hold hold :live live :set-phase set-phase :draft-key draft-key})])))
