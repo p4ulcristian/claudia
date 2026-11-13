@@ -112,7 +112,7 @@ files are served without either check (they hold no data). The hub listens on `H
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
 `/s/<server>/api/update-check`, `/s/<server>/api/claude-token/current`,
-`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits` and `/s/<server>/api/system` are refused (404): only
+`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github` and `/s/<server>/api/github/token` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -143,6 +143,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/claude-token` `{ name, token }` | person | the same shape: sealed and saved under the name (same name = replaced), in use on every server; 503 when `on` is false |
 | `POST /hub/claude-token/use` `{ name }` | person | the same shape: in use on every server; 404 no such name |
 | `DELETE /hub/claude-tokens/:name` | person | the same shape; 409 for the one in use |
+| `GET /hub/github-login` | person | `{ on, login, savedAt, servers: [{ name, label, ok, login, error }] }`: the caller's GitHub login kept by the hub (never the token) and what each of their servers' gh is logged in as |
+| `PUT /hub/github-login` `{ token }` | person | the same shape: checked with GitHub, sealed and kept, handed to each of their servers (`PUT /api/github` as them); 400 not a token or refused by GitHub, 503 when the hub keeps no tokens |
 
 Claude tokens (README decisions 10 and 16): every saved one on every server, one of them in use (the
 default: what a chat without its own pick runs on). The hub brings each front's saved tokens along
@@ -211,8 +213,9 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo), when the caller may read it (a view: below) |
 | `GET /api/prefs` | `{ chatColors: "each" \| "none", hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
 | `PATCH /api/prefs` `{ chatColors?, hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
-| `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login |
-| `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set |
+| `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
+| `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
+| `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
 
 ## WebSocket (`/ws`): page ↔ runner
 
@@ -225,7 +228,7 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use); runner answers `created { chat, id }` then events |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use) and in the colour its header wore (else one of the least worn; none when the profile keeps the default look); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
