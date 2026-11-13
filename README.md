@@ -170,6 +170,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     one Claude Code process (about 250 to 450 MB) per open chat. Decision 18 still holds: no chat or
     program starts a chat or writes into one through the page.
 
+20. Push to talk in the composer (2026-11-13): a 56 px round mic at the composer's left end, under
+    the left thumb of a tablet held in landscape (the chat pane hugs the left edge; Send sits
+    mid-screen on a 13" iPad). Hold it and talk: 48 bars round it follow the voice; let go and the
+    clip (WebM, or MP4 in Safari and the iPhone app) goes to the hub (`POST /hub/listen`), which
+    passes it to a speech-to-text service with OpenAI's transcription shape (`HUB_LISTEN_URL`,
+    token in `HUB_LISTEN_TOKEN_FILE`); the text joins the draft and nothing is sent: Send stays
+    the person's. A tap only says to hold it. The mic shows only where the browser can record and
+    the hub has a listen service. Instead of: a mic beside Send (out of a thumb's reach on a
+    tablet), Send turning into a mic (no talking once the box has text), a corner button over the
+    picture, or Apple's on-device speech (app only, weaker on names). Files:
+    `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

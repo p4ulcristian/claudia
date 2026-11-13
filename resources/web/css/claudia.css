@@ -286,6 +286,18 @@ code, pre { font-family: var(--mono); }
 .composer { position: relative; background: none; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
 .composer::before { content: ""; position: absolute; top: -2px; left: 12px; right: 12px; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .input-row { display: flex; flex-direction: column; gap: 2px; background: var(--bg2); border: 0; border-radius: 6px; padding: 6px 6px 6px 12px; }
+/* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
+.talk-row { display: flex; align-items: flex-end; gap: 10px; }
+.talk-row > .input-row { flex: 1; min-width: 0; }
+.mic { position: relative; flex: none; width: 56px; height: 56px; }
+.mic-bars { position: absolute; left: 50%; top: 50%; width: 160px; height: 160px; transform: translate(-50%, -50%); pointer-events: none; z-index: 3; }
+.mic-button { position: relative; z-index: 4; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--violet-bg); color: var(--violet); box-shadow: inset 0 0 0 2px var(--violet);
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: transform 0.15s var(--ease), background 0.15s; }
+.mic-button svg { width: 26px; height: 26px; }
+.mic.recording .mic-button { background: var(--red); color: var(--bg2); box-shadow: none; transform: scale(1.1); }
+.mic.hearing .mic-button { opacity: 0.7; cursor: progress; }
+.mic-hint { position: absolute; left: 0; bottom: 66px; z-index: 5; white-space: nowrap; padding: 4px 10px; border-radius: 7px; background: var(--panel2); color: var(--fg); font-size: 13px; }
 .toolbar { display: flex; align-items: center; gap: 6px; }
 .toolbar .primary, .toolbar .stop { padding: 4px 12px; font-size: 13px; border-radius: 7px; }
 .tools { display: flex; flex-wrap: nowrap; gap: 2px; flex: 1; min-width: 0; margin-left: -6px; }

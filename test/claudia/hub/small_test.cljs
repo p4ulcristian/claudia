@@ -1,7 +1,8 @@
 (ns claudia.hub.small-test
-  "The hub's smaller namespaces: GitHub's deliveries, narration's keys, presence."
+  "The hub's smaller namespaces: GitHub's deliveries, narration's keys, listening, presence."
   (:require [cljs.test :refer [deftest is]]
             [claudia.hub.github :as github]
+            [claudia.hub.listen :as listen]
             [claudia.hub.narrate :as narrate]
             [claudia.hub.presence :as presence]
             [claudia.shared.presence :as p]))
@@ -18,6 +19,18 @@
     (is (false? (github/signed? nil body "sha256=00")))
     (is (false? (github/signed? "k" body "sha256=00")))
     (is (true? (github/signed? "k" body "sha256=add853b103fbcc936a194f9eb15e29c4ff08af6e47d5d1bca4f20218e31e4fff")))))
+
+(deftest listen-clip-names
+  (is (= "clip.webm" (listen/clip-name "audio/webm;codecs=opus")))
+  (is (= "clip.m4a" (listen/clip-name "audio/mp4")))
+  (is (= "clip.ogg" (listen/clip-name "audio/ogg")))
+  (is (= "clip.wav" (listen/clip-name "audio/wav")))
+  (is (= "clip" (listen/clip-name nil))))
+
+(deftest listen-heard-text
+  (is (= "hello" (listen/heard-text #js {:text "  hello \n"})))
+  (is (= "" (listen/heard-text #js {})))
+  (is (= "" (listen/heard-text nil))))
 
 (deftest narration-keys
   (is (= "" (narrate/voice-of nil)))

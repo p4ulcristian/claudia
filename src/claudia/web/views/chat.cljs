@@ -15,6 +15,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.dot :as dot]
+            [claudia.web.views.mic :as mic]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
@@ -545,9 +546,11 @@
     [:div.composer
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
-     [:div.input-row
-      (message-box parts)
-      (toolbar parts)]]))
+     [:div.talk-row
+      [:f> mic/button draft-key]
+      [:div.input-row
+       (message-box parts)
+       (toolbar parts)]]]))
 
 (def ^:private new-chat-head
   [:header.chat-head [:div.head-pill [:div.head-title [:h1 [:span.t "New chat"]]]]])
