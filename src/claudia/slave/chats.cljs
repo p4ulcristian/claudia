@@ -36,7 +36,9 @@
 
 (def cwd (env/env "CLAUDIA_CWD" (path/join (os/homedir) "Work")))
 
-;; A chat whose turn ended this long ago lets its Claude Code process go; the next message resumes it.
+;; An archived or passive chat whose turn ended this long ago lets its Claude Code process go; the
+;; next message resumes it. An open chat keeps its process (view/keeps-session?), so other sessions
+;; can always message it.
 (def ^:private idle-ms (* 15 60 1000))
 (def ^:private secret-ms (* 10 60 1000))
 
@@ -136,9 +138,10 @@
 (declare arm-idle! turn-id! restart-if-stale! send-text!)
 
 (defn- idle-out!
-  "The quiet while is over: the chat's Claude Code goes, unless work it started still runs."
+  "The quiet while is over: an archived or passive chat's Claude Code goes, unless work it started
+  still runs. An open chat keeps it."
   [id]
-  (when (and (:live (st id)) (not (:running (st id))))
+  (when (and (:live (st id)) (not (:running (st id))) (not (view/keeps-session? (store/chat id))))
     (if (tasks/running-any? id)
       (arm-idle! id)
       (do (hostlink/send! {:op "close" :id id})
@@ -846,13 +849,17 @@
         (swap-chat! cid assoc :stale true)
         (restart-if-stale! cid)))))
 
+(declare open-sessions!)
+
 (defn- on-sessions!
-  "The sessions the host holds: those it no longer holds (it restarted) have ended."
+  "The sessions the host holds: those it no longer holds (it restarted) have ended. Then every open
+  chat without one gets its session back."
   [sessions]
   (let [live (into {} (map (juxt :id :busy)) sessions)]
     (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
       (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))
-    (doseq [[cid busy] live] (session-held! cid busy))))
+    (doseq [[cid busy] live] (session-held! cid busy))
+    (open-sessions!)))
 
 (defn on-host-event [{:keys [ev id] :as e}]
   (case ev
@@ -900,6 +907,31 @@
       (-> (sdk/getSessionInfo id #js {:dir cwd})
           (.catch (fn [_] nil))
           (.then (fn [info] (start-session! id (some? info) t account)))))))
+
+(defn- open-session!
+  "Resumes the chat's Claude Code without a message, so other sessions can reach it. Only a chat
+  whose session file exists: a missing one would start an empty conversation."
+  [id]
+  (-> (sdk/getSessionInfo id #js {:dir cwd})
+      (.catch (fn [_] nil))
+      (.then (fn [info]
+               (when (and info (not (:live (st id))) (view/keeps-session? (store/chat id)))
+                 (let [t (token-of id)]
+                   (start-session! id true t (session/account-of t))))))))
+
+(defn open-sessions!
+  "Every open chat (view/keeps-session?) that has no Claude Code running gets it resumed."
+  []
+  (doseq [r (store/chats) :when (and (view/keeps-session? r) (not (:live (st (:id r)))))]
+    (open-session! (:id r))))
+
+(defn session-follows-row!
+  "After the chat was archived, brought back, made passive or woken: an open chat gets its Claude
+  Code, an archived or passive one lets it go once its turn and its work are done."
+  [id]
+  (if (view/keeps-session? (store/chat id))
+    (open-session! id)
+    (arm-idle! id)))
 
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in."

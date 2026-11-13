@@ -205,3 +205,10 @@
 (deftest last-replies-are-the-texts-after-the-last-step
   (is (= ["b" "a"] (map :id (turns/last-replies [{:id "t" :role "tool"} {:id "a" :role "assistant"} {:id "b" :role "assistant"}]))))
   (is (= [] (turns/last-replies [{:id "a" :role "assistant"} {:id "t" :role "tool"}]))))
+
+(deftest open-chats-keep-their-session
+  (is (true? (view/keeps-session? {:id 1 :color "blue"})))
+  (is (true? (view/keeps-session? {:id 1 :color nil})) "the default look is open too")
+  (is (false? (view/keeps-session? {:id 1 :color "blue" :archived true})) "archived")
+  (is (false? (view/keeps-session? {:id 1 :color "ash"})) "passive")
+  (is (false? (view/keeps-session? nil)) "no such chat"))

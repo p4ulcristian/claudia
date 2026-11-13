@@ -161,6 +161,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Chats are started, written to and answered by a person in the page (the socket's `new`, `send`
     and `answer`). Instead of: other programs and other chats starting chats in a person's list.
 
+19. An open chat keeps its Claude Code running (2026-11-13), so another chat can always message it
+    (Claude Code's SendMessage between sessions on the machine): a chat that is not archived and
+    not passive (`claudia.slave.chats.view/keeps-session?`) is never closed for being quiet, and when
+    the host (re)connects every open chat without a session gets it resumed, without a message.
+    Archived and passive chats still let theirs go after 15 quiet minutes. Instead of: every chat
+    closing after 15 minutes, which made a quiet chat unreachable until a person wrote to it. Costs
+    one Claude Code process (about 250 to 450 MB) per open chat. Decision 18 still holds: no chat or
+    program starts a chat or writes into one through the page.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
