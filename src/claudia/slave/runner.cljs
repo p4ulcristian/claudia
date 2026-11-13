@@ -163,7 +163,7 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f))]
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan]))]
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})

@@ -79,9 +79,14 @@
     (is (= ["s" "c"] (:open after)))
     (is (nil? (:new-settings after)))
     (is (= ["s" "x"] (:open (ev/created-db (assoc d :open ["s" "x"]) "s" "c" "p" "hi"))))
-    (is (= [["s" {:type "open" :chat "c"}] ["s" {:type "settings" :chat "c" :model "m"}]]
-           (ev/created-frames d "s" "c")))
-    (is (= [["s" {:type "open" :chat "c"}]] (ev/created-frames {} "s" "c")))))
+    (is (= [["s" {:type "open" :chat "c"}]] (ev/created-frames "s" "c")))))
+
+(deftest a-new-chat-carries-its-picks
+  (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
+  (is (= {} (ev/new-picks {:folder ""})))
+  (is (= {} (ev/new-picks nil)))
+  (is (= ["s" {:type "new" :id "id" :text "hi" :effort "high"}]
+         (:ws/send (ev/send-new-chat {:new-settings {:effort "high"}} "s" "id" (ev/outgoing nil "hi"))))))
 
 (deftest chat-after-turn-settles-an-ended-turn
   (is (= {:running true :stopped false :note "n" :messages [{:streaming true}]}

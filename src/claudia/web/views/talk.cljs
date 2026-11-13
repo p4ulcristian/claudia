@@ -1,5 +1,5 @@
 (ns claudia.web.views.talk
-  "Talking mode's controls (README decision 21): the speaker in the composer's toolbar turns it on
+  "Talking mode's controls (README decision 21): the speaker in the chat's header turns it on
   and off for this device; while it is on, each of Claude's replies has a small play button; the
   guard silences the voice when the open chat changes. Shown only when the hub has a voice."
   (:require [claudia.web.speech :as speech]
@@ -33,7 +33,7 @@
                                  :on-click (fn [] (when-not on? (speech/unlock!)) (rf/dispatch [:talk/toggle]))}
        [speaker on?]])))
 
-(defn toggle "The toolbar's talking mode switch." [] [:f> toggle-view])
+(defn toggle "The header's talking mode switch." [] [:f> toggle-view])
 
 (defn say-button
   "A reply's play button while talking mode is on."
