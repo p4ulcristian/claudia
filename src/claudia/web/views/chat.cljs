@@ -526,7 +526,7 @@
        (archive-button (:ck oc) (:row oc)))
      (when running
        [:button.stop {:title "Stop (Esc)" :on-click #(rf/dispatch [:chat/stop])} "Stop"])
-     [:button.send.primary {:disabled (or (and (str/blank? text) (empty? attached)) busy?)
+     [:button.send.primary {:disabled (not (pure/sendable? text attached))
                             :title (if busy? "Wait until the files are sent" "Send (Enter)")
                             :on-click send!}
       "Send"]]))
@@ -547,7 +547,7 @@
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      [:f> mic/button draft-key]
+      [:f> mic/button draft-key {:send! (:send! parts) :sendable? (pure/sendable? text attached)}]
       [:div.input-row
        (message-box parts)
        (toolbar parts)]]]))

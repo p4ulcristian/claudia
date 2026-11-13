@@ -144,3 +144,9 @@
       (is (= "1 step" (steps/group-count [{:role "tool"}])))
       (is (= "1 note" (steps/group-count [{:role "assistant"}])))
       (is (= "Bash" (steps/group-names [{:role "assistant"} {:role "tool" :tool "Bash"}]))))))
+
+(deftest sendable-needs-something-and-no-busy-file
+  (is (false? (chat/sendable? "  " [])))
+  (is (true? (chat/sendable? "hi" [])))
+  (is (true? (chat/sendable? "" [{:file "a"}])))
+  (is (false? (chat/sendable? "hi" [{:busy true}]))))
