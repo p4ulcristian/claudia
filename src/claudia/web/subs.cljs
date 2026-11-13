@@ -14,6 +14,7 @@
 (rf/reg-sub :pending-new (fn [db] (:pending-new db)))
 (rf/reg-sub :ask-state (fn [db [_ id]] (get-in db [:ask-state id])))
 (rf/reg-sub :draft (fn [db [_ k]] (get-in db [:drafts k] "")))
+(rf/reg-sub :talk? (fn [db _] (:talk? db)))
 
 (rf/reg-sub
  :server-list

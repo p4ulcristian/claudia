@@ -197,6 +197,12 @@ code, pre { font-family: var(--mono); }
 /* fork link: shown on hover where there is a pointer that hovers */
 @media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
 .msg.claude { padding: 0 2px; }
+/* Talking mode (views/talk.cljs): the toolbar's speaker, a reply's play button. */
+.talk-toggle svg { width: 19px; height: 19px; }
+.talk-toggle.on { color: var(--accent); }
+.say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
+.say-reply:hover { background: var(--panel); color: var(--fg); }
+.say-reply svg { width: 14px; height: 14px; }
 .msg.small { font-size: 13px; }
 .streaming .md > :last-child::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
 /* A message sent while Claude works, waiting below the chat until Claude takes it in. */

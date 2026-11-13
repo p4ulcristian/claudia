@@ -3,59 +3,35 @@
   mono PCM at 24 kHz, kept on disk by the text); this plays it on the Web Audio clock, so a clip's
   length is known exactly and pausing pauses the voice with the story. A video made off screen has
   a narrator that only notes what it says and when (given)."
-  (:require [claudia.web.scene3d.clock :as clock]))
+  (:require [claudia.web.scene3d.clock :as clock]
+            [claudia.web.voice :as voice]))
 
-(def ^:private rate 24000)
-
-(defonce ^:private available
-  ;; Whether the hub has a voice set up (asked once per page).
-  (delay (-> (js/fetch "/hub/narrate" #js {:credentials "same-origin"})
-             (.then (fn [^js r] (if (.-ok r) (.json r) #js {})))
-             (.then (fn [^js j] (boolean (.-voice j))))
-             (.catch (fn [_] false)))))
-
-(defn available? [] @available)
+(defn available? [] (voice/available?))
 
 (defn- context! "The audio context, made on first use." [{:keys [ctx]}]
-  (or @ctx (reset! ctx (js/AudioContext. #js {:sampleRate rate}))))
+  (or @ctx (reset! ctx (js/AudioContext. #js {:sampleRate voice/rate}))))
 
-(defn- answer-buffer
-  "The hub's answer: the PCM bytes, or a rejection with its error."
-  [^js r]
-  (if (.-ok r)
-    (.arrayBuffer r)
-    (-> (.json r)
-        (.catch (fn [_] #js {}))
-        (.then (fn [^js j] (throw (js/Error. (or (.-error j) (str "voice answered " (.-status r))))))))))
+(defn- clip-of "16-bit PCM bytes as a clip {:buffer AudioBuffer :seconds n}." [narrator ^js buf]
+  (let [^js b (voice/audio-buffer (context! narrator) buf)]
+    {:buffer b :seconds (/ (.-length b) voice/rate)}))
 
-(defn- clip-of "16-bit PCM bytes as a clip {:buffer AudioBuffer :seconds n}." [voice ^js buf]
-  (let [pcm (js/Int16Array. buf 0 (js/Math.floor (/ (.-byteLength buf) 2)))
-        ^js b (.createBuffer ^js (context! voice) 1 (.-length pcm) rate)
-        out (.getChannelData b 0)]
-    (dotimes [i (.-length pcm)] (aset out i (/ (aget pcm i) 32768)))
-    {:buffer b :seconds (/ (.-length pcm) rate)}))
-
-(defn- fetch-clip "A promise of a line's clip, or nil (the error kept)." [{:keys [error] :as voice} text instruction]
-  (-> (js/fetch "/hub/narrate"
-                #js {:method "POST" :credentials "same-origin"
-                     :headers #js {"content-type" "application/json"}
-                     :body (js/JSON.stringify #js {:text text :instruction instruction})})
-      (.then answer-buffer)
-      (.then #(clip-of voice %))
+(defn- fetch-clip "A promise of a line's clip, or nil (the error kept)." [{:keys [error] :as narrator} text instruction]
+  (-> (voice/fetch-pcm text instruction)
+      (.then #(clip-of narrator %))
       (.catch (fn [e] (reset! error (.-message e)) nil))))
 
-(defn- load! "A line's clip, fetched once per text and instruction." [{:keys [clips] :as voice} text instruction]
+(defn- load! "A line's clip, fetched once per text and instruction." [{:keys [clips] :as narrator} text instruction]
   (let [k [instruction text]]
     (or (get @clips k)
-        (let [p (fetch-clip voice text instruction)] (swap! clips assoc k p) p))))
+        (let [p (fetch-clip narrator text instruction)] (swap! clips assoc k p) p))))
 
 (defn- stop! [{:keys [source]}]
   (when-let [^js s @source] (try (.stop s) (catch :default _ nil)))
   (reset! source nil))
 
-(defn- play! [{:keys [source] :as voice} {:keys [buffer]}]
-  (stop! voice)
-  (let [^js c (context! voice)]
+(defn- play! [{:keys [source] :as narrator} {:keys [buffer]}]
+  (stop! narrator)
+  (let [^js c (context! narrator)]
     (-> (if (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)) (js/Promise.resolve nil))
         (.then (fn [_]
                  (let [^js src (.createBufferSource c)]
@@ -64,23 +40,23 @@
                    (.start src)
                    (reset! source src)))))))
 
-(defn- close! [{:keys [ctx] :as voice}]
-  (stop! voice)
+(defn- close! [{:keys [ctx] :as narrator}]
+  (stop! narrator)
   (some-> ^js @ctx .close)
   (reset! ctx nil))
 
 (defn make
-  "One story's voice: {:load (fn [text instruction] promise of clip or nil) :play :stop :pause
+  "One story's narrator: {:load (fn [text instruction] promise of clip or nil) :play :stop :pause
   :resume :close :error (atom)}. A clip is {:buffer AudioBuffer :seconds n}."
   []
-  (let [{:keys [ctx error] :as voice} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :error (atom "")}]
+  (let [{:keys [ctx error] :as narrator} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :error (atom "")}]
     {:error error
-     :load #(load! voice %1 %2)
-     :play #(play! voice %)
-     :stop #(stop! voice)
+     :load #(load! narrator %1 %2)
+     :play #(play! narrator %)
+     :stop #(stop! narrator)
      :pause (fn [] (some-> ^js @ctx .suspend))
      :resume (fn [] (some-> ^js @ctx .resume))
-     :close #(close! voice)}))
+     :close #(close! narrator)}))
 
 (defn given
   "The narrator of a video made off screen: the clips' lengths are given ({[instruction text]

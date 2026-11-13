@@ -4,6 +4,7 @@
   hears the clip, and the text joins the draft (nothing is sent: Send stays yours). A tap only says
   to hold it. Shown only where the browser can record and the hub has a listen service."
   (:require [claudia.web.mic :as mic]
+            [claudia.web.speech :as speech]
             [claudia.web.views.pure.mic :as pure]
             [re-frame.core :as rf]
             [reagent.hooks :as h]))
@@ -75,6 +76,7 @@
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
+    (speech/stop!)   ; it never talks over you
     (let [p (mic/start!)]
       (set! (.-current hold) {:t0 (js/performance.now) :p p})
       (set-phase :recording)

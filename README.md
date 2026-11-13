@@ -184,6 +184,21 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     picture, or Apple's on-device speech (app only, weaker on names). Files:
     `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
 
+21. Talking mode (2026-11-13): a speaker in the composer's toolbar turns it on and off, per device
+    (localStorage), for whichever chat is open. It only ever speaks what arrives while the person
+    watches: the final reply of a turn that ended by itself (not the working messages, not a
+    stopped turn) and Claude's questions, in the chat on screen, with the page in front; read by
+    the hub's voice (`/hub/narrate`, the 3D narrator's), without code, tables, links or Markdown
+    marks ("There's code in the chat." instead). It never listens: answers go through the mic.
+    Silence at once, with nothing said late, when it is turned off, the open chat changes, the mic
+    is held or the page goes to the background; a new reply cuts off the one before. Turning it
+    on reads nothing back, and a chat with replies the person missed stays silent: while it is on,
+    each reply has a play button to hear it. Instead of: reading the last unheard reply on
+    arriving at a chat (every switch could start talking), or a hands-free conversation (the mic
+    opening by itself). Files: `src/claudia/web/speech.cljs`, `src/claudia/web/views/talk.cljs`,
+    `src/claudia/web/views/pure/talk.cljs`; `src/claudia/web/voice.cljs` is the one fetch of the
+    hub's voice (the 3D narrator uses it too).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

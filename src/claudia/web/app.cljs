@@ -16,6 +16,7 @@
             [claudia.web.md :as md]
             [claudia.web.pictures :as pictures]
             [claudia.web.render :as render]
+            [claudia.web.speech :as speech]
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
             [claudia.web.views.shell :as shell]
@@ -40,6 +41,7 @@
   (alerts/install!)
   (md/install-copy!)
   (pictures/install-keys!)
+  (speech/start!)
   (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
   (js/document.addEventListener
    "visibilitychange"
