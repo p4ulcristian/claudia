@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Swift 6.4 builds with the new swiftbuild engine by default, which can't find the iphoneos
+# platform in xtool's Darwin SDK ("unable to find platform for 'iphoneos'"). xtool runs
+# `swift build` with no way to pass options, so this wrapper (first on PATH in testflight.sh)
+# adds --build-system native to `swift build` and passes everything else through.
+if [ "${1:-}" = build ]; then
+  shift
+  exec /usr/bin/swift build --build-system native "$@"
+fi
+exec /usr/bin/swift "$@"
