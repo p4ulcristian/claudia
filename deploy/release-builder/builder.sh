@@ -48,13 +48,17 @@ wanted() {
 # status <commit> <pending|success|failure> <description>: the status `builder` on the commit
 # (nothing when this builder has no GitHub token; a failed call only logs).
 status() {
-	[ -s "$home/github-token" ] || return 0
-	local code
-	code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
+	local code=
+	[ -s "$home/github-token" ] || code=skip
+	[ -n "$code" ] || code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
 		-H "Authorization: Bearer $(cat "$home/github-token")" -H 'Accept: application/vnd.github+json' \
 		-d "{\"state\":\"$2\",\"context\":\"builder\",\"description\":\"$3\"}" \
 		"https://api.github.com/repos/$repo/statuses/$1") || code=000
-	[ "$code" = 201 ] || log "status $2 on ${1:0:7}: GitHub answered $code"
+	[ "$code" = 201 ] || [ "$code" = skip ] || log "status $2 on ${1:0:7}: GitHub answered $code"
+	# The hub's update pill follows the same steps (README decision 32).
+	hub_call --max-time 10 "${auth[@]}" -H 'content-type: application/json' \
+		-d "{\"commit\":\"$1\",\"tree\":\"${tree:-}\",\"state\":\"$2\",\"description\":\"$3\"}" \
+		"$hub/progress" >/dev/null || true
 }
 
 main_commit() { git -C "$home/repo" ls-remote origin refs/heads/main | cut -c1-40; }

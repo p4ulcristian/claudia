@@ -336,6 +336,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Opening another chat before sending anything takes the circle away again (nothing was made).
     Instead of: the circle appearing only once the first message had made the chat.
 
+32. The update pill (2026-11-14): at the rail's foot, only while an update moves or just finished.
+    The builder tells the hub each step it tells GitHub (checking and building, then success or
+    failure and why); from the push to main on, the hub asks every server's front which commit it
+    runs (GET /api/version, every 2 s, for up to 3 minutes) and marks the hub itself done when it
+    starts on the commit it waited for (kept in <data>/progress.json across that restart). The pill
+    says "Building <commit>", "Updating 3/5", then "Live in 16 s" (or how many were not reached)
+    for 90 s; a click lists every step with its seconds. Files: `src/claudia/hub/progress.cljs`,
+    `src/claudia/web/views/update_pill.cljs`, `src/claudia/web/views/pure/update_pill.cljs`.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

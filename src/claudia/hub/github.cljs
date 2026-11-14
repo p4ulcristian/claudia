@@ -19,6 +19,7 @@
             ["node:fs" :as fs]
             [clojure.string :as str]
             [claudia.hub.announce :as announce]
+            [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
             [claudia.shared.protocol :as protocol]))
 
@@ -80,7 +81,8 @@
       (announce/poke-all! (when commit {:main commit}))
       (when commit
         (announce/ask-gate! (str "update " commit " " tree))
-        (releases/want! {:key "main" :commit commit :kind "main"}))))
+        (releases/want! {:key "main" :commit commit :kind "main"})
+        (progress/main-pushed! commit tree (first (str/split-lines (str (get-in d [:head_commit :message]))))))))
   (when-let [tree (staged-tree event d)]
     (announce/poke-all! {:stage tree})
     (announce/ask-gate! (str "stage " tree)))
