@@ -310,7 +310,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     merge a PR adding its key to `deploy/release-signers`. node_modules go up only when the lockfile
     is new. The builder keeps a shadow-cljs server running between releases (a warm JVM: 35 s instead
     of 53 s for the five builds; five builds side by side were slower), started again only when the
-    packages or shadow-cljs.edn change. GitHub's signed releases (stage.yml) stay the fallback. Instead of: GitHub's runners only
+    packages or shadow-cljs.edn change. The builder is also main's merge gate: before it builds a
+    commit it runs clj-kondo, the ratchet and the tests (compiled in the warm server, run beside the
+    release builds) and sets the commit status `builder` (pending, then success or failure and why),
+    with a fine-grained token that can write this repository's commit statuses and nothing else.
+    `builder` is the check main requires; GitHub's `check` and `test` still run but are not required
+    (stage.yml's fallback releases still come from them). A commit that fails is never brought to the hub. GitHub's signed releases (stage.yml) stay the fallback. Instead of: GitHub's runners only
     (~6 min from a push to green, its slow days), a self-hosted GitHub runner (tried: slower over a
     home line, 382 s against 207 s), or the builder pushing to servers itself (it would need to reach
     them; its fence lets it reach only the internet). Files: `deploy/release-builder/`,
