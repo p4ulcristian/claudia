@@ -724,7 +724,8 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .up-pill.done { --b: var(--green); }
 .up-pill.warn { --b: var(--amber); }
 .up-pill.bad { --b: var(--red); }
-.up-panel { position: absolute; left: calc(100% + 8px); bottom: 4px; z-index: 40; width: 280px; margin: 0; padding: 10px 12px; list-style: none; display: grid; gap: 6px;
+/* Fixed, not absolute: the rail's column clips what sticks out of it (.sidebar-slot overflow: hidden). */
+.up-panel { position: fixed; left: calc(var(--rail-w) + 8px); bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 60; width: 280px; margin: 0; padding: 10px 12px; list-style: none; display: grid; gap: 6px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); font-size: 12.5px; }
 .up-step { display: grid; grid-template-columns: 70px 74px 1fr; gap: 6px; align-items: baseline; }
 .up-what { font-weight: 700; }
