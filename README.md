@@ -348,6 +348,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     release the hub runs, else when the hub started). Files: `src/claudia/hub/progress.cljs`,
     `src/claudia/web/views/update_pill.cljs`, `src/claudia/web/views/pure/update_pill.cljs`.
 
+33. Back fast after a sleep (2026-11-14): a page away for more than 5 s (a laptop asleep, a phone
+    locked) opens every socket again the moment it comes back, instead of trusting one that still
+    says open: after a sleep or a network change it is often dead, and the browser took 2–3 s to
+    notice before reconnecting. The network coming back (`online`) does the same.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

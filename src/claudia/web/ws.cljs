@@ -57,14 +57,6 @@
       (do (.send sock (protocol/write-json frame)) true)
       false)))
 
-(defn wake!
-  "Back in the foreground (a phone unlocks): reconnect now instead of waiting out the backoff."
-  []
-  (doseq [[server {:keys [^js sock]}] @sockets]
-    (when (or (nil? sock) (>= (.-readyState sock) 2))
-      (swap! sockets assoc-in [server :tries] 0)
-      (connect! server))))
-
 (defn reconnect!
   "Every socket closed, then these servers' opened again (whose chats changed)."
   [servers]
@@ -72,6 +64,41 @@
     (when timer (js/clearTimeout timer))
     (when sock (set! (.-onclose sock) nil) (.close sock)))
   (doseq [s servers] (connect! s)))
+
+(def ^:private suspect-after-ms
+  "Away longer than this, a socket that still says open is not trusted: after a sleep or a network
+  change it is often dead, and the browser takes seconds to notice."
+  5000)
+
+(defn suspect?
+  "Whether sockets are opened again at once after the page was away for away-ms."
+  [away-ms]
+  (> away-ms suspect-after-ms))
+
+(defn wake!
+  "Back in the foreground after away-ms (a phone unlocks, a laptop wakes): after a long time away,
+  every socket is opened again at once (a fresh one is up in a fraction of a second); after a short
+  one, only the closed ones, without waiting out their backoff."
+  [away-ms]
+  (if (suspect? away-ms)
+    (reconnect! (keys @sockets))
+    (doseq [[server {:keys [^js sock]}] @sockets]
+      (when (or (nil? sock) (>= (.-readyState sock) 2))
+        (swap! sockets assoc-in [server :tries] 0)
+        (connect! server)))))
+
+(defonce ^:private hidden-at (atom nil))
+
+(defn install!
+  "Watches the page leave and come back (and the network come back) to open the sockets again fast."
+  [on-visible]
+  (js/document.addEventListener
+   "visibilitychange"
+   #(if (= "visible" js/document.visibilityState)
+      (do (wake! (- (js/Date.now) (or @hidden-at (js/Date.now)))) (on-visible))
+      (reset! hidden-at (js/Date.now))))
+  (js/window.addEventListener "online" #(reconnect! (keys @sockets)))
+  (js/window.addEventListener "pageshow" #(when (.-persisted ^js %) (reconnect! (keys @sockets)))))
 
 (rf/reg-fx :ws/reconnect (fn [{v :view :keys [servers]}] (reset! view v) (reconnect! servers)))
 

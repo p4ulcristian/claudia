@@ -24,3 +24,7 @@
   (is (false? (presence/say? true true 0 (dec p/heartbeat-ms))))
   (is (true? (presence/say? true true 0 p/heartbeat-ms)))
   (is (false? (presence/say? false false 0 p/heartbeat-ms))))
+
+(deftest a-socket-is-not-trusted-after-a-long-time-away
+  (is (not (ws/suspect? 1000)))
+  (is (ws/suspect? 60000)))
