@@ -3,8 +3,9 @@
   commit it runs in /hub/me; the page keeps the one it loaded with and asks again each time a
   socket opens (a hub that restarted on a new version drops every socket, so they all open again).
   Another commit: the page reloads, keeping every composer's text across the reload (sessionStorage),
-  but never while a new chat or a message is on its way, a file waits to be sent, or the mic is
-  held: then it asks again in a few seconds."
+  but never while a new chat is on its way, a file waits to be sent, or the mic is held: then it
+  asks again in a few seconds. A message already sent does not hold it (it is with the runner; one
+  whose echo never matched once kept a page from ever reloading)."
   (:require [re-frame.core :as rf]
             [claudia.shared.protocol :as protocol]))
 
@@ -20,11 +21,10 @@
   (boolean (and (seq loaded) (seq heard) (not= loaded heard))))
 
 (defn reload-blocked?
-  "Whether a reload now would lose something: a new chat or a message on its way, or files waiting
-  to go with a message."
+  "Whether a reload now would lose something: a new chat on its way, or files waiting to go with a
+  message."
   [db]
   (boolean (or (seq (:pending-new db))
-               (some seq (vals (:outbox db)))
                (some seq (vals (:attach db))))))
 
 (defn drafts-json
