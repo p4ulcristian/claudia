@@ -18,6 +18,7 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.menu :as menu]
             [claudia.web.views.tearoff :as tearoff]
+            [claudia.web.views.update-pill :as update-pill]
             [claudia.web.views.logotools :as logotools]))
 
 (defn- use-slide!
@@ -148,4 +149,5 @@
        (for [[i r] (map-indexed vector rows)]
          ^{:key (str (:server r) "/" (:id r))}
          [rail-chat (assoc m :i i) r])]]
+     [update-pill/pill]
      [:f> menu/button]]))

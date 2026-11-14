@@ -22,6 +22,7 @@
             [claudia.node.env :refer [env]]
             [claudia.node.http :as io]
             [claudia.hub.announce :as announce]
+            [claudia.hub.progress :as progress]
             [claudia.hub.store :as store]))
 
 (def ^:private hex40 #"^[0-9a-f]{40}$")
@@ -187,12 +188,15 @@
     ["GET" "wanted"] (wanted req res)
     ["POST" "ready"] (.then (io/read-json req 4096) #(ready res %))
     ["PUT" "files"] (put-file req res file)
+    ["POST" "progress"] (.then (io/read-json req 4096)
+                               #(do (progress/builder-said! (select-keys % [:commit :tree :state :description]))
+                                    (io/send-json res 200 {:ok true})))
     (fail res 405 "not this way")))
 
 (defn call
   "/hub/releases/…: files for anyone (GET, HEAD); everything else for the builder only."
   [^js req ^js res pathname]
-  (let [[_ op file] (re-matches #"^/hub/releases/(wanted|ready|files)(?:/([^/]+))?$" pathname)
+  (let [[_ op file] (re-matches #"^/hub/releases/(wanted|ready|files|progress)(?:/([^/]+))?$" pathname)
         method (.-method req)]
     (cond
       (not @dir) (fail res 503 "no release folder")

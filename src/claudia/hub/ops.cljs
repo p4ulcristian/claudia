@@ -15,6 +15,7 @@
             [claudia.hub.github-login :as github-login]
             [claudia.hub.live :as live]
             [claudia.hub.pairing :as pairing]
+            [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
             [claudia.hub.push :as push]
@@ -394,6 +395,7 @@
                  (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
+                 (= pathname "/hub/progress") (io/send-json res 200 (progress/now))
                  (= pathname "/hub/listen") (listen/call req res)
                  (= pathname "/hub/gate/system")
                  (cond (not admin?) (fail res 403 "admins only")
