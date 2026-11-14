@@ -308,7 +308,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `sudo deploy/release-builder/install.sh https://<hub>` there, paste the builder key it prints in
     Settings (Servers page, Release builder: the old builder's token stops counting at once), and
     merge a PR adding its key to `deploy/release-signers`. node_modules go up only when the lockfile
-    is new. GitHub's signed releases (stage.yml) stay the fallback. Instead of: GitHub's runners only
+    is new. The builder keeps a shadow-cljs server running between releases (a warm JVM: 35 s instead
+    of 53 s for the five builds; five builds side by side were slower), started again only when the
+    packages or shadow-cljs.edn change. GitHub's signed releases (stage.yml) stay the fallback. Instead of: GitHub's runners only
     (~6 min from a push to green, its slow days), a self-hosted GitHub runner (tried: slower over a
     home line, 382 s against 207 s), or the builder pushing to servers itself (it would need to reach
     them; its fence lets it reach only the internet). Files: `deploy/release-builder/`,
