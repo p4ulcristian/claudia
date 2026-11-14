@@ -425,6 +425,9 @@ code, pre { font-family: var(--mono); }
 .rail-chat.passive { opacity: 0.55; }
 .rail-chat.passive:hover, .rail-chat.passive.on { opacity: 1; }
 /* Passive chats follow on with the same spacing as every other chat; a chalk line in the gap above the first. */
+/* The chat being started grows in at the top the moment it opens (rail.cljs fresh-dot). */
+.rail-chat.fresh { animation: fresh-in 0.18s ease-out; }
+@keyframes fresh-in { from { opacity: 0; transform: scale(0.6); } }
 .rail-chat.passive.first::before { content: ""; position: absolute; left: 10px; right: 10px; top: -6px; border-top: 1.5px dashed var(--line); }
 /* Spotlight: the open chat glows; the others fade (their state badges stay bright) until hovered. */
 .rail-chat.on .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }

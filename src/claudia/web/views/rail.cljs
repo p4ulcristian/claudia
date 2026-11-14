@@ -6,7 +6,8 @@
   slide to their new places when the order changes; a new one grows in. Every circle with its title
   takes the same height (a title is cut after two lines; one line keeps the room of two), so the
   spacing never changes. On a touch screen, pulling the circles down from the top and letting go
-  reloads the page (claudia.web.updates keeps what is typed)."
+  reloads the page (claudia.web.updates keeps what is typed). A new chat has its circle at the top
+  at once, before its first message (fresh-dot)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -110,10 +111,20 @@
      [dot/chat-dot r (and (not ro) (:unseen r) (not= k open))]
      [:span.rail-name title]]))
 
+(defn- fresh-dot
+  "The chat being started, at the top at once (README decision 31): the open one, in its colour,
+  until the list has it; it goes when another chat is opened before anything was sent."
+  [{:keys [title color] :as fresh}]
+  [:div.rail-chat.on.fresh {:style {"--chat" (sidebar/chat-color-var color)} :data-tip title :aria-label title}
+   [dot/chat-dot fresh false]
+   [:span.rail-name title]])
+
 (defn- rail-top [ro]
-  [:<>
-   (when-not ro
-     [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])])
+  (let [fresh @(rf/subscribe [:fresh-chat])]
+    [:<>
+     (when-not ro
+       [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])
+     (when fresh [fresh-dot fresh])]))
 
 (defn rail []
   (let [{:keys [text]} @(rf/subscribe [:search])
