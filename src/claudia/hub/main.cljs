@@ -20,6 +20,7 @@
             [claudia.hub.narrate :as narrate]
             [claudia.node.anatomy :as anatomy]
             [claudia.hub.github-login :as github-login]
+            [claudia.hub.releases :as releases]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
@@ -220,6 +221,7 @@
   (pairing/start! data-dir)
   (narrate/start! data-dir)
   (github/start!)
+  (releases/start! data-dir)
   (push/start!)
   (tokens/start!)
   (github-login/start!))

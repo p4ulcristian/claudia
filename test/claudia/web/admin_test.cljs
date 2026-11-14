@@ -17,3 +17,7 @@
   (is (= ["peer up" "The WireGuard peer is up (x); waiting for the server to fetch its address"]
          (admin/pairing-note {:pairing {:ip "x"} :peerUp true})))
   (is (str/starts-with? (second (admin/pairing-note {:pairing {:createdAt 1}})) "Paired ")))
+
+(deftest the-release-builder-line
+  (is (= "None yet: releases come from GitHub." (admin/builder-line nil)))
+  (is (re-find #"^box, paired .*, not heard from yet$" (admin/builder-line {:host "box" :pairedAt 0}))))

@@ -146,14 +146,32 @@
       [field :input pair :label {:placeholder "Label (optional)"}]
       [:button {:disabled (str/blank? (:key @pair))} "Pair"]])])
 
+(defn builder-line
+  "What the Release builder section says about the builder (README decision 29)."
+  [{:keys [host pairedAt seenAt]}]
+  (if host
+    (str host ", paired " (format/when-text pairedAt) (if seenAt (str ", last asked " (format/when-text seenAt)) ", not heard from yet"))
+    "None yet: releases come from GitHub."))
+
+(defn- builder-form [b builder]
+  [:section
+   [:h3 "Release builder " [:span.muted.small "the machine that builds and signs releases"]]
+   [:p.muted.small (builder-line builder)]
+   [:form.admin-form.pair
+    {:on-submit (submit #(call! "POST" "/hub/admin/builder" {:key (str/trim (:key @b))} [:admin/reset-form b]))}
+    [field :input.mono.key b :key {:placeholder "claudia-builder:…" :spell-check false :auto-complete "off"}]
+    [:button {:disabled (str/blank? (:key @b))} (if (:host builder) "Replace" "Pair")]]])
+
 (defn- servers-page [_]
   (let [add (r/atom {:name "" :label "" :address ""})
-        pair (r/atom {:key "" :name "" :label ""})]
-    (fn [{:keys [servers pairing]}]
+        pair (r/atom {:key "" :name "" :label ""})
+        b (r/atom {:key ""})]
+    (fn [{:keys [servers pairing builder]}]
       [:<>
        [servers-table servers]
        [add-form add]
-       [pair-form pair pairing]])))
+       [pair-form pair pairing]
+       [builder-form b builder]])))
 
 ;; A form's inputs are emptied once its call succeeded (the atom travels in the event).
 (rf/reg-event-fx

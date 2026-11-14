@@ -1,0 +1,6 @@
+# The release builder keys Claudia trusts (README decision 29), in ssh-keygen's allowed signers
+# format: servers (deploy/update.sh) and the gate's hub helper read this file from GitHub's main and
+# install a release only when its files are signed by one of these keys (principal
+# claudia-release-builder, namespace claudia-release). A new builder: deploy/release-builder/install.sh
+# prints its line; a PR adds it here (and drops the old builder's).
+claudia-release-builder namespaces="claudia-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIESC9X/0rXsODow2R6H8pM7yPcGH5ojRayOqCmVOu1Y4 builder-2026-11-14

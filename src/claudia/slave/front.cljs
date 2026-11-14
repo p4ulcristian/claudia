@@ -63,14 +63,19 @@
                          :commit h/commit}))
 
 (defn trigger-line
-  "The line the hub's poke adds to CLAUDIA_UPDATE_TRIGGER: \"stage <tree>\" (body {:stage tree}: a
+  "The lines the hub's poke adds to CLAUDIA_UPDATE_TRIGGER: \"stage <tree>\" (body {:stage tree}: a
   git tree to fetch ahead), \"main <commit>\" (body {:main commit}: main was pushed to it, which
-  GitHub's API may name a few seconds later), else \"check <time>\" (look at main now)."
+  GitHub's API may name a few seconds later), else \"check <time>\" (look at main now); first
+  \"releases <url>\" when the body names where the hub keeps the release builder's files (an https
+  address, README decision 29)."
   [body iso]
-  (let [hex? #(and (string? %) (re-matches #"^[0-9a-f]{40}$" %))]
-    (cond (hex? (:stage body)) (str "stage " (:stage body) "\n")
-          (hex? (:main body)) (str "main " (:main body) "\n")
-          :else (str "check " iso "\n"))))
+  (let [hex? #(and (string? %) (re-matches #"^[0-9a-f]{40}$" %))
+        url (when (string? (:releases body))
+              (re-matches #"^https://[A-Za-z0-9.-]+(?::\d+)?/hub/releases/files$" (:releases body)))]
+    (str (when url (str "releases " url "\n"))
+         (cond (hex? (:stage body)) (str "stage " (:stage body) "\n")
+               (hex? (:main body)) (str "main " (:main body) "\n")
+               :else (str "check " iso "\n")))))
 
 (defn- update-check
   "The hub's poke (README, Hub operations: following main): adds a line to CLAUDIA_UPDATE_TRIGGER,

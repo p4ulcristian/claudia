@@ -15,6 +15,7 @@
             [claudia.hub.github-login :as github-login]
             [claudia.hub.live :as live]
             [claudia.hub.pairing :as pairing]
+            [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
@@ -57,7 +58,8 @@
                             :peerUp (pairing/applied? (:name s)))))
      :people (store/people)
      :access (store/access)
-     :pairing {:available (pairing/available?)}}))
+     :pairing {:available (pairing/available?)}
+     :builder (releases/builder-state)}))
 
 (defn- changed!
   "After a change to the servers or the grid: pushes follow at once; the answer is the new state."
@@ -82,6 +84,7 @@
       (and person-email (= method "DELETE")) [:drop-person person-email]
       (and (= pathname "/hub/admin/access") (= method "PUT")) [:set-access]
       (and (= pathname "/hub/admin/pair") (= method "POST")) [:pair]
+      (and (= pathname "/hub/admin/builder") (= method "POST")) [:pair-builder]
       :else nil)))
 
 (defn server-entry
@@ -178,7 +181,10 @@
    :save-person save-person
    :drop-person drop-person
    :set-access set-access
-   :pair pair})
+   :pair pair
+   :pair-builder (fn [req res _]
+                   (with-body req (fn [b] (let [[status body] (releases/pair! (field (:key b) 200))]
+                                            (if (= 200 status) (io/send-json res 200 (admin-state)) (io/send-json res status body))))))})
 
 (defn- admin-call [^js req ^js res pathname]
   (if-let [[op arg] (admin-route (.-method req) pathname)]
@@ -346,9 +352,10 @@
 ;; Entry points -----------------------------------------------------------------------------------
 
 (defn open-call?
-  "Calls that come with no login: a joining server, GitHub."
+  "Calls that come with no login: a joining server, GitHub, the release builder and release files
+  (claudia.hub.releases checks the builder's token itself)."
   [pathname]
-  (#{"/hub/enroll" "/hub/github"} pathname))
+  (or (#{"/hub/enroll" "/hub/github"} pathname) (str/starts-with? pathname "/hub/releases/")))
 
 (defn- github-delivery [^js req ^js res]
   (.then (io/read-bytes req max-github-body)
@@ -365,8 +372,13 @@
 
 (defn open-call
   [^js req ^js res pathname]
-  (if (not= "POST" (.-method req))
+  (cond
+    (str/starts-with? pathname "/hub/releases/")
+    (-> (js/Promise.resolve) (.then #(releases/call req res pathname))
+        (.catch (fn [e] (when-not (.-headersSent res) (fail res 400 (.-message e))))))
+    (not= "POST" (.-method req))
     (do (.setHeader res "allow" "POST") (fail res 405 "POST only"))
+    :else
     (-> (if (= pathname "/hub/github") (github-delivery req res) (enroll req res))
         (.catch (fn [e] (when-not (.-headersSent res) (fail res 400 (.-message e))))))))
 

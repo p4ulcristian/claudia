@@ -10,13 +10,16 @@
   - a stage run succeeded (stage.yml; its title names the tree it published): servers and the gate
     are told to fetch that tree ahead (`{stage: tree}`; `stage <tree>`), and they look at main
     again (a tree published only after the push installs now).
+  - the release builder (README decision 29) is asked to build main's pushes and the heads of this
+    repository's pull requests (opened, pushed to, reopened; a closed one is dropped); it announces
+    each tree itself once its files are on the hub (claudia.hub.releases).
   Everything else (other branches, other workflows, other events) is answered 202 and ignored."
   (:require ["node:crypto" :as crypto]
             [claudia.node.env :refer [env]]
             ["node:fs" :as fs]
-            ["node:http" :as http]
             [clojure.string :as str]
-            [claudia.hub.config :as config]
+            [claudia.hub.announce :as announce]
+            [claudia.hub.releases :as releases]
             [claudia.shared.protocol :as protocol]))
 
 (def branch "main")
@@ -40,29 +43,6 @@
            got (js/Buffer.from (subs header 7) "hex")]
        (and (= (.-length got) (.-length want)) (crypto/timingSafeEqual got want))))))
 
-(defn poke!
-  "POST /api/update-check on one front (body: nil, or {:stage tree}); logs the answer."
-  [server body]
-  (let [text (if body (protocol/write-json body) "")
-        ^js req (http/request #js {:host (:host server) :port (:port server) :method "POST"
-                                   :path "/api/update-check" :timeout 5000
-                                   :headers #js {"content-type" "application/json"
-                                                 "content-length" (js/Buffer.byteLength text)}}
-                              (fn [^js res]
-                                (.resume res)
-                                (js/console.log (str "github: poked " (:name server) ": " (.-statusCode res)))))]
-    (.on req "timeout" #(.destroy req (js/Error. "timeout")))
-    (.on req "error" #(js/console.log (str "github: poked " (:name server) ": " (.-message %))))
-    (.end req text)))
-
-(defn- ask-gate!
-  "Adds a line for the gate's helper to HUB_UPDATE_REQUEST (a path unit starts it)."
-  [line]
-  (if-let [file (env "HUB_UPDATE_REQUEST" nil)]
-    (do (fs/appendFileSync file (str line "\n"))
-        (js/console.log (str "github: asked the gate: " line)))
-    (js/console.log (str "github: HUB_UPDATE_REQUEST not set, so the gate was not asked: " line))))
-
 (defn main-push?
   "A delivery for a push to the main branch."
   [event d]
@@ -84,17 +64,28 @@
                (= "success" (:conclusion run)) (= stage-workflow (:path run)))
       (second (re-matches #"^stage ([0-9a-f]{40})$" (str (:display_title run)))))))
 
-(defn- poke-all! [body]
-  (doseq [s (config/all-servers)] (poke! s body)))
+(defn pr-head
+  "A pull request from this repository opened or moved on: {:key \"pr-<n>\" :commit :kind \"pr\"};
+  closed: {:key :closed true}; else nil (a fork's pull request is never built)."
+  [event d repo]
+  (let [p (:pull_request d) n (:number p) head (str (get-in p [:head :sha]))]
+    (when (and (= event "pull_request") (integer? n) (= repo (get-in p [:head :repo :full_name])))
+      (cond (#{"opened" "synchronize" "reopened"} (:action d))
+            (when (re-matches hex40 head) {:key (str "pr-" n) :commit head :kind "pr"})
+            (= "closed" (:action d)) {:key (str "pr-" n) :closed true}))))
 
-(defn- act! [event d]
+(defn- act! [event d repo]
   (when (main-push? event d)
     (let [[commit tree] (push-target d)]
-      (poke-all! (when commit {:main commit}))
-      (when commit (ask-gate! (str "update " commit " " tree)))))
+      (announce/poke-all! (when commit {:main commit}))
+      (when commit
+        (announce/ask-gate! (str "update " commit " " tree))
+        (releases/want! {:key "main" :commit commit :kind "main"}))))
   (when-let [tree (staged-tree event d)]
-    (poke-all! {:stage tree})
-    (ask-gate! (str "stage " tree))))
+    (announce/poke-all! {:stage tree})
+    (announce/ask-gate! (str "stage " tree)))
+  (when-let [{:keys [closed] :as head} (pr-head event d repo)]
+    (if closed (releases/forget! (:key head)) (releases/want! head))))
 
 (defn handle
   "One delivery -> status. body: the raw bytes (Buffer)."
@@ -108,4 +99,4 @@
         (cond
           (= d ::bad) 400
           (not= repo (get-in d [:repository :full_name])) 204
-          :else (do (act! (get headers "x-github-event") d) 202))))))
+          :else (do (act! (get headers "x-github-event") d repo) 202))))))

@@ -1,0 +1,37 @@
+# Claudia's release builder (README decision 29; deploy/release-builder/builder.sh). Whatever runs
+# here can change a build every Claudia machine installs: no sudo, no other user may write its home,
+# it sees no other home, and its network is fenced (internet only).
+[Unit]
+Description=Claudia release builder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=claudia-release-builder
+WorkingDirectory=/home/claudia-release-builder
+# The fence names this slice's cgroup, which exists only once this unit runs in it.
+ExecStartPre=+/usr/sbin/nft -f /etc/nftables-claudia-release-builder.nft
+ExecStart=/home/claudia-release-builder/builder.sh
+Slice=claudia_release_builder.slice
+Restart=always
+RestartSec=15
+OOMPolicy=continue
+NoNewPrivileges=yes
+# No RestrictSUIDSGID: its seccomp filter makes tar fail on mkdir/open with "Function not
+# implemented" (tested 2026-11-14); NoNewPrivileges already keeps a setuid file from granting anything.
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=/home/claudia-release-builder
+ReadWritePaths=/home/claudia-release-builder
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

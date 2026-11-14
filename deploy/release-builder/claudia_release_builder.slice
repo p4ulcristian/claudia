@@ -1,0 +1,7 @@
+# Underscores, not dashes: a dash in a slice name nests it (claudia-release-builder.slice would sit
+# under claudia.slice, the Claudia chats' slice, and share its limits).
+[Unit]
+Description=Claudia's release builder (README decision 29)
+
+[Slice]
+MemoryMax=16G
