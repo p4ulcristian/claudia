@@ -113,15 +113,19 @@
 
 ;; ---- WebSocket ----------------------------------------------------------------------------
 
+(def page-deflate
+  "permessage-deflate for the page's side (a phone on 4G): chat frames are JSON and shrink several
+  times. A small window on what the hub sends keeps its zlib context small on the gate; frames under
+  1 KB go as they are. No clientMaxWindowBits: with it, ws refuses every offer without
+  client_max_window_bits, and Safari and Firefox send plain permessage-deflate (a 400, no chats)."
+  #js {:serverMaxWindowBits 11
+       :zlibDeflateOptions #js {:memLevel 4 :level 6}
+       :threshold 1024 :concurrencyLimit 4})
+
 (defonce ^:private wss
   (WebSocketServer. #js {:noServer true
                          :maxPayload max-frame
-                         ;; The page's side is compressed (a phone on 4G): chat frames are JSON and
-                         ;; shrink several times. Small windows keep each socket's zlib context to
-                         ;; ~20 KB on the gate; frames under 1 KB go as they are.
-                         :perMessageDeflate #js {:serverMaxWindowBits 11 :clientMaxWindowBits 11
-                                                 :zlibDeflateOptions #js {:memLevel 4 :level 6}
-                                                 :threshold 1024 :concurrencyLimit 4}}))
+                         :perMessageDeflate page-deflate}))
 
 ;; Every socket of a pair (both sides), for the heartbeat.
 (defonce ^:private live (js/Set.))
