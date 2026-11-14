@@ -1,7 +1,7 @@
 (ns claudia.web.views.rail
   "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): under Claudia's face
   the sounds and 2D/3D switches (claudia.web.views.logotools), + for a new chat, then a circle per
-  chat with its title under it; passive (ash) chats last, above a chalk line. At its foot: the
+  chat with its title under it; passive (ash) chats last, after a chalk line, with the same spacing. At its foot: the
   settings gear (claudia.web.views.menu). Circles
   slide to their new places when the order changes; a new one grows in. Every circle with its title
   takes the same height (a title is cut after two lines; one line keeps the room of two), so the

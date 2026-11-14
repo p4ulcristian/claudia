@@ -82,7 +82,7 @@
 
 ;; ---- drawing a screen ----
 
-(def ^:private font "'Atkinson Hyperlegible', system-ui, sans-serif")
+(def ^:private font "'Atkinson Hyperlegible Next', system-ui, sans-serif")
 
 (defn- frame-path! [^js ctx x y]
   (.beginPath ctx)

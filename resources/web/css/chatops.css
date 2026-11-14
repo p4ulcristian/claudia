@@ -67,7 +67,7 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 /* ---- the rows: the chat's circle, title, server, time; what it does or the start of the last reply ---- */
 .cs-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 6px 4px 12px; }
 .cs-list > * { flex-shrink: 0; }
-.chat-row.cs-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 8px 8px 8px 10px; border-radius: 10px; box-shadow: none; background: none; }
+.chat-row.cs-row { width: 100%; display: flex; align-items: center; gap: 12px; height: 54px; box-sizing: border-box; padding: 8px 8px 8px 10px; border-radius: 10px; box-shadow: none; background: none; }
 .chat-row.cs-row:hover { background: var(--panel); }
 .chat-row.cs-row.active { background: color-mix(in srgb, var(--chat, var(--grey)) 14%, var(--panel)); }
 .cs-row .rail-dot { flex: none; }
@@ -84,8 +84,9 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .chat-row.elsewhere .rail-dot, .rail-chat.elsewhere .rail-dot { outline: 1.5px dashed color-mix(in srgb, var(--chat, var(--grey)) 70%, transparent); outline-offset: 2px; }
 .cs-row.passive { opacity: 0.55; }
 .cs-row.passive:hover, .cs-row.passive.active { opacity: 1; }
-.cs-row.passive.first { margin-top: 10px; position: relative; }
-.cs-row.passive.first::before { content: ""; position: absolute; left: 10px; right: 10px; top: -6px; border-top: 1.5px dashed var(--line); }
+.cs-row.passive.first { position: relative; }
+/* Every row the same height and the same gap, passive ones too; a chalk line in the gap above the first. */
+.cs-row.passive.first::before { content: ""; position: absolute; left: 10px; right: 10px; top: -2px; border-top: 1.5px dashed var(--line); }
 .cs-elsewhere { flex: none; display: grid; place-items: center; width: 15px; height: 15px; color: var(--muted); }
 .cs-elsewhere svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
 .cs-tag { flex: none; font: 700 11px var(--hand); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }

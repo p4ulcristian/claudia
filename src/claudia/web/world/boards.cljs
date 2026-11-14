@@ -16,7 +16,7 @@
     (set! (.-halo rt) halo)
     rt))
 
-(def ^:private font "'Atkinson Hyperlegible', system-ui, sans-serif")
+(def ^:private font "'Atkinson Hyperlegible Next', system-ui, sans-serif")
 
 (defn- text! [^js ctx s x y size weight colour]
   (set! (.-font ctx) (str weight " " size "px " font))

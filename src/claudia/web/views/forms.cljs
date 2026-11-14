@@ -115,7 +115,7 @@
       :encoding (merge {:x {:field x :type (if numeric-x "quantitative" "ordinal") :sort nil :axis {:labelAngle 0}}
                         :y {:field y :type "quantitative"}}
                        (if (:color data) {:color {:field (:color data) :type "nominal"}} {:color {:value (first palette)}}))
-      :config {:font "Atkinson Hyperlegible" :view {:stroke nil} :range {:category palette}
+      :config {:font "Atkinson Hyperlegible Next" :view {:stroke nil} :range {:category palette}
                :title {:font "Kalam" :fontSize 18 :fontWeight 700 :color fg :anchor "start"}
                :axis {:labelColor muted :titleColor muted :domainColor line :tickColor line :gridColor line :gridOpacity 0.5
                       :labelFontSize 12 :titleFont "Kalam" :titleFontSize 14 :titleFontWeight 700}
