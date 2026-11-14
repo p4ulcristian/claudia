@@ -127,6 +127,30 @@
 
 (defn- to-bottom! [^js el] (set! (.-scrollTop el) (.-scrollHeight el)))
 
+(defn- use-bottom-on-open!
+  "Another chat opened: it shows its end. A layout effect declared before the others, so the
+  following below already knows (a plain effect ran after them, too late)."
+  [{:keys [box stuck]} ck]
+  (h/use-layout-effect
+   (fn []
+     (set! (.-current stuck) true)
+     (some-> (.-current box) to-bottom!)
+     nil)
+   [ck]))
+
+(defn- use-follow-growth!
+  "Things that grow after they are drawn (an image, a picture's frame, the fonts) keep the end in
+  view while the person is at the bottom."
+  [{:keys [box stuck]}]
+  (h/use-effect
+   (fn []
+     (when-let [^js el (.-current box)]
+       (let [follow #(when (.-current stuck) (to-bottom! el))]
+         (.addEventListener el "load" follow true)
+         (some-> js/document.fonts .-ready (.then follow))
+         #(.removeEventListener el "load" follow true))))
+   []))
+
 (defn- use-keep-place!
   "Older messages came in above: keep what was on screen where it was."
   [{:keys [box stuck anchor]} ck first-id]
@@ -259,10 +283,11 @@
                :read-only? @(rf/subscribe [:read-only?])
                :last-user last-user :running running :last-i (dec (count blocks))}]
     (jump! ck (:more state))
+    (use-bottom-on-open! scroll ck)
     (use-keep-place! scroll ck first-id)
     (use-follow-bottom! scroll [ck (count msgs) (count (:text (peek msgs))) (count (:outbox oc)) running])
     (use-follow-on-resize! scroll)
-    (h/use-effect (fn [] (set! (.-current stuck) true) nil) [ck])
+    (use-follow-growth! scroll)
     (use-load-older! scroll ck state (count msgs))
     (messages-column (assoc oc :scroll scroll :feed feed :since since :marks marks :first-id first-id))))
 
