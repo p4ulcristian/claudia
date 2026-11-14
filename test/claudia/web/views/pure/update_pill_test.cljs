@@ -23,3 +23,11 @@
 
 (deftest the-panel-lists-every-step
   (is (= ["merged" "hub" "box" "destiny"] (map first (u/steps moving)))))
+
+(deftest when-this-version-went-live
+  (is (= "updated just now" (u/updated-text 0 30000)))
+  (is (= "updated 5 min ago" (u/updated-text 0 (* 5 60000))))
+  (is (= "updated 3 h ago" (u/updated-text 0 (* 3 3600000))))
+  (is (= "updated 1 day ago" (u/updated-text 0 (* 30 3600000))))
+  (is (= "updated 3 days ago" (u/updated-text 0 (* 72 3600000))))
+  (is (nil? (u/updated-text nil 0))))

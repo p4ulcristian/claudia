@@ -133,3 +133,11 @@
   "What GET /hub/progress answers: the builds and the latest release."
   []
   @state)
+
+(defonce ^:private started-at (js/Date.now))
+
+(defn updated-at
+  "When this hub's version went live: the merge of the release it runs, else when it started."
+  []
+  (let [r (:release @state)]
+    (if (and r (short= (:commit r) (env "HUB_COMMIT" nil))) (:merged r) started-at)))
