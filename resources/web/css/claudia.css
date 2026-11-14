@@ -393,13 +393,14 @@ code, pre { font-family: var(--mono); }
 /* The picture, the bar under it and the right rail: right.css. */
 
 /* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
-.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(52px + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
 /* The vertical chalk lines run between the safe areas: never under the status bar or the home bar. */
 .sidebar::after, .rail::after { content: ""; position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
-.rail > .logo-tools { padding: 4px 0 8px; }
+/* Face, 2D/3D, + and every chat sit 11 px apart (measured headless, 2026-11-14). */
+.rail > .logo-tools { padding: 4px 0 5px; }
 .lt-sound { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--muted); opacity: 0.7; }
 .lt-sound.on { color: var(--accent); opacity: 1; }
 .lt-sound svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
@@ -563,7 +564,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* A Home Screen app: iOS 26 lays its own blurred band over the status bar and about 16px below it. */
 @media (display-mode: standalone) { :root { --top-safe: calc(env(safe-area-inset-top) + 16px); } }
 .split { padding-top: var(--top-safe); box-sizing: border-box; }
-.rail { padding-top: calc(46px + var(--top-safe)); }
+.rail { padding-top: calc(52px + var(--top-safe)); }
 .sidebar { padding-top: calc(14px + var(--top-safe)); }
 @media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
 .menu-toggle { top: calc(var(--edge-t) + var(--top-safe)); left: calc(10px + env(safe-area-inset-left)); }
