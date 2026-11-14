@@ -43,11 +43,7 @@
   (pictures/install-keys!)
   (speech/start!)
   (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
-  (js/document.addEventListener
-   "visibilitychange"
-   #(when (= "visible" js/document.visibilityState)
-      (ws/wake!)
-      (rf/dispatch [:chat/check-seen])))
+  (ws/install! #(rf/dispatch [:chat/check-seen]))
   (rf/dispatch-sync [:init])
   (presence/start!)
   (tabs/start!)
