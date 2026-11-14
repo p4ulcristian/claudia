@@ -110,6 +110,9 @@
 
 (rf/reg-sub
  :open-color
- :<- [:open-chat]
- (fn [oc] (get-in oc [:row :color])))
+ ;; The colour the window wears: the open chat's; a new chat's (it has one from the start); every
+ ;; screen wears a chat colour, there is no default look (README decision 25).
+ (fn [db]
+   (let [[s c] (:open db)]
+     (or (get-in db [:servers s :rows c :color]) (get-in db [:new-settings :color])))))
 

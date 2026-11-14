@@ -282,6 +282,7 @@
 
 (defn main [& _]
   (store/open! data-dir)
+  (chats/colour-every-chat!)
   (uploads/set-root! data-dir)
   (video/set-root! data-dir)
   (shown/set-root! data-dir)

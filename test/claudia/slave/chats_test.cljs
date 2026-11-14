@@ -35,6 +35,10 @@
 
 ;; The chat list -----------------------------------------------------------------------------------
 
+(deftest chats-without-a-colour
+  (is (= [2 3] (colours/uncoloured [{:id 1 :color "red"} {:id 2 :color nil} {:id 3 :color ""}])))
+  (is (= [] (colours/uncoloured []))))
+
 (deftest least-worn-colours
   (is (= ["c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] nil)))
   (is (= ["a" "c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] 1)) "except itself")

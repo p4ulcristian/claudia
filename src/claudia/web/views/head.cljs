@@ -185,9 +185,7 @@
      [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
                       :style {:background (str "var(--c-" c ")")}
                       :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
-                      :on-click #(pick c)}])
-   [:button.swatch.none {:class (when-not color "on") :title "No colour" :aria-label "No colour"
-                         :on-click #(pick nil)}]])
+                      :on-click #(pick c)}])])
 
 (defn- use-machine
   "The chat's computer's newest sample (GET /hub/servers/<server>/system, once), nil until it answers."

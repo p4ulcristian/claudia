@@ -214,8 +214,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     turn already runs on them (before, model and effort followed `created`, after the first turn
     had begun). A new chat also has its colour from the moment it opens (random among the ones
     the server's other chats wear least, `claudia.shared.colours`), the header wears it, the
-    project popup's palette changes it, and it goes with `new` (a profile whose preference keeps
-    the default look still gets none). The project popup starts with where the chat works: the
+    project popup's palette changes it, and it goes with `new` (decision 25). The project popup starts with where the chat works: the
     folder's full path and its computer (name, system, kernel and architecture, processor and
     cores, memory, uptime; `host` in the system sample). Once started, the computer is fixed and
     every other pick changes the chat. The composer keeps only writing and sending, one row
@@ -251,6 +250,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     long Settings scroll, the Systems computer alone on the rail, and a Picture | Timeline switch.
     Files: `src/claudia/web/views/menu.cljs`, `src/claudia/web/views/settings.cljs`,
     `resources/web/css/claudia.css`.
+
+25. Chat colours everywhere, no default look (2026-11-14): every chat has one of the chat
+    colours and the window always wears one: the open chat's, or a new chat's (it has one from
+    the moment it opens, decision 22). The "default look" preference, the palette's "No colour"
+    and the grey fallback are gone; a runner gives each chat without a colour one when it starts
+    (least worn first, `colour-every-chat!`). Ash (passive) stays a colour picked by hand.
+    Instead of: a grey default theme when a chat had no colour, which made the app look like two
+    apps. Files: `src/claudia/shared/colours.cljc`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/web/subs.cljs`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

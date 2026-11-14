@@ -46,16 +46,13 @@
   (let [v (store/kv "" "hiddenForms")] (if (sequential? v) (filterv string? v) [])))
 
 (defn prefs
-  "{:chatColors \"each\"|\"none\" :hiddenForms [forms the user deleted in the Forms window]}."
+  "{:hiddenForms [forms the user deleted in the Forms window]}."
   []
-  {:chatColors (if (= "none" (:chatColors (store/kv "" "prefs"))) "none" "each")
-   :hiddenForms (deleted-forms)})
+  {:hiddenForms (deleted-forms)})
 
 (defn set-prefs!
   "Changes the given preferences; returns them all."
   [changes]
-  (when (#{"each" "none"} (:chatColors changes))
-    (store/kv! "" "prefs" {:chatColors (:chatColors changes)}))
   (when (sequential? (:hiddenForms changes))
     (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help))) (:hiddenForms changes))))))
   (prefs))

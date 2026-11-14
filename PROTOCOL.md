@@ -211,8 +211,8 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `POST /api/sessions/:id/adopt` | `{ id }`: that session becomes a chat here |
 | `GET /api/project?folder=<abs>` | `{ name, logo (bool) }`: the folder's project (its git repo, or `<group>/<project>` under `CLAUDIA_CWD`); `{ name: null, logo: false }` for a folder a view may not read (below: "A view's reads stay in the work folder") |
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo), when the caller may read it (a view: below) |
-| `GET /api/prefs` | `{ chatColors: "each" \| "none", hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
-| `PATCH /api/prefs` `{ chatColors?, hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
+| `GET /api/prefs` | `{ hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
+| `PATCH /api/prefs` `{ hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
@@ -228,7 +228,7 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use) and in the colour its header wore (else one of the least worn; none when the profile keeps the default look); runner answers `created { chat, id }` then events |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use) and in the colour its header wore (else one of the least worn; every chat has a colour); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |

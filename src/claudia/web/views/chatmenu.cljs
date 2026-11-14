@@ -53,9 +53,7 @@
    (for [c colours]
      ^{:key c}
      [:button.swatch {:class (when (= c color) "on") :style {:background (str "var(--c-" c ")")}
-                      :title c :aria-label c :on-click (act #(rf/dispatch [:ops/color k c]))}])
-   [:button.swatch.none {:class (when-not color "on") :title "No colour" :aria-label "No colour"
-                         :on-click (act #(rf/dispatch [:ops/color k nil]))}]])
+                      :title c :aria-label c :on-click (act #(rf/dispatch [:ops/color k c]))}])])
 
 (defn- rename-input [k title close set-renaming]
   [:input.cm-rename {:auto-focus true :default-value title

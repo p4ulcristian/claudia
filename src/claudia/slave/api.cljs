@@ -223,7 +223,7 @@
         (.pipe (fs/createReadStream logo) res))
     (io/send-json res 404 {:error "No logo."})))
 
-;; The profile's preferences (runner.ts /api/prefs): chatColors, the forms deleted in the Forms
+;; The profile's preferences (runner.ts /api/prefs): the forms deleted in the Forms
 ;; window (they leave Claude's draw tool), and the opt-in forms this runner doesn't have.
 (defn- set-prefs [req]
   (.then (io/read-json req max-body)

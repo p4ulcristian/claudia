@@ -7,6 +7,11 @@
   ["burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan"
    "sky" "blue" "indigo" "violet" "purple" "magenta" "pink" "brown"])
 
+(defn uncoloured
+  "The ids of the chats without a colour (nil or blank)."
+  [chats]
+  (vec (keep #(when (empty? (:color %)) (:id %)) chats)))
+
 (defn least-worn
   "The colours the other chats in the list (not archived, not except) wear least."
   [colours chats except]

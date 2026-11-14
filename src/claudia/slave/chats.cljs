@@ -68,12 +68,18 @@
 
 (defn least-used-colour
   "A new chat's colour (src/colors.ts pickColor): random among the ones the other chats in the list
-  (not archived, not this one) wear least; never ash, which is only picked by hand. nil when the
-  profile's preference says new chats keep the default look."
+  (not archived, not this one) wear least; never ash, which is only picked by hand. Every chat has
+  one: there is no default look (README decision 25)."
   ([] (least-used-colour nil))
   ([except]
-   (when (not= "none" (:chatColors (codeforms/prefs)))
-     (rand-nth (colours/least-worn chat-colors (store/chats) except)))))
+   (rand-nth (colours/least-worn chat-colors (store/chats) except))))
+
+(defn colour-every-chat!
+  "Gives each chat without a colour one (chats made before decision 25 or with the default look),
+  one at a time, so they spread over the least worn."
+  []
+  (doseq [id (colours/uncoloured (store/chats))]
+    (store/update! id {:color (least-used-colour id)})))
 
 (defn wake!
   "Writing to a passive (ash) chat makes it active again: the colour it had, else a fresh one."
@@ -958,12 +964,9 @@
       (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)})))))
 
 (defn new-chat-colour
-  "A new chat's colour: the one its header showed (picked), when it is a chat colour and the
-  profile's preference gives new chats one; else least-used-colour."
+  "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."
   [picked]
-  (if (and (colours/chat-colour? picked) (not= "none" (:chatColors (codeforms/prefs))))
-    picked
-    (least-used-colour)))
+  (if (colours/chat-colour? picked) picked (least-used-colour)))
 
 (defn new-chat!
   "Starts a chat with its first message; returns its id (the Claude Code session id). picks: the
