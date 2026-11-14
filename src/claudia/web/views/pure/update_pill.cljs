@@ -20,7 +20,7 @@
 (defn release-label
   "What the pill says about a release: Updating d/n while it moves, then how long it took."
   [release]
-  (let [ps (parts release)
+  (let [ps (remove #(= "asleep" (:state %)) (parts release))
         done (count (filter #(= "done" (:state %)) ps))
         missing (count (filter #(= "not reached" (:state %)) ps))]
     (cond

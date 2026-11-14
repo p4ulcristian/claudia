@@ -340,7 +340,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 32. The update pill (2026-11-14): at the rail's foot, only while an update moves or just finished.
     The builder tells the hub each step it tells GitHub (checking and building, then success or
     failure and why); from the push to main on, the hub asks every server's front which commit it
-    runs (GET /api/version, every 2 s, for up to 3 minutes) and marks the hub itself done when it
+    runs (GET /api/version, every 2 s, for up to 3 minutes; one that does not answer the moment the
+    update begins is asleep, and nobody waits for it: it updates itself when it wakes) and marks the hub itself done when it
     starts on the commit it waited for (kept in <data>/progress.json across that restart). The pill
     says "Building <commit>", "Updating 3/5", then "Live in 16 s" (or how many were not reached)
     for 90 s; a click lists every step with its seconds. Under the gear, very small, when

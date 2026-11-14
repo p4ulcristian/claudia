@@ -43,6 +43,14 @@
     (= "waiting" (get-in release [:machines server-name :state]))
     (assoc-in [:machines server-name] {:state "done" :secs (/ (- t (:merged release)) 1000)})))
 
+(defn machine-asleep
+  "The release with server name marked asleep: it did not answer when the update began (a laptop
+  shut, a machine off), so nobody waits for it; it updates itself when it wakes."
+  [release server-name]
+  (cond-> release
+    (= "waiting" (get-in release [:machines server-name :state]))
+    (assoc-in [:machines server-name] {:state "asleep"})))
+
 (defn hub-done
   "The release with the hub on its commit at t."
   [release t]
@@ -122,11 +130,19 @@
   (when (and (re-matches hex40 (str commit)) (#{"pending" "success" "failure"} st))
     (change! update :builds with-build said (js/Date.now))))
 
+(defn- mark-asleep!
+  "Each server is asked once right away (before it starts installing): one that does not answer is asleep."
+  []
+  (doseq [s (config/all-servers)]
+    (.then (front/call s "GET" "/api/version" nil 1500)
+           (fn [[status]] (when (zero? status) (change! update :release machine-asleep (:name s)))))))
+
 (defn main-pushed!
-  "A push to main: every server and the hub are followed until they run it."
+  "A push to main: every server that is awake and the hub are followed until they run it."
   [commit tree title]
   (when (re-matches hex40 (str commit))
     (change! assoc :release (new-release commit tree title (mapv :name (config/all-servers)) (js/Date.now)))
+    (mark-asleep!)
     (start-polling!)))
 
 (defn now
