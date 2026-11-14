@@ -3,8 +3,8 @@
    screenshots come from. Ported from the old Claudia's web/style.css rule for rule. */
 
 /* ---------- The board ---------- */
-.right { position: relative; container-type: inline-size;
-  background: radial-gradient(ellipse at 30% 15%, color-mix(in oklch, var(--board) 88%, #fff) 0%, var(--board) 55%, color-mix(in oklch, var(--board) 90%, #000) 100%); }
+/* The same background as the chat: one surface, the chalk line between them. */
+.right { position: relative; container-type: inline-size; background: var(--board); }
 .right-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .right-scroll > * { flex-shrink: 0; }
 /* Room at the bottom: the bar slides up there. */
