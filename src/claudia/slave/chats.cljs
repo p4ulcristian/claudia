@@ -67,19 +67,21 @@
 ;; Colours and titles -----------------------------------------------------------------------------
 
 (defn least-used-colour
-  "A new chat's colour (src/colors.ts pickColor): random among the ones the other chats in the list
-  (not archived, not this one) wear least; never ash, which is only picked by hand. Every chat has
-  one: there is no default look (README decision 25)."
+  "A new chat's colour: among the ones the other chats in the list (not archived, not this one)
+  wear least, the most different from the rest (README decision 26); never ash, which is only
+  picked by hand. Every chat has one: there is no default look (README decision 25)."
   ([] (least-used-colour nil))
   ([except]
-   (rand-nth (colours/least-worn chat-colors (store/chats) except))))
+   (colours/most-different (store/chats) except)))
 
 (defn colour-every-chat!
-  "Gives each chat without a colour one (chats made before decision 25 or with the default look),
-  one at a time, so they spread over the least worn."
+  "Brings every chat into the crayon box (README decisions 25, 26): an old colour becomes its
+  crayon, a chat without one (or with an unknown one) gets the most different, one at a time."
   []
-  (doseq [id (colours/uncoloured (store/chats))]
-    (store/update! id {:color (least-used-colour id)})))
+  (doseq [r (store/chats)
+          :let [change (colours/recolour r)]
+          :when change]
+    (store/update! (:id r) (if (= :fresh change) {:color (least-used-colour (:id r))} change))))
 
 (defn wake!
   "Writing to a passive (ash) chat makes it active again: the colour it had, else a fresh one."

@@ -11,12 +11,11 @@
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.core :as r]
+            [claudia.shared.colours :as colours]
             [claudia.web.rowdiff :as rowdiff]))
 
 ;; The chat colours in hue order (claudia.css --c-*): neighbouring colours get neighbouring notes.
-(def ^:private colours
-  ["burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan" "sky" "blue" "indigo"
-   "violet" "purple" "magenta" "pink" "brown" "ash"])
+(def ^:private colours (conj colours/chat-colours "ash"))
 
 ;; A major pentatonic from C4 up: any two notes sound fine together. Index 0 = no colour.
 (def ^:private steps [0 2 4 7 9])

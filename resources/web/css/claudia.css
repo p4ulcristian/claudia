@@ -10,10 +10,16 @@
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
   /* Chat colours, and the text colour that sits on them. */
+  /* The chat colours: the crayon box (claudia.shared.colours, the same hexes; README decision 26). */
+  --c-cherry: #e5383b; --c-chocolate: #a0673f; --c-peach: #ffc49b; --c-tangerine: #ff8c1a; --c-gold: #d4a72c;
+  --c-sunflower: #ffd23f; --c-olive: #9a9a3a; --c-kiwi: #9bd63a; --c-forest: #3f9e4d; --c-mint: #7fe0b2;
+  --c-jade: #2fbf8a; --c-aqua: #5ce1f0; --c-sky: #6fc0ff; --c-ocean: #2f7fd8; --c-sapphire: #4a5cf0;
+  --c-periwinkle: #8f9cff; --c-grape: #9b5de5; --c-plum: #b0478f; --c-magenta: #f15bb5; --c-bubblegum: #ff9ecd;
+  /* Named colours the code forms use for files, lanes and namespaces (not chat colours). */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
-  --c-sky: #6fb3f0; --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
-  --c-purple: #d08cf0; --c-magenta: #f06ad8; --c-pink: #f080b8; --c-brown: #c49a72;
+  --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
+  --c-purple: #d08cf0; --c-pink: #f080b8; --c-brown: #c49a72;
   --c-ash: #6f7377;
   --on-hue: #0b0e0d;
   --sans: "Atkinson Hyperlegible", system-ui, sans-serif; --hand: "Kalam", cursive; --mono: "JetBrains Mono", ui-monospace, monospace;
