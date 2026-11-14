@@ -150,4 +150,5 @@
          ^{:key (str (:server r) "/" (:id r))}
          [rail-chat (assoc m :i i) r])]]
      [update-pill/pill]
-     [:f> menu/button]]))
+     [:f> menu/button]
+     [update-pill/updated]]))

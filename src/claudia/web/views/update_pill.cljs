@@ -3,8 +3,10 @@
   checking and building, then every server and the hub taking it) it says where it stands; a click
   lists every step. It asks GET /hub/progress every 2 s while something moves, every 15 s otherwise,
   and is not there when nothing moves."
-  (:require [reagent.hooks :as h]
+  (:require [re-frame.core :as rf]
+            [reagent.hooks :as h]
             [claudia.web.api :as api]
+            [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.update-pill :as pure]))
 
 (defn- use-progress
@@ -42,3 +44,13 @@
          [:ul.up-panel (for [[i s] (map-indexed vector (pure/steps p))] ^{:key i} [step-row s])])])))
 
 (defn pill "The rail's update pill." [] [:f> view])
+
+(defn- updated-view []
+  (let [t (hooks/use-now)]
+    (when-let [text (pure/updated-text (:updatedAt @(rf/subscribe [:me])) t)]
+      [:div.up-ago {:title (str "This version went live " (.toLocaleString (js/Date. (:updatedAt @(rf/subscribe [:me])))))} text])))
+
+(defn updated
+  "The small line under the rail's gear: when this version went live."
+  []
+  [:f> updated-view])

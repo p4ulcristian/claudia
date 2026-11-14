@@ -59,3 +59,14 @@
           (when release [["merged" "done" (:title release)]])
           (for [p (parts release) :when release]
             [(:name p) (:state p) (when (:secs p) (secs-text (:secs p)))])))))
+
+(defn updated-text
+  "The small line under the gear: when this version went live, as \"updated 5 min ago\"; nil when unknown."
+  [at t]
+  (when (number? at)
+    (let [s (max 0 (/ (- t at) 1000))
+          n #(js/Math.floor (/ s %))]
+      (cond (< s 60) "updated just now"
+            (< s 3600) (str "updated " (n 60) " min ago")
+            (< s 86400) (str "updated " (n 3600) " h ago")
+            :else (str "updated " (n 86400) (if (= 1 (n 86400)) " day ago" " days ago"))))))

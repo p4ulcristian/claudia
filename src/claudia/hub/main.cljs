@@ -140,6 +140,7 @@
    :push (push/on?)
    :version (:version version-info)
    :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
+   :updatedAt (progress/updated-at)
    :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
 
 (defn- server-call

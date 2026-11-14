@@ -119,7 +119,7 @@ the hub makes those calls on a front.
 
 ## Hub operations
 
-Signed-in calls refuse cross-site requests like `/hub/me`. `/hub/me` also answers `push` (bool:
+Signed-in calls refuse cross-site requests like `/hub/me`. `/hub/me` also answers `updatedAt` (ms: when the version it runs went live, the update pill's merge time for it, else when the hub started) and `push` (bool:
 pushes are on). Every admin call answers the whole admin state
 `{ servers: [{ name, label, address, pairing: { server, publicKey, ip, createdAt, fetchedAt } | null, peerUp }],
 people: [{ email, name, admin }], access: [{ email, server }], pairing: { available } }`.
