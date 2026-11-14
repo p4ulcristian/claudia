@@ -188,8 +188,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     picture, or Apple's on-device speech (app only, weaker on names). Files:
     `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
 
-21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off, per device
-    (localStorage), for whichever chat is open. It only ever speaks what arrives while the person
+21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
+    chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one
+    switch per device for whichever chat was open). Beside it the chat's bell (the Row's `bell`): on,
+    the chat chimes, pops up and pushes to the phones when it finishes or waits; off, it does none of
+    them (the phone's badge still counts it). A new chat starts with the speaker off and the bell on
+    (its header's picks go with `new`); a chat only looked at (another profile's) shows neither. It only ever speaks what arrives while the person
     watches: the final reply of a turn that ended by itself (not the working messages, not a
     stopped turn) and Claude's questions, in the chat on screen, with the page in front; read by
     the hub's voice (`/hub/narrate`, the 3D narrator's), without code, tables, links or Markdown
@@ -205,7 +209,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 22. The chat's header holds every setting (2026-11-14): one panel in the chat's colour, three
     rows, the same for a new chat and a started one. Row 1: the title (a click renames it), the
-    server's state, the sounds (a bell: a chime when a chat finishes or waits), talking mode (a
+    server's state, the chat's bell (a chime, popup and push when it finishes or waits), talking mode (a
     person speaking, decision 21) and Archive. Row 2: the computer it runs on, whose Claude
     subscription (decision 16), the project; each an icon (a computer, Claude's spark, a folder)
     before a pill button. Row 3: model and effort, then the context, 5-hour and week rings. Every
@@ -274,6 +278,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,
     picked at random. Files: `src/claudia/shared/colours.cljc`, `resources/web/css/claudia.css`.
 
+27. The page follows a new version by itself (2026-11-14): the hub names the commit it runs in
+    `/hub/me`; the page keeps the one it loaded with and asks again each time a socket opens (a hub
+    moved to a new image drops every socket, so they all open again). Another commit: the page
+    reloads, with every composer's text kept across the reload (sessionStorage), but never while a
+    new chat or a message is on its way, a file waits to be sent, or the mic is held (it looks again
+    after 3 s). On a touch screen, pulling the rail's circles down and letting go reloads the same
+    way. Instead of: reloading by hand after every ship, or a "new version" button to press. Files:
+    `src/claudia/web/updates.cljs`, `src/claudia/web/views/rail.cljs`.
+
+28. Small manners (2026-11-14): archiving a chat asks first ("Archive this chat?", the one confirm
+    card, `src/claudia/web/views/confirm.cljs`; unarchiving asks nothing); every error line goes by
+    itself after 5 s or on a click (a newer error stays its own 5 s); each chat on the rail is as tall
+    as the next (its title cut after two lines, one line keeping the room of two), so the spacing
+    between circles never changes. The iPhone app (1.3.1) grants the hub's page the microphone
+    itself, so WebKit no longer asks on every page load (each new version reloads the page); iOS
+    still asks once for the app. The PR check runs the tests as their own job beside the build.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -285,7 +306,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   `HUB_PEERS_DIR`, the gate's root helper adds the peer and answers in `HUB_APPLIED_DIR`; the server
   fetches its address with the secret). A hub without `HUB_WG_POOL` shows pairing as unavailable.
 - **Push**: the hub tells a person's iPhones (APNs, token auth with jose; `HUB_APNS_DRY_RUN=1` logs
-  instead) when a chat of theirs finished a turn, asks a question, or waits on a secret. It learns
+  instead) when a chat of theirs whose bell is on (decision 21) finished a turn, asks a question, or waits on a secret. It learns
   that like the page does: one socket per person with a phone and server the grid allows, as that
   person (their own chats only). Alert texts are sealed (AES-256-GCM, node:crypto) under the key the
   app made; every alert carries the badge (waiting plus finished-unseen chats across servers); a
@@ -321,7 +342,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 - People: a `person` part is a rigged CC0 MakeHuman body (`resources/web/person/person.glb`, about 400 KB, made by the TypeScript Claudia's `tools/person/make-person.py`), posed live: named poses measured from the body (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit, sit_floor, kneel, squat, bend, lie) and any target overridden; arms and legs are exact two-bone chains, hands, feet and the gaze can target a part; parts can ride on a joint (`parent: "anna.handR"`).
 - Phone: the list, the chat and the picture are screens, each sliding over the one before; sideways swipes follow the finger (`src/claudia/web/swipe.cljs`): on the chat right goes to the list and left pulls the picture in, on the list left brings the open chat back, on the picture and on Settings right goes back; past 40% or flicked it completes, else springs back; never in fields, on what scrolls sideways itself (code, tables, graphs, the 3D view), with two fingers or on a mostly vertical move. A Home Screen web app (`resources/web/app-icon/`: manifest and icons; standalone safe areas, 100lvh).
 - The chalk hover tip (a clipped chat title, or any `data-tip`), the logo mark in Settings and the favicon.
-- Sounds per chat colour (a bell when a chat finishes, two rising notes when it waits on you) and desktop popups (the browser's notifications, asked once), both off until turned on in Settings, per device; the open chat only when the window is not in front (`src/claudia/web/alerts.cljs`).
+- Sounds per chat colour (a bell when a chat finishes, two rising notes when it waits on you) for every chat whose bell is on (decision 21), and desktop popups (the browser's notifications, asked once; a per-device switch in Settings) for the same chats; the open chat only when the window is not in front (`src/claudia/web/alerts.cljs`).
 
 ## Code forms and templates (2026-11-03)
 

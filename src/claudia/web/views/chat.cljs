@@ -186,7 +186,7 @@
     "note" ^{:key (str "note-" id "-" i)} [:pre.note-line text]
     ^{:key id} [:div.msg.claude {:data-at (first (str/split (str id) #":")) :class (when streaming "streaming")}
                 [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
-                (when-not streaming [talk/say-button text])]))
+                (when-not streaming [talk/say-button ck text])]))
 
 (defn- feed-row
   "One block of the feed: a run of steps, a picture a step showed, or a message."
@@ -197,6 +197,21 @@
                                                    [(if (:video (:tool b)) attach/shown-video attach/shown-image)
                                                     (first ck) (second ck) (:id (:tool b))]]
     (msg-row ck i (:m b) marks)))
+
+(def ^:private error-ms
+  "How long an error shows before it goes by itself (a click takes it away sooner)."
+  5000)
+
+(defn- error-line-view [k text]
+  (h/use-effect (fn [] (let [t (js/setTimeout #(rf/dispatch [:error/clear-if k text]) error-ms)]
+                         #(js/clearTimeout t)))
+                [k text])
+  [:div.error-line {:class (when-not k "global") :on-click #(rf/dispatch [:error/dismiss k])} text])
+
+(defn- error-line
+  "An error, the chat k's (nil: the top one): it goes after error-ms, or on a click."
+  [k text]
+  [:f> error-line-view k text])
 
 (defn- working-line [state since]
   [:div.working [:span.pulse] " "
@@ -212,7 +227,7 @@
    (for [m queued] ^{:key (:id m)} [user-msg ck m {:queued? true}])
    (when (:stopped state) (when-not running [:div.muted.small "Stopped."]))
    (when-let [err (:error state)]
-     [:div.error-line err])])
+     [error-line ck err])])
 
 (defn- messages-column
   [{:keys [scroll ck state outbox pending? feed since marks first-id]}]
@@ -370,7 +385,7 @@
     [:section.left
      ^{:key (str (:ck oc))} [head/header oc]
      [talk/guard (str (:ck oc))]
-     (when error [:div.error-line.global {:on-click #(rf/dispatch [:error/dismiss nil])} error])
+     (when error [error-line nil error])
      (pane-body oc me me-error)
      ;; Background work (agents, long commands) sits right above the composer.
      (when oc [:f> agents/chips oc])

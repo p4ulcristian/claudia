@@ -4,6 +4,15 @@
   (:require [reagent.hooks :as h]
             [claudia.web.api :as api]))
 
+(defn use-key
+  "Calls (on-key e) on every keydown while mounted (capture: before the page's own handlers)."
+  [on-key capture deps]
+  (h/use-effect
+   (fn []
+     (js/window.addEventListener "keydown" on-key capture)
+     #(js/window.removeEventListener "keydown" on-key capture))
+   deps))
+
 (defn use-resize
   "Calls (f el) before the first paint and whenever the element in ref changes size. deps say when
   to look for the element again, e.g. after it first mounts."

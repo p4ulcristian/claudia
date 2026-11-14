@@ -38,7 +38,8 @@
    :past-scenes {}         ; [server chat turn] -> Scene of an earlier picture, fetched once
    :folded-at (if (stored "claudia.folded" false) (js/Date.now) 0) ; the right half folded since (0: shown)
    :error nil
-   :talk? (stored "claudia.talk" false) ; talking mode: the open chat's replies read aloud (this device)
+   :loaded-commit nil      ; the hub's commit when the page loaded (claudia.web.updates)
+   :archive-ask nil        ; [server chat] whose archiving waits on a yes (views.confirm)
 
    ;; claudia.web.chatops
    :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil

@@ -228,7 +228,7 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use) and in the colour its header wore (else one of the least worn; every chat has a colour); runner answers `created { chat, id }` then events |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
@@ -242,7 +242,7 @@ Page → runner:
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
 | `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
-| `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message |
+| `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick), `talk?`, `bell?` (booleans) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message. Its speaker (`talk`) and bell: kept with the chat, then `chats` goes to every page |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
 | `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 | `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
@@ -275,7 +275,7 @@ Runner → page:
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
-`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
+`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
 secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;

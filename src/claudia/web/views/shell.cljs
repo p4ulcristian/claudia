@@ -13,6 +13,7 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.confirm :as confirm]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.picture :as picture]
@@ -128,6 +129,7 @@
                      (when narrow? "narrow") (when ro "read-only")]
              :data-screen (name screen)}
    [asks/modal]
+   [confirm/archive-ask]
    (when-not world? (chats-view m))
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
    [gallery]

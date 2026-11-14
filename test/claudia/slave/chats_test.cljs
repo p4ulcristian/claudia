@@ -63,6 +63,9 @@
         (is (= {:id "u1" :ago 300 :stopped nil :failed nil :reply "ok"} (:lastTurn row)))
         (is (= "p" (:preview row)))
         (is (nil? (:runningFor row)))))
+    (testing "speaker off and bell on unless the chat says otherwise"
+      (is (= [false true] ((juxt :talk :bell) (view/row r {} 0 400))))
+      (is (= [true false] ((juxt :talk :bell) (view/row (assoc r :talk true :bell false) {} 0 400)))))
     (testing "work still running is not done yet"
       (is (false? (:unseen (view/row r {} 1 400)))))
     (testing "an open ask is the preview and goes to the hub"
@@ -159,6 +162,11 @@
   (is (= "Shown in the chat: a.png (cap)." (get-in (answers/image-shown "a.png" "d" "image/png" "cap") [:content 1 :text]))))
 
 ;; Session -----------------------------------------------------------------------------------------
+
+(deftest flags-of-takes-only-the-switches-named
+  (is (= {} (session/flags-of {:model "m"})))
+  (is (= {:talk true} (session/flags-of {:talk 1 :model "m"})))
+  (is (= {:talk false :bell false} (session/flags-of {:talk nil :bell false}))))
 
 (deftest session-names-and-spec
   (is (re-matches #"token-[0-9a-f]{8}" (session/account-of "t")))

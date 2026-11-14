@@ -22,7 +22,12 @@
   (is (nil? (talk/speakable " ")))
   (is (= "Done" (talk/speakable "## Done"))))
 
-(deftest only-the-open-chat-speaks
-  (is (talk/speaks? {:talk? true :open ["s" "c"]} ["s" "c"]))
-  (is (not (talk/speaks? {:talk? true :open ["s" "d"]} ["s" "c"])))
-  (is (not (talk/speaks? {:talk? false :open ["s" "c"]} ["s" "c"]))))
+(defn- db-with [open talk]
+  {:open open :servers {"s" {:rows {"c" {:id "c" :talk talk} "d" {:id "d" :talk true}}}}})
+
+(deftest only-the-open-chat-speaks-and-only-with-its-speaker-on
+  (is (talk/speaks? (db-with ["s" "c"] true) ["s" "c"]))
+  (is (not (talk/speaks? (db-with ["s" "d"] true) ["s" "c"])))
+  (is (not (talk/speaks? (db-with ["s" "c"] false) ["s" "c"])))
+  (is (not (talk/speaks? (db-with ["s" "c"] nil) ["s" "c"])) "a Row without talk: off")
+  (is (not (talk/speaks? (db-with nil true) nil)) "the new chat says nothing"))

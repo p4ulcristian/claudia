@@ -1,7 +1,9 @@
 # The PR check (CLAUDE.md, "How the code is written"): on every pull request and push to main,
 # - lint: clj-kondo over src and test, failing on any error (.clj-kondo/config.edn);
 # - ratchet: shadowed names and functions over 30 lines may only go down (bin/ratchet.mjs);
-# - test: the test build (test/, namespaces ending in -test) on Node;
+# - test: the test build (test/, namespaces ending in -test) on Node, as its own job beside the
+#   check job, so the tests are off the build's clock (both must pass: stage.yml waits for the
+#   whole run, and both are required checks on main);
 # - build: all five release builds;
 # - bundle: what was built, packed as one tarball keyed by the git tree it was built from (out/,
 #   production node_modules for linux-x64, deploy/, package.json, tree.txt), uploaded as the run's
@@ -30,6 +32,30 @@ env:
   KONDO_SHA256: ba8742f90555332852a3f63260611ca75cc7ba4e2b6dfe601bf5011bb9402b45
 
 jobs:
+  test:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Install
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
   check:
     runs-on: ubuntu-26.04
     steps:
@@ -66,9 +92,6 @@ jobs:
 
       - name: Install
         run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
-
-      - name: Test
-        run: npm test
 
       - name: Build (host runner front hub web)
         run: |

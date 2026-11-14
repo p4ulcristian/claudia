@@ -181,6 +181,17 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
 
     // MARK: JavaScript dialogs (alert, confirm, prompt)
 
+    /// The hub's page asks for the microphone (push to talk): granted at once, without WebKit's
+    /// own prompt on every page load (each new version reloads the page). iOS still asks once for
+    /// the app itself (NSMicrophoneUsageDescription). Any other page, or the camera, still asks.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        let port = origin.port == 0 ? "" : ":\(origin.port)"
+        let asking = "\(origin.protocol.lowercased())://\(origin.host.lowercased())\(port)"
+        decisionHandler(asking == Config.hubOrigin && frame.isMainFrame && type == .microphone ? .grant : .prompt)
+    }
+
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)

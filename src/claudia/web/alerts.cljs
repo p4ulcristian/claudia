@@ -1,7 +1,8 @@
 (ns claudia.web.alerts
   "Sounds and desktop popups when a chat finishes a turn or starts waiting on you (a question).
-  Both off unless turned on (kept per device); the open chat counts only while the window is not in
-  front.
+  Each chat has its own bell (README decision 21, kept with the chat, on unless turned off): with it
+  off, that chat makes no sound, no popup and no phone push. Popups are also a per-device switch
+  (the browser's permission). The open chat counts only while the window is not in front.
 
   Sounds are made here with Web Audio (no files): each chat colour has its own note, so you hear
   which chat it was. A finished turn rings its note once like a small bell; a chat waiting on you
@@ -12,7 +13,8 @@
             [re-frame.db :as rdb]
             [reagent.core :as r]
             [claudia.shared.colours :as colours]
-            [claudia.web.rowdiff :as rowdiff]))
+            [claudia.web.rowdiff :as rowdiff]
+            [claudia.web.views.pure.switches :as switches]))
 
 ;; The chat colours in hue order (claudia.css --c-*): neighbouring colours get neighbouring notes.
 (def ^:private colours (conj colours/chat-colours "ash"))
@@ -70,8 +72,7 @@
     (= "default" (.-permission js/Notification)) (.then (.requestPermission js/Notification) #(popups-allowed?))
     :else (js/Promise.resolve (popups-allowed?))))
 
-(defonce on (r/atom {:sounds (= "on" (js/localStorage.getItem "claudia.sounds"))
-                               :popups (and (= "on" (js/localStorage.getItem "claudia.popups")) (popups-allowed?))}))
+(defonce on (r/atom {:popups (and (= "on" (js/localStorage.getItem "claudia.popups")) (popups-allowed?))}))
 
 (defn notify!
   "A desktop popup (when popups are on and allowed): title, body; tag: one popup per tag at a time;
@@ -89,11 +90,6 @@
            (str server "/" id) [server id]))
 
 ;; ---- the toggles ----
-
-(defn set-sounds! [v]
-  (swap! on assoc :sounds v)
-  (js/localStorage.setItem "claudia.sounds" (if v "on" "off"))
-  (when v (play! :done (get-in @rdb/app-db [:servers (first (:open @rdb/app-db)) :rows (second (:open @rdb/app-db)) :color]))))
 
 (defn- set-popups! [v]
   (-> (if v (allow-popups!) (js/Promise.resolve false))
@@ -115,13 +111,21 @@
 
 (def ^:private bell-path "M6 9.5a6 6 0 0 1 12 0c0 4.6 1.8 6.2 1.8 6.2H4.2S6 14.1 6 9.5M10 19a2 2 0 0 0 4 0")
 
-(defn sounds-button
-  "The chat header's bell: the sounds when a chat finishes or waits on you, on or off."
-  []
-  (let [on? (boolean (:sounds @on))]
-    [:button.icon.sound-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Sounds"
-                                :data-tip (if on? "Sounds on: a chime when a chat finishes or waits" "Sounds off")
-                                :on-click #(set-sounds! (not on?))}
+(defn- ring-bell!
+  "The bell of chat k ([server id]; nil: the new chat) turned to on?; turning it on rings its note once."
+  [k on? color]
+  (rf/dispatch [:chat/switches k {:bell on?}])
+  (when on? (play! :done color)))
+
+(defn bell-button
+  "The chat header's bell for the chat k ([server id]; nil: the new chat) in colour color: its chime,
+  popup and phone push when it finishes or waits on you, on or off."
+  [k color]
+  (let [on? @(rf/subscribe [:bell? k])]
+    [:button.icon.sound-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Bell"
+                                :data-tip (if on? "Bell on: this chat chimes and pings your phone when it finishes or waits"
+                                              "Bell off: this chat stays quiet")
+                                :on-click #(ring-bell! k (not on?) color)}
      [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
             :stroke-linecap "round" :stroke-linejoin "round"}
       [:path {:d bell-path}]
@@ -144,9 +148,9 @@
       (js/window.addEventListener ev #(when (and @ctx (= "suspended" (.-state ^js @ctx))) (.resume ^js @ctx)) #js {:capture true}))
     (add-watch rdb/app-db ::alerts
                (fn [_ _ before after]
-                 (when (and (or (:sounds @on) (:popups @on))
-                            (not (identical? (:servers before) (:servers after))))
+                 (when-not (identical? (:servers before) (:servers after))
                    (doseq [[kind [s id :as k] row] (changes before after)
-                           :when (or (not= k (:open after)) (not (js/document.hasFocus)))]
-                     (when (:sounds @on) (play! kind (:color row)))
+                           :when (and (switches/row-bell-on? row)
+                                      (or (not= k (:open after)) (not (js/document.hasFocus))))]
+                     (play! kind (:color row))
                      (when (:popups @on) (popup! kind s (assoc row :id id)))))))))

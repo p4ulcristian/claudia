@@ -1,7 +1,7 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel in the chat's colour, three rows, the same
   for a new chat and a started one. Row 1: the title (a click renames it), the server's state, the
-  sounds (a bell), talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
+  chat's bell, its talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
   project (with the chat's colour). Row 3: model and effort, then the context, 5-hour and week
   rings. A new chat picks all of them here before its first message (they go with `new`); once
   it has started the computer is fixed and every other pick changes the chat."
@@ -117,15 +117,17 @@
 (defn- archive-button [ck row]
   (let [out? (boolean (:archived row))]
     [:button.icon.archive {:title (if out? "Unarchive" "Archive") :aria-label (if out? "Unarchive" "Archive")
-                           :on-click #(rf/dispatch [:chat/archive ck (not out?)])}
+                           :on-click #(rf/dispatch (if out? [:chat/archive ck false] [:archive/ask ck]))}
      [archive-icon out?]]))
 
-(defn- row-1 [{:keys [ck row ro] :as hc}]
-  [:div.head-row.r1
-   [:f> head-names hc]
-   [alerts/sounds-button]
-   [talk/toggle]
-   (when (and row (not ro)) (archive-button ck row))])
+(defn- row-1 [{:keys [ck row ro new? settings] :as hc}]
+  (let [k (when-not new? ck)]
+    [:div.head-row.r1
+     [:f> head-names hc]
+     ;; The chat's own bell and speaker (README decision 21); a chat only looked at has none.
+     (when-not ro [alerts/bell-button k (if new? (:color settings) (:color row))])
+     (when-not ro [talk/toggle k])
+     (when (and row (not ro)) (archive-button ck row))]))
 
 ;; ---- row 2: computer, account, project ----
 

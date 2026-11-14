@@ -1,7 +1,8 @@
 (ns claudia.web.views.talk
   "Talking mode's controls (README decision 21): the speaker in the chat's header turns it on
-  and off for this device; while it is on, each of Claude's replies has a small play button; the
-  guard silences the voice when the open chat changes. Shown only when the hub has a voice."
+  and off for that chat (kept with the chat); while it is on, each of the chat's replies has a small
+  play button; the guard silences the voice when the open chat changes. Shown only when the hub has
+  a voice."
   (:require [claudia.web.speech :as speech]
             [claudia.web.views.pure.talk :as pure]
             [claudia.web.voice :as voice]
@@ -27,20 +28,24 @@
      [:path {:d "M15.5 6a4.5 4.5 0 0 1 0 5.5M18.5 3.5a8 8 0 0 1 0 10.5"}]
      [:path {:d "M16 6l5 5M21 6l-5 5"}])])
 
-(defn- toggle-view []
-  (let [on? @(rf/subscribe [:talk?])]
+(defn- toggle-view [k]
+  (let [on? @(rf/subscribe [:talk? k])]
     (when (use-voice?)
       [:button.icon.talk-toggle {:type "button" :aria-pressed on? :class (when on? "on")
-                                 :aria-label "Talking mode" :data-tip (if on? "Talking mode on: replies are read aloud" "Talking mode off")
-                                 :on-click (fn [] (when-not on? (speech/unlock!)) (rf/dispatch [:talk/toggle]))}
+                                 :aria-label "Talking mode"
+                                 :data-tip (if on? "Talking mode on: this chat's replies are read aloud" "Talking mode off for this chat")
+                                 :on-click (fn [] (when-not on? (speech/unlock!)) (rf/dispatch [:chat/switches k {:talk (not on?)}]))}
        [speaker on?]])))
 
-(defn toggle "The header's talking mode switch." [] [:f> toggle-view])
+(defn toggle
+  "The header's talking mode switch for the chat k ([server id]; nil: the new chat)."
+  [k]
+  [:f> toggle-view k])
 
 (defn say-button
-  "A reply's play button while talking mode is on."
-  [text]
-  (when @(rf/subscribe [:talk?])
+  "A reply's play button while the chat k's speaker is on."
+  [k text]
+  (when @(rf/subscribe [:talk? k])
     (when-let [said (pure/speakable text)]
       [:button.say-reply {:type "button" :aria-label "Read aloud" :data-tip "Read aloud"
                           :on-click (fn [] (speech/unlock!) (speech/say! said))}

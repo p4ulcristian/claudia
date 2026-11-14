@@ -1,7 +1,8 @@
 (ns claudia.web.views.pure.talk
   "Talking mode, as data (README decision 21): what Claude's reply sounds like read aloud, which
   reply a turn ends with, and when a chat speaks at all."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.web.views.pure.switches :as switches]))
 
 (defn- claude? [{:keys [role]}] (not (#{"user" "note"} role)))
 
@@ -51,6 +52,6 @@
     (not-empty (str/join " " (filter seq (cons (plain body) notes))))))
 
 (defn speaks?
-  "Whether a chat speaks now: talking mode is on and it is the chat on screen."
+  "Whether a chat speaks now: it is the chat on screen and its speaker is on."
   [db k]
-  (boolean (and (:talk? db) (= (:open db) k))))
+  (boolean (and (some? k) (= (:open db) k) (switches/talk-on? db k))))
