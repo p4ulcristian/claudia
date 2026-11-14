@@ -321,6 +321,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     them; its fence lets it reach only the internet). Files: `deploy/release-builder/`,
     `deploy/bundle.sh`, `src/claudia/hub/releases.cljs`, `src/claudia/hub/announce.cljs`.
 
+30. One reading font (2026-11-14): Atkinson Hyperlegible Next (the 2025 redo, any weight) for the
+    page, the picture's labels and Claude's replies, and the person's own messages too (they were in
+    Kalam, handwriting, where I, l and 1 look alike); still in the accent colour, right-aligned.
+    Kalam stays for headings and the chalk labels. Every chat on the rail and every row of the list is the same height
+    with the same gap, passive chats too (they no longer sit apart at the bottom; a chalk line marks
+    where they start), titles cut to fit.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

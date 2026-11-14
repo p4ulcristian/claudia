@@ -42,7 +42,7 @@
   (fs/existsSync (path/join web-dir "js" "main.js")))
 
 (def ^:private fonts
-  "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap")
+  "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap")
 
 (def ^:private page
   (str "<!doctype html><html lang=\"en\" class=\"render\"><head><meta charset=\"utf-8\">"

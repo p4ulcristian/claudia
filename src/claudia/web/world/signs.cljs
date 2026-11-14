@@ -7,7 +7,7 @@
 
 (defn make [scene] (atlas/make scene spec))
 
-(def ^:private font "'Atkinson Hyperlegible', system-ui, sans-serif")
+(def ^:private font "'Atkinson Hyperlegible Next', system-ui, sans-serif")
 
 (defn- fit
   "s cut to fit max-w at the context's font, with an ellipsis."

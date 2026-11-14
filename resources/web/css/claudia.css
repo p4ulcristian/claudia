@@ -22,7 +22,7 @@
   --c-purple: #d08cf0; --c-pink: #f080b8; --c-brown: #c49a72;
   --c-ash: #6f7377;
   --on-hue: #0b0e0d;
-  --sans: "Atkinson Hyperlegible", system-ui, sans-serif; --hand: "Kalam", cursive; --mono: "JetBrains Mono", ui-monospace, monospace;
+  --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif; --hand: "Kalam", cursive; --mono: "JetBrains Mono", ui-monospace, monospace;
   --chalk: color-mix(in srgb, var(--accent) 40%, var(--line));
   --top-safe: env(safe-area-inset-top);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -192,7 +192,7 @@ code, pre { font-family: var(--mono); }
 .hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .msg { max-width: 100%; min-width: 0; }
 .msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
-.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 400 18px/1.45 var(--hand); color: var(--accent); text-align: right; }
+.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 500 15px/1.5 var(--sans); color: var(--accent); text-align: right; }
 .msg.user.viewing .bubble { outline: 0; text-decoration: underline 2px; text-underline-offset: 4px; }
 .pic-link { font-size: 11.5px; color: var(--muted); }
 .pic-link:hover { color: var(--blue); }
@@ -423,8 +423,8 @@ code, pre { font-family: var(--mono); }
 /* Passive chats: at the bottom of the rail, above a chalk line, faded until hovered or open. */
 .rail-chat.passive { opacity: 0.55; }
 .rail-chat.passive:hover, .rail-chat.passive.on { opacity: 1; }
-.rail-chat.passive.first { margin-top: auto; }
-.rail-chat.passive.last::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -11px; border-top: 1.5px dashed var(--line); }
+/* Passive chats follow on with the same spacing as every other chat; a chalk line in the gap above the first. */
+.rail-chat.passive.first::before { content: ""; position: absolute; left: 10px; right: 10px; top: -6px; border-top: 1.5px dashed var(--line); }
 /* Spotlight: the open chat glows; the others fade (their state badges stay bright) until hovered. */
 .rail-chat.on .rail-dot { background: color-mix(in srgb, var(--chat, var(--grey)) 22%, transparent); box-shadow: 0 0 16px 2px color-mix(in srgb, var(--chat, var(--grey)) 60%, transparent); }
 .rail-dot::before, .rail-dot > .rail-logo, .rail-dot > .rail-tag, .rail-dot > .rail-blank, .rail-chat > .rail-name, .rail-chat > .rail-server { transition: opacity 0.15s, filter 0.15s; }

@@ -15,7 +15,7 @@
 (def ^:private colors ["green" "red" "amber" "blue" "grey" "violet"])
 (def ^:private font "700 15px Kalam, cursive")
 (def ^:private group-font "700 14px Kalam, cursive")
-(def ^:private note-font "400 12px \"Atkinson Hyperlegible\", system-ui, sans-serif")
+(def ^:private note-font "400 12px \"Atkinson Hyperlegible Next\", system-ui, sans-serif")
 (def ^:private note-line pure/note-line)
 (def ^:private pad pure/pad)
 
