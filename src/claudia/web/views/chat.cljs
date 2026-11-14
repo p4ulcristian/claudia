@@ -291,16 +291,20 @@
         (do (rf/dispatch [:draft/set draft-key text]) (send-text! text))
         (rf/dispatch [:draft/heard draft-key heard])))))
 
+(defn- fit-height!
+  "The message box as tall as its text, up to 260 px; empty, one row (the placeholder never sizes
+  it: measured while the pane was still narrow, its wrapped lines once held the box at 260 px)."
+  [^js el]
+  (if (= "" (.-value el))
+    (set! (.. el -style -height) "")
+    (do (set! (.. el -style -height) "auto")
+        (set! (.. el -style -height) (str (min 260 (.-scrollHeight el)) "px")))))
+
 (defn- use-grow!
-  "The message box grows with its text, up to 260 px."
+  "The message box grows with its text, and fits again whenever its width changes."
   [ref text]
-  (h/use-layout-effect
-   (fn []
-     (when-let [el (.-current ref)]
-       (set! (.. el -style -height) "auto")
-       (set! (.. el -style -height) (str (min 260 (.-scrollHeight el)) "px")))
-     nil)
-   [text]))
+  (h/use-layout-effect (fn [] (some-> (.-current ref) fit-height!) nil) [text])
+  (hooks/use-resize ref fit-height! []))
 
 (defn- message-box [{:keys [ref draft-key text running asking items pick send!]}]
   [:textarea {:ref #(set! (.-current ref) %)
