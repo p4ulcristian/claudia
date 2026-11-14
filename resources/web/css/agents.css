@@ -1,7 +1,7 @@
 /* Agents, changes and meters (claudia.web.views.agents, .changes, .usage, .diff): ported from the
    TypeScript Claudia's look, in chalk. */
 
-/* The chips right above the composer: a grid of the running ones, then +N more and ✓ N ✕ M. */
+/* The chips right above the composer: a grid of the running ones, then +N more. */
 .ag-row { display: grid; gap: 6px; padding: 8px 16px 0; min-width: 0; }
 .ag-chips { display: grid; gap: 6px; min-width: 0; }
 .ag-sum { display: flex; gap: 6px; flex-wrap: wrap; }
