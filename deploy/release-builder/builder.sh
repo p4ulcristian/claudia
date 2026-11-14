@@ -57,10 +57,42 @@ ready() {
 		-d "{\"commit\":\"$1\",\"tree\":\"$2\",\"deps\":\"$3\"}" "$hub/ready" >/dev/null
 }
 
-# compile: the checkout (at the commit) built: dev packages, the five release builds, the page's files.
+# A shadow-cljs server stays running between releases: each release then compiles in a warm JVM
+# (measured 2026-11-14: 35 s against 53 s for a fresh one; five builds side by side were slower,
+# their JVMs fight over the cores). It starts again, after a fresh `npm ci`, only when the packages
+# or shadow-cljs.edn change (warm_key); `shadow-cljs release` runs in its own JVM when no server is up.
+server_pid=
+warm=
+
+warm_key() { cat package-lock.json shadow-cljs.edn | sha256sum | cut -c1-16; }
+
+stop_server() {
+	[ -n "$server_pid" ] && kill "$server_pid" 2>/dev/null && wait "$server_pid" 2>/dev/null
+	server_pid=
+	warm=
+}
+
+# warm_up: packages installed and the server running for this checkout's packages and config.
+warm_up() {
+	local key
+	key=$(warm_key) || return 1
+	[ "$key" = "$warm" ] && [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null && return 0
+	stop_server
+	npm ci --include=dev --ignore-scripts --no-audit --no-fund >/dev/null || return 1
+	npx shadow-cljs server >"$home/shadow-server.log" 2>&1 &
+	server_pid=$!
+	for _ in $(seq 90); do
+		grep -q "shadow-cljs - server version" "$home/shadow-server.log" && { warm=$key; return 0; }
+		sleep 1
+	done
+	log "the shadow-cljs server did not come up: building without it"
+	stop_server
+}
+
+# compile: the checkout (at the commit) built: the five release builds, the page's files.
 compile() {
-	npm ci --include=dev --ignore-scripts --no-audit --no-fund >/dev/null &&
-		npx shadow-cljs release host runner front hub web &&
+	warm_up || return 1
+	npx shadow-cljs release host runner front hub web &&
 		npm run build:web-files >/dev/null
 }
 
@@ -100,6 +132,7 @@ main_if_new() {
 	cat "$home/done" "$home/failed" 2>/dev/null | grep -qx "$c" || echo "$c"
 }
 
+trap stop_server EXIT
 [ -d "$home/repo/.git" ] || git clone -q "https://github.com/$repo.git" "$home/repo"
 touch "$home/done" "$home/failed"
 while true; do
