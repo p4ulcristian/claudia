@@ -31,7 +31,14 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-26.04
+    # Where it runs: pushes to main and pull requests from this repository run on our own
+    # runner, label claudia-release-builder (a fenced machine with warm caches: faster, no
+    # queue). A pull request from a fork runs on a GitHub-hosted runner, so code nobody here wrote
+    # never runs on ours (stage.yml publishes nothing from forks anyway). The runner only builds;
+    # stage.yml signs and publishes on GitHub-hosted runners, and this job's token can only read.
+    runs-on: >-
+      ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+          && 'claudia-release-builder' || 'ubuntu-26.04' }}
     steps:
       # Every action is pinned to a commit SHA, not a tag: tags can be moved.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,7 +49,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
-          cache: npm
+          # Our runner keeps ~/.npm between jobs; uploading it to GitHub's cache would only cost time.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
 
       # shadow-cljs compiles on the JVM.
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
