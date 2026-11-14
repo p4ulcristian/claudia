@@ -116,8 +116,12 @@
 (defonce ^:private wss
   (WebSocketServer. #js {:noServer true
                          :maxPayload max-frame
-                         ;; deflate keeps a zlib context per socket: real memory on the gate
-                         :perMessageDeflate false}))
+                         ;; The page's side is compressed (a phone on 4G): chat frames are JSON and
+                         ;; shrink several times. Small windows keep each socket's zlib context to
+                         ;; ~20 KB on the gate; frames under 1 KB go as they are.
+                         :perMessageDeflate #js {:serverMaxWindowBits 11 :clientMaxWindowBits 11
+                                                 :zlibDeflateOptions #js {:memLevel 4 :level 6}
+                                                 :threshold 1024 :concurrencyLimit 4}}))
 
 ;; Every socket of a pair (both sides), for the heartbeat.
 (defonce ^:private live (js/Set.))

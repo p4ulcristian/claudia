@@ -354,6 +354,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     says open: after a sleep or a network change it is often dead, and the browser took 2–3 s to
     notice before reconnecting. The network coming back (`online`) does the same.
 
+34. Lighter on a phone line (2026-11-14): the gate compresses the page (zstd/gzip: main.js 5.3 MB
+    → 1.35 MB, and it comes again after every update) and the hub compresses the page's sockets
+    (permessage-deflate with small windows, ~20 KB of memory per socket; frames under 1 KB as they
+    are). Opening a chat shows its end, and things that grow after they are drawn (images, a
+    picture's frame, the fonts) keep the end in view while the person is at the bottom.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
