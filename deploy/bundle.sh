@@ -12,7 +12,7 @@
 #   darwin/claudia-deps-<lockfile hash>-darwin-arm64.tar.gz  the same for a Mac (the Agent SDK's binary is per platform)
 #   claudia-tree-<tree>.tar.gz                       code and Linux node_modules in one (servers from before the split)
 # --no-deps: only the code (the builder skips node_modules a release already has); no tree file then.
-# Prints `tree=<tree>` and `deps=<hash>` lines last.
+# Prints only `tree=<tree>` and `deps=<hash>` on stdout (everything else goes to stderr).
 set -euo pipefail
 with_deps=1
 [ "${1:-}" = --no-deps ] && with_deps=0
@@ -28,13 +28,13 @@ echo "$deps" >dist/pkg/deps.txt
 tar -czf "dist/claudia-code-$tree.tar.gz" -C dist/pkg --exclude=./package-lock.json .
 
 if [ $with_deps = 1 ]; then
-	(cd dist/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund && rm package-lock.json)
+	(cd dist/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund >&2 && rm package-lock.json)
 	tar -czf "dist/claudia-tree-$tree.tar.gz" -C dist/pkg .
 	tar -czf "dist/claudia-deps-$deps.tar.gz" -C dist/pkg ./node_modules ./deps.txt
 	mkdir -p dist/darwin/pkg
 	cp package.json package-lock.json dist/darwin/pkg/
 	echo "$deps" >dist/darwin/pkg/deps.txt
-	(cd dist/darwin/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --os=darwin --cpu=arm64 && rm package.json package-lock.json)
+	(cd dist/darwin/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --os=darwin --cpu=arm64 >&2 && rm package.json package-lock.json)
 	test -x dist/darwin/pkg/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude
 	tar -czf "dist/darwin/claudia-deps-$deps-darwin-arm64.tar.gz" -C dist/darwin/pkg ./node_modules ./deps.txt
 fi
