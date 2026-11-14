@@ -7,13 +7,18 @@
 #
 # Its home holds everything: tools/ (Node, a JDK: install.sh), repo/ (a clone of the repository),
 # signing-key (ed25519, its public half in deploy/release-signers on main), token (the secret of
-# the builder key pasted on the hub) and env (HUB_URL, CLAUDIA_REPO).
+# the builder key pasted on the hub), github-token (fine-grained, this repository's commit statuses
+# only: the status `builder`, the check main requires before a merge) and env (HUB_URL, CLAUDIA_REPO).
+#
+# Each commit is checked before it is built: clj-kondo and the ratchet, then the tests (compiled in
+# the warm server, run beside the five release builds); the status `builder` on the commit says
+# pending, then success or failure and why. A commit that fails is never brought to the hub.
 set -euo pipefail
 home=/home/claudia-release-builder
 # shellcheck disable=SC1091
 . "$home/env"
 repo=${CLAUDIA_REPO:-p4ulcristian/claudia}
-export PATH="$home/tools/node/bin:$home/tools/jdk/bin:$PATH" JAVA_HOME="$home/tools/jdk"
+export PATH="$home/tools/node/bin:$home/tools/jdk/bin:$home/tools/kondo:$PATH" JAVA_HOME="$home/tools/jdk"
 auth=(-H "Authorization: Bearer $(cat "$home/token")")
 hub=${HUB_URL%/}/hub/releases
 
@@ -38,6 +43,18 @@ wanted() {
 	local j
 	j=$(hub_call --max-time 40 "${auth[@]}" "$hub/wanted") || return 1
 	node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const b of JSON.parse(s).builds||[])if(/^[0-9a-f]{40}$/.test(b.commit))console.log(b.commit)})' <<<"$j"
+}
+
+# status <commit> <pending|success|failure> <description>: the status `builder` on the commit
+# (nothing when this builder has no GitHub token; a failed call only logs).
+status() {
+	[ -s "$home/github-token" ] || return 0
+	local code
+	code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
+		-H "Authorization: Bearer $(cat "$home/github-token")" -H 'Accept: application/vnd.github+json' \
+		-d "{\"state\":\"$2\",\"context\":\"builder\",\"description\":\"$3\"}" \
+		"https://api.github.com/repos/$repo/statuses/$1") || code=000
+	[ "$code" = 201 ] || log "status $2 on ${1:0:7}: GitHub answered $code"
 }
 
 main_commit() { git -C "$home/repo" ls-remote origin refs/heads/main | cut -c1-40; }
@@ -89,11 +106,20 @@ warm_up() {
 	stop_server
 }
 
-# compile: the checkout (at the commit) built: the five release builds, the page's files.
-compile() {
-	warm_up || return 1
-	npx shadow-cljs release host runner front hub web &&
-		npm run build:web-files >/dev/null
+# check_and_compile <commit> <started>: the checkout checked and built; the tests run beside the
+# release builds. Every failure sets the status and says which step.
+check_and_compile() {
+	local c=$1 t0=$2 tests
+	fail() { status "$c" failure "$1 ($(($(date +%s) - t0)) s)"; log "${c:0:7}: $1"; return 1; }
+	warm_up || { fail "packages did not install"; return 1; }
+	clj-kondo --lint src test --fail-level error >"$home/lint.log" 2>&1 || { fail "clj-kondo found errors"; return 1; }
+	node bin/ratchet.mjs >"$home/ratchet.log" 2>&1 || { fail "the ratchet went up"; return 1; }
+	npx shadow-cljs compile test >"$home/test-build.log" 2>&1 || { fail "the tests do not compile"; return 1; }
+	node out/test.js >"$home/test.log" 2>&1 &
+	tests=$!
+	{ npx shadow-cljs release host runner front hub web && npm run build:web-files >/dev/null; } ||
+		{ kill "$tests" 2>/dev/null; wait "$tests" 2>/dev/null; fail "a release build failed"; return 1; }
+	wait "$tests" || { fail "tests failed: $(grep -m1 -oE '[0-9]+ failures, [0-9]+ errors' "$home/test.log")"; return 1; }
 }
 
 # build <commit>: its tree's release on the hub (built unless the hub has it already), then ready.
@@ -103,13 +129,14 @@ build() {
 	git -C "$home/repo" fetch -q origin "$commit" || return 1
 	tree=$(git -C "$home/repo" rev-parse "$commit^{tree}") || return 1
 	deps=$(git -C "$home/repo" show "$commit:package-lock.json" | sha256sum | cut -c1-20) || return 1
+	started=$(date +%s)
 	if ! on_hub "claudia-code-$tree.tar.gz"; then
-		started=$(date +%s)
+		status "$commit" pending "checking and building"
 		cd "$home/repo" || return 1
 		git checkout -q --force --detach "$commit" || return 1
 		# Untracked files go (out/ and dist/ too), but not the packages and shadow-cljs's cache (keyed by content).
 		git clean -q -ffdx -e node_modules -e .shadow-cljs || return 1
-		compile || { log "${commit:0:7} does not build"; return 1; }
+		check_and_compile "$commit" "$started" || return 1
 		local flag=--no-deps
 		{ on_hub "claudia-deps-$deps.tar.gz" && on_hub "claudia-deps-$deps-darwin-arm64.tar.gz"; } || flag=
 		out=$(deploy/bundle.sh $flag) || { log "${commit:0:7} does not bundle"; return 1; }
@@ -120,6 +147,7 @@ build() {
 		log "built ${commit:0:7} (tree ${tree:0:7}) in $(($(date +%s) - started)) s"
 	fi
 	ready "$commit" "$tree" "$deps" || { log "the hub refused ${commit:0:7} as ready"; return 1; }
+	status "$commit" success "checked, built and on the hub in $(($(date +%s) - started)) s"
 	echo "$commit" >>"$home/done"
 	log "ready ${commit:0:7} (tree ${tree:0:7})"
 }
