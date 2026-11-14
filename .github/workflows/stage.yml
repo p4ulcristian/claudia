@@ -51,6 +51,9 @@ jobs:
       packages: write   # push to GHCR
       id-token: write   # cosign keyless signing through GitHub OIDC
     steps:
+      # Before The tree: it checks an existing image's signature.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
       - name: The tree
         id: tree
         env:
@@ -66,8 +69,13 @@ jobs:
               echo "darwin=done" >> "$GITHUB_OUTPUT"
             fi
           fi
-          if docker manifest inspect "$IMAGE:tree-$tree" >/dev/null 2>&1; then
+          # Done only when signed as the gate checks it: an image pushed by a run whose signing failed
+          # (2026-11-14: Sigstore's log refused once) is pushed and signed again, never left unsigned.
+          if cosign verify "$IMAGE:tree-$tree" -a "tree=$tree" \
+               --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" >/dev/null 2>&1; then
             echo "image=done" >> "$GITHUB_OUTPUT"
+          elif docker manifest inspect "$IMAGE:tree-$tree" >/dev/null 2>&1; then
+            echo "image tree-$tree is there but not signed by stage.yml: pushed and signed again" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "tree $tree (commit $HEAD_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -128,8 +136,6 @@ jobs:
           fi
           jq -n --arg v "$(jq -r .version dist/pkg/package.json)" --arg t "$TREE" '{version: $v, tree: $t[0:7]}' \
             > dist/pkg/version.json
-
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Sign and publish the slave release
         if: steps.tree.outputs.release != 'done'

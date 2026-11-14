@@ -16,8 +16,9 @@
   ;; How the last turn ended (the TypeScript Claudia's last_turns, for the hub's pushes and badge):
   ;; last_turn = the result's uuid, stopped / failed, reply = the start of Claude's reply (only when
   ;; it succeeded); ended is that turn's time, moved to when the work it left running settled.
+  ;; talk = the chat's speaker (talking mode) is on; bell = it chimes and pushes when it finishes or waits.
   [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
-   :last_turn :stopped :failed :reply])
+   :last_turn :stopped :failed :reply :talk :bell])
 
 (def ^:private schema
   "The tables, made when missing."
@@ -81,7 +82,9 @@
    ["last_turn" "last_turn TEXT"]
    ["stopped" "stopped INTEGER NOT NULL DEFAULT 0"]
    ["failed" "failed INTEGER NOT NULL DEFAULT 0"]
-   ["reply" "reply TEXT NOT NULL DEFAULT ''"]])
+   ["reply" "reply TEXT NOT NULL DEFAULT ''"]
+   ["talk" "talk INTEGER NOT NULL DEFAULT 0"]
+   ["bell" "bell INTEGER NOT NULL DEFAULT 1"]])
 
 (defn- add-missing-columns! [^js d]
   (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
@@ -125,7 +128,9 @@
      :last-turn (.-last_turn r)
      :stopped (= 1 (.-stopped r))
      :failed (= 1 (.-failed r))
-     :reply (or (.-reply r) "")}))
+     :reply (or (.-reply r) "")
+     :talk (= 1 (.-talk r))
+     :bell (not= 0 (.-bell r))}))
 
 (defn chats [] (mapv row (.all (stmt "SELECT * FROM chats ORDER BY at DESC"))))
 

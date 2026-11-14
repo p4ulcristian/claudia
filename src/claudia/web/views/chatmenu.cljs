@@ -120,7 +120,7 @@
     (if forking "Forking…" "Fork chat")]
    (when error [:div.cm-error error])
    [:button.cm-item {:role "menuitem" :on-click #(set-moving true)} "Move to project…"]
-   [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:chat/archive k (not archived)]))}
+   [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 
 (defn- menu-box [{:keys [k x y error] :as m} row]

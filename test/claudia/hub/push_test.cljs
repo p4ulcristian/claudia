@@ -24,6 +24,12 @@
     (testing "a turn that ended before the first phone is not news"
       (is (= [] (push/notices-of "s" [{:id "c2" :lastTurn {:id "t1" :ago 1000}}] now now))))))
 
+(deftest a-chat-with-its-bell-off-pushes-nothing
+  (let [rows [{:id "c1" :bell false :asks [{:id "q1" :kind "question" :text "Which?"}]}
+              {:id "c2" :bell false :lastTurn {:id "t1" :ago 1000 :reply "Done."}}
+              {:id "c3" :bell true :lastTurn {:id "t2" :ago 1000 :reply "Done."}}]]
+    (is (= ["c3"] (map :chat (push/notices-of "s" rows 0 now))))))
+
 (deftest row-state-classifies-a-chat
   (is (= :waiting (push/row-state {:asks [{:id "q"}]})))
   (is (= :waiting (push/row-state {:waiting true :running true})))

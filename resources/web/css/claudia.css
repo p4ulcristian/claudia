@@ -408,6 +408,10 @@ code, pre { font-family: var(--mono); }
 .lt-dim button.on { background: var(--panel); color: var(--accent); }
 /* The rail's circles are smaller than the list's, so more chats fit. */
 .rail .rail-dot { zoom: 0.8; }
+.rail-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+/* Pull to reload (touch): a chalk arrow in the room the pulled circles leave, green once letting go reloads. */
+.rail-pull { position: absolute; top: 8px; left: 50%; width: 24px; height: 24px; margin-left: -12px; color: var(--muted); pointer-events: none; }
+.rail-pull.ready { color: var(--green); }
 .rail-dots { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; align-items: center; gap: 11px; padding: 6px 0 22px; }
 /* A chat on the rail: its circle, its title under it (two lines at most), then its server's name. */
 .rail-chat { align-self: stretch; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; position: relative; }
@@ -442,8 +446,9 @@ code, pre { font-family: var(--mono); }
 .rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
 .chalk-defs { position: absolute; width: 0; height: 0; }
 /* Rail: the chat's title under its circle, plain and readable, cut after two lines (the hover
-   bubble has it whole); the circle holds the project. */
-.rail-name { max-width: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; text-align: center;
+   bubble has it whole); the circle holds the project. A one-line title keeps the room of two, so
+   every chat on the rail is as tall as the next and the spacing never changes. */
+.rail-name { max-width: 100%; height: 2.5em; flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; text-align: center;
   font: 600 10.5px/1.25 var(--sans); letter-spacing: 0.01em; color: var(--muted); pointer-events: none; }
 .rail-chat.on .rail-name, .rail-chat:hover .rail-name { color: var(--fg); }
 /* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */

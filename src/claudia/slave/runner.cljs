@@ -131,7 +131,10 @@
 (defmethod on-chat-frame "folder" [_ f chat] (chats/move-folder! chat (:folder f)))
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
-(defmethod on-chat-frame "settings" [_ f chat] (chats/set-settings! chat (select-keys f [:model :effort :plan])))
+(defmethod on-chat-frame "settings" [_ f chat]
+  (chats/set-flags! chat (select-keys f [:talk :bell]))
+  (when (some #(contains? f %) [:model :effort :plan])
+    (chats/set-settings! chat (select-keys f [:model :effort :plan]))))
 
 (defmethod on-chat-frame "agent" [c f chat]
   (.then (chats/agent-detail chat (str (:agent f)))
@@ -162,7 +165,7 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color]))]
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell]))]
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})

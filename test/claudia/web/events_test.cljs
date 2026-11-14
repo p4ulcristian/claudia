@@ -4,6 +4,17 @@
             [claudia.shared.files :as files]
             [claudia.web.events :as ev]))
 
+(deftest new-picks-carry-the-speaker-and-bell
+  (is (= {:talk false :bell true :color "jade"} (ev/new-picks {:talk false :bell true :color "jade" :model nil}))))
+
+(deftest an-error-goes-only-while-it-is-the-one-shown
+  (let [db {:error "s: boom" :error-from "s" :chats {["s" "c"] {:error "bad" :title "t"}}}]
+    (is (nil? (:error (ev/without-error db nil "s: boom"))))
+    (is (nil? (:error-from (ev/without-error db nil "s: boom"))))
+    (is (= "s: boom" (:error (ev/without-error db nil "older"))) "a newer error stays")
+    (is (= {:title "t"} (get-in (ev/without-error db ["s" "c"] "bad") [:chats ["s" "c"]])))
+    (is (= "bad" (get-in (ev/without-error db ["s" "c"] "other") [:chats ["s" "c"] :error])))))
+
 (deftest without-index-drops-one-item
   (is (= [:a :c] (ev/without-index [:a :b :c] 1)))
   (is (= [] (ev/without-index [:a] 0))))

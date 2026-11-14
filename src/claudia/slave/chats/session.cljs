@@ -16,6 +16,11 @@
   (update (merge settings (select-keys m [:model :effort :plan]))
           :plan #(when (some #{%} saved-keys) %)))
 
+(defn flags-of
+  "The chat's speaker and bell switches m sets ({:talk :bell}, booleans), only those it names."
+  [m]
+  (into {} (for [k [:talk :bell] :when (contains? m k)] [k (boolean (get m k))])))
+
 (defn restart?
   "Whether a chat's live session starts again before its next message goes in: its token
   (token-account) is another than the one it runs on and no turn runs. After a plan was picked for

@@ -5,7 +5,9 @@
             [claudia.shared.files :as files]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
+            [claudia.web.updates :as updates]
             [claudia.web.views.pure.mic :as mic]
+            [claudia.web.views.pure.switches :as switches]
             [claudia.web.views.pure.talk :as talk]))
 
 ;; ---- helpers ----
@@ -99,7 +101,8 @@
    (let [open (fx/parse-path js/location.pathname)
          new-text (new-chat-text js/location.pathname js/location.search)]
      (when new-text (js/history.replaceState nil "" "/"))
-     {:db (start-db open new-text)
+     ;; Composer texts kept across a reload for a new version (claudia.web.updates) come back.
+     {:db (update (start-db open new-text) :drafts merge (updates/kept-drafts!))
       :fx (if new-text [[:store ["claudia.view" nil]]] [])
       :http/get {:url "/hub/me" :on-ok [:me/loaded] :on-fail [:me/failed]}})))
 
@@ -109,6 +112,8 @@
    (let [names (mapv :name (:servers me))]
      {:db (-> db
               (assoc :me me :me-error nil)
+              ;; The hub's commit the page loaded with: another one later means a new version.
+              (update :loaded-commit #(or % (:commit me)))
               (assoc :servers (connecting-servers (if (:view db) [] names))))
       ;; Another profile's chats (a stored view) connect once each server said it has that profile.
       :ws/connect (if (:view db) [] names)
@@ -135,7 +140,9 @@
  :ws/opened
  (fn [{:keys [db]} [_ server]]
    {:db (assoc-in db [:servers server :status] :open)
-    :ws/send-all (hello-frames (:open db) server)}))
+    :ws/send-all (hello-frames (:open db) server)
+    ;; A hub on a new version dropped every socket: as they open again, is it new? (claudia.web.updates)
+    :fx [[:dispatch [:version/check]]]}))
 
 (defmulti on-frame (fn [_db _server frame] (:type frame)))
 
@@ -197,9 +204,11 @@
   [[server {:type "open" :chat chat}]])
 
 (defn new-picks
-  "What a new chat's header picked, as `new` carries it: model, effort, plan, folder and colour, those set."
+  "What a new chat's header picked, as `new` carries it: model, effort, plan, folder, colour, speaker
+  and bell, those set."
   [new-settings]
-  (into {} (filter (comp some? val)) (update (select-keys new-settings [:model :effort :plan :folder :color]) :folder not-empty)))
+  (into {} (filter (comp some? val))
+        (update (select-keys new-settings [:model :effort :plan :folder :color :talk :bell]) :folder not-empty)))
 
 (defn fresh-colour
   "A new chat's colour as soon as it opens: the most different from what that server's chats (rows) wear."
@@ -378,25 +387,42 @@
  (fn [db [_ k heard]] (update-in db [:drafts k] mic/with-heard heard)))
 
 (rf/reg-event-fx
- :talk/toggle
- ;; Talking mode on or off for this device; off is silence at once.
- (fn [{:keys [db]} _]
-   (let [on? (not (:talk? db))]
-     {:db (assoc db :talk? on?)
-      :store ["claudia.talk" on?]
-      :fx (if on? [] [[:speech/stop]])})))
+ :chat/switches
+ ;; The chat's speaker and/or bell on or off (m: {:talk :bell}, those set), kept with the chat; k nil:
+ ;; the new chat's picks, which go with `new`. The speaker off is silence at once.
+ (fn [{:keys [db]} [_ [s c :as k] m]]
+   (cond-> {:db (switches/with-switches db k m)}
+     k (assoc :ws/send [s (merge {:type "settings" :chat c} m)])
+     (false? (:talk m)) (assoc :fx [[:speech/stop]]))))
 
-(rf/reg-event-fx
+(rf/reg-event-db
  :mic/failed
- ;; The mic's error goes by itself after 8 s (the next hold tries again).
- (fn [{:keys [db]} [_ message]]
-   (let [text (str "Mic: " message)]
-     {:db (assoc db :error text :error-from nil)
-      :fx [[:dispatch-later {:ms 8000 :dispatch [:error/clear-if text]}]]})))
+ ;; The mic's error goes by itself like every error (the next hold tries again).
+ (fn [db [_ message]] (assoc db :error (str "Mic: " message) :error-from nil)))
+
+(defn without-error
+  "db without the error text, if it still shows: the chat k's, or the top one (k nil). Another error
+  that came since stays."
+  [db k text]
+  (if k
+    (cond-> db (= text (get-in db [:chats k :error])) (update-in [:chats k] dissoc :error))
+    (cond-> db (= text (:error db)) (dissoc :error :error-from))))
 
 (rf/reg-event-db
  :error/clear-if
- (fn [db [_ text]] (cond-> db (= text (:error db)) (dissoc :error :error-from))))
+ ;; An error's time is up (views.chat/error-line): it goes, unless another took its place.
+ (fn [db [_ k text]] (without-error db k text)))
+
+;; ---- archiving asks first ----
+
+(rf/reg-event-db :archive/ask (fn [db [_ k]] (assoc db :archive-ask k)))
+(rf/reg-event-db :archive/keep (fn [db _] (dissoc db :archive-ask)))
+
+(rf/reg-event-fx
+ :archive/confirm
+ (fn [{:keys [db]} _]
+   (cond-> {:db (dissoc db :archive-ask)}
+     (:archive-ask db) (assoc :fx [[:dispatch [:chat/archive (:archive-ask db) true]]]))))
 
 (defn outgoing
   "What a send carries, from the draft's attachments (files uploaded, named by <claudia-file> tags

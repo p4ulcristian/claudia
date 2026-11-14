@@ -1,6 +1,7 @@
 (ns claudia.web.subs
   (:require [re-frame.core :as rf]
-            [claudia.web.events :as events]))
+            [claudia.web.events :as events]
+            [claudia.web.views.pure.switches :as switches]))
 
 (rf/reg-sub :me (fn [db] (:me db)))
 (rf/reg-sub :me-error (fn [db] (:me-error db)))
@@ -14,7 +15,11 @@
 (rf/reg-sub :pending-new (fn [db] (:pending-new db)))
 (rf/reg-sub :ask-state (fn [db [_ id]] (get-in db [:ask-state id])))
 (rf/reg-sub :draft (fn [db [_ k]] (get-in db [:drafts k] "")))
-(rf/reg-sub :talk? (fn [db _] (:talk? db)))
+(rf/reg-sub :talk? (fn [db [_ k]] (switches/talk-on? db k)))   ; k nil: the new chat
+(rf/reg-sub :bell? (fn [db [_ k]] (switches/bell-on? db k)))
+(rf/reg-sub :archive-ask   ; the chat whose archiving waits on a yes: {:k :title}, or nil
+            (fn [db _] (when-let [[s c :as k] (:archive-ask db)]
+                         {:k k :title (get-in db [:servers s :rows c :title])})))
 
 (rf/reg-sub
  :server-list

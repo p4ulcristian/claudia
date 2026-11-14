@@ -6,6 +6,8 @@
             [reagent.hooks :as h]
             [claudia.shared.forms :as forms]
             [claudia.web.api :as api]
+            [claudia.web.hooks :as hooks]
+            [claudia.web.views.confirm :as confirm]
             [claudia.web.views.calls :as calls]
             [claudia.web.views.clojure :as clojure]
             [claudia.web.views.code :as code]
@@ -107,28 +109,13 @@
    (when when-line [:p.g-when when-line])
    [:div.g-sample body]])
 
-(defn- use-key
-  "Calls (on-key e) on every keydown while mounted (capture: before the page's own handlers)."
-  [on-key capture deps]
-  (h/use-effect
-   (fn []
-     (js/window.addEventListener "keydown" on-key capture)
-     #(js/window.removeEventListener "keydown" on-key capture))
-   deps))
-
 (defn- confirm-delete
-  "Asked before a form or template goes: a chalk card over the window; Escape or a click outside keeps it."
+  "Asked before a form or template goes."
   [{:keys [kind] nm :name} on-yes on-no]
-  (use-key (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (on-no))) true [on-yes on-no])
-  [:div.confirm-backdrop {:on-click (fn [e] (.stopPropagation e) (on-no))}
-   [:div.confirm-card {:role "alertdialog" :aria-modal true :aria-label (str "Delete " kind) :on-click #(.stopPropagation %)}
-    [:h3 (str "Delete this " kind "?")]
-    (if (= kind "template")
-      [:p [:b nm] " goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
-      [:p "Claude stops getting the " [:b nm] " form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time."])
-    [:div.confirm-actions
-     [:button.confirm-no {:type "button" :auto-focus true :on-click on-no} "Keep it"]
-     [:button.confirm-yes {:type "button" :on-click on-yes} "Delete"]]]])
+  [confirm/card {:title (str "Delete this " kind "?") :yes "Delete" :on-yes on-yes :on-no on-no}
+   (if (= kind "template")
+     [:p [:b nm] " goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
+     [:p "Claude stops getting the " [:b nm] " form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time."])])
 
 (defn not-here-of
   "The forms this server doesn't have: as it says, else the opt-in forms it doesn't list."
@@ -203,7 +190,7 @@
         on-hide #(set-hidden! server info %)
         fs (remove (not-here-of info) forms/order)]
     (h/use-effect (fn [] (load-info! server) nil) [server])
-    (use-key (fn [e] (when (= "Escape" (.-key e)) (close))) false [close])
+    (hooks/use-key (fn [e] (when (= "Escape" (.-key e)) (close))) false [close])
     [:div.gallery-backdrop {:on-click close}
      [:div.gallery.right-scroll {:role "dialog" :aria-label "Forms" :on-click #(.stopPropagation %)}
       (gallery-head close)
@@ -211,4 +198,4 @@
       [:h3.g-section "Templates"]
       (template-entries info (+ 2 (count fs)) set-deleting)]
      (when deleting
-       [:f> confirm-delete deleting (confirm-yes server hidden on-hide deleting set-deleting) #(set-deleting nil)])]))
+       [confirm-delete deleting (confirm-yes server hidden on-hide deleting set-deleting) #(set-deleting nil)])]))

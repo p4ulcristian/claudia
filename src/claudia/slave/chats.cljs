@@ -606,6 +606,14 @@
       (when (contains? m :effort) (quiet (hostlink/control! id "applyFlagSettings" {:effortLevel (:effort s)}))))
     (emit! id {:type "settings" :settings s :model (:model (st id)) :effort (:effort-now (st id))})))
 
+(defn set-flags!
+  "Turns the chat's speaker and/or bell on or off (m: {:talk :bell}, those set); the list tells
+  every page and the hub."
+  [id m]
+  (when-let [flags (not-empty (session/flags-of m))]
+    (store/update! id flags)
+    (changed!)))
+
 (defn- read-context!
   "The chat's context use (tokens of its window), after a turn and at its start."
   [id]
@@ -977,10 +985,11 @@
   [message folder images picks]
   (let [id (str (random-uuid))
         ;; A new chat stays on the plan in use now unless one was picked: a later switch of that one moves no chat.
-        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) (dissoc picks :color) (map :key (tokens/saved)))]
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) (dissoc picks :color :talk :bell) (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (new-chat-colour (:color picks))})
+    (store/update! id (session/flags-of picks))
     (when (some some? (vals s)) (store/kv! id "settings" s))
     (changed!)
     (send-text! id message images)

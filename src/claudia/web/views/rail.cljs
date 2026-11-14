@@ -3,12 +3,16 @@
   the sounds and 2D/3D switches (claudia.web.views.logotools), + for a new chat, then a circle per
   chat with its title under it; passive (ash) chats last, above a chalk line. At its foot: the
   settings gear (claudia.web.views.menu). Circles
-  slide to their new places when the order changes; a new one grows in."
+  slide to their new places when the order changes; a new one grows in. Every circle with its title
+  takes the same height (a title is cut after two lines; one line keeps the room of two), so the
+  spacing never changes. On a touch screen, pulling the circles down from the top and letting go
+  reloads the page (claudia.web.updates keeps what is typed)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
+            [claudia.web.views.pure.pull :as pull]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.menu :as menu]
@@ -40,6 +44,44 @@
          (set! (.-current seen) nil))
        nil)
      [order])))
+
+(defn- pull-handlers
+  "Touch listeners on the list el for pull to reload: start at the top, follow the finger, reload
+  when let go far enough. set-d tells the view how far it is pulled."
+  [^js el set-d]
+  (let [start (atom nil) d (atom 0)
+        move! (fn [n] (reset! d n) (set-d n))]
+    {"touchstart" (fn [^js e] (reset! start (when (<= (.-scrollTop el) 0) (.. e -touches (item 0) -clientY))))
+     "touchmove" (fn [^js e]
+                   (when-let [y0 @start]
+                     (let [n (pull/distance (- (.. e -touches (item 0) -clientY) y0))]
+                       (when (pos? n) (.preventDefault e))
+                       (move! n))))
+     "touchend" (fn [_]
+                  (when (pull/ready? @d) (rf/dispatch [:version/reload]))
+                  (reset! start nil) (move! 0))}))
+
+(defn- use-pull!
+  "How far the rail's list (in box) is pulled down now (px); listens while mounted."
+  [box]
+  (let [[d set-d] (h/use-state 0)]
+    (h/use-effect
+     (fn []
+       (when-let [^js el (.-current box)]
+         (let [hs (pull-handlers el set-d)]
+           (doseq [[ev f] hs] (.addEventListener el ev f #js {:passive false}))
+           #(doseq [[ev f] hs] (.removeEventListener el ev f)))))
+     [])
+    d))
+
+(defn- pull-mark
+  "The chalk arrow that shows over the circles while they are pulled; green once letting go reloads."
+  [d]
+  (when (pos? d)
+    [:div.rail-pull {:class (when (pull/ready? d) "ready")
+                     :style {:opacity (min 1 (/ d pull/ready-px)) :transform (str "rotate(" (* 3 d) "deg)")}}
+     [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
+      [:path {:d "M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"}]]]))
 
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
@@ -82,13 +124,17 @@
         ro @(rf/subscribe [:read-only?])
         m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :ro ro
            :projects @(rf/subscribe [:projects]) :elsewhere elsewhere}
-        box (h/use-ref nil)]
+        box (h/use-ref nil)
+        pulled (use-pull! box)]
     (use-slide! box (str/join "," (map #(str (:server %) "/" (:id %)) rows)))
     [:nav.rail {:aria-label "Chats"}
      [logotools/tools]
-     [:div.rail-dots {:ref #(set! (.-current box) %)}
-      (rail-top ro)
-      (for [[i r] (map-indexed vector rows)]
-        ^{:key (str (:server r) "/" (:id r))}
-        [rail-chat (assoc m :i i) r])]
+     [:div.rail-scroll
+      (pull-mark pulled)
+      [:div.rail-dots {:ref #(set! (.-current box) %)
+                       :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
+       (rail-top ro)
+       (for [[i r] (map-indexed vector rows)]
+         ^{:key (str (:server r) "/" (:id r))}
+         [rail-chat (assoc m :i i) r])]]
      [:f> menu/button]]))

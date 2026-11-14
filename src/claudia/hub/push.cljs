@@ -88,10 +88,11 @@
   noticesOf). since: when they got their first phone (a turn that ended before that is not news to
   it). A Row's `asks` are its open asks ({id kind text}); `lastTurn` how its last turn ended
   ({id ago stopped failed reply}). Not told: a turn the person stopped, one whose agents still work
-  (told once the last ends), one they have seen since it ended."
+  (told once the last ends), one they have seen since it ended, anything of a chat whose bell is off
+  (`bell` false; the badge still counts it)."
   [server rows since now]
   (vec (for [r rows
-             :when (and (chat-id? (:id r)) (not (:archived r)))
+             :when (and (chat-id? (:id r)) (not (:archived r)) (not (false? (:bell r))))
              n (chat-notices server r since now)]
          n)))
 
