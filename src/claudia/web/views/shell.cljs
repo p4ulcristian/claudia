@@ -66,6 +66,9 @@
   "The divider: the chat column's width in px (not a share of the window, so maximizing gives the
   room to the picture), kept once dragged."
   [^js e set-w]
+  ;; A finger on a touch screen would scroll instead: the drag takes the pointer.
+  (.preventDefault e)
+  (.setPointerCapture (.-currentTarget e) (.-pointerId e))
   (let [main (.getBoundingClientRect (.. e -currentTarget -parentElement))
         width (atom nil)
         move (fn [^js m]

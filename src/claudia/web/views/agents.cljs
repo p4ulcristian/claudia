@@ -1,6 +1,6 @@
 (ns claudia.web.views.agents
   "The work Claude started beside the chat (README decision 25): chips right above the composer for the
-  running subagents and background shells (+N more, finished and failed folded into one chip), the
+  running subagents and background shells (+N more; finished ones leave the row), the
   list of every one of them, and one agent's view in the chat column (‹ Back, its facts, tabs Steps /
   Files / Prompt / Report; a shell: Output / Command). Stop on hover. The rail's third state (turn
   ended, agents still working) is agents-ring."
@@ -63,32 +63,26 @@
 
 ;; ---- the chips under the title ----
 
-(defn- chip-sum [ck {:keys [more finished failed done]}]
+(defn- more-pill [ck more]
   [:div.ag-sum
-   (when (pos? more)
-     [:button.ag-pill {:title "Every agent of this chat" :on-click #(rf/dispatch [:agents/open ck ""])}
-      (str "+" more " more")])
-   (when (seq finished)
-     [:button.ag-pill.done {:title (str done " finished" (when (pos? failed) (str ", " failed " failed")) ": every agent of this chat")
-                            :on-click #(rf/dispatch [:agents/open ck ""])}
-      (when (pos? done) [:span.ok (str "✓ " done)])
-      (when (pos? failed) [:span.bad (str "✕ " failed)])])])
+   [:button.ag-pill {:title "Every agent of this chat" :on-click #(rf/dispatch [:agents/open ck ""])}
+    (str "+" more " more")]])
 
 (defn chips
-  "The running ones (as many as fit: up to four on a desktop, two on a phone), +N more, ✓ N ✕ M."
+  "The running ones (as many as fit: up to four on a desktop, two on a phone) and +N more; finished
+  ones are not shown here (the agents list still has them)."
   [{:keys [ck state]}]
   (let [box (h/use-ref nil)
         agents (:agents state)
         width (hooks/use-width box [(boolean (seq agents))])
-        {:keys [shown more finished columns] :as row} (pure/chip-row agents width (< js/window.innerWidth 680))]
+        {:keys [shown more columns]} (pure/chip-row agents width (< js/window.innerWidth 680))]
     (use-tick! (boolean (some #(and (running? %) (or (= "agent" (:kind %)) (:background %))) agents)))
-    (when (seq agents)
+    (when (or (seq shown) (pos? more))
       [:div.ag-row {:ref #(set! (.-current box) %)}
        (when (seq shown)
          [:div.ag-chips {:style {:grid-template-columns (str "repeat(" columns ", minmax(0, 1fr))")}}
           (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])])
-       (when (or (pos? more) (seq finished))
-         (chip-sum ck row))])))
+       (when (pos? more) (more-pill ck more))])))
 
 ;; ---- the list and one agent ----
 

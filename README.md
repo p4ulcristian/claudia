@@ -326,7 +326,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Kalam, handwriting, where I, l and 1 look alike); still in the accent colour, right-aligned.
     Kalam stays for headings and the chalk labels. Every chat on the rail and every row of the list is the same height
     with the same gap, passive chats too (they no longer sit apart at the bottom; a chalk line marks
-    where they start), titles cut to fit.
+    where they start), titles cut to fit. Above the composer only the running agents (the finished ones' pill is gone,
+    the agents list keeps them) and no chalk line; the line between chat and picture has a 20 px
+    handle a finger can take (the drag takes the pointer, so a touch no longer scrolls instead).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

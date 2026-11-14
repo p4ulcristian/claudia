@@ -73,7 +73,9 @@ code, pre { font-family: var(--mono); }
 .menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px env(safe-area-inset-bottom); }
+.divider { cursor: col-resize; position: relative; z-index: 2; touch-action: none; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px env(safe-area-inset-bottom); }
+/* The line is 2 px; a finger gets 20 px to take it by (the handle is invisible). */
+.divider::after { content: ""; position: absolute; top: 0; bottom: 0; left: -9px; right: -9px; }
 .divider:hover { --ink: var(--accent); width: 3px; margin: 0 1.5px env(safe-area-inset-bottom); }
 .split.folded > .divider { visibility: hidden; }
 .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
@@ -291,9 +293,8 @@ code, pre { font-family: var(--mono); }
 /* Notes: slash-command output, compaction */
 .note-line { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--bg2); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 
-/* The composer sits under a chalk line. */
+/* The composer: no line above it, the chat runs straight into it. */
 .composer { position: relative; background: none; padding: 12px 14px var(--edge-b); }
-.composer::before { content: ""; position: absolute; top: -2px; left: 0; right: 0; height: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .input-row { display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 0; border-radius: 6px; padding: 6px; }
 /* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
 .talk-row { display: flex; align-items: center; gap: 10px; }
@@ -496,7 +497,7 @@ code, pre { font-family: var(--mono); }
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
 /* Chalk lines: each places its own ::before (or ::after) 2px past the line on every side. */
-.divider::before, .sidebar::after, .rail::after, .composer::before, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before {
+.divider::before, .sidebar::after, .rail::after, .edge-line::before, .f-arrow::before, .f-timeline::before, .f-ln.hot::before {
   content: ""; position: absolute; pointer-events: none; background: var(--ink); -webkit-mask-box-image: var(--chalk-line2); clip-path: var(--chalk-clip, none);
 }
 .divider::before, .edge-line::before, .f-arrow::before { inset: -2px; }
