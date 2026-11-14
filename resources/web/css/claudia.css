@@ -4,16 +4,22 @@
 
 :root {
   --bg: #383838; --bg2: #2e2e2e; --panel: #404040; --panel2: #484848; --fg: #ededed; --muted: #acacac; --line: #565656;
-  --board: #353535;
+  --board: var(--bg); /* the drawing board is the chat's own background */
   --green: #a3dbab; --green-bg: #34483d; --red: #f39a7f; --red-bg: #4a3632;
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
   /* Chat colours, and the text colour that sits on them. */
+  /* The chat colours: the crayon box (claudia.shared.colours, the same hexes; README decision 26). */
+  --c-cherry: #e5383b; --c-chocolate: #a0673f; --c-peach: #ffc49b; --c-tangerine: #ff8c1a; --c-gold: #d4a72c;
+  --c-sunflower: #ffd23f; --c-olive: #9a9a3a; --c-kiwi: #9bd63a; --c-forest: #3f9e4d; --c-mint: #7fe0b2;
+  --c-jade: #2fbf8a; --c-aqua: #5ce1f0; --c-sky: #6fc0ff; --c-ocean: #2f7fd8; --c-sapphire: #4a5cf0;
+  --c-periwinkle: #8f9cff; --c-grape: #9b5de5; --c-plum: #b0478f; --c-magenta: #f15bb5; --c-bubblegum: #ff9ecd;
+  /* Named colours the code forms use for files, lanes and namespaces (not chat colours). */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
-  --c-sky: #6fb3f0; --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
-  --c-purple: #d08cf0; --c-magenta: #f06ad8; --c-pink: #f080b8; --c-brown: #c49a72;
+  --c-blue: #6a8cff; --c-indigo: #8f86f5; --c-violet: #b49cf2;
+  --c-purple: #d08cf0; --c-pink: #f080b8; --c-brown: #c49a72;
   --c-ash: #6f7377;
   --on-hue: #0b0e0d;
   --sans: "Atkinson Hyperlegible", system-ui, sans-serif; --hand: "Kalam", cursive; --mono: "JetBrains Mono", ui-monospace, monospace;
@@ -28,7 +34,6 @@
    so switching chats repaints the window. Diff and picture colours keep their meaning. */
 :root[data-chat] {
   --bg: color-mix(in oklch, var(--hue) 18%, #343434); --bg2: color-mix(in oklch, var(--hue) 14%, #2a2a2a);
-  --board: color-mix(in oklch, var(--hue) 15%, #323232);
   --panel: color-mix(in oklch, var(--hue) 20%, #3c3c3c); --panel2: color-mix(in oklch, var(--hue) 24%, #444444);
   --line: color-mix(in oklch, var(--hue) 32%, #525252);
   --fg: color-mix(in oklch, var(--hue) 8%, #efefef); --muted: color-mix(in oklch, var(--hue) 25%, #a9a9a9);
@@ -68,8 +73,8 @@ code, pre { font-family: var(--mono); }
 .menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px; }
-.divider:hover { --ink: var(--accent); width: 3px; margin: 0 1.5px; }
+.divider { cursor: col-resize; position: relative; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px env(safe-area-inset-bottom); }
+.divider:hover { --ink: var(--accent); width: 3px; margin: 0 1.5px env(safe-area-inset-bottom); }
 .split.folded > .divider { visibility: hidden; }
 .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
 
@@ -389,7 +394,8 @@ code, pre { font-family: var(--mono); }
 /* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(46px + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
-.sidebar::after, .rail::after { content: ""; position: absolute; top: 0; bottom: 0; right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/* The vertical chalk lines run between the safe areas: never under the status bar or the home bar. */
+.sidebar::after, .rail::after { content: ""; position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .rail > .logo-tools { padding: 4px 0 8px; }

@@ -35,14 +35,25 @@
 
 ;; The chat list -----------------------------------------------------------------------------------
 
-(deftest chats-without-a-colour
-  (is (= [2 3] (colours/uncoloured [{:id 1 :color "red"} {:id 2 :color nil} {:id 3 :color ""}])))
-  (is (= [] (colours/uncoloured []))))
+(deftest a-new-chat-takes-the-most-different-colour
+  (is (= (first colours/chat-colours) (colours/most-different [] nil)) "nothing worn: the first")
+  (let [picked (colours/most-different [{:id 1 :color "cherry"}] nil)]
+    (is (not= "cherry" picked))
+    (is (= picked (apply max-key #(colours/apart % "cherry") (remove #{"cherry"} colours/chat-colours)))))
+  (is (= (first colours/chat-colours) (colours/most-different [{:id 1 :color "cherry"}] 1)) "except itself")
+  (is (= (first colours/chat-colours) (colours/most-different [{:id 1 :color "cherry" :archived true}] nil)) "archived ones don't count")
+  (let [all (map-indexed (fn [i c] {:id i :color c}) colours/chat-colours)]
+    (is (= (first colours/chat-colours) (colours/most-different all nil)) "every one worn once: the first in hue order")))
 
-(deftest least-worn-colours
-  (is (= ["c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] nil)))
-  (is (= ["a" "c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] 1)) "except itself")
-  (is (= ["a" "b" "c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a" :archived true}] nil))))
+(deftest old-colours-move-into-the-crayon-box
+  (is (= {:color "cherry"} (colours/recolour {:color "red"})))
+  (is (= {:prev_color "mint"} (colours/recolour {:color "ash" :prev-color "teal"})))
+  (is (= :fresh (colours/recolour {:color nil})))
+  (is (= :fresh (colours/recolour {:color "neon"})))
+  (is (nil? (colours/recolour {:color "jade"})))
+  (is (nil? (colours/recolour {:color "ash" :prev-color "jade"})))
+  (is (= 20 (count colours/chat-colours)))
+  (is (every? colours/chat-colour? (vals colours/renamed))))
 
 (deftest row-of-a-chat
   (let [r {:id "c" :title "T" :ended 100 :seen 50 :preview "p" :last-turn "u1" :reply "ok"}]

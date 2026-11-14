@@ -84,10 +84,10 @@
 
 (deftest a-new-chat-gets-a-colour-at-once
   (is (= "c" (get-in (ev/with-fresh-colour {:new-settings {:color "c"}}) [:new-settings :color])))
-  (let [rows {"1" {:id "1" :color "red"}}
+  (let [rows {"1" {:id "1" :color "cherry"}}
         picked (get-in (ev/with-fresh-colour {:me {:servers [{:name "s"}]} :servers {"s" {:rows rows}}}) [:new-settings :color])]
-    (is (some #{picked} colours/chat-colours))
-    (is (not= "red" picked))))
+    (is (= (colours/most-different (vals rows) nil) picked))
+    (is (not= "cherry" picked))))
 
 (deftest a-new-chat-carries-its-picks
   (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
@@ -96,6 +96,16 @@
   (is (= {} (ev/new-picks nil)))
   (is (= ["s" {:type "new" :id "id" :text "hi" :effort "high"}]
          (:ws/send (ev/send-new-chat {:new-settings {:effort "high"}} "s" "id" (ev/outgoing nil "hi"))))))
+
+(deftest errors-go-once-they-no-longer-hold
+  (is (= {:chats {["s" "c"] {:x 1}}} (ev/drop-chat-error {:chats {["s" "c"] {:x 1 :error "e"}}} ["s" "c"])))
+  (is (= {} (ev/drop-chat-error {} ["s" "c"])))
+  (is (nil? (:error (ev/chat-after-turn {:error "e"} true false))) "a new turn")
+  (is (= "e" (:error (ev/chat-after-turn {:error "e"} false false))) "the failed turn's end keeps it")
+  (is (= {} (ev/without-stale-error {:error "s: x" :error-from "s"} "s" {:type "chats"})))
+  (is (= {:error "s: x" :error-from "s"} (ev/without-stale-error {:error "s: x" :error-from "s"} "t" {:type "chats"})))
+  (is (= {:error "s: x" :error-from "s"} (ev/without-stale-error {:error "s: x" :error-from "s"} "s" {:type "error"})))
+  (is (nil? (:error (:db (ev/send-in-chat {:chats {["s" "c"] {:error "e"}}} ["s" "c"] (ev/outgoing nil "hi")))))))
 
 (deftest chat-after-turn-settles-an-ended-turn
   (is (= {:running true :stopped false :note "n" :messages [{:streaming true}]}

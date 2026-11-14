@@ -139,10 +139,23 @@
 
 (defmulti on-frame (fn [_db _server frame] (:type frame)))
 
+(defn drop-chat-error
+  "db without chat k's error (a chat that moved on: a new turn, Claude writing, a send)."
+  [db k]
+  (cond-> db (get-in db [:chats k :error]) (update-in [:chats k] dissoc :error)))
+
+(defn without-stale-error
+  "db without the top error a server sent (:error-from) once that server sends anything but an
+  error: the call it answered is over."
+  [db server frame]
+  (cond-> db
+    (and (= server (:error-from db)) (not= "error" (:type frame))) (dissoc :error :error-from)))
+
 (rf/reg-event-fx
  :ws/frame
  (fn [{:keys [db]} [_ server frame]]
-   (on-frame db server frame)))
+   (let [fx (on-frame db server frame)]
+     (cond-> fx (:db fx) (update :db without-stale-error server frame)))))
 
 (defmethod on-frame :default [db _ _] {:db db})
 
@@ -189,9 +202,9 @@
   (into {} (filter (comp some? val)) (update (select-keys new-settings [:model :effort :plan :folder :color]) :folder not-empty)))
 
 (defn fresh-colour
-  "A new chat's colour as soon as it opens: random among those server's chats (rows) wear least."
+  "A new chat's colour as soon as it opens: the most different from what that server's chats (rows) wear."
   [rows]
-  (rand-nth (colours/least-worn colours/chat-colours rows nil)))
+  (colours/most-different rows nil))
 
 (defn with-fresh-colour
   "db with a colour for the new chat on its new server, unless it has one."
@@ -209,9 +222,11 @@
     {:db db}))
 
 (defmethod on-frame "msg" [db server {:keys [chat msg]}]
+  ;; Claude writing again means the chat's error no longer holds.
   (let [k [server chat]]
     {:db (cond-> (update-in db [:chats k :messages] upsert-msg msg)
-           (= "user" (:role msg)) (update-in [:outbox k] #(drop-echo (vec %) (:text msg))))}))
+           (= "user" (:role msg)) (update-in [:outbox k] #(drop-echo (vec %) (:text msg)))
+           (not= "user" (:role msg)) (drop-chat-error k))}))
 
 (defmethod on-frame "delta" [db server {:keys [chat id text]}]
   {:db (update-in db [:chats [server chat] :messages] append-delta id text)})
@@ -227,9 +242,11 @@
 
 (defn chat-after-turn
   "A chat's state after a turn frame. A turn the person stopped says \"Stopped.\" until the next one
-  starts; a turn's end clears the note and settles every streamed message."
+  starts; a new turn clears the last one's error; a turn's end clears the note and settles every
+  streamed message."
   [st running stopped]
   (cond-> (assoc st :running running :stopped (boolean (and (not running) stopped)))
+    running (dissoc :error)
     (not running) (-> (dissoc :note)
                       (update :messages (fn [ms] (mapv #(dissoc % :streaming) ms))))))
 
@@ -268,7 +285,7 @@
 (defmethod on-frame "error" [db server {:keys [chat text]}]
   {:db (if chat
          (assoc-in db [:chats [server chat] :error] text)
-         (assoc db :error (str server ": " text)))})
+         (assoc db :error (str server ": " text) :error-from server))})
 
 ;; ---- navigation ----
 
@@ -347,7 +364,7 @@
 
 (rf/reg-event-db
  :error/dismiss
- (fn [db [_ k]] (if k (assoc-in db [:chats k :error] nil) (assoc db :error nil))))
+ (fn [db [_ k]] (if k (assoc-in db [:chats k :error] nil) (dissoc db :error :error-from))))
 
 ;; ---- talking ----
 
@@ -369,9 +386,17 @@
       :store ["claudia.talk" on?]
       :fx (if on? [] [[:speech/stop]])})))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  :mic/failed
- (fn [db [_ message]] (assoc db :error (str "Mic: " message))))
+ ;; The mic's error goes by itself after 8 s (the next hold tries again).
+ (fn [{:keys [db]} [_ message]]
+   (let [text (str "Mic: " message)]
+     {:db (assoc db :error text :error-from nil)
+      :fx [[:dispatch-later {:ms 8000 :dispatch [:error/clear-if text]}]]})))
+
+(rf/reg-event-db
+ :error/clear-if
+ (fn [db [_ text]] (cond-> db (= text (:error db)) (dissoc :error :error-from))))
 
 (defn outgoing
   "What a send carries, from the draft's attachments (files uploaded, named by <claudia-file> tags
@@ -399,7 +424,8 @@
 (defn send-in-chat
   "A send into the open chat k."
   [db [server chat :as k] {:keys [sent text extra]}]
-  {:db (-> db (update-in [:outbox k] (fnil conj []) text) (assoc-in [:drafts k] "") (update :attach dissoc k))
+  {:db (-> db (update-in [:outbox k] (fnil conj []) text) (assoc-in [:drafts k] "") (update :attach dissoc k)
+           (drop-chat-error k))
    :ws/send [server (merge {:type "send" :chat chat :text sent} extra)]})
 
 (defn send-new-chat

@@ -212,8 +212,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     pick is a pill button; a fixed value (a started chat's computer) has a dashed edge. A new chat
     picks all of them before its first message, and they go with the `new` frame, so the first
     turn already runs on them (before, model and effort followed `created`, after the first turn
-    had begun). A new chat also has its colour from the moment it opens (random among the ones
-    the server's other chats wear least, `claudia.shared.colours`), the header wears it, the
+    had begun). A new chat also has its colour from the moment it opens (the most different from
+    what the server's other chats wear, decision 26), the header wears it, the
     project popup's palette changes it, and it goes with `new` (decision 25). The project popup starts with where the chat works: the
     folder's full path and its computer (name, system, kernel and architecture, processor and
     cores, memory, uptime; `host` in the system sample). Once started, the computer is fixed and
@@ -243,7 +243,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     switch, More settings, and the version. Settings itself keeps what needs room: the Claude
     tokens, GitHub (decision 23), all ~/Work sessions, Servers and Access for admins, each
     server's chat colours. The right half shows only the picture: the timeline view is gone.
-    The window is one grid: the chalk lines run from the top to the bottom and meet each other,
+    The window is one grid: the chalk lines run from the top to the bottom between the safe areas
+    (never under the status bar or the home bar) and meet each other, the drawing board wears the
+    chat's own background,
     every top starts `--edge-t` down, and the composer's row, the picture's bar and the gear share
     one bottom line (`--edge-b`, the home bar's room included, and `--foot-h`), so an iPad's
     bottom inset moves all of them together. Instead of: a gear in the list's header with one
@@ -255,10 +257,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     colours and the window always wears one: the open chat's, or a new chat's (it has one from
     the moment it opens, decision 22). The "default look" preference, the palette's "No colour"
     and the grey fallback are gone; a runner gives each chat without a colour one when it starts
-    (least worn first, `colour-every-chat!`). Ash (passive) stays a colour picked by hand.
+    (`colour-every-chat!`). Ash (passive) stays a colour picked by hand.
     Instead of: a grey default theme when a chat had no colour, which made the app look like two
     apps. Files: `src/claudia/shared/colours.cljc`, `src/claudia/slave/chats.cljs`,
     `src/claudia/web/subs.cljs`.
+
+26. A crayon box of 20 chat colours (2026-11-14): cherry, chocolate, peach, tangerine, gold,
+    sunflower, olive, kiwi, forest, mint, jade, aqua, sky, ocean, sapphire, periwinkle, grape, plum,
+    magenta, bubblegum (and ash, passive, by hand). Picked from 33 crayons so no two look alike,
+    measured in OKLab both as the crayon and as the whole window tinted with it; the closest pair
+    left (aqua, mint) is further apart than any dropped crayon from its look-alike, save salmon.
+    A new chat takes, among the colours worn least, the one most different from every colour worn
+    more (`most-different`): no randomness. A runner moves its chats over on start: each old
+    colour becomes its crayon (red→cherry, teal→mint, pink→bubblegum, …; an ash chat's remembered
+    colour too). The old names stay as CSS variables only for the code forms' own lanes and files.
+    Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,
+    picked at random. Files: `src/claudia/shared/colours.cljc`, `resources/web/css/claudia.css`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

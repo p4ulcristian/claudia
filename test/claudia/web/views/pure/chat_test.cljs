@@ -20,7 +20,8 @@
   (is (= :reconnecting (chat/server-state nil))))
 
 (deftest colour-var-only-for-chat-colours
-  (is (= "var(--c-teal)" (words/colour-var "teal")))
+  (is (= "var(--c-mint)" (words/colour-var "mint")))
+  (is (nil? (words/colour-var "teal")))
   (is (= "var(--c-ash)" (words/colour-var "ash")))
   (is (nil? (words/colour-var "url(x)")))
   (is (nil? (words/colour-var nil))))

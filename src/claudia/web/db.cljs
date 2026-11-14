@@ -55,4 +55,4 @@
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
    :tokens nil :github-login nil
-   :new-settings {:color (rand-nth colours/chat-colours)}})  ; a new chat's picks; its colour from the start
+   :new-settings {:color (colours/most-different [] nil)}})  ; a new chat's picks; its colour from the start
