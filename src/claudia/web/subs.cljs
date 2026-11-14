@@ -1,6 +1,7 @@
 (ns claudia.web.subs
   (:require [re-frame.core :as rf]
             [claudia.web.events :as events]
+            [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.pure.switches :as switches]))
 
 (rf/reg-sub :me (fn [db] (:me db)))
@@ -112,6 +113,13 @@
         :state (get-in db [:chats k])
         :outbox (get-in db [:outbox k])
         :status (get-in db [:servers s :status])}))))
+
+(rf/reg-sub
+ :fresh-chat
+ ;; The chat being started, shown on the rail before the list has it (views.pure.sidebar/fresh-chat).
+ (fn [db]
+   (sidebar-pure/fresh-chat (assoc (select-keys db [:open :pending-new :servers :new-settings :new-server])
+                                   :ro (boolean (:view db))))))
 
 (rf/reg-sub
  :open-color

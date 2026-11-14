@@ -135,3 +135,17 @@
   "What an empty list says."
   [q archived?]
   (cond (seq q) "No match." archived? "Nothing archived." :else "No chats yet."))
+
+(defn fresh-chat
+  "The chat being started, before the list has it (README decision 31): the new chat on screen
+  (nothing open), or one sent and on its way (`created` not back yet). {:title :color :server
+  :folder}, or nil when the open chat is in the list or the caller only looks (read-only)."
+  [{:keys [open pending-new servers new-settings new-server ro]}]
+  (let [[s c] open]
+    (cond
+      ro nil
+      (nil? open) {:title "New chat" :color (:color new-settings) :server new-server :folder (:folder new-settings)}
+      (and (contains? pending-new c) (nil? (get-in servers [s :rows c])))
+      {:title (or (not-empty (first (str/split-lines (str (get-in pending-new [c :text]))))) "New chat")
+       :color (:color new-settings) :server s :folder (:folder new-settings)}
+      :else nil)))

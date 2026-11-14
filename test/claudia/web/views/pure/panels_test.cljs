@@ -260,3 +260,12 @@
     (is (= "max" (usage/effort-shown "max" kept "claude-fable-5-2")))
     (is (= "high" (usage/effort-shown nil kept "claude-fable-5-2")))
     (is (nil? (usage/effort-shown nil kept "claude-opus-5-5")))))
+
+(deftest a-new-chat-has-its-circle-at-once
+  (let [base {:new-settings {:color "jade" :folder "/w"} :new-server "s" :pending-new {} :servers {}}]
+    (is (= {:title "New chat" :color "jade" :server "s" :folder "/w"} (sidebar/fresh-chat (assoc base :open nil))))
+    (is (= "Fix the build" (:title (sidebar/fresh-chat (assoc base :open ["s" "u1"] :pending-new {"u1" {:server "s" :text "Fix the build\nplease"}})))))
+    (is (nil? (sidebar/fresh-chat (assoc base :open ["s" "u1"] :pending-new {"u1" {:text "x"}}
+                                         :servers {"s" {:rows {"u1" {:id "u1"}}}}))) "the list has it")
+    (is (nil? (sidebar/fresh-chat (assoc base :open ["s" "c"]))) "another chat is open")
+    (is (nil? (sidebar/fresh-chat (assoc base :open nil :ro true))) "only looking")))

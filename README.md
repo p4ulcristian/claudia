@@ -330,6 +330,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the agents list keeps them) and no chalk line; the line between chat and picture has a 20 px
     handle a finger can take (the drag takes the pointer, so a touch no longer scrolls instead).
 
+31. A new chat is on the rail at once (2026-11-14): pressing + (or opening Claudia on a new chat)
+    puts its circle at the top of the rail straight away, in the colour its header wears, titled
+    "New chat"; sent, it shows the first line until the runner's `created` and the list take over.
+    Opening another chat before sending anything takes the circle away again (nothing was made).
+    Instead of: the circle appearing only once the first message had made the chat.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
