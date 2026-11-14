@@ -6,6 +6,7 @@
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
             [claudia.web.updates :as updates]
+            [claudia.web.views.pure.chat :as chat-pure]
             [claudia.web.views.pure.mic :as mic]
             [claudia.web.views.pure.switches :as switches]
             [claudia.web.views.pure.talk :as talk]))
@@ -381,10 +382,6 @@
  :draft/set
  (fn [db [_ k text]] (assoc-in db [:drafts k] text)))
 
-(rf/reg-event-db
- :draft/heard
- ;; The mic's text joins the draft as it is now (typed on while it was being heard).
- (fn [db [_ k heard]] (update-in db [:drafts k] mic/with-heard heard)))
 
 (rf/reg-event-fx
  :chat/switches
@@ -469,16 +466,40 @@
      :store ["claudia.newServer" server]
      :ws/send [server (merge {:type "new" :id id :text sent} (new-picks (:new-settings db)) extra)]}))
 
+(defn send-for
+  "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat."
+  [db k typed]
+  (let [chat (when (vector? k) (second k))
+        attach (get-in db [:attach (if chat k :new)])
+        out (outgoing attach typed)]
+    (cond
+      (hold-send? db chat attach out) {}
+      chat (send-in-chat db k out)
+      :else (send-new-chat db (default-server db) (new-uuid) out))))
+
 (rf/reg-event-fx
  :composer/send
  (fn [{:keys [db]} [_ typed]]
-   (let [[_ chat :as k] (:open db)
-         attach (get-in db [:attach (if chat k :new)])
-         out (outgoing attach typed)]
-     (cond
-       (hold-send? db chat attach out) {}
-       chat (send-in-chat db k out)
-       :else (send-new-chat db (default-server db) (new-uuid) out)))))
+   (let [[_ chat :as k] (:open db)]
+     (send-for db (if chat k :new) typed))))
+
+(defn heard-fx
+  "What the mic's text does in the composer k it was held in ([server chat] or :new), wherever the
+  person is now (hearing takes a moment; they may have opened another chat): it joins that
+  composer's draft; let go to send, the draft with it answers that chat's question or is sent."
+  [db k heard dir]
+  (let [text (mic/with-heard (get-in db [:drafts k] "") heard)
+        with-text (assoc-in db [:drafts k] text)
+        ask (when (vector? k) (first (get-in db [:chats k :asks])))
+        answers (when ask (chat-pure/typed-answer ask (str/trim text) (get-in db [:attach k])))]
+    (cond
+      (not= dir :send) {:db with-text}
+      answers {:db (assoc-in db [:drafts k] "") :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
+      :else (let [sent (send-for with-text k text)] (if (seq sent) sent {:db with-text})))))
+
+(rf/reg-event-fx
+ :mic/heard
+ (fn [{:keys [db]} [_ k heard dir]] (heard-fx db k heard dir)))
 
 (defn- on-open-chat [db f]
   (let [[server chat] (:open db)]
