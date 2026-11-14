@@ -47,7 +47,7 @@
 
 (defn- updated-view []
   (let [t (hooks/use-now)]
-    (when-let [text (pure/updated-text (:updatedAt @(rf/subscribe [:me])) t)]
+    (when-let [text (pure/updated-text (:commit @(rf/subscribe [:me])) (:updatedAt @(rf/subscribe [:me])) t)]
       [:div.up-ago {:title (str "This version went live " (.toLocaleString (js/Date. (:updatedAt @(rf/subscribe [:me])))))} text])))
 
 (defn updated

@@ -11,7 +11,7 @@
 (deftest a-reload-waits-for-what-it-would-lose
   (is (not (up/reload-blocked? {:pending-new {} :outbox {["s" "c"] []} :attach {:new []}})))
   (is (up/reload-blocked? {:pending-new {"u" {:server "s"}}}))
-  (is (up/reload-blocked? {:outbox {["s" "c"] ["hi"]}}))
+  (is (not (up/reload-blocked? {:outbox {["s" "c"] ["hi"]}})) "a sent message is with the runner already")
   (is (up/reload-blocked? {:attach {:new [{:name "a.png"}]}})))
 
 (deftest drafts-survive-the-round-trip

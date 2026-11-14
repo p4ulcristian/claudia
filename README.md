@@ -282,8 +282,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `/hub/me`; the page keeps the one it loaded with and asks again each time a socket opens (a hub
     moved to a new image drops every socket, so they all open again). Another commit: the page
     reloads, with every composer's text kept across the reload (sessionStorage), but never while a
-    new chat or a message is on its way, a file waits to be sent, or the mic is held (it looks again
-    after 3 s). On a touch screen, pulling the rail's circles down and letting go reloads the same
+    new chat is on its way, a file waits to be sent, or the mic is held (it looks again after 3 s;
+    a message already sent no longer holds it: one whose echo never matched kept a page from ever
+    reloading). On a touch screen, pulling the rail's circles down and letting go reloads the same
     way. Instead of: reloading by hand after every ship, or a "new version" button to press. Files:
     `src/claudia/web/updates.cljs`, `src/claudia/web/views/rail.cljs`.
 
@@ -343,7 +344,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     starts on the commit it waited for (kept in <data>/progress.json across that restart). The pill
     says "Building <commit>", "Updating 3/5", then "Live in 16 s" (or how many were not reached)
     for 90 s; a click lists every step with its seconds. Under the gear, very small, when
-    the version on screen went live ("updated 5 min ago": `/hub/me`'s `updatedAt`, the merge of the
+    the version on screen went live ("8495c52 · 5 min ago": `/hub/me`'s commit and `updatedAt`, the merge of the
     release the hub runs, else when the hub started). Files: `src/claudia/hub/progress.cljs`,
     `src/claudia/web/views/update_pill.cljs`, `src/claudia/web/views/pure/update_pill.cljs`.
 
