@@ -7,9 +7,10 @@
   (0640, in a folder setgid to that group). Every saved token comes the same way (PUT
   /api/claude-token/saved, README decision 16): one file each in `<token file>.d/<key>` and their
   names in `<token file>.saved.json`, so each chat runs on the one picked for it (the token in use
-  is what a chat without a pick runs on). GitHub: this profile's own
-  login, handed to gh (kept in this Linux user's ~/.config/gh); git uses gh as its credential
-  helper and commits carry the account's name."
+  is what a chat without a pick runs on). GitHub: the person's login, which the hub keeps and hands
+  to this profile (PUT /api/github, README decision 23), given to gh (kept in this Linux user's
+  ~/.config/gh); git uses gh as its credential helper and commits carry the account's name. The
+  hub once takes a login gh already holds here into its keeping (GET /api/github/token)."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:path" :as path]
@@ -141,6 +142,14 @@
         (.then (fn [{:keys [out code]}]
                  (reset! known (when (zero? code)
                                  (let [u (p/read-json out)] {:login (:login u) :name (:name u)}))))))))
+
+(defn github-token
+  "Promise of {:token} gh holds for github.com (the hub takes it into its keeping once, README
+  decision 23), or {:error} when there is none."
+  []
+  (.then (run "gh" ["auth" "token" "--hostname" "github.com"] nil)
+         (fn [{:keys [out code]}]
+           (if (and (zero? code) (seq out)) {:token out} {:error "No GitHub login here." :status 404}))))
 
 (defn commit-identity
   "The name and email commits carry for a GitHub user (its API answer): [name email]."

@@ -28,7 +28,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 6. Runs beside the old Claudia at its own address until the switch.
 7. Secrets from 1Password, never stored on a server: [plan/1passwd-plan.md](plan/1passwd-plan.md).
 
-8. Back from the TypeScript Claudia (2026-11-03): agent chips under the chat's title (subagents and
+8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
@@ -59,7 +59,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     to the shadow-cljs server) is refused: reload by hand. Instead of: importing Shiki and Vega from
     jsdelivr by major version at run time, where a bad release would run as the signed-in person.
 
-12. Systems popup (2026-11-05): a computer on the rail, above the sounds, opens a card per server
+12. Systems popup (2026-11-05): Machines in the settings menu (decision 24; before 2026-11-14 a computer on the rail) opens a card per server
     the person may use (the access grid) and, for admins, one for the gate. Each card asks every 2 s
     while open (`GET /hub/servers/<name>/system`, `GET /hub/gate/system`) and shows how old its
     numbers are; older than 8 s greys it, a server that does not answer says why. Every server's
@@ -188,7 +188,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     picture, or Apple's on-device speech (app only, weaker on names). Files:
     `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
 
-21. Talking mode (2026-11-13): a speaker in the chat's header (row 1, decision 22) turns it on and off, per device
+21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off, per device
     (localStorage), for whichever chat is open. It only ever speaks what arrives while the person
     watches: the final reply of a turn that ended by itself (not the working messages, not a
     stopped turn) and Claude's questions, in the chat on screen, with the page in front; read by
@@ -205,17 +205,60 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 22. The chat's header holds every setting (2026-11-14): one panel in the chat's colour, three
     rows, the same for a new chat and a started one. Row 1: the title (a click renames it), the
-    server's state, talking mode and Archive. Row 2: the computer it runs on, whose Claude
-    subscription (decision 16), the project (with the chat's colour). Row 3: model and effort,
-    then the context, 5-hour and week rings. A new chat picks all of them before its first
-    message, and they go with the `new` frame, so the first turn already runs on them (before,
-    model and effort followed `created`, after the first turn had begun). Once started, the
-    computer is fixed and every other pick changes the chat. The composer keeps only writing and
-    sending, one row centred: the mic, Attach, the message, Send. Instead of: the computer above
-    the composer and model and effort in its toolbar (settings spread over two places, account
-    and project not settable before the chat existed), or a header that folds into a pill once
-    the chat starts (two layouts to learn). Files: `src/claudia/web/views/head.cljs`,
+    server's state, the sounds (a bell: a chime when a chat finishes or waits), talking mode (a
+    person speaking, decision 21) and Archive. Row 2: the computer it runs on, whose Claude
+    subscription (decision 16), the project; each an icon (a computer, Claude's spark, a folder)
+    before a pill button. Row 3: model and effort, then the context, 5-hour and week rings. Every
+    pick is a pill button; a fixed value (a started chat's computer) has a dashed edge. A new chat
+    picks all of them before its first message, and they go with the `new` frame, so the first
+    turn already runs on them (before, model and effort followed `created`, after the first turn
+    had begun). A new chat also has its colour from the moment it opens (random among the ones
+    the server's other chats wear least, `claudia.shared.colours`), the header wears it, the
+    project popup's palette changes it, and it goes with `new` (decision 25). The project popup starts with where the chat works: the
+    folder's full path and its computer (name, system, kernel and architecture, processor and
+    cores, memory, uptime; `host` in the system sample). Once started, the computer is fixed and
+    every other pick changes the chat. The composer keeps only writing and sending, one row
+    centred: the mic, Attach, the message, Send; the chips of background work sit right above it.
+    Instead of: the computer above the composer and model and effort in its toolbar (settings
+    spread over two places, account and project not settable before the chat existed), a header
+    that folds into a pill once the chat starts (two layouts to learn), or the sounds switch by
+    Claudia's face (two sound switches in two places). Files: `src/claudia/web/views/head.cljs`,
     `src/claudia/web/views/chat.cljs`.
+
+23. GitHub is one login per person, kept by the hub (2026-11-14): the hub keeps each person's
+    GitHub token sealed in its store (under `HUB_TOKEN_KEY_FILE`, as the Claude tokens) and logs
+    gh in on their profile on every server they may use (`PUT /api/github` through the front, as
+    them): at once after a save, and every minute for a server that missed it (off, new, newly
+    allowed). A person with none kept yet keeps the login gh already holds on one of their
+    servers (`GET /api/github/token`, read once), so a login made before is not asked for again.
+    Settings shows the login and a ✓ per server, and replaces it with a new token. The hub
+    refuses both `/api/github` paths from a page. No popup asks for a token any more. Instead of:
+    a token pasted per server in a tab each, and a popup on every page load for a profile
+    without one. Files: `src/claudia/hub/github_login.cljs`, `src/claudia/slave/tokens.cljs`,
+    `src/claudia/web/views/settings.cljs`.
+
+24. Settings start from a small menu at the bottom left (2026-11-14): a gear at the rail's foot
+    (and the list's, when it is open or on a phone) opens the default plan's 5-hour and week use
+    (a click: Settings), Machines (the Systems popup), Archived chats, Forms, the Desktop popups
+    switch, More settings, and the version. Settings itself keeps what needs room: the Claude
+    tokens, GitHub (decision 23), all ~/Work sessions, Servers and Access for admins, each
+    server's chat colours. The right half shows only the picture: the timeline view is gone.
+    The window is one grid: the chalk lines run from the top to the bottom and meet each other,
+    every top starts `--edge-t` down, and the composer's row, the picture's bar and the gear share
+    one bottom line (`--edge-b`, the home bar's room included, and `--foot-h`), so an iPad's
+    bottom inset moves all of them together. Instead of: a gear in the list's header with one
+    long Settings scroll, the Systems computer alone on the rail, and a Picture | Timeline switch.
+    Files: `src/claudia/web/views/menu.cljs`, `src/claudia/web/views/settings.cljs`,
+    `resources/web/css/claudia.css`.
+
+25. Chat colours everywhere, no default look (2026-11-14): every chat has one of the chat
+    colours and the window always wears one: the open chat's, or a new chat's (it has one from
+    the moment it opens, decision 22). The "default look" preference, the palette's "No colour"
+    and the grey fallback are gone; a runner gives each chat without a colour one when it starts
+    (least worn first, `colour-every-chat!`). Ash (passive) stays a colour picked by hand.
+    Instead of: a grey default theme when a chat had no colour, which made the app look like two
+    apps. Files: `src/claudia/shared/colours.cljc`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/web/subs.cljs`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
@@ -288,6 +331,5 @@ npx shadow-cljs release host runner front hub web
 
 ## Back from the TypeScript Claudia (2026-11-03)
 
-- Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; Picture | Timeline (Alt+T); fold (Alt+P); the camera copies or saves the picture as PNG.
-- Timeline: every step of the chat and its subagents from the session files, a rail per agent, quiet stretches, Edit/Write steps with +/− opening their diff (`src/claudia/slave/timeline.cljs`, `src/claudia/web/views/timeline.cljs`).
+- Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
 - Every draw answers Claude with a screenshot of the picture: playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).

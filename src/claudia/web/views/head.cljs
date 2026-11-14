@@ -1,17 +1,20 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel in the chat's colour, three rows, the same
-  for a new chat and a started one. Row 1: the title (a click renames it), the server's state,
-  talking mode and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
+  for a new chat and a started one. Row 1: the title (a click renames it), the server's state, the
+  sounds (a bell), talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
   project (with the chat's colour). Row 3: model and effort, then the context, 5-hour and week
   rings. A new chat picks all of them here before its first message (they go with `new`); once
   it has started the computer is fixed and every other pick changes the chat."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.alerts :as alerts]
+            [claudia.web.api :as api]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
+            [claudia.web.views.pure.systems :as systems-pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.usage :as usage]))
@@ -52,10 +55,20 @@
     (use-closes-away! box open close!)
     [open #(set-open not) close! box]))
 
+(def ^:private field-icons
+  "Row 2's icons in place of words: the computer, Claude's spark (whose Claude plan), the project's folder."
+  {:computer "M3.5 5h17v11h-17zM9 20h6M12 16v4"
+   :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
+   :project "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"})
+
 (defn- field
-  "One labelled pick of row 2."
-  [label & body]
-  (into [:div.head-field [:span.head-lab label]] body))
+  "One pick of row 2, its icon (field-icons, named by k) before it; label names it for screen readers and the tip."
+  [k label & body]
+  (into [:div.head-field {:data-tip label}
+         [:svg.head-ico {:viewBox "0 0 24 24" :role "img" :aria-label label :fill "none" :stroke "currentColor"
+                         :stroke-width 1.7 :stroke-linecap "round" :stroke-linejoin "round"}
+          [:path {:d (field-icons k)}]]]
+        body))
 
 ;; ---- row 1: names, talking mode, archive ----
 
@@ -110,6 +123,7 @@
 (defn- row-1 [{:keys [ck row ro] :as hc}]
   [:div.head-row.r1
    [:f> head-names hc]
+   [alerts/sounds-button]
    [talk/toggle]
    (when (and row (not ro)) (archive-button ck row))])
 
@@ -121,7 +135,7 @@
   (let [servers @(rf/subscribe [:server-list])
         all @(rf/subscribe [:servers])
         label @(rf/subscribe [:server-label server])]
-    (field "on"
+    (field :computer "Computer"
            (if (and new? (not ro) (> (count servers) 1))
              [:label.pick.computer {:title "The computer this chat runs on"}
               [:select {:value (str server) :on-change #(rf/dispatch [:new/server (.. % -target -value)])}
@@ -157,7 +171,7 @@
   [{:keys [plans on put! ro]}]
   (let [[open toggle! close! box] (use-popup)]
     (when (seq plans)
-      (field "account"
+      (field :account "Claude subscription"
              [:div.plan-pick {:ref #(set! (.-current box) %)}
               [:button.head-btn {:disabled ro :on-click toggle! :aria-haspopup "true" :aria-expanded open
                                  :title "Claude subscription of this chat"}
@@ -171,19 +185,46 @@
      [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
                       :style {:background (str "var(--c-" c ")")}
                       :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
-                      :on-click #(pick c)}])
-   [:button.swatch.none {:class (when-not color "on") :title "No colour" :aria-label "No colour"
-                         :on-click #(pick nil)}]])
+                      :on-click #(pick c)}])])
+
+(defn- use-machine
+  "The chat's computer's newest sample (GET /hub/servers/<server>/system, once), nil until it answers."
+  [server]
+  (let [[sample set-sample] (h/use-state nil)]
+    (h/use-effect
+     (fn []
+       (-> (api/fetch-json (str "/hub/servers/" (js/encodeURIComponent server) "/system"))
+           (.then set-sample)
+           (.catch (fn [_] (set-sample {:error true}))))
+       js/undefined)
+     [server])
+    sample))
+
+(defn- where-card
+  "Where the chat works: the folder's full path, then its computer: name, system, kernel, processor,
+  memory and uptime."
+  [{:keys [server folder]}]
+  (let [sample (use-machine server)
+        label @(rf/subscribe [:server-label server])]
+    [:div.where
+     [:div.where-path {:title folder} (if (seq folder) folder "The computer's working folder (no project)")]
+     [:div.where-machine
+      [:b label]
+      (cond (nil? sample) [:span.muted "…"]
+            (:error sample) [:span.muted "not reached"]
+            :else (for [line (systems-pure/machine-lines sample)] ^{:key line} [:span line]))]]))
 
 (defn- project-pop
-  "A started chat: the palette and the projects it can move to. A new chat: the projects to start
-  it in. A pick closes it."
-  [{:keys [new? ck server row settings put!]} close!]
+  "Where the chat works (where-card), the chat's colour (a new one's goes with `new`), and the
+  projects it can move to (a new chat: start in). A pick closes it."
+  [{:keys [new? ck server row settings put!] :as hc} close!]
   (let [act (fn [f] (fn [] (f) (close!)))]
     [:div.proj-pop {:role "menu"}
-     (when-not new?
-       [:<> [:div.plan-title "Colour"]
-        (palette (:color row) (fn [c] (rf/dispatch [:ops/color ck c]) (close!)))])
+     [:f> where-card hc]
+     [:div.plan-title "Colour"]
+     (if new?
+       (palette (:color settings) (fn [c] (put! {:color c}) (close!)))
+       (palette (:color row) (fn [c] (rf/dispatch [:ops/color ck c]) (close!))))
      [:div.plan-title "Project"]
      (if new?
        [:f> chatmenu/project-list {:server server :current (:folder settings) :none? (seq (:folder settings))
@@ -196,7 +237,7 @@
   [{:keys [server row folder ro] :as hc}]
   (let [[open toggle! close! box] (use-popup)
         label (pure/project-label (get-in row [:project :name]) folder)]
-    (field "project"
+    (field :project "Project"
            [:div.proj-pick {:ref #(set! (.-current box) %)}
             [:button.proj-btn {:disabled ro :on-click toggle! :aria-haspopup "true" :aria-expanded open
                                :title (str "Project of this chat" (when (seq folder) (str " · " folder)))}
@@ -265,7 +306,7 @@
   (let [hc (head-context oc ro)]
     (use-tokens!)
     [:header.chat-head
-     [:div.head-panel {:style {"--chat" (words/colour-var (get-in hc [:row :color]))}}
+     [:div.head-panel {:style {"--chat" (words/colour-var (if (:new? hc) (get-in hc [:settings :color]) (get-in hc [:row :color])))}}
       (row-1 hc)
       (row-2 hc)
       [:f> row-3 hc]]]))

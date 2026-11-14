@@ -176,11 +176,24 @@
     (.catch p (fn [_] (swap! state assoc :starting nil)))
     p))
 
+(defn os-name
+  "The system's name from /etc/os-release's text (PRETTY_NAME, else NAME), or nil."
+  [text]
+  (let [field (fn [k] (some->> (re-find (re-pattern (str "(?m)^" k "=\"?([^\"\n]*)\"?$")) (str text)) second not-empty))]
+    (or (field "PRETTY_NAME") (field "NAME"))))
+
+(defonce ^:private host-info
+  ;; What the machine is, read once: its name, system, kernel and architecture.
+  (delay (.then (if (= "darwin" (os/platform))
+                  (js/Promise.resolve (str "macOS " (os/version)))
+                  (.then (text-of "/etc/os-release") #(or (os-name %) "Linux")))
+                (fn [system] {:name (os/hostname) :os system :kernel (os/release) :arch (os/arch)}))))
+
 (defn latest!
-  "Promise of the newest sample, as {sample… :age ms since it was taken}; the first ask after a
-  quiet spell starts the reads and waits for the first window (1 s)."
+  "Promise of the newest sample, as {sample… :age ms since it was taken :host what the machine is};
+  the first ask after a quiet spell starts the reads and waits for the first window (1 s)."
   []
   (swap! state assoc :asked (js/Date.now))
   (let [{:keys [sample starting]} @state]
-    (.then (cond sample (js/Promise.resolve sample) starting starting :else (start!))
-           #(assoc % :age (- (js/Date.now) (:at %))))))
+    (-> (js/Promise.all #js [(cond sample (js/Promise.resolve sample) starting starting :else (start!)) @host-info])
+        (.then (fn [[s host]] (assoc s :age (- (js/Date.now) (:at s)) :host host))))))

@@ -17,6 +17,7 @@
             [claudia.slave.chats.titles :as titles]
             [claudia.slave.chats.turns :as turns]
             [claudia.slave.chats.view :as view]
+            [claudia.shared.colours :as colours]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
@@ -42,8 +43,7 @@
 (def ^:private idle-ms (* 15 60 1000))
 (def ^:private secret-ms (* 10 60 1000))
 
-(def chat-colors ["burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan"
-                  "sky" "blue" "indigo" "violet" "purple" "magenta" "pink" "brown"])
+(def chat-colors colours/chat-colours)
 
 ;; id -> what lives only while the runner runs:
 ;;   :live (the host holds a session) :running :stopping :scene :since (when the running turn began)
@@ -68,12 +68,18 @@
 
 (defn least-used-colour
   "A new chat's colour (src/colors.ts pickColor): random among the ones the other chats in the list
-  (not archived, not this one) wear least; never ash, which is only picked by hand. nil when the
-  profile's preference says new chats keep the default look."
+  (not archived, not this one) wear least; never ash, which is only picked by hand. Every chat has
+  one: there is no default look (README decision 25)."
   ([] (least-used-colour nil))
   ([except]
-   (when (not= "none" (:chatColors (codeforms/prefs)))
-     (rand-nth (view/least-worn chat-colors (store/chats) except)))))
+   (rand-nth (colours/least-worn chat-colors (store/chats) except))))
+
+(defn colour-every-chat!
+  "Gives each chat without a colour one (chats made before decision 25 or with the default look),
+  one at a time, so they spread over the least worn."
+  []
+  (doseq [id (colours/uncoloured (store/chats))]
+    (store/update! id {:color (least-used-colour id)})))
 
 (defn wake!
   "Writing to a passive (ash) chat makes it active again: the colour it had, else a fresh one."
@@ -957,16 +963,22 @@
       (.then #(send-now! id message images %))
       (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)})))))
 
+(defn new-chat-colour
+  "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."
+  [picked]
+  (if (colours/chat-colour? picked) picked (least-used-colour)))
+
 (defn new-chat!
   "Starts a chat with its first message; returns its id (the Claude Code session id). picks: the
-  model, effort and plan chosen before it was made, in place before its first turn starts."
+  model, effort and plan chosen before it was made, in place before its first turn starts, and
+  the colour its header already wore."
   [message folder images picks]
   (let [id (str (random-uuid))
         ;; A new chat stays on the plan in use now unless one was picked: a later switch of that one moves no chat.
-        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) picks (map :key (tokens/saved)))]
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) (dissoc picks :color) (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
-                 :color (least-used-colour)})
+                 :color (new-chat-colour (:color picks))})
     (when (some some? (vals s)) (store/kv! id "settings" s))
     (changed!)
     (send-text! id message images)

@@ -1,5 +1,6 @@
 (ns claudia.slave.chats-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.shared.colours :as colours]
             [claudia.slave.chats.answers :as answers]
             [claudia.slave.chats.session :as session]
             [claudia.slave.chats.titles :as titles]
@@ -34,10 +35,14 @@
 
 ;; The chat list -----------------------------------------------------------------------------------
 
+(deftest chats-without-a-colour
+  (is (= [2 3] (colours/uncoloured [{:id 1 :color "red"} {:id 2 :color nil} {:id 3 :color ""}])))
+  (is (= [] (colours/uncoloured []))))
+
 (deftest least-worn-colours
-  (is (= ["c"] (view/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] nil)))
-  (is (= ["a" "c"] (view/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] 1)) "except itself")
-  (is (= ["a" "b" "c"] (view/least-worn ["a" "b" "c"] [{:id 1 :color "a" :archived true}] nil))))
+  (is (= ["c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] nil)))
+  (is (= ["a" "c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a"} {:id 2 :color "b"}] 1)) "except itself")
+  (is (= ["a" "b" "c"] (colours/least-worn ["a" "b" "c"] [{:id 1 :color "a" :archived true}] nil))))
 
 (deftest row-of-a-chat
   (let [r {:id "c" :title "T" :ended 100 :seen 50 :preview "p" :last-turn "u1" :reply "ok"}]

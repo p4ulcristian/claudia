@@ -1,8 +1,8 @@
 /* Agents, changes and meters (claudia.web.views.agents, .changes, .usage, .diff): ported from the
    TypeScript Claudia's look, in chalk. */
 
-/* The chips under the chat's title: a grid of the running ones, then +N more and ✓ N ✕ M. */
-.ag-row { display: grid; gap: 6px; padding: 0 16px 8px; min-width: 0; }
+/* The chips right above the composer: a grid of the running ones, then +N more and ✓ N ✕ M. */
+.ag-row { display: grid; gap: 6px; padding: 8px 16px 0; min-width: 0; }
 .ag-chips { display: grid; gap: 6px; min-width: 0; }
 .ag-sum { display: flex; gap: 6px; flex-wrap: wrap; }
 .ag-pill { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 11.5px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums;

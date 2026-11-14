@@ -1,5 +1,5 @@
 (ns claudia.web.chatops-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is]]
             [claudia.web.chatops :as ops]))
 
 (deftest api-url-adds-the-view
@@ -35,14 +35,6 @@
 (deftest search-path-for-archived-chats
   (is (= "search?q=a%20b&archived=all" (ops/search-path "a b" false)))
   (is (= "search?q=a&archived=1" (ops/search-path "a" true))))
-
-(deftest github-prompt-once
-  (is (= {:github {"s" "me"}} (ops/github-known {} "s" "p" "me" false)))
-  (is (= {:github {"s" false} :github-prompt {:server "s" :profile "p"}} (ops/github-known {} "s" "p" nil false)))
-  (is (= {:github {"s" false}} (ops/github-known {} "s" "p" nil true)))
-  (testing "one prompt at a time"
-    (is (= {:server "t" :profile "q"}
-           (:github-prompt (ops/github-known {:github-prompt {:server "t" :profile "q"}} "s" "p" nil false))))))
 
 (deftest uploads
   (is (= {:new-upload-id "u"} (ops/with-upload-id {} :new "u")))

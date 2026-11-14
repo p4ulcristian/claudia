@@ -1,7 +1,6 @@
 (ns claudia.web.views.rightbar
-  "The right half's bars, always shown: Picture | Timeline at the top right; under the picture a
-  scrubber over every picture of the chat with ‹ ›, Back to live while an earlier picture is shown,
-  and the snapshot camera. The fold has no button: Alt+P (its edge unfolds it)."
+  "The right half's bar, always shown under the picture: a scrubber over every picture of the chat
+  with ‹ ›, Back to live while an earlier picture is shown, and the snapshot camera. The fold has no button: Alt+P (its edge unfolds it)."
   (:require [re-frame.core :as rf]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.shell :as pure]
@@ -10,17 +9,6 @@
 (defn- clock [t]
   (when (and t (pos? t))
     (.toLocaleTimeString (js/Date. t) #js [] #js {:hour "2-digit" :minute "2-digit" :hour12 false})))
-
-(defn- view-switch [view picture-behind?]
-  [:div.view-switch {:role "tablist"}
-   [:button {:role "tab" :aria-selected (= view :picture) :class (when (= view :picture) "on")
-             :title (if picture-behind? "New picture · show (Alt+T)" "Claude's picture (Alt+T)")
-             :on-click #(rf/dispatch [:right/view :picture])}
-    "Picture" (when picture-behind? [:span.fold-dot])]
-   [:button {:role "tab" :aria-selected (= view :timeline) :class (when (= view :timeline) "on")
-             :title "Every step of the chat and its agents (Alt+T)"
-             :on-click #(rf/dispatch [:right/view :timeline])}
-    "Timeline"]])
 
 (defn- use-tip-place!
   "The hover label sits over its mark (at, in percent of the track) but never leaves the right half."
@@ -89,13 +77,6 @@
      (when viewing?
        [:button.rbar-chip.past {:on-click #(rf/dispatch [:picture/live]) :title "Back to the live picture"}
         [:span.rbar-chip-dot] [:span.rbar-chip-text (if loading? "Loading…" "Back to live")]])]))
-
-(defn top
-  "The row over the right half: Picture | Timeline at its right."
-  []
-  (let [view @(rf/subscribe [:right-view])
-        {:keys [picture-behind?]} @(rf/subscribe [:fold-state])]
-    [:div.rtop [view-switch view picture-behind?]]))
 
 (defn bar
   "The bar under the picture; extra: more buttons at its end (the snapshot camera)."

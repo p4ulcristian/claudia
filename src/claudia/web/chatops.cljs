@@ -64,9 +64,7 @@
  (fn [{:keys [db]} [_ server me]]
    (let [db (assoc-in db [:server-me server] (or me {:failed true}))]
      (cond-> {:db db}
-       (view-due? db) (merge (connect-view db))
-       (and me (not (:view db)) (:profile me))
-       (assoc :api/call {:url (api-url server "github") :on-ok [:ops/github server (:profile me)]})))))
+       (view-due? db) (merge (connect-view db))))))
 
 (rf/reg-event-fx
  :ops/view
@@ -251,7 +249,7 @@
 (defn logo-url [view server folder]
   (api-url server (str "project/logo?folder=" (js/encodeURIComponent folder)) view))
 
-;; ---- Settings: Claude tokens (kept by the hub), GitHub ----
+;; ---- Settings: Claude tokens and GitHub logins (kept by the hub) ----
 
 (rf/reg-event-fx
  :ops/load-settings
@@ -259,7 +257,7 @@
    (when (and server (not (read-only? db)))
      {:db (assoc db :settings-server server)
       :fx [[:dispatch [:ops/load-tokens]]
-           [:api/call {:url (api-url server "github") :on-ok [:ops/github-user server]}]]})))
+           [:dispatch [:ops/load-github]]]})))
 
 ;; The hub's Claude tokens (claudia.hub.tokens): the one in use on every server, the saved names,
 ;; what each of the person's servers runs on now.
@@ -270,29 +268,19 @@
      {:fx [[:api/call {:url "/hub/claude-tokens" :on-ok [:ops/tokens]}]]})))
 
 (rf/reg-event-db :ops/tokens (fn [db [_ t]] (assoc db :tokens t)))
-(rf/reg-event-db :ops/github-user (fn [db [_ s {:keys [user]}]] (assoc-in db [:github s] (or user false))))
 (rf/reg-sub :tokens (fn [db] (:tokens db)))
-(rf/reg-sub :github (fn [db [_ s]] (get-in db [:github s])))
 (rf/reg-sub :settings-server (fn [db] (or (:settings-server db) (first (events/server-names db)))))
 
-(defn github-later-key [server profile] (str "claudia.github-later." server "." profile))
+;; The person's GitHub login, kept by the hub (claudia.hub.github-login): the login and what each of
+;; their servers' gh is logged in as.
+(rf/reg-event-fx
+ :ops/load-github
+ (fn [{:keys [db]} _]
+   (when-not (read-only? db)
+     {:fx [[:api/call {:url "/hub/github-login" :on-ok [:ops/github-login]}]]})))
 
-(defn github-known
-  "server's GitHub login (user) noted. A profile without one is asked once per browser and server
-  (later?: \"Later\" was clicked here, which hides it), one prompt at a time."
-  [db server profile user later?]
-  (cond-> (assoc-in db [:github server] (or user false))
-    (and (not user) (not later?) (not (:github-prompt db)))
-    (assoc :github-prompt {:server server :profile profile})))
-
-(rf/reg-event-db
- :ops/github
- (fn [db [_ server profile {:keys [user]}]]
-   (github-known db server profile user
-                 (boolean (and (not user) (js/localStorage.getItem (github-later-key server profile)))))))
-
-(rf/reg-event-db :ops/github-prompt (fn [db [_ v]] (assoc db :github-prompt v)))
-(rf/reg-sub :github-prompt (fn [db] (:github-prompt db)))
+(rf/reg-event-db :ops/github-login (fn [db [_ g]] (assoc db :github-login g)))
+(rf/reg-sub :github-login (fn [db] (:github-login db)))
 
 (rf/reg-fx
  :ops/put

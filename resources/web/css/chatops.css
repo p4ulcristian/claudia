@@ -7,7 +7,7 @@
    moves 30% to the left under it, as iOS does). */
 .sidebar-slot > .sidebar.cs-side { position: relative; overflow: hidden; padding: 0; gap: 0; }
 .cs-pane { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
-  padding: calc(12px + var(--top-safe)) 10px calc(8px + env(safe-area-inset-bottom)); transition: transform 0.32s var(--screen-ease); }
+  padding: calc(var(--edge-t) + var(--top-safe)) 10px var(--edge-b); transition: transform 0.32s var(--screen-ease); }
 .st-pane { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; min-height: 0; background: var(--bg2); padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.3);
   transform: translateX(100%); visibility: hidden; transition: transform 0.32s var(--screen-ease), visibility 0s 0.32s; }
 .app.settings-shown .st-pane { transform: none; visibility: visible; transition: transform 0.32s var(--screen-ease), visibility 0s; }

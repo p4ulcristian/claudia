@@ -9,13 +9,6 @@
   [row]
   (boolean (and row (not (:archived row)) (not= "ash" (:color row)))))
 
-(defn least-worn
-  "The colours the other chats in the list (not archived, not except) wear least."
-  [colours chats except]
-  (let [used (frequencies (keep #(when (and (not (:archived %)) (not= except (:id %))) (:color %)) chats))
-        least (apply min (map #(get used % 0) colours))]
-    (filter #(= least (get used % 0)) colours)))
-
 (defn- ask-preview
   "The open asks as the chat list's preview: a question's text, else a secret's or permit's line."
   [asks]

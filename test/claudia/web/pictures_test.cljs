@@ -6,15 +6,14 @@
 (def ^:private always (constantly true))
 
 (deftest key-event-for-the-shortcuts
-  (is (= [:right/view nil] (pictures/key-event {:alt true :code "KeyT"} never never)))
-  (is (= [:right/fold] (pictures/key-event {:alt true :code "KeyP"} never never)))
-  (is (nil? (pictures/key-event {:alt true :ctrl true :code "KeyT"} never never)))
-  (testing "arrows step only on the picture, not while typing"
-    (is (= [:picture/step -1] (pictures/key-event {:k "ArrowLeft"} never always)))
-    (is (= [:picture/step 1] (pictures/key-event {:k "ArrowRight"} never always)))
-    (is (nil? (pictures/key-event {:k "ArrowRight"} always always)))
-    (is (nil? (pictures/key-event {:k "ArrowRight"} never never)))
-    (is (nil? (pictures/key-event {:k "ArrowRight" :shift true} never always)))))
+  (is (nil? (pictures/key-event {:alt true :code "KeyT"} never)))
+  (is (= [:right/fold] (pictures/key-event {:alt true :code "KeyP"} never)))
+  (is (nil? (pictures/key-event {:alt true :ctrl true :code "KeyP"} never)))
+  (testing "arrows step through the pictures, not while typing"
+    (is (= [:picture/step -1] (pictures/key-event {:k "ArrowLeft"} never)))
+    (is (= [:picture/step 1] (pictures/key-event {:k "ArrowRight"} never)))
+    (is (nil? (pictures/key-event {:k "ArrowRight"} always)))
+    (is (nil? (pictures/key-event {:k "ArrowRight" :shift true} never)))))
 
 (deftest drew-nothing-when-asked-after-the-last-picture
   (let [pics [{:turn 1 :at 10}]]

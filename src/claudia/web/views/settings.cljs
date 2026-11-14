@@ -1,18 +1,16 @@
 (ns claudia.web.views.settings
-  "The list's title menu (whose chats, which servers), the Settings screen behind the gear (archived
-  chats, all ~/Work sessions, sounds and desktop popups, the instance chip, the plan, the hub's Claude tokens, each server's GitHub
-  login) and the GitHub prompt for a profile without a login."
+  "The list's title menu (whose chats, which servers) and the Settings screen, opened from the
+  settings menu (claudia.web.views.menu: its plan card and More settings): the instance chip, the
+  hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), all ~/Work
+  sessions, Servers and Access for admins, and each server's version and profile."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
-            [claudia.web.alerts :as alerts]
-            [claudia.web.chatops :as ops]
             [claudia.web.logo :as logo]
             [claudia.web.views.pure.settings :as pure]
-            [claudia.web.views.pure.words :as words]
-            [claudia.web.views.usage :as usage]))
+            [claudia.web.views.pure.words :as words]))
 
 ;; ---- the title menu ----
 
@@ -89,13 +87,6 @@
   [:span.cs-ro {:title "Read only" :aria-label "read only"}
    [:svg {:viewBox "0 0 16 16" :aria-hidden true} [:rect {:x 3.5 :y 7 :width 9 :height 6.5 :rx 1.5}] [:path {:d "M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"}]]])
 
-(defn gear-button []
-  [:button.cs-icon.cs-gear {:aria-label "Settings" :data-tip "Settings" :on-click #(rf/dispatch [:ops/settings true])}
-   [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-    [:circle {:cx 10 :cy 10 :r 2.6}]
-    [:path {:d "M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"}]
-    [:circle {:cx 10 :cy 10 :r 5.4}]]])
-
 ;; ---- token forms ----
 
 (defn- submit-token
@@ -127,60 +118,44 @@
 
 (def github-token-url "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Claudia")
 
-(defn- chat-colours
-  "Whether every new chat gets a colour of its own on this server (the profile's chatColors pref)."
-  [server]
-  (let [[prefs set-prefs] (h/use-state nil)
-        u (ops/api-url server "prefs")
-        save! (fn [v] (-> (js/fetch u #js {:method "PATCH" :headers #js {"content-type" "application/json"}
-                                           :body (js/JSON.stringify #js {:chatColors v})})
-                          (.then #(when (.-ok %) (.json %)))
-                          (.then #(when % (set-prefs (js->clj % :keywordize-keys true))))))]
-    (h/use-effect
-     (fn []
-       (-> (js/fetch u) (.then #(when (.-ok %) (.json %)))
-           (.then #(when % (set-prefs (js->clj % :keywordize-keys true)))))
-       nil)
-     [u])
-    [:section.st-section
-     [:h3 "Chat colours"]
-     [:div.choice
-      [:label [:input {:type "radio" :name (str "chatColors-" server) :checked (= "each" (:chatColors prefs))
-                       :on-change #(save! "each")}]
-       "A colour of its own for every new chat"]
-      [:label [:input {:type "radio" :name (str "chatColors-" server) :checked (= "none" (:chatColors prefs))
-                       :on-change #(save! "none")}]
-       "Default look; colour a chat by hand from its header dot"]]]))
+(defn- github-servers
+  "Each of the person's servers: logged in as the kept login, as another, or not reached."
+  [{:keys [login servers]}]
+  (when (seq servers)
+    [:p.small.token-servers
+     (for [{server-name :name :keys [label ok] :as s} servers]
+       ^{:key server-name}
+       [:span {:class (cond (not ok) "off" (= login (:login s)) "on" :else "other")
+               :title (cond (not ok) (str label ": " (or (:error s) "not reached"))
+                            :else (str label ": gh logged in as @" (:login s)))}
+        label " " (cond (not ok) "off" (= login (:login s)) "✓" :else "…")])]))
 
-(defn- put-fn
-  "A write to server's API now: on-ok gets the answer, done the error (nil when it went)."
-  [server]
-  (fn [method p body on-ok done]
-    (rf/dispatch [:ops/put-now {:url (ops/api-url server p) :method method :body body
-                                :on-done (fn [ok err] (when ok (on-ok ok)) (when done (done err)))}])))
+(defn- save-github! [token _ done]
+  (rf/dispatch [:ops/put-now {:url "/hub/github-login" :method "PUT" :body {:token token}
+                              :on-done (fn [ok err] (when ok (rf/dispatch [:ops/github-login ok])) (done err))}]))
 
-(defn- github-section [server put!]
-  (let [github @(rf/subscribe [:github server])]
+(defn- github-section
+  "The person's GitHub login, kept by the hub and handed to their profile on every server
+  (README decision 23)."
+  []
+  (let [{:keys [on login] :as g} @(rf/subscribe [:github-login])]
     [:section.st-section
-     [:h3 "GitHub " [:span.muted.small "yours only"]]
-     [:p.small
-      (cond (nil? github) "Checking…"
-            github [:<> "Pushes and pull requests come from " [:b (str "@" (:login github))] "."]
-            :else "Not connected: Claude can't push or open pull requests for you.")
-      " " [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
-      " (the boxes come ticked) and paste it here."]
-     [token-form {:placeholder (if github "Replace with a new token" "GitHub token (ghp_…)")
-                  :save (fn [token _ done]
-                          (put! "PUT" "github" {:token token}
-                                (fn [ok] (rf/dispatch [:ops/github-user server ok])) done))}]]))
+     [:h3 "GitHub " [:span.muted.small "yours, on every server"]]
+     (cond
+       (nil? g) [:p.small "Checking…"]
+       (not on) [:p.small "This hub keeps no tokens (no key set)."]
+       :else [:<>
+              [:p.small (if login
+                          [:<> "Pushes and pull requests come from " [:b (str "@" login)] "."]
+                          "Not connected: Claude can't push or open pull requests for you.")
+               " " [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
+               " (the boxes come ticked) and paste it here."]
+              [github-servers g]
+              [token-form {:placeholder (if login "Replace with a new token" "GitHub token (ghp_…)") :save save-github!}]])]))
 
 (defn- server-settings [server]
-  (let [me @(rf/subscribe [:server-me server])
-        put! (put-fn server)]
-    [:<>
-     [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]
-     (when-not (:readOnly me) [:f> chat-colours server])
-     (github-section server put!)]))
+  (let [me @(rf/subscribe [:server-me server])]
+    [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]))
 
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
 
@@ -268,14 +243,6 @@
         (when token [:span.instance-token token])
         [:span.instance-version (or (:commit me) (str "v" (:version me)))]])]))
 
-(def ^:private chev [:svg.st-chev {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M7.5 4l6 6-6 6"}]])
-
-(defn- archive-icon []
-  [:svg {:width 16 :height 16 :viewBox "0 0 16 16" :fill "none" :stroke "currentColor" :stroke-width 1.5
-         :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
-   [:rect {:x 1.5 :y 2.5 :width 13 :height 3.5 :rx 0.8}]
-   [:path {:d "M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6"}]
-   [:path {:d "M6.3 9h3.4"}]])
 
 (defn- server-pick
   "Which server's settings (a tab each, with two or more), and its name, version and commit."
@@ -323,19 +290,7 @@
 
 (defn- chats-group [all-sessions?]
   [:section.st-group {:aria-label "Chats"}
-   [:button.st-row {:on-click #(rf/dispatch [:ops/archived true])}
-    [archive-icon]
-    [:span.st-label "Archived chats"]
-    chev]
    [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]])
-
-(defn- drawing-group []
-  [:section.st-group {:aria-label "Drawing"}
-   [:button.st-row {:on-click #(rf/dispatch [:gallery/open true])}
-    [:svg.st-icon {:viewBox "0 0 20 20" :aria-hidden true}
-     [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]
-    [:span.st-label "Forms " [:span.st-note "everything Claude can draw, and your templates"]]
-    chev]])
 
 (defn- hub-group []
   [:section.st-group {:aria-label "Hub"}
@@ -357,12 +312,9 @@
       [:h2 "Settings"]]
      [:div.st-scroll
       [brand server]
-      [:f> usage/plan-meters server]
       (when-not ro [claude-subscription])
+      (when-not ro [github-section])
       (chats-group all-sessions?)
-      [:section.st-group {:aria-label "Alerts"}
-       [alerts/toggles]]
-      (drawing-group)
       (when (:admin @(rf/subscribe [:me])) (hub-group))
       (when (and (not ro) @(rf/subscribe [:server-me server]))
         [:div.st-server
@@ -375,53 +327,3 @@
   (let [server @(rf/subscribe [:settings-server])]
     (r/with-let [_ (rf/dispatch [:ops/load-settings server])]
       [:f> settings-view shown?])))
-
-;; ---- the GitHub prompt ----
-
-(defn- github-done [login close]
-  [:<>
-   [:p "Done: Claude now pushes and opens pull requests as " [:b (str "@" login)] "."]
-   [:div.prompt-actions [:button.primary {:on-click close} "Start"]]])
-
-(defn- submit-github
-  "The prompt's submit: the token to the server; done holds the login once it went."
-  [server {:keys [value busy error done]}]
-  (fn [e]
-    (.preventDefault e)
-    (reset! busy true)
-    (rf/dispatch [:ops/put-now {:url (ops/api-url server "github") :method "PUT" :body {:token @value}
-                                :on-done (fn [ok err]
-                                           (reset! busy false)
-                                           (reset! error err)
-                                           (when ok
-                                             (rf/dispatch [:ops/github-user server ok])
-                                             (reset! done (get-in ok [:user :login]))))}])))
-
-(defn- github-ask [server profile {:keys [value busy error] :as form} close]
-  [:<>
-   [:p "So Claude can push your branches and open pull requests as you, it needs a GitHub token of yours. It stays in your profile only."]
-   [:ol.prompt-steps
-    [:li [:a {:href github-token-url :target "_blank" :rel "noreferrer"} "Create a token on GitHub"]
-     ": the boxes are already ticked; pick an expiry, then " [:b "Generate token"] "."]
-    [:li "Copy it and paste it here."]]
-   [:form.token-form
-    {:on-submit (submit-github server form)}
-    [:input {:type "password" :auto-complete "off" :spell-check false :placeholder "ghp_…" :auto-focus true
-             :value @value :on-change #(reset! value (.. % -target -value))}]
-    [:button {:disabled (or @busy (str/blank? @value))} (if @busy "Saving…" "Save")]
-    (when @error [:p.token-error @error])]
-   [:div.prompt-actions
-    [:button {:on-click #(do (js/localStorage.setItem (ops/github-later-key server profile) "1") (close))} "Later"]
-    [:span.muted.small "You can add it any time in Settings."]]])
-
-(defn github-prompt []
-  (let [form {:value (r/atom "") :busy (r/atom false) :error (r/atom nil) :done (r/atom nil)}]
-    (fn []
-      (when-let [{:keys [server profile]} @(rf/subscribe [:github-prompt])]
-        (let [close #(rf/dispatch [:ops/github-prompt nil])]
-          [:div.settings-backdrop
-           [:div.settings.github-prompt {:role "dialog" :aria-label "Connect GitHub"}
-            [:header [:h2 "Connect GitHub"]]
-            (if @(:done form)
-              (github-done @(:done form) close)
-              (github-ask server profile form close))]])))))

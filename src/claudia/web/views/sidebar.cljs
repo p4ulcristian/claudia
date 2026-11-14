@@ -15,6 +15,7 @@
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.sidebar :as pure]
             [claudia.web.views.pure.words :as words]
+            [claudia.web.views.menu :as menu]
             [claudia.web.views.settings :as settings]
             [claudia.web.views.logotools :as logotools]))
 
@@ -167,7 +168,6 @@
    [:header.cs-head
     [settings/title-menu]
     [logotools/tools]
-    [settings/gear-button]
     (when (and (not ro) (not phone?))
       [:button.cs-icon.cs-add {:aria-label "New chat" :data-tip "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])}
        [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])]
@@ -286,6 +286,8 @@
       [off-notes]
       [list-body m found every-row text]
       (when-not found [sessions-list (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))])]
+     ;; The settings gear at the bottom left, where the rail has it.
+     [:div.cs-foot [:f> menu/button]]
      (when (and (not ro) phone?)
        [:button.cs-fab {:aria-label "New chat" :on-click #(rf/dispatch [:nav/new])}
         [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M12 5v14M5 12h14"}]]])]))

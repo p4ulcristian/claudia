@@ -58,13 +58,6 @@
  (fn [db _] (update db :viewing dissoc (:open db))))
 
 (rf/reg-event-fx
- :right/view
- ;; v: :picture, :timeline, or nil to switch.
- (fn [{:keys [db]} [_ v]]
-   (let [v (or v (if (= :timeline (:right-view db)) :picture :timeline))]
-     {:db (assoc db :right-view v :view-at (js/Date.now)) :store ["claudia.right" (name v)]})))
-
-(rf/reg-event-fx
  :right/fold
  ;; Desktop: fold or unfold the right half (not while Claude asks). Phone: back to the chat.
  (fn [{:keys [db]} _]
@@ -78,7 +71,6 @@
 
 ;; ---- subscriptions ----
 
-(rf/reg-sub :right-view (fn [db] (:right-view db)))
 
 (defn drew-nothing?
   "The chat's last turn ended without drawing: its last user message is newer than the newest picture."
@@ -114,10 +106,9 @@
          folded-at (:folded-at db)]
      {;; A question unfolds the right half while it is open.
       :folded? (and (pos? folded-at) (not asks))
-      :unseen? (> newest folded-at)
-      :picture-behind? (and (= :timeline (:right-view db)) (> newest (:view-at db)))})))
+      :unseen? (> newest folded-at)})))
 
-;; ---- keys: ← → step through the pictures, Alt+T switches the view, Alt+P folds ----
+;; ---- keys: ← → step through the pictures, Alt+P folds ----
 
 (defn- typing? []
   (let [el js/document.activeElement
@@ -126,24 +117,21 @@
         (some-> el .-isContentEditable))))
 
 (defn key-event
-  "The event a key press (as plain data) dispatches, or nil. typing? and picture? are asked only for
-  the arrows (a field has the focus; the picture is the right half's view)."
-  [{:keys [alt ctrl cmd shift code k]} typing-now? picture-now?]
+  "The event a key press (as plain data) dispatches, or nil. typing? is asked only for the arrows
+  (a field has the focus)."
+  [{:keys [alt ctrl cmd shift code k]} typing-now?]
   (let [alt-only? (and alt (not ctrl) (not cmd))]
     (cond
-      (and alt-only? (= "KeyT" code)) [:right/view nil]
       (and alt-only? (= "KeyP" code)) [:right/fold]
       (and (#{"ArrowLeft" "ArrowRight"} k)
            (not (or alt ctrl cmd shift))
-           (not (typing-now?))
-           (picture-now?))
+           (not (typing-now?)))
       [:picture/step (if (= "ArrowLeft" k) -1 1)])))
 
 (defn- on-key [^js e]
   (when-let [ev (key-event {:alt (.-altKey e) :ctrl (.-ctrlKey e) :cmd (.-metaKey e) :shift (.-shiftKey e)
                             :code (.-code e) :k (.-key e)}
-                           typing?
-                           #(= :picture @(rf/subscribe [:right-view])))]
+                           typing?)]
     (.preventDefault e)
     (rf/dispatch ev)))
 

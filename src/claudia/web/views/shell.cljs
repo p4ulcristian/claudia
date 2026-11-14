@@ -15,7 +15,6 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
-            [claudia.web.views.settings :as settings]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
@@ -104,14 +103,13 @@
    [picture/picture-pane]])
 
 (defn- layers
-  "Over the page: the list's backdrop, the menus, the GitHub prompt, the drop zone."
-  [{:keys [shown? phone? settings-shown? draft-key ro]}]
+  "Over the page: the list's backdrop, the menus, the drop zone."
+  [{:keys [shown? phone? draft-key ro]}]
   [:<>
    (when (and shown? (not phone?))
      [:div.backdrop {:on-click #(rf/dispatch [:sidebar/toggle false])}])
    [chatmenu/chat-menu]
    [chatmenu/context-menu]
-   (when-not settings-shown? [settings/github-prompt])
    [:f> attach/drop-zone draft-key (not ro)]])
 
 (defn- chats-view

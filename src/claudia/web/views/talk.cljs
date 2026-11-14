@@ -15,15 +15,17 @@
     (h/use-effect (fn [] (.then (voice/available?) set-ok) nil) [])
     ok))
 
-(def ^:private speaker-path "M4 9h3l5-4v14l-5-4H4z")
+(def ^:private head-path
+  "A person speaking, seen from the side: the head and shoulders."
+  "M8 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6")
 
 (defn- speaker [on?]
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
          :stroke-linecap "round" :stroke-linejoin "round"}
-   [:path {:d speaker-path}]
+   [:path {:d head-path}]
    (if on?
-     [:path {:d "M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"}]
-     [:path {:d "M16 10l4 4M20 10l-4 4"}])])
+     [:path {:d "M15.5 6a4.5 4.5 0 0 1 0 5.5M18.5 3.5a8 8 0 0 1 0 10.5"}]
+     [:path {:d "M16 6l5 5M21 6l-5 5"}])])
 
 (defn- toggle-view []
   (let [on? @(rf/subscribe [:talk?])]

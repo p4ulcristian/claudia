@@ -1,12 +1,10 @@
 (ns claudia.web.views.pure.words
   "Small words the views share: a capital first letter, a server's initial, the chat colours, a long
   path clipped to its end. Plain data only, so the tests run them on Node."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.shared.colours :as colours]))
 
-(def chat-colours
-  "The colours a chat can have (passive ash aside)."
-  ["burgundy" "red" "orange" "amber" "yellow" "lime" "green" "teal" "cyan"
-   "sky" "blue" "indigo" "violet" "purple" "magenta" "pink" "brown"])
+(def chat-colours "The colours a chat can have (passive ash aside)." colours/chat-colours)
 
 (def colours-with-ash
   "The chat colours and passive ash, last."

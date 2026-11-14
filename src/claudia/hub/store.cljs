@@ -99,6 +99,15 @@
      key TEXT PRIMARY KEY REFERENCES claude_tokens (key) ON DELETE CASCADE,
      limits TEXT NOT NULL,
      heard_at INTEGER NOT NULL
+   );
+   -- A person's GitHub token (claudia.hub.github-login): sealed with the key in HUB_TOKEN_KEY_FILE,
+   -- the login it belongs to, where it came from (the page, or a server whose gh held it) and when.
+   CREATE TABLE IF NOT EXISTS github_logins (
+     email TEXT PRIMARY KEY,
+     login TEXT NOT NULL,
+     sealed TEXT NOT NULL,
+     came_from TEXT NOT NULL,
+     saved_at INTEGER NOT NULL
    );")
 
 (defn open!
@@ -348,3 +357,19 @@
   (exec! "INSERT INTO claude_token_use (id, key, used_by, used_at) VALUES (1, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET key = excluded.key, used_by = excluded.used_by, used_at = excluded.used_at"
         token-key by (now)))
+
+;; GitHub logins ----------------------------------------------------------------------------------
+
+(defn github-login
+  "A person's GitHub login without the sealed token: {:login :came-from :saved-at}, or nil."
+  [email]
+  (when-let [r (one "SELECT login, came_from, saved_at FROM github_logins WHERE email = ?" email)]
+    {:login (:login r) :came-from (:came_from r) :saved-at (:saved_at r)}))
+
+(defn github-login-sealed [email] (:sealed (one "SELECT sealed FROM github_logins WHERE email = ?" email)))
+
+(defn save-github-login! [email login sealed came-from]
+  (exec! "INSERT INTO github_logins (email, login, sealed, came_from, saved_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (email) DO UPDATE SET login = excluded.login, sealed = excluded.sealed,
+           came_from = excluded.came_from, saved_at = excluded.saved_at"
+         email login sealed came-from (now)))
