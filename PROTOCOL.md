@@ -36,6 +36,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
 | hub | `HUB_APNS_KEY_FILE`, `HUB_APNS_KEY_ID`, `HUB_APNS_TEAM_ID` | the APNs key (.p8) and its ids; `HUB_APNS_DRY_RUN=1` logs pushes instead |
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
+| hub | `HUB_RELEASES`, `HUB_PUBLIC_URL` | where the release builder's files are kept (default `<data>/releases`); the hub's https address, so pokes tell servers where to fetch them (`<url>/hub/releases/files`; unset: pokes name none) |
 | front | `CLAUDIA_UPDATE_TRIGGER` | file `POST /api/update-check` writes (a path unit starts `deploy/update.sh`) |
 | hub | `HUB_WEB` | folder of the built page (`out/web`) |
 | hub | `HUB_TOKEN_KEY_FILE` | base64 of the 32-byte key the saved Claude tokens are sealed with (never in `hub.db`); unset: the hub keeps no tokens and leaves the servers' token files alone |
@@ -131,9 +132,14 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/people/:email` `{ name?, admin? }` | admin | changes a person |
 | `DELETE /hub/admin/people/:email` | admin | removes them and their ticks |
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
+| `POST /hub/admin/builder` `{ key }` | admin | makes the machine whose `deploy/release-builder/install.sh` printed `claudia-builder:<host>:<secret>` the release builder (the one before stops counting); answers like `GET /hub/admin` (its `builder`: `{ host, pairedAt, seenAt }` or null); 400 not a builder key |
 | `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
 | `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
-| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front with `{ main: commit }` and adds `update <commit> <tree>` to `HUB_UPDATE_REQUEST`; a successful `stage.yml` run (title `stage <tree>`) pokes every front with `{ stage: tree }` and adds `stage <tree>`; anything else ignored (202). 401 bad signature, 503 no secret |
+| `GET /hub/releases/wanted` | the release builder (`Authorization: Bearer <secret>`) | 200 `{ builds: [{ key: "main" \| "pr-<n>", commit, kind: "main" \| "pr", at }] }`, newest first; held up to 25 s while empty. 401 not the builder |
+| `PUT /hub/releases/files/<file>` | the release builder | the file's bytes (up to 400 MB) into `HUB_RELEASES` (default `<data>/releases`): 200 `{ ok, size }`. `<file>`: `claudia-code-<tree>.tar.gz`, `claudia-deps-<lockfile hash>.tar.gz`, `claudia-deps-<lockfile hash>-darwin-arm64.tar.gz`, or one of them + `.sig` (ssh-keygen -Y, namespace `claudia-release`) |
+| `GET`/`HEAD /hub/releases/files/<file>` | no login | the file (immutable), 404 when not here |
+| `POST /hub/releases/ready` `{ commit, tree, deps }` | the release builder | 200 once the tree's code and both platforms' node_modules are here with their signatures: the commit leaves the queue, every front is poked with `{ stage: tree, releases }` and the gate gets `stage <tree>`; 409 names what is missing |
+| `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front with `{ main: commit }`, adds `update <commit> <tree>` to `HUB_UPDATE_REQUEST` and asks the release builder for it; a pull request from this repository opened, pushed to or reopened asks the builder for its head (closed: dropped); a successful `stage.yml` run (title `stage <tree>`) pokes every front with `{ stage: tree }` and adds `stage <tree>`; anything else ignored (202). 401 bad signature, 503 no secret |
 | `POST /hub/push/devices` `{ token (hex), env: development\|production, topic (bundle id), key (base64 of 32 bytes), liveStartToken? }` | person | `{ ok, push }` |
 | `DELETE /hub/push/devices/:token` | person | their own phone only |
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
@@ -170,7 +176,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | Call | Answer |
 |---|---|
 | `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
-| `POST /api/update-check` `{ main?, stage? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`main <commit>`, `stage <tree>`, else `check <time>`), 202; 501 when unset |
+| `POST /api/update-check` `{ main?, stage?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`main <commit>`, `stage <tree>`, else `check <time>`), after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
 | `GET /api/claude-token/current` | the front, the hub only: `{ key, name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
 | `GET /api/claude-token/saved` | the front, the hub only: `{ tokens: [{ key, name, at }] }`, the saved tokens kept here, never a token |
 | `PUT /api/claude-token/saved` `{ tokens: [{ key, name, at, token }] }` | the front, the hub only: the whole set, written over the one kept here (a token no longer in it is deleted); answers like GET; 400 when one is not a key (`[a-z0-9-]{1,24}`), a name, a time and a Claude token |

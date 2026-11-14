@@ -1,0 +1,35 @@
+# The Claudia release builder (user claudia-release-builder, README decision 29;
+# deploy/release-builder) may reach the internet and servers its own jobs start on loopback,
+# nothing else on this machine or its networks: not loopback services (nREPL, Postgres, EOR,
+# Claudia, anything else of the machine's), not the LAN, WireGuard or Tailscale. What it builds is installed
+# on every Claudia machine, so it must not be able to reach them.
+# Loaded by the builder unit itself (ExecStartPre, as root) once its own cgroup exists: an empty
+# slice has no cgroup, so a fence loaded earlier could not name it. Every (re)start reloads it.
+table inet claudia_release_builder_guard
+delete table inet claudia_release_builder_guard
+table inet claudia_release_builder_guard {
+	set private4 {
+		type ipv4_addr; flags interval
+		elements = { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16 }
+	}
+	set private6 {
+		type ipv6_addr; flags interval
+		elements = { fc00::/7, fe80::/10 }
+	}
+	chain output {
+		type filter hook output priority -20; policy accept;
+		meta skuid "claudia-release-builder" oifname "lo" meta mark set 0x63726201 accept
+		meta skuid "claudia-release-builder" ip daddr @private4 counter drop
+		meta skuid "claudia-release-builder" ip6 daddr @private6 counter drop
+	}
+	chain input {
+		type filter hook input priority -20; policy accept;
+		iifname "lo" meta mark 0x63726201 jump from_builder
+	}
+	chain from_builder {
+		ct state established,related accept
+		ip daddr { 127.0.0.53, 127.0.0.54 } meta l4proto { tcp, udp } th dport 53 accept
+		socket cgroupv2 level 1 "claudia_release_builder.slice" accept
+		counter drop
+	}
+}

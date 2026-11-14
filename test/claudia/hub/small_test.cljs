@@ -13,6 +13,15 @@
   (is (not (github/main-push? "push" {:ref "refs/heads/other"})))
   (is (not (github/main-push? "workflow_run" {:ref "refs/heads/main"}))))
 
+(deftest github-pull-requests-the-builder-builds
+  (let [h (apply str (repeat 40 "c"))
+        d (fn [action repo] {:action action :pull_request {:number 7 :head {:sha h :repo {:full_name repo}}}})]
+    (is (= {:key "pr-7" :commit h :kind "pr"} (github/pr-head "pull_request" (d "synchronize" "o/r") "o/r")))
+    (is (= {:key "pr-7" :closed true} (github/pr-head "pull_request" (d "closed" "o/r") "o/r")))
+    (is (nil? (github/pr-head "pull_request" (d "opened" "fork/r") "o/r")) "a fork's head is never built")
+    (is (nil? (github/pr-head "pull_request" (d "labeled" "o/r") "o/r")))
+    (is (nil? (github/pr-head "push" (d "opened" "o/r") "o/r")))))
+
 (deftest github-signature
   (let [body (js/Buffer.from "{}")]
     (is (false? (github/signed? "k" body nil)))

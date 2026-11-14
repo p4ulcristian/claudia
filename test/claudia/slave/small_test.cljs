@@ -134,6 +134,9 @@
     (is (= (str "stage " t "\n") (front/trigger-line {:stage t} "now")))
     (is (= (str "main " t "\n") (front/trigger-line {:main t} "now")))
     (is (= "check now\n" (front/trigger-line {:stage "nope"} "now")))
+    (is (= (str "releases https://hub.example/hub/releases/files\nstage " t "\n")
+           (front/trigger-line {:stage t :releases "https://hub.example/hub/releases/files"} "now")))
+    (is (= (str "stage " t "\n") (front/trigger-line {:stage t :releases "http://evil/x"} "now")))
     (is (= "check now\n" (front/trigger-line {} "now")))))
 
 (deftest screenshot-reads-only-its-scenes-roots

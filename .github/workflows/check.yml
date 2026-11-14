@@ -99,23 +99,10 @@ jobs:
           npm run build:web-files
 
       - name: Bundle
+        id: bundle
         run: |
-          tree=$(git rev-parse 'HEAD^{tree}')
-          mkdir -p dist/pkg
-          cp -r out deploy package.json package-lock.json dist/pkg/
-          rm -rf dist/pkg/out/test.js dist/pkg/out/test.js.map dist/pkg/out/cljs-runtime
-          echo "$tree" > dist/pkg/tree.txt
-          # The lockfile's hash names the node_modules, so an update downloads them only when it changes.
-          deps=$(sha256sum package-lock.json | cut -c1-20)
-          echo "$deps" > dist/pkg/deps.txt
-          (cd dist/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund && rm package-lock.json)
-          # The whole build (the hub's image; servers that have not updated past the split), and the
-          # same split in two: its code (every update, a few MB) and its node_modules.
-          tar -czf "dist/claudia-tree-$tree.tar.gz" -C dist/pkg .
-          tar -czf "dist/claudia-code-$tree.tar.gz" -C dist/pkg --exclude=./node_modules .
-          tar -czf "dist/claudia-deps-$deps.tar.gz" -C dist/pkg ./node_modules ./deps.txt
-          ls -l dist/*.tar.gz
-          echo "bundle: tree $tree, node_modules $deps" >> "$GITHUB_STEP_SUMMARY"
+          deploy/bundle.sh | tee -a "$GITHUB_OUTPUT"
+          echo "bundle: $(grep tree= "$GITHUB_OUTPUT" | tail -1), node_modules $(grep deps= "$GITHUB_OUTPUT" | tail -1)" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -125,19 +112,8 @@ jobs:
           if-no-files-found: error
 
       # A Mac (deploy/macos) runs the same code with its own node_modules, from the same lockfile:
-      # claudia-deps-<lockfile hash>-darwin-arm64. Its own artifact, so a stage.yml that does not
-      # know it yet takes `bundle` as before.
-      - name: Bundle the Mac's node_modules
-        run: |
-          deps=$(cat dist/pkg/deps.txt)
-          mkdir -p dist/darwin/pkg
-          cp package.json package-lock.json dist/darwin/pkg/
-          echo "$deps" > dist/darwin/pkg/deps.txt
-          (cd dist/darwin/pkg && npm ci --omit=dev --ignore-scripts --no-audit --no-fund --os=darwin --cpu=arm64 && rm package.json package-lock.json)
-          test -x dist/darwin/pkg/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude
-          tar -czf "dist/darwin/claudia-deps-$deps-darwin-arm64.tar.gz" -C dist/darwin/pkg ./node_modules ./deps.txt
-          ls -l dist/darwin/*.tar.gz
-
+      # claudia-deps-<lockfile hash>-darwin-arm64 (deploy/bundle.sh made it). Its own artifact, so a
+      # stage.yml that does not know it yet takes `bundle` as before.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-darwin-arm64

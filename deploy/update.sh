@@ -12,13 +12,15 @@
 #
 # The poke's lines: `main <commit>` (main was pushed to it: GitHub's API names it a few seconds
 # later, so this waits up to 40 s for git to name it), `stage <tree>` (a build of that git tree was published
-# ahead of a merge: fetch it now), `check <time>` (look at main).
+# ahead of a merge: fetch it now), `check <time>` (look at main), `releases <url>` (where the hub
+# keeps the release builder's files: remembered for the runs without a poke).
 #
 # Steps: ask GitHub for main's newest commit and its git tree; if that commit is not the installed
 # one (commit.txt) and is ahead of it, install the build of that tree: the one fetched ahead
-# (staged/<tree>, verified when fetched), else the release tree-<tree> (stage.yml). Every
-# download's cosign signature must be stage.yml's on main (keyless), and the tarball must say the
-# tree it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
+# (staged/<tree>, verified when fetched), else that tree's files: first from the hub (the release
+# builder's, README decision 29: each file's ssh-keygen -Y signature must be one of the keys in
+# deploy/release-signers on GitHub's main), else from GitHub's release tree-<tree> (stage.yml: its
+# cosign signature must be stage.yml's on main, keyless). The tarball must say the tree it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
 # The front and the runners restart (chats keep going in the hosts); the hosts never restart here:
 # their new code waits for a restart by hand. Nothing published yet is not an error: the next poke
 # installs it.
@@ -45,8 +47,9 @@ fi
 pushed=$(grep -oE '^main [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 # The staged trees the poke named, space-separated (hex only, so word splitting is safe).
 stages=$(grep -oE '^stage [0-9a-f]{40}$' <<<"$lines" | cut -d' ' -f2 | sort -u | tr '\n' ' ' || true)
+told_releases=$(grep -oE '^releases https://[A-Za-z0-9.-]+(:[0-9]+)?/hub/releases/files$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 
-for t in curl tar node cosign; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
+for t in curl tar node cosign ssh-keygen; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
 [ "$os" = Darwin ] && [ $mode = shared ] && { echo "--shared is Linux only (systemd, /srv/claudia)" >&2; exit 1; }
 
 if [ $mode = shared ]; then
@@ -62,6 +65,14 @@ else
 fi
 staged=$work/staged
 mkdir -p "$staged"
+# Where the hub keeps the builder's files: the poke's word, else the last one heard.
+[ -n "$told_releases" ] && echo "$told_releases" >"$work/releases-url"
+releases_url=$(cat "$work/releases-url" 2>/dev/null || true)
+# Which builder keys count: deploy/release-signers on GitHub's main (GitHub stays the one place that
+# says it), else this release's own copy when GitHub can't be reached.
+signers=$work/release-signers
+curl -fsSL --max-time 20 -o "$signers.new" "https://raw.githubusercontent.com/$repo/$branch/deploy/release-signers" &&
+	mv "$signers.new" "$signers" || { rm -f "$signers.new"; [ -f "$signers" ] || cp "$dest/deploy/release-signers" "$signers" 2>/dev/null || true; }
 tmp=$(mktemp -d "$work/release.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
@@ -88,8 +99,33 @@ fetch() {
 	rm -rf "$d"
 }
 
-# from_release <tree> <file> <into>: one signed file of the release tree-<tree>, unpacked into <into>.
+# from_hub <file> <into>: one of the release builder's files from the hub, its signature checked
+# against the builder keys (ssh-keygen -Y, namespace claudia-release), unpacked into <into>. 1 when the
+# hub doesn't have it (or names no address); 2 when the signature isn't a builder key's.
+from_hub() {
+	local name=$1 into=$2 d
+	[ -n "$releases_url" ] && [ -s "$signers" ] || return 1
+	d=$(mktemp -d "$work/download.XXXXXX")
+	if ! curl -fsL --max-time 600 -o "$d/$name" "$releases_url/$name" ||
+		! curl -fsL --max-time 60 -o "$d/$name.sig" "$releases_url/$name.sig"; then
+		rm -rf "$d"
+		return 1
+	fi
+	if ! ssh-keygen -Y verify -f "$signers" -I claudia-release-builder -n claudia-release -s "$d/$name.sig" <"$d/$name" >/dev/null 2>&1; then
+		rm -rf "$d"
+		return 2
+	fi
+	mkdir -p "$into"
+	tar --no-same-owner -xzf "$d/$name" -C "$into"
+	rm -rf "$d"
+}
+
+# from_release <tree> <file> <into>: one signed file of the tree's release, unpacked into <into>:
+# the builder's from the hub, else stage.yml's from GitHub.
 from_release() {
+	local rc=0
+	from_hub "$2" "$3" || rc=$?
+	[ $rc = 1 ] || return $rc
 	fetch "https://github.com/$repo/releases/download/tree-$1" "$2" "$stage_identity" "$3"
 }
 
@@ -191,7 +227,7 @@ install_main() {
 	case $rc in
 	0) ;;
 	1) echo "no signed build for ${want:0:7} yet: the next poke installs it"; return 0 ;;
-	*) echo "the build for ${want:0:7} does not carry the workflow's signature: not installed" >&2; return 1 ;;
+	*) echo "the build for ${want:0:7} does not carry the builder's or the workflow's signature: not installed" >&2; return 1 ;;
 	esac
 	echo "$want" >"$tmp/x/commit.txt"
 	echo "updating Claudia ${have:0:7} -> ${want:0:7}"
@@ -238,7 +274,7 @@ for t in $stages; do
 	case $rc in
 	0) mv "$staged/$t.new" "$staged/$t" && echo "fetched tree ${t:0:7} ahead" ;;
 	1) echo "tree ${t:0:7} is not published" ;;
-	*) echo "the build for tree ${t:0:7} does not carry stage.yml's signature: not kept" >&2 ;;
+	*) echo "the build for tree ${t:0:7} does not carry the builder's or stage.yml's signature: not kept" >&2 ;;
 	esac
 	rm -rf "$staged/$t.new"
 done

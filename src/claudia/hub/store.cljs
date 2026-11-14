@@ -108,6 +108,15 @@
      sealed TEXT NOT NULL,
      came_from TEXT NOT NULL,
      saved_at INTEGER NOT NULL
+   );
+   -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
+   -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
+   CREATE TABLE IF NOT EXISTS release_builder (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     host TEXT NOT NULL,
+     token_hash TEXT NOT NULL,
+     paired_at INTEGER NOT NULL,
+     seen_at INTEGER
    );")
 
 (defn open!
@@ -373,3 +382,21 @@
          ON CONFLICT (email) DO UPDATE SET login = excluded.login, sealed = excluded.sealed,
            came_from = excluded.came_from, saved_at = excluded.saved_at"
          email login sealed came-from (now)))
+
+;; The release builder ---------------------------------------------------------------------------
+
+(defn release-builder
+  "The release builder: {:host :token-hash :paired-at :seen-at}, or nil."
+  []
+  (when-let [r (one "SELECT host, token_hash, paired_at, seen_at FROM release_builder WHERE id = 1")]
+    {:host (:host r) :token-hash (:token_hash r) :paired-at (:paired_at r) :seen-at (:seen_at r)}))
+
+(defn save-release-builder!
+  "Makes host the release builder (the one before it stops counting at once)."
+  [host token-hash]
+  (exec! "INSERT INTO release_builder (id, host, token_hash, paired_at) VALUES (1, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET host = excluded.host, token_hash = excluded.token_hash,
+           paired_at = excluded.paired_at, seen_at = NULL"
+         host token-hash (now)))
+
+(defn release-builder-seen! [] (exec! "UPDATE release_builder SET seen_at = ? WHERE id = 1" (now)))

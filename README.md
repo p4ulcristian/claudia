@@ -295,6 +295,25 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     itself, so WebKit no longer asks on every page load (each new version reloads the page); iOS
     still asks once for the app. The PR check runs the tests as their own job beside the build.
 
+29. A release builder, apart from the hub (2026-11-14): one machine at a time reads GitHub (main's
+    pushes and the heads of this repository's pull requests, ahead of their merge), builds, signs
+    each file with its own key (OpenSSH `ssh-keygen -Y`, namespace `claudia-release`) and brings the
+    files to the hub; the hub keeps them and hands them out, and tells servers and the gate to fetch
+    a tree once its code and both platforms' node_modules are there. The hub signs and checks
+    nothing: every server (`deploy/update.sh`) and the gate's hub helper check each file against
+    `deploy/release-signers` on GitHub's main before installing, so GitHub stays the one place that
+    says which builder counts, and a hub can hold an update back but never change one. There is no
+    second signature from a person: a builder taken over can ship to every machine (risk accepted
+    until the builder moves somewhere safer). Making another machine the builder: run
+    `sudo deploy/release-builder/install.sh https://<hub>` there, paste the builder key it prints in
+    Settings (Servers page, Release builder: the old builder's token stops counting at once), and
+    merge a PR adding its key to `deploy/release-signers`. node_modules go up only when the lockfile
+    is new. GitHub's signed releases (stage.yml) stay the fallback. Instead of: GitHub's runners only
+    (~6 min from a push to green, its slow days), a self-hosted GitHub runner (tried: slower over a
+    home line, 382 s against 207 s), or the builder pushing to servers itself (it would need to reach
+    them; its fence lets it reach only the internet). Files: `deploy/release-builder/`,
+    `deploy/bundle.sh`, `src/claudia/hub/releases.cljs`, `src/claudia/hub/announce.cljs`.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
