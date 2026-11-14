@@ -25,3 +25,9 @@
   (is (p/short= c "aaaaaaa"))
   (is (not (p/short= c "bbbbbbb")))
   (is (not (p/short= c nil))))
+
+(deftest a-machine-asleep-is-not-waited-for
+  (let [r (-> (p/new-release c "t" "Fix" ["box" "macbook"] 1000) (p/machine-asleep "macbook")
+              (p/machine-done "box" 3000) (p/hub-done 15000))]
+    (is (= "asleep" (get-in r [:machines "macbook" :state])))
+    (is (p/settled? r))))

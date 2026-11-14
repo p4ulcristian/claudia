@@ -734,6 +734,7 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .up-step.done .up-state, .up-step.success .up-state { color: var(--green); }
 .up-step.waiting .up-state, .up-step.pending .up-state { color: var(--blue); }
 .up-step.failure .up-state, .up-step.not.reached .up-state { color: var(--red); }
+.up-step.asleep { opacity: 0.55; }
 .up-note { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the gear: when this version went live, very small (views/update_pill.cljs). */
 .up-ago { padding: 2px 2px 4px; font: 9.5px/1.2 var(--sans); color: var(--muted); text-align: center; opacity: 0.8; }

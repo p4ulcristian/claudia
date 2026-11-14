@@ -31,3 +31,7 @@
   (is (= "x \u00b7 1 day ago" (u/updated-text "x" 0 (* 30 3600000))))
   (is (= "x \u00b7 3 days ago" (u/updated-text "x" 0 (* 72 3600000))))
   (is (nil? (u/updated-text "x" nil 0))))
+
+(deftest asleep-machines-do-not-count
+  (is (= {:label "Updating 1/3" :tone "running"}
+         (u/pill (assoc-in moving [:release :machines :mac] {:state "asleep"}) 5000))))
