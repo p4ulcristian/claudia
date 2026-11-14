@@ -16,7 +16,6 @@
             [claudia.web.views.mic :as mic]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.mic :as mic-pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
@@ -282,14 +281,10 @@
         (rf/dispatch [:composer/send text])))))
 
 (defn- heard-fn
-  "What the mic's heard text does: dragged right (:add) it joins the draft; else the draft with it
-  is sent (latest: a ref to the draft as typed now, so typing during hearing is kept)."
-  [draft-key latest attached send-text!]
-  (fn [heard dir]
-    (let [text (mic-pure/with-heard (.-current latest) heard)]
-      (if (and (= dir :send) (pure/sendable? text attached))
-        (do (rf/dispatch [:draft/set draft-key text]) (send-text! text))
-        (rf/dispatch [:draft/heard draft-key heard])))))
+  "What the mic's heard text does, in the composer it was held in (the mic keeps the one from the
+  press, so a chat opened while it is heard gets nothing): events/heard-fx."
+  [draft-key]
+  (fn [heard dir] (rf/dispatch [:mic/heard draft-key heard dir])))
 
 (defn- fit-height!
   "The message box as tall as its text, up to 260 px; empty, one row (the placeholder never sizes
@@ -341,7 +336,6 @@
 (defn- composer [{:keys [draft-key oc] :as props}]
   (let [ref (h/use-ref nil)
         picker (h/use-ref nil)
-        latest (h/use-ref "")
         text @(rf/subscribe [:draft draft-key])
         server-meta @(rf/subscribe [:meta (or (:server oc) @(rf/subscribe [:new-server]))])
         items (usage/matches text oc server-meta)
@@ -350,14 +344,13 @@
         send-text! (send-fn draft-key oc attached)
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
                      :send! #(send-text! text))]
-    (set! (.-current latest) text)
     (use-grow! ref text)
     (h/use-effect (fn [] (some-> (.-current ref) .focus) nil) [(str draft-key)])
     [:div.composer
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      [:f> mic/button (heard-fn draft-key latest attached send-text!)]
+      [:f> mic/button (heard-fn draft-key)]
       [:div.input-row
        (attach-button parts)
        (message-box parts)

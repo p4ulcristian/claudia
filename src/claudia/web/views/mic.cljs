@@ -72,13 +72,15 @@
 
 (defn- press!
   "Pointer down: the microphone goes on (the first time the browser asks for it)."
-  [^js e {:keys [hold live set-phase set-dir]}]
+  [^js e {:keys [hold live set-phase set-dir on-heard]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (speech/stop!)   ; it never talks over you
     (let [p (mic/start!)]
-      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p})
+      ;; on-heard as it is at the press: the composer the person spoke into, even when another chat
+      ;; is open by the time the words are heard.
+      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p :on-heard on-heard})
       (set-dir :send)
       (set-phase :recording)
       (-> p
@@ -96,8 +98,8 @@
 (defn- release!
   "Pointer up: a hold long enough is heard and sent (or, dragged right, added to the message); a
   tap is dropped and says to hold."
-  [{:keys [hold live set-phase on-heard]}]
-  (when-let [{:keys [t0 p dir]} (.-current hold)]
+  [{:keys [hold live set-phase]}]
+  (when-let [{:keys [t0 p dir on-heard]} (.-current hold)]
     (set! (.-current hold) nil)
     (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)]
       (.then p (fn [s]

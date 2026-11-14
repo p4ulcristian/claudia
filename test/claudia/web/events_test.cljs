@@ -189,3 +189,19 @@
     (is (false? (ev/seen-due? (assoc-in d [:chats ["s" "c"] :running] true) false true)))
     (is (false? (ev/seen-due? (assoc-in d [:seen-sent ["s" "c"]] 5) false true)))
     (is (false? (ev/seen-due? (assoc d :view "pat") false true)))))
+
+(deftest the-mic-text-goes-to-the-chat-it-was-held-in
+  (let [db {:open ["s" "other"] :drafts {["s" "c"] "half" ["s" "other"] "mine"}
+            :servers {"s" {:status :open}}}]
+    (testing "added: it joins that chat's draft, never the open one's"
+      (let [out (:db (ev/heard-fx db ["s" "c"] "more" :add))]
+        (is (= "half more" (get-in out [:drafts ["s" "c"]])))
+        (is (= "mine" (get-in out [:drafts ["s" "other"]])))))
+    (testing "sent: into that chat, with its draft"
+      (let [fx (ev/heard-fx db ["s" "c"] "more" :send)]
+        (is (= ["s" {:type "send" :chat "c" :text "half more"}] (:ws/send fx)))
+        (is (= "mine" (get-in fx [:db :drafts ["s" "other"]])))))
+    (testing "a question open in that chat is answered"
+      (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
+            fx (ev/heard-fx db ["s" "c"] "this one" :send)]
+        (is (= [[:dispatch [:ask/answer ["s" "c"] "q" {"Which?" "half this one"}]]] (:fx fx)))))))
