@@ -8,7 +8,8 @@
   user action sent while the socket is closed or quiet waits in the server's queue and goes out
   once the socket is proven alive (a pong or any frame), so nothing typed offline is lost."
   (:require [re-frame.core :as rf]
-            [claudia.shared.protocol :as protocol]))
+            [claudia.shared.protocol :as protocol]
+            [claudia.web.health :as health]))
 
 ;; server -> {:sock WebSocket :tries n :timer id :heard ms :pinged ms :ready bool :queue [frame]}
 (defonce ^:private sockets (atom {}))
@@ -86,12 +87,14 @@
   (when (identical? sock (get-in @sockets [server :sock]))
     (swap! sockets assoc-in [server :heard] (js/Date.now))
     (when-let [frame (try (protocol/read-json (.-data e)) (catch :default _ nil))]
+      (when (= "chats" (:type frame)) (health/working!))
       (when-not (= "pong" (:type frame)) (rf/dispatch [:ws/frame server frame])))
     (when (seq (get-in @sockets [server :queue])) (flush! server))))
 
 (defn- opened! [server ^js sock]
   (when (identical? sock (get-in @sockets [server :sock]))
     (swap! sockets update server assoc :tries 0 :heard (js/Date.now))
+    (health/socket-opened!)
     (rf/dispatch [:ws/opened server])))
 
 (defn- closed! [server ^js sock]

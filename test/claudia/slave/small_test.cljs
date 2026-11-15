@@ -139,6 +139,12 @@
     (is (= (str "stage " t "\n") (front/trigger-line {:stage t :releases "http://evil/x"} "now")))
     (is (= "check now\n" (front/trigger-line {} "now")))))
 
+(deftest the-poke-says-rollback
+  (let [t (apply str (repeat 40 "b"))]
+    (is (= (str "rollback " t "\n") (front/trigger-line {:rollback t} "now")))
+    (is (= (str "rollback " t "\n") (front/trigger-line {:rollback t :main t} "now")) "rollback first")
+    (is (= "check now\n" (front/trigger-line {:rollback "b; rm -rf /"} "now")) "hex only")))
+
 (deftest screenshot-reads-only-its-scenes-roots
   (is (= #{"/a"} (render/scene-roots {:blocks [{:kind "form" :form "scene3d" :data {:root "/a"}}
                                                {:kind "form" :form "files" :data {:root "/b"}}

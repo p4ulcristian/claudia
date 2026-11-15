@@ -55,6 +55,15 @@ if [ "$(as "$home/tools/kondo/clj-kondo" --version 2>/dev/null)" != "clj-kondo v
 	as rm -rf "$d"
 fi
 
+# The smoke test's headless Chromium (builder.sh downloads it as the builder) needs the system's
+# libraries: installed here, as root, on Debian and Ubuntu; elsewhere, Chromium's usual packages by hand.
+pw=$(grep -m1 -A2 '"node_modules/playwright-core"' "$here/../../package-lock.json" | grep -oE '"version": "[^"]+"' | cut -d'"' -f4)
+if command -v apt-get >/dev/null && [ -n "$pw" ]; then
+	PATH="$home/tools/node/bin:$PATH" npx --yes "playwright-core@$pw" install-deps chromium-headless-shell
+else
+	echo "not Debian or Ubuntu: install Chromium's libraries (nss, atk, cups, drm, gbm, xkbcommon, pango, alsa) by hand" >&2
+fi
+
 as test -f "$home/signing-key" || as ssh-keygen -q -t ed25519 -N '' -C "$user@$(hostname -s)" -f "$home/signing-key"
 as test -f "$home/token" || as sh -c "umask 077; head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=' > '$home/token'"
 as sh -c "umask 077; printf 'HUB_URL=%s\n' '$hub' > '$home/env'"

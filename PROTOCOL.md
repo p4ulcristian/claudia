@@ -147,6 +147,7 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
 | `DELETE /hub/push/live/:activity` | person | the app saw it end |
 | `POST /hub/presence` `{ page (8-64 chars), active }` | person | 204; alerts are held while any page said active within 45 s |
+| `POST /hub/health` `{ load (8-64 chars, one per page load), commit (the hub's, from /hub/me), ok, reason?: no-chats\|script-error\|no-socket, detail? }` | person | 200; 400 when it is not a report. In the hub's first 15 min on its commit (`HUB_COMMIT`), two broken loads and no working one roll the release back, once (README decision 35): `rollback <commit>` for the gate, `{ rollback }` to every front. `no-socket` counts only when one of the person's servers answers |
 | `GET /hub/claude-tokens` | person | `{ on, inUse: { name, by, at } \| null, tokens: [{ name, by, at, limits, heardAt }], servers: [{ name, label, ok, current, error }] }`: never a token; `servers` = the caller's, with the name each runs on now (`ok` false: not reached) |
 | `PUT /hub/claude-token` `{ name, token }` | person | the same shape: sealed and saved under the name (same name = replaced), in use on every server; 503 when `on` is false |
 | `POST /hub/claude-token/use` `{ name }` | person | the same shape: in use on every server; 404 no such name |
@@ -179,7 +180,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 |---|---|
 | `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
 | `GET /api/version` | the front, the hub only: `{ commit (7 characters), version }`, what this machine runs (the update pill follows each machine with it) |
-| `POST /api/update-check` `{ main?, stage?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`main <commit>`, `stage <tree>`, else `check <time>`), after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
+| `POST /api/update-check` `{ rollback?, main?, stage?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`rollback <commit>`: back one release from that commit, README decision 35; `main <commit>`, `stage <tree>`, else `check <time>`), after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
 | `GET /api/claude-token/current` | the front, the hub only: `{ key, name, by, at }` of the token in use here (nulls when none came from the hub), never the token |
 | `GET /api/claude-token/saved` | the front, the hub only: `{ tokens: [{ key, name, at }] }`, the saved tokens kept here, never a token |
 | `PUT /api/claude-token/saved` `{ tokens: [{ key, name, at, token }] }` | the front, the hub only: the whole set, written over the one kept here (a token no longer in it is deleted); answers like GET; 400 when one is not a key (`[a-z0-9-]{1,24}`), a name, a time and a Claude token |

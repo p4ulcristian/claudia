@@ -363,6 +363,29 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (`clientMaxWindowBits`) made ws refuse Safari and Firefox, which offer plain
     permessage-deflate, so no chat opened on an iPhone or iPad (fixed the same day).
 
+35. A broken page is stopped before the merge and rolled back after it (2026-11-15, after #171 shipped
+    a page whose every first frame the runner refused: no chat loaded for 1 h 47 min, and every
+    machine was up, so no check saw it). Before: the smoke test (`bin/smoke.mjs`) runs the built hub,
+    front and runner on loopback with throwaway data and one seeded chat and uses the page in
+    headless Chromium, on a desktop and a phone screen: the chat list comes, the chat opens and shows
+    its messages, the page tells the hub it works, no frame is answered with an error, nothing throws.
+    The release builder runs it after the tests (its browser: playwright-core's headless shell; its
+    system libraries from `install.sh`), and so does GitHub's `check`. After: every page load says
+    once whether this release works for it (`claudia.web.health`, `POST /hub/health`): it worked (a
+    chat list came), or a socket opened and no list came within 30 s, its own code threw first, or
+    no socket opened within 30 s (counted only when one of the person's servers answers); nothing
+    while hidden or offline. It is the page build's first module (`js/health.js`), so it runs and
+    reports when the rest of the code breaks on load. In the hub's first 15 minutes on a commit, two
+    broken loads of that commit and no working one roll it back (`claudia.hub.health`): the hub asks
+    the gate's helper (`rollback <commit>` in `HUB_UPDATE_REQUEST`) and pokes every front
+    (`{ rollback }` → `rollback <commit>` in `CLAUDIA_UPDATE_TRIGGER`), once. Each machine goes back
+    to the release it kept before that commit (`deploy/update.sh`: `<release>.old`; the gate: the
+    previous pin), only while that commit runs and only one step (the one before is not kept once it
+    is back), and never installs that commit again; main moving past it moves everyone forward. Pages
+    reload to the release that is back (decision 27). "Only forward" otherwise stands. Instead of: a
+    check that the processes answer (all did), a probe from outside with a login of its own, or a
+    rollback by hand (it needed a terminal and someone at it).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

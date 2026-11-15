@@ -50,7 +50,7 @@
        "<link rel=\"stylesheet\" href=\"/css/claudia.css\"><link rel=\"stylesheet\" href=\"/css/right.css\"><link rel=\"stylesheet\" href=\"/css/codeforms.css\">"
        "<link rel=\"stylesheet\" href=\"/css/scene3d.css\">"
        "<script>window.claudiaRender = true;</script></head>"
-       "<body><div id=\"root\"></div><script src=\"/js/main.js\"></script></body></html>"))
+       "<body><div id=\"root\"></div><script src=\"/js/health.js\"></script><script src=\"/js/main.js\"></script></body></html>"))
 
 (def ^:private types {".js" "text/javascript" ".mjs" "text/javascript" ".css" "text/css" ".svg" "image/svg+xml"
                       ".map" "application/json" ".json" "application/json" ".glb" "model/gltf-binary"

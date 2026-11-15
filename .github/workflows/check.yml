@@ -98,6 +98,11 @@ jobs:
           npx shadow-cljs release host runner front hub web
           npm run build:web-files
 
+      - name: Smoke (the built programs and the page in a browser, bin/smoke.mjs)
+        run: |
+          npx playwright-core install --with-deps chromium-headless-shell
+          node bin/smoke.mjs
+
       - name: Bundle
         id: bundle
         run: |

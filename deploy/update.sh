@@ -23,7 +23,9 @@
 # cosign signature must be stage.yml's on main, keyless). The tarball must say the tree it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
 # The front and the runners restart (chats keep going in the hosts); the hosts never restart here:
 # their new code waits for a restart by hand. Nothing published yet is not an error: the next poke
-# installs it.
+# installs it. Only forward, with one exception: a poke's "rollback <commit>" (the hub found that
+# release broken in people's pages, README decision 35) puts the release kept before it back, once,
+# and that commit is never installed again.
 set -euo pipefail
 repo=${CLAUDIA_REPO:-p4ulcristian/claudia}
 branch=main
@@ -47,6 +49,8 @@ fi
 pushed=$(grep -oE '^main [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 # The staged trees the poke named, space-separated (hex only, so word splitting is safe).
 stages=$(grep -oE '^stage [0-9a-f]{40}$' <<<"$lines" | cut -d' ' -f2 | sort -u | tr '\n' ' ' || true)
+# The hub found the release of this commit broken in people's pages (README decision 35).
+rollback=$(grep -oE '^rollback [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 told_releases=$(grep -oE '^releases https://[A-Za-z0-9.-]+(:[0-9]+)?/hub/releases/files$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 
 for t in curl tar node cosign ssh-keygen; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
@@ -221,6 +225,41 @@ get() {
 	return $rc
 }
 
+# restart_programs: the front and the runners start again on what $dest holds now; the hosts keep running.
+restart_programs() {
+	if [ $mode = shared ]; then
+		systemctl restart claudia-front.service
+		sed 's/#.*//' /etc/claudia/profiles | awk 'NF { print $1 }' | while read -r p; do
+			systemctl restart "claudia-runner@$p.service"
+		done
+	elif [ "$os" = Darwin ]; then
+		# The agents are written again from the release; the front and the runner restart, the
+		# hosts and this update agent keep running (deploy/macos/install.sh).
+		bash "$dest/deploy/macos/install.sh" --update
+	else
+		# Changed units are read again; the hosts keep running.
+		systemctl --user daemon-reload
+		systemctl --user restart claudia-front.service claudia-runner.service
+	fi
+}
+
+# roll_back <commit>: one step back, from that commit's release to the one kept before it (the hub's
+# word, README decision 35). Only while that commit runs, and only once: the release before it is
+# not kept after it is back, and the commit is never installed again (main must move past it).
+roll_back() {
+	local bad=$1 back
+	[ "$have" = "$bad" ] || { echo "a rollback of ${bad:0:7} was asked, but ${have:0:7} runs: nothing to do"; return 0; }
+	back=$(cat "$dest.old/commit.txt" 2>/dev/null || true)
+	[[ $back =~ ^[0-9a-f]{40}$ ]] || { echo "no release before ${bad:0:7} is kept: not rolled back" >&2; return 1; }
+	echo "$bad" >>"$work/rolled-back"
+	rm -rf "$dest.rolled-back"
+	mv "$dest" "$dest.rolled-back"
+	mv "$dest.old" "$dest"
+	restart_programs
+	echo "rolled back from ${bad:0:7} to ${back:0:7}: its pages were broken; waiting for a newer commit"
+	have=$back
+}
+
 install_main() {
 	local rc=0
 	get "$tmp/x" || rc=$?
@@ -236,25 +275,21 @@ install_main() {
 		mapfile -t profiles < <(sed 's/#.*//' /etc/claudia/profiles | awk 'NF { print $1 }')
 		bash "$tmp/x/deploy/shared-server/install.sh" "$tmp/x" "${profiles[@]}"
 	else
-		rm -rf "$dest.new" "$dest.old"
+		rm -rf "$dest.new" "$dest.old" "$dest.rolled-back"
 		mv "$tmp/x" "$dest.new"
 		[ -d "$dest" ] && mv "$dest" "$dest.old"
 		mv "$dest.new" "$dest"
-		if [ "$os" = Darwin ]; then
-			# The agents are written again from the new release; the front and the runner restart,
-			# the hosts and this update agent keep running (deploy/macos/install.sh).
-			bash "$dest/deploy/macos/install.sh" --update
-		else
-			# Changed units are read again; the hosts keep running.
-			systemctl --user daemon-reload
-			systemctl --user restart claudia-front.service claudia-runner.service
-		fi
+		restart_programs
 	fi
 	echo "Claudia is at ${want:0:7}; host code changes wait for a host restart by hand"
 	have=$want
 }
 
-if [ "$have" != "$want" ]; then
+[ -n "$rollback" ] && roll_back "$rollback"
+
+if grep -qxF "$want" "$work/rolled-back" 2>/dev/null; then
+	echo "main is still at ${want:0:7}, which was rolled back: waiting for a newer commit"
+elif [ "$have" != "$want" ]; then
 	# Only forward: the new commit must contain the installed one.
 	status=ahead
 	[[ $have =~ ^[0-9a-f]{40}$ ]] && status=$(api "compare/$have...$want" | json 'v.status')
