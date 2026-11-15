@@ -17,7 +17,16 @@
   (is (= :off (chat/server-state :closed)))
   (is (nil? (chat/server-state :open)))
   (is (= :reconnecting (chat/server-state :connecting)))
-  (is (= :reconnecting (chat/server-state nil))))
+  (is (= :reconnecting (chat/server-state nil)))
+  (is (= :offline (chat/server-state :offline))))
+
+(deftest link-strip-shows-only-what-is-not-there
+  (is (nil? (chat/link-state [:open false false true])))
+  (is (= :back (chat/link-state [:open true false true])))
+  (is (= :offline (chat/link-state [:closed false true true])))
+  (is (= :reconnecting (chat/link-state [:connecting false false true])))
+  (is (= :connecting (chat/link-state [:connecting false false false])))
+  (is (every? chat/link-text [:back :offline :reconnecting :connecting])))
 
 (deftest colour-var-only-for-chat-colours
   (is (= "var(--c-mint)" (words/colour-var "mint")))

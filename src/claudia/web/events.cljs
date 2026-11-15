@@ -126,9 +126,34 @@
 
 ;; ---- sockets ----
 
+(def back-after-ms
+  "A connection away at least this long shows \"Connected\" when it is back (a shorter blip never
+  showed its \"Reconnecting\" either)."
+  1500)
+
+(def back-shown-ms "How long \"Connected\" shows." 2000)
+
+(defn with-status
+  "A server's entry with its socket's new status at now: when it goes down, since when (:down-since);
+  when it opens after being down back-after-ms or longer, :back (\"Connected\" shows)."
+  [{:keys [down-since] :as entry} status now]
+  (cond
+    (= :open status) (-> entry (assoc :status :open :back (boolean (and down-since (>= (- now down-since) back-after-ms))))
+                         (dissoc :down-since))
+    (= :open (:status entry)) (assoc entry :status status :down-since now :back false)
+    :else (assoc entry :status status)))
+
 (rf/reg-event-db
  :ws/status
- (fn [db [_ server status]] (assoc-in db [:servers server :status] status)))
+ (fn [db [_ server status]] (update-in db [:servers server] with-status status (js/Date.now))))
+
+(rf/reg-event-db
+ :ws/back-shown
+ (fn [db [_ server]] (assoc-in db [:servers server :back] false)))
+
+(rf/reg-event-db
+ :net/online
+ (fn [db [_ online?]] (assoc db :offline (not online?))))
 
 (defn hello-frames
   "What a socket that just opened sends: hello, and after a reconnect the open chat's open again
@@ -140,10 +165,12 @@
 (rf/reg-event-fx
  :ws/opened
  (fn [{:keys [db]} [_ server]]
-   {:db (assoc-in db [:servers server :status] :open)
-    :ws/send-all (hello-frames (:open db) server)
-    ;; A hub on a new version dropped every socket: as they open again, is it new? (claudia.web.updates)
-    :fx [[:dispatch [:version/check]]]}))
+   (let [entry (with-status (get-in db [:servers server]) :open (js/Date.now))]
+     {:db (assoc-in db [:servers server] entry)
+      :ws/hello [server (hello-frames (:open db) server)]
+      ;; A hub on a new version dropped every socket: as they open again, is it new? (claudia.web.updates)
+      :fx (cond-> [[:dispatch [:version/check]]]
+            (:back entry) (conj [:dispatch-later {:ms back-shown-ms :dispatch [:ws/back-shown server]}]))})))
 
 (defmulti on-frame (fn [_db _server frame] (:type frame)))
 

@@ -156,19 +156,38 @@
     (= code 1006) (if to-page? 1014 1001)
     :else nil))
 
+(def ^:private ping-bytes
+  "The page's heartbeat frame (PROTOCOL.md, page heartbeat), byte for byte as the page writes it."
+  (js/Buffer.from (protocol/write-json {:type "ping"})))
+
+(def ^:private pong-text (protocol/write-json {:type "pong"}))
+
+(defn ping-frame?
+  "Whether a frame from the page is its heartbeat: the hub answers it and passes nothing on."
+  [data binary?]
+  (and (not binary?) (instance? js/Buffer data) (.equals ^js data ping-bytes)))
+
+(defn- forward!
+  "One frame from `from` on to `to`. When `to` cannot keep up, `from` is paused until its buffer
+  drains, so a slow page never piles a chat up in the hub."
+  [^js from ^js to data binary?]
+  (when (= (.-readyState to) 1)
+    (.send to data #js {:binary binary?}
+           (fn [_]
+             (when (and (.-isPaused from) (< (.-bufferedAmount to) (* 256 1024)))
+               (.resume from))))
+    (when (> (.-bufferedAmount to) (* 1024 1024))
+      (.pause from))))
+
 (defn- relay
-  "Frames from `from` to `to` as they are (text stays text, binary binary). When `to` cannot keep
-  up, `from` is paused until its buffer drains, so a slow page never piles a chat up in the hub."
-  [^js from ^js to]
+  "Frames from `from` to `to` as they are (text stays text, binary binary). With pong? (`from` is
+  the page), the page's heartbeat is answered here and not passed on."
+  [^js from ^js to pong?]
   (.on from "message"
        (fn [data binary?]
-         (when (= (.-readyState to) 1)
-           (.send to data #js {:binary binary?}
-                  (fn [_]
-                    (when (and (.-isPaused from) (< (.-bufferedAmount to) (* 256 1024)))
-                      (.resume from))))
-           (when (> (.-bufferedAmount to) (* 1024 1024))
-             (.pause from))))))
+         (if (and pong? (ping-frame? data binary?))
+           (.send from pong-text)
+           (forward! from to data binary?)))))
 
 (defn- follow
   "When `from` closes, `to` closes with the same code (or the one closing-code gives)."
@@ -190,8 +209,8 @@
     (.add live s)
     (.on s "pong" #(aset s "alive" true))
     (.on s "error" (fn [_] (.terminate s))))
-  (relay page front)
-  (relay front page)
+  (relay page front true)
+  (relay front page false)
   (follow page front false)
   (follow front page true))
 

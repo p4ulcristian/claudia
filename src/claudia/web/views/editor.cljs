@@ -144,7 +144,7 @@
         text (doc-of m view id)]
     (when (and s (.-editable l) (not= text (.-text s)))
       (set! (.-text s) text)
-      (ws/send! (.-server l) {:type "code_edit" :chat (.-chat l) :block (.-block l) :file id :text text :base (.-v s)}))))
+      (ws/post! (.-server l) {:type "code_edit" :chat (.-chat l) :block (.-block l) :file id :text text :base (.-v s)}))))
 
 (defn- on-update
   "Typing (not a change from the picture) saves the file save-ms after the last key."
@@ -277,7 +277,7 @@
   "Send: every file's typing saved, then Claude is told (code_send) with the note."
   [m view server chat block files note set-note]
   (doseq [f files] (save! m view (:id f)))
-  (ws/send! server {:type "code_send" :chat chat :block block :note note})
+  (ws/post! server {:type "code_send" :chat chat :block block :note note})
   (set-note ""))
 
 (defn- keep-open-state!

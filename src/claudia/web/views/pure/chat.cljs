@@ -18,11 +18,27 @@
         (last (keep-indexed (fn [i p] (when (or (nil? next-at) (< (:at p 0) next-at)) i)) pictures)))))
 
 (defn server-state
-  "What the header shows of a server's connection (status): :off when it is closed, nil when it is
-  open, :reconnecting for anything else."
+  "What the header shows of a server's connection (status): :off when it is closed, :offline when
+  the device has no network, nil when it is open, :reconnecting for anything else."
   [status]
   (cond (= :closed status) :off
+        (= :offline status) :offline
         (not= :open status) :reconnecting))
+
+(defn link-state
+  "What the strip over the composer shows: :back (\"Connected\", for a moment after a reconnect),
+  nil while connected, :offline (no network), :reconnecting (it was up) or :connecting (not yet)."
+  [[status back? offline? was-up?]]
+  (cond (= :open status) (when back? :back)
+        offline? :offline
+        was-up? :reconnecting
+        :else :connecting))
+
+(def link-text
+  {:back "Connected"
+   :offline "No network · messages wait and go when it is back"
+   :reconnecting "Reconnecting… · messages wait and go when it is back"
+   :connecting "Connecting…"})
 
 (defn new-title
   "The typed title, trimmed, when it is a new one; else nil."

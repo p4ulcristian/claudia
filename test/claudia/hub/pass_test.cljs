@@ -3,7 +3,7 @@
             [claudia.hub.pass :as pass]
             ["http" :as http]
             ["net" :as net]
-            ["ws" :refer [WebSocketServer]]))
+            ["ws" :refer [WebSocket WebSocketServer]]))
 
 (defn- handshake-request [extensions]
   (str "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
@@ -59,3 +59,33 @@
   (is (= (str "HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 2\r\n"
               "cache-control: no-store\r\nconnection: close\r\n\r\nno")
          (pass/upgrade-refusal 404 "no" "text/plain"))))
+
+(deftest only-the-exact-ping-is-answered-by-the-hub
+  (is (pass/ping-frame? (js/Buffer.from "{\"type\":\"ping\"}") false))
+  (is (not (pass/ping-frame? (js/Buffer.from "{\"type\":\"ping\"}") true)) "binary")
+  (is (not (pass/ping-frame? (js/Buffer.from "{\"type\":\"send\",\"text\":\"ping\"}") false))))
+
+(deftest the-hub-answers-the-page-ping-and-passes-the-rest
+  (async done
+    (let [front-wss (WebSocketServer. #js {:port 0 :host "127.0.0.1"})
+          got (atom [])
+          hub (http/createServer)]
+      (.on front-wss "connection" (fn [s] (.on s "message" #(swap! got conj (str %)))))
+      (.on front-wss "listening"
+           (fn []
+             (.on hub "upgrade"
+                  (fn [req sock head]
+                    (pass/ws! req sock head {:host "127.0.0.1" :port (.-port (.address front-wss))} "/ws" "a@example.com" nil)))
+             (.listen hub 0 "127.0.0.1"
+                      (fn []
+                        (let [page (WebSocket. (str "ws://127.0.0.1:" (.-port (.address hub)) "/"))]
+                          (.on page "open" #(.send page "{\"type\":\"ping\"}"))
+                          (.on page "message"
+                               (fn [m]
+                                 (is (= "{\"type\":\"pong\"}" (str m)))
+                                 (.send page "{\"type\":\"hello\"}")
+                                 (js/setTimeout
+                                  (fn []
+                                    (is (= ["{\"type\":\"hello\"}"] @got) "the ping never reached the front")
+                                    (.terminate page) (.close hub) (.close front-wss) (done))
+                                  100)))))))))))
