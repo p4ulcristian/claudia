@@ -20,7 +20,10 @@
            ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs) and Vega
            ;; (claudia.web.chart). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
            ;; native import() shadow.esm/dynamic-import calls (Closure would rewrite one in the code).
-           :modules {:main {:init-fn claudia.web.app/init
+           ;; health first (README decision 35): the page's word on whether this release works, so
+           ;; it runs, and reports, even when the rest of the page's code breaks on load.
+           :modules {:health {:init-fn claudia.web.health/start}
+                     :main {:init-fn claudia.web.app/init :depends-on #{:health}
                             :prepend "var shadow_esm_import = function (url) { return import(url); };\n"}
                      :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}
                      :shiki {:entries [claudia.web.shiki.lib] :depends-on #{:main}}

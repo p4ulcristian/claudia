@@ -11,6 +11,7 @@
             [clojure.string :as str]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
+            [claudia.hub.health :as health]
             [claudia.hub.ops :as ops]
             [claudia.hub.pairing :as pairing]
             [claudia.hub.pass :as pass]
@@ -168,6 +169,7 @@
       (cross-site? req) (io/send-json res 403 {:error "cross-site request"})
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
       (= pathname "/hub/videos") (videos/call req res person email)
+      (= pathname "/hub/health") (health/call req res person email)
       (not own?) (ops/call req res pathname email admin?)
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
       :else (server-call res person email server-name what))))

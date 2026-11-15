@@ -11,7 +11,8 @@
 # only: the status `builder`, the check main requires before a merge) and env (HUB_URL, CLAUDIA_REPO).
 #
 # Each commit is checked before it is built: clj-kondo and the ratchet, then the tests (compiled in
-# the warm server, run beside the five release builds); the status `builder` on the commit says
+# the warm server, run beside the five release builds), then the smoke test (bin/smoke.mjs: the built
+# programs on loopback and the page in headless Chromium); the status `builder` on the commit says
 # pending, then success or failure and why. A commit that fails is never brought to the hub.
 set -euo pipefail
 home=/home/claudia-release-builder
@@ -124,6 +125,8 @@ check_and_compile() {
 	{ npx shadow-cljs release host runner front hub web && npm run build:web-files >/dev/null; } ||
 		{ kill "$tests" 2>/dev/null; wait "$tests" 2>/dev/null; fail "a release build failed"; return 1; }
 	wait "$tests" || { fail "tests failed: $(grep -m1 -oE '[0-9]+ failures, [0-9]+ errors' "$home/test.log")"; return 1; }
+	npx playwright-core install chromium-headless-shell >"$home/browser.log" 2>&1 || { fail "the smoke test's browser did not install"; return 1; }
+	node bin/smoke.mjs >"$home/smoke.log" 2>&1 || { fail "$(grep -m1 -oE 'smoke: FAILED: .{0,100}' "$home/smoke.log" || echo 'the smoke test failed')"; return 1; }
 }
 
 # build <commit>: its tree's release on the hub (built unless the hub has it already), then ready.

@@ -8,7 +8,8 @@
     "build:web-files": "node -e \"const fs=require('fs');if(!fs.existsSync('resources/web/index.html')){console.error('resources/web/index.html is missing: the page has nothing to load');process.exit(1)}fs.cpSync('resources/web','out/web',{recursive:true})\" && node bin/shiki-langs.mjs",
     "watch": "shadow-cljs watch web",
     "test": "shadow-cljs compile test && node out/test.js",
-    "ratchet": "node bin/ratchet.mjs"
+    "ratchet": "node bin/ratchet.mjs",
+    "smoke": "node bin/smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.322",
