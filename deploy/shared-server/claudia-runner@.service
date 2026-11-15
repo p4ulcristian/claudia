@@ -1,4 +1,5 @@
-# Claudia on a shared server: a profile's runner, as its own Linux user claudia-<profile>.
+# Claudia on a shared server: a profile's runner, as Linux user claudia-<profile> unless its line in
+# /etc/claudia/profiles says user=<name> (install.sh writes that user and its home into a drop-in).
 # Its socket's folder lets the front (user claudia) in and nobody else.
 [Unit]
 Description=Claudia runner for %i

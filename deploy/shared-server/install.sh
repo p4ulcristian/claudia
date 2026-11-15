@@ -29,8 +29,29 @@ token_file=$(sed -n 's/^CLAUDIA_TOKEN_FILE=//p' /etc/claudia/env | tail -1)
 if [ -n "$token_file" ] && [ ! -d "$(dirname "$token_file")" ]; then
 	install -d -o claudia -g claudia-run -m 2750 "$(dirname "$token_file")"
 fi
-for p in "${profiles[@]}"; do id "claudia-$p" >/dev/null 2>&1 && usermod -aG claudia-run "claudia-$p"; done
 install -m 0644 "$(dirname "$0")"/claudia-*.service "$(dirname "$0")"/claudia-update.{path,timer} /etc/systemd/system/
+# profile_user <p>: the Linux user profile <p> runs as: user=<name> on its line of
+# /etc/claudia/profiles, else claudia-<p>.
+profile_user() {
+	local u
+	u=$(sed 's/#.*//' /etc/claudia/profiles | awk -v p="$1" '$1 == p { for (i = 4; i <= NF; i++) if ($i ~ /^user=./) { print substr($i, 6); exit } }')
+	echo "${u:-claudia-$1}"
+}
+# user_dropins <p> <user> <home>: the host and the runner of <p> run as <user>, with their data and
+# chats' folder in <home>. Written on every install, so a changed line takes effect.
+user_dropins() {
+	install -d /etc/systemd/system/claudia-host@"$1".service.d /etc/systemd/system/claudia-runner@"$1".service.d
+	printf '[Service]\nUser=%s\n' "$2" >/etc/systemd/system/claudia-host@"$1".service.d/user.conf
+	printf '[Service]\nUser=%s\nEnvironment=RUNNER_DATA=%s/.local/share/claudia CLAUDIA_CWD=%s/Work\n' \
+		"$2" "$3" "$3" >/etc/systemd/system/claudia-runner@"$1".service.d/user.conf
+}
+for p in "${profiles[@]}"; do
+	u=$(profile_user "$p")
+	home=$(getent passwd "$u" | cut -d: -f6)
+	[ -n "$home" ] || { echo "profile $p: no Linux user $u" >&2; exit 1; }
+	usermod -aG claudia-run "$u"
+	user_dropins "$p" "$u" "$home"
+done
 systemctl daemon-reload
 # Follows the main branch by itself: the hub's poke and an hourly check (deploy/update.sh).
 systemctl enable --now claudia-update.path claudia-update.timer >/dev/null
