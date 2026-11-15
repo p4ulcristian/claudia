@@ -4,6 +4,15 @@
             [claudia.shared.files :as files]
             [claudia.web.events :as ev]))
 
+(deftest status-remembers-the-outage-and-shows-a-long-one-back
+  (let [down (ev/with-status {:status :open :rows {}} :closed 1000)]
+    (is (= {:status :closed :rows {} :down-since 1000 :back false} down))
+    (is (= 1000 (:down-since (ev/with-status down :connecting 1200))) "still down since then")
+    (is (= {:status :open :rows {} :back true}
+           (ev/with-status (ev/with-status down :connecting 1200) :open (+ 1000 ev/back-after-ms))))
+    (is (false? (:back (ev/with-status down :open 1100))) "a blip"))
+  (is (= {:status :open :back false} (ev/with-status {:status :connecting} :open 5)) "the first open"))
+
 (deftest new-picks-carry-the-speaker-and-bell
   (is (= {:talk false :bell true :color "jade"} (ev/new-picks {:talk false :bell true :color "jade" :model nil}))))
 

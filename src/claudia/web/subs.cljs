@@ -85,10 +85,27 @@
  :<- [:servers]
  (fn [servers [_ [s c]]] (get-in servers [s :rows c])))
 
+(rf/reg-sub :offline (fn [db _] (boolean (:offline db))))
+
+(defn shown-status
+  "A server's socket status as the views show it: :offline while the device has no network and the
+  socket is not open (not the server's fault, so not \"off\")."
+  [status offline?]
+  (if (and offline? (not= :open status)) :offline status))
+
 (rf/reg-sub
  :server-status
  :<- [:servers]
- (fn [servers [_ s]] (get-in servers [s :status])))
+ :<- [:offline]
+ (fn [[servers offline?] [_ s]] (shown-status (get-in servers [s :status]) offline?)))
+
+(rf/reg-sub
+ :link
+ ;; What the strip over the composer shows of a server's connection (claudia.web.views.pure.chat).
+ :<- [:servers]
+ :<- [:offline]
+ (fn [[servers offline?] [_ s]]
+   (let [{:keys [status back down-since]} (get servers s)] [status back offline? (some? down-since)])))
 
 (rf/reg-sub
  :chat

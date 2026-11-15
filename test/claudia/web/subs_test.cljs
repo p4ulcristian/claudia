@@ -14,3 +14,8 @@
   (is (= ["3" "2" "1"] (map :id (subs/list-rows servers :any #{}))))
   (is (= ["3" "2" "1"] (map :id (subs/list-rows servers false #{} ["a" "2"]))) "the open archived chat stays in the chats list")
   (is (= ["2"] (map :id (subs/list-rows servers true #{} ["a" "1"]))) "the open chat never joins the archived list"))
+
+(deftest no-network-is-not-a-server-off
+  (is (= :offline (subs/shown-status :closed true)))
+  (is (= :open (subs/shown-status :open true)) "an open socket wins over the browser's guess")
+  (is (= :closed (subs/shown-status :closed false))))

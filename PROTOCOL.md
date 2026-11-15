@@ -230,6 +230,13 @@ its questions or reads how it stands: that is the page's socket only (README dec
 
 One socket per server the page uses. Every frame is a JSON object with `type`.
 
+Page heartbeat: the page sends exactly `{"type":"ping"}` on a socket it has heard nothing on for
+10 s; the hub answers `{"type":"pong"}` itself and passes the ping on to no one. No frame within
+6 s after a ping = the socket is dead: the page opens a new one at once. A user action (any frame
+but `hello`, `open`, `close`, `older`, `picture`, `agent`, `agent_git`, `diff`, `seen`) sent while
+the socket is closed or quiet waits in the page and goes out after the socket is heard from (on a
+new socket: after `hello` and the open chat's `open`).
+
 Page → runner:
 
 | type | fields | effect |

@@ -88,14 +88,17 @@
 
 (def ^:private state-paths
   {:off ["M12 3v8" "M6.5 6.5a8 8 0 1 0 11 0"]
-   :reconnecting ["M20 12a8 8 0 0 0-14-5.3L4 9" "M4 4v5h5" "M4 12a8 8 0 0 0 14 5.3l2-2.3" "M20 20v-5h-5"]})
+   :reconnecting ["M20 12a8 8 0 0 0-14-5.3L4 9" "M4 4v5h5" "M4 12a8 8 0 0 0 14 5.3l2-2.3" "M20 20v-5h-5"]
+   :offline ["M3 3l18 18" "M8.5 16.4a5 5 0 0 1 7 0" "M4.9 12.8a10 10 0 0 1 4.6-2.6" "M19.1 12.8a10 10 0 0 0-2.7-1.9" "M12 20h.01"]})
+
+(def ^:private state-tips {:offline "no network" :reconnecting "reconnecting…"})
 
 (defn- state-icon
-  "Whether the server is there: a power sign when it is off, turning arrows while the page
-  reconnects, nothing when it is connected."
+  "Whether the server is there: a power sign when it is off, a struck-through wave when the device
+  has no network, turning arrows while the page reconnects, nothing when it is connected."
   [status label]
   (when-let [s (pure/server-state status)]
-    (let [tip (if (= :off s) (str label " is off") "reconnecting…")]
+    (let [tip (if (= :off s) (str label " is off") (state-tips s))]
       [:span.head-state {:class (name s) :role "img" :aria-label tip :data-tip tip}
        [:svg {:viewBox "0 0 24 24" :aria-hidden true}
         (for [d (state-paths s)] ^{:key d} [:path {:d d}])]])))

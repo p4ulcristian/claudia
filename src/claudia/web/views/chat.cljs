@@ -358,11 +358,19 @@
                            :on-click send!}
      "Send"]))
 
+(defn- link-strip
+  "The server's connection over the composer while it is not there (and \"Connected\" for a moment
+  when it is back)."
+  [server]
+  (when-let [s (pure/link-state @(rf/subscribe [:link server]))]
+    [:div.link-strip {:class (name s) :role "status"} (pure/link-text s)]))
+
 (defn- composer [{:keys [draft-key oc] :as props}]
   (let [ref (h/use-ref nil)
         picker (h/use-ref nil)
         text @(rf/subscribe [:draft draft-key])
-        server-meta @(rf/subscribe [:meta (or (:server oc) @(rf/subscribe [:new-server]))])
+        server (or (:server oc) @(rf/subscribe [:new-server]))
+        server-meta @(rf/subscribe [:meta server])
         items (usage/matches text oc server-meta)
         pick (min @(rf/subscribe [:slash-pick]) (max 0 (dec (count items))))
         attached @(rf/subscribe [:attach draft-key])
@@ -372,6 +380,7 @@
     (use-grow! ref text)
     (h/use-effect (fn [] (some-> (.-current ref) .focus) nil) [(str draft-key)])
     [:div.composer
+     [link-strip server]
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
