@@ -92,7 +92,7 @@
   (is (= ["z" "a" "b"] (map :name (files/folders-first [{:name "b"} {:name "z" :dir true} {:name "a"}])))))
 
 (deftest front-routes-by-email
-  (let [ps (front/parse-profiles "# who\nann ANN@x.org /s/a\nbob bob@x.org /s/b # note\nbroken line\n")]
+  (let [ps (front/parse-profiles "# who\nann ANN@x.org /s/a\nbob bob@x.org /s/b user=bobby # note\nbroken line\n")]
     (is (= [{:profile "ann" :email "ann@x.org" :socket "/s/a"} {:profile "bob" :email "bob@x.org" :socket "/s/b"}] ps))
     (is (= {:status 401 :error "No caller."} (front/route-of ps nil nil)))
     (is (= 403 (:status (front/route-of ps "eve@x.org" nil))))

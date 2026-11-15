@@ -14,7 +14,8 @@
 (def ^:private env (.-env js/process))
 
 (defn parse-profiles
-  "The profiles file's text: `<profile> <email> <runner socket>` per line; # starts a comment."
+  "The profiles file's text: `<profile> <email> <runner socket> [user=<linux user>]` per line; # starts
+  a comment. The user is install.sh's (whom the profile's host and runner run as); the front ignores it."
   [text]
   (vec (for [line (str/split-lines text)
              :let [[profile email socket] (str/split (str/trim (str/replace line #"#.*" "")) #"\s+")]

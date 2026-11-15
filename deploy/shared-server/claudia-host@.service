@@ -1,5 +1,6 @@
 # Claudia on a shared server: a profile's session host (the Agent SDK sessions), as
-# claudia-<profile>. Restarting it stops that profile's running chats; the runner does not.
+# claudia-<profile> or its user=<name> (install.sh's drop-in). Restarting it stops that profile's
+# running chats; the runner does not.
 [Unit]
 Description=Claudia session host for %i
 
