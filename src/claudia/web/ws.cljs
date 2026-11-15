@@ -214,10 +214,12 @@
 
 (rf/reg-fx :ws/send-all (fn [pairs] (doseq [[server frame] pairs] (post! server frame))))
 
-(rf/reg-fx
- :ws/hello
- ;; A socket that just opened: hello (and the open chat) first, then it is ready and its queue goes.
- (fn [[server frames]]
-   (doseq [f frames] (send! server f))
-   (swap! sockets assoc-in [server :ready] true)
-   (flush! server)))
+(defn hello!
+  "A socket that just opened: its frames (plain frames, claudia.web.events/hello-frames: hello and
+  the open chat) go first, then it is ready and its queue goes."
+  [[server frames]]
+  (doseq [f frames] (send! server f))
+  (swap! sockets assoc-in [server :ready] true)
+  (flush! server))
+
+(rf/reg-fx :ws/hello hello!)

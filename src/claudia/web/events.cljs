@@ -156,21 +156,26 @@
  (fn [db [_ online?]] (assoc db :offline (not online?))))
 
 (defn hello-frames
-  "What a socket that just opened sends: hello, and after a reconnect the open chat's open again
-  (full state, live events)."
+  "The frames a socket to server that just opened sends, in order (plain frames: they all go on that
+  one socket): hello, and after a reconnect the open chat's open again (full state, live events)."
   [[s c] server]
-  (cond-> [[server {:type "hello"}]]
-    (and (= s server) c) (conj [server {:type "open" :chat c}])))
+  (cond-> [{:type "hello"}]
+    (and (= s server) c) (conj {:type "open" :chat c})))
+
+(defn opened-fx
+  "What a socket to server opening at now does: its status, hello (and the open chat) on it, a
+  version check (a hub on a new version dropped every socket: is it new? claudia.web.updates), and
+  \"Connected\" hidden again after a while when it shows."
+  [db server now]
+  (let [entry (with-status (get-in db [:servers server]) :open now)]
+    {:db (assoc-in db [:servers server] entry)
+     :ws/hello [server (hello-frames (:open db) server)]
+     :fx (cond-> [[:dispatch [:version/check]]]
+           (:back entry) (conj [:dispatch-later {:ms back-shown-ms :dispatch [:ws/back-shown server]}]))}))
 
 (rf/reg-event-fx
  :ws/opened
- (fn [{:keys [db]} [_ server]]
-   (let [entry (with-status (get-in db [:servers server]) :open (js/Date.now))]
-     {:db (assoc-in db [:servers server] entry)
-      :ws/hello [server (hello-frames (:open db) server)]
-      ;; A hub on a new version dropped every socket: as they open again, is it new? (claudia.web.updates)
-      :fx (cond-> [[:dispatch [:version/check]]]
-            (:back entry) (conj [:dispatch-later {:ms back-shown-ms :dispatch [:ws/back-shown server]}]))})))
+ (fn [{:keys [db]} [_ server]] (opened-fx db server (js/Date.now))))
 
 (defmulti on-frame (fn [_db _server frame] (:type frame)))
 

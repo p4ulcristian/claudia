@@ -83,9 +83,24 @@
     (is (= "draft" (get-in d [:drafts :new])))))
 
 (deftest hello-frames-reopen-the-open-chat
-  (is (= [["s" {:type "hello"}] ["s" {:type "open" :chat "c"}]] (ev/hello-frames ["s" "c"] "s")))
-  (is (= [["t" {:type "hello"}]] (ev/hello-frames ["s" "c"] "t")))
-  (is (= [["s" {:type "hello"}]] (ev/hello-frames nil "s"))))
+  (is (= [{:type "hello"} {:type "open" :chat "c"}] (ev/hello-frames ["s" "c"] "s")))
+  (is (= [{:type "hello"}] (ev/hello-frames ["s" "c"] "t")))
+  (is (= [{:type "hello"}] (ev/hello-frames nil "s")))
+  (is (= [{:type "hello"}] (ev/hello-frames ["s" nil] "s")) "a new chat not made yet: nothing to open"))
+
+(deftest an-opened-socket-says-hello-on-itself
+  (let [start {:open ["s" "c"] :servers {"s" {:status :connecting}}}
+        fx (ev/opened-fx start "s" 1000)]
+    (is (= ["s" [{:type "hello"} {:type "open" :chat "c"}]] (:ws/hello fx)))
+    (is (= :open (get-in fx [:db :servers "s" :status])))
+    (is (= [[:dispatch [:version/check]]] (:fx fx)) "not down before: no Connected")
+    (is (= ["t" [{:type "hello"}]] (:ws/hello (ev/opened-fx start "t" 1000))) "another server's socket")))
+
+(deftest connected-shows-after-a-long-outage
+  (let [start {:servers {"s" {:status :closed :down-since 0}}}]
+    (is (= [:dispatch-later {:ms ev/back-shown-ms :dispatch [:ws/back-shown "s"]}]
+           (second (:fx (ev/opened-fx start "s" ev/back-after-ms)))))
+    (is (= 1 (count (:fx (ev/opened-fx start "s" (dec ev/back-after-ms))))) "a blip")))
 
 (deftest chat-of-frame-keeps-the-chat-fields
   (is (= {:title "T" :messages [{:id 1}] :loaded true}
