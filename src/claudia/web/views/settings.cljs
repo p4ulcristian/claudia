@@ -2,7 +2,7 @@
   "The list's title menu (whose chats, which servers) and the Settings screen, opened from the
   settings menu (claudia.web.views.menu: its plan card and More settings): the instance chip, the
   hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), all ~/Work
-  sessions, Servers and Access for admins, and each server's version and profile."
+  sessions, Admin and Servers for admins, and each server's version and profile."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
             [re-frame.core :as rf]
@@ -293,16 +293,16 @@
    [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]])
 
 (defn- hub-group []
-  [:section.st-group {:aria-label "Hub"}
+  [:section.st-group {:aria-label "Admin"}
+   [:button.st-row {:on-click #(rf/dispatch [:admin/open :people])}
+    [:span.st-label "Admin " [:span.st-note "people: servers, write access, admins"]]]
    [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
-    [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]
-   [:button.st-row {:on-click #(rf/dispatch [:admin/open :access])}
-    [:span.st-label "Access " [:span.st-note "who may use which server"]]]])
+    [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]])
 
 (defn- settings-view [shown?]
   (let [servers @(rf/subscribe [:server-list])
         server @(rf/subscribe [:settings-server])
-        ro @(rf/subscribe [:read-only?])
+        ro @(rf/subscribe [:viewing-other?])
         {:keys [all-sessions?]} @(rf/subscribe [:list-mode])]
     (use-escape-back! shown?)
     [:div.st-pane {:role "dialog" :aria-label "Settings" :aria-hidden (not shown?) :inert (when-not shown? true)}

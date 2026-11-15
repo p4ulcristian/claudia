@@ -26,8 +26,6 @@
        (.then #(when on-ok (rf/dispatch (conj on-ok %))))
        (.catch #(when on-fail (rf/dispatch (conj on-fail (.-message %))))))))
 
-(defn read-only? [db] (some? (:view db)))
-
 ;; ---- whose chats, and which servers' ----
 
 (rf/reg-event-fx
@@ -68,7 +66,8 @@
 
 (rf/reg-event-fx
  :ops/view
- ;; Whose chats show: nil = your own, else a profile name (read only). Every socket starts over.
+ ;; Whose chats show: nil = your own, else a profile name (read only unless the hub's write tick says
+ ;; otherwise, which each server's /api/me is asked again for). Every socket starts over.
  (fn [{:keys [db]} [_ view]]
    (let [servers (view-servers db view)]
      {:db (-> db
@@ -77,7 +76,8 @@
               (assoc :servers (events/connecting-servers servers)))
       :store ["claudia.view" view]
       :history/push nil
-      :ws/reconnect {:view view :servers servers}})))
+      :ws/reconnect {:view view :servers servers}
+      :dispatch [:ops/me-loaded]})))
 
 (defn tick-server
   "The hidden servers once server is ticked: a hidden one shows again, a shown one leaves the list,
@@ -95,7 +95,11 @@
      {:db (assoc db :hidden-servers hidden) :store ["claudia.hiddenServers" (clj->js (vec hidden))]})))
 
 (rf/reg-sub :view (fn [db] (:view db)))
-(rf/reg-sub :read-only? (fn [db] (read-only? db)))
+(rf/reg-sub :read-only? (fn [db [_ server]] (if server (events/read-only? db server) (events/read-only? db))))
+(rf/reg-sub :viewing-other? (fn [db] (events/viewing-other? db)))
+(rf/reg-sub :new-chat-read-only? (fn [db] (events/read-only? db (events/default-server db))))
+(rf/reg-sub :read-only-servers
+            (fn [db] (set (filter #(events/read-only? db %) (events/server-names db)))))
 (rf/reg-sub :hidden-servers (fn [db] (set (:hidden-servers db))))
 (rf/reg-sub :server-me (fn [db [_ s]] (get-in db [:server-me s])))
 (rf/reg-sub :server-mes (fn [db] (:server-me db)))
@@ -132,7 +136,7 @@
  :ops/adopt
  ;; A Claude Code session that isn't a chat here yet becomes one, and opens.
  (fn [{:keys [db]} [_ server id]]
-   (if (read-only? db)
+   (if (events/read-only? db server)
      {}
      {:api/call {:method "POST" :url (api-url server (str "sessions/" id "/adopt"))
                  :on-ok [:ops/adopted server] :on-fail [:ops/error]}})))
@@ -196,13 +200,13 @@
 (rf/reg-event-fx
  :ops/color
  (fn [{:keys [db]} [_ [s c] color]]
-   (when-not (read-only? db)
+   (when-not (events/read-only? db s)
      {:api/call {:method "PATCH" :url (api-url s (str "chats/" c)) :body {:color color} :on-fail [:ops/error]}})))
 
 (rf/reg-event-fx
  :ops/fork
  (fn [{:keys [db]} [_ [s c] at]]
-   (when-not (read-only? db)
+   (when-not (events/read-only? db s)
      {:db (assoc-in db [:menu :forking] true)
       :api/call {:method "POST" :url (api-url s (str "chats/" c "/fork")) :body (if at {:at at} {})
                  :on-ok [:ops/forked s] :on-fail [:ops/fork-failed]}})))
@@ -254,7 +258,7 @@
 (rf/reg-event-fx
  :ops/load-settings
  (fn [{:keys [db]} [_ server]]
-   (when (and server (not (read-only? db)))
+   (when (and server (not (events/viewing-other? db)))
      {:db (assoc db :settings-server server)
       :fx [[:dispatch [:ops/load-tokens]]
            [:dispatch [:ops/load-github]]]})))
@@ -264,7 +268,7 @@
 (rf/reg-event-fx
  :ops/load-tokens
  (fn [{:keys [db]} _]
-   (when-not (read-only? db)
+   (when-not (events/viewing-other? db)
      {:fx [[:api/call {:url "/hub/claude-tokens" :on-ok [:ops/tokens]}]]})))
 
 (rf/reg-event-db :ops/tokens (fn [db [_ t]] (assoc db :tokens t)))
@@ -276,7 +280,7 @@
 (rf/reg-event-fx
  :ops/load-github
  (fn [{:keys [db]} _]
-   (when-not (read-only? db)
+   (when-not (events/viewing-other? db)
      {:fx [[:api/call {:url "/hub/github-login" :on-ok [:ops/github-login]}]]})))
 
 (rf/reg-event-db :ops/github-login (fn [db [_ g]] (assoc db :github-login g)))

@@ -101,10 +101,10 @@
       [:div.cs-section label]
       (for [it part] ^{:key (key-of it)} [item-view it])])])
 
-(defn- found-chat [r f {:keys [multi? ro search-text tag-archived?]}]
+(defn- found-chat [r f {:keys [multi? ro-servers search-text tag-archived?]}]
   (let [k [(:server r) (:id r)]]
     [:div.found {:style {"--chat" (chat-color-var (:color r))}}
-     [row-view r {:multi? multi? :read-only? ro :line2? false :project? true
+     [row-view r {:multi? multi? :read-only? (contains? ro-servers (:server r)) :line2? false :project? true
                   :tag (when (and tag-archived? (:archived r)) "archived")
                   :title-view (if (:title f) [marked-title (:title r) search-text] (:title r))
                   :when-text (if (pos? (:count f)) (pure/hits-label (:count f)) (ago (:at r)))
@@ -122,7 +122,7 @@
                    :let [r (rows-by [server (:id f)])]
                    :when (and r (seq (pure/in-project [r] chip)))]
                [r f])
-        o {:multi? (:multi? m) :ro (:ro m) :search-text search-text :tag-archived? (not archived?)}]
+        o {:multi? (:multi? m) :ro-servers (:ro-servers m) :search-text search-text :tag-archived? (not archived?)}]
     (if (and (empty? hits) (seq found))
       [:p.muted.small.cs-empty "Nothing said matches."]
       [sectioned hits (comp :at first) (comp row-key first) (fn [[r f]] [found-chat r f o])])))
@@ -206,19 +206,19 @@
 (defn- archived-rows
   "The archived list: newest first under time sections, each row with its project; a pick opens the
   chat and the chats list comes back."
-  [{:keys [shown open multi? ro q]}]
+  [{:keys [shown open multi? ro-servers q]}]
   (if (empty? shown)
     [:p.muted.small.cs-empty (pure/empty-note q true)]
     [sectioned shown :at row-key
      (fn [r]
        (let [k [(:server r) (:id r)]]
-         [row-view r {:active? (= open k) :multi? multi? :read-only? ro :project? true
+         [row-view r {:active? (= open k) :multi? multi? :read-only? (contains? ro-servers (:server r)) :project? true
                       :on-click #(rf/dispatch [:nav/open k])}]))]))
 
 (defn- chat-rows
   "The chats list: passive chats (ash, or open in another tab) last and dimmed, a dashed line over
   the first of them, as on the rail."
-  [{:keys [shown open multi? ro new-pending? q archived?]}]
+  [{:keys [shown open multi? ro-servers viewing? new-pending? q archived?]}]
   (let [elsewhere @(rf/subscribe [:open-elsewhere])
         passive? #(pure/passive? % elsewhere open)
         rows (pure/passive-last shown elsewhere open)]
@@ -226,11 +226,11 @@
      (for [[i r] (map-indexed vector rows)
            :let [k [(:server r) (:id r)]]]
        ^{:key (row-key r)}
-       [row-view r {:active? (= open k) :multi? multi? :read-only? ro
+       [row-view r {:active? (= open k) :multi? multi? :read-only? (contains? ro-servers (:server r))
                     :passive? (passive? r)
                     :first-passive? (and (passive? r) (not (some-> (get rows (dec i)) passive?)))
                     :tag (when (:archived r) "archived")
-                    :done? (and (not ro) (:unseen r) (not= open k))}])
+                    :done? (and (not viewing?) (:unseen r) (not= open k))}])
      (when new-pending?
        [:div.chat-row.cs-row.active.cs-new
         [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
@@ -256,7 +256,8 @@
         q (pure/search-key text)]
     {:shown (pure/in-project (pure/matching rows q) chip) :open open :q q :archived? archived? :chip chip
      :in-scope (if archived? rows every-row)
-     :multi? @(rf/subscribe [:multi-server?]) :ro @(rf/subscribe [:read-only?])
+     :multi? @(rf/subscribe [:multi-server?]) :ro @(rf/subscribe [:new-chat-read-only?])
+     :ro-servers @(rf/subscribe [:read-only-servers]) :viewing? @(rf/subscribe [:viewing-other?])
      :new-pending? (and open (not (contains? (by-key rows) open))
                         (contains? @(rf/subscribe [:pending-new]) (second open)))}))
 

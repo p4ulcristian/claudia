@@ -72,14 +72,17 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
   another profile's chats (read only). The page asks for a view with the query parameter
   `?view=<profile>` on `/s/<server>/api/…` and `/s/<server>/ws` (a browser cannot set headers on a
   WebSocket, and Caddy clears `X-Claudia-*`); the hub takes `view` out of the query and sends it as
-  `X-Claudia-View`. Whether the caller may see that profile is the front's call.
+  `X-Claudia-View`. Whether the caller may see that profile is the front's call. On every call,
+  `X-Claudia-Writes: <email>,<email>` names the people whose chats the caller may write to (the
+  admins' write ticks, `PUT /hub/admin/writers`); absent when none.
 - The hub passes on no browser header but `Content-Type`, `Content-Length` and `Accept`: not the
   login cookie, not `X-Auth-Request-*`, not any `X-Claudia-*`. From the front's answer it drops
   `Set-Cookie` and the hop-by-hop headers.
 - `/hub/*` and `/s/*` refuse (403) a request another site's page made: `Sec-Fetch-Site` other than
   `same-origin`/`none`, or an `Origin` whose host is not this one (`X-Forwarded-Host`, else `Host`).
 - A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
-- front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view.
+- front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view
+  of a profile whose owner's email is not in `X-Claudia-Writes`.
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
 ## Hub HTTP
@@ -133,6 +136,7 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/people/:email` `{ name?, admin? }` | admin | changes a person |
 | `DELETE /hub/admin/people/:email` | admin | removes them and their ticks |
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
+| `PUT /hub/admin/writers` `{ email, owner, granted }` | admin | a write tick on or off: `email` may write to `owner`'s chats on every server where `owner` has a profile |
 | `POST /hub/admin/builder` `{ key }` | admin | makes the machine whose `deploy/release-builder/install.sh` printed `claudia-builder:<host>:<secret>` the release builder (the one before stops counting); answers like `GET /hub/admin` (its `builder`: `{ host, pairedAt, seenAt }` or null); 400 not a builder key |
 | `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
 | `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
@@ -178,7 +182,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 
 | Call | Answer |
 |---|---|
-| `GET /api/me` | `{ server, profile, profiles, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `viewing` = the profile looked at (read only) or null |
+| `GET /api/me` | `{ server, profile, profiles, writable, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `writable` = the other profiles here the caller may write to, `viewing` = the other profile looked at or null, `readOnly` = that view is read only |
 | `GET /api/version` | the front, the hub only: `{ commit (7 characters), version }`, what this machine runs (the update pill follows each machine with it) |
 | `POST /api/update-check` `{ rollback?, main?, stage?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`rollback <commit>`: back one release from that commit, README decision 35; `main <commit>`, `stage <tree>`, else `check <time>`), after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
 | `GET /api/claude-token/current` | the front, the hub only: `{ key, name, by, at }` of the token in use here (nulls when none came from the hub), never the token |

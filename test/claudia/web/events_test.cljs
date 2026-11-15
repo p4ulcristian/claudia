@@ -177,12 +177,16 @@
 
 (deftest hold-send-when-nothing-or-not-yet
   (let [out (ev/outgoing nil "hi")]
-    (is (false? (ev/hold-send? {} "c" nil out)))
-    (is (true? (ev/hold-send? {} "c" nil (ev/outgoing nil " "))))
-    (is (false? (ev/hold-send? {} "c" [{:images [{:data "x"}]}] (ev/outgoing [{:images [{:data "x"}]}] ""))))
-    (is (true? (ev/hold-send? {} "c" [{:busy true}] out)))
-    (is (true? (ev/hold-send? {:view "pat"} "c" nil out)))
-    (is (true? (ev/hold-send? {:pending-new {"c" {}}} "c" nil out)))))
+    (is (false? (ev/hold-send? {} "s" "c" nil out)))
+    (is (true? (ev/hold-send? {} "s" "c" nil (ev/outgoing nil " "))))
+    (is (false? (ev/hold-send? {} "s" "c" [{:images [{:data "x"}]}] (ev/outgoing [{:images [{:data "x"}]}] ""))))
+    (is (true? (ev/hold-send? {} "s" "c" [{:busy true}] out)))
+    (is (true? (ev/hold-send? {:view "pat"} "s" "c" nil out)))
+    (is (false? (ev/hold-send? {:view "pat" :server-me {"s" {:writable ["pat"]}}} "s" "c" nil out))
+        "a write tick for pat on s lets it send")
+    (is (true? (ev/hold-send? {:view "pat" :server-me {"t" {:writable ["pat"]}}} "s" "c" nil out))
+        "a write tick holds per server")
+    (is (true? (ev/hold-send? {:pending-new {"c" {}}} "s" "c" nil out)))))
 
 (deftest sending
   (let [out (ev/outgoing nil "hi")]

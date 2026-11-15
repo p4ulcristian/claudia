@@ -647,6 +647,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .admin-table.grid th:not(:first-child), .admin-table.grid td.cell { text-align: center; }
 .admin-table.grid td.person { font-family: var(--mono); font-size: 12px; }
 .admin-table.grid input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.admin-table.grid thead tr + tr th { text-align: center; }
+.admin-table.grid th.group { color: var(--accent); text-align: center; }
+.admin-table.grid td.self { color: var(--muted); }
 .admin-grid-wrap { overflow-x: auto; }
 .admin-form { display: grid; grid-template-columns: 8em 1fr 1fr auto; gap: 6px; }
 .admin-form.pair { grid-template-columns: 2fr 1fr 1fr auto; }

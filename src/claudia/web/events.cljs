@@ -62,6 +62,22 @@
   (let [names (server-names db)]
     (if (some #{(:new-server db)} names) (:new-server db) (first names))))
 
+(defn viewing-other?
+  "Another person's chats are shown (the title menu's \"<person>'s chats\")."
+  [db]
+  (some? (:view db)))
+
+(defn writable?
+  "The viewed person gave the caller a write tick that holds on this server (its /api/me says)."
+  [db server]
+  (boolean (some #{(:view db)} (get-in db [:server-me server :writable]))))
+
+(defn read-only?
+  "Viewing another person's chats without write access to them on server (default: the open chat's
+  server, else where a new chat would start)."
+  ([db] (read-only? db (or (first (:open db)) (default-server db))))
+  ([db server] (and (viewing-other? db) (not (writable? db server)))))
+
 (defn connecting-servers
   "server name -> the state of a socket just opening, for each of names."
   [names]
@@ -468,12 +484,13 @@
               (seq images) (assoc :images images))}))
 
 (defn hold-send?
-  "Nothing is sent: nothing to send, an attachment still on its way, another profile's chats, or a
-  new chat still on its way (the text waits in the composer until `created`)."
-  [db chat attach {:keys [text extra]}]
+  "Nothing is sent: nothing to send, an attachment still on its way, another profile's chats without
+  write access on server, or a new chat still on its way (the text waits in the composer until
+  `created`)."
+  [db server chat attach {:keys [text extra]}]
   (boolean (or (and (str/blank? text) (empty? (:images extra)))
                (some :busy attach)
-               (:view db)
+               (read-only? db server)
                (contains? (:pending-new db) chat))))
 
 (defn send-in-chat
@@ -502,10 +519,11 @@
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat."
   [db k typed]
   (let [chat (when (vector? k) (second k))
+        server (if chat (first k) (default-server db))
         attach (get-in db [:attach (if chat k :new)])
         out (outgoing attach typed)]
     (cond
-      (hold-send? db chat attach out) {}
+      (hold-send? db server chat attach out) {}
       chat (send-in-chat db k out)
       :else (send-new-chat db (default-server db) (new-uuid) out))))
 

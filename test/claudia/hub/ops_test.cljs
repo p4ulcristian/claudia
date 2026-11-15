@@ -17,6 +17,7 @@
   (is (= [:save-person "ann@example.com"] (ops/admin-route "PUT" "/hub/admin/people/Ann%40Example.com")))
   (is (= [:drop-person "ann@example.com"] (ops/admin-route "DELETE" "/hub/admin/people/ann@example.com")))
   (is (= [:set-access] (ops/admin-route "PUT" "/hub/admin/access")))
+  (is (= [:set-writer] (ops/admin-route "PUT" "/hub/admin/writers")))
   (is (= [:pair] (ops/admin-route "POST" "/hub/admin/pair")))
   (testing "anything else is nothing"
     (is (nil? (ops/admin-route "POST" "/hub/admin")))
@@ -75,3 +76,8 @@
   (is (= [:presence] (ops/person-route "POST" "/hub/presence")))
   (is (nil? (ops/person-route "GET" "/hub/push/devices")))
   (is (nil? (ops/person-route "POST" "/hub/push/live/a1"))))
+
+(deftest writer-problem-refuses-unknown-people-and-oneself
+  (is (= "No such person." (ops/writer-problem "a@x.org" "b@x.org" false)))
+  (is (= "A person always writes to their own chats." (ops/writer-problem "a@x.org" "a@x.org" true)))
+  (is (nil? (ops/writer-problem "a@x.org" "b@x.org" true))))
