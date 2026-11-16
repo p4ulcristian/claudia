@@ -31,10 +31,10 @@
     (js/Promise.resolve false)))
 
 (defn heard
-  "The warm state after a chunk of samples: into the rolling buffer, and into the clip while one runs."
-  [w chunk limit]
-  (cond-> (update w :ring pcm/ring-push chunk limit)
-    (:clip w) (update :clip conj chunk)))
+  "The warm state after a piece of samples: into the rolling buffer, and into the clip while one runs."
+  [w piece limit]
+  (cond-> (update w :ring pcm/ring-push piece limit)
+    (:clip w) (update :clip conj piece)))
 
 (defn- rate [w] (.-sampleRate ^js (:ctx w)))
 

@@ -12,10 +12,10 @@
   (reduce + 0 (map #(.-length ^js %) chunks)))
 
 (defn ring-push
-  "The rolling buffer with chunk added at the end and the oldest chunks dropped while what stays
-  still holds at least limit samples without them."
-  [chunks chunk limit]
-  (loop [cs (conj (vec chunks) chunk)]
+  "The rolling buffer with piece (a chunk of samples) added at the end and the oldest chunks dropped
+  while what stays still holds at least limit samples without them."
+  [chunks piece limit]
+  (loop [cs (conj (vec chunks) piece)]
     (if (and (> (count cs) 1) (>= (- (size cs) (.-length ^js (first cs))) limit))
       (recur (subvec cs 1))
       cs)))
