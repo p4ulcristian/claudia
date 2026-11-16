@@ -48,10 +48,16 @@
     (is (= [0 32767 -32768] (mapv #(.getInt16 view (+ 44 (* 2 %)) true) (range 3))))))
 
 (deftest mic-warm-state
-  (let [w (mic/heard {:ring [] :clip nil} (f32 1 2) 10)]
+  (let [w (mic/heard {:ring [] :clip nil} (f32 1 2) 10 1000)]
     (is (= [[1 2]] (mapv v (:ring w))))
+    (is (= 1000 (:last w)) "when the last samples came")
     (is (nil? (:clip w)) "no clip runs: only the buffer"))
   (let [w (mic/began {:ring [(f32 1 2) (f32 3 4)] :clip nil :timer 7} 3)]
     (is (= [[2] [3 4]] (mapv v (:clip w))) "a clip starts with the last moments")
     (is (nil? (:timer w)))
-    (is (= [[2] [3 4] [5]] (mapv v (:clip (mic/heard w (f32 5) 10)))))))
+    (is (= [[2] [3 4] [5]] (mapv v (:clip (mic/heard w (f32 5) 10 0)))))))
+
+(deftest mic-sounding
+  (is (not (mic/sounding? {:ring []} 5000)) "never a sample: no sound")
+  (is (mic/sounding? {:last 4800} 5000) "samples 200 ms ago")
+  (is (not (mic/sounding? {:last 4000} 5000)) "nothing for a second: no sound"))
