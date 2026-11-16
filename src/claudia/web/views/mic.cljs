@@ -9,12 +9,10 @@
   where the browser can record and the hub has a listen service."
   (:require [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
-            [claudia.web.hooks :as hooks]
+            [claudia.web.views.mic-clips :as clips]
             [claudia.web.views.mic-flower :as flower]
             [claudia.web.views.pure.mic :as pure]
-            [claudia.web.views.pure.update-pill :as clock]
             [re-frame.core :as rf]
-            [reagent.core :as r]
             [reagent.hooks :as h]))
 
 (defn- flower-state
@@ -42,40 +40,6 @@
          (some-> (.-current canvas) flower/wipe!))))
    [phase]))
 
-;; The clips let go, in the order they were spoken: each gets its place (:issued) when it is let go,
-;; and its words go out only once every earlier clip's have (a long clip is heard more slowly than a
-;; short one after it). {:issued n :next n :held {n [result]}}
-(defonce ^:private line (atom {:issued 0 :next 0 :held {}}))
-
-;; The clips being heard, for the list over the composer: n -> {:n :secs :dir :t0 :heard}.
-(defonce ^:private clips (r/atom {}))
-
-(defn- place!
-  "Clip n's place in line, and its row in the list (secs: how long it was held)."
-  [secs dir]
-  (let [n (dec (:issued (swap! line update :issued inc)))]
-    (swap! clips assoc n {:n n :secs secs :dir dir :t0 (js/Date.now) :heard false})
-    n))
-
-(defn- arrive!
-  "Clip n's outcome ({:text :dir :on-heard}, nil when nothing was heard): what is now in order goes
-  out, and its rows leave the list."
-  [n result]
-  (let [out (atom nil)]
-    (swap! line (fn [l] (let [[l' ready] (pure/in-order l n result)] (reset! out ready) l')))
-    (swap! clips (fn [cs] (into {} (remove (fn [[k]] (< k (:next @line)))) (assoc-in cs [n :heard] true))))
-    (doseq [{:keys [text dir on-heard]} @out] (on-heard text dir))))
-
-(defn- heard!
-  "Clip n heard by the hub, its words given out in turn."
-  [n on-heard dir clip]
-  (-> (mic/hear clip)
-      (.then (fn [text] (mic/report! {:event "heard" :bytes (.-size clip) :chars (count text)})
-               (arrive! n {:text text :dir dir :on-heard on-heard})))
-      (.catch (fn [e] (mic/report! {:event "hear-failed" :bytes (.-size clip) :error (.-message e)})
-                (arrive! n nil)
-                (rf/dispatch [:mic/failed (.-message e)])))))
-
 (defn- watch-start!
   "Reports a press whose microphone is not recording 5 s later (the button still amber)."
   [hold p]
@@ -97,16 +61,16 @@
 (defn- press!
   "Pointer down: the clip starts (the microphone opens if it is cold; the first time the browser
   asks for it)."
-  [^js e {:keys [hold live set-phase set-dir on-heard]}]
+  [^js e {:keys [hold live set-phase set-dir draft-key]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (speech/stop!)   ; it never talks over you
     (let [t0 (js/performance.now) warm (mic/warm?)
           p (.then (mic/start!) #(started! t0 warm %))]
-      ;; on-heard as it is at the press: the composer the person spoke into, even when another chat
+      ;; The composer as it is at the press: the one the person spoke into, even when another chat
       ;; is open by the time the words are heard.
-      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p :on-heard on-heard})
+      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p :k draft-key})
       (set-dir :send)
       (set-phase :starting)
       (watch-start! hold p)
@@ -130,7 +94,7 @@
   "Pointer up: a hold long enough is heard and sent (dragged right: added to the message; dragged
   up: thrown away); a tap is dropped and says to hold."
   [{:keys [hold live set-phase]}]
-  (when-let [{:keys [t0 p dir on-heard rec-at]} (.-current hold)]
+  (when-let [{:keys [t0 p dir k rec-at]} (.-current hold)]
     (set! (.-current hold) nil)
     (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)
           secs (js/Math.round (/ (- (js/performance.now) (or rec-at t0)) 1000))]
@@ -139,9 +103,8 @@
                  (cond
                    tap? (do (mic/discard! s) (set-phase :tap))
                    (= dir :cancel) (do (mic/discard! s) (set-phase :idle))
-                   :else (let [n (place! secs dir)]
-                           (set-phase :idle)
-                           (.then (mic/stop! s) #(heard! n on-heard dir %)))))))))
+                   :else (do (set-phase :idle)
+                             (clips/spoken! k dir secs (mic/stop! s)))))))))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
@@ -154,22 +117,6 @@
      (when (= phase :tap)
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
-
-(defn- clip-row [{:keys [n secs dir t0 heard]} now]
-  [:li.mic-clip {:class (when heard "heard")}
-   [:span (str (inc n) " \u00b7 " secs " s \u2192 " (if (= dir :add) "add" "send"))]
-   [:b (if heard "heard, waits its turn" (str "hearing " (clock/clock-text (- now t0))))]])
-
-(defn- clip-list-view []
-  (let [now (hooks/use-now) cs (vals @clips)]
-    (when (seq cs)
-      [:ol.mic-clips {:aria-live "polite"}
-       (for [c (sort-by :n cs)] ^{:key (:n c)} [clip-row c now])])))
-
-(defn- clip-list
-  "Over the composer: each clip being heard, in spoken order, with how long it has been loading."
-  []
-  [:f> clip-list-view])
 
 (defn- core
   "The button with its bars, and the hint after a tap."
@@ -189,12 +136,13 @@
 
 (defn- view [{:keys [phase] :as parts}]
   [:div.mic {:class (name phase)}
-   [clip-list]
+   [clips/clip-list]
    (core parts)])
 
 (defn button
-  "The mic, or nothing where the mic cannot work. on-heard gets the heard text and :send or :add."
-  [on-heard]
+  "The mic, or nothing where the mic cannot work. draft-key: the composer it speaks into ([server
+  chat] or :new); the heard words go there (:mic/heard), sent or added as each press chose."
+  [draft-key]
   (let [[ok set-ok] (h/use-state false)
         [phase set-phase] (h/use-state :idle)
         [dir set-dir] (h/use-state :send)
@@ -206,4 +154,4 @@
     (use-tap-hint! phase set-phase)
     (when ok
       (view {:phase phase :dir dir :canvas canvas :hold hold :live live
-             :set-phase set-phase :set-dir set-dir :on-heard on-heard}))))
+             :set-phase set-phase :set-dir set-dir :draft-key draft-key}))))

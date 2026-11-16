@@ -204,6 +204,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.
+    Never lost (2026-11-16, after the listen service failed on a half-minute clip and it had to be
+    said again): every clip is kept on the device (IndexedDB, `src/claudia/web/clip_store.cljs`)
+    until its words went out; a failure is heard once more by itself after 2.5 s, then the clip stays
+    in the list with Try again and Throw away and holds the clips after it, so the order holds; after
+    a reload kept clips come back that way. Words go to the composer the clip was spoken into
+    (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
 
 21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
     chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one

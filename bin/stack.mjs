@@ -73,11 +73,14 @@ function seedRow(runnerData, cwd) {
   db.close();
 }
 
-// A stand-in for the listen service (OpenAI's transcription shape): every clip is heard as heardText.
-function startListen(port) {
+// A stand-in for the listen service (OpenAI's transcription shape): every clip is heard as heardText,
+// after the first `fails` clips are answered 500 (to try what a failure does).
+function startListen(port, fails = 0) {
+  let left = fails;
   const s = http.createServer((req, res) => {
     req.resume();
     req.on('end', () => {
+      if (left > 0) { left--; res.writeHead(500); res.end('{"error":"stand-in failure"}'); return; }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ text: heardText }));
     });
@@ -121,7 +124,7 @@ function writeConfig(tmp, frontPort, runnerSock) {
 }
 
 // startStack({listen}): the programs up and answering. -> {hubUrl, hubPort, out, stop()}
-export async function startStack({ listen = false } = {}) {
+export async function startStack({ listen = false, listenFails = 0 } = {}) {
   for (const f of ['hub.js', 'front.js', 'runner.js', 'web/index.html'])
     if (!existsSync(join(repo, 'out', f))) throw new Error(`out/${f} is missing: build first`);
   // The real path: macOS's temp folder (/var/folders/…) is behind a symlink (/private/var/…), and the
@@ -140,7 +143,7 @@ export async function startStack({ listen = false } = {}) {
     const runnerSock = join(tmp, 'runner.sock');
     const ports = { front: await freePort(), hub: await freePort(), listen: await freePort() };
     writeConfig(tmp, ports.front, runnerSock);
-    if (listen) servers.push(await startListen(ports.listen));
+    if (listen) servers.push(await startListen(ports.listen, listenFails));
     const env = settings(tmp, ports, runnerSock, listen && `http://127.0.0.1:${ports.listen}`);
     procs.push(program(out, state, 'runner', 'runner.js', env.runner));
     await until('the runner\'s store', () => existsSync(join(tmp, 'runner', 'claudia.db')) && existsSync(runnerSock));
