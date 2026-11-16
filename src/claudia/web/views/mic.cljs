@@ -66,13 +66,32 @@
          (some-> (.-current canvas) wipe!))))
    [phase]))
 
-(defn- heard! [on-heard set-phase dir clip]
+;; The clips let go, in the order they were spoken: each gets its place (:issued) when it is let go,
+;; and its words go out only once every earlier clip's have (a long clip is heard more slowly than a
+;; short one after it). {:issued n :next n :held {n [result]}}
+(defonce ^:private line (atom {:issued 0 :next 0 :held {}}))
+
+(defn- place! [] (dec (:issued (swap! line update :issued inc))))
+
+(defn- arrive!
+  "Clip n's outcome ({:text :dir :on-heard}, nil when nothing was heard): what is now in order goes out."
+  [n result]
+  (let [out (atom nil)]
+    (swap! line (fn [l] (let [[l' ready] (pure/in-order l n result)] (reset! out ready) l')))
+    (doseq [{:keys [text dir on-heard]} @out] (on-heard text dir))))
+
+(defn- heard!
+  "Clip n heard by the hub, its words given out in turn; the button shows hearing until the last
+  clip let go is through (a press meanwhile keeps its own state)."
+  [n on-heard set-phase dir clip]
   (set-phase :hearing)
   (-> (mic/hear clip)
-      (.then (fn [text] (mic/report! {:event "heard" :bytes (.-size clip) :chars (count text)}) (on-heard text dir)))
+      (.then (fn [text] (mic/report! {:event "heard" :bytes (.-size clip) :chars (count text)})
+               (arrive! n {:text text :dir dir :on-heard on-heard})))
       (.catch (fn [e] (mic/report! {:event "hear-failed" :bytes (.-size clip) :error (.-message e)})
+                (arrive! n nil)
                 (rf/dispatch [:mic/failed (.-message e)])))
-      (.finally #(set-phase :idle))))
+      (.finally #(when (= (:next @line) (:issued @line)) (set-phase (fn [p] (if (= p :hearing) :idle p)))))))
 
 (defn- watch-start!
   "Reports a press whose microphone is not recording 5 s later (the button still amber)."
@@ -133,7 +152,7 @@
                  (set! (.-current live) nil)
                  (if tap?
                    (do (mic/discard! s) (set-phase :tap))
-                   (.then (mic/stop! s) #(heard! on-heard set-phase dir %))))))))
+                   (let [n (place!)] (.then (mic/stop! s) #(heard! n on-heard set-phase dir %)))))))))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}

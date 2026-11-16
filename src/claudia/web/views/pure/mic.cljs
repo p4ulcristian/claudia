@@ -50,3 +50,13 @@
   [old fresh]
   (mapv (fn [o n] (if (> n o) (+ o (* 0.6 (- n o))) (+ o (* 0.2 (- n o)))))
         (or (seq old) (repeat (count fresh) 0)) fresh))
+
+(defn in-order
+  "The clips heard so far, given out in the order they were spoken: line is {:next n :held {n
+  result}} (n counts the clips from 0 as they are let go), and result is clip n's outcome (nil when
+  it failed or was empty: it holds nothing back). -> [line' results-to-give-out-now]."
+  [line n result]
+  (loop [held (assoc (:held line) n [result]) due (:next line) out []]
+    (if-let [[r] (get held due)]
+      (recur (dissoc held due) (inc due) (cond-> out r (conj r)))
+      [(assoc line :next due :held held) out])))

@@ -28,3 +28,15 @@
   (is (= :send (mic/gesture (dec mic/drag-px))))
   (is (= :add (mic/gesture mic/drag-px)))
   (is (= :add (mic/gesture 200))))
+
+(deftest heard-clips-go-out-in-spoken-order
+  (let [l0 {:next 0 :held {}}
+        [l1 out1] (mic/in-order l0 1 {:text "second"})
+        [l2 out2] (mic/in-order l1 0 {:text "first"})]
+    (is (= [] out1) "the second clip, heard first, waits")
+    (is (= [{:text "first"} {:text "second"}] out2) "the first one lets both out, in order")
+    (is (= {:next 2 :held {}} l2)))
+  (let [[l1 out1] (mic/in-order {:next 0 :held {}} 1 {:text "b"})
+        [_ out2] (mic/in-order l1 0 nil)]
+    (is (= [] out1))
+    (is (= [{:text "b"}] out2) "a failed earlier clip holds nothing back")))
