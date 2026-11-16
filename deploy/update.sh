@@ -80,6 +80,24 @@ curl -fsSL --max-time 20 -o "$signers.new" "https://raw.githubusercontent.com/$r
 tmp=$(mktemp -d "$work/release.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
+# kept <api path> <json expression>: GitHub's answer about fixed commits (a commit's tree, how two
+# commits compare), asked once and kept in $work/github: it never changes. Without a token a
+# server gets 60 API calls an hour, and every poke runs this script (2026-11-17: destiny ran it 28
+# times in an hour, two calls each, and GitHub answered 403 until the hour was over).
+kept() {
+	local f v
+	f="$work/github/$(printf '%s' "$1" | tr '/.' '__')"
+	if [ ! -s "$f" ]; then
+		v=$(api "$1" | json "$2") || return 0
+		[ -n "$v" ] || return 0
+		mkdir -p "$work/github"
+		printf '%s\n' "$v" >"$f.new" && mv "$f.new" "$f"
+		# The newest 200 are enough: only main's latest commits are asked about.
+		ls -t "$work/github" | tail -n +201 | while read -r old; do rm -f "$work/github/$old"; done
+	fi
+	cat "$f"
+}
+
 json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const r=new Function("v","return "+process.argv[1])(v);process.stdout.write(String(r??""))})' "$1"; }
 api() { curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} "https://api.github.com/repos/$repo/$1"; }
 
@@ -196,7 +214,7 @@ fetch_tree() {
 }
 
 # main's commit from git's own ref list (the API can name the commit before a push a few seconds
-# longer, and this costs no API call), then its tree from the API (a commit never changes).
+# longer, and this costs no API call), then its tree from the API (a commit never changes, so it is asked once: kept).
 main_now() {
 	curl -fsS --max-time 20 "https://github.com/$repo.git/info/refs?service=git-upload-pack" |
 		grep -aoE "[0-9a-f]{40} refs/heads/$branch\$" | cut -d' ' -f1 || true
@@ -209,7 +227,7 @@ for _ in $(seq 20); do
 	want=$(main_now)
 done
 [[ $want =~ ^[0-9a-f]{40}$ ]] || { echo "GitHub named no commit for $branch" >&2; exit 1; }
-tree=$(api "git/commits/$want" | json 'v.tree.sha')
+tree=$(kept "git/commits/$want" 'v.tree.sha')
 [[ $tree =~ ^[0-9a-f]{40}$ ]] || { echo "GitHub named no tree for ${want:0:7}" >&2; exit 1; }
 have=$(cat "$dest/commit.txt" 2>/dev/null || true)
 
@@ -292,7 +310,7 @@ if grep -qxF "$want" "$work/rolled-back" 2>/dev/null; then
 elif [ "$have" != "$want" ]; then
 	# Only forward: the new commit must contain the installed one.
 	status=ahead
-	[[ $have =~ ^[0-9a-f]{40}$ ]] && status=$(api "compare/$have...$want" | json 'v.status')
+	[[ $have =~ ^[0-9a-f]{40}$ ]] && status=$(kept "compare/$have...$want" 'v.status')
 	if [ "$status" = ahead ]; then
 		install_main
 	else
