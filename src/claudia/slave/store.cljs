@@ -5,7 +5,8 @@
             ["node:fs" :as fs]
             ["node:path" :as path]
             [clojure.string :as str]
-            [claudia.shared.protocol :as p]))
+            [claudia.shared.protocol :as p]
+            [claudia.slave.upgrade :as upgrade]))
 
 (defonce ^:private db (atom nil))
 
@@ -102,12 +103,36 @@
               DROP TABLE chat_settings;
               COMMIT;")))
 
+;; Version 1 (2026-11-16, README decision 39): every saved picture's blocks are forms.
+(def ^:private version 1)
+
+(defn- rewrite-scenes!
+  "Every saved picture (the chats' and the history's) rewritten by f, in one transaction."
+  [^js d f]
+  (let [redo (fn [json] (p/write-json (f (p/read-json json))))
+        ^js chat-st (.prepare d "UPDATE chats SET scene = ? WHERE id = ?")
+        ^js pic-st (.prepare d "UPDATE pictures SET scene = ? WHERE chat = ? AND turn = ?")]
+    (.exec d "BEGIN")
+    (try
+      (doseq [^js r (.all (.prepare d "SELECT id, scene FROM chats WHERE scene IS NOT NULL"))]
+        (.run chat-st (redo (.-scene r)) (.-id r)))
+      (doseq [^js r (.all (.prepare d "SELECT chat, turn, scene FROM pictures"))]
+        (.run pic-st (redo (.-scene r)) (.-chat r) (.-turn r)))
+      (.exec d (str "PRAGMA user_version = " version))
+      (.exec d "COMMIT")
+      (catch :default e (.exec d "ROLLBACK") (throw e)))))
+
+(defn- upgrade! [^js d]
+  (when (< (.-user_version (.get (.prepare d "PRAGMA user_version"))) version)
+    (rewrite-scenes! d upgrade/scene)))
+
 (defn open! [dir]
   (fs/mkdirSync dir #js {:recursive true})
   (let [d (DatabaseSync. (path/join dir "claudia.db"))]
     (.exec d schema)
     (add-missing-columns! d)
     (drop-chat-settings! d)
+    (upgrade! d)
     (reset! db d)))
 
 (defn- stmt ^js [sql] (.prepare ^js @db sql))
@@ -163,7 +188,7 @@
 (defn save-scene! [id s]
   (.run (stmt "UPDATE chats SET scene = ? WHERE id = ?") (p/write-json s) id))
 
-;; Templates: freeform blocks kept by name (save_template, the badge's "save as template").
+;; Templates: html blocks kept by name (save_template, the badge's "save as template").
 
 (defn- template-row [^js r]
   (when r

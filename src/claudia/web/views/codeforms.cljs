@@ -1,6 +1,6 @@
 (ns claudia.web.views.codeforms
-  "The page's side of the code forms and templates: which renderer a form block gets, the
-  \"save as template\" button on freeform badges, and the Forms gallery."
+  "The page's side of the forms and templates: which renderer a block gets, the \"save as
+  template\" button on html badges, and the Forms gallery."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -23,9 +23,12 @@
 ;; ---- which renderer ----
 
 (defn form-view
-  "A form block's body. ctx: {:server :chat :block :live}."
+  "A block's body by its form. ctx: {:server :chat :block :live :changed :seq-no} (changed, seq-no:
+  what the last draw changed and its number, for a graph's rings)."
   [form data ctx]
   (case form
+    "graph" [:f> graph/graph-view data (or (:changed ctx) #{}) (or (:seq-no ctx) 0)]
+    "html" [:f> frame/page-frame (:html data) (:parts data)]
     "files" [:div.form-view.form-files [:f> files/files-form data ctx]]
     "git" [:div.form-view.form-git [:f> git/git-form data ctx]]
     "clojure" [:div.form-view.form-clojure [:f> clojure/clojure-form data ctx]]
@@ -37,7 +40,7 @@
     "scene3d" [:div.form-view.form-scene3d [scene3d/scene3d-form data (:block ctx) ctx]]
     [base-forms/form-view form data (:block ctx)]))
 
-;; ---- "save as template" on a freeform block's badge ----
+;; ---- "save as template" on an html block's badge ----
 
 (defn template-save
   "The badge's button: a name field (the block's name to start with), then the block is kept as a
@@ -60,7 +63,7 @@
     (cond
       note [:span.tpl-note note]
       (nil? nm) [:button.tpl-save {:type "button" :title "Save as a template Claude can reuse and change by name"
-                                   :on-click #(set-nm (or (:name b) (when (= "html" (:kind b)) (:template b)) id))}
+                                   :on-click #(set-nm (or (:name b) (get-in b [:data :template]) id))}
                  "save as template"]
       :else [:span.tpl-form
              [:input {:auto-focus true :value nm :placeholder "Template name"
@@ -82,20 +85,10 @@
       (.catch (fn [_]))))
 
 
-(def ^:private sample-graph
-  {:id "graph" :kind "graph"
-   :nodes [{:id "you" :label "You" :color "violet"} {:id "page" :label "Page" :shape "box" :color "blue"}
-           {:id "claude" :label "Claude" :color "amber" :state "active"}]
-   :edges [{:from "you" :to "page" :label "type"} {:from "page" :to "claude" :label "turn"}]
-   :groups []})
-
-(def ^:private sample-freeform
-  "<div style=\"display:flex;gap:10px;align-items:center\"><span style=\"font:700 20px var(--hand)\">Anything else</span><input type=\"range\" min=\"0\" max=\"10\" value=\"6\"><span style=\"color:var(--muted)\">sliders, mockups, a table, code…</span></div>")
-
 (defn- badge
   "An entry's badge, as the picture's: the kind (a form by its label), a template by its name."
   [kind label tpl-name]
-  [:span.block-badge {:class (str "b-" kind) :title (when-not (#{"graph" "freeform" "template"} kind) (forms/when-line kind))}
+  [:span.block-badge {:class (str "b-" kind) :title (when-not (= "template" kind) (forms/when-line kind))}
    [:b label]
    (when tpl-name [:span.block-name tpl-name])])
 
@@ -145,24 +138,21 @@
 
 (defn- form-entries [fs hidden on-hide set-deleting]
   [:div.g-list
-   [entry {:n 1 :badge [badge "graph" "graph"] :when "Things and how they connect: circles, boxes, arrows, groups. The default."}
-    [:f> graph/graph-view sample-graph]]
    (for [[i f] (map-indexed vector fs)
-         :let [gone (some #{f} hidden)]]
+         :let [gone (some #{f} hidden)
+               core? (forms/core f)]]
      ^{:key f}
-     [entry {:n (+ i 2) :badge [badge f (str/lower-case (or (forms/label f) f))] :when (forms/when-line f)
+     [entry {:n (inc i) :badge [badge f (str/lower-case (or (forms/label f) f))] :when (forms/when-line f)
              :deleted gone
-             :on-delete (when-not gone #(set-deleting {:kind "form" :name f}))
+             :on-delete (when-not (or gone core?) #(set-deleting {:kind "form" :name f}))
              :on-restore (when gone #(on-hide (vec (remove #{f} hidden))))}
-      [form-view f (forms/sample f) {}]])
-   [entry {:n (+ 2 (count fs)) :badge [badge "freeform" "freeform"] :when "Claude's own small page, for what no graph or form shows. Save a good one as a template from its badge."}
-    [:f> frame/page-frame sample-freeform nil]]])
+      [form-view f (forms/sample f) {}]])])
 
 (defn- template-entries [info n0 set-deleting]
   (let [templates (:templates info)]
     (cond
       (nil? info) [:p.muted "Loading…"]
-      (empty? templates) [:p.muted "None yet. Use \"save as template\" on a freeform block, or ask Claude to save one."]
+      (empty? templates) [:p.muted "None yet. Use \"save as template\" on an html block, or ask Claude to save one."]
       :else
       [:div.g-list
        (for [[i t] (map-indexed vector templates)]
@@ -196,6 +186,6 @@
       (gallery-head close)
       (form-entries fs hidden on-hide set-deleting)
       [:h3.g-section "Templates"]
-      (template-entries info (+ 2 (count fs)) set-deleting)]
+      (template-entries info (count fs) set-deleting)]
      (when deleting
        [confirm-delete deleting (confirm-yes server hidden on-hide deleting set-deleting) #(set-deleting nil)])]))

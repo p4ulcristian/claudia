@@ -6,11 +6,8 @@
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.db :as db]
-            [claudia.web.md :as md]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.forms :as forms]
-            [claudia.web.views.frame :as frame]
-            [claudia.web.views.graph :as graph]
             [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
             [claudia.web.views.snapshot :as snapshot]))
@@ -32,14 +29,13 @@
          hot (or (contains? changed (:id block))
                  (some #(str/starts-with? (str %) (str (:id block) ":")) changed))]
      [:section.block {:class [(str "w-" (if (= "half" (:width block)) "half" "full"))
-                              (str "k-" (:kind block))
                               (when (= kept :gone) "kept-gone")]
                       :on-click-capture (when-not kept on-touch)}
       ;; A new glow per change; the block itself stays mounted (an html block keeps its page loaded).
       (when hot ^{:key seq-no} [:span.block-glow])
       [:div.block-head
        [forms/badge block]
-       (when (and (= "html" (:kind block)) (:live ctx))
+       (when (and (= "html" (:form block)) (:live ctx))
          [:f> codeforms/template-save (:server ctx) (:chat ctx) block])
        (when kept
          [:button.kept-off {:class (name kept) :on-click on-unkeep
@@ -47,31 +43,8 @@
                                      "Claude took this off the picture; it stays until you close it"
                                      "Kept: stays even when Claude takes it off the picture. Click to stop keeping it")}
           (if (= kept :gone) "kept · close ✕" "kept ✕")])]
-      (case (:kind block)
-        "graph" [:f> graph/graph-view block changed seq-no]
-        ;; Every block is as tall as it is: no inner scrolling, the picture scrolls.
-        "form" [codeforms/form-view (:form block) (:data block) ctx]
-        "html" [:f> frame/page-frame (:html block) (:parts block)]
-        [:p.f-note (str "Unknown block kind \"" (:kind block) "\".")])])))
-
-;; ---- a picture from before blocks: its graph and cards as they were drawn ----
-
-(defn- card [{:keys [kind title text code items html columns rows color]}]
-  (let [kind (or kind "text")]
-    [:section.card {:class [(str "c-" (or color "grey")) (str "k-" kind)]}
-     (when title [:h3 title])
-     (case kind
-       "text" [:div.md {:dangerouslySetInnerHTML {:__html (md/html text)}}]
-       "code" [:div.code [:pre [:code.hljs (or code text)]]]
-       "list" (into [:ul] (map-indexed (fn [i it] ^{:key i} [:li {:dangerouslySetInnerHTML {:__html (md/html it)}}]) items))
-       "page" [:f> frame/page-frame html nil]
-       "table" [:div.table-wrap
-                [:table
-                 (when (seq columns) [:thead (into [:tr] (map-indexed (fn [i c] ^{:key i} [:th c]) columns))])
-                 (into [:tbody] (map-indexed (fn [i row] ^{:key i}
-                                               (into [:tr] (map-indexed (fn [j c] ^{:key j} [:td {:dangerouslySetInnerHTML {:__html (md/html c)}}]) row)))
-                                             rows))]]
-       nil)]))
+      ;; Every block is as tall as it is: no inner scrolling, the picture scrolls.
+      [codeforms/form-view (:form block) (:data block) (assoc ctx :changed changed :seq-no seq-no)]])))
 
 (defn- empty-state []
   [:div.picture-empty
@@ -87,14 +60,8 @@
      ^{:key (:id b)}
      [block-view b {:changed (:changed p) :seq-no (:seq p) :live? live?
                     :kept (when kept? (if (gone (:id b)) :gone :here))
-                    :on-touch (when (and live? (= "form" (:kind b)) (= "files" (:form b))) #(keep! (:id b)))
+                    :on-touch (when (and live? (= "files" (:form b))) #(keep! (:id b)))
                     :on-unkeep #(unkeep! (:id b))}])])
-
-(defn- old-picture [scene p]
-  [:div.picture
-   (when (seq (:nodes scene)) [:f> graph/graph-view scene (:changed p) (:seq p)])
-   (when (seq (:cards scene))
-     [:div.cards (for [c (:cards scene)] ^{:key (:id c)} [card c])])])
 
 (defn picture-view
   "A scene's blocks. k: the chat it belongs to; live?: it is the chat's live picture (forms that
@@ -118,9 +85,6 @@
                     :unkeep! (fn [id]
                                (set! (.-current copies) (dissoc (.-current copies) id))
                                (set-kept (fn [kp] {:k k :ids (vec (remove #{id} (:ids kp)))})))})
-
-      (and (nil? (:blocks scene)) (or (seq (:nodes scene)) (seq (:cards scene))))
-      (old-picture scene p)
 
       :else [empty-state])))
 

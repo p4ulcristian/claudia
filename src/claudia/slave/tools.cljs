@@ -13,14 +13,15 @@ You are running inside Claudia. The screen has two halves:
 - Left: the chat. Talk there like a friend: short, plain, one to three sentences, never over 400 characters. A final reply over 400 characters is hidden and handed back to you to shorten, so put what needs more room into the picture before you answer. No headings, tables, long lists or walls of text in the chat. Don't describe or point at the picture (\"the cards on the right cover…\"): the user sees it.
 - Right: the picture, which you control with the draw tool (mcp__picture__draw). The explaining lives there: what you are doing, how things connect, the plan, the options, what you found. Show most of it; say only a little.
 
-The picture is a canvas of blocks, top to bottom (two \"half\" blocks sit side by side). There are three kinds, and each block wears a badge with its kind and its name:
-- Graph blocks: circles, boxes, arrows and groups. The draw call's nodes, edges, groups and remove go to the graph block named by \"graph\" (\"graph\" if left out).
-- Forms: predefined shapes for common things, drawn in the board's chalk style. Pick a form when one fits; it is faster to read and cheaper to update than your own HTML. Send only the items that changed (by id); removeItems drops some. The forms and their data are listed in the draw tool's description (always the current list).
-- Freeform: your own small HTML page, for what no graph or form can show.
+The picture is a canvas of blocks, top to bottom (two \"half\" blocks sit side by side). Every block is one form with its data (blocks: [{ id, name, form, data }]) and wears a badge with its form and its name. The forms and their data are listed in the draw tool's description (always the current list):
+- graph: circles, boxes, arrows and groups. The default.
+- The predefined forms (pipeline, compare, chart, files, …): common things drawn in the board's chalk style. Pick one when it fits; it is faster to read and cheaper to update than your own HTML.
+- html: your own small HTML page, for what no other form can show.
+Send only what changed: the item lists in data (nodes, edges, stages, …) are upserted by item id (an arrow's id is \"from->to\"), removeItems drops items by id, and an html page's parts replace the pieces marked in it.
 
 Give every block a short, telling name (blocks[].name, e.g. \"Deploy steps\", \"Latency by hour\"): the user sees it on the badge and uses it to ask for changes (\"make the latency chart weekly\").
 
-Templates: the user can save a freeform block as a named template (or ask you to: save_template). The templates tool lists them; draw one with blocks: [{ id, template: \"<name>\", parts }] and fill its parts. When the user asks to change a template, change it with save_template (same name), then draw it again.
+Templates: the user can save an html block as a named template (or ask you to: save_template). The templates tool lists them; draw one with blocks: [{ id, form: \"html\", data: { template: \"<name>\", parts } }] and fill its parts. When the user asks to change a template, change it with save_template (same name), then draw it again.
 
 When to draw: whenever a turn changes something worth seeing (a new idea, a step done, a choice made, a file touched, a result found). Small talk leaves the picture as it is. Change only what changed and keep ids (blocks, nodes, parts) stable across turns, so the picture grows instead of jumping. Start a new picture (clear: true) when the topic changes.
 
@@ -31,8 +32,8 @@ How to draw well:
 - Groups put related things in one frame (a server, a file, a phase).
 - Keep a graph to what matters: about 3 to 12 nodes. Short labels (1 to 4 words); put the rest in note. Use more graph blocks for separate views (the flow, the data), not one crowded graph.
 
-Freeform blocks: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the files form (the file opened, lines highlighted, notes pinned), never in freeform HTML. Plain prose to read goes in the notes form, not in freeform HTML. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and forms as the default; reach for freeform when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
-To change a freeform block, don't resend it: mark what will change with data-part=\"name\" (a number, a row, a status line) and send only parts: { name: \"<new markup>\" }. Send html again only when the layout itself changes.
+Use html for: a chart no form covers, sliders on a formula, a state machine to click through, UI mockups side by side, colours or fonts to compare in place or a table of data. Code always goes in the files form (the file opened, lines highlighted, notes pinned), never in an html block. Plain prose to read goes in the notes form, not in an html block. Use Claudia's CSS variables and the chalk look (--hand for headings) so it matches. Keep graphs and the predefined forms as the default; reach for html when the user would want to try something or compare how things look, and nothing predefined fits. Keep each block small (a few KB) and self-contained. A page is always shown at its full height and the picture scrolls, so never give it a fixed height or inner scroll areas (no height on wrappers, no overflow: auto).
+To change an html block, don't resend it: mark what will change with data-part=\"name\" (a number, a row, a status line) and send only data: { parts: { name: \"<new markup>\" } }. Send data.html again only when the layout itself changes.
 
 When you need the user to choose, use AskUserQuestion: it fills the whole window as buttons, with each option's description (put pros and cons there) and your recommended option first. Don't also write the question out in the chat.
 
@@ -69,8 +70,12 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
        " characters. Do not mention this message."))
 
 (def form-help
-  "form -> [when fields], word for word as the TypeScript Claudia's src/forms.ts, in its order."
+  "form -> [when fields], in the draw tool's order: graph, the predefined forms (word for word as the
+  TypeScript Claudia's src/forms.ts), html."
   (array-map
+   "graph"
+   ["Things and how they connect: circles and boxes are things, arrows are how they connect or what flows (label them with verbs when it helps), groups put related things in one frame. The default when nothing more specific fits."
+    "nodes: [{ id, label?, shape?: circle|box|pill|diamond (a decision), color?, note? (one short line under the label), group? (a group's id), state?: todo|active|done|blocked }], edges: [{ from, to, label?, dashed?, color? }] (an arrow's id is \"from->to\": removeItems takes it), groups: [{ id, label?, color? }]; colours: green|red|amber|blue|grey|violet. A graph without nodes leaves the picture"]
    "pipeline"
    ["Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
     "stages: [{ id, label, status: todo|running|done|failed|skipped, note? }] in order"]
@@ -109,7 +114,10 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
     "a picture holds one 3D scene: a new scene3d block takes the old one's place, so to show another model redraw the scene (a new id, or the same id with its parts and story replaced). parts: [{ id, shape: box|sphere|cylinder|cone|pyramid|torus|capsule|plane|ring|extrude|lathe|tube|rod|group|person|anatomy|code|text|folders, pos?: [x,y,z] (y is up, 1 unit is about a box), size?: number or [x,y,z], rot?: [x,y,z] degrees, color? (green|red|amber|blue|grey|violet or any CSS colour), label?, note?, material? (what the surface is made of, for real reflections: steel|brushed-steel|aluminium|chrome|copper|brass|iron|plastic|matte-plastic|rubber|enamel|ceramic|wood|glass; glass is see-through and never solid; a colour tints it), opacity?: 0..1, wire?: true, points? (extrude: [[x,y]…] outline pulled 1 unit deep, scale it with size; lathe: [[radius,y]…] profile spun round y; tube: [[x,y,z]…] path), parent? (a part or group id: this part's pos/rot are then relative to it and it follows it), ghost? (true: not solid), outline?: false (no ink outline), a group is an empty frame to hang parts on and turn together (a rotor and its blades), radius? (tube, rod), from?/to? ([x,y,z] ends of a rod: a cylinder between two points) , pose? (person, below) }]. A person is a real human body (rigged, clothed), standing at pos, facing +z, turned with rot [0, degrees, 0]; size is their height (default 1.75, so 1 unit is a metre around people); color tints the top, look: { skin, top, bottom, shoes, hair } any of them. pose: a name (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit (on a seat 0.46 high), sit_floor, kneel, squat, bend, lie) or { base: name, then any of: hips, chest (where the base of the neck goes: the spine bends to it), pelvis: [x,y,z] tilt degrees (x + forward, − back: lie is -90), twist: degrees, look, handL, handR, footL, footR, elbowL, elbowR, kneeL, kneeR (points an elbow or knee bends towards), toesL, toesR }, every point [x,y,z] in the person's own space (x + their left, y up, z + in front of them, metres for 1.75: hips 0.95, shoulders 1.41, head top 1.75) or, for look/hands/feet, a part id to reach for or look at (a hand on a switch: handR: 'switch'). A part with parent '<person>.<joint>' (hips, chest, head, handL, handR, footL, footR) rides on that joint, its pos in the person's axes (a mug held: parent 'anna.handR', pos [0, 0, 0.06]); arrows and cameras can point at '<person>.<joint>' too. People are not solid (not overlap-checked). An anatomy part is real human anatomy (Z-Anatomy models: bones, muscles, nerves, ligaments): ref names the structures by English name (femur, adductor longus), Latin name (os femoris, nervus obturatorius), id (femur.r) or tag: a region (Right lower limb, Pelvis, Head), a compartment (Medial compartment of thigh), a nerve's territory (Obturator nerve: the muscles it supplies); ref may be a list; side?: right|left|both (default both); system?: skeletal|muscular|nervous|joints|attachment (attachment: the muscles' origin and insertion patches, red and blue, only when asked for). Every structure stands where it is in one 1.75 m body (metres, feet on y 0, facing +z, the body's right at -x), so anatomy parts fit together: give the parts of one body the same pos (moves it) and size (scales it). One structure keeps the part's id; several become parts '<id>:<structure id>' (focus or frame 'thigh:*'). Labels default to the Latin name with the English one as a note (label: false for none); colour by system unless given. Anatomy is not overlap-checked. Real code: the scene's root? (a folder: absolute, ~/…, or relative to the working folder) and ref? (a git branch, tag or commit, read instead of the disk) let parts show the project's own code. A code part is a dark slab with code painted on its front (+z) face in VS Code's colours, no labels: file (relative to root) with range? (\"146-167\" or a list of ranges, a ⋮ row between two; default the whole file) or code (inline text; start? its first line number; lang?), mark? (lines in amber: numbers or \"a-b\"), title? (its header, default the file), size (its width; the height follows its lines), over? (a part id: it floats above that part, lift? units over its top and clear of the parts in front of it, pos is then an offset, a thin line down to it; all slabs with over hang as one row at one height, never over each other, in the order of their parts). A text part is painted words standing up (rot [-90,0,0] lays them on the floor): text, size (letter height), color, weight?: bold, align?: left (pos is then its left end). A folders part is a folder of root as a flat map on the floor: every folder an area one thin step above its parent's with its name painted at its front edge, every file a flat tile inside it (its area by its share of the lines, its name painted on it when big enough), one colour per folder at the hue depth; path? (the folder, default root), size? (its width, default 20), max? (tiles, default 1500; deeper folders become one tile each), hue? (the folder depth that gets its own colour, default 1: 2 colours each folder inside the top ones). Its parts' ids are \"<map id>:<path>\" (a folder's ends in /), so a story can frame and focus \"map:src/app/*\" and code can float over a file (over: \"map:src/app/core.clj\", file then optional); clicking a file raises its first 60 lines above it. world?: \"construct\" sets the scene in an endless white room (fog, soft shadows, no grid). arrows?: [{ id, from, to (a part id, or [x,y,z]), via?: [[x,y,z]…] (it bends through these points), flow?: true (a stream of dashes runs along it: air, current, signal), label?, color? }] (they follow their parts when these move), legend?: [{ color, label }] (colour key chips in a corner: use one colour per job, always the same: heat red, cold air blue, motion green, control violet), script?: JavaScript source for what the data can't say, run in a locked-down separate engine (no window, no network; plain JavaScript and Math only, 40 ms per frame): define build() returning { parts?, arrows? } for parts made by loops and maths, and frame(t, step) (t = seconds, step = the story's current step, 0-based, -1 when there is none) returning { [partId]: { pos?, rot?, size?, color?, opacity?, from?/to? (rod), pose? (person: set at once) } } to move parts every frame; the user gets play/pause and speed buttons; build() may also return allow), allow?: [[idA, idB]…] pairs that are meant to touch or overlap (a pin inside a rod end; an id ending in * matches every id starting so), scan?: seconds of the script the user's scan button checks (default 12). story?: [{ say?: the line spoken in this step (shown as subtitles; a narrator voice reads it aloud when the user has turned it on, it is off by default), show?: ids to bring in (part or arrow ids; a trailing * matches a prefix, like blade*), hide?: ids to take away, focus?: ids that glow while the step lasts, camera?: { frame?: ids to bring into view, target?: an id or [x,y,z], dist?, az?: degrees round, el?: degrees up, read?: a part id (straight in front of its +z face, close enough to read a code slab) }, mark?: { <code part id>: lines marked while this step lasts }, hold?: minimum seconds, pose?: { <person id>: pose } (they glide into it), move?: seconds the glide takes (default 1.4) }] makes the scene a narrated build: parts the story shows stay hidden until their step (parts it never shows are there from the start), the user presses play and the steps run one after the other, each part fading in as it is spoken about, with pause, next, back and a dot per step; voice?: how the narrator sounds (like: a calm man), autoplay?: false keeps it waiting for the play button (a story starts by itself by default), narrate?: false turns the voice off. The default look is a chalk diagram: flat colour in bands and a thin light outline round every part; while a story step has focus, the other parts fade back and the focused ones get a thick amber outline, so name the focus in each step. The page checks that solid parts never pass through each other: parts that are translucent (opacity under 1), wire, plane, ring or ghost: true are housings and don't count; every other overlap glows red and is counted for the user, so build the model so nothing intersects (real clearances, split shafts) and list only intended overlaps in allow"]
    "flow"
    ["Something travelling through a system, step by step: a request through the layers, an order through checkout, a job through a queue. Stations side by side (with steps inside if one has them), cards carrying what travels slide between them frame by frame, a caption per frame; the user clicks back / next. Several scenarios (allowed vs refused, cache hit vs miss) to switch between. Use it when what moves and how it changes is the point; for a job's progress use pipeline."
-    "stations: [{ id, label, note?, steps?: [{ id, label }] }] left to right, lanes?: [{ id, label }] one row per kind of thing that travels (default one), scenarios?: [{ id, label, frames }] or frames for one way through; a frame: { caption, cards?: [{ lane? (default the first), at (a station or step id), title?, body? (text, kept to a few lines), lang? (colours body), new? (a piece of body to mark as just added), color?, dim? }], on?: [station or step ids lit], leave?: [step ids, dashed: on the way out], skip?: [step ids, struck: never run] }. A lane's card slides when its at changes; a lane without a card in a frame fades out"]))
+    "stations: [{ id, label, note?, steps?: [{ id, label }] }] left to right, lanes?: [{ id, label }] one row per kind of thing that travels (default one), scenarios?: [{ id, label, frames }] or frames for one way through; a frame: { caption, cards?: [{ lane? (default the first), at (a station or step id), title?, body? (text, kept to a few lines), lang? (colours body), new? (a piece of body to mark as just added), color?, dim? }], on?: [station or step ids lit], leave?: [step ids, dashed: on the way out], skip?: [step ids, struck: never run] }. A lane's card slides when its at changes; a lane without a card in a frame fades out"]
+   "html"
+   ["Your own small HTML page, for what no other form can show. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent."
+    "html (a whole page or just its body, with inline <style> and <script>; elements with data-part=\"name\" can later be replaced through parts), parts?: { <name>: markup } (new inner markup for those elements, markup only: scripts in it do not run; the page is not reloaded), template? (a saved template's name: its page, which parts then fill)"]))
 
 (defn help-lines
   "The forms part of the draw tool's description (src/forms.ts formsHelp): one line per form."
@@ -127,25 +135,10 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
   [f]
   (let [[use-when fields] (form-help f)] (str (hash (str use-when fields)))))
 
-(def ^:private colour {:type "string" :enum ["green" "red" "amber" "blue" "grey" "violet"]})
 (defn- s [description] {:type "string" :description description})
 (defn- strings [description] {:type "array" :items {:type "string"} :description description})
 (defn- obj [required props] (cond-> {:type "object" :properties props :additionalProperties false}
                               (seq required) (assoc :required required)))
-
-(def ^:private node-item
-  (obj ["id"] (array-map :id (s "Stable id, reused across turns")
-                         :label {:type "string"}
-                         :shape {:type "string" :enum ["circle" "box" "pill" "diamond"]
-                                 :description "circle (default), box, pill, diamond (a decision)"}
-                         :color colour
-                         :note (s "One short line under the label")
-                         :group (s "Id of a group frame to sit in")
-                         :state {:type "string" :enum ["todo" "active" "done" "blocked"]})))
-
-(def ^:private edge-item
-  (obj ["from" "to"] (array-map :from {:type "string"} :to {:type "string"} :label {:type "string"}
-                                :dashed {:type "boolean"} :color colour)))
 
 (defn- block-item
   "One block of a draw call; forms: the ones on offer."
@@ -154,23 +147,17 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
        (array-map
         :id (s "Stable block id, reused across turns")
         :name (s "Short telling name shown on the block's badge, e.g. \"Deploy steps\"")
-        :kind {:type "string" :enum ["graph" "html"]
-               :description "Only needed for a new graph block placed before its nodes come; html is assumed when html or template is given"}
-        :form {:type "string" :enum (if (seq forms) (vec forms) ["none"]) :description "Makes this a form block of that kind"}
+        :form {:type "string" :enum (if (seq forms) (vec forms) ["none"])
+               :description "The block's form (see this tool's description); needed for a new block, a block given another form starts empty"}
         :data {:type "object" :propertyNames {:type "string"} :additionalProperties {}
-               :description "A form's data (see the forms in this tool's description): item lists are upserted by item id, other fields replaced"}
-        :removeItems (strings "Ids of form items to remove")
-        :template (s "Draw a saved template (by name) in this freeform block; fill it through parts")
+               :description "The form's data (see the forms in this tool's description): item lists are upserted by item id, an html page's parts merged, other fields replaced"}
+        :removeItems (strings "Ids of items to remove from the block's data (a graph's arrow: \"from->to\")")
         :width {:type "string" :enum ["full" "half"]
                 :description "full (default) or half: two half blocks in a row sit side by side"}
-        :before (s "Move or put this block before the block with this id; new blocks go last")
-        :html (s "The block's page: a whole HTML page or just its body, with inline <style> and <script>. Runs sandboxed (no access to Claudia, no network except scripts/styles from cdn.jsdelivr.net, e.g. Chart.js or D3). Claudia's colours and fonts are set as CSS variables: --bg --panel --fg --muted --line --accent --green --red --amber --blue --grey --violet (each colour also as --<colour>-bg), --sans --mono --hand; the background is transparent. Elements with data-part=\"name\" can later be replaced through parts.")
-        :parts {:type "object" :propertyNames {:type "string"} :additionalProperties {:type "string"}
-                :description "New inner markup for the elements marked data-part=\"<name>\" (markup only: scripts in it do not run). The page is not reloaded"}
-        :height {:type "number" :description "Not used: a page is always shown at its full height"})))
+        :before (s "Move or put this block before the block with this id; new blocks go last"))))
 
 (defn- draw-schema
-  "The draw tool's input (src/prompt.ts drawShape); forms: the ones on offer."
+  "The draw tool's input; forms: the ones on offer."
   [forms]
   {:type "object"
    :additionalProperties false
@@ -178,37 +165,27 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
    (array-map
     :title (s "Picture title, a few words")
     :clear {:type "boolean" :description "Start a fresh picture before applying the rest (new topic)"}
-    :nodes {:type "array"
-            :items node-item
-            :description "Add or change nodes by id; fields left out stay as they were"}
-    :edges {:type "array"
-            :items edge-item
-            :description "Add or change arrows; an arrow is identified by from + to"}
-    :groups {:type "array"
-             :items (obj ["id"] (array-map :id {:type "string"} :label {:type "string"} :color colour))}
-    :graph (s "The graph block that nodes, edges, groups and remove apply to (made if missing). Default \"graph\"")
     :blocks {:type "array"
              :items (block-item forms)
-             :description "Add or change blocks by id: HTML blocks, and the width/position of any block"}
-    :removeBlocks (strings "Ids of whole blocks to remove")
-    :remove (strings "Ids to remove from the graph block: nodes, groups, or arrows as \"from->to\""))})
+             :description "Add or change blocks by id"}
+    :removeBlocks (strings "Ids of whole blocks to remove"))})
 
 (defn picture-mcp
   "The picture server's tools (src/prompt.ts pictureMcp). forms: the forms on offer here and now
   (deleted and not on this runner left out)."
   [forms]
-  {:draw {:description (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each a graph (nodes, arrows, groups), a predefined form or your own freeform HTML. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of a freeform block.\n\n"
-                            "Forms (blocks[].form + blocks[].data); pick one when it fits, before freeform:\n"
+  {:draw {:description (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each one form with its data: a graph (nodes, arrows, groups), a predefined form or your own html page. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of an html page.\n\n"
+                            "Forms (blocks[].form + blocks[].data); pick graph or a predefined one when it fits, before html:\n"
                             (help-lines forms))
           :inputSchema (draw-schema forms)}
-   :templates {:description "List the saved templates (freeform blocks kept by name): name, description, parts."
+   :templates {:description "List the saved templates (html blocks kept by name): name, description, parts."
                :inputSchema {:type "object" :properties {} :additionalProperties false}}
-   :save_template {:description "Save or change a template: from a freeform block of the picture (block) and/or new html. Same name = change it."
+   :save_template {:description "Save or change a template: from an html block of the picture (block) and/or new html. Same name = change it."
                    :inputSchema (obj ["name"]
                                      (array-map
                                       :name (s "Short telling name, e.g. \"Plan usage tiles\"")
-                                      :block (s "Id of a freeform block in the picture to take the page and parts from")
-                                      :html (s "The page, as for a freeform block (replaces the old one)")
+                                      :block (s "Id of an html block in the picture to take the page and parts from")
+                                      :html (s "The page, as an html block's data.html (replaces the old one)")
                                       :parts {:type "object" :propertyNames {:type "string"} :additionalProperties {:type "string"}
                                               :description "Default markup for its data-part elements"}
                                       :description (s "One line: what it shows and when to use it")))}})

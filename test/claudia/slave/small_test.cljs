@@ -157,9 +157,9 @@
     (is (= "check now\n" (front/trigger-line {:rollback "b; rm -rf /"} "now")) "hex only")))
 
 (deftest screenshot-reads-only-its-scenes-roots
-  (is (= #{"/a"} (render/scene-roots {:blocks [{:kind "form" :form "scene3d" :data {:root "/a"}}
-                                               {:kind "form" :form "files" :data {:root "/b"}}
-                                               {:kind "form" :form "scene3d" :data {}}]})))
+  (is (= #{"/a"} (render/scene-roots {:blocks [{:form "scene3d" :data {:root "/a"}}
+                                               {:form "files" :data {:root "/b"}}
+                                               {:form "scene3d" :data {}}]})))
   (is (= #{} (render/scene-roots {}))))
 
 (deftest the-hubs-saved-tokens-are-checked-before-they-are-written

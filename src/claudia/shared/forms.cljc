@@ -7,7 +7,11 @@
 
 (def order
   "Every form, in the order the gallery shows them."
-  ["pipeline" "timeline" "compare" "chart" "stats" "notes" "files" "git" "clojure" "calls" "editor" "scene3d" "flow"])
+  ["graph" "pipeline" "timeline" "compare" "chart" "stats" "notes" "files" "git" "clojure" "calls" "editor" "scene3d" "flow" "html"])
+
+(def core
+  "The forms every runner has and the Forms window cannot delete."
+  #{"graph" "html"})
 
 (def specs
   "code form name -> {:label :when :fields :sample :opt-in}, in the gallery's order."
@@ -237,6 +241,16 @@
 (def base
   "The forms that are not code forms, for the gallery: {:label :when :sample}."
   {
+   "graph" {:label "Graph"
+    :when "Things and how they connect: circles, boxes, arrows, groups. The default."
+    :sample {:nodes [{:id "you" :label "You" :color "violet"} {:id "page" :label "Page" :shape "box" :color "blue"}
+                     {:id "claude" :label "Claude" :color "amber" :state "active"}]
+             :edges [{:id "you->page" :from "you" :to "page" :label "type"} {:id "page->claude" :from "page" :to "claude" :label "turn"}]
+             :groups []}}
+   "html" {:label "HTML"
+    :when "Claude's own small page, for what no other form shows. Save a good one as a template from its badge."
+    :sample {:html "<div style=\"display:flex;gap:10px;align-items:center\"><span style=\"font:700 20px var(--hand)\">Anything else</span><input type=\"range\" min=\"0\" max=\"10\" value=\"6\"><span style=\"color:var(--muted)\">sliders, mockups, a table, code…</span></div>"
+             :parts {}}}
    "pipeline" {:label "Pipeline"
     :when "Steps that run in order, each with a status: a deploy, CI, a migration, a multi-step job. Update one stage as it moves."
     :sample {:stages [{:id "build" :label "Build" :status "done" :note "41 s"}
