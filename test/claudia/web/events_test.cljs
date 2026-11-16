@@ -108,12 +108,12 @@
 
 (deftest created-moves-the-pending-chat
   (let [d {:pending-new {"p" {:text "hi"}} :outbox {["s" "p"] ["hi"]} :open ["s" "p"]
-           :new-settings {:model "m"}}
+           :new-settings {:model "m" :color "red"}}
         after (ev/created-db d "s" "c" "p" "hi")]
     (is (= {} (:pending-new after)))
     (is (= {["s" "c"] ["hi"]} (:outbox after)))
     (is (= ["s" "c"] (:open after)))
-    (is (nil? (:new-settings after)))
+    (is (= {:model "m"} (:new-settings after)) "kept for the next new chat, all but the colour")
     (is (= ["s" "x"] (:open (ev/created-db (assoc d :open ["s" "x"]) "s" "c" "p" "hi"))))
     (is (= [["s" {:type "open" :chat "c"}]] (ev/created-frames "s" "c")))))
 
@@ -246,3 +246,11 @@
       (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
             fx (ev/heard-fx db ["s" "c"] "this one" :send)]
         (is (= [[:dispatch [:ask/answer ["s" "c"] "q" {"Which?" "half this one"}]]] (:fx fx)))))))
+
+(deftest a-new-chat-carries-the-last-chats-picks
+  (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
+            :servers {"s" {:rows {"c" {:talk true :bell false :color "teal"}}}}
+            :new-settings {:plan "pro" :color "red" :folder "/old"}}]
+    (is (= {:plan "max" :model "opus" :effort "high" :folder "/w/ir" :talk true :bell false}
+           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour")
+    (is (= {:plan "pro" :folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour")))

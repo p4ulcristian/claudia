@@ -250,16 +250,33 @@
              (update-in [:turn-since k] running-since (:running f) now))
      :fx [[:dispatch [:chat/check-seen]]]}))
 
+(def carried-keys
+  "What a new chat takes over from the last chat: the subscription, model, effort, project folder,
+  speaker and bell (not the colour: each chat gets its own)."
+  [:plan :model :effort :folder :talk :bell])
+
+(defn carried-picks
+  "The picks a new chat starts with after the chat k: that chat's settings, folder and switches, else
+  (no chat open) the last new chat's picks, without its colour."
+  [db k]
+  (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
+    (let [row (get-in db [:servers (first k) :rows (second k)])]
+      (into {} (filter (comp some? val))
+            (merge (select-keys settings [:plan :model :effort]) {:folder folder}
+                   (select-keys row [:talk :bell]))))
+    (select-keys (:new-settings db) carried-keys)))
+
 (defn created-db
   "A new chat the server made (as chat) from the pending one sent as id: the text waiting for it
-  moves to the real chat, which opens if the pending one was open."
+  moves to the real chat, which opens if the pending one was open; its picks stay for the next new
+  chat, all but the colour."
   [db server chat id text]
   (let [k [server chat]]
     (cond-> (-> db
                 (update :pending-new dissoc id)
                 (assoc-in [:outbox k] [text])
                 (update :outbox dissoc [server id])
-                (dissoc :new-settings))
+                (update :new-settings select-keys carried-keys))
       (= (:open db) [server id]) (assoc :open k))))
 
 (defn created-frames
@@ -278,6 +295,7 @@
   (if-let [{:keys [text]} (get-in db [:pending-new id])]
     (let [was-open? (= (:open db) [server id])]
       {:db (created-db db server chat id text)
+       :store ["claudia.newPicks" (clj->js (select-keys (:new-settings db) carried-keys))]
        :history/replace (if was-open? [server chat] (fx/parse-path js/location.pathname))
        :ws/send-all (created-frames server chat)})
     {:db db}))
@@ -376,9 +394,13 @@
 
 (rf/reg-event-fx
  :nav/new
+ ;; The new chat starts where the chat open now works, with its picks (carried-picks).
  (fn [{:keys [db]} _]
-   (let [[ps pc] (:open db)]
-     {:db (with-fresh-colour (assoc (on-chat-screen db) :open nil))
+   (let [[ps pc :as k] (:open db)
+         picks (carried-picks db k)
+         server (if (and pc (not (contains? (:pending-new db) pc))) ps (:new-server db))]
+     {:db (-> (assoc (on-chat-screen db) :open nil :new-settings picks :new-server server) with-fresh-colour)
+      :store ["claudia.newPicks" (clj->js picks)]
       :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
       :history/push nil})))
 
