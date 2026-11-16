@@ -55,4 +55,7 @@
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
    :tokens nil :github-login nil
-   :new-settings {}})      ; a new chat's picks; its colour comes with the chat list (events/with-fresh-colour)
+   ;; a new chat's picks, kept from the last chat (events/carried-picks) across reloads; its colour
+   ;; comes with the chat list (events/with-fresh-colour)
+   :new-settings (let [v (stored "claudia.newPicks" nil)]
+                   (if (and v (= "object" (goog/typeOf v))) (dissoc (js->clj v :keywordize-keys true) :color) {}))})

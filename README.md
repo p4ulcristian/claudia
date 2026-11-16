@@ -196,6 +196,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     mono WAV (`src/claudia/web/pcm.cljs`: resampled with a windowed-sinc low-pass), up to 24 MB
     (about 12 minutes) at the hub. Instead of: MediaRecorder from the press (WebM/MP4: smaller, but
     it cannot start before the press), or the microphone open whenever the composer shows.
+    The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
+    messages went out swapped): held, the mic opens a 320 px flower round itself, amber while
+    waking and red while recording, breathing with the voice, the time spoken in the middle. Two
+    petals open where a thumb at the composer's left edge can go: up throws the clip away, right
+    adds the words to the message; letting go in place sends. Each clip let go waits in a list over
+    the composer with its own hearing clock, and the words go out in the order they were spoken
+    (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
+    Files: `src/claudia/web/views/mic_flower.cljs`.
+    Never lost (2026-11-16, after the listen service failed on a half-minute clip and it had to be
+    said again): every clip is kept on the device (IndexedDB, `src/claudia/web/clip_store.cljs`)
+    until its words went out; a failure is heard once more by itself after 2.5 s, then the clip stays
+    in the list with Try again and Throw away and holds the clips after it, so the order holds; after
+    a reload kept clips come back that way. Words go to the composer the clip was spoken into
+    (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
 
 21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
     chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one
@@ -403,6 +417,29 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     check that the processes answer (all did), a probe from outside with a login of its own, or a
     rollback by hand (it needed a terminal and someone at it).
 
+37. GitHub through the hub's GitHub App (2026-11-16): only the hub keeps a long-lived GitHub secret.
+    A person presses Connect in Settings (GET `/hub/github/connect`), authorizes the app on GitHub
+    and comes back (`/hub/github/callback`); the hub keeps their user token (8 hours) and refresh token
+    (6 months) sealed, renews a token that runs out within 30 minutes, and hands each person's current
+    token to their profile on every server they use (`PUT /api/github` as them: gh and git's helper).
+    Which repositories it reaches is chosen on GitHub when the app is installed (Settings links
+    there). SSH keys and the logins kept before (`/hub/github-login`) go on as before. Instead of: a
+    personal access token per person pasted into every server (long-lived, on every machine).
+
+38. Each person's own chat order, and groups (2026-11-16): the list and the rail show the chats in
+    the order the person put them; a chat stays where it was dragged, a new message never moves it, and
+    a new chat appears on top. Dragging (a finger holds a row 350 ms; a mouse moves it): let go on the
+    upper or lower third of a chat, it goes before or after it; on its middle, the two become a group
+    (like an iPhone folder) whose name is typed at once. In the list a group is a header that folds,
+    with its name (double-click renames), how many chats, and a + that starts a chat in it with the
+    group's picks (the last ones a chat in it started with); that chat goes on top of the group. On
+    the rail a group is a stack of its chats' colours; pressed, a chooser card opens beside the rail
+    with each chat's full title and the +. The order is kept on the hub per person (`GET`/`PUT
+    /hub/chat-order`, the whole list each time, `claudia.shared.order`), so every device shows the
+    same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
+    and the archived list show the chats found as before; another person's chats (a view) keep the
+    plain order. Instead of: the order the chats were started in, or moving a chat up on each message.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -423,8 +460,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   person (their own chats only). Alert texts are sealed (AES-256-GCM, node:crypto) under the key the
   app made; every alert carries the badge (waiting plus finished-unseen chats across servers); a
   change of the count alone goes as a badge-only push; one summary Live Activity per phone. While the
-  person works at a desktop page (`POST /hub/presence`), alerts are held; when they leave, the newest
-  per chat that still matters goes.
+  person works at a Claudia page (`POST /hub/presence`; a browser or, since 2026-11-16, the iPhone
+  and iPad app too), alerts are held; when they leave, the newest per chat that still matters goes.
+  One device rings (2026-11-16, after every open page rang at once): a page plays a chat's sound and
+  popup only while it is in use itself (in front, touched in the last minutes), or when none of the
+  person's other pages is (`GET /hub/presence?page=<id>` -> `{elsewhere}`).
 - **Following main** (built before the merge, 2026-11-03): `check.yml` checks a PR at its head
   commit and packs what it built as one bundle keyed by that commit's git tree. When the check is
   green (a PR into main from this repository, or a push to main), `stage.yml` (run on main, so its

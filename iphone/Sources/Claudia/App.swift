@@ -15,8 +15,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
             else if !granted { NSLog("claudia push: notifications not allowed") }
         }
         application.registerForRemoteNotifications()
-        // The alarms the person asks Claude for ring through AlarmKit (iOS 26 and later).
-        Alarm.askPermission()
         Push.shared.prepare()
         // Also in a background launch: iOS starts the app when the hub starts a Live Activity,
         // so its update token can reach the hub.

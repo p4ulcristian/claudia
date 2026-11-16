@@ -36,9 +36,11 @@
   (let [p (use-progress)
         t (hooks/use-now)
         [open set-open] (h/use-state false)
+        box (h/use-ref nil)
         shown (when p (pure/pill p t))]
+    (hooks/use-click-outside box open #(set-open false))
     (when shown
-      [:div.up-box
+      [:div.up-box {:ref #(set! (.-current box) %)}
        [:button.up-pill {:class (:tone shown) :type "button" :aria-expanded open
                          :on-click #(set-open (not open))}
         (:label shown)]

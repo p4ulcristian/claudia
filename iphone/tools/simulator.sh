@@ -38,7 +38,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.claudia.sim.shared
         SWIFT_VERSION: "5"
         GENERATE_INFOPLIST_FILE: YES
-        OTHER_LDFLAGS: "-weak_framework AlarmKit"
         CODE_SIGNING_ALLOWED: NO
   Claudia:
     type: application

@@ -152,6 +152,14 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `POST /hub/push/live` `{ device, activity, token }` | person | a Live Activity's update token: `{ ok, ended }` |
 | `DELETE /hub/push/live/:activity` | person | the app saw it end |
 | `POST /hub/presence` `{ page (8-64 chars), active }` | person | 204; alerts are held while any page said active within 45 s |
+| `GET /hub/presence?page=<id>` | person | `{ elsewhere }`: another of the person's pages said active within 45 s (this page then makes no sound or popup) |
+| `GET /hub/chat-order` | person | `{ items, at }`: the person's chat order and groups (README decision 38); items: `{ chat: "<server>/<chat>" }` or `{ group, name, chats: ["<server>/<chat>"], folded, picks }`; `{ items: [], at: 0 }` before any |
+| `PUT /hub/chat-order` `{ items }` | person | the same shape: the whole list kept, as far as it is well formed (at most 500 items; picks: plan, model, effort, folder, server, talk, bell) |
+| `GET /hub/github/state` | person | `{ app: { slug, installUrl } \| null, user: { login, accessExpiresAt, refreshExpiresAt } \| null, servers }`: the hub's GitHub App and the caller's connection (README decision 37) |
+| `GET /hub/github/connect` | person | 302 to GitHub's authorize page for the hub's GitHub App |
+| `GET /hub/github/callback?code&state` | person | the code traded for the caller's tokens (sealed), handed to their servers; 302 to the page. 400 not the caller's Connect, 502 GitHub gave no token |
+| `GET /hub/github/installed` | person | 302 to the page (GitHub's return after installing the app) |
+| `DELETE /hub/github/connection` | person | `{ ok }`: the app's grant revoked on GitHub and the caller's tokens dropped. Every `/hub/github/…` call: 501 without a GitHub App on this hub |
 | `POST /hub/health` `{ load (8-64 chars, one per page load), commit (the hub's, from /hub/me), ok, reason?: no-chats\|script-error\|no-socket, detail? }` | person | 200; 400 when it is not a report. In the hub's first 15 min on its commit (`HUB_COMMIT`), two broken loads and no working one roll the release back, once (README decision 35): `rollback <commit>` for the gate, `{ rollback }` to every front. `no-socket` counts only when one of the person's servers answers |
 | `GET /hub/claude-tokens` | person | `{ on, inUse: { name, by, at } \| null, tokens: [{ name, by, at, limits, heardAt }], servers: [{ name, label, ok, current, error }] }`: never a token; `servers` = the caller's, with the name each runs on now (`ok` false: not reached) |
 | `PUT /hub/claude-token` `{ name, token }` | person | the same shape: sealed and saved under the name (same name = replaced), in use on every server; 503 when `on` is false |

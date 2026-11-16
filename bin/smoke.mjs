@@ -15,91 +15,15 @@
 // (`npx playwright-core install chromium-headless-shell`). No session host and no Claude token: the
 // smoke test reads and opens chats, it never starts Claude.
 
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
-import { DatabaseSync } from 'node:sqlite';
+import { join } from 'node:path';
+import { repo, email, chatId, title, question, reply, waitMs, until, startStack } from './stack.mjs';
 
-const repo = resolve(import.meta.dirname, '..');
 const require = createRequire(join(repo, 'package.json'));
 const { chromium, webkit } = require('playwright-core');
 const engine = process.env.SMOKE_BROWSER === 'webkit' ? 'webkit' : 'chromium';
 
-const email = 'smoke@example.invalid';
-const server = 'smoke';
-const chatId = '5a0e5a0e-0000-4000-8000-000000000001';
-const title = 'Smoke chat';
-const question = 'Is the smoke test reading this chat?';
-const reply = 'Yes: the smoke test reads this reply.';
-const waitMs = 15000;
-
-const out = [];
 const say = (...a) => console.log('smoke:', ...a);
-
-function freePort() {
-  return new Promise((ok, no) => {
-    const s = createServer().listen(0, '127.0.0.1', () => {
-      const { port } = s.address();
-      s.close(() => ok(port));
-    }).on('error', no);
-  });
-}
-
-// start(name, file, env): one built program, its output kept for a failure's report.
-function start(name, file, env) {
-  const p = spawn(process.execPath, [join(repo, 'out', file)], {
-    env: { PATH: process.env.PATH, NODE_ENV: 'production', ...env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const keep = (d) => out.push(`[${name}] ${d}`.trimEnd());
-  p.stdout.on('data', keep);
-  p.stderr.on('data', keep);
-  p.on('exit', (code, sig) => { if (!stopping) out.push(`[${name}] exited ${code ?? sig}`); });
-  return p;
-}
-
-async function until(what, ok, ms = waitMs) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < ms) {
-    if (await ok()) return;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`${what}: not within ${ms / 1000} s`);
-}
-
-async function answers(url) {
-  try { return (await fetch(url, { headers: { 'X-Auth-Request-Email': email } })).status < 500; } catch { return false; }
-}
-
-// The chat as Claude Code keeps it: one question and its reply, in the session file the runner reads.
-function seedSession(claudeDir, cwd) {
-  const dir = join(claudeDir, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
-  mkdirSync(dir, { recursive: true });
-  const at = new Date(Date.now() - 60000).toISOString();
-  const base = { isSidechain: false, userType: 'external', cwd, sessionId: chatId, version: '2.0.0', timestamp: at };
-  const lines = [
-    { ...base, parentUuid: null, type: 'user', uuid: 'a0000000-0000-4000-8000-000000000001',
-      message: { role: 'user', content: question } },
-    { ...base, parentUuid: 'a0000000-0000-4000-8000-000000000001', type: 'assistant',
-      uuid: 'a0000000-0000-4000-8000-000000000002',
-      message: { id: 'msg_smoke_1', type: 'message', role: 'assistant', model: 'claude-smoke',
-                 content: [{ type: 'text', text: reply }], stop_reason: 'end_turn',
-                 usage: { input_tokens: 1, output_tokens: 1 } } },
-  ];
-  writeFileSync(join(dir, `${chatId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
-}
-
-// The chat's row, as the runner's store adds one (claudia.slave.store/add!), once its schema exists.
-function seedRow(runnerData, cwd) {
-  const db = new DatabaseSync(join(runnerData, 'claudia.db'));
-  const at = Date.now() - 60000;
-  db.prepare('INSERT OR IGNORE INTO chats (id, title, folder, color, created, at, seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(chatId, title, cwd, null, at, at, at);
-  db.close();
-}
 
 // What the page sent and heard on its sockets, and what went wrong on the way.
 function watch(page) {
@@ -165,55 +89,17 @@ const screens = [
   { name: 'phone', options: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },
 ];
 
-let stopping = false;
-const procs = [];
-// The real path: macOS's temp folder (/var/folders/…) is behind a symlink (/private/var/…), and the
-// seeded chat's session file is found by the folder's real path.
-const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'claudia-smoke-')));
 let failed = false;
+let stack = null;
 
 try {
-  for (const f of ['hub.js', 'front.js', 'runner.js', 'web/index.html'])
-    if (!existsSync(join(repo, 'out', f))) throw new Error(`out/${f} is missing: build first`);
-  const cwd = join(tmp, 'work');
-  const claudeDir = join(tmp, 'claude');
-  const runnerData = join(tmp, 'runner');
-  for (const d of [cwd, claudeDir, runnerData, join(tmp, 'hub')]) mkdirSync(d, { recursive: true });
-  seedSession(claudeDir, cwd);
-  const runnerSock = join(tmp, 'runner.sock');
-  const [frontPort, hubPort] = [await freePort(), await freePort()];
-  writeFileSync(join(tmp, 'profiles'), `smoke ${email} ${runnerSock}\n`);
-  writeFileSync(join(tmp, 'hub.json'), JSON.stringify({
-    servers: [{ name: server, label: 'Smoke', address: `127.0.0.1:${frontPort}` }],
-    people: [{ email, name: 'Smoke', admin: true, servers: [server] }],
-  }));
-
-  procs.push(start('runner', 'runner.js', {
-    HOME: tmp, RUNNER_SOCKET: runnerSock, HOST_SOCKET: join(tmp, 'host.sock'), RUNNER_PROFILE: 'smoke',
-    RUNNER_DATA: runnerData, CLAUDIA_CWD: cwd, CLAUDE_CONFIG_DIR: claudeDir,
-    CLAUDIA_TOKEN_FILE: join(tmp, 'token'),
-  }));
-  await until('the runner\'s store', () => existsSync(join(runnerData, 'claudia.db')) && existsSync(runnerSock));
-  seedRow(runnerData, cwd);
-  procs.push(start('front', 'front.js', {
-    HOME: tmp, FRONT_HOST: '127.0.0.1', FRONT_PORT: String(frontPort), FRONT_NAME: server,
-    FRONT_PROFILES: join(tmp, 'profiles'),
-  }));
-  procs.push(start('hub', 'hub.js', {
-    HOME: tmp, HUB_HOST: '127.0.0.1', HUB_PORT: String(hubPort), HUB_CONFIG: join(tmp, 'hub.json'),
-    HUB_DATA: join(tmp, 'hub'), HUB_WEB: join(repo, 'out', 'web'), HUB_COMMIT: 'c'.repeat(40),
-    HUB_UPDATE_REQUEST: join(tmp, 'update-requested'),
-  }));
-  const hubUrl = `http://127.0.0.1:${hubPort}/`;
-  await until('the hub', () => answers(hubUrl));
-  await until('the front, through the hub', () => answers(`${hubUrl}s/${server}/api/me`));
-
+  stack = await startStack();
   const browser = engine === 'webkit'
     ? await webkit.launch()
     : await chromium.launch(process.env.SMOKE_CHROMIUM ? { executablePath: process.env.SMOKE_CHROMIUM } : {});
   say(`browser: ${engine} ${browser.version()}`);
   try {
-    for (const s of screens) await visit(browser, hubUrl, s);
+    for (const s of screens) await visit(browser, stack.hubUrl, s);
   } finally {
     await browser.close();
   }
@@ -221,10 +107,9 @@ try {
 } catch (e) {
   failed = true;
   console.error(`smoke: FAILED: ${e.message}`);
+  const out = stack?.out ?? e.out ?? [];
   if (out.length) console.error('smoke: what the programs said:\n' + out.slice(-60).join('\n'));
 } finally {
-  stopping = true;
-  for (const p of procs) p.kill('SIGKILL');
-  rmSync(tmp, { recursive: true, force: true });
+  stack?.stop();
 }
 process.exit(failed ? 1 : 0);

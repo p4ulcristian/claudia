@@ -81,3 +81,7 @@
   (is (= "No such person." (ops/writer-problem "a@x.org" "b@x.org" false)))
   (is (= "A person always writes to their own chats." (ops/writer-problem "a@x.org" "a@x.org" true)))
   (is (nil? (ops/writer-problem "a@x.org" "b@x.org" true))))
+
+(deftest the-chat-order-is-a-persons-own-call
+  (is (= [:order] (ops/person-route "GET" "/hub/chat-order")))
+  (is (= [:save-order] (ops/person-route "PUT" "/hub/chat-order"))))

@@ -11,6 +11,18 @@
 
 (defn when-away! [f] (reset! on-away f))
 
+(defn in-use-besides
+  "Whether a person's pages ({page-id at}) hold another page than page in use at now (it said
+  active within stale-ms)."
+  [m page now]
+  (boolean (some (fn [[k at]] (and (not= k page) (< (- now at) p/stale-ms))) m)))
+
+(defn elsewhere?
+  "Whether another of the person's pages than page is in use now: then this one stays quiet
+  (README decision 21)."
+  [email page]
+  (in-use-besides (get @pages email) page (js/Date.now)))
+
 (defn present?
   ([email] (present? email (js/Date.now)))
   ([email now] (boolean (some #(< (- now %) p/stale-ms) (vals (get @pages email))))))

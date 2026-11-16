@@ -15,11 +15,14 @@
     (is (= {:label "Live in 15 s" :tone "done"} (u/pill done 20000)))
     (is (nil? (u/pill done 200000)))))
 
-(deftest a-build-before-the-merge-shows
-  (is (= {:label "Building abcdef1 \u00b7 0:01" :tone "running"}
-         (u/pill {:builds [{:commit "abcdef1234" :tree "x" :state "pending" :at 1000 :started 1000}]} 2000)))
-  (is (= "Build failed" (:label (u/pill {:builds [{:commit "abcdef1234" :state "failure" :at 1000 :started 900}]} 2000))))
-  (is (nil? (u/pill {:builds [{:commit "abcdef1234" :state "success" :at 1000 :started 900}]} 2000))))
+(deftest a-pull-requests-build-is-not-the-pills
+  (is (nil? (u/pill {:builds [{:commit "abcdef1234" :tree "x" :state "pending" :at 1000 :started 1000}]} 2000))
+      "built ahead of a merge: nothing is going live"))
+
+(deftest a-merge-waiting-for-its-build-shows-the-build
+  (let [p {:builds [{:commit "abcdef1234" :tree "t" :state "pending" :at 1000 :started 900}] :release (:release moving)}]
+    (is (= {:label "Building abcdef1 \u00b7 0:04" :tone "running"} (u/pill p 5000)))
+    (is (= "Build failed" (:label (u/pill (assoc-in p [:builds 0 :state] "failure") 5000))))))
 
 (deftest the-panel-lists-every-step
   (is (= ["merged" "hub" "box" "destiny"] (map first (u/steps moving)))))

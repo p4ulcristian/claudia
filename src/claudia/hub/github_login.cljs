@@ -10,7 +10,8 @@
             [claudia.hub.config :as config]
             [claudia.hub.front :as front]
             [claudia.hub.store :as store]
-            [claudia.hub.tokens :as tokens]))
+            [claudia.hub.tokens :as tokens]
+            [claudia.node.env :as env]))
 
 ;; [server name, email] -> {:ok :login :error :checked}: what the last look found.
 (defonce ^:private synced (atom {}))
@@ -88,11 +89,19 @@
   [email servers]
   (reduce (fn [p s] (.then p #(or % (adopt-from! s email)))) (js/Promise.resolve false) servers))
 
-(defn- sync-person! [email]
-  (let [servers (config/servers-of {:email email})]
-    (if-let [login (:login (store/github-login email))]
-      (js/Promise.all (into-array (map #(push! % email login) servers)))
-      (.then (adopt! email servers) (fn [kept?] (when kept? (sync-person! email)))))))
+(defn- sync-person!
+  "The kept login onto the person's servers; nothing for a person connected through the GitHub App
+  (claudia.hub.github-app hands theirs out), and no login is taken in from a server while the hub
+  has the app."
+  [email]
+  (let [servers (config/servers-of {:email email})
+        app? (some? (env/env "HUB_GITHUB_APP_CLIENT_ID"))]
+    (cond
+      (store/github-user email) (js/Promise.resolve nil)
+      (:login (store/github-login email))
+      (js/Promise.all (into-array (map #(push! % email (:login (store/github-login email))) servers)))
+      app? (js/Promise.resolve nil)
+      :else (.then (adopt! email servers) (fn [kept?] (when kept? (sync-person! email)))))))
 
 (defonce ^:private running (atom nil))
 

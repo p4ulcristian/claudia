@@ -1,0 +1,55 @@
+(ns claudia.shared.order-test
+  (:require [cljs.test :refer [deftest is]]
+            [claudia.shared.order :as o]))
+
+(defn- row [s id started] {:server s :id id :started started})
+(def rows [(row "s" "a" 1) (row "s" "b" 2) (row "s" "c" 3) (row "s" "d" 4)])
+
+(defn- shape [arranged]
+  (mapv #(if (= :group (:kind %)) [(:name (:group %)) (mapv :id (:rows %))] (:id (:row %))) arranged))
+
+(deftest new-chats-first-newest-first-then-the-persons-order
+  (is (= ["d" "c" "b" "a"] (shape (o/arrange rows [] :started))) "nothing arranged: newest first")
+  (is (= ["d" "b" "a" "c"] (shape (o/arrange rows [{:chat "s/b"} {:chat "s/a"} {:chat "s/c"}] :started)))
+      "d is new: on top; the rest as placed, whatever their times"))
+
+(deftest a-new-message-moves-nothing
+  (let [items [{:chat "s/a"} {:chat "s/b"}]
+        later (assoc (row "s" "b" 2) :at 999)]
+    (is (= ["a" "b"] (shape (o/arrange [(row "s" "a" 1) later] items :started))))))
+
+(deftest placing-moves-a-chat-before-another-or-to-the-end
+  (let [items [{:chat "s/a"} {:chat "s/b"} {:chat "s/c"}]]
+    (is (= [{:chat "s/c"} {:chat "s/a"} {:chat "s/b"}] (o/place items "s/c" "s/a")))
+    (is (= [{:chat "s/b"} {:chat "s/c"} {:chat "s/a"}] (o/place items "s/a" nil)))
+    (is (= [{:chat "s/a"} {:chat "s/b"} {:chat "s/c"} {:chat "s/d"}] (o/place items "s/d" nil)) "a new chat placed")))
+
+(deftest dropping-onto-a-chat-makes-a-group-where-it-was
+  (let [g (o/group-with [{:chat "s/a"} {:chat "s/b"} {:chat "s/c"}] "s/c" "s/a" "g1" "IR")]
+    (is (= [{:group "g1" :name "IR" :chats ["s/a" "s/c"] :folded false :picks {}} {:chat "s/b"}] g))
+    (is (= [["IR" ["a" "c"]] "b"] (shape (o/arrange (take 3 rows) g :started))))
+    (is (= {:group "g1" :name "IR" :chats ["s/a" "s/c" "s/b"] :folded false :picks {}}
+           (first (o/into-group g "s/b" "g1" nil))))
+    (is (= [{:chat "s/c"} {:group "g1" :name "IR" :chats ["s/a"] :folded false :picks {}} {:chat "s/b"}]
+           (o/place g "s/c" "g1")) "dragged out, before the group")
+    (is (= [{:chat "s/b"}] (o/without (o/without g "s/a") "s/c")) "the last chat out ends the group")))
+
+(deftest a-fresh-chat-dropped-onto-a-fresh-chat
+  (is (= [{:group "g" :name "N" :chats ["s/a" "s/b"] :folded false :picks {}}] (o/group-with [] "s/b" "s/a" "g" "N"))))
+
+(deftest only-well-formed-lists-are-kept
+  (is (= [{:chat "s/a"} {:group "g" :name "IR" :chats ["s/b"] :folded true :picks {:folder "/w"}}]
+         (o/clean-items [{:chat "s/a"} {:chat "../etc"} {:group "g" :name " IR " :chats ["s/b" 7] :folded true
+                                                         :picks {:folder "/w" :evil 1}} {:x 1}]))))
+
+(deftest settle-places-the-fresh-chats-on-top-as-shown
+  (is (= [{:chat "s/d"} {:chat "s/c"} {:chat "s/a"} {:chat "s/b"}]
+         (o/settle [{:chat "s/b"}] rows :started)))
+  (is (= (o/arrange rows [{:chat "s/b"}] :started)
+         (o/arrange rows (o/settle [{:chat "s/b"}] rows :started) :started))))
+
+(deftest a-reference-names-its-chat-and-a-group-is-found-by-id
+  (is (= ["s" "a-1"] (o/chat-key "s/a-1")))
+  (is (nil? (o/chat-key "nothing")))
+  (is (= "g" (:group (o/find-group [{:chat "s/a"} {:group "g" :chats ["s/b"]}] "g"))))
+  (is (nil? (o/find-group [{:chat "s/a"}] "g"))))

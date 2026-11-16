@@ -12,9 +12,10 @@
   (let [k [server chat]
         turns (set (map :turn pictures))]
     {:db (cond-> (assoc-in db [:pictures k] (vec pictures))
-           ;; The picture looked at is gone (or became the live one): back to live.
+           ;; A new picture came, or the one looked at is gone (or became the live one): back to live.
            (let [v (get-in db [:viewing k])]
-             (and v (or (not (turns v)) (= v (:turn (last pictures))))))
+             (and v (or (not (turns v)) (= v (:turn (last pictures)))
+                        (not= (:turn (last (get-in db [:pictures k]))) (:turn (last pictures))))))
            (update :viewing dissoc k))}))
 
 (defmethod events/on-frame "picture" [db server {:keys [chat turn scene]}]

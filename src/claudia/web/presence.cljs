@@ -16,6 +16,17 @@
        (js/document.hasFocus)
        (< (- (js/Date.now) @input) p/away-after-ms)))
 
+(defn sound-here?
+  "Promise of whether this page makes a chat's sound or popup (README decision 21): yes while it is
+  in use itself; otherwise only when none of the person's other pages is in use (the hub knows)."
+  []
+  (if (active?)
+    (js/Promise.resolve true)
+    (-> (js/fetch (str "/hub/presence?page=" page) #js {:credentials "same-origin"})
+        (.then #(.json ^js %))
+        (.then #(not (.-elsewhere ^js %)))
+        (.catch (fn [_] true)))))
+
 (defn- body [on] (js/JSON.stringify #js {:page page :active on}))
 
 (defn- say! [on]
@@ -37,9 +48,10 @@
       (say! on))))
 
 (defn start!
-  "Once, in a browser (not inside the iPhone app, whose own pages are the phone)."
+  "Once per page, in a browser and in the iPhone and iPad app alike: a page in use there quiets the
+  others (and holds the phone's alerts) just as a desktop's does."
   []
-  (when-not (or @started (.-claudiaNative js/window))
+  (when-not @started
     (reset! started true)
     (let [touched (fn [] (reset! input (js/Date.now)) (when-not (true? @said) (tick!)))]
       (doseq [e ["pointerdown" "pointermove" "keydown" "wheel" "touchstart"]]

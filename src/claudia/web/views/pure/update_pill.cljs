@@ -6,10 +6,6 @@
   "A finished update stays on the pill this long, then the pill goes."
   90000)
 
-(def ^:private build-shown-ms
-  "A build (no merge yet) shows this long after the builder last said something."
-  600000)
-
 (defn- waits? [x] (= "waiting" (:state x)))
 
 (defn- parts [release]
@@ -42,28 +38,25 @@
       (pos? missing) {:label (str missing " not reached") :tone "warn"}
       :else {:label (str "Live in " (secs-text (apply max 0 (keep :secs ps)))) :tone "done"})))
 
-(defn- recent-build
-  "The newest build the builder spoke of lately, unless it is the release's own (already merged)."
-  [{:keys [builds release]} t]
-  (let [b (first builds)]
-    (when (and b (< (- t (:at b)) build-shown-ms)
-               (not (and release (= (:tree b) (:tree release)) (>= (:merged release) (:started b)))))
-      b)))
+(defn- release-build
+  "The build of what was merged (the release's tree), when the builder spoke of one: a pull
+  request's build ahead of a merge is not going live, so it is not the pill's."
+  [{:keys [builds release]}]
+  (when release (some #(when (= (:tree %) (:tree release)) %) builds)))
 
 (defn pill
-  "The pill: {:label :tone}, or nil when nothing is moving or just finished."
+  "The pill, only for what is going live (from a merge to main on): {:label :tone}, or nil."
   [progress t]
   (let [r (:release progress)
-        b (recent-build progress t)
+        b (release-build progress)
         moving? (and r (some waits? (parts r)))
         fresh? (and r (< (- t (:merged r)) settled-shown-ms))]
     (cond
-      (or moving? (and fresh? (not b))) (release-label r t)
-      (= "pending" (:state b)) {:label (with-clock (str "Building " (subs (:commit b) 0 7)) (:started b) t)
+      (not (or moving? fresh?)) nil
+      (= "pending" (:state b)) {:label (with-clock (str "Building " (subs (:commit b) 0 7)) (:merged r) t)
                                 :tone "running"}
       (= "failure" (:state b)) {:label "Build failed" :tone "bad"}
-      fresh? (release-label r t)
-      :else nil)))
+      :else (release-label r t))))
 
 (defn steps
   "The panel's lines: [what state note], the build first, then each machine and the hub."

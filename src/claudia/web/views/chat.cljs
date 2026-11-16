@@ -71,7 +71,7 @@
    (when (or picture? (pos? files))
      [:button.pic-link {:title "Show the picture from this turn"
                         :on-click #(rf/dispatch [:chat/view-turn ck (when-not viewing? id)])}
-      (if viewing? "back to live" (pure/turn-links picture? files))])])
+      (pure/turn-links picture? files)])])
 
 (defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? files forkable? queued?] :as marks}]
   (let [[server chat] ck]
@@ -305,12 +305,6 @@
             (rf/dispatch [:draft/set draft-key ""]))
         (rf/dispatch [:composer/send text])))))
 
-(defn- heard-fn
-  "What the mic's heard text does, in the composer it was held in (the mic keeps the one from the
-  press, so a chat opened while it is heard gets nothing): events/heard-fx."
-  [draft-key]
-  (fn [heard dir] (rf/dispatch [:mic/heard draft-key heard dir])))
-
 (defn- fit-height!
   "The message box as tall as its text, up to 260 px; empty, one row (the placeholder never sizes
   it: measured while the pane was still narrow, its wrapped lines once held the box at 260 px)."
@@ -384,7 +378,7 @@
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      [:f> mic/button (heard-fn draft-key)]
+      [:f> mic/button draft-key]
       [:div.input-row
        (attach-button parts)
        (message-box parts)

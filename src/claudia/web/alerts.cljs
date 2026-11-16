@@ -2,7 +2,9 @@
   "Sounds and desktop popups when a chat finishes a turn or starts waiting on you (a question).
   Each chat has its own bell (README decision 21, kept with the chat, on unless turned off): with it
   off, that chat makes no sound, no popup and no phone push. Popups are also a per-device switch
-  (the browser's permission). The open chat counts only while the window is not in front.
+  (the browser's permission). The open chat counts only while the window is not in front. Only one
+  of a person's devices rings: the page in use (in front, touched in the last minutes), or, when
+  none is, every page (claudia.web.presence/sound-here?).
 
   Sounds are made here with Web Audio (no files): each chat colour has its own note, so you hear
   which chat it was. A finished turn rings its note once like a small bell; a chat waiting on you
@@ -13,6 +15,7 @@
             [re-frame.db :as rdb]
             [reagent.core :as r]
             [claudia.shared.colours :as colours]
+            [claudia.web.presence :as presence]
             [claudia.web.rowdiff :as rowdiff]
             [claudia.web.views.pure.switches :as switches]))
 
@@ -152,5 +155,8 @@
                    (doseq [[kind [s id :as k] row] (changes before after)
                            :when (and (switches/row-bell-on? row)
                                       (or (not= k (:open after)) (not (js/document.hasFocus))))]
-                     (play! kind (:color row))
-                     (when (:popups @on) (popup! kind s (assoc row :id id)))))))))
+                     (.then (presence/sound-here?)
+                            (fn [here?]
+                              (when here?
+                                (play! kind (:color row))
+                                (when (:popups @on) (popup! kind s (assoc row :id id))))))))))))

@@ -10,6 +10,7 @@
   at once, before its first message (fresh-dot)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
+            [claudia.shared.order :as order]
             [reagent.hooks :as h]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
@@ -19,7 +20,8 @@
             [claudia.web.views.menu :as menu]
             [claudia.web.views.tearoff :as tearoff]
             [claudia.web.views.update-pill :as update-pill]
-            [claudia.web.views.logotools :as logotools]))
+            [claudia.web.views.logotools :as logotools]
+            [claudia.web.views.rail-group :as rail-group]))
 
 (defn- use-slide!
   "Each [data-slide] child of box is measured after every change of order and animated from where
@@ -88,7 +90,7 @@
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
   shows it under the title); dragged out of the window, the chat opens in a window of its own."
-  [{:keys [rows i open multi? viewing? projects elsewhere]} {:keys [server id title color off folder] :as r}]
+  [{:keys [rows i open multi? viewing? projects elsewhere ordered?]} {:keys [server id title color off folder] :as r}]
   (let [k [server id]
         steps-back? #(sidebar-pure/passive? % elsewhere open)
         passive? (steps-back? r)
@@ -99,8 +101,9 @@
                               {:data-slide (str server "/" id)
                         :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
                                 (when passive? "passive")
-                                (when (and passive? (not (some-> (get rows (dec i)) steps-back?))) "first")
-                                (when (and passive? (= i (dec (count rows)))) "last")]
+                                ;; The chalk line before the passive ones only where they sit last (a search).
+                                (when (and passive? (not ordered?) (not (some-> (get rows (dec i)) steps-back?))) "first")
+                                (when (and passive? (not ordered?) (= i (dec (count rows)))) "last")]
                         :style {"--chat" (sidebar/chat-color-var color)}
                         :data-tip (str title (when project (str " · " project))
                                        (when multi? (str " · " label (when off " is off")))
@@ -127,18 +130,33 @@
        [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])
      (when fresh [fresh-dot fresh])]))
 
+(defn- rail-entries
+  "What the rail shows under +: while searching, the chats found (passive ones last); else the
+  person's order with its groups (README decision 38)."
+  [text elsewhere open]
+  (if (seq text)
+    (mapv (fn [r] {:kind :chat :row r})
+          (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text))
+                                     elsewhere open))
+    @(rf/subscribe [:arranged])))
+
+(defn- entry-view [m i {:keys [kind row] :as e}]
+  (if (= kind :group)
+    ^{:key (str "group/" (:group (:group e)))} [rail-group/rail-group e m]
+    ^{:key (str (:server row) "/" (:id row))} [rail-chat (assoc m :i i) row]))
+
 (defn rail []
   (let [{:keys [text]} @(rf/subscribe [:search])
         open @(rf/subscribe [:open])
         elsewhere @(rf/subscribe [:open-elsewhere])
-        rows (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text))
-                                        elsewhere open)
+        entries (rail-entries text elsewhere open)
+        rows (vec (mapcat #(or (:rows %) [(:row %)]) entries))
         ro @(rf/subscribe [:new-chat-read-only?])
         m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
-           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere}
+           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? (empty? text)}
         box (h/use-ref nil)
         pulled (use-pull! box)]
-    (use-slide! box (str/join "," (map #(str (:server %) "/" (:id %)) rows)))
+    (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
     [:nav.rail {:aria-label "Chats"}
      [logotools/tools]
      [:div.rail-scroll
@@ -146,9 +164,7 @@
       [:div.rail-dots {:ref #(set! (.-current box) %)
                        :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
        (rail-top ro)
-       (for [[i r] (map-indexed vector rows)]
-         ^{:key (str (:server r) "/" (:id r))}
-         [rail-chat (assoc m :i i) r])]]
+       (map-indexed #(entry-view m %1 %2) entries)]]
      [update-pill/pill]
      [:f> menu/button]
      [update-pill/updated]]))

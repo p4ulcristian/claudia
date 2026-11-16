@@ -13,6 +13,17 @@
      #(js/window.removeEventListener "keydown" on-key capture))
    deps))
 
+(defn use-click-outside
+  "While open, a press anywhere outside the element in ref calls (on-outside)."
+  [ref open on-outside]
+  (h/use-effect
+   (fn []
+     (when open
+       (let [f (fn [^js e] (when-let [el (.-current ref)] (when-not (.contains el (.-target e)) (on-outside))))]
+         (js/document.addEventListener "pointerdown" f true)
+         #(js/document.removeEventListener "pointerdown" f true))))
+   [open]))
+
 (defn use-resize
   "Calls (f el) before the first paint and whenever the element in ref changes size. deps say when
   to look for the element again, e.g. after it first mounts."

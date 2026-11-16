@@ -5,6 +5,7 @@
             [claudia.web.swipe :as swipe]
             [claudia.web.tip :as tip]
             [claudia.web.native :as native]
+            [claudia.web.order :as order]
             [claudia.web.presence :as presence]
             [claudia.web.tabs :as tabs]
             [reagent.dom.client :as rdc]
@@ -46,6 +47,7 @@
   (ws/install! #(rf/dispatch [:chat/check-seen]))
   (rf/dispatch-sync [:init])
   (presence/start!)
+  (order/start!)
   (tabs/start!)
   (native/start!)
   (mount!))

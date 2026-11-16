@@ -1,5 +1,6 @@
 (ns claudia.web.pictures-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.web.events :as events]
             [claudia.web.pictures :as pictures]))
 
 (def ^:private never (constantly false))
@@ -26,3 +27,9 @@
   (is (= 1 (pictures/shown-index [{:turn 1} {:turn 2}] nil)))
   (is (= 0 (pictures/shown-index [{:turn 1} {:turn 2}] 1)))
   (is (= -1 (pictures/shown-index [] nil))))
+
+(deftest a-new-picture-brings-the-live-one-back
+  (let [db {:pictures {["s" "c"] [{:turn "t1"} {:turn "t2"}]} :viewing {["s" "c"] "t1"}}
+        frame (fn [turns] (:db (events/on-frame db "s" {:type "pictures" :chat "c" :pictures (mapv #(hash-map :turn %) turns)})))]
+    (is (nil? (get-in (frame ["t1" "t2" "t3"]) [:viewing ["s" "c"]])) "t3 came: live again")
+    (is (= "t1" (get-in (frame ["t1" "t2"]) [:viewing ["s" "c"]])) "nothing new: still looking at t1")))

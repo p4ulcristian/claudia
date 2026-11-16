@@ -10,15 +10,18 @@
   350)
 
 (def drag-px
-  "How far right of where the hold started the finger goes for the clip to join the message
-  instead of being sent."
+  "How far the finger goes from where the hold started for a drag to choose a petal."
   40)
 
 (defn gesture
-  "What letting go does after a drag of dx px from where the hold started: :add (the text joins
-  the message, nothing is sent) right of drag-px, else :send (in place or dragged left)."
-  [dx]
-  (if (>= dx drag-px) :add :send))
+  "What letting go does after a drag of dx, dy px (y down) from where the hold started: :cancel
+  (the clip is thrown away) drag-px or more up and more up than sideways, :add (the text joins the
+  message) drag-px or more right, else :send (in place or dragged left or down)."
+  [dx dy]
+  (cond
+    (and (<= dy (- drag-px)) (> (js/Math.abs dy) (js/Math.abs dx))) :cancel
+    (>= dx drag-px) :add
+    :else :send))
 
 (defn with-heard
   "The draft with heard text added at its end, one space between (a new line kept as it is)."
@@ -50,3 +53,13 @@
   [old fresh]
   (mapv (fn [o n] (if (> n o) (+ o (* 0.6 (- n o))) (+ o (* 0.2 (- n o)))))
         (or (seq old) (repeat (count fresh) 0)) fresh))
+
+(defn in-order
+  "The clips heard so far, given out in the order they were spoken: line is {:next n :held {n
+  result}} (n counts the clips from 0 as they are let go), and result is clip n's outcome (nil when
+  it failed or was empty: it holds nothing back). -> [line' results-to-give-out-now]."
+  [line n result]
+  (loop [held (assoc (:held line) n [result]) due (:next line) out []]
+    (if-let [[r] (get held due)]
+      (recur (dissoc held due) (inc due) (cond-> out r (conj r)))
+      [(assoc line :next due :held held) out])))

@@ -1,78 +1,44 @@
 (ns claudia.web.views.mic
   "The composer's mic: a 56 px round button at the composer's left end, under the left thumb of a
-  tablet held in landscape. Hold it and talk: bars round it follow the voice, and two arrows float
-  over the messages. Let go (in place or dragged left) and the hub hears the clip and the draft
-  with the text is sent; dragged right, the text only joins the draft. A tap only says to hold it.
-  The button is amber while the microphone wakes (the first press, or one after it went cold) and
-  turns red only once it records. Shown only where the browser can record and the hub has a
-  listen service."
+  tablet held in landscape. Hold it and talk: a flower opens round it (views/mic_flower.cljs), big
+  enough to show past the finger: amber while the microphone wakes, red once it records, with the
+  time spoken. Let go in place (or dragged left or down) and the clip is heard and sent; dragged
+  right, the words only join the draft; dragged up, the clip is thrown away. Each clip let go waits
+  in a list over the composer with its own hearing clock, and the words go out in the order they
+  were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
+  where the browser can record and the hub has a listen service."
   (:require [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
+            [claudia.web.views.mic-clips :as clips]
+            [claudia.web.views.mic-flower :as flower]
             [claudia.web.views.pure.mic :as pure]
             [re-frame.core :as rf]
             [reagent.hooks :as h]))
 
-(def ^:private size "The canvas round the button, CSS px." 160)
-(def ^:private inner "Where the bars start: just outside the 56 px button." 32)
+(defn- flower-state
+  "What the flower shows now: the phase, how loud (eased), seconds spoken, the way letting go goes."
+  [phase ^js live hold eased]
+  (let [{:keys [dir rec-at]} (.-current hold)]
+    {:phase phase :level eased :way (or dir :send)
+     :secs (if rec-at (/ (- (js/performance.now) rec-at) 1000) 0)
+     :live live}))
 
-(defn- color [^js el v] (.trim (.getPropertyValue (js/getComputedStyle el) v)))
-
-(defn- draw-bars! [^js g levels]
-  (doseq [[i level] (map-indexed vector levels)
-          :when (> level 0.02)]
-    (.save g)
-    (.rotate g (* 2 js/Math.PI (/ i pure/bar-count)))
-    (.fillRect g inner -1.5 (+ 3 (* level 34)) 3)
-    (.restore g)))
-
-(defn- draw-wait! [^js g t]
-  (.beginPath g)
-  (.arc g 0 0 (+ inner 4) (* t 5) (+ (* t 5) 1.6))
-  (set! (.-lineWidth g) 3)
-  (.stroke g))
-
-(defn- wipe! [^js canvas]
-  (let [g (.getContext canvas "2d")]
-    (.setTransform g 1 0 0 1 0 0)
-    (.clearRect g 0 0 (.-width canvas) (.-height canvas))))
-
-(defn- frame!
-  "One frame on the canvas: the voice's bars while recording, a turning arc while being heard."
-  [^js canvas phase levels]
-  (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1) ink (color canvas "--red")]
-    (wipe! canvas)
-    (.setTransform g dpr 0 0 dpr 0 0)
-    (.translate g (/ size 2) (/ size 2))
-    (set! (.-fillStyle g) ink)
-    (set! (.-strokeStyle g) (color canvas "--accent"))
-    (if (= phase :hearing)
-      (draw-wait! g (/ (js/performance.now) 1000))
-      (draw-bars! g levels))))
-
-(defn- use-bars!
-  "Runs the canvas while recording or being heard; clears it after."
-  [canvas live phase]
+(defn- use-flower!
+  "Runs the flower while the mic is held (waking or recording); clears it after."
+  [canvas live hold phase]
   (h/use-effect
    (fn []
-     (let [raf (atom nil) levels (atom [])
+     (let [raf (atom nil) eased (atom 0)
            step (fn step []
                   (when-let [c (.-current canvas)]
-                    (when-let [s (.-current live)] (swap! levels pure/eased (pure/bar-levels (mic/spectrum s))))
-                    (frame! c phase @levels))
+                    (when-let [s (.-current live)] (swap! eased #(+ (* 0.7 %) (* 0.3 (flower/level (mic/spectrum s))))))
+                    (flower/draw! c (flower-state phase (.-current live) hold @eased)))
                   (reset! raf (js/requestAnimationFrame step)))]
-       (when (#{:recording :hearing} phase) (step))
+       (when (#{:starting :recording} phase) (step))
        (fn []
          (some-> @raf js/cancelAnimationFrame)
-         (some-> (.-current canvas) wipe!))))
+         (some-> (.-current canvas) flower/wipe!))))
    [phase]))
-
-(defn- heard! [on-heard set-phase dir clip]
-  (set-phase :hearing)
-  (-> (mic/hear clip)
-      (.then (fn [text] (mic/report! {:event "heard" :bytes (.-size clip) :chars (count text)}) (on-heard text dir)))
-      (.catch (fn [e] (mic/report! {:event "hear-failed" :bytes (.-size clip) :error (.-message e)})
-                (rf/dispatch [:mic/failed (.-message e)])))
-      (.finally #(set-phase :idle))))
 
 (defn- watch-start!
   "Reports a press whose microphone is not recording 5 s later (the button still amber)."
@@ -95,45 +61,50 @@
 (defn- press!
   "Pointer down: the clip starts (the microphone opens if it is cold; the first time the browser
   asks for it)."
-  [^js e {:keys [hold live set-phase set-dir on-heard]}]
+  [^js e {:keys [hold live set-phase set-dir draft-key]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (speech/stop!)   ; it never talks over you
     (let [t0 (js/performance.now) warm (mic/warm?)
           p (.then (mic/start!) #(started! t0 warm %))]
-      ;; on-heard as it is at the press: the composer the person spoke into, even when another chat
+      ;; The composer as it is at the press: the one the person spoke into, even when another chat
       ;; is open by the time the words are heard.
-      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p :on-heard on-heard})
+      (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p :k draft-key})
       (set-dir :send)
       (set-phase :starting)
       (watch-start! hold p)
       (-> p
           (.then (fn [s]
                    (set! (.-current live) s)
-                   (when (.-current hold) (set-phase :recording))))
+                   (when (.-current hold)
+                     (set! (.-current hold) (assoc (.-current hold) :rec-at (js/performance.now)))
+                     (set-phase :recording))))
           (.catch #(start-failed! set-phase %))))))
 
 (defn- drag!
-  "Pointer move while held: the side the finger is on chooses what letting go does."
+  "Pointer move while held: where the finger went chooses what letting go does (pure/gesture)."
   [^js e {:keys [hold set-dir]}]
-  (when-let [{:keys [x0]} (.-current hold)]
-    (let [dir (pure/gesture (- (.-clientX e) x0))]
+  (when-let [{:keys [x0 y0]} (.-current hold)]
+    (let [dir (pure/gesture (- (.-clientX e) x0) (- (.-clientY e) y0))]
       (set! (.-current hold) (assoc (.-current hold) :dir dir))
       (set-dir dir))))
 
 (defn- release!
-  "Pointer up: a hold long enough is heard and sent (or, dragged right, added to the message); a
-  tap is dropped and says to hold."
+  "Pointer up: a hold long enough is heard and sent (dragged right: added to the message; dragged
+  up: thrown away); a tap is dropped and says to hold."
   [{:keys [hold live set-phase]}]
-  (when-let [{:keys [t0 p dir on-heard]} (.-current hold)]
+  (when-let [{:keys [t0 p dir k rec-at]} (.-current hold)]
     (set! (.-current hold) nil)
-    (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)]
+    (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)
+          secs (js/Math.round (/ (- (js/performance.now) (or rec-at t0)) 1000))]
       (.then p (fn [s]
                  (set! (.-current live) nil)
-                 (if tap?
-                   (do (mic/discard! s) (set-phase :tap))
-                   (.then (mic/stop! s) #(heard! on-heard set-phase dir %))))))))
+                 (cond
+                   tap? (do (mic/discard! s) (set-phase :tap))
+                   (= dir :cancel) (do (mic/discard! s) (set-phase :idle))
+                   :else (do (set-phase :idle)
+                             (clips/spoken! k dir secs (mic/stop! s)))))))))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
@@ -147,23 +118,14 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
-(defn- guide
-  "While held: two arrows floating over the messages just above the composer (nothing moves),
-  the one letting go would do lit."
-  [dir]
-  [:div.mic-guide {:aria-hidden true}
-   [:span.mic-way.send {:class (when (= dir :send) "on")} "\u2190 send"]
-   [:span.mic-way.add {:class (when (= dir :add) "on")} "add to message \u2192"]])
-
 (defn- core
   "The button with its bars, and the hint after a tap."
   [{:keys [phase canvas] :as parts}]
   [:div.mic-core
-   [:canvas.mic-bars {:ref #(set! (.-current canvas) %) :aria-hidden true
-                      :width (* size (or js/devicePixelRatio 1)) :height (* size (or js/devicePixelRatio 1))}]
-   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go to send, drag right to add to the message"
-                        :data-tip "Hold to talk: let go sends, drag right adds to the message"
-                        :disabled (= phase :hearing)
+   [:canvas.mic-flower {:ref #(set! (.-current canvas) %) :aria-hidden true
+                        :width (* flower/size (or js/devicePixelRatio 1)) :height (* flower/size (or js/devicePixelRatio 1))}]
+   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go to send, drag right to add to the message, drag up to cancel"
+                        :data-tip "Hold to talk: let go sends, drag right adds to the message, drag up cancels"
                         :on-pointer-down #(press! % parts)
                         :on-pointer-move #(drag! % parts)
                         :on-pointer-up #(release! parts)
@@ -172,14 +134,15 @@
     icon]
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
 
-(defn- view [{:keys [phase dir] :as parts}]
+(defn- view [{:keys [phase] :as parts}]
   [:div.mic {:class (name phase)}
-   (when (#{:starting :recording} phase) (guide dir))
+   [clips/clip-list]
    (core parts)])
 
 (defn button
-  "The mic, or nothing where the mic cannot work. on-heard gets the heard text and :send or :add."
-  [on-heard]
+  "The mic, or nothing where the mic cannot work. draft-key: the composer it speaks into ([server
+  chat] or :new); the heard words go there (:mic/heard), sent or added as each press chose."
+  [draft-key]
   (let [[ok set-ok] (h/use-state false)
         [phase set-phase] (h/use-state :idle)
         [dir set-dir] (h/use-state :send)
@@ -187,8 +150,8 @@
         live (h/use-ref nil)
         canvas (h/use-ref nil)]
     (h/use-effect (fn [] (.then (mic/available?) set-ok) nil) [])
-    (use-bars! canvas live phase)
+    (use-flower! canvas live hold phase)
     (use-tap-hint! phase set-phase)
     (when ok
       (view {:phase phase :dir dir :canvas canvas :hold hold :live live
-             :set-phase set-phase :set-dir set-dir :on-heard on-heard}))))
+             :set-phase set-phase :set-dir set-dir :draft-key draft-key}))))

@@ -70,3 +70,9 @@
       (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :conclusion] "failure"))))
       (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :display_title] "stage "))))
       (is (nil? (github/staged-tree "workflow_run" (assoc-in d [:workflow_run :path] ".github/workflows/check.yml")))))))
+
+(deftest another-page-in-use-quiets-this-one
+  (is (true? (presence/in-use-besides {"ipad" 100} "mac" 110)))
+  (is (false? (presence/in-use-besides {"mac" 100} "mac" 110)) "only itself")
+  (is (false? (presence/in-use-besides {"ipad" 100} "mac" (+ 101 p/stale-ms))) "the iPad went quiet")
+  (is (false? (presence/in-use-besides nil "mac" 0))))
