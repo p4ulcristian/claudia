@@ -108,7 +108,7 @@
 
 (defn- to-server
   "Checks a /s/<server>/… call: a WebSocket handshake (`ws?`) for /s/<server>/ws, a plain request
-  for /s/<server>/api/…. -> {:status :error} to refuse, or {:server :target :email :view}."
+  for /s/<server>/api/…. -> {:status :error} to refuse, or {:server :target :who {:email :view :writes}}."
   [req pathname query ws?]
   (let [[_ server-name rest-path] (re-matches #"^/s/([a-z][a-z0-9-]{0,30})(/.*)?$" pathname)
         email (caller req)
@@ -122,7 +122,7 @@
       (not person) {:status 403 :error "you have no access to Claudia here"}
       (not server) {:status 403 :error (str "no access to " server-name)}
       :else (or (path-problem rest-path ws? view error)
-                {:server server :target (str rest-path q) :email email :view view}))))
+                {:server server :target (str rest-path q) :who {:email email :view view :writes (:writes person)}}))))
 
 (defn- admin-group?
   "The login's groups (X-Auth-Request-Groups, set by the gate's login like the email) hold
@@ -178,10 +178,10 @@
   (let [[pathname query] (split-url (.-url req))]
     (cond
       (str/starts-with? pathname "/s/")
-      (let [{:keys [status error server target email view]} (to-server req pathname query false)]
+      (let [{:keys [status error server target who]} (to-server req pathname query false)]
         (if status
           (io/send-json res status {:error error})
-          (pass/http! req res server target email view)))
+          (pass/http! req res server target who)))
 
       (str/starts-with? pathname "/hub/")
       (hub-api req res pathname)
@@ -194,7 +194,7 @@
 
 (defn- on-upgrade [^js req ^js socket head]
   (let [[pathname query] (split-url (.-url req))
-        {:keys [status error server target email view]}
+        {:keys [status error server target who]}
         (if (str/starts-with? pathname "/s/")
           (to-server req pathname query true)
           {:status 404 :error "not found"})]
@@ -202,7 +202,7 @@
     (if status
       (pass/refuse-upgrade socket status (js/JSON.stringify #js {:error error})
                            "application/json; charset=utf-8")
-      (pass/ws! req socket head server target email view))))
+      (pass/ws! req socket head server target who))))
 
 (defn settings
   "Where the hub listens and keeps its things, from the environment (env-of: name, default -> value)."

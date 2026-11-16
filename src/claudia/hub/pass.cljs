@@ -1,9 +1,11 @@
 (ns claudia.hub.pass
   "Passing /s/<server>/api/… and /s/<server>/ws on to that server's front, as the caller: the
-  front gets who is calling (X-Claudia-Email) and whose chats to show (X-Claudia-View), and none of
-  the browser's own headers (its cookies hold the login)."
+  front gets who is calling (X-Claudia-Email), whose chats to show (X-Claudia-View), whose chats
+  the caller may write to (X-Claudia-Writes: emails, comma-separated), and none of the browser's
+  own headers (its cookies hold the login). `who` = {:email :view :writes}."
   (:require ["http" :as http]
             ["ws" :refer [WebSocket WebSocketServer]]
+            [clojure.string :as str]
             [claudia.node.http :as io]
             [claudia.shared.protocol :as protocol]))
 
@@ -35,16 +37,17 @@
 (defn- unreachable [server]
   {:error (str (:name server) " is not reachable")})
 
-(defn hub-headers [email view]
+(defn hub-headers [{:keys [email view writes]}]
   (cond-> {"x-claudia-email" email}
-    view (assoc "x-claudia-view" view)))
+    view (assoc "x-claudia-view" view)
+    (seq writes) (assoc "x-claudia-writes" (str/join "," writes))))
 
 (defn request-headers
   "The headers a passed request carries to the front: the hub's own and the few browser ones passed
   on. in: the browser request's headers (a JS object)."
-  [^js in email view]
+  [^js in who]
   (reduce (fn [h k] (if-let [v (aget in k)] (assoc h k v) h))
-          (hub-headers email view)
+          (hub-headers who)
           passed-request-headers))
 
 (defn response-headers
@@ -78,12 +81,12 @@
 
 (defn http!
   "Passes one request on, streaming the body both ways. `target` is the path and query on the front."
-  [^js req ^js res server target email view]
+  [^js req ^js res server target who]
   (let [^js up (http/request #js {:host (:host server)
                                   :port (:port server)
                                   :method (.-method req)
                                   :path target
-                                  :headers (clj->js (request-headers (.-headers req) email view))
+                                  :headers (clj->js (request-headers (.-headers req) who))
                                   :agent agent})]
     (guard-connect up)
     (.on up "response" #(answered res %))
@@ -101,7 +104,7 @@
                                    :port (:port server)
                                    :method "GET"
                                    :path "/api/me"
-                                   :headers (clj->js (hub-headers email nil))
+                                   :headers (clj->js (hub-headers {:email email}))
                                    :agent agent})
         t (js/setTimeout #(.destroy req (js/Error. "timeout")) 2000)]
     (.on req "response" (fn [^js answer]
@@ -250,9 +253,9 @@
            (.terminate front)))
     (.on answer "error" (fn [_] (.terminate front)))))
 
-(defn- open-front ^js [server target email view]
+(defn- open-front ^js [server target who]
   (WebSocket. (front-url server target)
-              #js {:headers (clj->js (hub-headers email view))
+              #js {:headers (clj->js (hub-headers who))
                    :maxPayload max-frame
                    :perMessageDeflate false
                    :handshakeTimeout connect-ms}))
@@ -260,8 +263,8 @@
 (defn ws!
   "Opens the front's socket first and only then completes the page's handshake: the page sees the
   front's own refusal (its status and body) when the front says no, and 502 when it is not up."
-  [^js req ^js socket head server target email view]
-  (let [^js front (open-front server target email view)
+  [^js req ^js socket head server target who]
+  (let [^js front (open-front server target who)
         ;; Until the page's handshake is answered (refused or upgraded), the raw socket is ours;
         ;; after that it belongs to the page's WebSocket and nothing here may write to it.
         pending (atom true)

@@ -245,7 +245,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (and the list's, when it is open or on a phone) opens the default plan's 5-hour and week use
     (a click: Settings), Machines (the Systems popup), Archived chats, Forms, the Desktop popups
     switch, More settings, and the version. Settings itself keeps what needs room: the Claude
-    tokens, GitHub (decision 23), all ~/Work sessions, Servers and Access for admins, each
+    tokens, GitHub (decision 23), all ~/Work sessions, Admin and Servers for admins, each
     server's chat colours. The right half shows only the picture: the timeline view is gone.
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
     (never under the status bar or the home bar) and meet each other, the drawing board wears the
@@ -389,10 +389,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
-  is the source of truth for the servers, the people and the access grid (person × server; a tick =
-  their own profile there). A `hub.json` (`HUB_CONFIG`) is imported once into an empty store, then no
-  longer read. Admins (the store's admin flag, or the login group `HUB_ADMIN_GROUP`) change it on the
-  page's Servers and Access dialog. A new server joins with `deploy/pair.sh` (a WireGuard key and a
+  is the source of truth for the servers, the people and the People table (per person: the servers
+  they use, a tick = their own profile there; whose chats they may write to; admin). A `hub.json`
+  (`HUB_CONFIG`) is imported once into an empty store, then no longer read. Admins (the store's admin
+  flag, or the login group `HUB_ADMIN_GROUP`) change it in Settings → Admin (People and Servers).
+  A write tick (2026-11-16) lets a person open, start and send in another person's chats on every
+  server where both have a profile: the hub names those people to each front (`X-Claudia-Writes`),
+  which then passes the view on without `X-Claudia-Read-Only`; Claude runs as the owner's Linux user.
+  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile. A new server joins with `deploy/pair.sh` (a WireGuard key and a
   one-time secret printed as a key, pasted into Servers; the hub writes the peer request into
   `HUB_PEERS_DIR`, the gate's root helper adds the peer and answers in `HUB_APPLIED_DIR`; the server
   fetches its address with the secret). A hub without `HUB_WG_POOL` shows pairing as unavailable.

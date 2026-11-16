@@ -27,23 +27,40 @@
 (defn- caller-email [^js headers]
   (some-> (aget headers "x-claudia-email") str/trim str/lower-case))
 
+(defn- caller-writes
+  "The emails whose chats the caller may write to (the hub's X-Claudia-Writes), as a set."
+  [^js headers]
+  (into #{} (comp (map str/trim) (map str/lower-case) (filter seq))
+        (str/split (or (aget headers "x-claudia-writes") "") #",")))
+
 (defn route-of
-  "Whose runner a call goes to among profiles, for the caller's email and the profile it views
-  (blank = its own): {:own :target :read-only}, or {:status :error}."
-  [profile-list email view]
+  "Whose runner a call goes to among profiles, for the caller's email, the profile it views (blank =
+  its own) and the emails whose chats it may write to: {:own :target :viewing :read-only}, or
+  {:status :error}. Viewing another profile is read only unless its owner is in writes."
+  [profile-list email view writes]
   (let [own (some #(when (= (:email %) email) %) profile-list)
-        target (when (seq view) (some #(when (= (:profile %) view) %) profile-list))]
+        target (when (seq view) (some #(when (= (:profile %) view) %) profile-list))
+        other? (boolean (and target (not= (:profile target) (:profile own))))]
     (cond (not (seq email)) {:status 401 :error "No caller."}
           (not own) {:status 403 :error "No profile on this server for this person."}
           (and (seq view) (not target)) {:status 404 :error (str "No profile " view " on this server.")}
           :else {:own own
                  :target (or target own)
-                 :read-only (boolean (and target (not= (:profile target) (:profile own))))})))
+                 :viewing (when other? (:profile target))
+                 :read-only (and other? (not (contains? (set writes) (:email target))))})))
+
+(defn writable-profiles
+  "The other profiles here the caller may write to: those whose owner's email is in writes."
+  [profile-list own writes]
+  (vec (for [{:keys [profile email]} profile-list
+             :when (and (not= profile (:profile own)) (contains? (set writes) email))]
+         profile)))
 
 (defn- route
-  "Whose runner the call goes to: {:own :target :read-only}, or {:status :error}."
+  "Whose runner the call goes to: {:own :target :viewing :read-only}, or {:status :error}."
   [^js headers]
-  (route-of @profiles (caller-email headers) (some-> (aget headers "x-claudia-view") str/trim)))
+  (route-of @profiles (caller-email headers) (some-> (aget headers "x-claudia-view") str/trim)
+            (caller-writes headers)))
 
 (defn runner-headers
   "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's own."
@@ -54,11 +71,12 @@
             [["X-Claudia-Profile" (:profile target)]]
             (when read-only [["X-Claudia-Read-Only" "1"]]))))
 
-(defn- me [res {:keys [own target read-only]}]
+(defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
                          :profiles (mapv :profile @profiles)
-                         :viewing (when read-only (:profile target))
+                         :writable (writable-profiles @profiles own (caller-writes headers))
+                         :viewing viewing
                          :readOnly read-only
                          :version h/version
                          :commit h/commit}))
@@ -175,7 +193,7 @@
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})
-      (and (= url "/api/me") (= "GET" (.-method req))) (me res r)
+      (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       :else
       (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))

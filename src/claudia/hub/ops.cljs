@@ -59,6 +59,7 @@
                             :peerUp (pairing/applied? (:name s)))))
      :people (store/people)
      :access (store/access)
+     :writers (store/writers)
      :pairing {:available (pairing/available?)}
      :builder (releases/builder-state)}))
 
@@ -84,6 +85,7 @@
       (and person-email (= method "PUT")) [:save-person person-email]
       (and person-email (= method "DELETE")) [:drop-person person-email]
       (and (= pathname "/hub/admin/access") (= method "PUT")) [:set-access]
+      (and (= pathname "/hub/admin/writers") (= method "PUT")) [:set-writer]
       (and (= pathname "/hub/admin/pair") (= method "POST")) [:pair]
       (and (= pathname "/hub/admin/builder") (= method "POST")) [:pair-builder]
       :else nil)))
@@ -153,6 +155,23 @@
           (do (store/set-access! email server-name (true? (:granted b)))
               (changed! res)))))))
 
+(defn writer-problem
+  "What is wrong with a write tick (writer email, owner email, both known?), or nil."
+  [email owner known?]
+  (cond (not known?) "No such person."
+        (= email owner) "A person always writes to their own chats."
+        :else nil))
+
+(defn- set-writer [req res _]
+  (with-body req
+    (fn [b]
+      (let [email (str/lower-case (field (:email b)))
+            owner (str/lower-case (field (:owner b)))]
+        (if-let [problem (writer-problem email owner (boolean (and (store/person email) (store/person owner))))]
+          (fail res 400 problem)
+          (do (store/set-writer! email owner (true? (:granted b)))
+              (changed! res)))))))
+
 (defn pair-names
   "The name and label a pairing gets: the body's, else from the host the key carries."
   [pair-key b]
@@ -182,6 +201,7 @@
    :save-person save-person
    :drop-person drop-person
    :set-access set-access
+   :set-writer set-writer
    :pair pair
    :pair-builder (fn [req res _]
                    (with-body req (fn [b] (let [[status body] (releases/pair! (field (:key b) 200))]

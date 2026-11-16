@@ -94,11 +94,16 @@
 (deftest front-routes-by-email
   (let [ps (front/parse-profiles "# who\nann ANN@x.org /s/a\nbob bob@x.org /s/b user=bobby # note\nbroken line\n")]
     (is (= [{:profile "ann" :email "ann@x.org" :socket "/s/a"} {:profile "bob" :email "bob@x.org" :socket "/s/b"}] ps))
-    (is (= {:status 401 :error "No caller."} (front/route-of ps nil nil)))
-    (is (= 403 (:status (front/route-of ps "eve@x.org" nil))))
-    (is (= 404 (:status (front/route-of ps "ann@x.org" "zed"))))
-    (is (= {:own (first ps) :target (second ps) :read-only true} (front/route-of ps "ann@x.org" "bob")))
-    (is (= {:own (first ps) :target (first ps) :read-only false} (front/route-of ps "ann@x.org" "ann")))))
+    (is (= {:status 401 :error "No caller."} (front/route-of ps nil nil #{})))
+    (is (= 403 (:status (front/route-of ps "eve@x.org" nil #{}))))
+    (is (= 404 (:status (front/route-of ps "ann@x.org" "zed" #{}))))
+    (is (= {:own (first ps) :target (second ps) :viewing "bob" :read-only true} (front/route-of ps "ann@x.org" "bob" #{})))
+    (is (= {:own (first ps) :target (second ps) :viewing "bob" :read-only false}
+           (front/route-of ps "ann@x.org" "bob" #{"bob@x.org"}))
+        "a write tick for bob's owner lifts read only")
+    (is (= {:own (first ps) :target (first ps) :viewing nil :read-only false} (front/route-of ps "ann@x.org" "ann" #{})))
+    (is (= ["bob"] (front/writable-profiles ps (first ps) #{"bob@x.org" "ann@x.org"})))
+    (is (= [] (front/writable-profiles ps (first ps) #{"eve@x.org"})))))
 
 (deftest front-headers
   (is (= [["Host" "h"] ["X-Claudia-Profile" "bob"] ["X-Claudia-Read-Only" "1"]]

@@ -88,7 +88,7 @@
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
   shows it under the title); dragged out of the window, the chat opens in a window of its own."
-  [{:keys [rows i open multi? ro projects elsewhere]} {:keys [server id title color off folder] :as r}]
+  [{:keys [rows i open multi? viewing? projects elsewhere]} {:keys [server id title color off folder] :as r}]
   (let [k [server id]
         steps-back? #(sidebar-pure/passive? % elsewhere open)
         passive? (steps-back? r)
@@ -109,7 +109,7 @@
                         :aria-label title
                         :on-click #(sidebar/pick! k (= k open) %)
                         :on-context-menu #(chatmenu/open-at! k %)})
-     [dot/chat-dot r (and (not ro) (:unseen r) (not= k open))]
+     [dot/chat-dot r (and (not viewing?) (:unseen r) (not= k open))]
      [:span.rail-name title]]))
 
 (defn- fresh-dot
@@ -133,8 +133,8 @@
         elsewhere @(rf/subscribe [:open-elsewhere])
         rows (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text))
                                         elsewhere open)
-        ro @(rf/subscribe [:read-only?])
-        m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :ro ro
+        ro @(rf/subscribe [:new-chat-read-only?])
+        m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
            :projects @(rf/subscribe [:projects]) :elsewhere elsewhere}
         box (h/use-ref nil)
         pulled (use-pull! box)]

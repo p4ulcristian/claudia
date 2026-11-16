@@ -33,6 +33,14 @@
      server TEXT NOT NULL REFERENCES servers (name) ON DELETE CASCADE,
      PRIMARY KEY (email, server)
    );
+   -- A write tick: this person (email) may write to the chats of another (owner), on every server
+   -- where the owner has a profile. Without one, another's chats are read only.
+   CREATE TABLE IF NOT EXISTS writers (
+     email TEXT NOT NULL REFERENCES people (email) ON DELETE CASCADE,
+     owner TEXT NOT NULL REFERENCES people (email) ON DELETE CASCADE,
+     PRIMARY KEY (email, owner),
+     CHECK (email <> owner)
+   );
    -- A server joining from the Servers page: its WireGuard key, the address it was given, and the
    -- hash of the one-time secret it fetches its address with.
    CREATE TABLE IF NOT EXISTS pairings (
@@ -207,6 +215,18 @@
   [email]
   (all "SELECT s.name, s.label, s.address FROM servers s JOIN access a ON a.server = s.name
         WHERE a.email = ? ORDER BY s.added_at, s.name" email))
+
+(defn writers [] (all "SELECT email, owner FROM writers ORDER BY email, owner"))
+
+(defn set-writer! [email owner granted]
+  (if granted
+    (exec! "INSERT OR IGNORE INTO writers (email, owner) VALUES (?, ?)" email owner)
+    (exec! "DELETE FROM writers WHERE email = ? AND owner = ?" email owner)))
+
+(defn writes-for
+  "The emails whose chats this person may write to."
+  [email]
+  (mapv :owner (all "SELECT owner FROM writers WHERE email = ? ORDER BY owner" email)))
 
 (defn may? [email server-name]
   (some? (one "SELECT 1 AS n FROM access WHERE email = ? AND server = ?" email server-name)))

@@ -36,8 +36,13 @@
 
 (deftest request-headers-pass-only-a-few
   (is (= {"x-claudia-email" "ann@example.com" "x-claudia-view" "paul" "content-type" "text/plain"}
-         (pass/request-headers #js {"content-type" "text/plain" "cookie" "login=1"} "ann@example.com" "paul")))
-  (is (= {"x-claudia-email" "ann@example.com"} (pass/request-headers #js {} "ann@example.com" nil))))
+         (pass/request-headers #js {"content-type" "text/plain" "cookie" "login=1"} {:email "ann@example.com" :view "paul"})))
+  (is (= {"x-claudia-email" "ann@example.com"} (pass/request-headers #js {} {:email "ann@example.com"}))))
+
+(deftest hub-headers-name-whose-chats-the-caller-may-write
+  (is (= {"x-claudia-email" "ann@example.com" "x-claudia-writes" "bo@example.com,cy@example.com"}
+         (pass/hub-headers {:email "ann@example.com" :writes ["bo@example.com" "cy@example.com"]})))
+  (is (= {"x-claudia-email" "ann@example.com"} (pass/hub-headers {:email "ann@example.com" :writes []}))))
 
 (deftest response-headers-drop-hop-by-hop-and-cookies
   (is (= {"content-type" "text/html" "etag" "x"}
@@ -75,7 +80,7 @@
            (fn []
              (.on hub "upgrade"
                   (fn [req sock head]
-                    (pass/ws! req sock head {:host "127.0.0.1" :port (.-port (.address front-wss))} "/ws" "a@example.com" nil)))
+                    (pass/ws! req sock head {:host "127.0.0.1" :port (.-port (.address front-wss))} "/ws" {:email "a@example.com"})))
              (.listen hub 0 "127.0.0.1"
                       (fn []
                         (let [page (WebSocket. (str "ws://127.0.0.1:" (.-port (.address hub)) "/"))]

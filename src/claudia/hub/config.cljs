@@ -92,12 +92,14 @@
       (assoc s :host host :port port))))
 
 (defn person
-  "The person with that (lower-case) email: {:email :name :admin :servers [names]}, or nil."
+  "The person with that (lower-case) email: {:email :name :admin :servers [names] :writes [emails
+  whose chats they may write to]}, or nil."
   [email]
   (when-let [p (store/person email)]
     (assoc p
            :name (if (str/blank? (:name p)) email (:name p))
-           :servers (mapv :name (store/allowed email)))))
+           :servers (mapv :name (store/allowed email))
+           :writes (store/writes-for email))))
 
 (defn servers-of
   "The servers this person may use, in the order they were added."

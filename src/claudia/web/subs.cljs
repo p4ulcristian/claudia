@@ -136,7 +136,7 @@
  ;; The chat being started, shown on the rail before the list has it (views.pure.sidebar/fresh-chat).
  (fn [db]
    (sidebar-pure/fresh-chat (assoc (select-keys db [:open :pending-new :servers :new-settings :new-server])
-                                   :ro (boolean (:view db))))))
+                                   :ro (events/read-only? db (events/default-server db))))))
 
 (rf/reg-sub
  :open-color

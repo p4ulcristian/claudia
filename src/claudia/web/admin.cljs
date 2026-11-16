@@ -1,8 +1,8 @@
 (ns claudia.web.admin
-  "The admins' Servers and Access pages (GET/PUT/POST/DELETE /hub/admin…): the servers the hub
+  "The admins' People and Servers pages (GET/PUT/POST/DELETE /hub/admin…): the people table (per
+  person: which servers they use, whose chats they may write to, admin), and the servers the hub
   reaches (add one already on WireGuard, pair a new one with the key deploy/pair.sh printed, change a
-  label or address, remove), and the access grid (person × server: a tick = their own profile there).
-  A dialog over the page; every call answers the whole new state."
+  label or address, remove). A dialog over the page; every call answers the whole new state."
   (:require [clojure.string :as str]
             [claudia.web.api :as api]
             [claudia.web.format :as format]
@@ -14,7 +14,7 @@
 (rf/reg-event-fx
  :admin/open
  (fn [{:keys [db]} [_ tab]]
-   {:db (assoc db :admin {:tab (or tab :servers) :state nil :error nil})
+   {:db (assoc db :admin {:tab (or tab :people) :state nil :error nil})
     :admin/call {:method "GET" :path "/hub/admin"}}))
 
 (rf/reg-event-db :admin/close (fn [db _] (dissoc db :admin)))
@@ -178,31 +178,61 @@
  :admin/reset-form
  (fn [_ [_ a]] (swap! a #(zipmap (keys %) (repeat ""))) nil))
 
-(defn- access-cell [p s on]
-  [:td.cell [:input {:type "checkbox" :checked on :aria-label (str p " on " (:label s))
-                     :on-change #(call! "PUT" "/hub/admin/access" {:email p :server (:name s) :granted (not on)})}]])
+(defn- tick
+  "A checkbox cell: on, its label, and what a click sends."
+  [on label method path body]
+  [:td.cell [:input {:type "checkbox" :checked (boolean on) :aria-label label
+                     :on-change #(call! method path body)}]])
 
-(defn- person-row [{p :email :as person} servers granted removing]
+(defn person-label [{:keys [email] person-name :name}]
+  (if (str/blank? person-name) email person-name))
+
+(defn- server-ticks [p servers granted]
+  (for [s servers
+        :let [on (contains? granted [p (:name s)])]]
+    ^{:key (:name s)}
+    [tick on (str p " on " (:label s)) "PUT" "/hub/admin/access" {:email p :server (:name s) :granted (not on)}]))
+
+(defn- writer-ticks [p people writes]
+  (for [{owner :email :as o} people]
+    (if (= owner p)
+      ^{:key owner} [:td.cell.self "—"]
+      (let [on (contains? writes [p owner])]
+        ^{:key owner}
+        [tick on (str p " may write to " (person-label o) "'s chats") "PUT" "/hub/admin/writers"
+         {:email p :owner owner :granted (not on)}]))))
+
+(defn- person-row [{p :email :as person} {:keys [servers people granted writes]} removing]
   [:tr
-   [:td.person p]
-   (for [s servers]
-     ^{:key (:name s)} [access-cell p s (contains? granted [p (:name s)])])
-   [:td.cell [:input {:type "checkbox" :checked (boolean (:admin person)) :aria-label (str p " is an admin")
-                      :on-change #(call! "PUT" (person-path p) {:admin (not (:admin person))})}]]
+   [:td.person {:title p} (person-label person)]
+   (server-ticks p servers granted)
+   (writer-ticks p people writes)
+   [tick (:admin person) (str p " is an admin") "PUT" (person-path p) {:admin (not (:admin person))}]
    [:td.row-actions
     [remove-buttons (= @removing p) "Remove this person (and every tick)"
      #(reset! removing p)
      #(do (reset! removing nil) (call! "DELETE" (person-path p)))
      #(reset! removing nil)]]])
 
-(defn- access-grid [{:keys [servers people access]} removing]
-  (let [granted (set (map (juxt :email :server) access))]
+(defn- grid-head [servers people]
+  [:thead
+   [:tr [:th {:row-span 2} "Person"]
+    [:th.group {:col-span (count servers)} "Uses server"]
+    [:th.group {:col-span (count people)} "May write to the chats of"]
+    [:th {:row-span 2} "Admin"] [:th {:row-span 2}]]
+   [:tr (for [s servers] ^{:key (:name s)} [:th {:title (:name s)} (:label s)])
+    (for [o people] ^{:key (:email o)} [:th {:title (:email o)} (person-label o)])]])
+
+(defn- access-grid [{:keys [servers people access writers]} removing]
+  (let [m {:servers servers :people people
+           :granted (set (map (juxt :email :server) access))
+           :writes (set (map (juxt :email :owner) writers))}]
     [:div.admin-grid-wrap
      [:table.admin-table.grid
-      [:thead [:tr [:th "Person"] (for [s servers] ^{:key (:name s)} [:th {:title (:name s)} (:label s)]) [:th "Admin"] [:th]]]
+      [grid-head servers people]
       [:tbody
        (for [person people]
-         ^{:key (:email person)} [person-row person servers granted removing])]]]))
+         ^{:key (:email person)} [person-row person m removing])]]]))
 
 (defn- person-form [email]
   [:section
@@ -218,10 +248,13 @@
     (fn [{:keys [people] :as state}]
       [:<>
        [:section
-        [:h3 "Who works where " [:span.muted.small "a tick = their own profile on that server"]]
+        [:h3 "People " [:span.muted.small "each tick takes effect on their next request"]]
         (if (seq people)
           [access-grid state removing]
-          [:p.muted.small "Nobody yet."])]
+          [:p.muted.small "Nobody yet."])
+        [:p.muted.small "Uses server: their own profile there. May write: they can open, start and send in that "
+         "person's chats on every server where both have a profile; Claude then runs as that person's "
+         "Linux user, with its logins. Without a tick, another's chats are read only."]]
        [person-form email]])))
 
 (rf/reg-event-fx :admin/reset-email (fn [_ [_ a]] (reset! a "") nil))
@@ -231,7 +264,7 @@
 (defn- tabs [tab]
   [:header
    [:div.profile-tabs {:role "tablist"}
-    (for [[t label] [[:servers "Servers"] [:access "Access"]]]
+    (for [[t label] [[:people "People"] [:servers "Servers"]]]
       ^{:key t}
       [:button {:role "tab" :aria-selected (= tab t) :class (when (= tab t) "on")
                 :on-click #(rf/dispatch [:admin/tab t])} label])]
@@ -243,7 +276,7 @@
   (r/with-let [_ (js/window.addEventListener "keydown" on-key)]
     (when-let [{:keys [tab state error]} @(rf/subscribe [:admin])]
       [:div.settings-backdrop {:on-click #(rf/dispatch [:admin/close])}
-       [:div.settings.hub-admin {:role "dialog" :aria-label (if (= tab :servers) "Servers" "Access")
+       [:div.settings.hub-admin {:role "dialog" :aria-label (if (= tab :servers) "Servers" "People")
                                  :on-click #(.stopPropagation %)}
         [tabs tab]
         (when error [:p.token-error error])
@@ -254,9 +287,8 @@
     (finally (js/window.removeEventListener "keydown" on-key))))
 
 (defn links
-  "The way in, for admins: two small buttons (in the chat list's head)."
+  "The way in, for admins: a small button (in the chat list's head)."
   []
   (when (:admin @(rf/subscribe [:me]))
     [:span.admin-links
-     [:button {:title "Servers (admins)" :on-click #(rf/dispatch [:admin/open :servers])} "Servers"]
-     [:button {:title "Access (admins)" :on-click #(rf/dispatch [:admin/open :access])} "Access"]]))
+     [:button {:title "People and servers (admins)" :on-click #(rf/dispatch [:admin/open :people])} "Admin"]]))
