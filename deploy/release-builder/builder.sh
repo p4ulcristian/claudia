@@ -36,8 +36,25 @@ hub_call() {
 	[ "$code" = 200 ]
 }
 
-# on_hub <file>: whether the hub has the file and its signature.
-on_hub() { hub_call -I --max-time 20 "$hub/files/$1" >/dev/null && hub_call -I --max-time 20 "$hub/files/$1.sig" >/dev/null; }
+# This builder's own key as an allowed-signers line: what on_hub checks a signature on the hub by.
+ssh-keygen -y -f "$home/signing-key" | cut -d' ' -f1,2 |
+	sed 's/^/claudia-release-builder namespaces="claudia-release" /' >"$home/own-signer"
+
+# on_hub <file>: whether the hub has the file and a signature of it made with this builder's key.
+# A file signed with another key (an earlier builder's, whose key main no longer trusts) counts as
+# missing, so it is built and signed again (2026-11-17: the deps signed on Peter's box stayed on
+# the hub after the builder moved to destiny, and the gate refused the hub of 194952a).
+on_hub() {
+	local sig ok=1
+	hub_call -I --max-time 20 "$hub/files/$1" >/dev/null || return 1
+	sig=$(mktemp)
+	if hub_call --max-time 20 "$hub/files/$1.sig" >"$sig" &&
+		ssh-keygen -Y find-principals -s "$sig" -f "$home/own-signer" 2>/dev/null | grep -qx claudia-release-builder; then
+		ok=0
+	fi
+	rm -f "$sig"
+	return $ok
+}
 
 # wanted: the commits the hub wants built, newest first, one per line.
 wanted() {

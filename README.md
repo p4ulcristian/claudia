@@ -345,7 +345,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `sudo deploy/release-builder/install.sh https://<hub>` there, paste the builder key it prints in
     Settings (Servers page, Release builder: the old builder's token stops counting at once), and
     merge a PR adding its key to `deploy/release-signers`. node_modules go up only when the lockfile
-    is new. The builder keeps a shadow-cljs server running between releases (a warm JVM: 35 s instead
+    is new. A file on the hub counts as there only when its signature is the builder's own key's;
+    one signed with another key (an earlier builder's) is built and signed again (2026-11-17: the
+    node_modules signed on Peter's box stayed on the hub after the move, and the gate refused the
+    hub of 194952a). The builder keeps a shadow-cljs server running between releases (a warm JVM: 35 s instead
     of 53 s for the five builds; five builds side by side were slower), started again only when the
     packages or shadow-cljs.edn change. The builder is also main's merge gate: before it builds a
     commit it runs clj-kondo, the ratchet and the tests (compiled in the warm server, run beside the
@@ -522,7 +525,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   `CLAUDIA_UPDATE_TRIGGER` and `HUB_UPDATE_REQUEST`), and they download and verify that build ahead;
   a push to main → `{main: commit}` and `update <commit> <tree>`. Each server's `deploy/update.sh`
   (path unit on the trigger, hourly timer) and the gate's helper take main's commit from git's ref
-  list (waiting up to 40 s for a pushed one), its tree from the API, and install that tree's build:
+  list (waiting up to 40 s for a pushed one), its tree from the API (each server asks GitHub about a commit once and keeps the answer: without a token it gets 60 calls an hour), and install that tree's build:
   fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
   front and the runners restart, never the hosts. No call fails while they do (2026-11-16): the
