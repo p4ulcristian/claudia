@@ -1,23 +1,23 @@
 (ns claudia.shared.csp
-  "The Content-Security-Policy of the page and of the frame Claude's freeform pages run in, and the
+  "The Content-Security-Policy of the page and of the frame Claude's html pages run in, and the
   headers a file of the page is sent with (the hub serves the page, the runner's render server the
   same files for screenshots).
 
   The page runs only its own scripts: everything it loads (Shiki, Vega, three.js, QuickJS) is built
   from npm into the page's own files. WebAssembly is allowed (QuickJS and Shiki's regex engine).
-  Styles may be inline (CodeMirror, Vega and the markdown add them). A freeform page runs in
+  Styles may be inline (CodeMirror, Vega and the markdown add them). An html page runs in
   frame.html, its own document from the same server: a srcdoc or blob frame would take on the
   page's policy and could not run Claude's inline scripts. frame.html's policy sandboxes it
   (an opaque origin, also when opened on its own: no cookies, no Claudia API) and allows inline
-  scripts and the CDN (Chart.js, D3), as the freeform block promises Claude."
+  scripts and the CDN (Chart.js, D3), as the html block promises Claude."
   (:require [clojure.string :as str]))
 
-(def cdn "The one place Claude's freeform pages may load scripts and styles from." "https://cdn.jsdelivr.net")
+(def cdn "The one place Claude's html pages may load scripts and styles from." "https://cdn.jsdelivr.net")
 
 (def ^:private fonts-css "https://fonts.googleapis.com")
 (def ^:private fonts-files "https://fonts.gstatic.com")
 
-(def frame-file "The page that holds a freeform block (in the web folder)." "frame.html")
+(def frame-file "The page that holds an html block (in the web folder)." "frame.html")
 
 (def page-directives
   [["default-src" "'none'"]

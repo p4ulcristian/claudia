@@ -11,18 +11,14 @@
             [claudia.web.scene3d :as scene3d]))
 
 (defn badge
-  "The badge over a block: its name, then its kind (graph, a form's name, freeform or template) in
-  the kind's chalk colour; a form's when-line as its tooltip."
-  [block]
-  (let [form? (= "form" (:kind block))
-        html? (= "html" (:kind block))
-        kind (cond (= "graph" (:kind block)) "graph"
-                   form? (:form block)
-                   (:template block) "template"
-                   :else "freeform")
-        label (if form? (str/lower-case (or (forms/label (:form block)) (:form block))) kind)
-        nm (or (not-empty (:name block)) (when html? (:template block)))]
-    [:span.block-badge {:class (str "b-" kind) :title (when form? (forms/when-line (:form block)))}
+  "The badge over a block: its name, then its form (an html page drawn from a template: template)
+  in the form's chalk colour; the form's when-line as its tooltip."
+  [{:keys [form data] :as block}]
+  (let [tpl (when (= "html" form) (not-empty (:template data)))
+        kind (if tpl "template" form)
+        label (if tpl "template" (str/lower-case (or (forms/label form) (str form))))
+        nm (or (not-empty (:name block)) tpl)]
+    [:span.block-badge {:class (str "b-" kind) :title (forms/when-line form)}
      [:b label]
      (when nm [:span.block-name nm])]))
 

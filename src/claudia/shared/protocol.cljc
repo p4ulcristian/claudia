@@ -32,4 +32,4 @@
 
 (def forms
   "The forms the draw tool offers in this version."
-  ["pipeline" "timeline" "compare" "chart" "stats" "notes" "scene3d"])
+  ["graph" "pipeline" "timeline" "compare" "chart" "stats" "notes" "scene3d" "html"])

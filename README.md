@@ -53,7 +53,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     version in `package-lock.json` and is built into `out/web` (Shiki, Vega, three.js and QuickJS
     in modules loaded on first use, Shiki's grammars as its own files); the hub sends a
     Content-Security-Policy that allows the page's own scripts and WebAssembly only, and no framing
-    (`claudia.shared.csp`). Claude's freeform pages run in `frame.html`, a sandboxed document with its
+    (`claudia.shared.csp`). Claude's html pages run in `frame.html`, a sandboxed document with its
     own policy (inline scripts and cdn.jsdelivr.net, no Claudia API): a srcdoc frame would take on the
     page's policy. A `shadow-cljs watch` build loads under the policy, but its live reload (a socket
     to the shadow-cljs server) is refused: reload by hand. Instead of: importing Shiki and Vega from
@@ -444,6 +444,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
     and the archived list show the chats found as before; another person's chats (a view) keep the
     plain order. Instead of: the order the chats were started in, or moving a chat up on each message.
+39. Every block is a form (2026-11-16): a block is `{ id, name, width, form, data }`; the graph and
+    Claude's own HTML page are the forms `graph` and `html`, beside the predefined ones. The draw
+    call has only `title`, `clear`, `blocks` and `removeBlocks`; every block updates by the same
+    rule (item lists upserted by id, `removeItems`), with two additions: a graph's arrow is named
+    `"from->to"` by the runner (Claude never names arrows), and new `html` starts its parts again.
+    The page has one render path (`claudia.web.views.codeforms/form-view`). `graph` and `html` are
+    listed in the Forms window and cannot be deleted. Saved pictures were rewritten once into this
+    shape when each runner's store first opened (`claudia.slave.upgrade`, `PRAGMA user_version` 1):
+    blocks with a kind, and pictures from before blocks (their cards became notes, a page card html);
+    the page's old-picture view is gone. Templates keep their table (a template is html data).
+    Instead of: three block kinds (graph, html, form), the draw call's own graph fields (`graph`,
+    `nodes`, `edges`, `groups`, `remove`), and the page reading every shape ever saved.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
@@ -513,7 +525,7 @@ clojure and calls need `clj-kondo` on the runner). Forms are described in `claud
 (the draw tool, the system prompt and the Forms gallery read it). Code is coloured by Shiki
 (VS Code's grammars and Dark+ theme; 2026-11-03: highlight.js coloured differently), built from npm
 into the page's own files and loaded on first use, each grammar when its language is first shown; the editor is CodeMirror 6. Templates
-(`save_template`, `templates`, "save as template" on a freeform badge) live in the runner's SQLite.
+(`save_template`, `templates`, "save as template" on an html badge) live in the runner's SQLite.
 Built-in forms can be deleted and restored in the Forms window (per profile; Claude's draw tool
 leaves them out). Claude picks the kinds and the layout of every picture itself (decision 14).
 Claude Code cuts long tool descriptions, so the forms' data is also in the system prompt.

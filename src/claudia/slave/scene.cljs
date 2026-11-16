@@ -1,55 +1,31 @@
 (ns claudia.slave.scene
-  "The picture: a list of named blocks (graph, html, form). A draw call upserts by id, so Claude sends
-  only what changed (the TypeScript Claudia's src/scene.ts applyDraw and describe)."
-  (:require [claudia.shared.protocol :as p]))
+  "The picture: a list of named blocks, each one form with its data (graph, html and the predefined
+  forms). A draw call upserts by id, so Claude sends only what changed (README decision 39)."
+  (:require [clojure.string :as str]
+            [claudia.shared.protocol :as p]))
 
 (def empty-scene {:title "" :blocks []})
 
 (defn- index-of [items id] (first (keep-indexed (fn [i x] (when (= (:id x) id) i)) items)))
 
 (defn- upsert
-  "Patches given replace fields, fields left out stay; new ids are made by fresh."
-  [items patches fresh]
+  "Patches given replace fields of the item with their id, fields left out stay; new ids are added."
+  [items patches]
   (reduce (fn [items patch]
             (if-let [i (index-of items (:id patch))]
               (update items i merge patch)
-              (conj items (fresh patch))))
+              (conj items patch)))
           (vec items)
           patches))
 
-(defn edge-id [{:keys [from to]}] (str from "->" to))
-
-(defn- upsert-edges
-  "Arrows sent replace fields of the arrow with the same ends, or are added."
-  [es sent]
-  (reduce (fn [es e]
-            (if-let [i (first (keep-indexed #(when (= (edge-id %2) (edge-id e)) %1) es))]
-              (update es i merge e)
-              (conj es e)))
-          (vec es)
-          sent))
-
-(defn- draw-graph
-  "One graph block after a draw call, and changed (a set of ids) with the ids that changed: arrows
-  sent, then the graph's nodes and groups, less the ones removed. {:graph :changed}."
-  [g {:keys [nodes edges groups] removed :remove} changed]
-  (let [gone (set removed)
-        labelled #(merge {:label (:id %)} %)
-        kept-nodes (->> (upsert (:nodes g) nodes labelled) (filterv #(not (gone (:id %)))))
-        kept-groups (->> (upsert (:groups g) groups labelled) (filterv #(not (gone (:id %)))))
-        all-edges (upsert-edges (:edges g) edges)
-        ids (set (map :id kept-nodes))
-        group-ids (set (map :id kept-groups))]
-    {:changed (as-> changed c
-                (reduce conj c (map edge-id edges))
-                (into c (map :id) (concat kept-nodes kept-groups))
-                (reduce disj c gone))
-     :graph (assoc g
-                   :nodes (mapv #(if (and (:group %) (not (group-ids (:group %)))) (dissoc % :group) %) kept-nodes)
-                   :edges (filterv #(and (not (gone (edge-id %))) (ids (:from %)) (ids (:to %))) all-edges)
-                   :groups kept-groups)}))
-
 (defn- item-list? [x] (and (sequential? x) (every? #(and (map? %) (contains? % :id)) x)))
+
+(defn- without-items
+  "Every list of the data without the items whose id is in gone."
+  [data gone]
+  (reduce-kv (fn [out k v]
+               (assoc out k (if (sequential? v) (filterv #(not (and (map? %) (gone (:id %)))) v) v)))
+             data data))
 
 (defn merge-form
   "A form's data, field by field: lists of items with an id are upserted by id, anything else replaced;
@@ -57,17 +33,57 @@
   [prev data remove-items]
   (let [out (reduce-kv (fn [out k v]
                          (let [old (get out k)]
-                           (assoc out k (if (and (item-list? v) (item-list? old))
-                                          (upsert old v identity)
-                                          v))))
+                           (assoc out k (if (and (item-list? v) (item-list? old)) (upsert old v) v))))
                        (or prev {})
                        (or data {}))
         gone (set remove-items)]
-    (if (empty? gone)
-      out
-      (reduce-kv (fn [out k v]
-                   (assoc out k (if (sequential? v) (filterv #(not (and (map? %) (gone (:id %)))) v) v)))
-                 out out))))
+    (if (empty? gone) out (without-items out gone))))
+
+;; ---- graph ----
+
+(defn edge-id [{:keys [from to]}] (str from "->" to))
+
+(defn- with-edge-ids
+  "Every arrow sent named by its ends (\"from->to\"): an arrow is identified by from + to."
+  [data]
+  (cond-> data
+    (sequential? (:edges data)) (update :edges (fn [es] (mapv #(assoc % :id (edge-id %)) es)))))
+
+(defn- labelled [items] (mapv #(merge {:label (:id %)} %) items))
+
+(defn tidy-graph
+  "A graph's data after a merge: nodes and groups without a label labelled by their id, a node's
+  group dropped when that group is gone, arrows whose ends are gone dropped."
+  [{:keys [nodes edges groups] :as data}]
+  (let [groups (labelled (or groups []))
+        group-ids (set (map :id groups))
+        nodes (mapv #(if (and (:group %) (not (group-ids (:group %)))) (dissoc % :group) %)
+                    (labelled (or nodes [])))
+        ids (set (map :id nodes))]
+    (assoc data
+           :nodes nodes
+           :groups groups
+           :edges (filterv #(and (ids (:from %)) (ids (:to %))) (or edges [])))))
+
+;; ---- html ----
+
+(defn merge-html
+  "An html page's data: new html starts from its own markup (parts sent with it still apply);
+  parts sent are merged into the ones it has; anything else replaced."
+  [prev {:keys [html parts] :as data}]
+  (let [prev (merge {:html "" :parts {}} prev)
+        fresh (and (some? html) (not= html (:html prev)))]
+    (merge prev (dissoc data :parts) {:parts (merge (if fresh {} (:parts prev)) parts)})))
+
+(defn merge-data
+  "A block's data after a draw: the graph and html forms have their own rules, the rest upsert."
+  [form prev data remove-items]
+  (case form
+    "graph" (tidy-graph (merge-form prev (with-edge-ids data) remove-items))
+    "html" (merge-html prev data)
+    (merge-form prev data remove-items)))
+
+;; ---- blocks ----
 
 (defn- place
   "Puts block b before the block `before`, or where it was, or last."
@@ -79,7 +95,7 @@
           was (assoc blocks was b)
           :else (conj rest-blocks b))))
 
-(defn- scene3d? [b] (and (= "form" (:kind b)) (= "scene3d" (:form b))))
+(defn- scene3d? [b] (= "scene3d" (:form b)))
 
 (defn- place-scene3d
   "A picture holds one 3D scene: a new one takes the old one's place (unless it says where to go),
@@ -91,89 +107,87 @@
       (place (filterv #(or (= (:id %) (:id b)) (not (scene3d? %))) blocks) b before))))
 
 (defn- item-ids
-  "\"block:item\" for every item with an id in a form's data lists."
+  "\"block:item\" for every item with an id in a form's data lists, and every html part sent."
   [id data]
-  (for [[_ v] data :when (sequential? v), it v :when (and (map? it) (contains? it :id))]
-    (str id ":" (:id it))))
+  (concat (for [[_ v] data :when (sequential? v), it v :when (and (map? it) (contains? it :id))]
+            (str id ":" (:id it)))
+          (for [k (keys (:parts data))] (str id ":" (name k)))))
 
-(defn- form-block
-  "A form block after a draw: [block changed]."
-  [old common {:keys [id data removeItems]} form-name changed]
-  (let [f (if (and (= "form" (:kind old)) (= form-name (:form old)))
-            old
-            {:id id :kind "form" :form form-name :data {}})]
-    [(merge f common {:data (merge-form (:data f) data removeItems)})
-     (into (conj changed id) (item-ids id data))]))
-
-(defn- html-block
-  "A freeform (html) block after a draw: [block changed]."
-  [old common {:keys [id html parts template height]} changed]
-  (let [h (if (= "html" (:kind old)) old {:id id :kind "html" :html "" :parts {}})
-        fresh (and (some? html) (not= html (:html h)))
-        changed (cond-> changed (or fresh (some? height)) (conj id))]
-    [(merge h common
-            (when template {:template template})
-            (when (some? height) {:height height})
-            (when (some? html) {:html html})
-            ;; New HTML starts from its own markup; parts sent with it still apply.
-            {:parts (merge (if fresh {} (:parts h)) parts)})
-     (into changed (map #(str id ":" (subs (str %) 1))) (keys parts))]))
-
-(defn block-kind
-  "What kind a block drawn as given is: a form, what it was, what it says, html, or else a graph."
-  [old form-name {:keys [kind html template]}]
-  (cond form-name "form"
-        old (:kind old)
-        kind kind
-        (or (some? html) template) "html"
-        :else "graph"))
+(defn- drawn-block
+  "The block after a draw: a form other than the one it was starts from empty data."
+  [old {:keys [id form data removeItems width] block-name :name}]
+  (let [form (or form (:form old))
+        start (if (= form (:form old)) old {:id id :form form :data {}})]
+    (cond-> (assoc start :data (merge-data form (:data start) data removeItems))
+      width (assoc :width width)
+      block-name (assoc :name block-name))))
 
 (defn- draw-block
   "One block of a draw call into {:blocks :changed}."
-  [{:keys [blocks changed]} {:keys [id form width before] block-name :name :as given}]
+  [{:keys [blocks changed]} {:keys [id before] :as given}]
   (let [old (some #(when (= (:id %) id) %) blocks)
-        ;; A form block keeps its form when later calls only send data.
-        form-name (or form (when (= "form" (:kind old)) (:form old)))
-        common (cond-> {} width (assoc :width width) block-name (assoc :name block-name))
-        [drawn changed] (case (block-kind old form-name given)
-                          "form" (form-block old common given form-name changed)
-                          "graph" [(merge (if (= "graph" (:kind old)) old {:id id :kind "graph" :nodes [] :edges [] :groups []})
-                                          common)
-                                   changed]
-                          (html-block old common given changed))]
-    {:changed (cond-> changed (or (not old) width block-name) (conj id))
-     :blocks (if (scene3d? drawn)
-               (place-scene3d blocks drawn (some? old) before)
-               (place blocks drawn before))}))
+        b (drawn-block old given)
+        sent (cond-> (:data given) (= "graph" (:form b)) with-edge-ids)]
+    {:changed (into (conj changed id) (item-ids id sent))
+     :blocks (if (scene3d? b)
+               (place-scene3d blocks b (some? old) before)
+               (place blocks b before))}))
 
-(defn- draw-into-graph
-  "Nodes, arrows and groups of a draw call into its graph block (graph, default \"graph\")."
-  [{:keys [blocks changed]} {:keys [graph] :as input}]
-  (let [gid (or graph "graph")
-        old (some #(when (= (:id %) gid) %) blocks)
-        g (if (= "graph" (:kind old)) old {:id gid :kind "graph" :nodes [] :edges [] :groups []})
-        drawn (draw-graph g input changed)]
-    {:blocks (place blocks (:graph drawn) nil) :changed (:changed drawn)}))
+;; ---- a draw call ----
+
+(def ^:private old-call-fields
+  "Fields of the draw call before every block was a form (2026-11-16)."
+  [:nodes :edges :groups :graph :remove])
+
+(def ^:private old-block-fields [:kind :html :parts :template :height])
+
+(defn- old-shape-error
+  "Why a call in the shape before every block was a form is refused, or nil."
+  [{:keys [blocks] :as input}]
+  (when (or (some #(contains? input %) old-call-fields)
+            (some (fn [b] (some #(contains? b %) old-block-fields)) blocks))
+    (str "The draw tool changed: every block is a form now. A graph is blocks: [{ id, form: \"graph\", "
+         "data: { nodes, edges, groups } }] (removeItems drops nodes, groups or arrows \"from->to\"); an "
+         "html page is blocks: [{ id, form: \"html\", data: { html, parts, template } }]. "
+         "Nothing was drawn; draw again in this shape.")))
+
+(defn- call-error
+  "Why a draw call is refused: an old shape, a new block without a form, a form not offered."
+  [scene {:keys [blocks] :as input} forms]
+  (let [known (set (map :id (:blocks scene)))
+        bad (some #(when (and (:form %) (not (some #{(:form %)} forms))) (:form %)) blocks)
+        formless (some #(when (and (not (:form %)) (not (known (:id %)))) (:id %)) blocks)]
+    (or (old-shape-error input)
+        (when bad (str "No form \"" bad "\" here. Forms: " (str/join ", " forms) "."))
+        (when formless (str "Block \"" formless "\" is new: give it a form.")))))
+
+(defn- shown?
+  "Whether a block stays on the picture: a graph only while it has nodes."
+  [b]
+  (or (not= "graph" (:form b)) (seq (get-in b [:data :nodes]))))
 
 (defn apply-draw
-  "The scene after one draw call and the ids that changed (nodes, arrows, blocks, \"block:part\",
-  \"block:item\"), or {:error text} when the call asks for a form this runner lacks. forms: the
-  forms on offer (default the base ones)."
+  "The scene after one draw call and the ids that changed (blocks, \"block:item\", \"block:part\"),
+  or {:error text} when the call is refused. forms: the forms on offer (default the base ones)."
   ([scene input] (apply-draw scene input p/forms))
-  ([scene {:keys [title clear nodes edges groups blocks removeBlocks] removed :remove :as input} forms]
-   (if-let [bad (some #(when (and (:form %) (not (some #{(:form %)} forms))) (:form %)) blocks)]
-     {:error (str "No form \"" bad "\" here. Forms: " (apply str (interpose ", " forms)) ".")}
-     (let [base (if clear empty-scene scene)
-           drawn (reduce draw-block {:blocks (vec (:blocks base)) :changed #{}} blocks)
-           {bs :blocks changed :changed} (if (or (seq nodes) (seq edges) (seq groups) (seq removed))
-                                           (draw-into-graph drawn input)
-                                           drawn)
-           gone (set removeBlocks)]
-       {:scene {:title (or title (:title base) "")
-                :blocks (filterv #(and (not (gone (:id %)))
-                                       (or (not= "graph" (:kind %)) (seq (:nodes %))))
-                                 bs)}
-        :changed (vec changed)}))))
+  ([scene {:keys [title clear blocks removeBlocks] :as input} forms]
+   (let [base (if clear empty-scene scene)]
+     (if-let [error (call-error base input forms)]
+       {:error error}
+       (let [{bs :blocks changed :changed} (reduce draw-block {:blocks (vec (:blocks base)) :changed #{}} blocks)
+             gone (set removeBlocks)]
+         {:scene {:title (or title (:title base) "")
+                  :blocks (filterv #(and (not (gone (:id %))) (shown? %)) bs)}
+          :changed (vec changed)})))))
+
+(defn- describe-block [{:keys [id form data]}]
+  (case form
+    "graph" (str id " (graph, " (count (:nodes data)) " nodes, " (count (:edges data)) " arrows)")
+    "html" (str id " (html"
+                (when (seq (:template data)) (str " from template \"" (:template data) "\""))
+                (when (seq (:parts data)) (str ", parts " (str/join ", " (map name (keys (:parts data))))))
+                ")")
+    (str id " (" form ")")))
 
 (defn describe
   "What the draw tool tells Claude back: \"2 blocks: flow (graph, 5 nodes, 4 arrows), steps (pipeline)\"."
@@ -181,11 +195,4 @@
   (if (empty? blocks)
     "The picture is empty."
     (str (count blocks) (if (= 1 (count blocks)) " block: " " blocks: ")
-         (apply str (interpose ", " (for [b blocks]
-                                      (case (:kind b)
-                                        "graph" (str (:id b) " (graph, " (count (:nodes b)) " nodes, " (count (:edges b)) " arrows)")
-                                        "form" (str (:id b) " (" (:form b) ")")
-                                        (str (:id b) " (freeform"
-                                             (when (seq (:template b)) (str " from template \"" (:template b) "\""))
-                                             (when (seq (:parts b)) (str ", parts " (apply str (interpose ", " (map #(subs (str %) 1) (keys (:parts b)))))))
-                                             ")"))))))))
+         (str/join ", " (map describe-block blocks)))))

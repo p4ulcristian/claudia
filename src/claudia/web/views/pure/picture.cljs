@@ -14,11 +14,12 @@
                     (let [p (old (:id b))]
                       (concat
                        (when (not= p b) [(:id b)])
-                       (when (and p (= "graph" (:kind b)) (not= p b))
-                         (let [on (by-id (:nodes p))
-                               oe (into {} (map (juxt eid identity)) (:edges p))]
-                           (concat (for [n (:nodes b) :when (not= n (on (:id n)))] (:id n))
-                                   (for [e (:edges b) :when (not= e (oe (eid e)))] (eid e)))))))))
+                       (when (and p (= "graph" (:form b)) (not= p b))
+                         (let [{:keys [nodes edges]} (:data b)
+                               on (by-id (get-in p [:data :nodes]))
+                               oe (into {} (map (juxt eid identity)) (get-in p [:data :edges]))]
+                           (concat (for [n nodes :when (not= n (on (:id n)))] (:id n))
+                                   (for [e edges :when (not= e (oe (eid e)))] (eid e)))))))))
           (:blocks scene))))
 
 (defn next-shown
