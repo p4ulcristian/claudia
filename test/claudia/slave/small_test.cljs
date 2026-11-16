@@ -105,6 +105,12 @@
     (is (= ["bob"] (front/writable-profiles ps (first ps) #{"bob@x.org" "ann@x.org"})))
     (is (= [] (front/writable-profiles ps (first ps) #{"eve@x.org"})))))
 
+(deftest a-restarting-runner-is-tried-again-only-when-safe
+  (is (true? (front/retry? "GET" "ENOENT" 1000 2000)) "its socket is missing while it restarts")
+  (is (true? (front/retry? "HEAD" "ECONNREFUSED" 1000 2000)))
+  (is (false? (front/retry? "PUT" "ECONNREFUSED" 1000 2000)))
+  (is (false? (front/retry? "GET" "ECONNREFUSED" 3000 2000))))
+
 (deftest front-headers
   (is (= [["Host" "h"] ["X-Claudia-Profile" "bob"] ["X-Claudia-Read-Only" "1"]]
          (front/runner-headers #js ["Host" "h" "X-Claudia-Email" "e"] {:target {:profile "bob"} :read-only true})))

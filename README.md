@@ -442,7 +442,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   list (waiting up to 40 s for a pushed one), its tree from the API, and install that tree's build:
   fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
-  front and the runners restart, never the hosts. A single-user machine's `CLAUDIA_CHECKOUT`
+  front and the runners restart, never the hosts. No call fails while they do (2026-11-16): the
+  hub tries a front that refuses it again every 0.3 s for up to 15 s, and a front a runner whose
+  socket refuses or is missing, for any call without a body (GET, HEAD, a WebSocket handshake), so
+  a restart makes a call wait a moment instead of failing; a front that is off or asleep times out
+  as before. The hub on the gate runs in two slots and switches without a gap (the gate repo). A single-user machine's `CLAUDIA_CHECKOUT`
   must be a release folder (a git checkout is never replaced): first install with
   `CLAUDIA_CHECKOUT=<folder> deploy/update.sh`, then enable `claudia-update.path` and `.timer`
   (on a Mac the same first install loads the launchd agents, the update agent included:

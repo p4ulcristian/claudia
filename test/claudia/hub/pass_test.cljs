@@ -94,3 +94,9 @@
                                     (is (= ["{\"type\":\"hello\"}"] @got) "the ping never reached the front")
                                     (.terminate page) (.close hub) (.close front-wss) (done))
                                   100)))))))))))
+
+(deftest a-restarting-front-is-tried-again-only-when-safe
+  (is (true? (pass/retry? "GET" "ECONNREFUSED" 1000 2000)))
+  (is (false? (pass/retry? "POST" "ECONNREFUSED" 1000 2000)) "a body already went out")
+  (is (false? (pass/retry? "GET" "ETIMEDOUT" 1000 2000)) "an asleep front times out: no waiting")
+  (is (false? (pass/retry? "GET" "ECONNREFUSED" 2000 2000)) "time is up"))

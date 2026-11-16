@@ -179,8 +179,40 @@
         (.catch #(io/send-json res 500 {:error (.-message %)})))
     (io/send-json res 405 {:error "GET only"})))
 
+(def ^:private retry-ms "How soon a call a restarting runner refused tries again." 300)
+(def ^:private retry-for-ms
+  "How long a call keeps trying a runner that refuses it: one restarting for an update is back
+  within a second or two, so the call waits instead of failing."
+  15000)
+
+(defn retry?
+  "Whether a failed try to reach a runner is tried again: its socket refused or is missing for the
+  moment (it is restarting), the call has no body that already went out (GET, HEAD, a WebSocket
+  handshake), and there is time left."
+  [method code now deadline]
+  (boolean (and (#{"GET" "HEAD"} method)
+                (#{"ECONNREFUSED" "ENOENT" "ECONNRESET"} code)
+                (< now deadline))))
+
+(defn- to-runner!
+  "One try of passing the call on to the runner r names; a refused one tries again (retry?)."
+  [^js req ^js res {:keys [target] :as r} deadline]
+  (let [method (.-method req)
+        headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))
+        up (http/request #js {:socketPath (:socket target) :method method :path (.-url req) :headers headers}
+                         (fn [^js up-res]
+                           (.writeHead res (.-statusCode up-res) (.-rawHeaders up-res))
+                           (.pipe up-res res)))]
+    (.on up "error" (fn [^js e]
+                      (cond
+                        (.-headersSent res) (.destroy res)
+                        (retry? method (.-code e) (js/Date.now) deadline)
+                        (js/setTimeout #(to-runner! req res r deadline) retry-ms)
+                        :else (io/send-json res 502 {:error "The runner is not answering."}))))
+    (if (#{"GET" "HEAD"} method) (.end up) (.pipe req up))))
+
 (defn- on-request [^js req ^js res]
-  (let [{:keys [status error target read-only] :as r} (route (.-headers req))
+  (let [{:keys [status error read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
     (cond
       ;; From the hub itself (no caller): only the hub reaches this listener.
@@ -195,17 +227,7 @@
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
-      :else
-      (let [headers (reduce (fn [o [k v]] (doto o (aset k v))) #js {} (runner-headers (.-rawHeaders req) r))
-            up (http/request #js {:socketPath (:socket target) :method (.-method req) :path (.-url req) :headers headers}
-                             (fn [^js up-res]
-                               (.writeHead res (.-statusCode up-res) (.-rawHeaders up-res))
-                               (.pipe up-res res)))]
-        (.on up "error" (fn [_]
-                          (if (.-headersSent res)
-                            (.destroy res)
-                            (io/send-json res 502 {:error "The runner is not answering."}))))
-        (.pipe req up)))))
+      :else (to-runner! req res r (+ (js/Date.now) retry-for-ms)))))
 
 (defn request-head
   "An HTTP/1.1 request's first line and headers ([name value] pairs) as text, the blank line included."
@@ -214,22 +236,32 @@
        (apply str (for [[k v] pairs] (str k ": " v "\r\n")))
        "\r\n"))
 
+(defn- splice!
+  "One try of the WebSocket's way to the runner: the upgrade request written to its socket as it came
+  (with the front's headers), then bytes both ways untouched; a refused try waits and tries again."
+  [^js req ^js sock ^js head {:keys [target] :as r} deadline]
+  (let [up (net/connect (:socket target))
+        joined (atom false)]
+    (.on up "connect"
+         (fn []
+           (reset! joined true)
+           (.write up (request-head (.-method req) (.-url req) (runner-headers (.-rawHeaders req) r)))
+           (when (pos? (.-length head)) (.write up head))
+           (.pipe up sock)
+           (.pipe sock up)))
+    (.on up "error" (fn [^js e]
+                      (if (and (not @joined) (not (.-destroyed sock)) (retry? "GET" (.-code e) (js/Date.now) deadline))
+                        (js/setTimeout #(splice! req sock head r deadline) retry-ms)
+                        (.destroy sock))))
+    (.on sock "error" (fn [_] (.destroy up)))))
+
 (defn- on-upgrade
-  "A WebSocket: the upgrade request is written to the runner socket as it came (with the front's
-  headers), then bytes flow both ways untouched. Read-only frames are enforced by the runner."
+  "A WebSocket: passed on to the runner's socket (splice!). Read-only frames are enforced by the runner."
   [^js req ^js sock ^js head]
-  (let [{:keys [status error target] :as r} (route (.-headers req))]
+  (let [{:keys [status error] :as r} (route (.-headers req))]
     (if status
       (.end sock (str "HTTP/1.1 " status " " error "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
-      (let [up (net/connect (:socket target))]
-        (.on up "connect"
-             (fn []
-               (.write up (request-head (.-method req) (.-url req) (runner-headers (.-rawHeaders req) r)))
-               (when (pos? (.-length head)) (.write up head))
-               (.pipe up sock)
-               (.pipe sock up)))
-        (.on up "error" (fn [_] (.destroy sock)))
-        (.on sock "error" (fn [_] (.destroy up)))))))
+      (splice! req sock head r (+ (js/Date.now) retry-for-ms)))))
 
 (defn main [& _]
   (let [file (.-FRONT_PROFILES env)]
