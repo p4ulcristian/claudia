@@ -23,3 +23,11 @@
   (is (= {} (up/json-drafts "not json")))
   (is (= {} (up/json-drafts "{\"k\": 1}")))
   (is (= {} (up/json-drafts "[{\"k\": [\"s\"], \"text\": \"x\"}]"))))
+
+(deftest asset-urls-are-the-page-own-scripts-and-styles
+  (is (= ["/css/claudia.css" "/js/health.js" "/js/main.js"]
+         (up/asset-urls (str "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/x.css\" />"
+                             "<link rel=\"stylesheet\" href=\"/css/claudia.css\" />"
+                             "<link rel=\"icon\" href=\"/img/favicon.svg\" />"
+                             "<script src=\"/js/health.js\"></script><script src=\"/js/main.js\"></script>"
+                             "<script src=\"//cdn.example/x.js\"></script><script src=\"/js/main.js\"></script>")))))

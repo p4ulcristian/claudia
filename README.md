@@ -299,6 +299,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     reloading). On a touch screen, pulling the rail's circles down and letting go reloads the same
     way. Instead of: reloading by hand after every ship, or a "new version" button to press. Files:
     `src/claudia/web/updates.cljs`, `src/claudia/web/views/rail.cljs`.
+    Prepared first (2026-11-16): before it reloads, the page fetches the new index.html and every
+    script and style it names into the browser's cache (up to 20 s), then reloads at once; the
+    reload only revalidates them, so it is as quick as opening the page, not a 5 MB download. The
+    drafts are read at that moment, and a mic that is waking (amber) also holds it.
 
 28. Small manners (2026-11-14): archiving a chat asks first ("Archive this chat?", the one confirm
     card, `src/claudia/web/views/confirm.cljs`; unarchiving asks nothing); every error line goes by
