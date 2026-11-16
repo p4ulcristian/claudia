@@ -9,12 +9,14 @@
 //   node bin/smoke.mjs            after `npx shadow-cljs release host runner front hub web` and
 //                                 `npm run build:web-files`
 //
-// The browser: SMOKE_CHROMIUM (a Chromium or Chrome binary), else the one playwright-core installed
+// The browser: SMOKE_BROWSER=webkit runs Playwright's WebKit (`npx playwright-core install webkit`;
+// on a Mac it is Apple's WebKit, the engine of Safari and the iPhone app, README decision 36), else
+// Chromium: SMOKE_CHROMIUM (a Chromium or Chrome binary), else the one playwright-core installed
 // (`npx playwright-core install chromium-headless-shell`). No session host and no Claude token: the
 // smoke test reads and opens chats, it never starts Claude.
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:net';
@@ -23,7 +25,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 const repo = resolve(import.meta.dirname, '..');
 const require = createRequire(join(repo, 'package.json'));
-const { chromium } = require('playwright-core');
+const { chromium, webkit } = require('playwright-core');
+const engine = process.env.SMOKE_BROWSER === 'webkit' ? 'webkit' : 'chromium';
 
 const email = 'smoke@example.invalid';
 const server = 'smoke';
@@ -164,7 +167,9 @@ const screens = [
 
 let stopping = false;
 const procs = [];
-const tmp = mkdtempSync(join(tmpdir(), 'claudia-smoke-'));
+// The real path: macOS's temp folder (/var/folders/…) is behind a symlink (/private/var/…), and the
+// seeded chat's session file is found by the folder's real path.
+const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'claudia-smoke-')));
 let failed = false;
 
 try {
@@ -203,7 +208,10 @@ try {
   await until('the hub', () => answers(hubUrl));
   await until('the front, through the hub', () => answers(`${hubUrl}s/${server}/api/me`));
 
-  const browser = await chromium.launch(process.env.SMOKE_CHROMIUM ? { executablePath: process.env.SMOKE_CHROMIUM } : {});
+  const browser = engine === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch(process.env.SMOKE_CHROMIUM ? { executablePath: process.env.SMOKE_CHROMIUM } : {});
+  say(`browser: ${engine} ${browser.version()}`);
   try {
     for (const s of screens) await visit(browser, hubUrl, s);
   } finally {
