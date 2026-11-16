@@ -64,19 +64,33 @@
     (.connect source node)
     {:ctx ctx :stream stream :analyser (analyser-of ctx source) :node node :ring [] :clip nil}))
 
+(defn- in-time
+  "Promise p, or a refusal with text when it has not settled within ms."
+  [p ms text]
+  (js/Promise.race #js [p (js/Promise. (fn [_ no] (js/setTimeout #(no (js/Error. text)) ms)))]))
+
+(defn- warm-up
+  "Promise of the warm state for a microphone stream: a context, the tap loaded, the context running.
+  The context is made only now: while the page captures, WebKit lets it run without a gesture (a
+  finger going down on a touch screen is not one, so resuming inside the press waits for ever)."
+  [^js stream]
+  (let [ctx (js/AudioContext.)]
+    (-> (js/Promise.all #js [(.addModule (.-audioWorklet ctx) "/mic-tap.js")
+                             (in-time (.resume ctx) 3000 "The microphone didn't start: try again.")])
+        (.then #(reset! warm (wire ctx stream)))
+        (.catch (fn [e]
+                  (doseq [^js track (.getTracks stream)] (.stop track))
+                  (.catch (.close ctx) (fn [_] nil))
+                  (throw e))))))
+
 (defn- open!
-  "Promise of the warm state, opening the microphone when it is cold. The context is made first,
-  inside the press (iOS lets audio run only from a person's gesture)."
+  "Promise of the warm state, opening the microphone when it is cold (one opening at a time)."
   []
   (or (some-> @warm js/Promise.resolve)
       @opening
-      (let [ctx (js/AudioContext.)
-            p (-> (js/Promise.all #js [(.resume ctx)
-                                       (.addModule (.-audioWorklet ctx) "/mic-tap.js")
-                                       (.getUserMedia (.-mediaDevices js/navigator)
-                                                      #js {:audio #js {:echoCancellation true :noiseSuppression true}})])
-                  (.then (fn [[_ _ stream]] (reset! warm (wire ctx stream))))
-                  (.catch (fn [e] (.catch (.close ctx) (fn [_] nil)) (throw e)))
+      (let [p (-> (.getUserMedia (.-mediaDevices js/navigator)
+                                 #js {:audio #js {:echoCancellation true :noiseSuppression true}})
+                  (.then warm-up)
                   (.finally #(reset! opening nil)))]
         (reset! opening p)
         p)))
