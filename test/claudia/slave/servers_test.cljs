@@ -1,6 +1,7 @@
 (ns claudia.slave.servers-test
   "The runner's routing, the forms' preparation and the reads' parsers, on plain data."
   (:require [cljs.test :refer [deftest is testing]]
+            [clojure.string :as str]
             [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
             [claudia.slave.clojure :as clojure]
@@ -102,8 +103,8 @@
 
 (deftest codeforms-templates-and-text
   (is (nil? (codeforms/with-template {:id "b"} nil)))
-  (is (= {:id "b" :template "T" :html "<p>" :parts {:a "1" :b "2"} :name "T"}
-         (codeforms/with-template {:id "b" :parts {:b "2"}} {:name "T" :html "<p>" :parts {:a "1" :b "1"}})))
+  (is (= {:id "b" :form "html" :data {:template "T" :html "<p>" :parts {:a "1" :b "2"}} :name "T"}
+         (codeforms/with-template {:id "b" :form "html" :data {:parts {:b "2"}}} {:name "T" :html "<p>" :parts {:a "1" :b "1"}})))
   (is (= "Picture updated: The picture is empty.. Not drawn: git: the user deleted that form; use another kind"
          (codeforms/draw-text {:blocks []} {:refused ["git" "git"]}))))
 
@@ -138,15 +139,44 @@
   (is (= [{:hash "h" :parents ["p1" "p2"] :author "Ann" :when "1 day ago" :time 5 :refs [{:type "tag" :name "v1"}] :subject "s"}]
          (repo/parse-log "h\u001fp1 p2\u001fAnn\u001f1 day ago\u001ftag: v1\u001fs\u001f5\u001e" {}))))
 
-(deftest scene-blocks-and-graph
-  (is (= "form" (scene/block-kind nil "steps" {})))
-  (is (= "html" (scene/block-kind nil nil {:template "t"})))
-  (is (= "graph" (scene/block-kind nil nil {})))
-  (is (= "html" (scene/block-kind {:kind "html"} nil {:kind "graph"})))
-  (let [{s :scene changed :changed} (scene/apply-draw scene/empty-scene
-                                                      {:nodes [{:id "a"} {:id "b"}] :edges [{:from "a" :to "b"}]}
-                                                      ["steps"])]
-    (is (= [{:id "graph" :kind "graph" :nodes [{:label "a" :id "a"} {:label "b" :id "b"}]
-             :edges [{:from "a" :to "b"}] :groups []}]
+(deftest scene-graph-is-a-form
+  (let [{s :scene changed :changed}
+        (scene/apply-draw scene/empty-scene
+                          {:blocks [{:id "g" :form "graph" :data {:nodes [{:id "a"} {:id "b"}] :edges [{:from "a" :to "b"}]}}]}
+                          ["graph"])]
+    (is (= [{:id "g" :form "graph" :data {:nodes [{:label "a" :id "a"} {:label "b" :id "b"}]
+                                          :edges [{:from "a" :to "b" :id "a->b"}] :groups []}}]
            (:blocks s)))
-    (is (= #{"a->b" "a" "b"} (set changed)))))
+    (is (= #{"g" "g:a" "g:b" "g:a->b"} (set changed)))
+    (testing "an arrow is named by its ends: a label change merges, removeItems drops it"
+      (is (= [{:from "a" :to "b" :id "a->b" :label "calls"}]
+             (get-in (scene/apply-draw s {:blocks [{:id "g" :data {:edges [{:from "a" :to "b" :label "calls"}]}}]} ["graph"])
+                     [:scene :blocks 0 :data :edges])))
+      (is (= [] (get-in (scene/apply-draw s {:blocks [{:id "g" :removeItems ["a->b"]}]} ["graph"])
+                        [:scene :blocks 0 :data :edges]))))
+    (testing "a node removed takes its arrows; the last node removed takes the graph"
+      (is (= [] (get-in (scene/apply-draw s {:blocks [{:id "g" :removeItems ["b"]}]} ["graph"])
+                        [:scene :blocks 0 :data :edges])))
+      (is (= [] (:blocks (:scene (scene/apply-draw s {:blocks [{:id "g" :removeItems ["a" "b"]}]} ["graph"]))))))))
+
+(deftest scene-html-is-a-form
+  (let [s (:scene (scene/apply-draw scene/empty-scene
+                                    {:blocks [{:id "p" :form "html" :data {:html "<b data-part=n>1</b>" :parts {:n "2"}}}]}
+                                    ["html"]))
+        parts-of #(get-in (scene/apply-draw s {:blocks [{:id "p" :data %}]} ["html"]) [:scene :blocks 0 :data :parts])]
+    (is (= {:n "2" :m "3"} (parts-of {:parts {:m "3"}})) "parts merge")
+    (is (= {:m "3"} (parts-of {:html "<i>" :parts {:m "3"}})) "new html starts its parts again")
+    (is (= {:n "2"} (parts-of {:html "<b data-part=n>1</b>"})) "the same html keeps them")
+    (is (= "1 block: p (html, parts n)" (scene/describe s)))))
+
+(deftest scene-refuses-what-it-cannot-draw
+  (is (str/starts-with? (:error (scene/apply-draw scene/empty-scene {:nodes [{:id "a"}]} ["graph"]))
+                        "The draw tool changed"))
+  (is (str/starts-with? (:error (scene/apply-draw scene/empty-scene {:blocks [{:id "p" :html "<p>"}]} ["html"]))
+                        "The draw tool changed"))
+  (is (= "Block \"x\" is new: give it a form." (:error (scene/apply-draw scene/empty-scene {:blocks [{:id "x"}]} ["graph"]))))
+  (is (= "No form \"git\" here. Forms: graph, html." (:error (scene/apply-draw scene/empty-scene {:blocks [{:id "x" :form "git"}]} ["graph" "html"]))))
+  (testing "a block given another form starts empty"
+    (let [s (:scene (scene/apply-draw scene/empty-scene {:blocks [{:id "x" :form "stats" :data {:tiles [{:id "t"}]}}]} ["stats" "notes"]))]
+      (is (= {:id "x" :form "notes" :data {:text "hi"}}
+             (first (:blocks (:scene (scene/apply-draw s {:blocks [{:id "x" :form "notes" :data {:text "hi"}}]} ["stats" "notes"])))))))))

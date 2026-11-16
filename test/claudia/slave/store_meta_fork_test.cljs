@@ -32,6 +32,34 @@
     (is (= {:chart "x1"} (store/forms-seen "a")) "opening again changes nothing")
     (fs/rmSync dir #js {:recursive true :force true})))
 
+;; Saved pictures rewritten once (README decision 39).
+
+(defn- old-store!
+  "A store as a runner before decision 39 left it: one chat whose live picture has blocks with a
+  kind, one history picture from before blocks."
+  [dir]
+  (store/open! dir)
+  (let [d (DatabaseSync. (path/join dir "claudia.db"))]
+    (.exec d "PRAGMA user_version = 0;
+              INSERT INTO chats (id, created, at, scene) VALUES
+                ('c', 1, 1, '{\"title\":\"t\",\"blocks\":[{\"id\":\"g\",\"kind\":\"graph\",\"nodes\":[{\"id\":\"a\"}],\"edges\":[],\"groups\":[]}]}');
+              INSERT INTO pictures (chat, turn, scene, at) VALUES
+                ('c', 'old', '{\"title\":\"o\",\"nodes\":[],\"edges\":[],\"groups\":[],\"cards\":[{\"id\":\"1\",\"kind\":\"text\",\"text\":\"hi\"}]}', 1);")
+    (.close d)))
+
+(deftest saved-pictures-are-rewritten-once
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-store-"))]
+    (old-store! dir)
+    (store/open! dir)
+    (is (= {:title "t" :blocks [{:id "g" :form "graph" :data {:nodes [{:id "a"}] :edges [] :groups []}}]}
+           (store/scene "c")))
+    (is (= {:title "o" :blocks [{:id "card-1" :form "notes" :data {:text "hi"}}]}
+           (store/picture "c" "old")))
+    (store/save-scene! "c" {:title "new" :blocks []})
+    (store/open! dir)
+    (is (= {:title "new" :blocks []} (store/scene "c")) "opening again changes nothing")
+    (fs/rmSync dir #js {:recursive true :force true})))
+
 ;; meta
 
 (deftest limits-from-a-rate-limit-event

@@ -20,7 +20,7 @@
 
 (def ^:private width 1000)
 (def ^:private max-height 3200)
-;; After the picture is on the page its graph layout and freeform pages still settle.
+;; After the picture is on the page its graph layout and html pages still settle.
 (def ^:private settle-ms 1500)
 (def ^:private idle-ms 60000)
 (def ^:private timeout-ms 20000)
@@ -58,7 +58,7 @@
 
 (defn asset-path
   "The file under folder that a request path (no query) asks for, when it is one of the page's
-  assets (js, css, img, person, the freeform frame), else nil."
+  assets (js, css, img, person, the html frame), else nil."
   [folder url]
   (let [file (path/join folder (path/normalize url))]
     (when (and (str/starts-with? file (str folder "/"))
@@ -71,7 +71,7 @@
 (defn scene-roots
   "The roots of the scene3d blocks in a picture (the only folders its screenshot may read)."
   [scene]
-  (set (for [b (:blocks scene) :when (and (= "form" (:kind b)) (= "scene3d" (:form b)) (string? (get-in b [:data :root])))]
+  (set (for [b (:blocks scene) :when (and (= "scene3d" (:form b)) (string? (get-in b [:data :root])))]
          (get-in b [:data :root]))))
 
 (defn- source-reply

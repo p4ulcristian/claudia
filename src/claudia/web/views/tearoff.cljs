@@ -7,7 +7,7 @@
             [claudia.web.fx :as fx]))
 
 ;; A drag leaving the page within this many CSS px of the window's edge left the window (leaving
-;; through the middle is entering a freeform block's frame).
+;; through the middle is entering an html block's frame).
 (def ^:private edge 32)
 ;; What the drag carries: the chat's path, a type no field takes as text.
 (def drag-type "application/x-claudia-chat")

@@ -166,8 +166,8 @@
   (is (= "~/x" (changes/short-path "/home/someone/x" "/w/p"))))
 
 (deftest picture-keeps-blocks
-  (let [prev {:blocks [{:id "a" :kind "text"} {:id "g" :kind "graph" :nodes [{:id "n1"}] :edges [{:from "n1" :to "n2"}]}]}
-        scene {:blocks [{:id "a" :kind "text"} {:id "g" :kind "graph" :nodes [{:id "n1" :label "x"}] :edges [{:from "n1" :to "n2"}]}
+  (let [prev {:blocks [{:id "a" :form "notes"} {:id "g" :form "graph" :data {:nodes [{:id "n1"}] :edges [{:from "n1" :to "n2"}]}}]}
+        scene {:blocks [{:id "a" :form "notes"} {:id "g" :form "graph" :data {:nodes [{:id "n1" :label "x"}] :edges [{:from "n1" :to "n2"}]}}
                         {:id "new"}]}]
     (is (= #{"g" "n1" "new"} (picture/changed-ids prev scene)))
     (is (= {:k 1 :scene scene :changed #{} :seq 0} (picture/next-shown nil 1 scene)))

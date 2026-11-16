@@ -8,6 +8,7 @@
             ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
@@ -43,7 +44,7 @@
 (defn deleted-forms
   "The forms the user deleted in the Forms window (this profile's): Claude doesn't get them."
   []
-  (let [v (store/kv "" "hiddenForms")] (if (sequential? v) (filterv string? v) [])))
+  (let [v (store/kv "" "hiddenForms")] (if (sequential? v) (filterv #(and (string? %) (not (forms/core %))) v) [])))
 
 (defn prefs
   "{:hiddenForms [forms the user deleted in the Forms window]}."
@@ -54,7 +55,7 @@
   "Changes the given preferences; returns them all."
   [changes]
   (when (sequential? (:hiddenForms changes))
-    (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help))) (:hiddenForms changes))))))
+    (store/kv! "" "hiddenForms" (vec (distinct (filter #(and (string? %) (some #{%} (keys tools/form-help)) (not (forms/core %))) (:hiddenForms changes))))))
   (prefs))
 
 (defn hidden-forms
@@ -71,7 +72,7 @@
 (defn- form-of
   "The form a block of the call is or already was."
   [scene b]
-  (or (:form b) (let [k (known-block scene (:id b))] (when (= "form" (:kind k)) (:form k)))))
+  (or (:form b) (:form (known-block scene (:id b)))))
 
 (defn- with-root
   "A files/git block's folder made absolute (relative to the chat's folder), so the page can read
@@ -83,20 +84,27 @@
         known (known-block scene (:id b))]
     (cond
       (and (= "auto-files" (:id b)) (= k :root) (nil? given))
-      (assoc-in b [:data k] (if (and (= "form" (:kind known)) (string? (get-in known [:data :root])))
+      (assoc-in b [:data k] (if (string? (get-in known [:data :root]))
                               (get-in known [:data :root])
                               folder))
       (get-in b [:data :demo]) b
-      (and (nil? given) (or (= "form" (:kind known)) (and (= k :root) (sequential? (get-in b [:data :sketch]))))) b
+      (and (nil? given) (or (some? known) (and (= k :root) (sequential? (get-in b [:data :sketch]))))) b
       :else (assoc-in b [:data k] (path/resolve folder (home-path (or given ".")))))))
 
 (defn with-template
-  "A block drawn from template t (nil: no such template): the template's page, its parts under the
-  block's, its name kept; nil when there is no template."
+  "An html block drawn from template t (nil: no such template): the template's page, its parts under
+  the block's, its name kept; nil when there is no template."
   [b t]
   (when t
-    (-> b (assoc :template (:name t) :html (:html t) :parts (merge (:parts t) (:parts b)))
+    (-> b
+        (update :data assoc :template (:name t) :html (:html t) :parts (merge (:parts t) (get-in b [:data :parts])))
         (update :name #(or % (:name t))))))
+
+(defn- template-wanted
+  "The template an html block of the call asks for (one that sends no html of its own), or nil."
+  [scene b]
+  (let [{:keys [template html]} (:data b)]
+    (when (and (= "html" (form-of scene b)) (some? template) (nil? html)) (str template))))
 
 (defn- guard-editor
   "An editor block's code guarded against the user's unsent edits: {:block :notes}."
@@ -111,7 +119,7 @@
 (defn- prepare-block
   "One block of a draw call made ready, into {:blocks :missing :notes}."
   [scene folder acc b]
-  (let [wanted (when (and (:template b) (nil? (:html b))) (str (:template b)))
+  (let [wanted (template-wanted scene b)
         filled (if wanted (with-template b (store/template wanted)) b)]
     (if-not filled
       (update acc :missing conj wanted)
@@ -145,17 +153,18 @@
       (str (str/join "\n" (for [t all]
                             (str "- \"" (:name t) "\": " (if (seq (:description t)) (:description t) "(no description)")
                                  (when (seq (:parts t)) (str " Parts: " (str/join ", " (map #(subs (str %) 1) (keys (:parts t)))) ".")))))
-           "\nDraw one with blocks: [{ id, template: \"<name>\", parts? }]; change one with save_template."))))
+           "\nDraw one with blocks: [{ id, form: \"html\", data: { template: \"<name>\", parts? } }]; change one with save_template."))))
 
 (defn save-template!
-  "Saves a template from a freeform block of scene and/or html; the text for Claude or the page."
+  "Saves a template from an html block of scene and/or html; the text for Claude or the page."
   [scene {:keys [block html parts description] given-name :name}]
   (let [title (let [n (str/trim (str given-name))] (subs n 0 (min 80 (count n))))
         old (when (seq title) (store/template title))
-        b (when block (known-block scene block))]
+        found (when block (known-block scene block))
+        b (when (= "html" (:form found)) (:data found))]
     (cond
       (not (seq title)) "A template needs a name."
-      (and block (not= "html" (:kind b))) (str "No freeform block \"" block "\" in the picture.")
+      (and block (not b)) (str "No html block \"" block "\" in the picture.")
       :else
       (let [html (or html (:html b) (:html old))
             parts (if b (merge (:parts b) parts) (or parts (:parts old) {}))]
@@ -165,31 +174,12 @@
                                      :description (or description (:description old) "")})
               (str (if old "Updated" "Saved") " template \"" (or (:name old) title) "\".")))))))
 
-(def tools
-  "The picture server's template tools, for the host's start spec."
-  {:templates {:description "List the saved templates (freeform blocks kept by name): name, description, parts."
-               :inputSchema {:type "object" :properties {}}}
-   :save_template {:description "Save or change a template: from a freeform block of the picture (block) and/or new html. Same name = change it."
-                   :inputSchema {:type "object" :required ["name"]
-                                 :properties {:name {:type "string" :description "Short telling name, e.g. \"Plan usage tiles\""}
-                                              :block {:type "string" :description "Id of a freeform block in the picture to take the page and parts from"}
-                                              :html {:type "string" :description "The page, as for a freeform block (replaces the old one)"}
-                                              :parts {:type "object" :additionalProperties {:type "string"} :description "Default markup for its data-part elements"}
-                                              :description {:type "string" :description "One line: what it shows and when to use it"}}}}})
-
-(def tool-names ["mcp__picture__templates" "mcp__picture__save_template"])
-
-(def prompt
-  "The system prompt's lines about code forms and templates."
-  (str "Code always goes in the files form (the file opened, lines highlighted, notes pinned) or, when the user should change it, the editor form; never in freeform HTML.\n"
-       "Templates: the user can save a freeform block as a named template (or ask you to: save_template). The templates tool lists them; draw one with blocks: [{ id, template: \"<name>\", parts }] and fill its parts. When the user asks to change a template, change it with save_template (same name), then draw it again."))
-
 ;; ---- the page's reads --------------------------------------------------------------------------
 
 (defn- drawn
   "The values of field k of every block of form f in these pictures."
   [scenes f k]
-  (set (for [scene scenes b (:blocks scene) :when (and (= "form" (:kind b)) (= f (:form b)) (string? (get-in b [:data k])))]
+  (set (for [scene scenes b (:blocks scene) :when (and (= f (:form b)) (string? (get-in b [:data k])))]
          (get-in b [:data k]))))
 
 (defn- drawn?
@@ -409,7 +399,7 @@
   "The scene's editor block with this id, or nil."
   [scene block]
   (let [b (known-block scene block)]
-    (when (and (= "form" (:kind b)) (= "editor" (:form b))) b)))
+    (when (= "editor" (:form b)) b)))
 
 (defn- with-block-data [scene block data]
   (update scene :blocks (fn [bs] (mapv #(if (= (:id %) block) (assoc % :data data) %) bs))))
@@ -437,14 +427,6 @@
           {:scene (with-block-data scene block data) :text text})))))
 
 ;; ---- the forms Claude hears of ------------------------------------------------------------------
-
-(defn- kind-of-block [b]
-  (case (:kind b) "form" (:form b) "html" "freeform" "graph"))
-
-(defn- kind-of-call [scene b]
-  (cond (:form b) (:form b)
-        (or (some? (:html b)) (:template b)) "freeform"
-        :else (if-let [k (known-block scene (:id b))] (kind-of-block k) (if (= "html" (:kind b)) "freeform" "graph"))))
 
 (defn- offered
   "The forms the draw tool offers: this runner's, less the ones deleted in the Forms window."
@@ -513,15 +495,15 @@
 (defn- touches?
   "Whether a block of a draw call draws something (one only moved, renamed or resized does not)."
   [b]
-  (or (:form b) (:data b) (some? (:html b)) (:template b) (:parts b) (:kind b)))
+  (or (:form b) (:data b) (:removeItems b)))
 
 (defn- without-hidden
   "A draw call's input without the forms deleted in the Forms window (hidden): {:input :refused}.
   A session started before the delete still has them in its draw tool."
   [scene input hidden]
-  (let [refused (for [b (:blocks input) :when (and (touches? b) (hidden (kind-of-call scene b)))]
-                  (kind-of-call scene b))
-        blocks (filterv #(not (and (touches? %) (hidden (kind-of-call scene %)))) (:blocks input))]
+  (let [refused (for [b (:blocks input) :when (and (touches? b) (hidden (form-of scene b)))]
+                  (form-of scene b))
+        blocks (filterv #(not (and (touches? %) (hidden (form-of scene %)))) (:blocks input))]
     {:input (assoc input :blocks blocks)
      :refused (vec refused)}))
 

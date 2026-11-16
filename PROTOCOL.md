@@ -91,12 +91,12 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 |---|---|
 | `GET /`, `/new` and `/c/*` | the page (`index.html`), `cache-control: no-cache` |
 | `GET /js/*`, `/css/*`, `/fonts/*`, `/img/*` (any file in `HUB_WEB`) | the built page's files; `no-cache` with an ETag, fonts and images kept a week |
-| `GET /frame.html` | the document a freeform block runs in (it asks the page for Claude's HTML by postMessage and writes it in) |
+| `GET /frame.html` | the document an html block runs in (it asks the page for Claude's HTML by postMessage and writes it in) |
 
 Every file of the page goes with `x-content-type-options: nosniff` and a Content-Security-Policy
 (`claudia.shared.csp`): the page's own (only its own scripts and WebAssembly, no CDN, no eval;
 inline styles; fonts from Google Fonts; same-origin fetches and sockets; no framing,
-`x-frame-options: DENY`); `frame.html` has the freeform policy instead (`sandbox allow-scripts`,
+`x-frame-options: DENY`); `frame.html` has the html block's policy instead (`sandbox allow-scripts`,
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
@@ -288,7 +288,7 @@ Runner → page:
 | `created` | `chat`, `id` (the page's uuid, to match) |
 | `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`; `gone: true`: a queued message Claude Code dropped) |
 | `delta` | `chat`, `id`, `text` (streamed text appended to message `id`) |
-| `scene` | `chat`, `scene: Scene` (the whole picture; it is small), `changed` (ids the draw changed: nodes, arrows `from->to`, blocks, `block:part`, `block:item`), `turn` (the picture's turn) |
+| `scene` | `chat`, `scene: Scene` (the whole picture; it is small), `changed` (ids the draw changed: blocks, `block:item` (a graph's nodes and arrows `block:from->to` too), `block:part`), `turn` (the picture's turn) |
 | `status` | `chat`, `running`, `note?` (`Thinking`, `Retrying…`, `Compacting`; none: plain working) |
 | `turn` | `chat`, `running` (bool), `stopped` (when a turn ended: the person stopped it) |
 | `ask` | `chat`, `ask: Ask` |
@@ -363,16 +363,27 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
   (ExitPlanMode: the plan); every other tool is allowed without asking (each logged as
   `[<chat id 8>] auto-allowed <tool>: <input ≤ 300>`)
 
-`Scene`: `{ title, blocks: [Block] }` in order, top to bottom. A `Block` has `id`, `name`, `kind`
-(`"graph"`, `"html"`, `"form"`), `width` (`"full"`/`"half"`) and:
-- graph: `nodes: [{ id, label, shape, color, note, group, state }]`, `edges: [{ from, to, label, dashed, color }]`, `groups: [{ id, label, color }]`
-- html: `html`, `parts: { name: markup }`
-- form: `form` (`pipeline`, `timeline`, `compare`, `chart`, `stats`, `notes`, `scene3d`, and the code forms `files`, `editor`, `flow`, opt-in `git`, `clojure`, `calls`), `data` (as the draw tool's description says; `claudia.shared.forms`).
-  A picture holds one `scene3d` block: a new one takes the old one's place (or goes where its `before`
-  says) and every other `scene3d` block leaves; redrawing the same id keeps its place and merges its data.
+`Scene`: `{ title, blocks: [Block] }` in order, top to bottom. Every `Block` is one form with its data
+(README decision 39): `{ id, name, width ("full"/"half"), form, data }`. `form` is `graph`, `pipeline`,
+`timeline`, `compare`, `chart`, `stats`, `notes`, `scene3d`, the code forms `files`, `editor`, `flow`,
+opt-in `git`, `clojure`, `calls`, or `html`; `data` as the draw tool's description says
+(`claudia.shared.forms`, `claudia.slave.tools`). Two have rules of their own:
+- graph: `{ nodes: [{ id, label, shape, color, note, group, state }], edges: [{ id, from, to, label, dashed, color }], groups: [{ id, label, color }] }`.
+  An arrow's `id` is always `"from->to"` (the runner sets it); arrows whose ends are gone are dropped,
+  and a graph without nodes leaves the picture.
+- html: `{ html, parts: { name: markup }, template? }`. New `html` starts its parts again; `parts` sent
+  merge into the ones it has.
+Every other form's item lists are upserted by item id; `removeItems` drops items by id from every list.
+A block given another form starts from empty data.
+A picture holds one `scene3d` block: a new one takes the old one's place (or goes where its `before`
+says) and every other `scene3d` block leaves; redrawing the same id keeps its place and merges its data.
+Pictures saved in an older shape (blocks with a `kind`, or the graph and cards from before blocks) are
+rewritten once when the runner's store opens with `PRAGMA user_version` below 1 (`claudia.slave.upgrade`).
 
-The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `graph`, `nodes`,
-`edges`, `groups`, `remove`, `blocks`, `removeBlocks`) to the chat's scene and sends `scene`. It keeps
+The runner applies each `draw` call (same input as the draw tool: `title`, `clear`, `blocks: [{ id, name,
+form, data, removeItems, width, before }]`, `removeBlocks`) to the chat's scene and sends `scene`. A new
+block needs a `form`; a call in the older shape (`nodes`, `edges`, `groups`, `graph`, `remove`, or a
+block's `kind`, `html`, `parts`, `template`, `height`) is refused with the new shape spelled out. It keeps
 the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
 id made for a turn Claude started itself), sends `pictures`, and answers the draw with the text and a
 screenshot of the whole picture (`{ type: "image", data, mimeType: "image/png" }`), or the text and why
@@ -428,7 +439,7 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 | `GET /api/forms` | `{ forms: [names this runner offers, in the draw tool's order], hidden: [the ones deleted in the Forms window], templates: [Template] }` |
 | `GET /api/templates` | `[Template]`: `{ name, html, parts, description }` |
 | `DELETE /api/templates/<name>` | `{ ok }` (not for a view) |
-| `POST /api/chats/<id>/blocks/<block>/template` `{ name, description? }` | `{ ok, text }`: the freeform block kept as a template (not for a view) |
+| `POST /api/chats/<id>/blocks/<block>/template` `{ name, description? }` | `{ ok, text }`: the html block kept as a template (not for a view) |
 | `GET /api/chats/<id>/files?root&path` | `{ entries: [{ name, dir, status?, changed?, lines? }] }`: a folder of a files block's `root` (or inside it, or above it up to the home folder; in a view, up to the work folder) |
 | `…/files?root&path&read=1&since?` | `{ text, mtime }`, `{ same: true }` while the mtime is `since`, or `{ error }` |
 | `…/files?root&path&image=1` | the image itself (up to 25 MB) |
@@ -439,7 +450,8 @@ Claude picks every kind of block itself: there are no per-chat choices. The draw
 forms deleted in the Forms window (a session started before the delete still lists them); changes
 to the forms are told to Claude once, in a `<system-reminder>` after the text of the next message
 (the forms news). `templates` and `save_template` are
-tools of the `picture` server; a block `{ id, template: "<name>", parts? }` is drawn from the template.
+tools of the `picture` server; a block `{ id, form: "html", data: { template: "<name>", parts? } }` is
+drawn from the template. `graph` and `html` are on every runner and cannot be deleted.
 A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
 
 A view's reads stay in the work folder (`claudia.slave.reach`): for a read-only view every disk read

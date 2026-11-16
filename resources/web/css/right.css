@@ -32,7 +32,7 @@
 .block:hover .block-badge, .g-entry .block-badge { opacity: 0.9; }
 .block-badge b { order: 2; font: 700 12px/1.4 var(--hand); color: var(--b-c); white-space: nowrap; }
 .block-badge.b-graph { --b-c: var(--violet); }
-.block-badge.b-freeform { --b-c: var(--amber); }
+.block-badge.b-html { --b-c: var(--amber); }
 .block-badge.b-template { --b-c: var(--green); }
 .block-name { order: 1; font: 400 12.5px var(--hand); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .block-name::after { content: " ·"; }
@@ -88,23 +88,7 @@
 .edge .fray { stroke-width: 3.7; }
 .edge.hot .fray { stroke: var(--c); stroke-width: 3.9; }
 
-/* A picture from before blocks: its cards. */
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-.card { min-width: 0; padding: 12px 14px; font-size: 13.5px; animation: rise 0.3s ease-out;
-  background: color-mix(in oklch, var(--board) 85%, #fff 4%); border: 0; border-left: 3px solid var(--c); border-radius: 4px; }
-.card h3 { margin: 0 0 6px; font: 700 18px var(--hand); color: var(--c); }
-.card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
-.card pre { margin: 0; overflow-x: auto; font-size: 12px; line-height: 1.5; }
-.table-wrap { overflow-x: auto; }
-.card table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.card th { text-align: left; font: 700 12px var(--sans); color: var(--muted); padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.card td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.card td p { margin: 0; }
-.cards > .card.k-code, .cards > .card.k-table, .cards > .card.k-page { grid-column: 1 / -1; }
-.card .code { margin: 0; }
-.card .code pre { max-height: 60vh; font-size: 12.5px; }
-
-/* ---------- Freeform pages ---------- */
+/* ---------- HTML pages ---------- */
 .page-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; transition: height 0.15s ease-out; }
 
 /* ---------- The base forms (claudia.web.views.forms) ---------- */
