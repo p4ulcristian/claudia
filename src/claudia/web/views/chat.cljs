@@ -2,7 +2,8 @@
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
   the working line) and the composer (the mic, Attach, the message and one Send)."
-  (:require [clojure.string :as str]
+  (:require [claudia.web.db :as db]
+            [clojure.string :as str]
             [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -372,7 +373,9 @@
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
                      :send! #(send-text! text))]
     (use-grow! ref text)
-    (h/use-effect (fn [] (some-> (.-current ref) .focus) nil) [(str draft-key)])
+    ;; The box is ready to type in on each chat, except on a touch screen, where focus brings up
+    ;; the keyboard over the chat.
+    (h/use-effect (fn [] (when-not (db/touch?) (some-> (.-current ref) .focus)) nil) [(str draft-key)])
     [:div.composer
      [link-strip server]
      [attach/chips draft-key]

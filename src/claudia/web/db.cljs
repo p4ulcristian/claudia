@@ -8,6 +8,11 @@
 
 (defn phone? [] (< js/window.innerWidth phone-width))
 
+(defn touch?
+  "A device with a touch screen (iPad, iPhone): a field focused by itself brings up its keyboard."
+  []
+  (pos? (or (.-maxTouchPoints js/navigator) 0)))
+
 (defn- stored [k default]
   (try (or (some-> (js/localStorage.getItem k) js/JSON.parse) default)
        (catch :default _ default)))
