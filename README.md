@@ -198,9 +198,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it cannot start before the press), or the microphone open whenever the composer shows.
     The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
     messages went out swapped): held, the mic opens a 320 px flower round itself, amber while
-    waking and red while recording, breathing with the voice, the time spoken in the middle. Two
-    petals open where a thumb at the composer's left edge can go: up throws the clip away, right
-    adds the words to the message; letting go in place sends. Each clip let go waits in a list over
+    waking and red while recording, breathing with the voice, the time spoken in the middle. Three
+    petals open round it: left sends, up throws the clip away, right adds the words to the message;
+    letting go in place sends too. Each clip let go waits in a list over
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.

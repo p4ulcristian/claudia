@@ -2,8 +2,8 @@
   "The mic's flower (README decision 20): while the mic is held, a 320 px canvas round the button,
   big enough to show past the finger on it. In the middle a disc, amber while the microphone wakes
   and red once it records, breathing with the voice, with the time spoken so far and what letting
-  go would do. Two petals open where a thumb at the composer's left edge can go: up cancels, right
-  adds the words to the message; letting go in place sends. The petal the finger is over lights."
+  go would do. Three petals open round it: left sends, up cancels, right adds the words to the
+  message; letting go in place sends too. The petal the finger is over lights."
   (:require [claudia.web.views.pure.mic :as pure]
             [claudia.web.views.pure.update-pill :as clock]))
 
@@ -11,8 +11,9 @@
 
 (def ^:private petals
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.
-  [[:cancel -150 -40 "✕" "cancel" "--red"]
-   [:add -30 40 "+" "add" "--blue"]])
+  [[:send 145 215 "➤" "send" "--green"]
+   [:cancel -135 -45 "✕" "cancel" "--red"]
+   [:add -35 35 "+" "add" "--blue"]])
 
 (def ^:private words {:send "send" :add "add" :cancel "cancel"})
 
@@ -29,6 +30,9 @@
 (defn- petal! [^js g ^js el way [p a0 a1 icon word colour]]
   (let [on (= way p) c (css el colour) mid (rad (/ (+ a0 a1) 2)) x (* 104 (js/Math.cos mid)) y (* 104 (js/Math.sin mid))]
     (petal-path! g 56 150 a0 a1)
+    ;; Opaque underneath: what lies behind (the rail on a tablet) never shows through a petal.
+    (set! (.-fillStyle g) (css el "--bg2"))
+    (.fill g)
     (set! (.-globalAlpha g) (if on 0.92 0.16))
     (set! (.-fillStyle g) c)
     (.fill g)
@@ -42,16 +46,25 @@
 
 (defn- disc! [^js g ^js el {:keys [phase level secs way]}]
   (let [warm? (= phase :recording) r (+ 44 (* 10 level))]
+    ;; The ring between the disc and the petals is opaque too: the composer under it stays hidden.
+    (.beginPath g)
+    (.arc g 0 0 56 0 (* 2 js/Math.PI))
+    (set! (.-fillStyle g) (css el "--bg2"))
+    (.fill g)
     (.beginPath g)
     (.arc g 0 0 r 0 (* 2 js/Math.PI))
     (set! (.-fillStyle g) (css el (if warm? "--red" "--amber")))
     (.fill g)
     (set! (.-fillStyle g) "#fff")
     (set! (.-textAlign g) "center")
-    (set! (.-font g) (str "700 19px " (css el "--mono")))
-    (.fillText g (if warm? (clock/clock-text (* 1000 secs)) "…") 0 -10)
+    ;; The 26 px mic icon sits in the middle (-13..13): the clock above it, the word below, both
+    ;; the same distance from it.
+    (set! (.-textBaseline g) "middle")
+    (set! (.-font g) (str "700 17px " (css el "--mono")))
+    (.fillText g (if warm? (clock/clock-text (* 1000 secs)) "…") 0 -27)
     (set! (.-font g) (str "600 12px " (css el "--sans")))
-    (.fillText g (if warm? (get words way) "waking") 0 34)))
+    (.fillText g (if warm? (get words way) "waking") 0 26)
+    (set! (.-textBaseline g) "alphabetic")))
 
 (defn draw!
   "One frame: the petals, then the disc. state: {:phase :level (0-1) :secs :way}."
