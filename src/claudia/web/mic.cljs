@@ -4,12 +4,17 @@
   press starts the clip half a second back, so the first words are never lost to the microphone
   waking up. It closes after `idle-ms` without a press, or as soon as the page is hidden (the
   browser shows the microphone in use while it is warm). The clip goes to the hub as 16 kHz WAV
-  (POST /hub/listen, claudia.hub.listen); an analyser drives the bars."
+  (POST /hub/listen, claudia.hub.listen); an analyser drives the bars. The microphone opens without
+  echo cancellation and noise suppression (`constraints`): with them, iOS puts the whole page into
+  call audio while the microphone is warm, whose own quieter volume ignores the media volume (bells
+  and the read-aloud voice went faint on an iPad at full volume). Nothing needs the echo removed:
+  the read-aloud voice stops when the mic is held."
   (:require [claudia.web.api :as api]
             [claudia.web.pcm :as pcm]))
 
 (def ^:private idle-ms "How long the microphone stays warm after the last press." (* 10 60 1000))
 (def ^:private keep-s "How much sound before now is kept." 1)
+(def ^:private constraints #js {:audio #js {:echoCancellation false :noiseSuppression false}})
 (def ^:private pre-s "How far back a clip starts from the press." 0.5)
 (def ^:private late-ms "Waited at release for the samples still on their way from the worklet." 80)
 
@@ -110,8 +115,7 @@
   (or (some-> @warm js/Promise.resolve)
       @opening
       (let [_ (reset! steps {:at (js/Date.now)})
-            p (-> (in-time (.getUserMedia (.-mediaDevices js/navigator)
-                                          #js {:audio #js {:echoCancellation true :noiseSuppression true}})
+            p (-> (in-time (.getUserMedia (.-mediaDevices js/navigator) constraints)
                            15000 "The microphone didn't answer: try again.")
                   (.then (fn [stream] (step! :mic) (warm-up stream)))
                   (.finally #(reset! opening nil)))]
