@@ -417,6 +417,7 @@
                  (= pathname "/hub/narrate") (narrate/call req res)
                  (= pathname "/hub/progress") (io/send-json res 200 (progress/now))
                  (= pathname "/hub/listen") (listen/call req res)
+                 (= pathname "/hub/listen/log") (listen/log req res email)
                  (= pathname "/hub/gate/system")
                  (cond (not admin?) (fail res 403 "admins only")
                        (not= "GET" (.-method req)) (fail res 405 "GET only")

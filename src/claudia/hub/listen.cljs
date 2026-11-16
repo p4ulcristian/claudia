@@ -54,6 +54,28 @@
               (.then #(io/send-json res 200 {:text %}))
               (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))
 
+(def ^:private log-keys [:event :ms :warm :steps :bytes :chars :error :ua :app])
+
+(defn log-line
+  "One line for the hub's log from a page's mic report (POST /hub/listen/log): the caller and the
+  known fields only, each cut short. No sound and no words ever come in it."
+  [email body]
+  (let [cut (fn [v] (cond (string? v) (subs v 0 (min 200 (count v)))
+                          (map? v) (into {} (for [[k x] (take 6 v) :when (number? x)] [k x]))
+                          (or (number? v) (boolean? v)) v
+                          :else nil))
+        fields (into {} (for [k log-keys :let [v (cut (get body k))] :when (some? v)] [k v]))]
+    (str "mic: " email " " (js/JSON.stringify (clj->js fields)))))
+
+(defn log
+  "POST /hub/listen/log: a page's mic report, written to the hub's log."
+  [^js req ^js res email]
+  (if (not= "POST" (.-method req))
+    (io/send-json res 405 {:error "POST only"})
+    (-> (io/read-json req 8192)
+        (.then (fn [body] (js/console.log (log-line email body)) (io/send-json res 200 {:ok true})))
+        (.catch (fn [e] (io/send-json res 400 {:error (.-message e)}))))))
+
 (defn call
   "GET or POST /hub/listen for a signed-in caller."
   [^js req ^js res]
