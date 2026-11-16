@@ -1,13 +1,20 @@
 (ns claudia.web.views.mic-flower
   "The mic's flower (README decision 20): while the mic is held, a 320 px canvas round the button,
   big enough to show past the finger on it. In the middle a disc, amber while the microphone wakes
-  and red once it records, breathing with the voice, with the time spoken so far and what letting
-  go would do. Three petals open round it: left sends, up cancels, right adds the words to the
-  message; letting go in place sends too. The petal the finger is over lights."
+  and red once it records, with the time spoken so far and what letting go would do; round it the
+  48 bars that follow the voice. Three petals open outside the bars: left sends, up cancels, right
+  adds the words to the message; letting go in place sends too. The petal the finger is over lights."
   (:require [claudia.web.views.pure.mic :as pure]
             [claudia.web.views.pure.update-pill :as clock]))
 
 (def size "The canvas, CSS px (square, centred on the button)." 320)
+
+;; Radii, CSS px from the middle: the disc, the bars (from bar-r, up to bar-len long), the petals.
+(def ^:private disc-r 44)
+(def ^:private bar-r 48)
+(def ^:private bar-len 33)
+(def ^:private petal-in 88)
+(def ^:private petal-out 155)
 
 (def ^:private petals
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.
@@ -28,8 +35,9 @@
   (.closePath g))
 
 (defn- petal! [^js g ^js el way [p a0 a1 icon word colour]]
-  (let [on (= way p) c (css el colour) mid (rad (/ (+ a0 a1) 2)) x (* 104 (js/Math.cos mid)) y (* 104 (js/Math.sin mid))]
-    (petal-path! g 56 150 a0 a1)
+  (let [on (= way p) c (css el colour) mid (rad (/ (+ a0 a1) 2)) r (/ (+ petal-in petal-out) 2)
+        x (* r (js/Math.cos mid)) y (* r (js/Math.sin mid))]
+    (petal-path! g petal-in petal-out a0 a1)
     ;; Opaque underneath: what lies behind (the rail on a tablet) never shows through a petal.
     (set! (.-fillStyle g) (css el "--bg2"))
     (.fill g)
@@ -44,15 +52,29 @@
     (set! (.-font g) (str "600 15px " (css el "--sans")))
     (.fillText g word x (+ y 20))))
 
-(defn- disc! [^js g ^js el {:keys [phase level secs way]}]
-  (let [warm? (= phase :recording) r (+ 44 (* 10 level))]
-    ;; The ring between the disc and the petals is opaque too: the composer under it stays hidden.
+(defn- ground!
+  "The round inside the petals, opaque: the composer under the bars stays hidden."
+  [^js g ^js el]
+  (.beginPath g)
+  (.arc g 0 0 petal-in 0 (* 2 js/Math.PI))
+  (set! (.-fillStyle g) (css el "--bg2"))
+  (.fill g))
+
+(defn- bars!
+  "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right)."
+  [^js g ^js el levels]
+  (set! (.-fillStyle g) (css el "--red"))
+  (doseq [[i level] (map-indexed vector levels)
+          :when (> level 0.02)]
+    (.save g)
+    (.rotate g (* 2 js/Math.PI (/ i pure/bar-count)))
+    (.fillRect g bar-r -1.5 (+ 3 (* level bar-len)) 3)
+    (.restore g)))
+
+(defn- disc! [^js g ^js el {:keys [phase secs way]}]
+  (let [warm? (= phase :recording)]
     (.beginPath g)
-    (.arc g 0 0 56 0 (* 2 js/Math.PI))
-    (set! (.-fillStyle g) (css el "--bg2"))
-    (.fill g)
-    (.beginPath g)
-    (.arc g 0 0 r 0 (* 2 js/Math.PI))
+    (.arc g 0 0 disc-r 0 (* 2 js/Math.PI))
     (set! (.-fillStyle g) (css el (if warm? "--red" "--amber")))
     (.fill g)
     (set! (.-fillStyle g) "#fff")
@@ -67,7 +89,8 @@
     (set! (.-textBaseline g) "alphabetic")))
 
 (defn draw!
-  "One frame: the petals, then the disc. state: {:phase :level (0-1) :secs :way}."
+  "One frame: the petals, the ground inside them, the bars, the disc. state: {:phase :levels (one
+  0-1 per bar) :secs :way}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
     (.setTransform g 1 0 0 1 0 0)
@@ -75,15 +98,11 @@
     (.setTransform g dpr 0 0 dpr 0 0)
     (.translate g (/ size 2) (/ size 2))
     (doseq [p petals] (petal! g canvas (:way state) p))
+    (ground! g canvas)
+    (bars! g canvas (:levels state))
     (disc! g canvas state)))
 
 (defn wipe! [^js canvas]
   (let [g (.getContext canvas "2d")]
     (.setTransform g 1 0 0 1 0 0)
     (.clearRect g 0 0 (.-width canvas) (.-height canvas))))
-
-(defn level
-  "How loud the voice is now (0-1) from the analyser's spectrum bytes."
-  [spectrum]
-  (let [ls (pure/bar-levels spectrum)]
-    (if (seq ls) (min 1 (* 1.6 (/ (reduce + ls) (count ls)))) 0)))

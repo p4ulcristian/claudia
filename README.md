@@ -197,9 +197,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (about 12 minutes) at the hub. Instead of: MediaRecorder from the press (WebM/MP4: smaller, but
     it cannot start before the press), or the microphone open whenever the composer shows.
     The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
-    messages went out swapped): held, the mic opens a 320 px flower round itself, amber while
-    waking and red while recording, breathing with the voice, the time spoken in the middle. Three
-    petals open round it: left sends, up throws the clip away, right adds the words to the message;
+    messages went out swapped): held, the mic opens a 320 px flower round itself: an 88 px disc,
+    amber while waking and red while recording, the time spoken in it; round the disc the 48 bars
+    that follow the voice (back 2026-11-16: the bars, not a breathing disc, show the voice). Three
+    petals open outside the bars: left sends, up throws the clip away, right adds the words to the message;
     letting go in place sends too. Each clip let go waits in a list over
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.

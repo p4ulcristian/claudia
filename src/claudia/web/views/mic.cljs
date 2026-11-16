@@ -2,7 +2,7 @@
   "The composer's mic: a 56 px round button at the composer's left end, under the left thumb of a
   tablet held in landscape. Hold it and talk: a flower opens round it (views/mic_flower.cljs), big
   enough to show past the finger: amber while the microphone wakes, red once it records, with the
-  time spoken. Let go in place (or dragged left or down) and the clip is heard and sent; dragged
+  time spoken and bars round it that follow the voice. Let go in place (or dragged left or down) and the clip is heard and sent; dragged
   right, the words only join the draft; dragged up, the clip is thrown away. Each clip let go waits
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
@@ -16,10 +16,11 @@
             [reagent.hooks :as h]))
 
 (defn- flower-state
-  "What the flower shows now: the phase, how loud (eased), seconds spoken, the way letting go goes."
-  [phase ^js live hold eased]
+  "What the flower shows now: the phase, the bars' levels (eased), seconds spoken, the way letting
+  go goes."
+  [phase ^js live hold levels]
   (let [{:keys [dir rec-at]} (.-current hold)]
-    {:phase phase :level eased :way (or dir :send)
+    {:phase phase :levels levels :way (or dir :send)
      :secs (if rec-at (/ (- (js/performance.now) rec-at) 1000) 0)
      :live live}))
 
@@ -28,10 +29,10 @@
   [canvas live hold phase]
   (h/use-effect
    (fn []
-     (let [raf (atom nil) eased (atom 0)
+     (let [raf (atom nil) eased (atom [])
            step (fn step []
                   (when-let [c (.-current canvas)]
-                    (when-let [s (.-current live)] (swap! eased #(+ (* 0.7 %) (* 0.3 (flower/level (mic/spectrum s))))))
+                    (when-let [s (.-current live)] (swap! eased pure/eased (pure/bar-levels (mic/spectrum s))))
                     (flower/draw! c (flower-state phase (.-current live) hold @eased)))
                   (reset! raf (js/requestAnimationFrame step)))]
        (when (#{:starting :recording} phase) (step))
