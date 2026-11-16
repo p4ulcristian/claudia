@@ -458,6 +458,31 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Instead of: three block kinds (graph, html, form), the draw call's own graph fields (`graph`,
     `nodes`, `edges`, `groups`, `remove`), and the page reading every shape ever saved.
 
+40. Buttons where touches land (2026-11-16, #197): on screens where
+    touch is the main input (`pointer: coarse`: phones and iPads, with or without a trackpad), the
+    most used buttons sit where people tap best; a desktop with a mouse keeps its layout. Source:
+    Steven Hoober's measurements (millions of touches on phones and tablets): misses are about 7 mm
+    in the middle of a screen, 9 mm along the edges and 12 mm in the corners, and people move what
+    they want to the middle to tap it; a big tablet held up is held at its sides partway up, so the
+    thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
+    hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
+    a holder in 22%). So:
+    - iPad: the left edge is for chats, the right edge for the mic and the picture's ‹ ›. The rail's
+      circles (with +) sit centred at middle height, the open chat kept in the middle; with more
+      chats than fit, the rail fills the edge and scrolls the open chat to the middle.
+    - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
+      bottom middle too (bottom middle is each screen's main action), the list ending in room as
+      tall as the + so the last chat scrolls clear of it.
+    - Send and Stop stay at the text box's right end on every screen: Send is for typed text (the
+      hands are at the keyboard, the on-screen keyboard lifts the box), letting go of the mic sends.
+    - The main buttons (mic, +, ‹ ›, the rail's circles) are at least 12 mm wide, the corner miss:
+      72 pt on a phone, 64 pt on an iPad (56 pt was 9.3 mm on an iPhone).
+    Instead of: the mic in the composer's bottom-left corner and the list's + in the bottom-right
+    corner (the least accurate spots), the rail from the top corner, the picture's ‹ › only in the
+    bottom bar, the main buttons along an iPad's bottom edge (a phone habit; a held tablet's thumbs
+    are rarely there), Apple's top toolbar (a convention, not a reach finding), and the same places
+    for a mouse (the research is about fingers).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

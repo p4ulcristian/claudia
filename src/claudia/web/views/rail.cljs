@@ -7,7 +7,9 @@
   takes the same height (a title is cut after two lines; one line keeps the room of two), so the
   spacing never changes. On a touch screen, pulling the circles down from the top and letting go
   reloads the page (claudia.web.updates keeps what is typed). A new chat has its circle at the top
-  at once, before its first message (fresh-dot)."
+  at once, before its first message (fresh-dot). On a touch tablet the circles sit centred at middle
+  height, under the left thumb, and opening a chat scrolls its circle to the middle (README decision
+  40)."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [claudia.shared.order :as order]
@@ -15,6 +17,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.pull :as pull]
+            [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.menu :as menu]
@@ -48,6 +51,19 @@
          (set! (.-current seen) nil))
        nil)
      [order])))
+
+(defn- use-centre-open!
+  "On a touch tablet, scrolls the rail (box) so the open chat's circle sits in its middle."
+  [box open]
+  (h/use-effect
+   (fn []
+     (when-let [^js el (.-current box)]
+       (when-let [^js on (and (.-matches (js/matchMedia reach/touch-tablet)) (.querySelector el ".rail-chat.on"))]
+         (let [r (.getBoundingClientRect on) b (.getBoundingClientRect el)]
+           (.scrollBy el #js {:top (reach/centre-offset (.-top r) (.-height r) (.-top b) (.-clientHeight el))
+                              :behavior "smooth"}))))
+     js/undefined)
+   [(str open)]))
 
 (defn- pull-handlers
   "Touch listeners on the list el for pull to reload: start at the top, follow the finger, reload
@@ -156,6 +172,7 @@
            :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? (empty? text)}
         box (h/use-ref nil)
         pulled (use-pull! box)]
+    (use-centre-open! box open)
     (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
     [:nav.rail {:aria-label "Chats"}
      [logotools/tools]
