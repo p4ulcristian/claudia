@@ -204,6 +204,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.
+    No echo cancellation (2026-11-16): the microphone opens without echo cancellation and noise
+    suppression. With them, iOS put the page into call audio for as long as the microphone was warm,
+    and call audio's own volume stayed low with the iPad at full volume. The read-aloud voice stops
+    when the mic is held, so there is no echo to remove.
     Never lost (2026-11-16, after the listen service failed on a half-minute clip and it had to be
     said again): every clip is kept on the device (IndexedDB, `src/claudia/web/clip_store.cljs`)
     until its words went out; a failure is heard once more by itself after 2.5 s, then the clip stays
