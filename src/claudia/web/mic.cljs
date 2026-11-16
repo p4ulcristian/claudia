@@ -16,6 +16,26 @@
 ;; nil, or {:ctx :stream :analyser :node :ring [chunks] :clip [chunks]-or-nil :timer}
 (defonce ^:private warm (atom nil))
 (defonce ^:private opening (atom nil))
+;; When the last opening began and how far each step got (ms after it began): for the mic log.
+(defonce ^:private steps (atom nil))
+
+(defn- step! [k] (swap! steps #(when % (assoc % k (- (js/Date.now) (:at %))))))
+
+(defn steps-now
+  "How far the last opening got: {:mic :module :running ms after it began}, or nil."
+  []
+  (some-> @steps (dissoc :at)))
+
+(defn warm? "Whether the microphone is warm now." [] (some? @warm))
+
+(defn- native-app []
+  (when-let [n (.-claudiaNative js/window)] (str (.-platform n) " " (.-version n))))
+
+(defn report!
+  "Tells the hub's log what a press did (POST /hub/listen/log): no sound, no words, only how it went."
+  [m]
+  (-> (api/post-json "/hub/listen/log" (assoc m :ua (.-userAgent js/navigator) :app (native-app)))
+      (.catch (fn [_] nil))))
 
 (defonce ^:private listen?
   ;; Whether the hub has a listen service (asked once per page).
@@ -75,8 +95,9 @@
   finger going down on a touch screen is not one, so resuming inside the press waits for ever)."
   [^js stream]
   (let [ctx (js/AudioContext.)]
-    (-> (js/Promise.all #js [(.addModule (.-audioWorklet ctx) "/mic-tap.js")
-                             (in-time (.resume ctx) 3000 "The microphone didn't start: try again.")])
+    (-> (js/Promise.all #js [(.then (.addModule (.-audioWorklet ctx) "/mic-tap.js") #(step! :module))
+                             (.then (in-time (.resume ctx) 3000 "The microphone didn't start: try again.")
+                                    #(step! :running))])
         (.then #(reset! warm (wire ctx stream)))
         (.catch (fn [e]
                   (doseq [^js track (.getTracks stream)] (.stop track))
@@ -88,9 +109,11 @@
   []
   (or (some-> @warm js/Promise.resolve)
       @opening
-      (let [p (-> (.getUserMedia (.-mediaDevices js/navigator)
-                                 #js {:audio #js {:echoCancellation true :noiseSuppression true}})
-                  (.then warm-up)
+      (let [_ (reset! steps {:at (js/Date.now)})
+            p (-> (in-time (.getUserMedia (.-mediaDevices js/navigator)
+                                          #js {:audio #js {:echoCancellation true :noiseSuppression true}})
+                           15000 "The microphone didn't answer: try again.")
+                  (.then (fn [stream] (step! :mic) (warm-up stream)))
                   (.finally #(reset! opening nil)))]
         (reset! opening p)
         p)))

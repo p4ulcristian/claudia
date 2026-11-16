@@ -69,9 +69,28 @@
 (defn- heard! [on-heard set-phase dir clip]
   (set-phase :hearing)
   (-> (mic/hear clip)
-      (.then #(on-heard % dir))
-      (.catch #(rf/dispatch [:mic/failed (.-message %)]))
+      (.then (fn [text] (mic/report! {:event "heard" :bytes (.-size clip) :chars (count text)}) (on-heard text dir)))
+      (.catch (fn [e] (mic/report! {:event "hear-failed" :bytes (.-size clip) :error (.-message e)})
+                (rf/dispatch [:mic/failed (.-message e)])))
       (.finally #(set-phase :idle))))
+
+(defn- watch-start!
+  "Reports a press whose microphone is not recording 5 s later (the button still amber)."
+  [hold p]
+  (let [done (atom false)]
+    (.finally p #(reset! done true))
+    (js/setTimeout #(when (and (not @done) (.-current hold))
+                      (mic/report! {:event "slow-start" :steps (mic/steps-now)}))
+                   5000)))
+
+(defn- started! [t0 warm s]
+  (mic/report! {:event "started" :ms (js/Math.round (- (js/performance.now) t0)) :warm warm :steps (when-not warm (mic/steps-now))})
+  s)
+
+(defn- start-failed! [set-phase ^js err]
+  (mic/report! {:event "start-failed" :error (.-message err) :steps (mic/steps-now)})
+  (rf/dispatch [:mic/failed (.-message err)])
+  (set-phase :idle))
 
 (defn- press!
   "Pointer down: the clip starts (the microphone opens if it is cold; the first time the browser
@@ -81,17 +100,19 @@
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (speech/stop!)   ; it never talks over you
-    (let [p (mic/start!)]
+    (let [t0 (js/performance.now) warm (mic/warm?)
+          p (.then (mic/start!) #(started! t0 warm %))]
       ;; on-heard as it is at the press: the composer the person spoke into, even when another chat
       ;; is open by the time the words are heard.
       (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p :on-heard on-heard})
       (set-dir :send)
       (set-phase :starting)
+      (watch-start! hold p)
       (-> p
           (.then (fn [s]
                    (set! (.-current live) s)
                    (when (.-current hold) (set-phase :recording))))
-          (.catch (fn [err] (rf/dispatch [:mic/failed (.-message err)]) (set-phase :idle)))))))
+          (.catch #(start-failed! set-phase %))))))
 
 (defn- drag!
   "Pointer move while held: the side the finger is on chooses what letting go does."
