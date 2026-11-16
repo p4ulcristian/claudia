@@ -173,7 +173,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 20. Push to talk in the composer (2026-11-13): a 56 px round mic at the composer's left end, under
     the left thumb of a tablet held in landscape (the chat pane hugs the left edge; Send sits
     mid-screen on a 13" iPad). Hold it and talk: 48 bars round it follow the voice; let go and the
-    clip (WebM, or MP4 in Safari and the iPhone app) goes to the hub (`POST /hub/listen`), which
+    clip goes to the hub (`POST /hub/listen`), which
     passes it to a speech-to-text service with OpenAI's transcription shape (`HUB_LISTEN_URL`,
     token in `HUB_LISTEN_TOKEN_FILE`). Letting go sends (2026-11-14): the draft with the heard
     text goes at once, whether the finger let go in place or dragged left; dragged right (40 px
@@ -187,6 +187,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     tablet), Send turning into a mic (no talking once the box has text), a corner button over the
     picture, or Apple's on-device speech (app only, weaker on names). Files:
     `src/claudia/hub/listen.cljs`, `src/claudia/web/mic.cljs`, `src/claudia/web/views/mic.cljs`.
+    The microphone stays warm (2026-11-16, after the first words of every message went missing:
+    the mic opened only at the press while the button already showed red): opened at the first
+    press, it keeps running for 10 minutes after the last one, and an AudioWorklet
+    (`resources/web/mic-tap.js`) keeps the last second, so a clip starts half a second before the
+    press. The button is amber while the microphone wakes and red once it records. It closes when
+    the page is hidden; while warm the browser shows the microphone in use. The clip is 16 kHz
+    mono WAV (`src/claudia/web/pcm.cljs`: resampled with a windowed-sinc low-pass), up to 24 MB
+    (about 12 minutes) at the hub. Instead of: MediaRecorder from the press (WebM/MP4: smaller, but
+    it cannot start before the press), or the microphone open whenever the composer shows.
 
 21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
     chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one

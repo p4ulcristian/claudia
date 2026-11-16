@@ -2,7 +2,10 @@
   "The composer's mic: a 56 px round button at the composer's left end, under the left thumb of a
   tablet held in landscape. Hold it and talk: bars round it follow the voice, and two arrows float
   over the messages. Let go (in place or dragged left) and the hub hears the clip and the draft
-  with the text is sent; dragged right, the text only joins the draft. A tap only says to hold it. Shown only where the browser can record and the hub has a listen service."
+  with the text is sent; dragged right, the text only joins the draft. A tap only says to hold it.
+  The button is amber while the microphone wakes (the first press, or one after it went cold) and
+  turns red only once it records. Shown only where the browser can record and the hub has a
+  listen service."
   (:require [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
             [claudia.web.views.pure.mic :as pure]
@@ -71,7 +74,8 @@
       (.finally #(set-phase :idle))))
 
 (defn- press!
-  "Pointer down: the microphone goes on (the first time the browser asks for it)."
+  "Pointer down: the clip starts (the microphone opens if it is cold; the first time the browser
+  asks for it)."
   [^js e {:keys [hold live set-phase set-dir on-heard]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
@@ -82,9 +86,11 @@
       ;; is open by the time the words are heard.
       (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :dir :send :p p :on-heard on-heard})
       (set-dir :send)
-      (set-phase :recording)
+      (set-phase :starting)
       (-> p
-          (.then #(set! (.-current live) %))
+          (.then (fn [s]
+                   (set! (.-current live) s)
+                   (when (.-current hold) (set-phase :recording))))
           (.catch (fn [err] (rf/dispatch [:mic/failed (.-message err)]) (set-phase :idle)))))))
 
 (defn- drag!
@@ -147,7 +153,7 @@
 
 (defn- view [{:keys [phase dir] :as parts}]
   [:div.mic {:class (name phase)}
-   (when (= phase :recording) (guide dir))
+   (when (#{:starting :recording} phase) (guide dir))
    (core parts)])
 
 (defn button

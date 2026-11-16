@@ -320,6 +320,7 @@ code, pre { font-family: var(--mono); }
 .mic-button svg { width: 26px; height: 26px; }
 .mic.recording .mic-button { background: var(--red); color: var(--bg2); box-shadow: none; transform: scale(1.1); }
 .mic.hearing .mic-button { opacity: 0.7; cursor: progress; }
+.mic.starting .mic-button { background: var(--amber); color: var(--bg2); box-shadow: none; transform: scale(1.1); }
 .mic-hint { position: absolute; left: 0; bottom: 66px; z-index: 5; white-space: nowrap; padding: 4px 10px; border-radius: 7px; background: var(--panel2); color: var(--fg); font-size: 13px; }
 .input-row .attach { flex: none; }
 .input-row .primary, .input-row .stop { flex: none; padding: 6px 14px; font-size: 13px; border-radius: 7px; }
