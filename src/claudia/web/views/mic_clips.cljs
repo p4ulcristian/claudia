@@ -58,9 +58,16 @@
   (swap! blobs assoc id blob)
   (swap! rows assoc n {:n n :id id :k k :dir dir :secs secs :t0 at :state state :tries 0}))
 
+(defn- soundless!
+  "Clip n came without sound (the mic's error e): said, and out of the line so the next ones go on."
+  [n ^js e]
+  (rf/dispatch [:mic/failed (.-message e)])
+  (swap! rows dissoc n)
+  (arrive! n nil))
+
 (defn spoken!
   "A clip let go in composer k (dir :send or :add, secs long): its place in line now; heard, kept
-  and given out once its sound (blob-promise) is here."
+  and given out once its sound (blob-promise) is here; a clip without sound only says so."
   [k dir secs blob-promise]
   (let [n (place!) id (str (random-uuid)) at (js/Date.now)]
     (swap! rows assoc n {:n n :id id :k k :dir dir :secs secs :t0 at :state :hearing :tries 0})
@@ -69,7 +76,8 @@
              (let [clip {:id id :k k :dir dir :secs secs :at at :blob blob}]
                (add-row! n clip :hearing)
                (store/put! clip)
-               (hear! n))))))
+               (hear! n)))
+           #(soundless! n %))))
 
 (defn throw-away!
   "Clip n is given up on: forgotten here and on the device; the clips after it go on."
