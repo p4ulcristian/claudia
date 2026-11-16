@@ -185,6 +185,10 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 @media (max-width: 679px) {
   .cs-pane { padding-left: 12px; padding-right: 12px; }
   .cs-head { min-height: 44px; }
+  /* A small iPad app window: its buttons sit over the top-left corner (claudia.css); the list's
+     and the chat's first row start right of them, on the same row. */
+  .cs-head { margin-left: max(0px, calc(var(--window-buttons-width, 0px) - 12px)); }
+  .head-panel .head-row.r1 { padding-left: max(0px, calc(var(--window-buttons-width, 0px) - 14px)); }
   .cs-title { min-height: 44px; font-size: 25px; padding: 0 8px; }
   .cs-title-hint { font-size: 13px; }
   .cs-menu-item { min-height: 44px; font-size: 15px; }
