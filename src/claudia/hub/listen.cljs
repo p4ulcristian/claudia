@@ -1,6 +1,6 @@
 (ns claudia.hub.listen
-  "Speech to text for the composer's mic. The page records a clip as the browser makes it (WebM in
-  Chrome, MP4 in Safari) and posts it as the body, its type as content-type; the hub passes it to
+  "Speech to text for the composer's mic. The page posts a clip (16 kHz WAV from its warm
+  microphone, claudia.web.mic) as the body, its type as content-type; the hub passes it to
   the listen service (HUB_LISTEN_URL, its token in HUB_LISTEN_TOKEN_FILE or HUB_LISTEN_TOKEN):
   <url>/v1/audio/transcriptions, OpenAI's shape (a multipart `file`) -> {text}. No language is
   given, so the service writes down whatever language was spoken.
@@ -11,7 +11,9 @@
             [claudia.node.http :as io]
             [clojure.string :as str]))
 
-(def ^:private max-bytes (* 8 1024 1024))
+(def ^:private max-bytes
+  "The largest clip: 16 kHz 16-bit WAV is 32 kB a second, so about 12 minutes (the service takes 25 MB)."
+  (* 24 1024 1024))
 
 (defn- config "A promise of {:url :token} or nil." [] (env/service "HUB_LISTEN"))
 
