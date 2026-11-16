@@ -43,6 +43,7 @@
    "line2" {:r 1 :noise :line}
    "dot18" {:r 9}
    "dot56" {:r 28}
+   "dot72" {:r 36}
    "bar35" {:r 3.5}
    ;; The code forms (codeforms.css): file tags, kind chips.
    "r5-15" {:r 5 :b 1.5}

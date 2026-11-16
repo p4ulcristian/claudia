@@ -19,6 +19,8 @@
             [claudia.web.views.picture :as picture]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
+            [claudia.web.views.pure.reach :as reach]
+            [claudia.web.views.thumb-edge :as thumb-edge]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
@@ -134,6 +136,7 @@
    [asks/modal]
    [confirm/archive-ask]
    (when-not world? (chats-view m))
+   (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
    [gallery]
    [admin/dialog]
@@ -151,12 +154,13 @@
         world? @(rf/subscribe [:world?])
         phone? (hooks/use-media "(max-width: 679px)")
         narrow? (hooks/use-media "(max-width: 1099px)")
+        edge? (hooks/use-media reach/touch-tablet)
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Desktop: the drawer.
         shown? (if phone? (= screen :list) drawer?)]
     (chat-colour! color)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
                :chat-w chat-w :set-chat-w set-chat-w
                :shown? shown? :settings-shown? (and shown? settings?)
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

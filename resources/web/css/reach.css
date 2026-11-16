@@ -1,0 +1,39 @@
+/* ---------- Buttons where touches land (README decision 40) ----------
+   Only where touch is the main input (pointer: coarse); a mouse keeps the layout above.
+   Misses are about 7 mm in a screen's middle, 9 mm along its edges, 12 mm in its corners, so the
+   main buttons are at least 12 mm wide: 72 pt on a phone, 64 pt on an iPad. */
+
+/* Phone: the mic in the bottom middle, above the text row; the list's + in the bottom middle. */
+@media (pointer: coarse) and (max-width: 679px) {
+  .talk-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .talk-row > .mic { align-self: center; }
+  .talk-row .mic-core, .talk-row .mic-button { width: 72px; height: 72px; }
+  .talk-row .mic-button svg { width: 32px; height: 32px; }
+  .talk-row .mic-clips { left: 50%; transform: translateX(-50%); }
+  .talk-row .mic-hint { left: 50%; transform: translateX(-50%); bottom: 82px; }
+  /* Typing: while the on-screen keyboard is up (claudia.web.viewport sets data-keyboard) the hands
+     are on it, so the mic gives its row back (the clips still being heard stay). */
+  :root[data-keyboard] .talk-row > .mic:not(.starting, .recording) > .mic-core { display: none; }
+  :root[data-keyboard] .talk-row { gap: 0; }
+  .cs-fab { right: auto; left: calc(50% - 36px); width: 72px; height: 72px; --ring: var(--chalk-dot72); }
+  .cs-fab svg { width: 32px; height: 32px; }
+}
+
+/* iPad: the left edge holds the chats (centred at middle height), the right edge the mic and the
+   picture's ‹ › (claudia.web.views.thumb-edge). */
+@media (pointer: coarse) and (min-width: 680px) {
+  .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
+  .rail-chat { min-height: 64px; justify-content: center; }
+  /* The + keeps its look; its touch area grows to 64 pt (the rail's dots are zoomed to 0.8). */
+  .rail .rail-dot.add::after { content: ""; position: absolute; inset: -23px; }
+
+  .thumb-edge { position: fixed; z-index: 35; right: calc(10px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
+  .thumb-edge .mic-button svg { width: 30px; height: 30px; }
+  .thumb-edge .mic-clips, .thumb-edge .mic-hint { left: auto; right: calc(100% + 12px); bottom: auto; top: 50%; transform: translateY(-50%); }
+  .edge-step { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; line-height: 1; color: var(--fg);
+    background: color-mix(in srgb, var(--bg2) 88%, transparent); box-shadow: inset 0 0 0 1.5px var(--line), 0 6px 18px rgb(0 0 0 / 0.3); }
+  .edge-step:active:not(:disabled) { background: var(--panel); }
+  .edge-step:disabled { opacity: 0.35; }
+}
