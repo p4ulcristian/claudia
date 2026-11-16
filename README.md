@@ -457,7 +457,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Instead of: three block kinds (graph, html, form), the draw call's own graph fields (`graph`,
     `nodes`, `edges`, `groups`, `remove`), and the page reading every shape ever saved.
 
-40. Buttons where touches land (2026-11-16, not built yet: branch `thumb-reach`): on screens where
+40. Buttons where touches land (2026-11-16, #197): on screens where
     touch is the main input (`pointer: coarse`: phones and iPads, with or without a trackpad), the
     most used buttons sit where people tap best; a desktop with a mouse keeps its layout. Source:
     Steven Hoober's measurements (millions of touches on phones and tablets): misses are about 7 mm
