@@ -359,7 +359,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     runs (GET /api/version, every 2 s, for up to 3 minutes; one that does not answer the moment the
     update begins is asleep, and nobody waits for it: it updates itself when it wakes) and marks the hub itself done when it
     starts on the commit it waited for (kept in <data>/progress.json across that restart). The pill
-    says "Building <commit>", "Updating 3/5", then "Live in 16 s" (or how many were not reached)
+    says "Building <commit> · 0:42", "Updating 3/5 · 1:10" (a clock running from the build's start,
+    then from the merge, 2026-11-16), then "Live in 16 s" (or how many were not reached)
     for 90 s; a click lists every step with its seconds. Under the gear, very small, when
     the version on screen went live ("8495c52 · 5 min ago": `/hub/me`'s commit and `updatedAt`, the merge of the
     release the hub runs, else when the hub started). Files: `src/claudia/hub/progress.cljs`,

@@ -17,14 +17,28 @@
 
 (defn- secs-text [s] (str (js/Math.round s) " s"))
 
+(defn clock-text
+  "ms as a running clock: \"0:07\", \"1:42\", \"1:02:05\" (never below 0)."
+  [ms]
+  (let [s (js/Math.floor (/ (max 0 ms) 1000))
+        two #(if (< % 10) (str "0" %) (str %))
+        h (quot s 3600) m (quot (mod s 3600) 60)]
+    (if (pos? h) (str h ":" (two m) ":" (two (mod s 60))) (str m ":" (two (mod s 60))))))
+
+(defn- with-clock
+  "label with the time since start, while it runs: \"Updating 3/5 · 1:10\"."
+  [label start t]
+  (if (number? start) (str label " \u00b7 " (clock-text (- t start))) label))
+
 (defn release-label
-  "What the pill says about a release: Updating d/n while it moves, then how long it took."
-  [release]
+  "What the pill says about a release at t: Updating d/n and the time since the merge while it
+  moves, then how long it took."
+  [release t]
   (let [ps (remove #(= "asleep" (:state %)) (parts release))
         done (count (filter #(= "done" (:state %)) ps))
         missing (count (filter #(= "not reached" (:state %)) ps))]
     (cond
-      (some waits? ps) {:label (str "Updating " done "/" (count ps)) :tone "running"}
+      (some waits? ps) {:label (with-clock (str "Updating " done "/" (count ps)) (:merged release) t) :tone "running"}
       (pos? missing) {:label (str missing " not reached") :tone "warn"}
       :else {:label (str "Live in " (secs-text (apply max 0 (keep :secs ps)))) :tone "done"})))
 
@@ -44,10 +58,11 @@
         moving? (and r (some waits? (parts r)))
         fresh? (and r (< (- t (:merged r)) settled-shown-ms))]
     (cond
-      (or moving? (and fresh? (not b))) (release-label r)
-      (= "pending" (:state b)) {:label (str "Building " (subs (:commit b) 0 7)) :tone "running"}
+      (or moving? (and fresh? (not b))) (release-label r t)
+      (= "pending" (:state b)) {:label (with-clock (str "Building " (subs (:commit b) 0 7)) (:started b) t)
+                                :tone "running"}
       (= "failure" (:state b)) {:label "Build failed" :tone "bad"}
-      fresh? (release-label r)
+      fresh? (release-label r t)
       :else nil)))
 
 (defn steps

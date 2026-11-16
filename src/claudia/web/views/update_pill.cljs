@@ -1,6 +1,7 @@
 (ns claudia.web.views.update-pill
   "The update pill at the rail's foot (README decision 32): while an update moves (the builder
-  checking and building, then every server and the hub taking it) it says where it stands; a click
+  checking and building, then every server and the hub taking it) it says where it stands, with a
+  clock running from the build's start or the merge (\"Updating 3/5 · 1:10\"); a click
   lists every step. It asks GET /hub/progress every 2 s while something moves, every 15 s otherwise,
   and is not there when nothing moves."
   (:require [re-frame.core :as rf]
@@ -33,8 +34,9 @@
 
 (defn- view []
   (let [p (use-progress)
+        t (hooks/use-now)
         [open set-open] (h/use-state false)
-        shown (when p (pure/pill p (js/Date.now)))]
+        shown (when p (pure/pill p t))]
     (when shown
       [:div.up-box
        [:button.up-pill {:class (:tone shown) :type "button" :aria-expanded open
