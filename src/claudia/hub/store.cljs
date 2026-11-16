@@ -117,6 +117,31 @@
      came_from TEXT NOT NULL,
      saved_at INTEGER NOT NULL
    );
+   -- The hub's GitHub App (claudia.hub.github-app, made from Settings by manifest): its id, slug,
+   -- client id, the client secret sealed with the key in HUB_TOKEN_KEY_FILE, the account that owns
+   -- it, who made it and when. Its private key is not kept: user tokens need only the client secret.
+   CREATE TABLE IF NOT EXISTS github_app (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     app_id INTEGER NOT NULL,
+     slug TEXT NOT NULL,
+     client_id TEXT NOT NULL,
+     sealed_secret TEXT NOT NULL,
+     owner TEXT NOT NULL,
+     html_url TEXT NOT NULL,
+     made_by TEXT NOT NULL,
+     made_at INTEGER NOT NULL
+   );
+   -- A person's connection to the GitHub App: their login, the refresh token (months) and the user
+   -- token (hours) sealed, and when each runs out (null: GitHub gave one that does not expire).
+   CREATE TABLE IF NOT EXISTS github_users (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     login TEXT NOT NULL,
+     sealed_access TEXT NOT NULL,
+     access_expires_at INTEGER,
+     sealed_refresh TEXT,
+     refresh_expires_at INTEGER,
+     saved_at INTEGER NOT NULL
+   );
    -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
    -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
    CREATE TABLE IF NOT EXISTS release_builder (
@@ -404,6 +429,41 @@
          email login sealed came-from (now)))
 
 ;; The release builder ---------------------------------------------------------------------------
+
+(defn github-app
+  "The hub's GitHub App, or nil: {:app-id :slug :client-id :sealed-secret :owner :html-url :made-by :made-at}."
+  []
+  (one "SELECT app_id, slug, client_id, sealed_secret, owner, html_url, made_by, made_at FROM github_app WHERE id = 1"))
+
+(defn save-github-app! [{:keys [app-id slug client-id sealed-secret owner html-url made-by]}]
+  (exec! "INSERT INTO github_app (id, app_id, slug, client_id, sealed_secret, owner, html_url, made_by, made_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (id) DO UPDATE SET app_id = excluded.app_id, slug = excluded.slug, client_id = excluded.client_id,
+            sealed_secret = excluded.sealed_secret, owner = excluded.owner, html_url = excluded.html_url,
+            made_by = excluded.made_by, made_at = excluded.made_at"
+         app-id slug client-id sealed-secret owner html-url made-by (now)))
+
+(defn github-users
+  "Every person's GitHub App connection."
+  []
+  (all "SELECT email, login, sealed_access, access_expires_at, sealed_refresh, refresh_expires_at, saved_at
+        FROM github_users ORDER BY email"))
+
+(defn github-user [email]
+  (one "SELECT email, login, sealed_access, access_expires_at, sealed_refresh, refresh_expires_at, saved_at
+        FROM github_users WHERE email = ?" email))
+
+(defn save-github-user! [{:keys [email login sealed-access access-expires-at sealed-refresh refresh-expires-at]}]
+  (exec! "INSERT INTO github_users (email, login, sealed_access, access_expires_at, sealed_refresh, refresh_expires_at, saved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET login = excluded.login, sealed_access = excluded.sealed_access,
+            access_expires_at = excluded.access_expires_at, sealed_refresh = excluded.sealed_refresh,
+            refresh_expires_at = excluded.refresh_expires_at, saved_at = excluded.saved_at"
+         email login sealed-access access-expires-at sealed-refresh refresh-expires-at (now)))
+
+(defn drop-github-user! [email] (exec! "DELETE FROM github_users WHERE email = ?" email))
+
+(defn drop-github-login! [email] (exec! "DELETE FROM github_logins WHERE email = ?" email))
 
 (defn release-builder
   "The release builder: {:host :token-hash :paired-at :seen-at}, or nil."
