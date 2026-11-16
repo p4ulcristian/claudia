@@ -64,6 +64,24 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         view = root
     }
 
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        fitWindowControls()
+    }
+
+    /// iPadOS 26 and later: a window that is not full screen shows its close, minimise and
+    /// full-screen buttons in its top-left corner, over whatever is there. The window's safe area
+    /// adapted to that corner says how far down they reach; that much more room at the top of the
+    /// page's safe area (env(safe-area-inset-top), which the page pads by) keeps Claudia's head clear
+    /// of them, and none when the window shows no buttons. Measured on the window, which this
+    /// controller's own additional safe area does not change, so the value never feeds on itself.
+    private func fitWindowControls() {
+        guard #available(iOS 26.0, *), let window = view.window else { return }
+        let adapted = window.edgeInsets(for: .safeArea(cornerAdaptation: .vertical))
+        let extra = max(0, adapted.top - window.safeAreaInsets.top)
+        if additionalSafeAreaInsets.top != extra { additionalSafeAreaInsets.top = extra }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let url = first ?? Config.hub else {
