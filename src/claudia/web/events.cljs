@@ -215,8 +215,23 @@
 
 (defmethod on-frame :default [db _ _] {:db db})
 
+(defn fresh-colour
+  "A new chat's colour: the most different from what that server's chats (rows) wear, never the
+  colour of the chat started last."
+  [rows]
+  (colours/most-different rows nil))
+
+(defn with-fresh-colour
+  "db with a colour for the new chat on its new server, unless it has one (picked by hand or before)."
+  [db]
+  (cond-> db
+    (not (get-in db [:new-settings :color]))
+    (assoc-in [:new-settings :color] (fresh-colour (vals (get-in db [:servers (default-server db) :rows]))))))
+
 (defmethod on-frame "chats" [db server {:keys [chats]}]
-  {:db (assoc-in db [:servers server :rows] (into {} (map (juxt :id identity)) chats))
+  ;; The new chat on screen takes its colour once its server's list is here (until then it has none).
+  {:db (cond-> (assoc-in db [:servers server :rows] (into {} (map (juxt :id identity)) chats))
+         (and (nil? (:open db)) (= server (default-server db))) with-fresh-colour)
    :fx [[:dispatch [:chat/check-seen]]]})
 
 (defn chat-of-frame
@@ -258,18 +273,6 @@
   [new-settings]
   (into {} (filter (comp some? val))
         (update (select-keys new-settings [:model :effort :plan :folder :color :talk :bell]) :folder not-empty)))
-
-(defn fresh-colour
-  "A new chat's colour as soon as it opens: the most different from what that server's chats (rows) wear."
-  [rows]
-  (colours/most-different rows nil))
-
-(defn with-fresh-colour
-  "db with a colour for the new chat on its new server, unless it has one."
-  [db]
-  (cond-> db
-    (not (get-in db [:new-settings :color]))
-    (assoc-in [:new-settings :color] (fresh-colour (vals (get-in db [:servers (default-server db) :rows]))))))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text]} (get-in db [:pending-new id])]

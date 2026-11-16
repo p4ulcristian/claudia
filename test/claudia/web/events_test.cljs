@@ -124,6 +124,19 @@
     (is (= (colours/most-different (vals rows) nil) picked))
     (is (not= "cherry" picked))))
 
+(deftest the-new-chat-takes-its-colour-when-the-list-comes
+  (let [d {:me {:servers [{:name "s"}]} :new-settings {}}
+        rows [{:id "1" :color "cherry" :archived true :started 1}]
+        after (:db (ev/on-frame d "s" {:type "chats" :chats rows}))]
+    (is (= (colours/most-different rows nil) (get-in after [:new-settings :color])))
+    (is (not= "cherry" (get-in after [:new-settings :color]))))
+  (let [d {:me {:servers [{:name "s"}]} :new-settings {:color "mint"}}]
+    (is (= "mint" (get-in (:db (ev/on-frame d "s" {:type "chats" :chats []})) [:new-settings :color]))
+        "a colour picked by hand stays"))
+  (let [d {:me {:servers [{:name "s"}]} :new-settings {} :open ["s" "1"]}]
+    (is (nil? (get-in (:db (ev/on-frame d "s" {:type "chats" :chats []})) [:new-settings :color]))
+        "a chat open: picked when the new chat opens")))
+
 (deftest a-new-chat-carries-its-picks
   (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
   (is (= {:color "teal"} (ev/new-picks {:color "teal"})))

@@ -1,7 +1,8 @@
 (ns claudia.shared.colours
   "The chat colours, one list for the runner and the page (README decision 26): a crayon box of 20
   picked so no two look alike, both as the crayon and as the whole window tinted with it (measured
-  in OKLab). A new chat takes the colour most different from the ones the other chats wear. The
+  in OKLab). A new chat takes the colour most different from the ones the other chats wear, never the
+  colour of the chat started last. The
   hex values here are the same as claudia.css's --c-<name>.")
 
 (def hexes
@@ -63,18 +64,43 @@
           (or (empty? color) (not (or (chat-colour? color) (= "ash" color)))) :fresh
           :else nil)))
 
-(defn worn
-  "How many of the other chats in the list (not archived, not except) wear each chat colour."
+(def recent-count
+  "How many of the most recently started chats count as worn, archived or not, so new chats walk
+  through the box instead of going back to a colour just used."
+  5)
+
+(defn- started [chat]
+  (or (:started chat) (:created chat) 0))
+
+(defn recent
+  "The chats (not except) started most recently, newest first: recent-count of them."
   [chats except]
-  (frequencies (keep #(when (and (not (:archived %)) (not= except (:id %)) (chat-colour? (:color %))) (:color %)) chats)))
+  (take recent-count (sort-by (comp - started) (remove #(= except (:id %)) chats))))
+
+(defn last-colour
+  "The colour of the chat started last (not except), archived or not; nil when it has no chat colour."
+  [chats except]
+  (let [c (:color (first (recent chats except)))]
+    (when (chat-colour? c) c)))
+
+(defn worn
+  "How many chats wear each chat colour: those in the list (not archived) and the recently started
+  ones (archived too), each chat once, except never counted."
+  [chats except]
+  (let [shown (remove :archived chats)
+        counted (vals (into {} (map (juxt :id identity)) (concat shown (recent chats except))))]
+    (frequencies (keep #(when (and (not= except (:id %)) (chat-colour? (:color %))) (:color %)) counted))))
 
 (defn most-different
-  "A new chat's colour: among the colours worn least, the one furthest from every colour worn more
-  (the first in hue order when nothing is worn more)."
+  "A new chat's colour: never the colour of the chat started last; among the others worn least,
+  the one furthest from every colour worn more and from the last one (the first in hue order when
+  nothing is worn)."
   [chats except]
   (let [used (worn chats except)
-        least (apply min (map #(get used % 0) chat-colours))
-        others (filter #(> (get used % 0) least) chat-colours)
-        score (fn [c] (if (seq others) (apply min (map #(apart c %) others)) 0))]
+        last-c (last-colour chats except)
+        open (remove #{last-c} chat-colours)
+        least (apply min (map #(get used % 0) open))
+        far-from (cond-> (filter #(> (get used % 0) least) chat-colours) last-c (conj last-c))
+        score (fn [c] (if (seq far-from) (apply min (map #(apart c %) far-from)) 0))]
     (reduce (fn [best c] (if (> (score c) (score best)) c best))
-            (filter #(= least (get used % 0)) chat-colours))))
+            (filter #(= least (get used % 0)) open))))

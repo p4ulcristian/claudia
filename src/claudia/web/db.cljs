@@ -1,7 +1,6 @@
 (ns claudia.web.db
   "The page's state, one map. Chats are keyed by [server chat] everywhere: two servers may in
-  principle hand out the same chat id."
-  (:require [claudia.shared.colours :as colours]))
+  principle hand out the same chat id.")
 
 (def phone-width
   "Under this many CSS px wide the page is three full screens (list, chat, picture)."
@@ -56,4 +55,4 @@
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
    :tokens nil :github-login nil
-   :new-settings {:color (colours/most-different [] nil)}})  ; a new chat's picks; its colour from the start
+   :new-settings {}})      ; a new chat's picks; its colour comes with the chat list (events/with-fresh-colour)

@@ -271,8 +271,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     magenta, bubblegum (and ash, passive, by hand). Picked from 33 crayons so no two look alike,
     measured in OKLab both as the crayon and as the whole window tinted with it; the closest pair
     left (aqua, mint) is further apart than any dropped crayon from its look-alike, save salmon.
-    A new chat takes, among the colours worn least, the one most different from every colour worn
-    more (`most-different`): no randomness. A runner moves its chats over on start: each old
+    A new chat never takes the colour of the chat started last (archived or not); among the other
+    colours worn least, it takes the one most different from every colour worn more and from that
+    last one (`most-different`): no randomness. Worn = the chats in the list plus the 5 started
+    last, archived too (2026-11-16: archiving every chat left nothing worn, so each new chat was
+    cherry). The page picks a new chat's colour once its server's list is here, not before. A runner moves its chats over on start: each old
     colour becomes its crayon (red→cherry, teal→mint, pink→bubblegum, …; an ash chat's remembered
     colour too). The old names stay as CSS variables only for the code forms' own lanes and files.
     Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,

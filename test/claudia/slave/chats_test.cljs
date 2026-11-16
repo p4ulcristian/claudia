@@ -41,9 +41,28 @@
     (is (not= "cherry" picked))
     (is (= picked (apply max-key #(colours/apart % "cherry") (remove #{"cherry"} colours/chat-colours)))))
   (is (= (first colours/chat-colours) (colours/most-different [{:id 1 :color "cherry"}] 1)) "except itself")
-  (is (= (first colours/chat-colours) (colours/most-different [{:id 1 :color "cherry" :archived true}] nil)) "archived ones don't count")
-  (let [all (map-indexed (fn [i c] {:id i :color c}) colours/chat-colours)]
-    (is (= (first colours/chat-colours) (colours/most-different all nil)) "every one worn once: the first in hue order")))
+  (let [all (map-indexed (fn [i c] {:id i :color c :started i}) colours/chat-colours)
+        picked (colours/most-different all nil)]
+    (is (not= (last colours/chat-colours) picked) "every one worn once: never the last started")
+    (is (= picked (apply max-key #(colours/apart % (last colours/chat-colours)) (butlast colours/chat-colours)))
+        "every one worn once: the furthest from the last started")))
+
+(deftest a-new-chat-never-repeats-the-last-colour
+  (is (not= "cherry" (colours/most-different [{:id 1 :color "cherry" :archived true :started 5}] nil))
+      "the last chat archived still counts")
+  (is (not= "cherry" (colours/most-different [{:id 1 :color "cherry" :archived true :created 5}] nil))
+      "the runner's rows carry :created")
+  (let [old (map (fn [i] {:id i :color "kiwi" :started i}) (range 3))]
+    (is (not= "cherry" (colours/most-different (conj old {:id 9 :color "cherry" :started 9}) nil))
+        "the last started, not the most worn")))
+
+(deftest new-chats-walk-through-the-box
+  (let [step (fn [chats i] (conj chats {:id i :archived true :started i
+                                        :color (colours/most-different chats nil)}))
+        picks (map :color (reduce step [] (range 12)))]
+    (is (every? (fn [w] (apply distinct? w)) (partition (inc colours/recent-count) 1 picks))
+        "no colour comes back within the recent ones")
+    (is (< colours/recent-count (count (set picks))))))
 
 (deftest old-colours-move-into-the-crayon-box
   (is (= {:color "cherry"} (colours/recolour {:color "red"})))
