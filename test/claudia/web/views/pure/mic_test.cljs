@@ -23,11 +23,15 @@
   (is (= [0.6] (mic/eased nil [1]))))
 
 (deftest a-drag-right-adds-anything-else-sends
-  (is (= :send (mic/gesture 0)))
-  (is (= :send (mic/gesture -120)))
-  (is (= :send (mic/gesture (dec mic/drag-px))))
-  (is (= :add (mic/gesture mic/drag-px)))
-  (is (= :add (mic/gesture 200))))
+  (is (= :send (mic/gesture 0 0)))
+  (is (= :send (mic/gesture -120 0)) "dragged left")
+  (is (= :send (mic/gesture 0 80)) "dragged down")
+  (is (= :send (mic/gesture (dec mic/drag-px) 0)))
+  (is (= :add (mic/gesture mic/drag-px 0)))
+  (is (= :add (mic/gesture 200 -60)) "more right than up")
+  (is (= :cancel (mic/gesture 0 (- mic/drag-px))))
+  (is (= :cancel (mic/gesture 30 -90)) "more up than right")
+  (is (= :send (mic/gesture 0 (- 1 mic/drag-px))) "not far enough up"))
 
 (deftest heard-clips-go-out-in-spoken-order
   (let [l0 {:next 0 :held {}}
