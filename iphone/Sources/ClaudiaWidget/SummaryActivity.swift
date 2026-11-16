@@ -16,7 +16,7 @@ extension Color {
     static let tile = Color(red: 0x2c / 255, green: 0x38 / 255, blue: 0x33 / 255)
     static let accent = Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
     static let ask = Color(red: 0xF2 / 255, green: 0xE3 / 255, blue: 0xA0 / 255)
-    static let alarm = Color(red: 0xE5 / 255, green: 0x53 / 255, blue: 0x4B / 255)
+    static let warn = Color(red: 0xE5 / 255, green: 0x53 / 255, blue: 0x4B / 255)
     static let ink = Color(red: 0xEE / 255, green: 0xEC / 255, blue: 0xE6 / 255)
     static let muted = Color(red: 0xA3 / 255, green: 0xAE / 255, blue: 0xA8 / 255)
 }
@@ -50,7 +50,7 @@ private extension Item {
     var start: Date { Date(timeIntervalSince1970: TimeInterval(since)) }
     var isPermission: Bool { kind == "permission" }
     var symbol: String { isPermission ? "hand.raised.fill" : "questionmark.bubble.fill" }
-    var tint: Color { isPermission ? .alarm : .ask }
+    var tint: Color { isPermission ? .warn : .ask }
     var waitLabel: String { isPermission ? "Permission" : "Question" }
 }
 
@@ -166,7 +166,7 @@ struct SummaryActivity: Widget {
         } dynamicIsland: { context in
             let state = context.state
             let waits = !state.waiting.isEmpty
-            let mark = waits ? Color.alarm : Color.accent
+            let mark = waits ? Color.warn : Color.accent
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Label {
@@ -182,7 +182,7 @@ struct SummaryActivity: Widget {
                     if waits {
                         Label("\(state.waiting.count)", systemImage: "exclamationmark.bubble.fill")
                             .font(.headline)
-                            .foregroundStyle(Color.alarm)
+                            .foregroundStyle(Color.warn)
                             .padding(.trailing, 4)
                     } else if state.done > 0 {
                         Label("\(state.done)", systemImage: "checkmark")

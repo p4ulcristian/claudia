@@ -42,12 +42,10 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: sdkStamp
         ),
-        // What the app and its extensions both know: the Live Activity's data, the device key,
-        // the alarm. AlarmKit is iOS 26: linked weak, so iOS 17-25 still start.
+        // What the app and its extensions both know: the Live Activity's data, the device key.
         .target(
             name: "ClaudiaShared",
-            swiftSettings: [.swiftLanguageMode(.v5)],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-weak_framework", "-Xlinker", "AlarmKit"])]
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )

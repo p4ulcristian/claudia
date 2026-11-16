@@ -7,9 +7,7 @@ import UserNotifications
 /// fallback ("Claudia" / "New message") plus `enc`, the real title and body sealed with the
 /// device key (AES-256-GCM, base64 of nonce 12 || ciphertext || tag 16, around UTF-8 JSON
 /// `{"title", "body"}`). Opened here; on any failure the fallback shows. Everything else in the
-/// notification (url, server, chat, kind) is passed on as it came, for the tap. An alarm
-/// (`kind: "alarm"`, one the person asked Claude for) also rings as an AlarmKit alarm (Alarm),
-/// with the opened body as its title; the notification shows as well.
+/// notification (url, server, chat, kind) is passed on as it came, for the tap.
 @objc(NotificationService)
 final class NotificationService: UNNotificationServiceExtension {
     private var deliver: ((UNNotificationContent) -> Void)?
@@ -26,13 +24,7 @@ final class NotificationService: UNNotificationServiceExtension {
             if let title = text.title { content.title = title }
             if let body = text.body { content.body = body }
         }
-        guard content.userInfo["kind"] as? String == "alarm" else { return finish(content) }
-        let title = content.body
-        Task {
-            do { try await Alarm.ring(title: title) }
-            catch { NSLog("claudia alarm: not rung: \(error.localizedDescription)") }
-            self.finish(content)
-        }
+        finish(content)
     }
 
     /// iOS is about to give up on the extension: show the fallback.
