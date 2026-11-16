@@ -64,12 +64,17 @@ function seedSession(claudeDir, cwd) {
   writeFileSync(join(dir, `${chatId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
 
-// The chat's row, as the runner's store adds one (claudia.slave.store/add!), once its schema exists.
-function seedRow(runnerData, cwd) {
+// The chat's row, as the runner's store adds one (claudia.slave.store/add!), once its schema exists;
+// and `more` rows besides it (titles "Chat 1"…, started a minute apart, no session: list rows only).
+function seedRow(runnerData, cwd, more = 0) {
   const db = new DatabaseSync(join(runnerData, 'claudia.db'));
   const at = Date.now() - 60000;
-  db.prepare('INSERT OR IGNORE INTO chats (id, title, folder, color, created, at, seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(chatId, title, cwd, null, at, at, at);
+  const add = db.prepare('INSERT OR IGNORE INTO chats (id, title, folder, color, created, at, seen) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  add.run(chatId, title, cwd, null, at, at, at);
+  for (let i = 1; i <= more; i++) {
+    const t = at - i * 60000;
+    add.run(`b0000000-0000-4000-8000-${String(i).padStart(12, '0')}`, `Chat ${i}`, cwd, null, t, t, t);
+  }
   db.close();
 }
 
@@ -123,8 +128,8 @@ function writeConfig(tmp, frontPort, runnerSock) {
   }));
 }
 
-// startStack({listen}): the programs up and answering. -> {hubUrl, hubPort, out, stop()}
-export async function startStack({ listen = false, listenFails = 0 } = {}) {
+// startStack({listen, listenFails, moreChats}): the programs up and answering. -> {hubUrl, hubPort, out, stop()}
+export async function startStack({ listen = false, listenFails = 0, moreChats = 0 } = {}) {
   for (const f of ['hub.js', 'front.js', 'runner.js', 'web/index.html'])
     if (!existsSync(join(repo, 'out', f))) throw new Error(`out/${f} is missing: build first`);
   // The real path: macOS's temp folder (/var/folders/…) is behind a symlink (/private/var/…), and the
@@ -147,7 +152,7 @@ export async function startStack({ listen = false, listenFails = 0 } = {}) {
     const env = settings(tmp, ports, runnerSock, listen && `http://127.0.0.1:${ports.listen}`);
     procs.push(program(out, state, 'runner', 'runner.js', env.runner));
     await until('the runner\'s store', () => existsSync(join(tmp, 'runner', 'claudia.db')) && existsSync(runnerSock));
-    seedRow(join(tmp, 'runner'), join(tmp, 'work'));
+    seedRow(join(tmp, 'runner'), join(tmp, 'work'), moreChats);
     procs.push(program(out, state, 'front', 'front.js', env.front));
     procs.push(program(out, state, 'hub', 'hub.js', env.hub));
     const hubUrl = `http://127.0.0.1:${ports.hub}/`;

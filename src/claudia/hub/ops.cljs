@@ -19,6 +19,8 @@
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
+            [claudia.shared.order :as order]
+            [claudia.shared.protocol :as protocol]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
             [claudia.hub.store :as store]
@@ -302,6 +304,21 @@
           (do (presence/beat! email page (true? (:active b)))
               (io/no-content res)))))))
 
+(defn- order-of
+  "A person's chat order as the page gets it: {:items :at} ({:items [] :at 0} before any)."
+  [email]
+  (if-let [{:keys [items at]} (store/chat-order email)]
+    {:items (order/clean-items (protocol/read-json items)) :at at}
+    {:items [] :at 0}))
+
+(defn- save-order
+  "PUT /hub/chat-order {items}: the person's whole list, kept as far as it is well formed."
+  [req res email _]
+  (with-body req
+    (fn [b]
+      (store/save-chat-order! email (protocol/write-json (order/clean-items (:items b))))
+      (io/send-json res 200 (order-of email)))))
+
 (defn person-route
   "Which of a person's own calls this is: [op] or [op id-from-the-path] (still encoded), else nil."
   [method pathname]
@@ -314,6 +331,8 @@
       (and activity (= method "DELETE")) [:end-live activity]
       (and (= pathname "/hub/presence") (= method "POST")) [:presence]
       (and (= pathname "/hub/presence") (= method "GET")) [:elsewhere]
+      (and (= pathname "/hub/chat-order") (= method "GET")) [:order]
+      (and (= pathname "/hub/chat-order") (= method "PUT")) [:save-order]
       :else nil)))
 
 (def ^:private person-ops
@@ -322,6 +341,8 @@
    :report-live (fn [req res email _] (report-live req res email))
    :end-live end-live
    :presence beat
+   :order (fn [_ res email _] (io/send-json res 200 (order-of email)))
+   :save-order save-order
    :elsewhere (fn [^js req res email _]
                 (let [page (.get (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) "")) "page")]
                   (io/send-json res 200 {:elsewhere (presence/elsewhere? email (str page))})))})
@@ -417,7 +438,7 @@
                (cond
                  (str/starts-with? pathname "/hub/admin")
                  (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
-                 (or (str/starts-with? pathname "/hub/push/") (= pathname "/hub/presence"))
+                 (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order"} pathname))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
                  (= pathname "/hub/progress") (io/send-json res 200 (progress/now))

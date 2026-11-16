@@ -128,6 +128,13 @@
      refresh_expires_at INTEGER,
      saved_at INTEGER NOT NULL
    );
+   -- A person's own order of their chats and their groups (claudia.shared.order), as JSON: the same
+   -- list on every device of theirs.
+   CREATE TABLE IF NOT EXISTS chat_orders (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     items TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );
    -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
    -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
    CREATE TABLE IF NOT EXISTS release_builder (
@@ -437,6 +444,16 @@
 (defn drop-github-user! [email] (exec! "DELETE FROM github_users WHERE email = ?" email))
 
 (defn drop-github-login! [email] (exec! "DELETE FROM github_logins WHERE email = ?" email))
+
+(defn chat-order
+  "A person's chat order: {:items (JSON text) :at}, or nil."
+  [email]
+  (one "SELECT items, at FROM chat_orders WHERE email = ?" email))
+
+(defn save-chat-order! [email items-json]
+  (exec! "INSERT INTO chat_orders (email, items, at) VALUES (?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET items = excluded.items, at = excluded.at"
+         email items-json (now)))
 
 (defn release-builder
   "The release builder: {:host :token-hash :paired-at :seen-at}, or nil."

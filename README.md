@@ -417,6 +417,29 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     check that the processes answer (all did), a probe from outside with a login of its own, or a
     rollback by hand (it needed a terminal and someone at it).
 
+37. GitHub through the hub's GitHub App (2026-11-16): only the hub keeps a long-lived GitHub secret.
+    A person presses Connect in Settings (GET `/hub/github/connect`), authorizes the app on GitHub
+    and comes back (`/hub/github/callback`); the hub keeps their user token (8 hours) and refresh token
+    (6 months) sealed, renews a token that runs out within 30 minutes, and hands each person's current
+    token to their profile on every server they use (`PUT /api/github` as them: gh and git's helper).
+    Which repositories it reaches is chosen on GitHub when the app is installed (Settings links
+    there). SSH keys and the logins kept before (`/hub/github-login`) go on as before. Instead of: a
+    personal access token per person pasted into every server (long-lived, on every machine).
+
+38. Each person's own chat order, and groups (2026-11-16): the list and the rail show the chats in
+    the order the person put them; a chat stays where it was dragged, a new message never moves it, and
+    a new chat appears on top. Dragging (a finger holds a row 350 ms; a mouse moves it): let go on the
+    upper or lower third of a chat, it goes before or after it; on its middle, the two become a group
+    (like an iPhone folder) whose name is typed at once. In the list a group is a header that folds,
+    with its name (double-click renames), how many chats, and a + that starts a chat in it with the
+    group's picks (the last ones a chat in it started with); that chat goes on top of the group. On
+    the rail a group is a stack of its chats' colours; pressed, a chooser card opens beside the rail
+    with each chat's full title and the +. The order is kept on the hub per person (`GET`/`PUT
+    /hub/chat-order`, the whole list each time, `claudia.shared.order`), so every device shows the
+    same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
+    and the archived list show the chats found as before; another person's chats (a view) keep the
+    plain order. Instead of: the order the chats were started in, or moving a chat up on each message.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

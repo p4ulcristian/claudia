@@ -117,6 +117,19 @@
     (is (= ["s" "x"] (:open (ev/created-db (assoc d :open ["s" "x"]) "s" "c" "p" "hi"))))
     (is (= [["s" {:type "open" :chat "c"}]] (ev/created-frames "s" "c")))))
 
+(deftest a-chat-started-from-a-groups-plus-goes-into-that-group
+  (let [d {:new-group "g" :new-settings {:model "m" :color "red"} :drafts {} :attach {}}
+        sent (ev/send-new-chat d "s" "p" {:sent "hi" :text "hi"})
+        pending (get-in sent [:db :pending-new "p"])]
+    (is (= {:server "s" :text "hi" :group "g" :picks {:model "m" :color "red" :server "s"}} pending))
+    (is (nil? (:new-group (:db sent))) "only that one chat")
+    (is (= [[:dispatch [:order/created "s/c" "g" {:model "m" :server "s"}]]]
+           (:fx (ev/on-frame (:db sent) "s" {:type "created" :chat "c" :id "p"}))))
+    (is (nil? (:fx (ev/on-frame (assoc-in (:db sent) [:pending-new "p"] {:server "s" :text "hi"}) "s"
+                                {:type "created" :chat "c" :id "p"})))
+        "a chat not started from a group stays where new chats go")
+    (is (nil? (:new-group (:db (ev/new-chat d {} "s")))) "a plain + starts outside the group")))
+
 (deftest a-new-chat-gets-a-colour-at-once
   (is (= "c" (get-in (ev/with-fresh-colour {:new-settings {:color "c"}}) [:new-settings :color])))
   (let [rows {"1" {:id "1" :color "cherry"}}

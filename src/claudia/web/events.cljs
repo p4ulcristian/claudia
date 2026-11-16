@@ -292,12 +292,14 @@
         (update (select-keys new-settings [:model :effort :plan :folder :color :talk :bell]) :folder not-empty)))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
-  (if-let [{:keys [text]} (get-in db [:pending-new id])]
+  (if-let [{:keys [text group picks]} (get-in db [:pending-new id])]
     (let [was-open? (= (:open db) [server id])]
-      {:db (created-db db server chat id text)
-       :store ["claudia.newPicks" (clj->js (select-keys (:new-settings db) carried-keys))]
-       :history/replace (if was-open? [server chat] (fx/parse-path js/location.pathname))
-       :ws/send-all (created-frames server chat)})
+      (cond-> {:db (created-db db server chat id text)
+               :store ["claudia.newPicks" (clj->js (select-keys (:new-settings db) carried-keys))]
+               :history/replace (if was-open? [server chat] (fx/parse-path js/location.pathname))
+               :ws/send-all (created-frames server chat)}
+        ;; Started from a group's +: it goes into that group (claudia.web.order).
+        group (assoc :fx [[:dispatch [:order/created (str server "/" chat) group (dissoc picks :color)]]])))
     {:db db}))
 
 (defmethod on-frame "msg" [db server {:keys [chat msg]}]
@@ -392,17 +394,23 @@
       :fx (cond-> [[:dispatch [:chat/check-seen]]]
             history? (conj [:history/push k]))})))
 
+(defn new-chat
+  "The effects of opening a new chat on server with picks (the chat open now closes)."
+  [db picks server]
+  (let [[ps pc] (:open db)]
+    {:db (-> (assoc (on-chat-screen db) :open nil :new-settings picks :new-server server :new-group nil)
+             with-fresh-colour)
+     :store ["claudia.newPicks" (clj->js picks)]
+     :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
+     :history/push nil}))
+
 (rf/reg-event-fx
  :nav/new
  ;; The new chat starts where the chat open now works, with its picks (carried-picks).
  (fn [{:keys [db]} _]
    (let [[ps pc :as k] (:open db)
-         picks (carried-picks db k)
          server (if (and pc (not (contains? (:pending-new db) pc))) ps (:new-server db))]
-     {:db (-> (assoc (on-chat-screen db) :open nil :new-settings picks :new-server server) with-fresh-colour)
-      :store ["claudia.newPicks" (clj->js picks)]
-      :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
-      :history/push nil})))
+     (new-chat db (carried-picks db k) server))))
 
 (rf/reg-event-fx
  :nav/list
@@ -530,7 +538,10 @@
   [db server id {:keys [sent text extra]}]
   (when server
     {:db (-> db
-             (assoc-in [:pending-new id] {:server server :text text})
+             (assoc-in [:pending-new id] (cond-> {:server server :text text}
+                                           (:new-group db) (assoc :group (:new-group db)
+                                                                  :picks (assoc (new-picks (:new-settings db)) :server server))))
+             (dissoc :new-group)
              (assoc :open [server id])
              (assoc-in [:outbox [server id]] [text])
              (assoc-in [:drafts :new] "")

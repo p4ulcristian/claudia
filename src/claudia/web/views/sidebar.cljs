@@ -6,7 +6,9 @@
   started. The archived list and a search's finds run newest first under time sections, each row
   with its project; the archived list's project chips narrow both. Picking a chat from either brings
   the chats list back (events/on-chat-screen)."
-  (:require [clojure.string :as str]
+  (:require [claudia.shared.order :as order]
+            [claudia.web.views.chat-groups :as groups]
+            [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.views.chat :as chat]
@@ -215,28 +217,47 @@
          [row-view r {:active? (= open k) :multi? multi? :read-only? (contains? ro-servers (:server r)) :project? true
                       :on-click #(rf/dispatch [:nav/open k])}]))]))
 
-(defn- chat-rows
-  "The chats list: passive chats (ash, or open in another tab) last and dimmed, a dashed line over
-  the first of them, as on the rail."
-  [{:keys [shown open multi? ro-servers viewing? new-pending? q archived?]}]
+(defn- draw-row
+  "One chat row of the list (m: what list-state says)."
+  [{:keys [open multi? ro-servers viewing?]} r passive? first-passive?]
+  (let [k [(:server r) (:id r)]]
+    [row-view r {:active? (= open k) :multi? multi? :read-only? (contains? ro-servers (:server r))
+                 :passive? passive? :first-passive? first-passive?
+                 :tag (when (:archived r) "archived")
+                 :done? (and (not viewing?) (:unseen r) (not= open k))}]))
+
+(defn- searched-rows
+  "While searching, a project chip is on or the archived list shows: the rows found, passive ones last (as on the rail)."
+  [{:keys [shown open] :as m}]
   (let [elsewhere @(rf/subscribe [:open-elsewhere])
         passive? #(pure/passive? % elsewhere open)
         rows (pure/passive-last shown elsewhere open)]
-    [:<>
-     (for [[i r] (map-indexed vector rows)
-           :let [k [(:server r) (:id r)]]]
-       ^{:key (row-key r)}
-       [row-view r {:active? (= open k) :multi? multi? :read-only? (contains? ro-servers (:server r))
-                    :passive? (passive? r)
-                    :first-passive? (and (passive? r) (not (some-> (get rows (dec i)) passive?)))
-                    :tag (when (:archived r) "archived")
-                    :done? (and (not viewing?) (:unseen r) (not= open k))}])
-     (when new-pending?
-       [:div.chat-row.cs-row.active.cs-new
-        [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
-        [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
-     (when (and (empty? shown) (not new-pending?))
-       [:p.muted.small.cs-empty (pure/empty-note q archived?)])]))
+    (for [[i r] (map-indexed vector rows)]
+      ^{:key (row-key r)}
+      [draw-row m r (passive? r) (and (passive? r) (not (some-> (get rows (dec i)) passive?)))])))
+
+(defn- ordered-rows
+  "The person's own order with their groups (README decision 38): chats stay where they were dragged."
+  [{:keys [open] :as m}]
+  (let [elsewhere @(rf/subscribe [:open-elsewhere])
+        passive? #(pure/passive? % elsewhere open)
+        draw #(draw-row m % (passive? %) false)]
+    (for [{:keys [kind row] :as e} @(rf/subscribe [:arranged])]
+      (if (= kind :group)
+        ^{:key (:group (:group e))} [groups/group e draw]
+        (let [cref (order/ref-of row)] ^{:key cref} [groups/item cref nil (draw row)])))))
+
+(defn- chat-rows
+  "The chats list: the person's order and groups; while searching, the rows found."
+  [{:keys [shown new-pending? q chip archived?] :as m}]
+  [:<>
+   (if (or (seq q) chip archived?) (searched-rows m) (ordered-rows m))
+   (when new-pending?
+     [:div.chat-row.cs-row.active.cs-new
+      [:span.rail-dot [:span.rail-blank {:aria-hidden true}]]
+      [:span.cs-text [:span.cs-l1 [:span.t "New chat"]]]])
+   (when (and (empty? shown) (not new-pending?))
+     [:p.muted.small.cs-empty (pure/empty-note q archived?)])])
 
 (defn- use-search-focus! [search-ref rail-search?]
   (h/use-effect
