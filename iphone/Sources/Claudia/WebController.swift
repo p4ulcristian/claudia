@@ -64,6 +64,39 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         view = root
     }
 
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        fitWindowControls()
+    }
+
+    /// iPadOS 26 and later: a window that is not full screen shows its close, minimise and
+    /// full-screen buttons in its top-left corner, over the page. The window's safe area adapted to
+    /// that corner, less its plain safe area, says how far down (vertical) and right (horizontal)
+    /// they reach. The page gets that as `--window-buttons-height` and `--window-buttons-width` on
+    /// its root (0px when the window shows none) and makes room only in its left column, under the
+    /// buttons; the rest of the top stays the page's.
+    private var windowButtons = CGSize(width: -1, height: -1)
+
+    private func fitWindowControls() {
+        guard #available(iOS 26.0, *), let window = view.window else { return }
+        let tall = window.edgeInsets(for: .safeArea(cornerAdaptation: .vertical))
+        let wide = window.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal))
+        let size = CGSize(width: max(0, wide.left - window.safeAreaInsets.left),
+                          height: max(0, tall.top - window.safeAreaInsets.top))
+        guard size != windowButtons else { return }
+        windowButtons = size
+        sendWindowButtons()
+    }
+
+    private func sendWindowButtons() {
+        guard windowButtons.width >= 0, let url = webView.url, Config.isHub(url) else { return }
+        let source = """
+        document.documentElement.style.setProperty('--window-buttons-width', '\(Int(windowButtons.width))px');
+        document.documentElement.style.setProperty('--window-buttons-height', '\(Int(windowButtons.height))px');
+        """
+        webView.evaluateJavaScript(source)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let url = first ?? Config.hub else {
@@ -154,6 +187,7 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         failure.isHidden = true
         sendPushToken()
+        sendWindowButtons()
         // A page load may follow a fresh sign-in: the cookies the native calls need.
         if let url = webView.url, Config.isHub(url) { LiveActivities.shared.sync() }
     }
