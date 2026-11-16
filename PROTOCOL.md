@@ -100,6 +100,7 @@ inline styles; fonts from Google Fonts; same-origin fetches and sockets; no fram
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
+| `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
 | `GET /anatomy/<version>/<file>` | an anatomy model or the index (`index.json`, `<system>/<id>.glb`) of the pinned version only (`claudia.shared.anatomy`): fetched once from the claudia-anatomy repository at that version's tag, kept in `HUB_DATA/anatomy`, then sent from disk with a year's immutable caching; 404 for another path, 502 when it can't be fetched |
 | `GET /hub/progress` | person | `{ builds: [{ commit, tree?, state, note, started, at }], release: { commit, tree, title, merged, machines: { <server>: { state: waiting\|done\|not reached, secs? } }, hub: { state, secs? } } \| null }`: the update pill (README decision 32) |
 | `GET /hub/narrate` | `{ voice: bool }`: a voice service is set up (`HUB_TTS_URL` and its token) |

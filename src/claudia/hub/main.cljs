@@ -154,6 +154,16 @@
       (systems/server-sample server res))
     (io/send-json res 403 {:error (str "no access to " server-name)})))
 
+;; Set once the hub is stopping: /hub/alive then says so, and the gate's proxy sends new calls to
+;; the other hub of an update (the one starting beside it).
+(defonce ^:private stopping? (atom false))
+
+(defn- alive
+  "GET /hub/alive, no login: 200 while this hub takes calls, 503 once it is stopping. The gate's
+  proxy asks it every second to pick between the two hubs that run during an update."
+  [^js res]
+  (io/send-json res (if @stopping? 503 200) {:alive (not @stopping?) :commit (health/commit)}))
+
 (defn- hub-api [^js req ^js res pathname]
   (let [[_ server-name what] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/(state|system)$" pathname)
         email (caller req)
@@ -163,6 +173,7 @@
         admin? (boolean (or (:admin person) group-admin))
         own? (or (= pathname "/hub/me") server-name)]
     (cond
+      (= pathname "/hub/alive") (alive res)
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
       (not email) (io/send-json res 401 {:error "not signed in"})
@@ -244,6 +255,7 @@
     (fn [sig]
       (when-not @stopping
         (reset! stopping true)
+        (reset! stopping? true)
         (js/console.log (str "hub: " sig ", stopping"))
         (push/stop!)
         (js/clearInterval beat)
