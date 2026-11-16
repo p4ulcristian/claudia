@@ -431,8 +431,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   person (their own chats only). Alert texts are sealed (AES-256-GCM, node:crypto) under the key the
   app made; every alert carries the badge (waiting plus finished-unseen chats across servers); a
   change of the count alone goes as a badge-only push; one summary Live Activity per phone. While the
-  person works at a desktop page (`POST /hub/presence`), alerts are held; when they leave, the newest
-  per chat that still matters goes.
+  person works at a Claudia page (`POST /hub/presence`; a browser or, since 2026-11-16, the iPhone
+  and iPad app too), alerts are held; when they leave, the newest per chat that still matters goes.
+  One device rings (2026-11-16, after every open page rang at once): a page plays a chat's sound and
+  popup only while it is in use itself (in front, touched in the last minutes), or when none of the
+  person's other pages is (`GET /hub/presence?page=<id>` -> `{elsewhere}`).
 - **Following main** (built before the merge, 2026-11-03): `check.yml` checks a PR at its head
   commit and packs what it built as one bundle keyed by that commit's git tree. When the check is
   green (a PR into main from this repository, or a push to main), `stage.yml` (run on main, so its

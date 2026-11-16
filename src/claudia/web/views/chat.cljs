@@ -71,7 +71,7 @@
    (when (or picture? (pos? files))
      [:button.pic-link {:title "Show the picture from this turn"
                         :on-click #(rf/dispatch [:chat/view-turn ck (when-not viewing? id)])}
-      (if viewing? "back to live" (pure/turn-links picture? files))])])
+      (pure/turn-links picture? files)])])
 
 (defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? files forkable? queued?] :as marks}]
   (let [[server chat] ck]

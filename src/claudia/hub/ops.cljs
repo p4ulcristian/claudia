@@ -313,6 +313,7 @@
       (and (= pathname "/hub/push/live") (= method "POST")) [:report-live]
       (and activity (= method "DELETE")) [:end-live activity]
       (and (= pathname "/hub/presence") (= method "POST")) [:presence]
+      (and (= pathname "/hub/presence") (= method "GET")) [:elsewhere]
       :else nil)))
 
 (def ^:private person-ops
@@ -320,7 +321,10 @@
    :drop-device drop-device
    :report-live (fn [req res email _] (report-live req res email))
    :end-live end-live
-   :presence beat})
+   :presence beat
+   :elsewhere (fn [^js req res email _]
+                (let [page (.get (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) "")) "page")]
+                  (io/send-json res 200 {:elsewhere (presence/elsewhere? email (str page))})))})
 
 (defn- person-call
   "Calls any signed-in person makes about themselves (phones, Live Activities, presence)."
