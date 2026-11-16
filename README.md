@@ -339,8 +339,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     nothing: every server (`deploy/update.sh`) and the gate's hub helper check each file against
     `deploy/release-signers` on GitHub's main before installing, so GitHub stays the one place that
     says which builder counts, and a hub can hold an update back but never change one. There is no
-    second signature from a person: a builder taken over can ship to every machine (risk accepted
-    until the builder moves somewhere safer). Making another machine the builder: run
+    second signature from a person: a builder taken over can ship to every machine. So the builder
+    runs on a machine only Paul is root on: destiny since 2026-11-16 (was Peter's box, where everyone
+    with sudo could have signed). Making another machine the builder: run
     `sudo deploy/release-builder/install.sh https://<hub>` there, paste the builder key it prints in
     Settings (Servers page, Release builder: the old builder's token stops counting at once), and
     merge a PR adding its key to `deploy/release-signers`. node_modules go up only when the lockfile
