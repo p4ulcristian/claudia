@@ -20,6 +20,11 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         webView = WKWebView(frame: .zero, configuration: config)
+        #if DEBUG
+        // Debug builds only (the Simulator test build): Safari's Web Inspector and Appium can reach
+        // the page. TestFlight builds are release builds and stay closed.
+        if #available(iOS 16.4, *) { webView.isInspectable = true }
+        #endif
         super.init(nibName: nil, bundle: nil)
         Self.current = self
         installScripts()
@@ -103,6 +108,20 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
             return showFailure("This build has no hub address. Build it with iphone/tools/testflight.sh.", retry: false)
         }
         load(url)
+    }
+
+    /// A notification's or the Live Activity's chat: the page on screen switches to it with its own
+    /// router (as a back swipe does: the address changes, then a popstate), so nothing reloads. A
+    /// page that is not the hub's, still loading, or that fails to take it, loads the address.
+    func open(_ url: URL) {
+        guard let current = webView.url, Config.isHub(current), Config.isHub(url), !webView.isLoading else {
+            return load(url)
+        }
+        let path = url.path + (url.query.map { "?" + $0 } ?? "")
+        let source = "history.pushState(null, '', \(json(path))); window.dispatchEvent(new PopStateEvent('popstate')); true"
+        webView.evaluateJavaScript(source) { [weak self] _, error in
+            if error != nil { self?.load(url) }
+        }
     }
 
     func load(_ url: URL) {

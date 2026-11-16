@@ -574,11 +574,12 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .split { padding-top: var(--top-safe); box-sizing: border-box; }
 /* The iPad app's window buttons (close, minimise, full screen: iPadOS 26 and later, a window that is not
    full screen) sit over the top-left corner; the app sets their size (WebController.swift, 0 when none).
-   Only the left column makes room under them; the chat's head keeps the whole top. */
+   Wide: the rail is what lies under them, and it starts below them; the rest of the top stays.
+   Narrow (phones' layout): each screen's first row starts right of them (chatops.css). */
 .rail { padding-top: calc(52px + var(--top-safe) + var(--window-buttons-height, 0px)); }
-.sidebar { padding-top: calc(14px + var(--top-safe) + var(--window-buttons-height, 0px)); }
+.sidebar { padding-top: calc(14px + var(--top-safe)); }
 @media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
-.menu-toggle { top: calc(var(--edge-t) + var(--top-safe)); left: calc(10px + env(safe-area-inset-left) + var(--window-buttons-width, 0px)); }
+.menu-toggle { top: calc(var(--edge-t) + var(--top-safe) + var(--window-buttons-height, 0px)); left: calc(10px + env(safe-area-inset-left)); }
 .app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 

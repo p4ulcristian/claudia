@@ -109,7 +109,7 @@ enum Router {
     }
 
     private static func go(_ url: URL) {
-        if let web = WebController.current { web.load(url) } else { pending = url }
+        if let web = WebController.current { web.open(url) } else { pending = url }
     }
 
     static func takePending() -> URL? {
