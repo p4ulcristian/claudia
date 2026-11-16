@@ -134,7 +134,52 @@
   (rf/dispatch [:ops/put-now {:url "/hub/github-login" :method "PUT" :body {:token token}
                               :on-done (fn [ok err] (when ok (rf/dispatch [:ops/github-login ok])) (done err))}]))
 
+(defn- app-connection [{:keys [user]}]
+  (if user
+    [:p.small "Connected as " [:b (str "@" (:login user))] ": pushes and pull requests come from you. "
+     [:button.linkish {:on-click #(rf/dispatch [:ops/github-disconnect])} "Disconnect"]]
+    [:p.small "Not connected: Claude can't push or open pull requests for you. "
+     [:a.st-cta {:href "/hub/github/connect"} "Connect GitHub"]]))
+
+(defn- app-installs [{:keys [user installations app]}]
+  (when user
+    [:div.small.gh-installs
+     (for [{:keys [id account selection configureUrl] kind :type} installations]
+       ^{:key id}
+       [:p (str (if (= kind "Organization") "Org " "") account ": ")
+        (if (= selection "all") "all repositories" "chosen repositories") " · "
+        [:a {:href configureUrl :target "_blank" :rel "noreferrer"} "Choose repos \u2197"]])
+     [:p [:a {:href (:installUrl app) :target "_blank" :rel "noreferrer"} "Install on another account or org \u2197"]]]))
+
+(defn- app-servers [{:keys [user servers]}]
+  (when (and user (seq servers))
+    [:p.small.token-servers
+     (for [{server-name :name :keys [label ok]} servers]
+       ^{:key server-name}
+       [:span {:class (if ok "on" "off") :title (str label (if ok ": has your current GitHub token" ": not given it yet"))}
+        label " " (if ok "\u2713" "\u2026")])]))
+
+(defn- app-section
+  "GitHub through the hub's GitHub App (README decision 37): Connect once; the hub keeps the
+  long-lived token and gives every server a short one."
+  [ga]
+  [:section.st-section
+   [:h3 "GitHub " [:span.muted.small "yours, on every server"]]
+   [app-connection ga]
+   [app-installs ga]
+   [app-servers ga]])
+
+(declare token-github-section)
+
 (defn- github-section
+  "The person's GitHub: through the hub's GitHub App when the hub has one, else the login kept by
+  the hub and handed to their profile on every server (README decision 23)."
+  []
+  (if-let [ga (when (:app @(rf/subscribe [:github-app])) @(rf/subscribe [:github-app]))]
+    [app-section ga]
+    [token-github-section]))
+
+(defn- token-github-section
   "The person's GitHub login, kept by the hub and handed to their profile on every server
   (README decision 23)."
   []

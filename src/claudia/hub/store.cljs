@@ -117,20 +117,6 @@
      came_from TEXT NOT NULL,
      saved_at INTEGER NOT NULL
    );
-   -- The hub's GitHub App (claudia.hub.github-app, made from Settings by manifest): its id, slug,
-   -- client id, the client secret sealed with the key in HUB_TOKEN_KEY_FILE, the account that owns
-   -- it, who made it and when. Its private key is not kept: user tokens need only the client secret.
-   CREATE TABLE IF NOT EXISTS github_app (
-     id INTEGER PRIMARY KEY CHECK (id = 1),
-     app_id INTEGER NOT NULL,
-     slug TEXT NOT NULL,
-     client_id TEXT NOT NULL,
-     sealed_secret TEXT NOT NULL,
-     owner TEXT NOT NULL,
-     html_url TEXT NOT NULL,
-     made_by TEXT NOT NULL,
-     made_at INTEGER NOT NULL
-   );
    -- A person's connection to the GitHub App: their login, the refresh token (months) and the user
    -- token (hours) sealed, and when each runs out (null: GitHub gave one that does not expire).
    CREATE TABLE IF NOT EXISTS github_users (
@@ -429,19 +415,6 @@
          email login sealed came-from (now)))
 
 ;; The release builder ---------------------------------------------------------------------------
-
-(defn github-app
-  "The hub's GitHub App, or nil: {:app-id :slug :client-id :sealed-secret :owner :html-url :made-by :made-at}."
-  []
-  (one "SELECT app_id, slug, client_id, sealed_secret, owner, html_url, made_by, made_at FROM github_app WHERE id = 1"))
-
-(defn save-github-app! [{:keys [app-id slug client-id sealed-secret owner html-url made-by]}]
-  (exec! "INSERT INTO github_app (id, app_id, slug, client_id, sealed_secret, owner, html_url, made_by, made_at)
-          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT (id) DO UPDATE SET app_id = excluded.app_id, slug = excluded.slug, client_id = excluded.client_id,
-            sealed_secret = excluded.sealed_secret, owner = excluded.owner, html_url = excluded.html_url,
-            made_by = excluded.made_by, made_at = excluded.made_at"
-         app-id slug client-id sealed-secret owner html-url made-by (now)))
 
 (defn github-users
   "Every person's GitHub App connection."

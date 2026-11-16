@@ -12,6 +12,7 @@
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
+            [claudia.hub.github-app :as github-app]
             [claudia.hub.github-login :as github-login]
             [claudia.hub.live :as live]
             [claudia.hub.pairing :as pairing]
@@ -425,6 +426,7 @@
                  (str/starts-with? pathname "/hub/claude-token")
                  (token-call req res pathname email)
                  (= pathname "/hub/github-login") (github-login-call req res email)
+                 (str/starts-with? pathname "/hub/github/") (github-app/call req res pathname email)
                  :else (fail res 404 "not found"))))
       (.catch (fn [e]
                 (js/console.error (str "hub: " pathname ": " (.-message e)))

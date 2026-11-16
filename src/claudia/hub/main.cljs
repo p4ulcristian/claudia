@@ -20,6 +20,7 @@
             [claudia.hub.videos :as videos]
             [claudia.hub.narrate :as narrate]
             [claudia.node.anatomy :as anatomy]
+            [claudia.hub.github-app :as github-app]
             [claudia.hub.github-login :as github-login]
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
@@ -177,7 +178,10 @@
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
       (not email) (io/send-json res 401 {:error "not signed in"})
-      (cross-site? req) (io/send-json res 403 {:error "cross-site request"})
+      ;; GitHub sends the browser back to these (a cross-site navigation by nature); the callback
+      ;; checks its own state, the other only goes on to the page.
+      (and (cross-site? req) (not (and (= "GET" (.-method req)) (github-app/return-path? pathname))))
+      (io/send-json res 403 {:error "cross-site request"})
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
       (= pathname "/hub/videos") (videos/call req res person email)
       (= pathname "/hub/health") (health/call req res person email)
@@ -240,7 +244,8 @@
   (progress/start! data-dir)
   (push/start!)
   (tokens/start!)
-  (github-login/start!))
+  (github-login/start!)
+  (github-app/start!))
 
 (defn- exit!
   "The store closes last, once no request can reach it any more, then the process exits."

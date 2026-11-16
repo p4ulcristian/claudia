@@ -281,10 +281,21 @@
  :ops/load-github
  (fn [{:keys [db]} _]
    (when-not (events/viewing-other? db)
-     {:fx [[:api/call {:url "/hub/github-login" :on-ok [:ops/github-login]}]]})))
+     {:fx [[:api/call {:url "/hub/github-login" :on-ok [:ops/github-login]}]
+           [:api/call {:url "/hub/github/state" :on-ok [:ops/github-app]}]]})))
 
 (rf/reg-event-db :ops/github-login (fn [db [_ g]] (assoc db :github-login g)))
 (rf/reg-sub :github-login (fn [db] (:github-login db)))
+
+;; The hub's GitHub App (claudia.hub.github-app): the app, the person's connection, where it is
+;; installed, which servers have the person's current token.
+(rf/reg-event-db :ops/github-app (fn [db [_ g]] (assoc db :github-app g)))
+(rf/reg-sub :github-app (fn [db] (:github-app db)))
+
+(rf/reg-event-fx
+ :ops/github-disconnect
+ (fn [_ _]
+   {:fx [[:api/call {:method "DELETE" :url "/hub/github/connection" :on-ok [:ops/load-github]}]]}))
 
 (rf/reg-fx
  :ops/put
