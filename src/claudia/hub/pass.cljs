@@ -79,21 +79,42 @@
     (.destroy res)
     (io/send-json res 502 (unreachable server))))
 
+(def ^:private retry-ms "How soon a call a restarting front refused tries again." 300)
+(def ^:private retry-for-ms
+  "How long a call keeps trying a front that refuses it: a front (or its runner) restarting for an
+  update is back within a second or two, so the call waits instead of failing."
+  15000)
+
+(defn retry?
+  "Whether a failed try to reach a front is tried again: the front refused the connection (it is
+  restarting; a front that is off or asleep times out instead), nothing went out yet that could not
+  be sent again (a call without a body: GET, HEAD, a WebSocket handshake), and there is time left."
+  [method code now deadline]
+  (boolean (and (#{"GET" "HEAD"} method)
+                (#{"ECONNREFUSED" "ECONNRESET"} code)
+                (< now deadline))))
+
+(defn- send-up!
+  "One try of passing the request on; a refused one tries again (retry?)."
+  [^js req ^js res server target who deadline]
+  (let [method (.-method req)
+        ^js up (http/request #js {:host (:host server) :port (:port server) :method method :path target
+                                  :headers (clj->js (request-headers (.-headers req) who)) :agent agent})]
+    (guard-connect up)
+    (.on up "response" #(answered res %))
+    (.on up "error" (fn [^js e]
+                      (if (and (retry? method (.-code e) (js/Date.now) deadline)
+                               (not (.-headersSent res)) (not (.-destroyed res)))
+                        (js/setTimeout #(send-up! req res server target who deadline) retry-ms)
+                        (up-failed res server))))
+    ;; The caller left (closed the tab, cancelled an upload): the front's side ends too.
+    (.on res "close" #(when-not (.-writableFinished res) (.destroy up)))
+    (if (#{"GET" "HEAD"} method) (.end up) (.pipe req up))))
+
 (defn http!
   "Passes one request on, streaming the body both ways. `target` is the path and query on the front."
   [^js req ^js res server target who]
-  (let [^js up (http/request #js {:host (:host server)
-                                  :port (:port server)
-                                  :method (.-method req)
-                                  :path target
-                                  :headers (clj->js (request-headers (.-headers req) who))
-                                  :agent agent})]
-    (guard-connect up)
-    (.on up "response" #(answered res %))
-    (.on up "error" (fn [_] (up-failed res server)))
-    ;; The caller left (closed the tab, cancelled an upload): the front's side ends too.
-    (.on res "close" #(when-not (.-writableFinished res) (.destroy up)))
-    (.pipe req up)))
+  (send-up! req res server target who (+ (js/Date.now) retry-for-ms)))
 
 (defn up?
   "Calls (done true) when the front answers GET /api/me with a 2xx within 2 s, else (done false)."
@@ -260,26 +281,40 @@
                    :perMessageDeflate false
                    :handshakeTimeout connect-ms}))
 
-(defn ws!
-  "Opens the front's socket first and only then completes the page's handshake: the page sees the
-  front's own refusal (its status and body) when the front says no, and 502 when it is not up."
-  [^js req ^js socket head server target who]
-  (let [^js front (open-front server target who)
-        ;; Until the page's handshake is answered (refused or upgraded), the raw socket is ours;
-        ;; after that it belongs to the page's WebSocket and nothing here may write to it.
-        pending (atom true)
-        take! #(when @pending (reset! pending false) true)
-        refuse! (fn [status body content-type]
-                  (when (take!) (refuse-upgrade socket status body content-type)))]
-    (.on socket "error" (fn [_] (when (take!) (.terminate front))))
-    (.on socket "close" (fn [_] (when (take!) (.terminate front))))
-    (.on front "error" (fn [_] (refuse! 502 (protocol/write-json (unreachable server)) json-type)))
+(defn- connect-front!
+  "One try of opening the front's socket for a page's handshake (c: what ws! keeps); a refused one
+  tries again while the handshake waits (retry?)."
+  [{:keys [req socket head server target who pending take! refuse! front-ref deadline] :as c}]
+  (let [^js front (open-front server target who)]
+    (reset! front-ref front)
+    (.on front "error" (fn [^js e]
+                         (if (and @pending (retry? "GET" (.-code e) (js/Date.now) deadline))
+                           (js/setTimeout #(when @pending (connect-front! c)) retry-ms)
+                           (refuse! 502 (protocol/write-json (unreachable server)) json-type))))
     (.on front "unexpected-response" (fn [_ answer] (front-refused front answer refuse!)))
     (.on front "open"
          (fn []
            (if (take!)
              (.handleUpgrade wss req socket head (fn [page] (pair! page front)))
              (.terminate front))))))
+
+(defn ws!
+  "Opens the front's socket first and only then completes the page's handshake: the page sees the
+  front's own refusal (its status and body) when the front says no, and 502 when it is not up (a
+  front that refuses while it restarts is tried again for retry-for-ms)."
+  [^js req ^js socket head server target who]
+  (let [;; Until the page's handshake is answered (refused or upgraded), the raw socket is ours;
+        ;; after that it belongs to the page's WebSocket and nothing here may write to it.
+        pending (atom true)
+        front-ref (atom nil)
+        take! #(when @pending (reset! pending false) true)
+        refuse! (fn [status body content-type]
+                  (when (take!) (refuse-upgrade socket status body content-type)))]
+    (.on socket "error" (fn [_] (when (take!) (some-> ^js @front-ref .terminate))))
+    (.on socket "close" (fn [_] (when (take!) (some-> ^js @front-ref .terminate))))
+    (connect-front! {:req req :socket socket :head head :server server :target target :who who
+                     :pending pending :take! take! :refuse! refuse! :front-ref front-ref
+                     :deadline (+ (js/Date.now) retry-for-ms)})))
 
 (defn close-all!
   "On shutdown: every page is told the hub is going away (1001); their fronts' sockets follow."
