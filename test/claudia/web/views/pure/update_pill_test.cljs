@@ -7,7 +7,7 @@
                        :hub {:state "waiting"}}})
 
 (deftest the-pill-counts-what-has-taken-the-update
-  (is (= {:label "Updating 1/3 \u00b7 0:04" :tone "running"} (u/pill moving 5000))))
+  (is (= {:label "Updating 1/3\n0:04" :tone "running"} (u/pill moving 5000))))
 
 (deftest a-finished-update-says-how-long-then-goes
   (let [done (-> moving (assoc-in [:release :machines :destiny] {:state "done" :secs 6})
@@ -21,7 +21,7 @@
 
 (deftest a-merge-waiting-for-its-build-shows-the-build
   (let [p {:builds [{:commit "abcdef1234" :tree "t" :state "pending" :at 1000 :started 900}] :release (:release moving)}]
-    (is (= {:label "Building abcdef1 \u00b7 0:04" :tone "running"} (u/pill p 5000)))
+    (is (= {:label "Building abcdef1\n0:04" :tone "running"} (u/pill p 5000)))
     (is (= "Build failed" (:label (u/pill (assoc-in p [:builds 0 :state] "failure") 5000))))))
 
 (deftest the-panel-lists-every-step
@@ -36,7 +36,7 @@
   (is (nil? (u/updated-text "x" nil 0))))
 
 (deftest asleep-machines-do-not-count
-  (is (= {:label "Updating 1/3 \u00b7 0:04" :tone "running"}
+  (is (= {:label "Updating 1/3\n0:04" :tone "running"}
          (u/pill (assoc-in moving [:release :machines :mac] {:state "asleep"}) 5000))))
 
 (deftest the-clock-reads-like-a-clock

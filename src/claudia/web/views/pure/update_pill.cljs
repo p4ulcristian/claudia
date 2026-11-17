@@ -22,9 +22,10 @@
     (if (pos? h) (str h ":" (two m) ":" (two (mod s 60))) (str m ":" (two (mod s 60))))))
 
 (defn- with-clock
-  "label with the time since start, while it runs: \"Updating 3/5 · 1:10\"."
+  "label with the time since start on its own line, while it runs: \"Updating 3/5\\n1:10\" (the
+  clock never shares a line with words, so its ticking can't move the line breaks)."
   [label start t]
-  (if (number? start) (str label " \u00b7 " (clock-text (- t start))) label))
+  (if (number? start) (str label "\n" (clock-text (- t start))) label))
 
 (defn release-label
   "What the pill says about a release at t: Updating d/n and the time since the merge while it
