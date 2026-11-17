@@ -25,12 +25,12 @@
 (defn- place! [] (dec (:issued (swap! line update :issued inc))))
 
 (defn- arrive!
-  "Clip n's outcome ({:text :k :dir}, nil: nothing to give): what is now in order goes out."
+  "Clip n's outcome ({:text :raw :k :dir}, nil: nothing to give): what is now in order goes out."
   [n result]
   (let [out (atom nil)]
     (swap! line (fn [l] (let [[l' ready] (pure/in-order l n result)] (reset! out ready) l')))
     (swap! rows (fn [rs] (into {} (remove (fn [[i]] (< i (:next @line)))) (cond-> rs (get rs n) (assoc-in [n :state] :heard)))))
-    (doseq [{:keys [text k dir]} @out] (rf/dispatch [:mic/heard k text dir]))))
+    (doseq [{:keys [text raw k dir]} @out] (rf/dispatch [:mic/heard k {:text text :raw raw} dir]))))
 
 (declare hear!)
 
@@ -47,11 +47,11 @@
   (when-let [{:keys [id k dir]} (get @rows n)]
     (swap! rows #(-> % (assoc-in [n :state] :hearing) (update-in [n :tries] inc)))
     (-> (mic/hear (get @blobs id))
-        (.then (fn [text]
+        (.then (fn [{:keys [text raw]}]
                  (mic/report! {:event "heard" :bytes (.-size (get @blobs id)) :chars (count text)})
                  (store/drop! id)
                  (swap! blobs dissoc id)
-                 (arrive! n {:text text :k k :dir dir})))
+                 (arrive! n {:text text :raw raw :k k :dir dir})))
         (.catch #(failed! n %)))))
 
 (defn- add-row! [n {:keys [id k dir secs at blob]} state]

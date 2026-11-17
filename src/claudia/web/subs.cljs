@@ -1,6 +1,7 @@
 (ns claudia.web.subs
   (:require [re-frame.core :as rf]
             [claudia.web.events :as events]
+            [claudia.web.views.pure.dictated :as dictated]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.pure.switches :as switches]))
 
@@ -16,6 +17,8 @@
 (rf/reg-sub :pending-new (fn [db] (:pending-new db)))
 (rf/reg-sub :ask-state (fn [db [_ id]] (get-in db [:ask-state id])))
 (rf/reg-sub :draft (fn [db [_ k]] (get-in db [:drafts k] "")))
+;; The dictated piece in draft k whose clean and raw words differ (the composer's chip), or nil.
+(rf/reg-sub :dictated-swap (fn [db [_ k]] (dictated/swappable (get-in db [:dictated k]) (get-in db [:drafts k]))))
 (rf/reg-sub :talk? (fn [db [_ k]] (switches/talk-on? db k)))   ; k nil: the new chat
 (rf/reg-sub :bell? (fn [db [_ k]] (switches/bell-on? db k)))
 (rf/reg-sub :archive-ask   ; the chat whose archiving waits on a yes: {:k :title}, or nil

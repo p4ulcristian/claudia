@@ -36,11 +36,6 @@
   (is (= "clip.wav" (listen/clip-name "audio/wav")))
   (is (= "clip" (listen/clip-name nil))))
 
-(deftest listen-heard-text
-  (is (= "hello" (listen/heard-text #js {:text "  hello \n"})))
-  (is (= "" (listen/heard-text #js {})))
-  (is (= "" (listen/heard-text nil))))
-
 (deftest narration-keys
   (is (= "" (narrate/voice-of nil)))
   (is (= "calm" (narrate/voice-of "  calm ")))
