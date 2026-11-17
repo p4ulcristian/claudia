@@ -24,13 +24,14 @@
 
 (defn fetch-pcm
   "Promise of the PCM bytes (an ArrayBuffer) for text, in the voice described by instruction (nil:
-  the hub's own)."
-  [text instruction]
-  (-> (js/fetch "/hub/narrate"
-                #js {:method "POST" :credentials "same-origin"
-                     :headers #js {"content-type" "application/json"}
-                     :body (js/JSON.stringify #js {:text text :instruction instruction})})
-      (.then answer-buffer)))
+  the hub's own), spoken in language (an ISO code like \"hu\"; nil: none asked)."
+  ([text instruction] (fetch-pcm text instruction nil))
+  ([text instruction language]
+   (-> (js/fetch "/hub/narrate"
+                 #js {:method "POST" :credentials "same-origin"
+                      :headers #js {"content-type" "application/json"}
+                      :body (js/JSON.stringify #js {:text text :instruction instruction :language language})})
+       (.then answer-buffer))))
 
 (defn audio-buffer
   "16-bit PCM bytes as an AudioBuffer of ctx."

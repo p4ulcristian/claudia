@@ -1,12 +1,11 @@
 (ns claudia.hub.small-test
   "The hub's smaller namespaces: GitHub's deliveries, narration's keys, listening, presence."
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [claudia.hub.github :as github]
             [claudia.hub.listen :as listen]
             [claudia.hub.narrate :as narrate]
             [claudia.hub.presence :as presence]
             [claudia.shared.presence :as p]))
-
 
 (deftest github-deliveries-that-act
   (is (github/main-push? "push" {:ref "refs/heads/main"}))
@@ -40,9 +39,25 @@
   (is (= "" (narrate/voice-of nil)))
   (is (= "calm" (narrate/voice-of "  calm ")))
   (is (= 200 (count (narrate/voice-of (apply str (repeat 300 "v"))))))
-  (is (not= (narrate/clip-key "" "http://a" "hi") (narrate/clip-key "calm" "http://a" "hi")))
-  (is (= (narrate/clip-key "calm" "http://a" "hi") (narrate/clip-key "calm" "http://b" "hi")))
-  (is (not= (narrate/clip-key "" "http://a" "hi") (narrate/clip-key "" "http://b" "hi"))))
+  (is (not= (narrate/clip-key "" nil "http://a" "hi") (narrate/clip-key "calm" nil "http://a" "hi")))
+  (is (= (narrate/clip-key "calm" nil "http://a" "hi") (narrate/clip-key "calm" nil "http://b" "hi")))
+  (is (not= (narrate/clip-key "" nil "http://a" "hi") (narrate/clip-key "" nil "http://b" "hi"))))
+
+(deftest narration-keys-by-language
+  (is (not= (narrate/clip-key "calm" nil "http://a" "hi") (narrate/clip-key "calm" "hu" "http://a" "hi")))
+  (is (not= (narrate/clip-key "" "de" "http://a" "hi") (narrate/clip-key "" "hu" "http://a" "hi")))
+  (is (not= (narrate/reference-key "calm" "Hello." nil) (narrate/reference-key "calm" "Hello." "en")))
+  (is (= 24 (count (narrate/reference-key "calm" "Hello." "hu")))))
+
+(deftest a-described-voice-is-cloned-from-a-clip-in-the-storys-language
+  (is (re-find #"^Hello\." (narrate/reference-text nil)))
+  (is (= (narrate/reference-text nil) (narrate/reference-text "en")))
+  (is (re-find #"^Szia\." (narrate/reference-text "hu")))
+  (is (nil? (narrate/reference-text "fi")))
+  (is (= "calm" (narrate/spoken-voice "calm" "hu")))
+  (is (= "calm" (narrate/spoken-voice "calm" nil)))
+  (testing "no reference sentence in the language: the service's default voice speaks it"
+    (is (= "" (narrate/spoken-voice "calm" "fi")))))
 
 (deftest said-text-trims-and-cuts
   (is (nil? (narrate/said-text {})))

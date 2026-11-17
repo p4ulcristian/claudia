@@ -1,7 +1,7 @@
 (ns claudia.shared.narration
   "What a 3D story's narrator says, the same for the page (claudia.web.scene3d.story), the runner
   that makes a story's video and the hub that voices it: each step's line, and the story's lines
-  with the voice they are said in."
+  with the voice and language they are said in."
   (:require [clojure.string :as str]))
 
 (def max-chars 1200)
@@ -19,22 +19,32 @@
   [data]
   (when (string? (:voice data)) (:voice data)))
 
+(defn language-of
+  "The language a story's lines are in (its `language`): an ISO 639 code like \"hu\", lower-cased,
+  or nil (none, or not a 2- or 3-letter code)."
+  [data]
+  (let [l (:language data)]
+    (when (string? l)
+      (let [code (str/lower-case (str/trim l))]
+        (when (re-matches #"[a-z]{2,3}" code) code)))))
+
 (defn lines
-  "The lines a story's narrator says, once each, in order: [{:text :instruction}]. None when the
-  story turns the narrator off (narrate: false)."
+  "The lines a story's narrator says, once each, in order: [{:text :instruction :language}]. None
+  when the story turns the narrator off (narrate: false)."
   [data]
   (if (or (false? (:narrate data)) (not (sequential? (:story data))))
     []
-    (let [instruction (voice-of data)]
+    (let [instruction (voice-of data)
+          language (language-of data)]
       (->> (:story data)
            (filter map?)
            (map say-of)
            (filter seq)
            distinct
-           (mapv (fn [t] {:text t :instruction instruction}))))))
+           (mapv (fn [t] {:text t :instruction instruction :language language}))))))
 
 (defn seconds-by-line
   "The clips' lengths as the narrator looks them up: [{:text :instruction :seconds}] ->
-  {[instruction text] seconds}."
+  {[instruction text] seconds}. One video is one story, so one language: it is not in the key."
   [clips]
   (into {} (map (juxt (juxt :instruction :text) :seconds)) clips))
