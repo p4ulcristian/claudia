@@ -744,7 +744,9 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .mn-foot { padding: 6px 8px 2px; font-size: 11px; color: var(--muted); }
 /* The update pill at the rail's foot (views/update_pill.cljs): small, two lines at most; its panel opens to the right. */
 .up-box { position: relative; display: flex; justify-content: center; padding: 6px 4px; }
-.up-pill { max-width: 58px; padding: 3px 6px; border-radius: 9px; font: 700 10px/1.2 var(--sans); text-align: center; color: var(--b, var(--muted));
+/* One size whatever it says (three lines of 12 px): a label or clock that changes never moves the rail. */
+.up-pill { box-sizing: border-box; width: 58px; height: 42px; display: grid; place-items: center; overflow: hidden; padding: 3px 4px; border-radius: 9px;
+  font: 700 10px/1.2 var(--sans); font-variant-numeric: tabular-nums; white-space: pre-line; text-align: center; color: var(--b, var(--muted));
   background: color-mix(in srgb, var(--b, var(--muted)) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--b, var(--muted)) 60%, transparent); }
 .up-pill.running { --b: var(--blue); animation: breathe 1.4s ease-in-out infinite; }
 .up-pill.done { --b: var(--green); }
