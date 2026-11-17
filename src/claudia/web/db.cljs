@@ -37,6 +37,7 @@
    :drafts {}              ; [server chat] or :new -> composer text
    :dictated {}            ; draft key -> [{:text :raw :shown}]: what the mic put in it (pure/dictated)
    :my-words nil           ; claudia.web.words: nil unknown, {:off true} no listen service, {:words :busy :error}
+   :words-panel? false     ; the My words panel is open (claudia.web.views.my-words)
    :words-offer nil        ; a corrected word offered for My words
    :words-offered (let [v (stored "claudia.wordsOffered" #js [])] (if (array? v) (set v) #{})) ; lower case, offered once
    :ask-state {}           ; ask id -> {:busy bool :error text}

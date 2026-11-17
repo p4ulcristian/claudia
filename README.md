@@ -485,7 +485,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
-    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (2026-11-17: ‹ mic › in one row, search and archive over it, all see-through at rest; the mic 128 px in so its flower fits). The rail's
+    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (2026-11-17: ‹ mic › in one row, search, My words and archive over it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
       circles (with +) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the

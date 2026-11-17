@@ -16,6 +16,7 @@
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
+            [claudia.web.views.my-words :as my-words]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
@@ -141,6 +142,7 @@
    [asks/modal]
    [confirm/archive-ask]
    [search-panel/panel]
+   [my-words/panel]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
