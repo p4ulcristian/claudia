@@ -553,8 +553,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     running (a live clock), “? asks · 3m” in amber while a question waits, “done · 12m”
     when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
     (claudia.web.views.pure.sidebar/status-line). The list and the group card keep their badges.
-    Still to decide: a card with the rest (started, project) on hover or long-press (long-press now
-    drags the chat to reorder it).
+    No card with more (started, project) on hover or long-press: dropped by the user the same day.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
