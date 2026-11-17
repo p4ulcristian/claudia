@@ -506,6 +506,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Web are gone in the app. A browser keeps the iOS menu (a page can't turn it off) and shows no
     pill. Instead of: keeping the iOS menu (the bug stays), a Copy button on every message (part of
     a message still meets the bug).
+43. A held selection holds the chat column still (2026-11-17): while a text selection is held in
+    the chat column, the column does not scroll itself to its end (streamed text, images loading);
+    once the selection is let go it catches up (claudia.web.selection). Each held selection tells
+    the hub's log (the mic log, event `selection`) how long it was held, how many self-scrolls it
+    held back and how often the column's text changed under it. Why: on an iPad selecting text
+    lagged and stopped at times, while a chat was answering: every streamed piece moved the text
+    under the finger dragging a handle. Instead of: guessing further from the simulator, whose
+    scripted touches on a still test chat never showed it.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
