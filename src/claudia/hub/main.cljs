@@ -13,7 +13,7 @@
             [claudia.hub.github :as github]
             [claudia.hub.health :as health]
             [claudia.hub.ops :as ops]
-            [claudia.hub.pairing :as pairing]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
             [claudia.hub.push :as push]
             [claudia.hub.systems :as systems]
@@ -229,15 +229,18 @@
    :data-dir (env-of "HUB_DATA" (path/join (env-of "XDG_DATA_HOME" (path/join (env-of "HOME" "/tmp") ".local/share")) "claudia-hub"))})
 
 (defn- start-parts!
-  "The store (a broken one stops the hub), pairing, narration, GitHub's webhook and push."
+  "The hub key and the store (either broken stops the hub), narration, GitHub's webhook and push."
   [{:keys [web-root config-file data-dir]}]
   (when-not (fs/existsSync (path/join web-root "index.html"))
     (js/console.warn (str "hub: " web-root "/index.html is missing: the page is not built")))
+  (try (hub-key/start!)
+       (catch :default e
+         (js/console.error (str "hub: " (.-message e)))
+         (js/process.exit 1)))
   (try (config/start! data-dir config-file)
        (catch :default e
          (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
          (js/process.exit 1)))
-  (pairing/start! data-dir)
   (narrate/start! data-dir)
   (github/start!)
   (releases/start! data-dir)

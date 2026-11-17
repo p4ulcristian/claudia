@@ -16,6 +16,7 @@
             [clojure.string :as str]
             [claudia.hub.apns :as apns]
             [claudia.hub.config :as config]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.hub.live :as live]
             [claudia.hub.presence :as presence]
             [claudia.hub.seal :as seal]
@@ -370,7 +371,8 @@
   (when-not (:stopped @w)
     (let [{:keys [email host port]} @w
           ^js ws (WebSocket. (str "ws://" (io/url-host host) ":" port "/ws")
-                             #js {:headers #js {"x-claudia-email" email} :handshakeTimeout 10000})
+                             #js {:headers (clj->js (assoc (hub-key/header (:server @w)) "x-claudia-email" email))
+                                  :handshakeTimeout 10000})
           alive (atom true)]
       (swap! w assoc :ws ws)
       (.on ws "open" #(opened! w ws alive))

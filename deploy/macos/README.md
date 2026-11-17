@@ -18,11 +18,12 @@ GUI session: from login on, while the user is logged in.
 
 ## The front's port
 
-The front believes the hub's `X-Claudia-Email`, so only the hub may reach it. Two things hold that:
+The front answers only calls carrying this Mac's hub key (`FRONT_HUB_KEY_FILE`, README decision
+47), so reaching its port is not enough. On top of that:
 
-- `FRONT_HOST` is the Mac's WireGuard address: the front listens there only. While the tunnel is
-  down the address does not exist, the front exits, and launchd starts it again every 5 s until it
-  can listen.
+- `FRONT_HOST` is the Mac's private-network address (Tailscale/Headscale): the front listens there
+  only. While that network is down the address does not exist, the front exits, and launchd starts
+  it again every 5 s until it can listen.
 - `guard.sh` (root) loads pf rules: `FRONT_PORT` in only from `FRONT_HUB_ADDRESS` (the hub's tunnel
   address) to `FRONT_HOST`, never over loopback; everything else to that port is dropped. macOS
   accepts a packet for any of its addresses on any interface, so binding alone would let a LAN host
@@ -38,8 +39,8 @@ The front believes the hub's `X-Claudia-Email`, so only the hub may reach it. Tw
    (secrets), `brew install --cask google-chrome` (the picture screenshots Claude gets back; or
    `node ~/claudia/node_modules/playwright-core/cli.js install chromium` after step 5). No Claude
    Code CLI: the release carries the Agent SDK's own Claude Code for darwin-arm64.
-2. The WireGuard app with the tunnel to the gate, On-Demand on (Wi-Fi and Ethernet), so it is up
-   whenever the Mac is online. Note the Mac's tunnel address and the hub's.
+2. The Mac on the private network the hub is on (Tailscale or Headscale), so it is up whenever the
+   Mac is online. Note the Mac's address there and the hub's.
 3. A clone of this repository anywhere (only for the first install), and the settings, written by
    hand:
    ```
@@ -55,11 +56,10 @@ The front believes the hub's `X-Claudia-Email`, so only the hub may reach it. Tw
    ```
    It installs main's signed build and runs `~/claudia/deploy/macos/install.sh --update`, which
    writes and loads the four agents.
-6. On the hub, the server is added (or already is) on the Servers page as "already on WireGuard"
-   with `<the Mac's tunnel address>:4540` (`FRONT_HOST:FRONT_PORT`), and people are ticked for it on
-   the Access page. No `deploy/pair.sh` (Linux only: wg-quick, nft): the Mac's tunnel is the
-   WireGuard app's. The hub writes the Claude token in use into `CLAUDIA_TOKEN_FILE` within a
-   minute.
+6. `bash ~/claudia/deploy/pair.sh https://<hub address>` prints a pairing key: paste it on the hub's
+   Servers page with `<the Mac's address>:4540` (`FRONT_HOST:FRONT_PORT`); it writes the Mac's hub
+   key and restarts the front. Tick people for it on the Access page. The hub writes the Claude
+   token in use into `CLAUDIA_TOKEN_FILE` within a minute.
 7. A Mac that serves stays awake on power: `sudo pmset -c sleep 0` (or System Settings > Battery >
    Options: prevent automatic sleeping on power adapter when the display is off). After a reboot
    the agents start when the user logs in.

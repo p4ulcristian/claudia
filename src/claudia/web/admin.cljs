@@ -1,8 +1,8 @@
 (ns claudia.web.admin
   "The admins' People and Servers pages (GET/PUT/POST/DELETE /hub/admin…): the people table (per
   person: which servers they use, whose chats they may write to, admin), and the servers the hub
-  reaches (add one already on WireGuard, pair a new one with the key deploy/pair.sh printed, change a
-  label or address, remove). A dialog over the page; every call answers the whole new state."
+  reaches (pair one with the key deploy/pair.sh printed, which gives it its hub key; change a label
+  or address; remove). A dialog over the page; every call answers the whole new state."
   (:require [clojure.string :as str]
             [claudia.web.api :as api]
             [claudia.web.format :as format]
@@ -53,21 +53,20 @@
 (defn person-path [email] (str "/hub/admin/people/" (js/encodeURIComponent email)))
 
 (defn pair-body
-  "What Pair sends: the key, and a name and label when given (all trimmed)."
+  "What Pair sends: the key, and an address, name and label when given (all trimmed)."
   [form]
-  (cond-> {:key (str/trim (:key form))}
-    (not (str/blank? (:name form))) (assoc :name (str/trim (:name form)))
-    (not (str/blank? (:label form))) (assoc :label (str/trim (:label form)))))
+  (into {:key (str/trim (:key form))}
+        (for [k [:address :name :label] :when (not (str/blank? (k form)))]
+          [k (str/trim (k form))])))
 
 (defn pairing-note
   "A server's pairing as [short state, longer tip]."
-  [{:keys [pairing peerUp]}]
+  [{:keys [pairing]}]
   (cond
-    (not pairing) ["on WireGuard" "Added by its address (already a WireGuard peer)"]
-    (:fetchedAt pairing) ["fetched" (str "Paired " (format/when-text (:createdAt pairing)) "; the server fetched its address "
-                                         (format/when-text (:fetchedAt pairing)) " (" (:ip pairing) ")")]
-    peerUp ["peer up" (str "The WireGuard peer is up (" (:ip pairing) "); waiting for the server to fetch its address")]
-    :else ["waiting for peer" (str "Paired " (format/when-text (:createdAt pairing)) "; the WireGuard peer isn't added yet")]))
+    (not pairing) ["by hand" "Its hub key was put on it by hand, not by pairing"]
+    (:fetchedAt pairing) ["paired" (str "Paired " (format/when-text (:createdAt pairing)) "; the server fetched its hub key "
+                                        (format/when-text (:fetchedAt pairing)))]
+    :else ["waiting" (str "Paired " (format/when-text (:createdAt pairing)) "; waiting for the server to fetch its hub key")]))
 
 ;; ---- views ----
 
@@ -102,7 +101,7 @@
          [:td.row-actions
           (when changed?
             [:button {:on-click #(call! "PUT" path {:label (str/trim @label) :address (str/trim @address)})} "Save"])
-          [remove-buttons @removing "Remove this server (its WireGuard peer too, if paired here)"
+          [remove-buttons @removing "Remove this server"
            #(reset! removing true) #(call! "DELETE" path) #(reset! removing false)]]]))))
 
 (defn- servers-table [servers]
@@ -121,30 +120,16 @@
 
 (defn- submit [f] (fn [e] (.preventDefault e) (f)))
 
-(defn- add-form [add]
+(defn- pair-form [pair]
   [:section
-   [:h3 "Add a server " [:span.muted.small "already on WireGuard"]]
-   [:form.admin-form
-    {:on-submit (submit #(let [{server-name :name :keys [label address]} @add]
-                           (call! "PUT" (server-path (str/trim server-name))
-                                  {:label (str/trim label) :address (str/trim address)}
-                                  [:admin/reset-form add])))}
-    [field :input add :name {:placeholder "name (team)" :spell-check false}]
-    [field :input add :label {:placeholder "Label (Team server)"}]
-    [field :input.mono add :address {:placeholder "host:port" :spell-check false}]
-    [:button {:disabled (or (str/blank? (:name @add)) (str/blank? (:address @add)))} "Add"]]])
-
-(defn- pair-form [pair pairing]
-  [:section
-   [:h3 "Pair a new server " [:span.muted.small "the key its pair script printed"]]
-   (if-not (:available pairing)
-     [:p.muted.small "Pairing is unavailable on this hub (it has no WireGuard address pool). Add servers already on WireGuard above."]
-     [:form.admin-form.pair
-      {:on-submit (submit #(call! "POST" "/hub/admin/pair" (pair-body @pair) [:admin/reset-form pair]))}
-      [field :input.mono.key pair :key {:placeholder "claudia-pair:…" :spell-check false :auto-complete "off"}]
-      [field :input pair :name {:placeholder "name (optional)" :spell-check false}]
-      [field :input pair :label {:placeholder "Label (optional)"}]
-      [:button {:disabled (str/blank? (:key @pair))} "Pair"]])])
+   [:h3 "Pair a server " [:span.muted.small "the key its pair script printed; an existing name gets its key again"]]
+   [:form.admin-form.pair
+    {:on-submit (submit #(call! "POST" "/hub/admin/pair" (pair-body @pair) [:admin/reset-form pair]))}
+    [field :input.mono.key pair :key {:placeholder "claudia-pair:…" :spell-check false :auto-complete "off"}]
+    [field :input.mono pair :address {:placeholder "host:port (its front, on your private network)" :spell-check false}]
+    [field :input pair :name {:placeholder "name (optional)" :spell-check false}]
+    [field :input pair :label {:placeholder "Label (optional)"}]
+    [:button {:disabled (str/blank? (:key @pair))} "Pair"]]])
 
 (defn builder-line
   "What the Release builder section says about the builder (README decision 29)."
@@ -163,14 +148,12 @@
     [:button {:disabled (str/blank? (:key @b))} (if (:host builder) "Replace" "Pair")]]])
 
 (defn- servers-page [_]
-  (let [add (r/atom {:name "" :label "" :address ""})
-        pair (r/atom {:key "" :name "" :label ""})
+  (let [pair (r/atom {:key "" :address "" :name "" :label ""})
         b (r/atom {:key ""})]
-    (fn [{:keys [servers pairing builder]}]
+    (fn [{:keys [servers builder]}]
       [:<>
        [servers-table servers]
-       [add-form add]
-       [pair-form pair pairing]
+       [pair-form pair]
        [builder-form b builder]])))
 
 ;; A form's inputs are emptied once its call succeeded (the atom travels in the event).
