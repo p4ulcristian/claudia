@@ -86,11 +86,15 @@
   (js/window.open (chat-url js/location.origin k) "_blank" (features js/window.innerWidth js/window.innerHeight))
   (move-on))
 
-(defn- end! [k move-on]
+(defn- end!
+  "A circle's drag ended: torn out (left the window or dropped on the page), it opens in a window of
+  its own; else it was a click that moved a little (a mouse slipping, a long touch), and the chat
+  opens here as a click would have."
+  [k move-on]
   (listen! false)
   (let [{:keys [outside? dropped?]} @drag]
     (reset! drag {})
-    (when (or outside? dropped?) (tear! k move-on))))
+    (if (or outside? dropped?) (tear! k move-on) (rf/dispatch [:nav/open k]))))
 
 (defn move-on!
   "After chat k is torn out: when it was open here (open), open the first chat of rows no other
