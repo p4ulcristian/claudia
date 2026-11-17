@@ -393,9 +393,8 @@ form, data, removeItems, width, before }]`, `removeBlocks`) to the chat's scene 
 block needs a `form`; a call in the older shape (`nodes`, `edges`, `groups`, `graph`, `remove`, or a
 block's `kind`, `html`, `parts`, `template`, `height`) is refused with the new shape spelled out. It keeps
 the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
-id made for a turn Claude started itself), sends `pictures`, and answers the draw with the text and a
-screenshot of the whole picture (`{ type: "image", data, mimeType: "image/png" }`), or the text and why
-there is none. A chat older than the history has only its last picture (turn `imported`).
+id made for a turn Claude started itself), sends `pictures`, and answers the draw with text only: what changed (no
+screenshot). A chat older than the history has only its last picture (turn `imported`).
 
 ## Secrets (1Password, `plan/1passwd-plan.md`)
 

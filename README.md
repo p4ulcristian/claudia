@@ -651,4 +651,4 @@ npx shadow-cljs release host runner front hub web
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
-- Every draw answers Claude with a screenshot of the picture: playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
+- The camera's PNG of the picture (draw answers carry no screenshot since 2026-11-18: one per draw was about 3% of all tokens spent): playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).

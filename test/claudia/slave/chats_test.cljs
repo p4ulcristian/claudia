@@ -160,10 +160,6 @@
   (is (= {:id "a" :kind "permit" :tool "ExitPlanMode" :title "Claude wants to use ExitPlanMode" :description "" :detail "{}"}
          (answers/permit-ask "a" "ExitPlanMode" {} nil nil))))
 
-(deftest draw-answer-carries-the-screenshot
-  (is (= [{:type "text" :text "ok"} {:type "image" :data "aGk=" :mimeType "image/png"}]
-         (:content (answers/draw-answer "ok" {:png (js/Buffer.from "hi")}))))
-  (is (= (answers/text-result "ok\n\n(No screenshot of the picture: gone)") (answers/draw-answer "ok" {:error "gone"}))))
 
 (deftest folder-and-image-answers
   (is (= "/h/x" (answers/home-path "~/x" "/h")))

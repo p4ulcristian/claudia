@@ -26,7 +26,6 @@
             [claudia.slave.tokens :as tokens]
             [claudia.slave.pictures :as pictures]
             [claudia.slave.projects :as projects]
-            [claudia.slave.render :as render]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.shown :as shown]
@@ -354,8 +353,7 @@
         (pictures/record! id turn prev s)
         (emit! id {:type "scene" :scene s :changed changed :turn turn})
         (emit! id {:type "pictures" :pictures (pictures/listing id)})
-        (-> (render/screenshot s (:color (store/chat id)))
-            (.then #(answers/draw-answer summary %)))))))
+        (answers/text-result summary)))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [done]

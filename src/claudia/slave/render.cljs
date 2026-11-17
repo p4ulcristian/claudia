@@ -1,6 +1,6 @@
 (ns claudia.slave.render
-  "A screenshot of a picture, so Claude sees what it drew (every draw returns one) and the page's
-  camera can save it. The page's own build (out/web of this checkout) is served on a loopback port
+  "A screenshot of a picture, for the page's camera (copy or save as PNG; draw answers carry none:
+  a screenshot in every draw answer cost Claude's context about 1,000 tokens per draw). The page's own build (out/web of this checkout) is served on a loopback port
   nobody is told about, as a render-only page (claudia.web.render); one headless Chromium, started
   on the first shot and closed after a minute without one, opens it, is handed the scene and shoots
   it. No browser or no built page: no screenshot, and the reason says why.
