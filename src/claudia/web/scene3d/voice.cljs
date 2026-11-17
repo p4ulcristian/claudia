@@ -15,15 +15,19 @@
   (let [^js b (voice/audio-buffer (context! narrator) buf)]
     {:buffer b :seconds (/ (.-length b) voice/rate)}))
 
-(defn- fetch-clip "A promise of a line's clip, or nil (the error kept)." [{:keys [error] :as narrator} text instruction]
-  (-> (voice/fetch-pcm text instruction)
+(defn- fetch-clip
+  "A promise of a line's clip, or nil (the error kept)."
+  [{:keys [error] :as narrator} text instruction language]
+  (-> (voice/fetch-pcm text instruction language)
       (.then #(clip-of narrator %))
       (.catch (fn [e] (reset! error (.-message e)) nil))))
 
-(defn- load! "A line's clip, fetched once per text and instruction." [{:keys [clips] :as narrator} text instruction]
-  (let [k [instruction text]]
+(defn- load!
+  "A line's clip, fetched once per text, instruction and language."
+  [{:keys [clips] :as narrator} text instruction language]
+  (let [k [instruction language text]]
     (or (get @clips k)
-        (let [p (fetch-clip narrator text instruction)] (swap! clips assoc k p) p))))
+        (let [p (fetch-clip narrator text instruction language)] (swap! clips assoc k p) p))))
 
 (defn- stop! [{:keys [source]}]
   (when-let [^js s @source] (try (.stop s) (catch :default _ nil)))
@@ -46,12 +50,12 @@
   (reset! ctx nil))
 
 (defn make
-  "One story's narrator: {:load (fn [text instruction] promise of clip or nil) :play :stop :pause
+  "One story's narrator: {:load (fn [text instruction language] promise of clip or nil) :play :stop :pause
   :resume :close :error (atom)}. A clip is {:buffer AudioBuffer :seconds n}."
   []
   (let [{:keys [ctx error] :as narrator} {:ctx (atom nil) :clips (atom {}) :source (atom nil) :error (atom "")}]
     {:error error
-     :load #(load! narrator %1 %2)
+     :load #(load! narrator %1 %2 %3)
      :play #(play! narrator %)
      :stop #(stop! narrator)
      :pause (fn [] (some-> ^js @ctx .suspend))
@@ -61,12 +65,13 @@
 (defn given
   "The narrator of a video made off screen: the clips' lengths are given ({[instruction text]
   seconds}) and nothing is heard; each line it says is noted in :said (an atom of [{:text
-  :instruction :at}], :at the clock's ms), for the video's sound. A line without a clip has none."
+  :instruction :at}], :at the clock's ms), for the video's sound. A line without a clip has none.
+  A video is one story in one language, so the language is not in the key."
   [seconds]
   (let [said (atom [])]
     {:error (atom "")
      :said said
-     :load (fn [text instruction]
+     :load (fn [text instruction _language]
              (js/Promise.resolve
               (when-let [secs (get seconds [instruction text])]
                 {:text text :instruction instruction :seconds secs})))

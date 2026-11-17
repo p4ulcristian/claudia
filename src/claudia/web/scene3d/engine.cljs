@@ -628,7 +628,7 @@
        :box (THREE/Box3.) :fitted false
        :script nil :arrows [] :steps []
        :sIdx -1 :sPlaying false :sElapsed 0 :sDur 0 :sToken 0 :sTick 0 :sLast 0
-       :sMuted (not= "on" (js/localStorage.getItem voice-key)) :sInstruction nil :sAutoplay false
+       :sMuted (not= "on" (js/localStorage.getItem voice-key)) :sInstruction nil :sLanguage nil :sAutoplay false
        :world nil :faces {} :raised nil :reader nil
        :focus #{} :cam nil :checker nil :flagged "" :bad #{} :chosen nil
        :frames 0 :scanSeconds scan-seconds
@@ -1044,7 +1044,7 @@
 (defn- narrate-step!
   "The narrator says the step's line (given 12 s to load); the step lasts as long as the clip."
   [{:keys [^js st narrator] :as sc} step mine est]
-  (-> (js/Promise.race #js [((:load narrator) (:say step) (.-sInstruction st))
+  (-> (js/Promise.race #js [((:load narrator) (:say step) (.-sInstruction st) (.-sLanguage st))
                             (js/Promise. (fn [r] (js/setTimeout #(r nil) 12000)))])
       (.then (fn [clip]
                (when (= mine (.-sToken st))
@@ -1168,7 +1168,7 @@
     (.-sMuted st) nil
     (>= n (count lines)) (ui! sc :voice-state "voice ready")
     :else (do (ui! sc :voice-state (str "voice " n "/" (count lines)))
-              (-> ((:load narrator) (nth lines n) (.-sInstruction st))
+              (-> ((:load narrator) (nth lines n) (.-sInstruction st) (.-sLanguage st))
                   (.then (fn [clip]
                            (if clip
                              (preload-line! sc lines (inc n))
@@ -1221,6 +1221,7 @@
   (let [steps (story/normalize (:story d))]
     (set! (.-steps st) steps)
     (set! (.-sInstruction st) (narration/voice-of d))
+    (set! (.-sLanguage st) (narration/language-of d))
     (ui! sc :story-len (count steps) :story steps :autoplay (:autoplay d))
     (if (empty? steps) (clear-story! sc) (keep-story! sc d steps))))
 
