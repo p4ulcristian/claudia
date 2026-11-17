@@ -6,6 +6,7 @@
             [claudia.slave.changes :as changes]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.codeforms :as codeforms]
+            [claudia.slave.tools :as tools]
             [claudia.slave.explain :as explain]
             [claudia.slave.git :as repo]
             [claudia.slave.runner :as runner]
@@ -187,3 +188,11 @@
     (let [s (:scene (scene/apply-draw scene/empty-scene {:blocks [{:id "x" :form "stats" :data {:tiles [{:id "t"}]}}]} ["stats" "notes"]))]
       (is (= {:id "x" :form "notes" :data {:text "hi"}}
              (first (:blocks (:scene (scene/apply-draw s {:blocks [{:id "x" :form "notes" :data {:text "hi"}}]} ["stats" "notes"])))))))))
+
+(deftest forms-news-carries-the-data
+  (let [news #'codeforms/forms-news]
+    (is (str/includes? (news nil {"graph" "1"}) "system prompt's forms list"))
+    (is (nil? (news {"graph" "1"} {"graph" "1"})))
+    (is (str/includes? (news {} {"stats" "1"}) (tools/help-lines ["stats"])))
+    (is (str/includes? (news {"stats" "0"} {"stats" "1"}) (str "Changed, their data now:\n" (tools/help-lines ["stats"]))))
+    (is (str/includes? (news {"stats" "1"} {}) "Gone (draw refuses them): stats."))))

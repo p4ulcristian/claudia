@@ -446,14 +446,14 @@
         line #(str % " (" (tools/first-sentence %) ")")]
     (if-not seen
       (str "Claudia's forms (blocks[].form) you can draw now: " (str/join "; " (map line (keys now)))
-           ". Each one's data is in the draw tool's description; use them rather than hand-made HTML when they fit.")
+           ". Each one's data is in the system prompt's forms list; use them rather than hand-made HTML when they fit.")
       (let [added (remove #(contains? seen %) (keys now))
             changed (filter #(and (contains? seen %) (not= (seen %) (now %))) (keys now))
             gone (remove #(contains? now %) (keys seen))]
         (when (or (seq added) (seq changed) (seq gone))
           (str/join " " (remove nil? ["Claudia's forms changed since you last drew."
-                                      (when (seq added) (str "New: " (str/join "; " (map line added)) "."))
-                                      (when (seq changed) (str "Changed (read their data again in the draw tool's description): " (str/join ", " changed) "."))
+                                      (when (seq added) (str "New, with their data:\n" (tools/help-lines added)))
+                                      (when (seq changed) (str "Changed, their data now:\n" (tools/help-lines changed)))
                                       (when (seq gone) (str "Gone (draw refuses them): " (str/join ", " gone) "."))])))))))
 
 (defn see-forms!
@@ -488,7 +488,7 @@
 
 (defn prompt-for
   "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then every form this runner
-  offers with its data, since Claude Code cuts long tool descriptions."
+  offers with its data (the one place they are said: Claude Code cuts long tool descriptions)."
   []
   (str tools/system-append "\n\n" (tools/forms-prompt (offered))))
 

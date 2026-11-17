@@ -13,7 +13,7 @@ You are running inside Claudia. The screen has two halves:
 - Left: the chat. Talk there like a friend: short, plain, one to three sentences, never over 400 characters. A final reply over 400 characters is hidden and handed back to you to shorten, so put what needs more room into the picture before you answer. No headings, tables, long lists or walls of text in the chat. Don't describe or point at the picture (\"the cards on the right cover…\"): the user sees it.
 - Right: the picture, which you control with the draw tool (mcp__picture__draw). The explaining lives there: what you are doing, how things connect, the plan, the options, what you found. Show most of it; say only a little.
 
-The picture is a canvas of blocks, top to bottom (two \"half\" blocks sit side by side). Every block is one form with its data (blocks: [{ id, name, form, data }]) and wears a badge with its form and its name. The forms and their data are listed in the draw tool's description (always the current list):
+The picture is a canvas of blocks, top to bottom (two \"half\" blocks sit side by side). Every block is one form with its data (blocks: [{ id, name, form, data }]) and wears a badge with its form and its name. The forms and their data are listed at the end of this prompt:
 - graph: circles, boxes, arrows and groups. The default.
 - The predefined forms (pipeline, compare, chart, files, …): common things drawn in the board's chalk style. Pick one when it fits; it is faster to read and cheaper to update than your own HTML.
 - html: your own small HTML page, for what no other form can show.
@@ -118,7 +118,7 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
     "html (a whole page or just its body, with inline <style> and <script>; elements with data-part=\"name\" can later be replaced through parts), parts?: { <name>: markup } (new inner markup for those elements, markup only: scripts in it do not run; the page is not reloaded), template? (a saved template's name: its page, which parts then fill)"]))
 
 (defn help-lines
-  "The forms part of the draw tool's description (src/forms.ts formsHelp): one line per form."
+  "The forms with their data (src/forms.ts formsHelp): one line per form."
   [forms]
   (str/join "\n" (for [f forms :let [[use-when fields] (form-help f)] :when use-when]
                    (str "- " f ": " use-when " Data: " fields "."))))
@@ -146,9 +146,9 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
         :id (s "Stable block id, reused across turns")
         :name (s "Short telling name shown on the block's badge, e.g. \"Deploy steps\"")
         :form {:type "string" :enum (if (seq forms) (vec forms) ["none"])
-               :description "The block's form (see this tool's description); needed for a new block, a block given another form starts empty"}
+               :description "The block's form (see the forms list in the system prompt); needed for a new block, a block given another form starts empty"}
         :data {:type "object" :propertyNames {:type "string"} :additionalProperties {}
-               :description "The form's data (see the forms in this tool's description): item lists are upserted by item id, an html page's parts merged, other fields replaced"}
+               :description "The form's data (see the forms list in the system prompt): item lists are upserted by item id, an html page's parts merged, other fields replaced"}
         :removeItems (strings "Ids of items to remove from the block's data (a graph's arrow: \"from->to\")")
         :width {:type "string" :enum ["full" "half"]
                 :description "full (default) or half: two half blocks in a row sit side by side"}
@@ -170,11 +170,12 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 
 (defn picture-mcp
   "The picture server's tools (src/prompt.ts pictureMcp). forms: the forms on offer here and now
-  (deleted and not on this runner left out)."
+  (deleted and not on this runner left out). The forms and their data are said once, in the system
+  prompt (forms-prompt): Claude Code cuts a tool description at about 4,000 characters, so the list
+  here was a cut-off copy read again on every call."
   [forms]
   {:draw {:description (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each one form with its data: a graph (nodes, arrows, groups), a predefined form or your own html page. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of an html page.\n\n"
-                            "Forms (blocks[].form + blocks[].data); pick graph or a predefined one when it fits, before html:\n"
-                            (help-lines forms))
+                            "The forms (blocks[].form + blocks[].data) and their data are listed in the system prompt, under \"The forms of the draw tool and their data\"; pick graph or a predefined one when it fits, before html.")
           :inputSchema (draw-schema forms)}
    :templates {:description "List the saved templates (html blocks kept by name): name, description, parts."
                :inputSchema {:type "object" :properties {} :additionalProperties false}}
@@ -206,8 +207,8 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                                   :command (s "The shell command, using the variable (e.g. curl -H \"Authorization: Bearer $GITHUB_TOKEN\" ...)")))}})
 
 (defn forms-prompt
-  "This version's addition to the system prompt: Claude Code cuts long tool descriptions, so every form this
-  runner offers is said here with its data too (the draw tool's description stays the live list)."
+  "The forms this runner offers, each with its data: the one place Claude reads them (the draw tool's
+  description points here; Claude Code cuts long tool descriptions)."
   [forms]
   (str "The forms of the draw tool and their data (blocks[].form + blocks[].data):\n" (help-lines forms)))
 
