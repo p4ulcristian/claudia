@@ -25,6 +25,17 @@
     (>= dx drag-px) :add
     :else :send))
 
+(defn clock-text
+  "A recording's time in ms with its milliseconds, so the start shows at once: \"0.000\",
+  \"12.345\" under a minute, \"1:02.345\" from then on."
+  [ms]
+  (let [ms (js/Math.floor (max 0 ms))
+        s (quot ms 1000)
+        milli (.padStart (str (mod ms 1000)) 3 "0")]
+    (if (< s 60)
+      (str s "." milli)
+      (str (quot s 60) ":" (.padStart (str (mod s 60)) 2 "0") "." milli))))
+
 (defn with-heard
   "The draft with heard text added at its end, one space between (a new line kept as it is)."
   [draft heard]

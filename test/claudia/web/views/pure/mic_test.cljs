@@ -57,3 +57,10 @@
         [_ out2] (mic/in-order l1 0 nil)]
     (is (= [] out1))
     (is (= [{:text "b"}] out2) "a failed earlier clip holds nothing back")))
+
+(deftest the-clock-shows-milliseconds
+  (is (= "0.000" (mic/clock-text 0)))
+  (is (= "0.007" (mic/clock-text 7.9)))
+  (is (= "12.345" (mic/clock-text 12345)))
+  (is (= "1:02.345" (mic/clock-text 62345)))
+  (is (= "0.000" (mic/clock-text -5)) "never below 0"))
