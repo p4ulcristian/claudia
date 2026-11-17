@@ -1,0 +1,5 @@
+shadow-cljs - config: /home/p4ulcristian/Work/tools/claudia/shadow-cljs.edn
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::arrayBaseOffset has been called by com.google.javascript.jscomp.jarjar.com.google.protobuf.UnsafeUtil$MemoryAccessor (file:/home/p4ulcristian/.m2/repository/com/google/javascript/closure-compiler/v20261021/closure-compiler-v20261021.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.javascript.jscomp.jarjar.com.google.protobuf.UnsafeUtil$MemoryAccessor
+WARNING: sun.misc.Unsafe::arrayBaseOffset will be removed in a future release
