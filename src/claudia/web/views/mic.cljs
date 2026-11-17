@@ -13,6 +13,7 @@
             [claudia.web.views.mic-flower :as flower]
             [claudia.web.views.pure.mic :as pure]
             [re-frame.core :as rf]
+            [claudia.web.views.pure.words :as words]
             [reagent.hooks :as h]))
 
 (defn- flower-state
@@ -135,8 +136,15 @@
     icon]
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
 
-(defn- view [{:keys [phase] :as parts}]
-  [:div.mic {:class (name phase)}
+(defn- colour-of
+  "The colour of the chat the mic speaks into (draft-key: [server chat] or :new), as a CSS var."
+  [draft-key]
+  (words/colour-var (if (vector? draft-key)
+                      (get-in @(rf/subscribe [:servers]) [(first draft-key) :rows (second draft-key) :color])
+                      (:color @(rf/subscribe [:new-settings])))))
+
+(defn- view [{:keys [phase draft-key] :as parts}]
+  [:div.mic {:class (name phase) :style {"--chat" (colour-of draft-key)}}
    [clips/clip-list]
    (core parts)])
 

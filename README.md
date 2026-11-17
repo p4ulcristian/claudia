@@ -497,7 +497,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     whatever the app can do better than the web view, the app does, and the page keeps working in a
     browser. Instead of: keeping the page's microphone in the app and only waking the app's session
     before each opening (WebKit owns that session; no guarantee it hands the input back).
-42. A Copy pill instead of the iOS edit menu (2026-11-17): in the iPhone/iPad app the iOS edit
+42. A Copy pill instead of the iOS edit menu (2026-11-17; TAKEN BACK the same night in app 1.4.2:
+    with the menu turned off, selecting text on the user's iPad lagged and mostly never started (the
+    hub logged 2 selections out of many tries), worse than the menu over the handle; the app shows
+    iOS's own menu again and the page shows no pill, since the pill only shows where the app answers
+    `claudiaText`): in the iPhone/iPad app the iOS edit
     menu is off outside text fields (ClaudiaWebView.swift), and a selection that rests gets one
     Copy pill above it (claudia.web.copy-pill), which copies through the app (`claudiaText`,
     UIPasteboard). In a text field the menu stays (Paste). Why: iOS 27 opens the edit menu right
