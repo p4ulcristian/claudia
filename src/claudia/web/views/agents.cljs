@@ -31,8 +31,8 @@
                         #(js/clearInterval t))))
                   [on])))
 
-(defn- facts-line [a]
-  [:span.ag-facts (str/join " · " (pure/facts-words a (js/Date.now)))])
+(defn- facts-line [a now]
+  [:span.ag-facts (str/join " · " (pure/facts-words a now))])
 
 (defn- status-mark [a]
   (if (running? a)
@@ -46,13 +46,16 @@
      [:span.ag-bar-fill {:style {:width (str pct "%")}}]
      [:span.ag-bar-text (str done "/" total (when (seq label) (str " " label)) " · " pct "%")]]))
 
-(defn- chip [ck a read-only?]
+(defn- chip
+  "One agent's chip; now: the time its clock shows, passed in so the parent's tick redraws it (a
+  Reagent component given the same arguments is not drawn again)."
+  [ck a read-only? now]
   [:div.ag-chip {:class (:status a) :role "button" :tab-index 0 :title (:name a)
                  :on-click #(rf/dispatch [:agents/open ck (:id a)])
                  :on-key-down #(when (#{"Enter" " "} (.-key %))
                                  (.preventDefault %)
                                  (rf/dispatch [:agents/open ck (:id a)]))}
-   [:span.ag-l1 [status-mark a] [:b.ag-name (:name a)] [facts-line a]]
+   [:span.ag-l1 [status-mark a] [:b.ag-name (:name a)] [facts-line a now]]
    (when (:progress a) [bar (:progress a) (:status a)])
    [:span.ag-l2 (str (or (:step a) (when (= "agent" (:kind a)) "starting…"))
                      (when (pos? (:children a)) (str " · +" (:children a))))]
@@ -81,7 +84,7 @@
       [:div.ag-row {:ref #(set! (.-current box) %)}
        (when (seq shown)
          [:div.ag-chips {:style {:grid-template-columns (str "repeat(" columns ", minmax(0, 1fr))")}}
-          (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])])
+          (for [a shown] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?]) (js/Date.now)])])
        (when (pos? more) (more-pill ck more))])))
 
 ;; ---- the list and one agent ----
@@ -93,7 +96,7 @@
       [:p.muted.small.ag-pad "No agents in this chat."]
       [:div.ag-scroll
        [:h2.ag-title "Agents " [:span.muted.small (str (when (pos? n) (str n " running · ")) (count agents) " in this chat")]]
-       [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?])])]])))
+       [:div.ag-list (for [a agents] ^{:key (:id a)} [chip ck a @(rf/subscribe [:read-only?]) (js/Date.now)])]])))
 
 (defn- file-row [_f]
   (let [open? (r/atom false)]
