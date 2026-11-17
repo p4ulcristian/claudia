@@ -10,10 +10,12 @@
   at once, before its first message (fresh-dot). On a touch tablet the circles sit centred at middle
   height, under the left thumb, and opening a chat scrolls its circle to the middle (README decision
   40)."
-  (:require [clojure.string :as str]
+  (:require [claudia.web.search-open :as search-open]
+            [clojure.string :as str]
             [re-frame.core :as rf]
             [claudia.shared.order :as order]
             [reagent.hooks :as h]
+            [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.pure.pull :as pull]
@@ -139,22 +141,18 @@
    [dot/chat-dot fresh false]
    [:span.rail-name title]])
 
-(defn- rail-top [ro]
+(defn- rail-top
+  "+, and the search button where the screen has no right-edge column (the iPad's edge has search)."
+  [ro edge?]
   (let [fresh @(rf/subscribe [:fresh-chat])]
     [:<>
+     (when-not edge?
+       [:button.rail-dot.search {:title "Search chats (\u2318K)" :aria-label "Search chats"
+                                 :on-click search-open/open!}
+        [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16 16l-3.5-3.5"}]]])
      (when-not ro
        [:button.rail-dot.add {:title "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])} "+"])
      (when fresh [fresh-dot fresh])]))
-
-(defn- rail-entries
-  "What the rail shows under +: while searching, the chats found (passive ones last); else the
-  person's order with its groups (README decision 38)."
-  [text elsewhere open]
-  (if (seq text)
-    (mapv (fn [r] {:kind :chat :row r})
-          (sidebar-pure/passive-last (sidebar-pure/matching @(rf/subscribe [:rows]) (sidebar-pure/search-key text))
-                                     elsewhere open))
-    @(rf/subscribe [:arranged])))
 
 (defn- entry-view [m i {:keys [kind row] :as e}]
   (if (= kind :group)
@@ -162,14 +160,13 @@
     ^{:key (str (:server row) "/" (:id row))} [rail-chat (assoc m :i i) row]))
 
 (defn rail []
-  (let [{:keys [text]} @(rf/subscribe [:search])
-        open @(rf/subscribe [:open])
+  (let [open @(rf/subscribe [:open])
         elsewhere @(rf/subscribe [:open-elsewhere])
-        entries (rail-entries text elsewhere open)
+        entries @(rf/subscribe [:arranged])
         rows (vec (mapcat #(or (:rows %) [(:row %)]) entries))
         ro @(rf/subscribe [:new-chat-read-only?])
         m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
-           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? (empty? text)}
+           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? true}
         box (h/use-ref nil)
         pulled (use-pull! box)]
     (use-centre-open! box open)
@@ -180,7 +177,7 @@
       (pull-mark pulled)
       [:div.rail-dots {:ref #(set! (.-current box) %)
                        :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
-       (rail-top ro)
+       (rail-top ro (hooks/use-media reach/touch-tablet))
        (map-indexed #(entry-view m %1 %2) entries)]]
      [update-pill/pill]
      [:f> menu/button]

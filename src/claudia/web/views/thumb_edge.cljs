@@ -7,7 +7,8 @@
   The composer leaves its own mic out on these screens (claudia.web.views.chat). The ‹ › show while
   the picture is unfolded and has more than one picture; the mic wherever the composer shows;
   archive while a chat is open."
-  (:require [re-frame.core :as rf]
+  (:require [claudia.web.search-open :as search-open]
+            [re-frame.core :as rf]
             [claudia.web.views.head :as head]
             [claudia.web.views.mic :as mic]))
 
@@ -18,7 +19,7 @@
 
 (defn- search-button []
   [:button.edge-step.edge-icon {:type "button" :aria-label "Search chats" :data-tip "Search chats"
-                                :on-click #(rf/dispatch [:sidebar/search])}
+                                :on-click search-open/open!}
    [:svg {:width 28 :height 28 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
           :stroke-linecap "round" :aria-hidden true}
     [:circle {:cx 11 :cy 11 :r 6}] [:path {:d "M20 20l-4.5-4.5"}]]])

@@ -21,6 +21,7 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.thumb-edge :as thumb-edge]
+            [claudia.web.views.search-panel :as search-panel]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
@@ -39,7 +40,8 @@
    [color]))
 
 (defn- keys!
-  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+B (⌘B) opens or closes the list."
+  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+B (⌘B) opens or closes the list,
+  Ctrl+K (⌘K) opens the search panel."
   []
   (h/use-effect
    (fn []
@@ -53,7 +55,10 @@
                  (do (.preventDefault e) (rf/dispatch [:nav/new]))
 
                  (and (or (.-ctrlKey e) (.-metaKey e)) (= "b" (.toLowerCase (.-key e))))
-                 (do (.preventDefault e) (rf/dispatch [:sidebar/toggle]))))]
+                 (do (.preventDefault e) (rf/dispatch [:sidebar/toggle]))
+
+                 (and (or (.-ctrlKey e) (.-metaKey e)) (= "k" (.toLowerCase (.-key e))))
+                 (do (.preventDefault e) (rf/dispatch [:search/open]))))]
        (js/window.addEventListener "keydown" k)
        #(js/window.removeEventListener "keydown" k)))
    []))
@@ -135,6 +140,7 @@
              :data-screen (name screen)}
    [asks/modal]
    [confirm/archive-ask]
+   [search-panel/panel]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})

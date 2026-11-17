@@ -269,3 +269,10 @@
                                          :servers {"s" {:rows {"u1" {:id "u1"}}}}))) "the list has it")
     (is (nil? (sidebar/fresh-chat (assoc base :open ["s" "c"]))) "another chat is open")
     (is (nil? (sidebar/fresh-chat (assoc base :open nil :ro true))) "only looking")))
+
+(deftest the-search-panel-lists
+  (let [rows [{:id "a" :archived true :at 1} {:id "b" :at 9} {:id "c" :archived true :at 5}]]
+    (is (= ["c" "a"] (mapv :id (sidebar/recent-archived rows 10))) "archived only, last active first")
+    (is (= ["c"] (mapv :id (sidebar/recent-archived rows 1))) "no more than n"))
+  (is (= [{:id "x"}] (sidebar/found-rows {"s" [{:id "x"} {:id "gone"}]} {["s" "x"] {:id "x"}}))
+      "the finds' rows; a find with no row left out"))

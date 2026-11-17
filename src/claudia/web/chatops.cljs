@@ -165,10 +165,9 @@
     :ops/search-later text}))
 
 (defn search-path
-  "The runner's search for text: among the archived chats when archived? (the archived list),
-  else among every chat, archived ones too."
-  [text archived?]
-  (str "search?q=" (js/encodeURIComponent text) "&archived=" (if archived? "1" "all")))
+  "The runner's search for text, among every chat, archived ones too (the search panel)."
+  [text]
+  (str "search?q=" (js/encodeURIComponent text) "&archived=all"))
 
 (rf/reg-event-fx
  :ops/search-now
@@ -180,7 +179,7 @@
      :else
      {:db (assoc-in db [:search :found] {})
       :fx (vec (for [s (keys (:servers db))]
-                 [:api/call {:url (api-url s (search-path text (:archived? db)) (:view db))
+                 [:api/call {:url (api-url s (search-path text) (:view db))
                              :on-ok [:ops/found s text]}]))})))
 
 (rf/reg-event-db

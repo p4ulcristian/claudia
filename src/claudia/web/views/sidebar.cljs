@@ -1,12 +1,14 @@
 (ns claudia.web.views.sidebar
   "The chat list (the phone's list screen and the desktop's drawer) and the Settings screen its gear
   opens over it (web/sidebar.tsx of the TypeScript Claudia). The list holds only chats: a header
-  (whose chats as a title menu, the 5-hour and week rings, the gear, + on a desktop), the search, the
-  rows; + floats bottom right on a phone. Every server's chats in one list, in the order they were
-  started. The archived list and a search's finds run newest first under time sections, each row
-  with its project; the archived list's project chips narrow both. Picking a chat from either brings
-  the chats list back (events/on-chat-screen)."
-  (:require [claudia.shared.order :as order]
+  (whose chats as a title menu, the 5-hour and week rings, the gear, the search button that opens
+  the search panel, claudia.web.views.search-panel, + on a desktop), the rows; + floats bottom
+  right on a phone. Every server's chats in one list, in the order they were started. The archived
+  list runs newest first under time sections, each row with its project, narrowed by its project
+  chips. Picking a chat brings the chats list back (events/on-chat-screen). The search panel draws
+  its finds and its recently archived chats with this namespace's found-list and archived-rows."
+  (:require [claudia.web.search-open :as search-open]
+            [claudia.shared.order :as order]
             [claudia.web.views.chat-groups :as groups]
             [clojure.string :as str]
             [re-frame.core :as rf]
@@ -114,7 +116,7 @@
      (for [h (:hits f)]
        ^{:key (:uuid h)} [found-hit k h])]))
 
-(defn- found-list
+(defn found-list
   "The search's chats with their hits (and the chats of a project whose name matches), in the project
   chip's project, under time sections; an archived one is tagged when the list mixes them (not the
   archived list)."
@@ -170,6 +172,9 @@
    [:header.cs-head
     [settings/title-menu]
     [logotools/tools]
+    [:button.cs-icon.cs-search {:aria-label "Search chats" :data-tip "Search chats (\u2318K)"
+                                :on-click search-open/open!}
+     [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16 16l-3.5-3.5"}]]]
     (when (and (not ro) (not phone?))
       [:button.cs-icon.cs-add {:aria-label "New chat" :data-tip "New chat (Alt+N)" :on-click #(rf/dispatch [:nav/new])}
        [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])]
@@ -183,7 +188,7 @@
   [:button.cs-chip {:class (when on? "on") :title tip :on-click on-click}
    label [:span.n n]])
 
-(defn- project-chips
+(defn project-chips
   "The archived list's projects as chips (All first); one picked narrows the list and the search."
   [rows chosen]
   (let [chips (pure/project-chips rows)]
@@ -195,17 +200,7 @@
          [chip-button label n (= k chosen) (if (seq k) (format/tilde k) "Chats with no project folder")
           #(rf/dispatch [:ops/project-filter k])])])))
 
-(defn- search-box [search-ref text rail-search? archived?]
-  [:label.search-box.cs-search
-   [:input.search {:ref #(set! (.-current search-ref) %)
-                   :placeholder (if archived? "Search archived: titles, projects, what was said" "Search chats")
-                   :value (or text "")
-                   :on-change #(rf/dispatch [:ops/search (.. % -target -value)])
-                   :on-key-down #(when (and (= "Escape" (.-key %)) rail-search?)
-                                   (.stopPropagation %)
-                                   (rf/dispatch [:sidebar/toggle false]))}]])
-
-(defn- archived-rows
+(defn archived-rows
   "The archived list: newest first under time sections, each row with its project; a pick opens the
   chat and the chats list comes back."
   [{:keys [shown open multi? ro-servers q]}]
@@ -259,55 +254,39 @@
    (when (and (empty? shown) (not new-pending?))
      [:p.muted.small.cs-empty (pure/empty-note q archived?)])])
 
-(defn- use-search-focus! [search-ref rail-search?]
-  (h/use-effect
-   (fn []
-     (when rail-search?
-       (js/requestAnimationFrame #(some-> (.-current search-ref) .focus)))
-     nil)
-   [rail-search?]))
-
-(defn- by-key [rows] (into {} (map (juxt (juxt :server :id) identity)) rows))
+(defn by-key "Rows by [server id]." [rows] (into {} (map (juxt (juxt :server :id) identity)) rows))
 
 (defn- list-state
-  "What the list shows: the rows the search text and the project chip keep, and what found-list and
-  the rows need."
-  [rows every-row {:keys [archived? text chip]}]
-  (let [open @(rf/subscribe [:open])
-        q (pure/search-key text)]
-    {:shown (pure/in-project (pure/matching rows q) chip) :open open :q q :archived? archived? :chip chip
+  "What the list shows: the rows the project chip keeps, and what the rows need."
+  [rows every-row {:keys [archived? chip]}]
+  (let [open @(rf/subscribe [:open])]
+    {:shown (pure/in-project rows chip) :open open :q "" :archived? archived? :chip chip
      :in-scope (if archived? rows every-row)
      :multi? @(rf/subscribe [:multi-server?]) :ro @(rf/subscribe [:new-chat-read-only?])
      :ro-servers @(rf/subscribe [:read-only-servers]) :viewing? @(rf/subscribe [:viewing-other?])
      :new-pending? (and open (not (contains? (by-key rows) open))
                         (contains? @(rf/subscribe [:pending-new]) (second open)))}))
 
-(defn- list-body [{:keys [archived?] :as m} found every-row text]
+(defn- list-body [{:keys [archived?] :as m}]
   (cond
     (nil? @(rf/subscribe [:me])) nil
-    found [found-list found (by-key every-row) m text]
     archived? (archived-rows m)
     :else (chat-rows m)))
 
 (defn chat-list [phone?]
   (let [rows @(rf/subscribe [:rows])
         every-row @(rf/subscribe [:all-rows])
-        rail-search? @(rf/subscribe [:rail-search?])
         {:keys [archived? all-sessions?]} @(rf/subscribe [:list-mode])
-        {:keys [text found]} @(rf/subscribe [:search])
         chip (when archived? @(rf/subscribe [:project-filter]))
-        search-ref (h/use-ref nil)
-        {:keys [open ro] :as m} (list-state rows every-row {:archived? archived? :text text :chip chip})]
+        {:keys [open ro] :as m} (list-state rows every-row {:archived? archived? :chip chip})]
     (scroll-open-into-view! [(str open) (count rows)])
-    (use-search-focus! search-ref rail-search?)
     [:div.cs-pane
      (list-head ro phone? archived? (count rows))
-     (search-box search-ref text rail-search? archived?)
      (when archived? [project-chips rows chip])
      [:nav.cs-list {:aria-label "Chats"}
       [off-notes]
-      [list-body m found every-row text]
-      (when-not found [sessions-list (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))])]
+      [list-body m]
+      [sessions-list (when (and all-sessions? (not archived?)) @(rf/subscribe [:sessions]))]]
      ;; The settings gear at the bottom left, where the rail has it.
      [:div.cs-foot [:f> menu/button]]
      (when (and (not ro) phone?)
