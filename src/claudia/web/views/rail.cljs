@@ -105,6 +105,14 @@
      [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
       [:path {:d "M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"}]]]))
 
+(defn status
+  "The line under a chat's name (README decision 46): running time and agents, a question waiting,
+  done since, or last active; it ticks every second."
+  [r done?]
+  (let [now (hooks/use-now)
+        [kind text] (sidebar-pure/status-line r done? now)]
+    [:span.rail-status {:class kind} text]))
+
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
   shows it under the title); dragged out of the window, the chat opens in a window of its own."
@@ -130,8 +138,9 @@
                         :aria-label title
                         :on-click #(sidebar/pick! k (= k open) %)
                         :on-context-menu #(chatmenu/open-at! k %)})
-     [dot/chat-dot r (and (not viewing?) (:unseen r) (not= k open))]
-     [:span.rail-name title]]))
+     [dot/chat-dot r (and (not viewing?) (:unseen r) (not= k open)) true]
+     [:span.rail-name title]
+     [:f> status r (and (not viewing?) (:unseen r) (not= k open))]]))
 
 (defn- fresh-dot
   "The chat being started, at the top at once (README decision 31): the open one, in its colour,

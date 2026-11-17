@@ -779,3 +779,15 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .copy-pill { position: fixed; z-index: 95; width: 68px; height: 40px; border-radius: 20px; border: 0;
   font: 600 15px/1 var(--sans); color: var(--bg); background: var(--fg); box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+/* The rail's circles (README decision 46): bigger, no badges; a ring turns round the circle while
+   the chat works, and the line under the name says the rest. */
+.rail .rail-chat .rail-dot { zoom: 1.25; }
+.work-ring { position: absolute; inset: -4px; border-radius: 50%; border: 2px solid transparent; pointer-events: none;
+  border-top-color: var(--green); border-right-color: var(--green); animation: work-turn 1.1s linear infinite; }
+@keyframes work-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .work-ring { animation: none; border-color: var(--green); opacity: 0.6; } }
+.rail-status { max-width: 100%; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+  font: 600 9.5px/1.25 var(--sans); font-variant-numeric: tabular-nums; color: var(--muted); opacity: 0.85; pointer-events: none; }
+.rail-status.running { color: var(--green); opacity: 1; }
+.rail-status.asks { color: var(--amber); opacity: 1; }
+.rail-status.done { color: var(--fg); opacity: 1; }

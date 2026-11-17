@@ -45,6 +45,54 @@
        (sort-by (juxt #(= "" (:key %)) (comp - :count) (comp str/lower-case :label)))
        vec))
 
+(def ^:private weekdays ["Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat"])
+(def ^:private months ["Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"])
+
+(defn short-ago
+  "How long ago ms (epoch) was at now, short: \"now\", \"12m\", \"2h\", the weekday within a
+  week, else \"12 Nov\"."
+  [ms now]
+  (let [d (- now ms) m (quot d 60000) h (quot m 60)]
+    (cond
+      (< m 1) "now"
+      (< m 60) (str m "m")
+      (< h 24) (str h "h")
+      (< h (* 24 7)) (weekdays (.getDay (js/Date. ms)))
+      :else (let [t (js/Date. ms)] (str (.getDate t) " " (months (.getMonth t)))))))
+
+(defn- clock
+  "ms as a running clock: \"0:07\", \"4:12\", \"1:02:05\"."
+  [ms]
+  (let [s (quot (max 0 ms) 1000) two #(if (< % 10) (str "0" %) (str %))
+        h (quot s 3600) m (quot (mod s 3600) 60)]
+    (if (pos? h) (str h ":" (two m) ":" (two (mod s 60))) (str m ":" (two (mod s 60))))))
+
+(defn- agents-text [n] (str n " agent" (when (not= n 1) "s")))
+
+(defn status-line
+  "The rail's line under a chat's name (README decision 46), [kind text]: running (how long, and
+  its agents), asks (a question waits on you, how long), done (finished since you looked, how
+  long ago), quiet (last active). runningSince / askedAt are page times (with-clock-times)."
+  [{:keys [waiting running agents runningSince askedAt ended at]} done? now]
+  (let [n (or agents 0)]
+    (cond
+      waiting ["asks" (str "? asks" (when askedAt (str " \u00b7 " (short-ago askedAt now))))]
+      (and running runningSince) ["running" (str (clock (- now runningSince)) (when (pos? n) (str " \u00b7 " (agents-text n))))]
+      (or running (pos? n)) ["running" (if (pos? n) (agents-text n) "working")]
+      (and done? (pos? ended)) ["done" (str "done \u00b7 " (short-ago ended now))]
+      (pos? at) ["quiet" (let [a (short-ago at now)] (if (re-find #"\d[mh]$" a) (str a " ago") a))]
+      :else ["quiet" ""])))
+
+(defn with-clock-times
+  "A server's chat rows as they came at now (page time): runningFor and the asks' ago become the page
+  times runningSince and askedAt, so a clock can run on without a new frame."
+  [chats now]
+  (mapv (fn [{:keys [runningFor asks] :as c}]
+          (cond-> c
+            runningFor (assoc :runningSince (- now runningFor))
+            (seq asks) (assoc :askedAt (- now (apply max (map #(or (:ago %) 0) asks))))))
+        chats))
+
 (defn recent-archived
   "The n archived rows last active, newest first: the search panel's list before a word is typed
   (a row keeps no time of its archiving; its last activity is the nearest)."

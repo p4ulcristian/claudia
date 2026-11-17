@@ -547,6 +547,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     that message. Project chips under the field. ✕, Escape or a tap on the dimmed page closes it,
     the typed words kept. The list's search box went, and the rail no longer filters itself.
     Instead of: Open / Archived tabs, an empty panel until typing, a full screen, swipe to close.
+46. The rail says how each chat stands (2026-11-17, the user's picks): bigger circles (42 px), no
+    badges on them; a green ring turns round the circle while the chat works (a turn or its agents).
+    Under the name (two lines, as before) a third line in words: “4:12 · 2 agents” while
+    running (a live clock), “? asks · 3m” in amber while a question waits, “done · 12m”
+    when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
+    (claudia.web.views.pure.sidebar/status-line). The list and the group card keep their badges.
+    Still to decide: a card with the rest (started, project) on hover or long-press (long-press now
+    drags the chat to reorder it).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
