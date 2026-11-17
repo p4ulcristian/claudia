@@ -6,6 +6,7 @@
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
             [claudia.web.updates :as updates]
+            [claudia.web.views.pure.agents :as agents-pure]
             [claudia.web.views.pure.chat :as chat-pure]
             [claudia.web.views.pure.dictated :as dictated]
             [claudia.web.views.pure.mic :as mic]
@@ -622,7 +623,10 @@
 
 (rf/reg-event-fx
  :mic/heard
- (fn [{:keys [db]} [_ k heard dir]] (heard-fx db k heard dir)))
+ ;; A "now" press in a chat whose helpers still run is sent without stopping the turn (it would
+ ;; stop them too): it arrives in the running turn like a plain send.
+ (fn [{:keys [db]} [_ k heard dir]]
+   (heard-fx db k heard (agents-pure/mic-dir dir (when (vector? k) (get-in db [:chats k :agents]))))))
 
 (defn- on-open-chat [db f]
   (let [[server chat] (:open db)]

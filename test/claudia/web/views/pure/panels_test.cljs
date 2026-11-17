@@ -288,3 +288,15 @@
     (is (= ["quiet" "now"] (sidebar/status-line {:at now} false now))))
   (is (= [{:runningFor 4000 :runningSince 6000} {:asks [{:ago 100} {:ago 300}] :askedAt 9700} {:id "c"}]
          (sidebar/with-clock-times [{:runningFor 4000} {:asks [{:ago 100} {:ago 300}]} {:id "c"}] 10000))))
+
+(deftest mic-now-keeps-helpers
+  (testing "\"now\" stops the turn only when no helper runs"
+    (let [helper {:kind "agent" :status "running"}
+          shell {:kind "shell" :background true :status "running"}
+          done {:kind "agent" :status "completed"}]
+      (is (= :send (agents/mic-dir :now [helper])))
+      (is (= :send (agents/mic-dir :now [done shell])))
+      (is (= :now (agents/mic-dir :now [done])))
+      (is (= :now (agents/mic-dir :now nil)))
+      (is (= :add (agents/mic-dir :add [helper])))
+      (is (= :cancel (agents/mic-dir :cancel [helper]))))))

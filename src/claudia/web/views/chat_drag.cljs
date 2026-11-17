@@ -11,7 +11,7 @@
 (def ^:private hold-ms 350)
 (def ^:private move-px 6)
 
-;; {:cref :x0 :y0 :touch? :started :timer :ghost :mark [el class] :drop target}
+;; {:cref :x0 :y0 :touch? :started :moved :timer :ghost :mark [el class] :drop target}
 (defonce ^:private drag (atom nil))
 
 (defn- clear-mark! []
@@ -82,8 +82,11 @@
     (.add (.-classList js/document.body) "chat-dragging")
     (swap! drag assoc :started true :ghost ghost)))
 
-(defn- finish! []
-  (let [{:keys [cref started ^js ghost timer] target :drop} @drag]
+(defn- finish!
+  "Ends a press; true when it was a real drag (lifted and moved), whose closing click must not open
+  the chat. A finger held still past hold-ms and let go is a tap: the chat opens."
+  []
+  (let [{:keys [cref started moved ^js ghost timer] target :drop} @drag]
     (some-> timer js/clearTimeout)
     (some-> ghost .remove)
     (clear-mark!)
@@ -94,13 +97,13 @@
         (rf/dispatch [:order/change (change-for cref target gid)])
         ;; A new group asks for its name at once.
         (when (= :group (first target)) (rf/dispatch [:order/renaming gid]))))
-    started))
+    (boolean (and started (or moved target)))))
 
 (defn- on-move [^js e]
   (when-let [{:keys [started x0 y0 touch? timer row]} @drag]
     (let [far? (> (js/Math.hypot (- (.-clientX e) x0) (- (.-clientY e) y0)) move-px)]
       (cond
-        started (over! e)
+        started (do (when far? (swap! drag assoc :moved true)) (over! e))
         (and far? touch?) (do (js/clearTimeout timer) (reset! drag nil))   ; a scroll, not a drag
         far? (do (lift! row) (over! e))))))
 
