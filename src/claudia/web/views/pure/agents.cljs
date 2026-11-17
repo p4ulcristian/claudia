@@ -20,6 +20,17 @@
 
 (defn running? [a] (= "running" (:status a)))
 
+(defn helper-running?
+  "A subagent or background shell still at work: stopping the chat's turn would stop it too."
+  [a]
+  (and (running? a) (or (= "agent" (:kind a)) (:background a))))
+
+(defn mic-dir
+  "What a mic press does in a chat with agents: :now (stop the turn, then send) becomes :send while
+  a helper runs, since stopping the turn stops every helper with it; any other dir stays."
+  [dir agents]
+  (if (and (= dir :now) (some helper-running? agents)) :send dir))
+
 (defn elapsed
   "How long it ran (until now while it runs)."
   [a now]
@@ -33,7 +44,7 @@
   background shells (as many as fit: up to four on a desktop, two on a phone, the most active),
   how many more, the finished and failed counts, and the grid's columns."
   [agents width phone?]
-  (let [running (filter #(and (running? %) (or (= "agent" (:kind %)) (:background %))) agents)
+  (let [running (filter helper-running? agents)
         finished (remove running? agents)
         failed (count (filter #(= "failed" (:status %)) finished))
         cols (max 1 (js/Math.floor (/ (+ width gap) (+ chip-min gap))))
