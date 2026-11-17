@@ -377,6 +377,13 @@
 
 (defn running-any? [chat] (some #(= "running" (:status %)) (vals (get @tasks chat))))
 
+(defn running-ids
+  "The ids of the running tasks in ts (a chat's tasks by id)."
+  [ts]
+  (vec (for [[id t] ts :when (= "running" (:status t))] id)))
+
+(defn running-of [chat] (running-ids (get @tasks chat)))
+
 ;; One agent -----------------------------------------------------------------------------------
 
 (defn- edit-of

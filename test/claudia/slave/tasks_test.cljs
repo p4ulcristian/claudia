@@ -80,3 +80,7 @@
       (is (= [{:path "/w/a.txt" :rel "a.txt" :added 1 :removed 1
                :edits [{:name "Edit" :before "a\n" :after "b\n"}]}]
              (:files view))))))
+
+(deftest running-ids-of-a-chat
+  (is (= ["a"] (tasks/running-ids {"a" {:status "running"} "b" {:status "completed"} "c" {:status "stopped"}})))
+  (is (= [] (tasks/running-ids nil))))

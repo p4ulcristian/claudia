@@ -26,4 +26,4 @@
   (when-let [{:keys [title]} @(rf/subscribe [:archive-ask])]
     [card {:title "Archive this chat?" :yes "Archive"
            :on-yes #(rf/dispatch [:archive/confirm]) :on-no #(rf/dispatch [:archive/keep])}
-     [:p [:b (if (seq title) title "This chat")] " leaves the list. It stays under Archived, and you can unarchive it any time."]]))
+     [:p [:b (if (seq title) title "This chat")] " stops now: its running turn, its background work and its Claude Code. It leaves the list and stays under Archived; writing to it brings it back."]]))

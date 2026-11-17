@@ -37,10 +37,12 @@
 
 (def cwd (env/env "CLAUDIA_CWD" (path/join (os/homedir) "Work")))
 
-;; An archived or passive chat whose turn ended this long ago lets its Claude Code process go; the
-;; next message resumes it. An open chat keeps its process (view/keeps-session?), so other sessions
-;; can always message it.
+;; A passive chat whose turn ended this long ago lets its Claude Code process go; the next message
+;; resumes it. An archived chat lets it go at once (archive-stop!). An open chat keeps its process
+;; (view/keeps-session?), so other sessions can always message it.
 (def ^:private idle-ms (* 15 60 1000))
+;; An archived chat whose interrupted turn hasn't ended by then has its process closed anyway.
+(def ^:private archive-grace-ms 10000)
 (def ^:private secret-ms (* 10 60 1000))
 
 (def chat-colors colours/chat-colours)
@@ -146,22 +148,35 @@
 
 (declare arm-idle! turn-id! restart-if-stale! send-text!)
 
+(declare stop-task! close-session!)
+
+(defn- archived? [id] (boolean (:archived (store/chat id))))
+
+(defn- archive-out!
+  "An archived chat's turn has ended: every agent and background shell it started is stopped, then
+  its Claude Code process goes."
+  [id]
+  (-> (js/Promise.all (clj->js (map #(stop-task! id %) (tasks/running-of id))))
+      (.then #(when (and (archived? id) (:live (st id)) (not (:running (st id))))
+                (close-session! id)))))
+
 (defn- idle-out!
-  "The quiet while is over: an archived or passive chat's Claude Code goes, unless work it started
-  still runs. An open chat keeps it."
+  "The quiet while is over: a passive chat's Claude Code goes, unless work it started still runs;
+  an archived chat's goes with all its work. An open chat keeps it."
   [id]
   (when (and (:live (st id)) (not (:running (st id))) (not (view/keeps-session? (store/chat id))))
-    (if (tasks/running-any? id)
-      (arm-idle! id)
-      (do (hostlink/send! {:op "close" :id id})
-          (swap-chat! id assoc :live false)))))
+    (cond (archived? id) (archive-out! id)
+          (tasks/running-any? id) (arm-idle! id)
+          :else (do (hostlink/send! {:op "close" :id id})
+                    (swap-chat! id assoc :live false)))))
 
 (defn- arm-idle!
-  "Its Claude Code goes after a quiet while, never while work it started still runs (that would end
-  the work; settling arms it again once the last of it ended)."
+  "Its Claude Code goes after a quiet while (an archived chat's at once), never while work it
+  started still runs (that would end the work; settling arms it again once the last of it ended)."
   [id]
   (some-> (:idle (st id)) js/clearTimeout)
-  (swap-chat! id assoc :idle (when-not (:running (st id)) (js/setTimeout #(idle-out! id) idle-ms))))
+  (let [ms (if (archived? id) 0 idle-ms)]
+    (swap-chat! id assoc :idle (when-not (:running (st id)) (js/setTimeout #(idle-out! id) ms)))))
 
 ;; Settling (src/chat.ts watchWork): the last background task ended after Claude's turn. Its notice
 ;; usually starts a turn of Claude's own within a moment, so the chat counts as finished only when
@@ -516,7 +531,6 @@
         t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
     (if (seq t) t (throw (js/Error. "No Claude token yet: add one in Settings (bottom left).")))))
 
-(declare close-session!)
 
 (defn token-of
   "The token chat id runs on: the saved one picked for it (README decision 16), else the one in use
@@ -953,13 +967,34 @@
   (doseq [r (store/chats) :when (and (view/keeps-session? r) (not (:live (st (:id r)))))]
     (open-session! (:id r))))
 
+(declare stop!)
+
+(defn- force-out!
+  "The archived chat's interrupted turn never ended: its Claude Code process is closed anyway."
+  [id]
+  (when (and (archived? id) (:running (st id)))
+    (close-session! id)
+    (set-running! id false)
+    (swap-chat! id assoc :stopping false)))
+
+(defn- archive-stop!
+  "Archiving ends everything at once: the running turn is stopped (messages waiting for it are
+  dropped), then its agents, background shells and Claude Code process (archive-out!)."
+  [id]
+  (swap-chat! id dissoc :after-stop)
+  (if (:running (st id))
+    (do (stop! id)
+        (js/setTimeout #(force-out! id) archive-grace-ms))
+    (arm-idle! id)))
+
 (defn session-follows-row!
   "After the chat was archived, brought back, made passive or woken: an open chat gets its Claude
-  Code, an archived or passive one lets it go once its turn and its work are done."
+  Code, an archived one stops everything at once, a passive one lets it go once its turn and its
+  work are done."
   [id]
-  (if (view/keeps-session? (store/chat id))
-    (open-session! id)
-    (arm-idle! id)))
+  (cond (view/keeps-session? (store/chat id)) (open-session! id)
+        (archived? id) (archive-stop! id)
+        :else (arm-idle! id)))
 
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in."
@@ -1006,8 +1041,6 @@
     (changed!)
     (send-text! id message images)
     id))
-
-(declare stop!)
 
 (defn send-after-stop!
   "A message sent with now: while a turn runs, the turn stops and the message waits for its end
