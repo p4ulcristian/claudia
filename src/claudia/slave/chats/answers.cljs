@@ -41,15 +41,6 @@
      :description (or (not-empty description) (history/tool-title tool input))
      :detail (text/fit (js/JSON.stringify (clj->js input) nil 2) 2000)}))
 
-(defn draw-answer
-  "The draw tool's answer: what changed, and a screenshot of the picture as it looks now, so Claude
-  sees its own drawing; one that failed is said in the text, never the draw's failure."
-  [summary {:keys [^js png error]}]
-  (if png
-    {:content [{:type "text" :text summary}
-               {:type "image" :data (.toString png "base64") :mimeType "image/png"}]}
-    (text-result (str summary "\n\n(No screenshot of the picture: " error ")"))))
-
 (defn home-path
   "A path with a leading ~ as the home folder."
   [p home]
