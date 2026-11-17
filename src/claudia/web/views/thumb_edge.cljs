@@ -3,11 +3,12 @@
   its sides partway up, so the right thumb rests on the right edge at middle height. There: ‹ (the
   previous picture), the mic and › (the next picture) in a row, left going left and right going
   right; over them search (the chats), My words (the panel of claudia.web.views.my-words: see, add
-  and remove them) and archive (the open chat, asked first; unarchive for an archived one). Each at
-  least 12 mm, all see-through at rest.
+  and remove them) and archive (the open chat, asked first; unarchive for an archived one); under
+  them New chat (the rail has no + any more). Each at least 12 mm, all see-through at rest.
   The composer leaves its own mic out on these screens (claudia.web.views.chat). The ‹ › show while
   the picture is unfolded and has more than one picture; the mic wherever the composer shows; My
-  words where the composer shows and the hub has a listen service; archive while a chat is open."
+  words where the composer shows and the hub has a listen service; archive while a chat is open;
+  New chat where a new chat can be written in."
   (:require [claudia.web.search-open :as search-open]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -33,6 +34,13 @@
           :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
     [:path {:d "M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"}]
     [:path {:d "M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"}] [:path {:d "M9 7.5h6"}]]])
+
+(defn- new-button []
+  [:button.edge-step.edge-icon {:type "button" :aria-label "New chat" :data-tip "New chat (Alt+N)"
+                                :on-click #(rf/dispatch [:nav/new])}
+   [:svg {:width 28 :height 28 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
+          :stroke-linecap "round" :aria-hidden true}
+    [:path {:d "M12 5v14M5 12h14"}]]])
 
 (defn- archive-button
   "Archive the open chat (asked first, as the header's archive), or unarchive an archived one."
@@ -71,6 +79,12 @@
    (if (composer-shown?) [:f> mic/button (if oc (:ck oc) :new)] [:span.edge-gap])
    (if steps? (step-button "Next picture" 1 (>= index (dec n))) [:span.edge-gap])])
 
+(defn- bottom-row
+  "New chat, under the mic."
+  []
+  (when-not @(rf/subscribe [:new-chat-read-only?])
+    [:div.edge-row [new-button]]))
+
 (defn- edge-view []
   (let [oc @(rf/subscribe [:open-chat])
         {:keys [pictures index]} @(rf/subscribe [:picture-history])
@@ -78,7 +92,8 @@
         steps? (and (not (:folded? @(rf/subscribe [:fold-state]))) (> n 1))]
     [:div.thumb-edge
      [top-row oc]
-     [middle-row oc steps? index n]]))
+     [middle-row oc steps? index n]
+     [bottom-row]]))
 
 (defn edge
   "The edge; mounting it asks the hub whether it has a listen service (for My words)."

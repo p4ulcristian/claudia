@@ -476,7 +476,6 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 /* Idle dots: the badges, moons and run dots move on for good only on the open chat; on the other
    chats they run a few times when they appear, then rest. */
 .rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i) { animation-iteration-count: infinite; }
-.rail-dot.add { color: var(--muted); font-size: 20px; font-weight: 400; --ring: var(--chalk-c34-18-dash); --ink: var(--muted); background: none; }
 .chalk-defs { position: absolute; width: 0; height: 0; }
 /* Rail: the chat's title under its circle, plain and readable, cut after two lines (the hover
    bubble has it whole); the circle holds the project. A one-line title keeps the room of two, so
