@@ -24,8 +24,6 @@
 @media (pointer: coarse) and (min-width: 680px) {
   .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
   .rail-chat { min-height: 64px; justify-content: center; }
-  /* The + keeps its look; its touch area grows to 64 pt (the rail's dots are zoomed to 0.8). */
-  .rail .rail-dot.add::after { content: ""; position: absolute; inset: -23px; }
 
   /* The ‹ mic › row ends 18 px from the right edge: the mic's centre is 128 px in, so the flower
      (240 px, centred on the mic) shows whole with 8 px to spare. */

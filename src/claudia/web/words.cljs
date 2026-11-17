@@ -1,6 +1,6 @@
 (ns claudia.web.words
   "My words: the person's own names and terms for the listen service (claudia.hub.listen-words),
-  read and saved through /hub/listen/words, edited in Settings (views.my-words). A word the person
+  read and saved through /hub/listen/words, edited in Settings and in the panel the iPad's edge opens (views.my-words). A word the person
   corrected in dictated text before sending is offered once (never again on this device, whatever
   the answer), and only when the list does not hold it."
   (:require [claudia.web.views.pure.dictated :as dictated]
@@ -11,7 +11,7 @@
 
 (rf/reg-event-fx
  :words/load
- ;; Settings opened: whether the hub has a listen service, then the list.
+ ;; Settings or the edge opened: whether the hub has a listen service, then the list.
  (fn [_ _] {:fx [[:api/call {:url "/hub/listen" :on-ok [:words/listen]}]]}))
 
 (rf/reg-event-fx
@@ -60,5 +60,13 @@
 
 (rf/reg-event-db :words/dismiss (fn [db _] (dissoc db :words-offer)))
 
+(rf/reg-event-fx
+ :words/panel
+ ;; The My words panel opened (the list read again) or closed.
+ (fn [{:keys [db]} [_ on]]
+   (cond-> {:db (assoc db :words-panel? on)}
+     on (assoc :fx [[:dispatch [:words/load]]]))))
+
 (rf/reg-sub :my-words (fn [db] (:my-words db)))
+(rf/reg-sub :words-panel? (fn [db] (:words-panel? db)))
 (rf/reg-sub :words-offer (fn [db] (:words-offer db)))

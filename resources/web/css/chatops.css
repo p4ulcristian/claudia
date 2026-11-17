@@ -363,3 +363,8 @@ body.chat-dragging .order-item { touch-action: none; }
 .sp-list { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 .rail-dot.search svg, .cs-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .sp-stand-in { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
+/* The My words panel (views/my_words.cljs, from the iPad's edge): the search panel's frame. */
+.wp-panel { gap: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.wp-head { display: flex; align-items: center; gap: 10px; }
+.wp-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.wp-panel p { margin: 0; }
