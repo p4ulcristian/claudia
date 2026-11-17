@@ -22,6 +22,7 @@
             [claudia.web.speech :as speech]
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
+            [claudia.web.words]
             [claudia.web.views.shell :as shell]
             [claudia.web.ws :as ws]
             [shadow.loader :as loader]))

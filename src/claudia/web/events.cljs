@@ -7,6 +7,7 @@
             [claudia.web.fx :as fx]
             [claudia.web.updates :as updates]
             [claudia.web.views.pure.chat :as chat-pure]
+            [claudia.web.views.pure.dictated :as dictated]
             [claudia.web.views.pure.mic :as mic]
             [claudia.web.views.pure.switches :as switches]
             [claudia.web.views.pure.talk :as talk]))
@@ -464,7 +465,10 @@
 
 (rf/reg-event-db
  :draft/set
- (fn [db [_ k text]] (assoc-in db [:drafts k] text)))
+ ;; An emptied draft forgets what the mic put into it.
+ (fn [db [_ k text]]
+   (cond-> (assoc-in db [:drafts k] text)
+     (str/blank? text) (update :dictated dissoc k))))
 
 
 (rf/reg-event-fx
@@ -567,26 +571,52 @@
       chat (send-in-chat db k out)
       :else (send-new-chat db (default-server db) (new-uuid) out))))
 
+(defn with-dictation-checked
+  "A send's effects fx (nothing sent: empty) from composer k, whose text went out: the mic's pieces
+  in that draft are forgotten, and a word the person corrected in them before sending is offered
+  for My words (claudia.web.words)."
+  [fx db k text]
+  (let [pieces (get-in db [:dictated k])
+        word (dictated/offered-word pieces text)]
+    (if (or (empty? fx) (empty? pieces))
+      fx
+      (cond-> (update fx :db #(update (or % db) :dictated dissoc k))
+        word (update :fx (fnil conj []) [:dispatch [:words/maybe-offer word]])))))
+
 (rf/reg-event-fx
  :composer/send
  (fn [{:keys [db]} [_ typed]]
-   (let [[_ chat :as k] (:open db)]
-     (send-for db (if chat k :new) typed))))
+   (let [[_ chat :as k] (:open db)
+         k (if chat k :new)]
+     (with-dictation-checked (send-for db k typed) db k typed))))
 
 (defn heard-fx
-  "What the mic's text does in the composer k it was held in ([server chat] or :new), wherever the
-  person is now (hearing takes a moment; they may have opened another chat): it joins that
-  composer's draft; let go to send (or :now: the running turn stops first), the draft with it
+  "What the mic's words (heard: {:text :raw}, text cleaned up, raw as heard) do in the composer k
+  it was held in ([server chat] or :new), wherever the person is now (hearing takes a moment; they
+  may have opened another chat): the clean text joins that composer's draft, kept as a piece
+  (pure/dictated); let go to send (or :now: the running turn stops first), the draft with it
   answers that chat's question or is sent."
   [db k heard dir]
-  (let [text (mic/with-heard (get-in db [:drafts k] "") heard)
-        with-text (assoc-in db [:drafts k] text)
+  (let [text (mic/with-heard (get-in db [:drafts k] "") (:text heard))
+        with-text (-> db (assoc-in [:drafts k] text) (update-in [:dictated k] dictated/added heard))
         ask (when (vector? k) (first (get-in db [:chats k :asks])))
         answers (when ask (chat-pure/typed-answer ask (str/trim text) (get-in db [:attach k])))]
     (cond
       (not (#{:send :now} dir)) {:db with-text}
-      answers {:db (assoc-in db [:drafts k] "") :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
-      :else (let [sent (send-for with-text k text (= dir :now))] (if (seq sent) sent {:db with-text})))))
+      answers {:db (-> db (assoc-in [:drafts k] "") (update :dictated dissoc k))
+               :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
+      :else (let [sent (send-for with-text k text (= dir :now))]
+              (if (seq sent) (with-dictation-checked sent with-text k text) {:db with-text})))))
+
+(rf/reg-event-db
+ :dictated/swap
+ ;; The composer's chip: the last dictated words in draft k swapped, clean for raw or back.
+ (fn [db [_ k]]
+   (let [draft (get-in db [:drafts k]) pieces (get-in db [:dictated k])]
+     (if-let [piece (dictated/swappable pieces draft)]
+       (let [[d ps] (dictated/swapped draft pieces piece)]
+         (-> db (assoc-in [:drafts k] d) (assoc-in [:dictated k] ps)))
+       db))))
 
 (rf/reg-event-fx
  :mic/heard

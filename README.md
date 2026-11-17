@@ -216,6 +216,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     in the list with Try again and Throw away and holds the clips after it, so the order holds; after
     a reload kept clips come back that way. Words go to the composer the clip was spoken into
     (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
+    My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
+    the listen service hears with each person's own names and terms and cleans the text up. The hub
+    sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
+    `{text, raw}` back: text cleaned up, raw as heard. The draft gets the clean text; while the
+    raw words differ and the draft still holds them, a chip over the composer shows the other
+    version and a tap swaps them (and back). Settings has My words: the list, Add, and × to remove,
+    saved through `/hub/listen/words` (the caller's own list only; hidden without a listen
+    service). When the person changes exactly one dictated word before sending, to one that looks
+    like a name or a term (a capital not at a sentence's start, a capital inside, a digit, or
+    - _ . inside), the composer offers "Add <word> to My words?" once: each word is offered once
+    on a device (`claudia.wordsOffered`), never when the list holds it, Add or No. A one-word clip
+    counts only when it was sent alone. The clip flow above is the same. Files:
+    `src/claudia/hub/listen_words.cljs`, `src/claudia/web/words.cljs`,
+    `src/claudia/web/views/my_words.cljs`, `src/claudia/web/views/pure/dictated.cljs`.
 
 21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
     chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one

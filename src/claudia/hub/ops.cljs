@@ -2,9 +2,11 @@
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence), Claude tokens (/hub/claude-token…),
-  each person's GitHub login (/hub/github-login),
+  each person's GitHub login (/hub/github-login), speech to text and each person's words for it
+  (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.listen :as listen]
+            [claudia.hub.listen-words :as listen-words]
             [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
             [claudia.shared.text :as text]
@@ -442,7 +444,8 @@
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
                  (= pathname "/hub/progress") (io/send-json res 200 (progress/now))
-                 (= pathname "/hub/listen") (listen/call req res)
+                 (= pathname "/hub/listen") (listen/call req res email)
+                 (= pathname "/hub/listen/words") (listen-words/call req res email)
                  (= pathname "/hub/listen/log") (listen/log req res email)
                  (= pathname "/hub/gate/system")
                  (cond (not admin?) (fail res 403 "admins only")

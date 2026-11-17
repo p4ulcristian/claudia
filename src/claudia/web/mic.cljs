@@ -285,6 +285,9 @@
   (if (:native session) (native/spectrum session) (web-spectrum session)))
 
 (defn hear
-  "Promise of the text the hub heard in a clip."
+  "Promise of {:text :raw} the hub heard in a clip: text cleaned up by the listen service, raw as
+  heard (the text again from a service without cleanup)."
   [clip]
-  (.then (api/post-blob "/hub/listen" clip) #(or (:text %) "")))
+  (.then (api/post-blob "/hub/listen" clip)
+         (fn [{:keys [text raw]}]
+           {:text (or text "") :raw (or raw text "")})))

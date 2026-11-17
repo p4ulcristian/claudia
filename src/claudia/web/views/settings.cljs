@@ -1,7 +1,8 @@
 (ns claudia.web.views.settings
   "The list's title menu (whose chats, which servers) and the Settings screen, opened from the
   settings menu (claudia.web.views.menu: its plan card and More settings): the instance chip, the
-  hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), all ~/Work
+  hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), My words for
+  dictation (views.my-words), all ~/Work
   sessions, Admin and Servers for admins, and each server's version and profile."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -9,6 +10,7 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.logo :as logo]
+            [claudia.web.views.my-words :as my-words]
             [claudia.web.views.pure.settings :as pure]
             [claudia.web.views.pure.words :as words]))
 
@@ -359,6 +361,7 @@
       [brand server]
       (when-not ro [claude-subscription])
       (when-not ro [github-section])
+      (when-not ro [my-words/settings-section])
       (chats-group all-sessions?)
       (when (:admin @(rf/subscribe [:me])) (hub-group))
       (when (and (not ro) @(rf/subscribe [:server-me server]))
@@ -370,5 +373,6 @@
   "The Settings screen over the list; mounted while shown and for its slide out."
   [shown?]
   (let [server @(rf/subscribe [:settings-server])]
-    (r/with-let [_ (rf/dispatch [:ops/load-settings server])]
+    (r/with-let [_ (rf/dispatch [:ops/load-settings server])
+                 _ (rf/dispatch [:words/load])]
       [:f> settings-view shown?])))

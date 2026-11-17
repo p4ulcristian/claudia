@@ -297,6 +297,14 @@ code, pre { font-family: var(--mono); }
 .link-strip.back { color: var(--green); background: var(--green-bg); animation-delay: 0s; }
 @keyframes link-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .link-strip { animation: link-in 0s .8s both; } .link-strip.back { animation: none; } }
+/* My words over the composer (views.my-words): the offer for a corrected word; the chip that swaps clean and heard words */
+.words-offer { display: flex; align-items: center; gap: 8px; font-size: 13px; border-radius: 8px; padding: 5px 6px 5px 10px; margin-bottom: 8px; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line); }
+.words-offer > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.words-offer button { padding: 3px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg2); color: var(--fg); font-size: 13px; }
+.words-offer button:first-of-type { border-color: var(--accent); color: var(--accent); }
+.raw-chip { display: flex; gap: 6px; max-width: 100%; margin-bottom: 6px; padding: 3px 10px; border-radius: 999px; border: 1px dashed var(--line); background: none; color: var(--muted); font-size: 12.5px; text-align: left; }
+.raw-chip-k { flex: none; }
+.raw-chip-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
 /* Notes: slash-command output, compaction */
 .note-line { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--bg2); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 

@@ -17,6 +17,7 @@
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.head :as head]
             [claudia.web.views.mic :as mic]
+            [claudia.web.views.my-words :as my-words]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.reach :as reach]
@@ -402,6 +403,8 @@
     (h/use-effect (fn [] (when-not (db/touch?) (some-> (.-current ref) .focus)) nil) [(str draft-key)])
     [:div.composer
      [link-strip server]
+     [my-words/offer-strip]
+     [my-words/raw-chip draft-key]
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row

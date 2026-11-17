@@ -246,20 +246,146 @@
   (let [db {:open ["s" "other"] :drafts {["s" "c"] "half" ["s" "other"] "mine"}
             :servers {"s" {:status :open}}}]
     (testing "added: it joins that chat's draft, never the open one's"
-      (let [out (:db (ev/heard-fx db ["s" "c"] "more" :add))]
+      (let [out (:db (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :add))]
         (is (= "half more" (get-in out [:drafts ["s" "c"]])))
         (is (= "mine" (get-in out [:drafts ["s" "other"]])))))
     (testing "sent: into that chat, with its draft"
-      (let [fx (ev/heard-fx db ["s" "c"] "more" :send)]
+      (let [fx (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :send)]
         (is (= ["s" {:type "send" :chat "c" :text "half more"}] (:ws/send fx)))
         (is (= "mine" (get-in fx [:db :drafts ["s" "other"]])))))
     (testing "sent now: the runner stops the running turn first"
       (is (= ["s" {:type "send" :chat "c" :text "half more" :now true}]
-             (:ws/send (ev/heard-fx db ["s" "c"] "more" :now)))))
+             (:ws/send (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :now)))))
     (testing "a question open in that chat is answered"
       (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
-            fx (ev/heard-fx db ["s" "c"] "this one" :send)]
+            fx (ev/heard-fx db ["s" "c"] {:text "this one" :raw "this one"} :send)]
         (is (= [[:dispatch [:ask/answer ["s" "c"] "q" {"Which?" "half this one"}]]] (:fx fx)))))))
+
+(deftest a-new-chat-carries-its-picks
+  (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
+  (is (= {:color "teal"} (ev/new-picks {:color "teal"})))
+  (is (= {} (ev/new-picks {:folder ""})))
+  (is (= {} (ev/new-picks nil)))
+  (is (= ["s" {:type "new" :id "id" :text "hi" :effort "high"}]
+         (:ws/send (ev/send-new-chat {:new-settings {:effort "high"}} "s" "id" (ev/outgoing nil "hi"))))))
+
+(deftest errors-go-once-they-no-longer-hold
+  (is (= {:chats {["s" "c"] {:x 1}}} (ev/drop-chat-error {:chats {["s" "c"] {:x 1 :error "e"}}} ["s" "c"])))
+  (is (= {} (ev/drop-chat-error {} ["s" "c"])))
+  (is (nil? (:error (ev/chat-after-turn {:error "e"} true false))) "a new turn")
+  (is (= "e" (:error (ev/chat-after-turn {:error "e"} false false))) "the failed turn's end keeps it")
+  (is (= {} (ev/without-stale-error {:error "s: x" :error-from "s"} "s" {:type "chats"})))
+  (is (= {:error "s: x" :error-from "s"} (ev/without-stale-error {:error "s: x" :error-from "s"} "t" {:type "chats"})))
+  (is (= {:error "s: x" :error-from "s"} (ev/without-stale-error {:error "s: x" :error-from "s"} "s" {:type "error"})))
+  (is (nil? (:error (:db (ev/send-in-chat {:chats {["s" "c"] {:error "e"}}} ["s" "c"] (ev/outgoing nil "hi")))))))
+
+(deftest chat-after-turn-settles-an-ended-turn
+  (is (= {:running true :stopped false :note "n" :messages [{:streaming true}]}
+         (ev/chat-after-turn {:note "n" :messages [{:streaming true}]} true true)))
+  (is (= {:running false :stopped true :messages [{:id 1}]}
+         (ev/chat-after-turn {:note "n" :messages [{:id 1 :streaming true}]} false true)))
+  (is (= {:running false :stopped false :messages []} (ev/chat-after-turn nil false nil))))
+
+(deftest remove-ask-by-id
+  (is (= [{:id 2}] (ev/remove-ask [{:id 1} {:id 2}] 1))))
+
+(deftest navigation
+  (is (= {:screen :chat :sidebar? false :rail-search? false :settings? false
+          :archived? false :search nil :project-filter nil}
+         (ev/on-chat-screen {:sidebar? true :settings? true :archived? true :search {:text "x"} :project-filter "/w/a"})))
+  (is (= [["s" {:type "close" :chat "a"}] ["t" {:type "open" :chat "b"}]] (ev/switch-frames ["s" "a"] ["t" "b"])))
+  (is (= [["t" {:type "open" :chat "b"}]] (ev/switch-frames nil ["t" "b"])))
+  (is (= [] (ev/switch-frames nil nil))))
+
+(deftest toggle-sidebar-from-the-rail-and-the-drawer
+  (is (= {:sidebar? true :rail-search? false} (ev/toggle-sidebar {} nil)))
+  (is (= {:sidebar? false :rail-search? false :settings? false} (ev/toggle-sidebar {:sidebar? true :settings? true} nil)))
+  (is (= {:sidebar? false :rail-search? false :settings? false :search nil}
+         (ev/toggle-sidebar {:sidebar? true :rail-search? true :search {:text "x"}} nil)))
+  (is (= {:sidebar? true :rail-search? false} (ev/toggle-sidebar {:sidebar? true} true))))
+
+(deftest outgoing-joins-notes-text-and-files
+  (let [file {:path "/w/a.txt" :name "a.txt" :size 1}
+        out (ev/outgoing [{:note "note"} {:file file} {:images [{:data "x"}]}] "  hi ")]
+    (is (= "note\n\nhi" (:sent out)))
+    (is (= (files/with-files "note\n\nhi" [file]) (:text out)))
+    (is (= {:files [file] :images [{:data "x"}]} (:extra out))))
+  (is (= {:sent "" :text "" :extra {}} (ev/outgoing nil nil))))
+
+(deftest hold-send-when-nothing-or-not-yet
+  (let [out (ev/outgoing nil "hi")]
+    (is (false? (ev/hold-send? {} "s" "c" nil out)))
+    (is (true? (ev/hold-send? {} "s" "c" nil (ev/outgoing nil " "))))
+    (is (false? (ev/hold-send? {} "s" "c" [{:images [{:data "x"}]}] (ev/outgoing [{:images [{:data "x"}]}] ""))))
+    (is (true? (ev/hold-send? {} "s" "c" [{:busy true}] out)))
+    (is (true? (ev/hold-send? {:view "pat"} "s" "c" nil out)))
+    (is (false? (ev/hold-send? {:view "pat" :server-me {"s" {:writable ["pat"]}}} "s" "c" nil out))
+        "a write tick for pat on s lets it send")
+    (is (true? (ev/hold-send? {:view "pat" :server-me {"t" {:writable ["pat"]}}} "s" "c" nil out))
+        "a write tick holds per server")
+    (is (true? (ev/hold-send? {:pending-new {"c" {}}} "s" "c" nil out)))))
+
+(deftest sending
+  (let [out (ev/outgoing nil "hi")]
+    (is (= {:db {:outbox {["s" "c"] ["hi"]} :drafts {["s" "c"] ""} :attach nil}
+            :ws/send ["s" {:type "send" :chat "c" :text "hi"}]}
+           (ev/send-in-chat {} ["s" "c"] out)))
+    (let [fx (ev/send-new-chat {:new-upload-id "u"} "s" "id" out)]
+      (is (= {:pending-new {"id" {:server "s" :text "hi"}} :open ["s" "id"] :outbox {["s" "id"] ["hi"]}
+              :drafts {:new ""} :attach nil :new-server "s"}
+             (:db fx)))
+      (is (= ["s" {:type "new" :id "id" :text "hi"}] (:ws/send fx))))
+    (is (nil? (ev/send-new-chat {} nil "id" out)))))
+
+(deftest next-open-after-archiving
+  (let [servers {"s" {:rows {"a" {:started 1} "b" {:started 2} "c" {:started 0 :archived true}}}}]
+    (is (= ["s" "b"] (ev/next-open servers ["s" "a"])))
+    (is (= ["s" "a"] (ev/next-open servers ["s" "b"])))
+    (is (nil? (ev/next-open {"s" {:rows {"a" {}}}} ["s" "a"])))))
+
+(deftest seen-due-once-the-turn-is-on-screen
+  (let [d {:open ["s" "c"] :screen :chat
+           :servers {"s" {:rows {"c" {:unseen true :at 5}}}}
+           :chats {["s" "c"] {:loaded true}}}]
+    (is (true? (ev/seen-due? d false true)))
+    (is (false? (ev/seen-due? d false false)))
+    (is (false? (ev/seen-due? (assoc d :screen :list) true true)))
+    (is (true? (ev/seen-due? (assoc d :screen :list) false true)))
+    (is (false? (ev/seen-due? (assoc-in d [:chats ["s" "c"] :running] true) false true)))
+    (is (false? (ev/seen-due? (assoc-in d [:seen-sent ["s" "c"]] 5) false true)))
+    (is (false? (ev/seen-due? (assoc d :view "pat") false true)))))
+
+(deftest the-mic-text-goes-to-the-chat-it-was-held-in
+  (let [db {:open ["s" "other"] :drafts {["s" "c"] "half" ["s" "other"] "mine"}
+            :servers {"s" {:status :open}}}]
+    (testing "added: it joins that chat's draft, never the open one's"
+      (let [out (:db (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :add))]
+        (is (= "half more" (get-in out [:drafts ["s" "c"]])))
+        (is (= "mine" (get-in out [:drafts ["s" "other"]])))))
+    (testing "sent: into that chat, with its draft"
+      (let [fx (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :send)]
+        (is (= ["s" {:type "send" :chat "c" :text "half more"}] (:ws/send fx)))
+        (is (= "mine" (get-in fx [:db :drafts ["s" "other"]])))))
+    (testing "sent now: the runner stops the running turn first"
+      (is (= ["s" {:type "send" :chat "c" :text "half more" :now true}]
+             (:ws/send (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :now)))))
+    (testing "a question open in that chat is answered"
+      (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
+            fx (ev/heard-fx db ["s" "c"] {:text "this one" :raw "this one"} :send)]
+        (is (= [[:dispatch [:ask/answer ["s" "c"] "q" {"Which?" "half this one"}]]] (:fx fx)))))))
+
+(deftest dictated-words-are-kept-and-checked-at-send
+  (let [db {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
+        added (:db (ev/heard-fx db ["s" "c"] {:text "call mission now" :raw "call mission now um"} :add))]
+    (is (= [{:text "call mission now" :raw "call mission now um" :shown :text}] (get-in added [:dictated ["s" "c"]])))
+    (testing "sent with one word corrected to a name: offered, and the pieces forgotten"
+      (let [fx (ev/with-dictation-checked {:db added} added ["s" "c"] "call Dorka now")]
+        (is (= [[:dispatch [:words/maybe-offer "Dorka"]]] (:fx fx)))
+        (is (nil? (get-in fx [:db :dictated ["s" "c"]])))))
+    (testing "sent unchanged: nothing offered"
+      (is (nil? (:fx (ev/with-dictation-checked {:db added} added ["s" "c"] "call mission now")))))
+    (testing "nothing sent: nothing changes"
+      (is (= {} (ev/with-dictation-checked {} added ["s" "c"] "call Dorka now"))))))
 
 (deftest a-new-chat-carries-the-last-chats-picks
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
