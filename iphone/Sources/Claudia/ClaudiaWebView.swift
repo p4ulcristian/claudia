@@ -9,10 +9,8 @@ import WebKit
 final class ClaudiaWebView: WKWebView {
     var editing = false
 
-    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        editing ? super.canPerformAction(action, withSender: sender) : false
-    }
-
+    // Only the menu goes: WebKit asks canPerformAction for its own selection steps too, so
+    // refusing actions there (1.4.0) made selecting stall on an iPad.
     override func buildMenu(with builder: UIMenuBuilder) {
         super.buildMenu(with: builder)
         // Every item, WebKit's own too (Copy Link with Highlight): an empty menu is not shown.

@@ -1,28 +1,27 @@
 (ns claudia.web.views.mic-flower
-  "The mic's flower (README decision 20): while the mic is held, a 320 px canvas round the button,
+  "The mic's flower (README decision 20): while the mic is held, a 240 px canvas round the button,
   big enough to show past the finger on it. In the middle a disc, amber while the microphone wakes
   and red once it records, with the time spoken so far and what letting go would do; round it the
   48 bars that follow the voice. Four petals open outside the bars: left sends, up cancels, right
   adds the words to the message, down sends now (the running turn stops first); letting go in place
   sends too. The petal the finger is over lights."
-  (:require [claudia.web.views.pure.mic :as pure]
-            [claudia.web.views.pure.update-pill :as clock]))
+  (:require [claudia.web.views.pure.mic :as pure]))
 
-(def size "The canvas, CSS px (square, centred on the button)." 320)
+(def size "The canvas, CSS px (square, centred on the button)." 240)
 
 ;; Radii, CSS px from the middle: the disc, the bars (from bar-r, up to bar-len long), the petals.
-(def ^:private disc-r 44)
-(def ^:private bar-r 48)
-(def ^:private bar-len 33)
-(def ^:private petal-in 88)
-(def ^:private petal-out 155)
+(def ^:private disc-r 36)
+(def ^:private bar-r 39)
+(def ^:private bar-len 24)
+(def ^:private petal-in 66)
+(def ^:private petal-out 116)
 
 (def ^:private petals
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.
   [[:send 145 215 "➤" "send" "--green"]
    [:cancel -135 -45 "✕" "cancel" "--red"]
    [:add -35 35 "+" "add" "--blue"]
-   [:now 55 125 "⚡" "now" "--amber"]])
+   [:now 55 125 :now "now" "--amber"]])
 
 (def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now"})
 
@@ -35,6 +34,24 @@
   (.arc g 0 0 r2 (rad a0) (rad a1))
   (.arc g 0 0 r1 (rad a1) (rad a0) true)
   (.closePath g))
+
+(defn- now-icon!
+  "Send now, drawn: two chevrons running into a bar (go straight to the end), centred on x y."
+  [^js g colour x y]
+  (.save g)
+  (set! (.-strokeStyle g) colour)
+  (set! (.-lineWidth g) 2.2)
+  (set! (.-lineCap g) "round")
+  (set! (.-lineJoin g) "round")
+  (.beginPath g)
+  (doseq [dx [-8 -1]]
+    (.moveTo g (+ x dx) (- y 6))
+    (.lineTo g (+ x dx 6) y)
+    (.lineTo g (+ x dx) (+ y 6)))
+  (.moveTo g (+ x 8) (- y 6))
+  (.lineTo g (+ x 8) (+ y 6))
+  (.stroke g)
+  (.restore g))
 
 (defn- petal! [^js g ^js el way [p a0 a1 icon word colour]]
   (let [on (= way p) c (css el colour) mid (rad (/ (+ a0 a1) 2)) r (/ (+ petal-in petal-out) 2)
@@ -49,10 +66,12 @@
     (set! (.-globalAlpha g) 1)
     (set! (.-fillStyle g) (if on (css el "--bg2") c))
     (set! (.-textAlign g) "center")
-    (set! (.-font g) (str "700 26px " (css el "--sans")))
-    (.fillText g icon x (- y 2))
-    (set! (.-font g) (str "600 15px " (css el "--sans")))
-    (.fillText g word x (+ y 20))))
+    (if (keyword? icon)
+      (now-icon! g (if on (css el "--bg2") c) x (- y 9))
+      (do (set! (.-font g) (str "700 19px " (css el "--sans")))
+          (.fillText g icon x (- y 3))))
+    (set! (.-font g) (str "600 12px " (css el "--sans")))
+    (.fillText g word x (+ y 14))))
 
 (defn- ground!
   "The round inside the petals, opaque: the composer under the bars stays hidden."
@@ -81,13 +100,13 @@
     (.fill g)
     (set! (.-fillStyle g) "#fff")
     (set! (.-textAlign g) "center")
-    ;; The 26 px mic icon sits in the middle (-13..13): the clock above it, the word below, both
-    ;; the same distance from it.
+    ;; The mic icon sits in the middle (-13..13, 30 px on the iPad's edge): the clock above it,
+    ;; the word below, both the same distance from it.
     (set! (.-textBaseline g) "middle")
-    (set! (.-font g) (str "700 17px " (css el "--mono")))
-    (.fillText g (if warm? (clock/clock-text (* 1000 secs)) "…") 0 -27)
-    (set! (.-font g) (str "600 12px " (css el "--sans")))
-    (.fillText g (if warm? (get words way) "waking") 0 26)
+    (set! (.-font g) (str "700 11px " (css el "--mono")))
+    (.fillText g (if warm? (pure/clock-text (* 1000 secs)) "…") 0 -23)
+    (set! (.-font g) (str "600 10px " (css el "--sans")))
+    (.fillText g (if warm? (get words way) "waking") 0 23)
     (set! (.-textBaseline g) "alphabetic")))
 
 (defn draw!
