@@ -33,8 +33,7 @@
   (is (= ["pat"] (ops/people (:server-me db)))))
 
 (deftest search-path-for-archived-chats
-  (is (= "search?q=a%20b&archived=all" (ops/search-path "a b" false)))
-  (is (= "search?q=a&archived=1" (ops/search-path "a" true))))
+  (is (= "search?q=a%20b&archived=all" (ops/search-path "a b"))))
 
 (deftest uploads
   (is (= {:new-upload-id "u"} (ops/with-upload-id {} :new "u")))

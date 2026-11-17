@@ -524,6 +524,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     picking and widening a selection). Why: a cancelled touchmove stops iOS's selection gestures,
     so selecting on an iPad stalled or never started depending on which way the finger first moved;
     Discourse met the same in its composer and lets touchmove through while a selection exists.
+45. One search panel (2026-11-17, the user's picks one by one): a panel over the dimmed page, not
+    the whole screen (claudia.web.views.search-panel). One list of every chat, open and archived:
+    titles, projects, what was said. On every screen: the iPad's edge search, the rail's search
+    (only where there is no right-edge column), the list's search button, ⌘K / Ctrl+K. Before a
+    word is typed: the ten archived chats last active (a row keeps no archiving time). A find: the
+    title in the chat's colour, project, when, the lines that matched lit; a tap opens that chat at
+    that message. Project chips under the field. ✕, Escape or a tap on the dimmed page closes it,
+    the typed words kept. The list's search box went, and the rail no longer filters itself.
+    Instead of: Open / Archived tabs, an empty panel until typing, a full screen, swipe to close.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

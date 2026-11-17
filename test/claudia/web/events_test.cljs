@@ -179,7 +179,7 @@
   (is (= [{:id 2}] (ev/remove-ask [{:id 1} {:id 2}] 1))))
 
 (deftest navigation
-  (is (= {:screen :chat :sidebar? false :rail-search? false :settings? false
+  (is (= {:screen :chat :sidebar? false :search-panel? false :settings? false
           :archived? false :search nil :project-filter nil}
          (ev/on-chat-screen {:sidebar? true :settings? true :archived? true :search {:text "x"} :project-filter "/w/a"})))
   (is (= [["s" {:type "close" :chat "a"}] ["t" {:type "open" :chat "b"}]] (ev/switch-frames ["s" "a"] ["t" "b"])))
@@ -187,11 +187,9 @@
   (is (= [] (ev/switch-frames nil nil))))
 
 (deftest toggle-sidebar-from-the-rail-and-the-drawer
-  (is (= {:sidebar? true :rail-search? false} (ev/toggle-sidebar {} nil)))
-  (is (= {:sidebar? false :rail-search? false :settings? false} (ev/toggle-sidebar {:sidebar? true :settings? true} nil)))
-  (is (= {:sidebar? false :rail-search? false :settings? false :search nil}
-         (ev/toggle-sidebar {:sidebar? true :rail-search? true :search {:text "x"}} nil)))
-  (is (= {:sidebar? true :rail-search? false} (ev/toggle-sidebar {:sidebar? true} true))))
+  (is (= {:sidebar? true} (ev/toggle-sidebar {} nil)))
+  (is (= {:sidebar? false :settings? false} (ev/toggle-sidebar {:sidebar? true :settings? true} nil)))
+  (is (= {:sidebar? true} (ev/toggle-sidebar {:sidebar? true} true))))
 
 (deftest outgoing-joins-notes-text-and-files
   (let [file {:path "/w/a.txt" :name "a.txt" :size 1}

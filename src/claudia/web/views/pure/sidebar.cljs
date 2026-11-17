@@ -45,6 +45,17 @@
        (sort-by (juxt #(= "" (:key %)) (comp - :count) (comp str/lower-case :label)))
        vec))
 
+(defn recent-archived
+  "The n archived rows last active, newest first: the search panel's list before a word is typed
+  (a row keeps no time of its archiving; its last activity is the nearest)."
+  [rows n]
+  (->> rows (filter :archived) (sort-by :at >) (take n) vec))
+
+(defn found-rows
+  "The rows of a search's finds ({server [Found]}), as rows-by ([server id] -> row) has them."
+  [found rows-by]
+  (vec (keep (fn [[server f]] (rows-by [server (:id f)])) (for [[server fs] found, f fs] [server f]))))
+
 (defn with-project-finds
   "The search's finds ({server [Found]}) with every row whose project name holds q added (no hits)
   when the search did not find it already."
