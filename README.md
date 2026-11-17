@@ -197,11 +197,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (about 12 minutes) at the hub. Instead of: MediaRecorder from the press (WebM/MP4: smaller, but
     it cannot start before the press), or the microphone open whenever the composer shows.
     The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
-    messages went out swapped): held, the mic opens a 320 px flower round itself: an 88 px disc,
+    messages went out swapped): held, the mic opens a 240 px flower round itself, always centred on
+    the mic (320 px until 2026-11-17: on the iPad's edge it ran off the screen): a 72 px disc,
     amber while waking and red while recording, the time spoken in it; round the disc the 48 bars
-    that follow the voice (back 2026-11-16: the bars, not a breathing disc, show the voice). Three
-    petals open outside the bars: left sends, up throws the clip away, right adds the words to the message;
-    letting go in place sends too. Each clip let go waits in a list over
+    that follow the voice (back 2026-11-16: the bars, not a breathing disc, show the voice). Four
+    petals open outside the bars: left sends, up throws the clip away, right adds the words to the message,
+    down sends now (the running turn stops first, 2026-11-17); letting go in place sends too. Each clip let go waits in a list over
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.
@@ -470,7 +471,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
-    - iPad: the left edge is for chats, the right edge for the mic and the picture's ‹ ›. The rail's
+    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (96 px in from the edge since 2026-11-17, so the mic's flower fits). The rail's
       circles (with +) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
