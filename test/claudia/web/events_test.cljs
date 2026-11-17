@@ -255,6 +255,9 @@
       (let [fx (ev/heard-fx db ["s" "c"] "more" :send)]
         (is (= ["s" {:type "send" :chat "c" :text "half more"}] (:ws/send fx)))
         (is (= "mine" (get-in fx [:db :drafts ["s" "other"]])))))
+    (testing "sent now: the runner stops the running turn first"
+      (is (= ["s" {:type "send" :chat "c" :text "half more" :now true}]
+             (:ws/send (ev/heard-fx db ["s" "c"] "more" :now)))))
     (testing "a question open in that chat is answered"
       (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
             fx (ev/heard-fx db ["s" "c"] "this one" :send)]

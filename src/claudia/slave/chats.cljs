@@ -47,6 +47,7 @@
 
 ;; id -> what lives only while the runner runs:
 ;;   :live (the host holds a session) :running :stopping :scene :since (when the running turn began)
+;;   :after-stop [[text images]] (sent with now while a turn ran: they go in once it has ended)
 ;;   :asks {ask id -> {:ask (as the page gets it) :resolve :input :keys :secret :timer :at :rpc}}
 ;;   :turn (this turn's Msgs, by arrival) :partial (the assistant text being streamed)
 ;;   :mid (the API message streaming) :stream-counts :final-counts (API message id -> text blocks)
@@ -728,6 +729,16 @@
                         (emit! id {:type "msg" :msg {:id sent-id :role "user" :gone true}}))
         nil))))
 
+(declare send-text!)
+
+(defn- send-waiting!
+  "The turn ended: the messages sent with now (send-after-stop!) go in, in the order they came."
+  [id]
+  (let [waiting (:after-stop (st id))]
+    (swap-chat! id dissoc :after-stop)
+    (doseq [[text images] waiting]
+      (if images (send-text! id text images) (send-text! id text)))))
+
 (defn- turn-end! [id m]
   (let [stopped (boolean (:stopping (st id)))
         {:keys [error row]} (turns/turn-outcome m stopped (js/Date.now) (str (random-uuid)))]
@@ -741,6 +752,7 @@
     (doseq [[sent-id msg] (:unsaved (st id)) :when (:queued msg)] (take-in! id sent-id "started"))
     (set-running! id false)
     (swap-chat! id assoc :stopping false)
+    (send-waiting! id)
     (changed!)
     (read-context! id)
     (refresh-title! id)
@@ -994,6 +1006,18 @@
     (changed!)
     (send-text! id message images)
     id))
+
+(declare stop!)
+
+(defn send-after-stop!
+  "A message sent with now: while a turn runs, the turn stops and the message waits for its end
+  (sent into a stopping turn, Claude Code could drop it with the turn); with none running it goes
+  at once."
+  [id message images]
+  (if (:running (st id))
+    (do (swap-chat! id update :after-stop (fnil conj []) [message images])
+        (stop! id))
+    (if images (send-text! id message images) (send-text! id message))))
 
 (defn stop! [id]
   (drop-asks! id true "The user stopped the turn.")

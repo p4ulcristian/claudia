@@ -485,6 +485,26 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     bottom bar, the main buttons along an iPad's bottom edge (a phone habit; a held tablet's thumbs
     are rarely there), Apple's top toolbar (a convention, not a reach finding), and the same places
     for a mouse (the research is about fingers).
+41. The app records the mic (2026-11-17): in the iPhone/iPad app the composer's mic is recorded
+    by the app (NativeMic.swift, AVAudioEngine; the page's claudia.web.mic-native asks it over a
+    message handler) and the page gets the clip as 16 kHz WAV and the bars' spectrum. Every press
+    checks the app's audio session and engine and starts them again when they stopped. In a browser
+    the page records as before (getUserMedia + AudioWorklet), and a fresh opening that gives no
+    sound is tried again up to three times in the same press. Why: the hub's mic log showed the
+    web view's microphone opening live after a switch to another app and giving no sound, press
+    after press, for up to half a minute; the page cannot reach the app's audio session. Rule:
+    whatever the app can do better than the web view, the app does, and the page keeps working in a
+    browser. Instead of: keeping the page's microphone in the app and only waking the app's session
+    before each opening (WebKit owns that session; no guarantee it hands the input back).
+42. A Copy pill instead of the iOS edit menu (2026-11-17): in the iPhone/iPad app the iOS edit
+    menu is off outside text fields (ClaudiaWebView.swift), and a selection that rests gets one
+    Copy pill above it (claudia.web.copy-pill), which copies through the app (`claudiaText`,
+    UIPasteboard). In a text field the menu stays (Paste). Why: iOS 27 opens the edit menu right
+    under the selected text, in Safari too, so a finger reaching for the lower blue handle lands on
+    the menu; neither a page nor WKWebView can move that menu. Cost: Look Up, Translate and Search
+    Web are gone in the app. A browser keeps the iOS menu (a page can't turn it off) and shows no
+    pill. Instead of: keeping the iOS menu (the bug stays), a Copy button on every message (part of
+    a message still meets the bug).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

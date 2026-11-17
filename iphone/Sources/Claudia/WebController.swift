@@ -8,7 +8,7 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
     /// The icon's tile colour: shown until the page paints, so there is no white flash.
     static let background = UIColor(red: 0x2c / 255.0, green: 0x38 / 255.0, blue: 0x33 / 255.0, alpha: 1)
 
-    private let webView: WKWebView
+    private let webView: ClaudiaWebView
     private let first: URL?
     private let failure = UIView()
     private let failureText = UILabel()
@@ -19,7 +19,12 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         // Persistent cookies and storage: the sign-in survives restarts.
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
-        webView = WKWebView(frame: .zero, configuration: config)
+        config.userContentController.addScriptMessageHandler(NativeMic(), contentWorld: .page,
+                                                             name: NativeMic.name)
+        let text = TextBridge()
+        config.userContentController.addScriptMessageHandler(text, contentWorld: .page, name: TextBridge.name)
+        webView = ClaudiaWebView(frame: .zero, configuration: config)
+        text.webView = webView
         #if DEBUG
         // Debug builds only (the Simulator test build): Safari's Web Inspector and Appium can reach
         // the page. TestFlight builds are release builds and stay closed.

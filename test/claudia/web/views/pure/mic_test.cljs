@@ -9,14 +9,25 @@
   (is (= "kept" (mic/with-heard "kept" "  ")))
   (is (= "x" (mic/with-heard nil "x"))))
 
+(defn- spectrum-with
+  "A 256-bin spectrum at 48 kHz (93.75 Hz a bin): v in the bins from..to Hz, 0 elsewhere."
+  [v from-hz to-hz]
+  (vec (for [i (range 256) :let [hz (* i 93.75)]] (if (<= from-hz hz to-hz) v 0))))
+
 (deftest bars-are-mirrored-levels
-  (let [levels (mic/bar-levels (vec (repeat 256 255)))]
+  (let [levels (mic/bar-levels (vec (repeat 256 255)) 48000)]
     (is (= mic/bar-count (count levels)))
-    (is (every? #(= 1 %) levels)))
-  (let [levels (mic/bar-levels (vec (concat (repeat 8 255) (repeat 248 0))))]
-    (is (= (first levels) (last levels)))
-    (is (pos? (first levels)))
-    (is (zero? (nth levels 20)))))
+    (is (every? #(= 1 %) levels) "loud everywhere: every bar full"))
+  (let [levels (mic/bar-levels (spectrum-with 255 0 300) 48000)]
+    (is (= (first levels) (last levels)) "mirrored")
+    (is (pos? (first levels)) "a low voice lights the first bars")
+    (is (zero? (nth levels 20)) "and not the high ones")))
+
+(deftest bars-show-only-the-voice
+  (is (every? zero? (mic/bar-levels (vec (repeat 256 70)) 48000)) "room noise (-80 dB): no bar")
+  (is (every? zero? (mic/bar-levels (spectrum-with 255 4500 24000) 48000)) "above 4 kHz: no bar")
+  (is (every? pos? (take 24 (mic/bar-levels (spectrum-with 220 90 4000) 44100)))
+      "a voice over the whole band lights every bar, at 44.1 kHz too"))
 
 (deftest bars-ease
   (is (= [0.6 0.8] (mic/eased [0 1] [1 0])))
@@ -25,7 +36,9 @@
 (deftest a-drag-right-adds-anything-else-sends
   (is (= :send (mic/gesture 0 0)))
   (is (= :send (mic/gesture -120 0)) "dragged left")
-  (is (= :send (mic/gesture 0 80)) "dragged down")
+  (is (= :now (mic/gesture 0 80)) "dragged down: send now")
+  (is (= :send (mic/gesture 0 (dec mic/drag-px))) "not far enough down")
+  (is (= :add (mic/gesture 90 60)) "more right than down")
   (is (= :send (mic/gesture (dec mic/drag-px) 0)))
   (is (= :add (mic/gesture mic/drag-px 0)))
   (is (= :add (mic/gesture 200 -60)) "more right than up")

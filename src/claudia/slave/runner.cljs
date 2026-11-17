@@ -83,11 +83,14 @@
     {:messages (subvec ms (max 0 (- end page-size)) end) :more (> end page-size)}))
 
 (defn- wake-with!
-  "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes."
-  [chat text images]
+  "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
+  now: a running turn is stopped and the message goes once it has ended."
+  [chat text images now]
   (store/update! chat {:archived false})
   (chats/wake! chat)
-  (if images (chats/send-text! chat text images) (chats/send-text! chat text))
+  (if now
+    (chats/send-after-stop! chat text images)
+    (if images (chats/send-text! chat text images) (chats/send-text! chat text)))
   (chats-changed))
 
 (defmulti ^:private on-chat-frame
@@ -117,7 +120,7 @@
   (let [files (uploads/own-files (:files f))
         images (sent-images f)]
     (when (or (seq (:text f)) (seq files) (seq images))
-      (wake-with! chat (uploads/with-files (str (:text f)) files) images))))
+      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f))))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
 (defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
@@ -155,7 +158,7 @@
 (defmethod on-chat-frame "code_send" [_ f chat]
   (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
     (chats/set-scene! chat scene)
-    (when (seq text) (wake-with! chat text nil))))
+    (when (seq text) (wake-with! chat text nil false))))
 
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))

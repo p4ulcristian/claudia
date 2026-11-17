@@ -15,11 +15,13 @@
 
 (defn gesture
   "What letting go does after a drag of dx, dy px (y down) from where the hold started: :cancel
-  (the clip is thrown away) drag-px or more up and more up than sideways, :add (the text joins the
-  message) drag-px or more right, else :send (in place or dragged left or down)."
+  (the clip is thrown away) drag-px or more up and more up than sideways, :now (the running turn
+  stops and the words go at once) drag-px or more down and more down than sideways, :add (the text
+  joins the message) drag-px or more right, else :send (in place or dragged left)."
   [dx dy]
   (cond
     (and (<= dy (- drag-px)) (> (js/Math.abs dy) (js/Math.abs dx))) :cancel
+    (and (>= dy drag-px) (> (js/Math.abs dy) (js/Math.abs dx))) :now
     (>= dx drag-px) :add
     :else :send))
 
@@ -38,14 +40,34 @@
   (let [n (max 1 (- to from))]
     (/ (reduce + (map #(nth spectrum % 0) (range from to))) n 255)))
 
+(def ^:private speech-hz "The voice's band the bars show: [low high] Hz." [90 4000])
+(def ^:private floor-level "A band's level (0..1, -100..-30 dB) that is room noise: no bar." 0.3)
+(def ^:private full-level "A band's level that fills its bar." 0.75)
+
+(defn- edges
+  "n+1 bin edges for n bands spread evenly on a log scale over speech-hz, for a 256-bin spectrum
+  of a microphone at rate Hz (each bin rate/512 wide); every band at least one bin."
+  [n rate]
+  (let [[lo hi] speech-hz
+        bin-hz (/ rate 512)
+        at #(* lo (js/Math.pow (/ hi lo) (/ % n)))]
+    (vec (reductions (fn [prev i] (max (inc prev) (js/Math.floor (/ (at i) bin-hz))))
+                     (js/Math.floor (/ lo bin-hz))
+                     (range 1 (inc n))))))
+
+(defn- lifted
+  "A band's level as a bar's: room noise none, a speaking voice most of it."
+  [v]
+  (-> (/ (- v floor-level) (- full-level floor-level)) (max 0) (min 1)))
+
 (defn bar-levels
-  "A spectrum (bytes 0-255, low to high) as bar-count levels 0..1: the speech bands (the lower
-  half) spread over half the circle and mirrored, so the ring is even left and right."
-  [spectrum]
-  (let [bins (quot (count spectrum) 2)
-        half (quot bar-count 2)
-        side (vec (for [i (range half)]
-                    (band spectrum (quot (* i bins) half) (quot (* (inc i) bins) half))))]
+  "A spectrum (bytes 0-255, low to high, 256 bins) of a microphone at rate Hz as bar-count levels
+  0..1: the voice's band (speech-hz, log spaced, so every bar has voice in it) over half the circle
+  and mirrored, so the ring is even left and right."
+  [spectrum rate]
+  (let [half (quot bar-count 2)
+        e (edges half (or rate 48000))
+        side (vec (for [i (range half)] (lifted (band spectrum (e i) (e (inc i))))))]
     (into side (rseq side))))
 
 (defn eased

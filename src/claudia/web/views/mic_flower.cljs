@@ -2,8 +2,9 @@
   "The mic's flower (README decision 20): while the mic is held, a 320 px canvas round the button,
   big enough to show past the finger on it. In the middle a disc, amber while the microphone wakes
   and red once it records, with the time spoken so far and what letting go would do; round it the
-  48 bars that follow the voice. Three petals open outside the bars: left sends, up cancels, right
-  adds the words to the message; letting go in place sends too. The petal the finger is over lights."
+  48 bars that follow the voice. Four petals open outside the bars: left sends, up cancels, right
+  adds the words to the message, down sends now (the running turn stops first); letting go in place
+  sends too. The petal the finger is over lights."
   (:require [claudia.web.views.pure.mic :as pure]
             [claudia.web.views.pure.update-pill :as clock]))
 
@@ -20,9 +21,10 @@
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.
   [[:send 145 215 "➤" "send" "--green"]
    [:cancel -135 -45 "✕" "cancel" "--red"]
-   [:add -35 35 "+" "add" "--blue"]])
+   [:add -35 35 "+" "add" "--blue"]
+   [:now 55 125 "⚡" "now" "--amber"]])
 
-(def ^:private words {:send "send" :add "add" :cancel "cancel"})
+(def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now"})
 
 (defn- css [^js el v] (.trim (.getPropertyValue (js/getComputedStyle el) v)))
 

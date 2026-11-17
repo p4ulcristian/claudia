@@ -20,7 +20,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo or a video to send in a chat.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Record sound with a video you send in a chat.</string>
+	<string>Hold the mic to speak a message, and record sound with a video you send in a chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save pictures from a chat to your photos.</string>
 	<key>NSSupportsLiveActivities</key>

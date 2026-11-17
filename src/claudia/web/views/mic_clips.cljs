@@ -103,7 +103,7 @@
 
 (defn- row [{:keys [n secs dir state] :as c} now]
   [:li.mic-clip {:class (name state)}
-   [:span (str (inc n) " · " secs " s → " (if (= dir :add) "add" "send"))]
+   [:span (str (inc n) " · " secs " s → " (case dir :add "add" :now "now" "send"))]
    (status c now)
    (when (= state :failed)
      [:span.mic-clip-acts

@@ -259,7 +259,7 @@ Page → runner:
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
-| `send` | `chat`, `text`, `files?`, `images?` | a message into the chat (queued if a turn runs) |
+| `send` | `chat`, `text`, `files?`, `images?`, `now?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |
