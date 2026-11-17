@@ -8,6 +8,7 @@
             [claudia.web.updates :as updates]
             [claudia.web.views.pure.chat :as chat-pure]
             [claudia.web.views.pure.mic :as mic]
+            [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.pure.switches :as switches]
             [claudia.web.views.pure.talk :as talk]))
 
@@ -230,7 +231,8 @@
 
 (defmethod on-frame "chats" [db server {:keys [chats]}]
   ;; The new chat on screen takes its colour once its server's list is here (until then it has none).
-  {:db (cond-> (assoc-in db [:servers server :rows] (into {} (map (juxt :id identity)) chats))
+  {:db (cond-> (assoc-in db [:servers server :rows]
+                         (into {} (map (juxt :id identity)) (sidebar-pure/with-clock-times chats (js/Date.now))))
          (and (nil? (:open db)) (= server (default-server db))) with-fresh-colour)
    :fx [[:dispatch [:chat/check-seen]]]})
 
