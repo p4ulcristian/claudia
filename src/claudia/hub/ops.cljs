@@ -59,13 +59,10 @@
   []
   (let [pairings (store/pairings)]
     {:servers (vec (for [s (store/servers)]
-                     (assoc s
-                            :pairing (some #(when (= (:name s) (:server %)) %) pairings)
-                            :peerUp (pairing/applied? (:name s)))))
+                     (assoc s :pairing (some #(when (= (:name s) (:server %)) %) pairings))))
      :people (store/people)
      :access (store/access)
      :writers (store/writers)
-     :pairing {:available (pairing/available?)}
      :builder (releases/builder-state)}))
 
 (defn- changed!
@@ -121,7 +118,6 @@
           (do (store/save-server! s) (changed! res)))))))
 
 (defn- drop-server [_ res server-name]
-  (pairing/drop-peer! server-name)
   (store/drop-server! server-name)
   (changed! res))
 
@@ -188,13 +184,11 @@
     (fn [b]
       (let [pair-key (pairing/parse-key (field (:key b) 400))]
         (cond
-          (not (pairing/available?))
-          (fail res 409 "Pairing is unavailable on this hub (no HUB_WG_POOL).")
           (not pair-key)
           (fail res 400 "That isn't a pairing key (claudia-pair:…). Run deploy/pair.sh on the server to get one.")
           :else
           (try (let [[pair-name label] (pair-names pair-key b)]
-                 (pairing/pair! pair-key pair-name label))
+                 (pairing/pair! pair-key pair-name label (field (:address b) 100)))
                (changed! res)
                (catch :default e (fail res 409 (.-message e)))))))))
 

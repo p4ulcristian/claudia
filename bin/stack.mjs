@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
 import http from 'node:http';
+import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 export const repo = resolve(import.meta.dirname, '..');
@@ -112,15 +113,21 @@ function settings(tmp, ports, runnerSock, listenUrl) {
               RUNNER_DATA: join(tmp, 'runner'), CLAUDIA_CWD: join(tmp, 'work'), CLAUDE_CONFIG_DIR: join(tmp, 'claude'),
               CLAUDIA_TOKEN_FILE: join(tmp, 'token') },
     front: { HOME: tmp, FRONT_HOST: '127.0.0.1', FRONT_PORT: String(ports.front), FRONT_NAME: server,
-             FRONT_PROFILES: join(tmp, 'profiles') },
+             FRONT_PROFILES: join(tmp, 'profiles'), FRONT_HUB_KEY_FILE: join(tmp, 'front-hub-key') },
     hub: { HOME: tmp, HUB_HOST: '127.0.0.1', HUB_PORT: String(ports.hub), HUB_CONFIG: join(tmp, 'hub.json'),
            HUB_DATA: join(tmp, 'hub'), HUB_WEB: join(repo, 'out', 'web'), HUB_COMMIT: 'c'.repeat(40),
-           HUB_UPDATE_REQUEST: join(tmp, 'update-requested'),
+           HUB_UPDATE_REQUEST: join(tmp, 'update-requested'), HUB_KEY_FILE: join(tmp, 'hub-secret'),
            ...(listenUrl ? { HUB_LISTEN_URL: listenUrl, HUB_LISTEN_TOKEN: 'smoke' } : {}) },
   };
 }
 
+// The hub's secret and the front's key from it, as claudia.node.crypto/server-key makes it (README decision 47).
+const hubSecret = 'smoke-hub-secret-0123456789012345678901234567';
+const frontKey = (name) => createHmac('sha256', hubSecret).update(`claudia-front:${name}`).digest('base64url');
+
 function writeConfig(tmp, frontPort, runnerSock) {
+  writeFileSync(join(tmp, 'hub-secret'), `${hubSecret}\n`);
+  writeFileSync(join(tmp, 'front-hub-key'), `${frontKey(server)}\n`);
   writeFileSync(join(tmp, 'profiles'), `smoke ${email} ${runnerSock}\n`);
   writeFileSync(join(tmp, 'hub.json'), JSON.stringify({
     servers: [{ name: server, label: 'Smoke', address: `127.0.0.1:${frontPort}` }],

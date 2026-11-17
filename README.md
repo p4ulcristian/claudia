@@ -85,9 +85,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `deploy/update.sh` (bash 3.2 and BSD tools as well as Linux's), and takes the release's
     darwin-arm64 node_modules (`claudia-deps-<lockfile hash>-darwin-arm64`, packed by check.yml,
     signed by stage.yml: the Agent SDK's Claude Code is per platform). The front listens on the Mac's
-    WireGuard address only, and a pf anchor (`deploy/macos/guard.sh`, root) lets its port in only
-    from the hub's tunnel address, as the nft rule does on Linux. Instead of: a Linux VM on the Mac,
-    or building node_modules on the Mac itself.
+    private-network address and answers only calls carrying its hub key (decision 47); a pf anchor
+    (`deploy/macos/guard.sh`, root) can further limit its port to the hub's address. Instead of: a
+    Linux VM on the Mac, or building node_modules on the Mac itself.
 14. Claude chooses every block (2026-11-09): the per-chat form row is gone: the right rail on
     desktops, the row over the picture on phones, the column picker, required and off kinds,
     questions off, and the auto files/git/clojure blocks. The draw tool offers every form not deleted
@@ -554,6 +554,19 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
     (claudia.web.views.pure.sidebar/status-line). The list and the group card keep their badges.
     No card with more (started, project) on hover or long-press: dropped by the user the same day.
+47. The hub proves itself with a key, not with the network (2026-11-17, the user's call to move every
+    machine off the gate's WireGuard onto Headscale): every call the hub makes on a front carries
+    `X-Claudia-Hub-Key`, that server's own key: HMAC-SHA256 of its name under the hub's secret
+    (`HUB_KEY_FILE`), so one server's key opens no other front. The front (`FRONT_HUB_KEY_FILE`)
+    answers 401 to any call without it, compared in constant time, and never passes it on to a
+    runner. Before, the front believed `X-Claudia-Email` from whoever reached its port, and only a
+    WireGuard tunnel plus a firewall rule kept others out. With Tailscale in userspace mode a
+    network's connections arrive from localhost, where every user of the machine could have called
+    the front as anyone. Pairing no longer makes a network: `deploy/pair.sh` prints a one-time secret,
+    the admin pastes it with the address the hub reaches the front at (any private network), and the
+    server fetches its key once. The WireGuard address pool, peer files and the gate's peer helper are
+    gone. Instead of: one shared key for every server (a server's root would hold every front's key),
+    or mutual TLS (certificates to issue and renew per server for the same proof).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
@@ -565,10 +578,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   A write tick (2026-11-16) lets a person open, start and send in another person's chats on every
   server where both have a profile: the hub names those people to each front (`X-Claudia-Writes`),
   which then passes the view on without `X-Claudia-Read-Only`; Claude runs as the owner's Linux user.
-  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile. A new server joins with `deploy/pair.sh` (a WireGuard key and a
-  one-time secret printed as a key, pasted into Servers; the hub writes the peer request into
-  `HUB_PEERS_DIR`, the gate's root helper adds the peer and answers in `HUB_APPLIED_DIR`; the server
-  fetches its address with the secret). A hub without `HUB_WG_POOL` shows pairing as unavailable.
+  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile. A server gets its hub key with `deploy/pair.sh` (decision 47: a
+  one-time secret printed as a key, pasted into Servers with the address the hub reaches its front
+  at; the server fetches its key with the secret, once). Pairing a known server again gives it its
+  key again.
 - **Push**: the hub tells a person's iPhones (APNs, token auth with jose; `HUB_APNS_DRY_RUN=1` logs
   instead) when a chat of theirs whose bell is on (decision 21) finished a turn, asks a question, or waits on a secret. It learns
   that like the page does: one socket per person with a phone and server the grid allows, as that

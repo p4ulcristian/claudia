@@ -6,11 +6,12 @@
   (:require ["http" :as http]
             ["ws" :refer [WebSocket WebSocketServer]]
             [clojure.string :as str]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.node.http :as io]
             [claudia.shared.protocol :as protocol]))
 
 ;; Connections to the fronts are kept open between requests: each one is a TCP handshake over
-;; WireGuard saved. Node drops a kept connection just before the front's Keep-Alive timeout.
+;; the private network saved. Node drops a kept connection just before the front's Keep-Alive timeout.
 (def ^:private agent (http/Agent. #js {:keepAlive true :maxFreeSockets 8}))
 
 (def ^:private connect-ms
@@ -37,18 +38,22 @@
 (defn- unreachable [server]
   {:error (str (:name server) " is not reachable")})
 
-(defn hub-headers [{:keys [email view writes]}]
+(defn who-headers
+  "Who is calling, for the front: X-Claudia-Email, -View, -Writes."
+  [{:keys [email view writes]}]
   (cond-> {"x-claudia-email" email}
     view (assoc "x-claudia-view" view)
     (seq writes) (assoc "x-claudia-writes" (str/join "," writes))))
 
-(defn request-headers
-  "The headers a passed request carries to the front: the hub's own and the few browser ones passed
-  on. in: the browser request's headers (a JS object)."
-  [^js in who]
-  (reduce (fn [h k] (if-let [v (aget in k)] (assoc h k v) h))
-          (hub-headers who)
-          passed-request-headers))
+(defn- hub-headers
+  "Everything the hub tells that server's front: its key (claudia.hub.hub-key) and who is calling."
+  [server who]
+  (merge (who-headers who) (hub-key/header (:name server))))
+
+(defn pick-headers
+  "The browser headers passed on to a front: the few in passed-request-headers. in: a JS object."
+  [^js in]
+  (reduce (fn [h k] (if-let [v (aget in k)] (assoc h k v) h)) {} passed-request-headers))
 
 (defn response-headers
   "The front's answer's headers (a JS object) without the dropped ones, as a JS object."
@@ -99,7 +104,8 @@
   [^js req ^js res server target who deadline]
   (let [method (.-method req)
         ^js up (http/request #js {:host (:host server) :port (:port server) :method method :path target
-                                  :headers (clj->js (request-headers (.-headers req) who)) :agent agent})]
+                                  :headers (clj->js (merge (pick-headers (.-headers req)) (hub-headers server who)))
+                                  :agent agent})]
     (guard-connect up)
     (.on up "response" #(answered res %))
     (.on up "error" (fn [^js e]
@@ -125,7 +131,7 @@
                                    :port (:port server)
                                    :method "GET"
                                    :path "/api/me"
-                                   :headers (clj->js (hub-headers {:email email}))
+                                   :headers (clj->js (hub-headers server {:email email}))
                                    :agent agent})
         t (js/setTimeout #(.destroy req (js/Error. "timeout")) 2000)]
     (.on req "response" (fn [^js answer]
@@ -276,7 +282,7 @@
 
 (defn- open-front ^js [server target who]
   (WebSocket. (front-url server target)
-              #js {:headers (clj->js (hub-headers who))
+              #js {:headers (clj->js (hub-headers server who))
                    :maxPayload max-frame
                    :perMessageDeflate false
                    :handshakeTimeout connect-ms}))

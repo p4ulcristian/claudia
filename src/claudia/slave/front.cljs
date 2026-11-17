@@ -1,11 +1,13 @@
 (ns claudia.slave.front
-  "This server's front: believes the hub's X-Claudia-Email (only the hub can reach it: firewall), picks
-  the caller's profile, and passes HTTP and WebSocket on to that profile's runner socket. No page."
+  "This server's front: answers only calls carrying this server's hub key (X-Claudia-Hub-Key, the
+  file FRONT_HUB_KEY_FILE; README decision 47), believes their X-Claudia-Email, picks the caller's
+  profile, and passes HTTP and WebSocket on to that profile's runner socket. No page."
   (:require ["node:http" :as http]
             [claudia.node.http :as io]
             ["node:net" :as net]
             ["node:fs" :as fs]
             [clojure.string :as str]
+            [claudia.node.crypto :as crypto]
             [claudia.node.system :as system]
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
@@ -23,6 +25,21 @@
          {:profile profile :email (str/lower-case email) :socket socket})))
 
 (def ^:private profiles (atom []))
+
+(defonce ^:private hub-key (atom nil))
+
+(defn from-hub?
+  "Whether a call carries this server's hub key (X-Claudia-Hub-Key): the only proof it is the hub's."
+  [^js headers own-key]
+  (boolean (and (seq own-key) (crypto/same-secret? (aget headers "x-claudia-hub-key") own-key))))
+
+(defn read-hub-key
+  "The key file's text, trimmed; throws when it is missing or too short to be one."
+  [file]
+  (when-not (seq file) (throw (js/Error. "FRONT_HUB_KEY_FILE is not set: the front could tell no call from the hub's.")))
+  (let [k (str/trim (fs/readFileSync file "utf8"))]
+    (when (< (count k) 40) (throw (js/Error. (str file " does not hold a hub key."))))
+    k))
 
 (defn- caller-email [^js headers]
   (some-> (aget headers "x-claudia-email") str/trim str/lower-case))
@@ -215,7 +232,8 @@
   (let [{:keys [status error read-only] :as r} (route (.-headers req))
         url (first (str/split (.-url req) #"\?"))]
     (cond
-      ;; From the hub itself (no caller): only the hub reaches this listener.
+      (not (from-hub? (.-headers req) @hub-key)) (io/send-json res 401 {:error "Not the hub."})
+      ;; From the hub itself (no caller).
       (= url "/api/update-check")
       (if (= "POST" (.-method req)) (update-check req res) (io/send-json res 405 {:error "POST only"}))
       (= url "/api/claude-token/current") (token-current req res)
@@ -258,7 +276,9 @@
 (defn- on-upgrade
   "A WebSocket: passed on to the runner's socket (splice!). Read-only frames are enforced by the runner."
   [^js req ^js sock ^js head]
-  (let [{:keys [status error] :as r} (route (.-headers req))]
+  (let [{:keys [status error] :as r} (if (from-hub? (.-headers req) @hub-key)
+                                       (route (.-headers req))
+                                       {:status 401 :error "Not the hub."})]
     (if status
       (.end sock (str "HTTP/1.1 " status " " error "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
       (splice! req sock head r (+ (js/Date.now) retry-for-ms)))))
@@ -267,13 +287,14 @@
   (let [file (.-FRONT_PROFILES env)]
     (when-not (seq file) (throw (js/Error. "FRONT_PROFILES is not set.")))
     (reset! profiles (parse-profiles (fs/readFileSync file "utf8")))
+    (reset! hub-key (read-hub-key (.-FRONT_HUB_KEY_FILE env)))
     (let [server (doto (http/createServer on-request)
                    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
                    (aset "requestTimeout" 0))
           port (js/parseInt (or (.-FRONT_PORT env) "4540") 10)
           host (or (.-FRONT_HOST env) "127.0.0.1")]
       (.on server "upgrade" on-upgrade)
-      ;; FRONT_HOST is the tunnel's address: while the tunnel is down there is nothing to listen on.
+      ;; FRONT_HOST may be a network's address: while that network is down there is nothing to listen on.
       ;; The front stops and its service manager starts it again (systemd Restart, launchd KeepAlive).
       (.on server "error" (fn [e]
                             (js/console.error "claudia front cannot listen on" (str host ":" port) "-" (.-message e))

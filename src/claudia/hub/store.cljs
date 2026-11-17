@@ -1,7 +1,7 @@
 (ns claudia.hub.store
   "The hub's own store (node:sqlite, HUB_DATA/hub.db), the source of truth since README, Hub operations: servers and access: the
   servers it reaches, the people and who may use which server (the access grid), servers pairing
-  over WireGuard, and for push the phones, what each person was told, and Live Activities."
+  (their one-time secrets for fetching a hub key), and for push the phones, what each person was told, and Live Activities."
   (:require ["node:sqlite" :refer [DatabaseSync]]
             ["node:fs" :as fs]
             ["node:path" :as path]
@@ -12,8 +12,8 @@
 (def ^:private schema
   "PRAGMA journal_mode = WAL;
    PRAGMA foreign_keys = ON;
-   -- A server: its short name (in addresses: /s/<name>/…), the label people see, and where its
-   -- front listens on WireGuard (host:port).
+   -- A server: its short name (in addresses: /s/<name>/…), the label people see, and where the hub
+   -- reaches its front (host:port, on the private network joining them).
    CREATE TABLE IF NOT EXISTS servers (
      name TEXT PRIMARY KEY,
      label TEXT NOT NULL,
@@ -41,12 +41,13 @@
      PRIMARY KEY (email, owner),
      CHECK (email <> owner)
    );
-   -- A server joining from the Servers page: its WireGuard key, the address it was given, and the
-   -- hash of the one-time secret it fetches its address with.
-   CREATE TABLE IF NOT EXISTS pairings (
+   -- The WireGuard pairings of before README decision 47 (servers now reach the hub over any
+   -- private network and fetch a hub key): gone.
+   DROP TABLE IF EXISTS pairings;
+   -- A server paired from the Servers page: the hash of the one-time secret it fetches its hub
+   -- key with (README decision 47), and when it did.
+   CREATE TABLE IF NOT EXISTS pairing_secrets (
      server TEXT PRIMARY KEY REFERENCES servers (name) ON DELETE CASCADE,
-     public_key TEXT NOT NULL UNIQUE,
-     ip TEXT NOT NULL UNIQUE,
      secret_hash TEXT NOT NULL UNIQUE,
      created_at INTEGER NOT NULL,
      fetched_at INTEGER
@@ -252,26 +253,27 @@
 ;; Pairings --------------------------------------------------------------------------------------
 
 (defn- pairing-row [r]
-  (when r {:server (:server r) :publicKey (:public_key r) :ip (:ip r)
-           :createdAt (:created_at r) :fetchedAt (:fetched_at r)}))
+  (when r {:server (:server r) :createdAt (:created_at r) :fetchedAt (:fetched_at r)}))
 
 (defn pairings []
-  (mapv pairing-row (all "SELECT server, public_key, ip, created_at, fetched_at FROM pairings ORDER BY created_at")))
+  (mapv pairing-row (all "SELECT server, created_at, fetched_at FROM pairing_secrets ORDER BY created_at")))
 
-(defn add-paired!
-  "A new server and its pairing, together or not at all."
-  [s {:keys [public-key ip secret-hash]}]
+(defn add-pairing!
+  "The server (new or kept) and its new pairing secret, together or not at all."
+  [s secret-hash]
   (transaction!
    (fn []
      (save-server! s)
-     (exec! "INSERT INTO pairings (server, public_key, ip, secret_hash, created_at) VALUES (?, ?, ?, ?, ?)"
-            (:name s) public-key ip secret-hash (now)))))
+     (exec! "INSERT INTO pairing_secrets (server, secret_hash, created_at) VALUES (?, ?, ?)
+             ON CONFLICT (server) DO UPDATE SET secret_hash = excluded.secret_hash,
+               created_at = excluded.created_at, fetched_at = NULL"
+            (:name s) secret-hash (now)))))
 
 (defn pairing-by-secret [secret-hash]
-  (pairing-row (one "SELECT server, public_key, ip, created_at, fetched_at FROM pairings WHERE secret_hash = ?" secret-hash)))
+  (pairing-row (one "SELECT server, created_at, fetched_at FROM pairing_secrets WHERE secret_hash = ?" secret-hash)))
 
 (defn mark-fetched! [server-name]
-  (exec! "UPDATE pairings SET fetched_at = ? WHERE server = ? AND fetched_at IS NULL" (now) server-name))
+  (exec! "UPDATE pairing_secrets SET fetched_at = ? WHERE server = ? AND fetched_at IS NULL" (now) server-name))
 
 ;; Phones ----------------------------------------------------------------------------------------
 

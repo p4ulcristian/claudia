@@ -5,7 +5,7 @@ become keywords once, where data comes in (`claudia.shared.protocol/read-json`),
 where it leaves (`write-json`). Times are milliseconds since the epoch (numbers). Ids are strings.
 
 ```
-browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──WireGuard──▶ front (one per machine)
+browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──private network + hub key──▶ front (one per machine)
                                                                          │ unix socket per profile
                                                                          ▼
                                                                        runner (one per profile)
@@ -32,7 +32,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_CONFIG` | path of `hub.json` (below), imported once into an empty store |
 | hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-hub`) |
 | hub | `HUB_ADMIN_GROUP` | a login group (`X-Auth-Request-Groups`) whose members are admins (optional) |
-| hub | `HUB_WG_POOL`, `HUB_SERVER_PORT` | addresses paired servers get (`10.0.0.100-10.0.0.199`; unset: no pairing), their front's port (4540) |
+| hub | `HUB_KEY_FILE` | the hub's secret (40+ characters, `openssl rand -base64 32`); each server's key is HMAC-SHA256 of its name under it. Required: without it the hub does not start |
 | hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
 | hub | `HUB_APNS_KEY_FILE`, `HUB_APNS_KEY_ID`, `HUB_APNS_TEAM_ID` | the APNs key (.p8) and its ids; `HUB_APNS_DRY_RUN=1` logs pushes instead |
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
@@ -41,7 +41,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──Wire
 | hub | `HUB_WEB` | folder of the built page (`out/web`) |
 | hub | `HUB_TOKEN_KEY_FILE` | base64 of the 32-byte key the saved Claude tokens are sealed with (never in `hub.db`); unset: the hub keeps no tokens and leaves the servers' token files alone |
 | hub | `HUB_TTS_URL`, `HUB_TTS_TOKEN_FILE` (or `HUB_TTS_TOKEN`) | the narrator's voice service for 3D stories and its bearer token (unset: no voice) |
-| front | `FRONT_HOST`, `FRONT_PORT` | the WireGuard address it listens on |
+| front | `FRONT_HOST`, `FRONT_PORT` | where it listens: the address the hub reaches it at on the private network (`127.0.0.1` with Tailscale in userspace mode) |
+| front | `FRONT_HUB_KEY_FILE` | this server's hub key (written by `deploy/pair.sh`). Required: without it the front does not start |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
 | front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
@@ -68,6 +69,8 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 
 - Caddy clears `X-Auth-Request-*` and `X-Claudia-*` from the browser, then sets
   `X-Auth-Request-Email` from the login.
+- hub → front: every call carries `X-Claudia-Hub-Key: <that server's key>` (README decision 47); a
+  front answers 401 to a call without it and never passes it to a runner.
 - hub → front: `X-Claudia-Email: <email>`, and `X-Claudia-View: <profile>` when the caller looks at
   another profile's chats (read only). The page asks for a view with the query parameter
   `?view=<profile>` on `/s/<server>/api/…` and `/s/<server>/ws` (a browser cannot set headers on a
@@ -144,8 +147,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `PUT /hub/admin/writers` `{ email, owner, granted }` | admin | a write tick on or off: `email` may write to `owner`'s chats on every server where `owner` has a profile |
 | `POST /hub/admin/builder` `{ key }` | admin | makes the machine whose `deploy/release-builder/install.sh` printed `claudia-builder:<host>:<secret>` the release builder (the one before stops counting); answers like `GET /hub/admin` (its `builder`: `{ host, pairedAt, seenAt }` or null); 400 not a builder key |
-| `POST /hub/admin/pair` `{ key, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<wg public key>:<secret>`; 409 when unavailable (no `HUB_WG_POOL`) |
-| `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, address, port, gate: { publicKey, endpoint, address } }`, 202 while the gate adds the peer, 404 unknown |
+| `POST /hub/admin/pair` `{ key, address?, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<secret>`; `address` (host:port of its front) is required for a new server; a known name keeps its address unless given |
+| `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, key }` once (the server's hub key), 404 before its pairing key is pasted or after it was fetched |
 | `GET /hub/releases/wanted` | the release builder (`Authorization: Bearer <secret>`) | 200 `{ builds: [{ key: "main" \| "pr-<n>", commit, kind: "main" \| "pr", at }] }`, newest first; held up to 25 s while empty. 401 not the builder |
 | `PUT /hub/releases/files/<file>` | the release builder | the file's bytes (up to 400 MB) into `HUB_RELEASES` (default `<data>/releases`): 200 `{ ok, size }`. `<file>`: `claudia-code-<tree>.tar.gz`, `claudia-deps-<lockfile hash>.tar.gz`, `claudia-deps-<lockfile hash>-darwin-arm64.tar.gz`, or one of them + `.sig` (ssh-keygen -Y, namespace `claudia-release`) |
 | `GET`/`HEAD /hub/releases/files/<file>` | no login | the file (immutable), 404 when not here |

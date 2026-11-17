@@ -4,11 +4,12 @@
   (claudia.hub.systems); and calls it makes for a person on their runner (call-as: a 3D scene's
   video, claudia.hub.videos)."
   (:require ["node:http" :as http]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.shared.protocol :as protocol]))
 
 (defn- request-options [server method path text ms email]
   #js {:host (:host server) :port (:port server) :method method :path path :timeout ms
-       :headers (clj->js (cond-> {"accept" "application/json"}
+       :headers (clj->js (cond-> (assoc (hub-key/header (:name server)) "accept" "application/json")
                            text (assoc "content-type" "application/json"
                                        "content-length" (js/Buffer.byteLength text))
                            email (assoc "x-claudia-email" email)))})

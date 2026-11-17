@@ -1,5 +1,5 @@
 # Claudia on a shared server: the front, one per machine (user claudia). It
-# believes X-Claudia-Email, so the machine's firewall lets only the hub reach FRONT_PORT.
+# believes X-Claudia-Email only on calls carrying its hub key (FRONT_HUB_KEY_FILE, README decision 47).
 [Unit]
 Description=Claudia front (takes the hub's calls, picks the profile)
 After=network-online.target

@@ -1,9 +1,12 @@
 (ns claudia.hub.pass-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
             ["http" :as http]
             ["net" :as net]
             ["ws" :refer [WebSocket WebSocketServer]]))
+
+(use-fixtures :once {:before #(hub-key/use-secret! "test-hub-secret-0123456789012345678901234567")})
 
 (defn- handshake-request [extensions]
   (str "GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
@@ -34,15 +37,18 @@
                            (.close server)
                            (done)))))))))))
 
-(deftest request-headers-pass-only-a-few
-  (is (= {"x-claudia-email" "ann@example.com" "x-claudia-view" "paul" "content-type" "text/plain"}
-         (pass/request-headers #js {"content-type" "text/plain" "cookie" "login=1"} {:email "ann@example.com" :view "paul"})))
-  (is (= {"x-claudia-email" "ann@example.com"} (pass/request-headers #js {} {:email "ann@example.com"}))))
+(deftest pick-headers-pass-only-a-few
+  (is (= {"content-type" "text/plain" "range" "bytes=0-"}
+         (pass/pick-headers #js {"content-type" "text/plain" "cookie" "login=1" "range" "bytes=0-"
+                                 "x-claudia-hub-key" "forged"})))
+  (is (= {} (pass/pick-headers #js {}))))
 
-(deftest hub-headers-name-whose-chats-the-caller-may-write
+(deftest who-headers-name-the-caller-view-and-writes
+  (is (= {"x-claudia-email" "ann@example.com" "x-claudia-view" "paul"}
+         (pass/who-headers {:email "ann@example.com" :view "paul"})))
   (is (= {"x-claudia-email" "ann@example.com" "x-claudia-writes" "bo@example.com,cy@example.com"}
-         (pass/hub-headers {:email "ann@example.com" :writes ["bo@example.com" "cy@example.com"]})))
-  (is (= {"x-claudia-email" "ann@example.com"} (pass/hub-headers {:email "ann@example.com" :writes []}))))
+         (pass/who-headers {:email "ann@example.com" :writes ["bo@example.com" "cy@example.com"]})))
+  (is (= {"x-claudia-email" "ann@example.com"} (pass/who-headers {:email "ann@example.com" :writes []}))))
 
 (deftest response-headers-drop-hop-by-hop-and-cookies
   (is (= {"content-type" "text/html" "etag" "x"}

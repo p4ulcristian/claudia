@@ -1,5 +1,5 @@
 # Claudia front: takes the hub's calls on FRONT_HOST:FRONT_PORT and passes them to the caller's
-# runner socket. Only the hub may reach that address (firewall).
+# runner socket. It answers only calls carrying its hub key (FRONT_HUB_KEY_FILE, README decision 47).
 [Unit]
 Description=Claudia front
 Wants=claudia-runner.service

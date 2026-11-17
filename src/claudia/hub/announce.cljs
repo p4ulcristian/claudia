@@ -7,6 +7,7 @@
             ["node:fs" :as fs]
             ["node:http" :as http]
             [claudia.hub.config :as config]
+            [claudia.hub.hub-key :as hub-key]
             [claudia.shared.protocol :as protocol]))
 
 (defn poke!
@@ -16,8 +17,9 @@
   (let [text (if body (protocol/write-json body) "")
         ^js req (http/request #js {:host (:host server) :port (:port server) :method "POST"
                                    :path "/api/update-check" :timeout 5000
-                                   :headers #js {"content-type" "application/json"
-                                                 "content-length" (js/Buffer.byteLength text)}}
+                                   :headers (clj->js (assoc (hub-key/header (:name server))
+                                                            "content-type" "application/json"
+                                                            "content-length" (js/Buffer.byteLength text)))}
                               (fn [^js res]
                                 (.resume res)
                                 (js/console.log (str "announce: poked " (:name server) ": " (.-statusCode res)))))]
