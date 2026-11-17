@@ -169,6 +169,13 @@
     (is (= {:n "2"} (parts-of {:html "<b data-part=n>1</b>"})) "the same html keeps them")
     (is (= "1 block: p (html, parts n)" (scene/describe s)))))
 
+(deftest scene3d-parts-are-a-list
+  (let [r (scene/apply-draw scene/empty-scene
+                            {:blocks [{:id "d" :form "scene3d" :data {:parts [{:id "body" :shape "box"}]}}]}
+                            ["scene3d"])]
+    (is (nil? (:error r)))
+    (is (= [{:id "body" :shape "box"}] (get-in r [:scene :blocks 0 :data :parts])))))
+
 (deftest scene-refuses-what-it-cannot-draw
   (is (str/starts-with? (:error (scene/apply-draw scene/empty-scene {:nodes [{:id "a"}]} ["graph"]))
                         "The draw tool changed"))

@@ -107,11 +107,13 @@
       (place (filterv #(or (= (:id %) (:id b)) (not (scene3d? %))) blocks) b before))))
 
 (defn- item-ids
-  "\"block:item\" for every item with an id in a form's data lists, and every html part sent."
+  "\"block:item\" for every item with an id in a form's data lists, and every html part sent
+  (an html block's parts are a map; a scene3d block's parts are a list, counted with the lists)."
   [id data]
   (concat (for [[_ v] data :when (sequential? v), it v :when (and (map? it) (contains? it :id))]
             (str id ":" (:id it)))
-          (for [k (keys (:parts data))] (str id ":" (name k)))))
+          (when (map? (:parts data))
+            (for [k (keys (:parts data))] (str id ":" (name k))))))
 
 (defn- drawn-block
   "The block after a draw: a form other than the one it was starts from empty data."
