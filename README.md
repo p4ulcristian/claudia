@@ -518,6 +518,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     lagged and stopped at times, while a chat was answering: every streamed piece moved the text
     under the finger dragging a handle. Instead of: guessing further from the simulator, whose
     scripted touches on a still test chat never showed it.
+44. A selecting finger is never held (2026-11-17): the page cancels a touch's moves when nothing
+    under it can scroll that way (so iOS never pans the page itself, claudia.web.viewport), but never
+    while a selection is held (its handles) or after the finger rested 300 ms (a long press: iOS
+    picking and widening a selection). Why: a cancelled touchmove stops iOS's selection gestures,
+    so selecting on an iPad stalled or never started depending on which way the finger first moved;
+    Discourse met the same in its composer and lets touchmove through while a selection exists.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
