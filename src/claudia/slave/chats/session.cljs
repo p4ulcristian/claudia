@@ -72,5 +72,5 @@
            ;; inside Eye on Rainbow's worktrees are reported (where configured).
            :PostToolUse [{:matcher (if worktrees? (str edit-tools "|Bash") edit-tools)}]
            ;; The end of every turn: its input says the effort the turn ran with, and its final reply
-           ;; (one over the chat's limit is handed back).
+           ;; (one over the chat's limit is handed back), and the background tasks still in flight.
            :Stop [{}]}})
