@@ -8,6 +8,7 @@
             [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
+            [claudia.web.selection :as selection]
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.md :as md]
@@ -128,7 +129,12 @@
 
 (rf/reg-sub :jump-to (fn [db] (:jump-to db)))
 
-(defn- to-bottom! [^js el] (set! (.-scrollTop el) (.-scrollHeight el)))
+(defn- to-bottom!
+  "The column to its end; held back while a selection is held in it (it goes once let go)."
+  [^js el]
+  (if (selection/holds? el)
+    (selection/held-back! #(set! (.-scrollTop el) (.-scrollHeight el)))
+    (set! (.-scrollTop el) (.-scrollHeight el))))
 
 (defn- use-bottom-on-open!
   "Another chat opened: it shows its end. A layout effect declared before the others, so the
