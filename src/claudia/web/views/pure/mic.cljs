@@ -15,11 +15,13 @@
 
 (defn gesture
   "What letting go does after a drag of dx, dy px (y down) from where the hold started: :cancel
-  (the clip is thrown away) drag-px or more up and more up than sideways, :add (the text joins the
-  message) drag-px or more right, else :send (in place or dragged left or down)."
+  (the clip is thrown away) drag-px or more up and more up than sideways, :now (the running turn
+  stops and the words go at once) drag-px or more down and more down than sideways, :add (the text
+  joins the message) drag-px or more right, else :send (in place or dragged left)."
   [dx dy]
   (cond
     (and (<= dy (- drag-px)) (> (js/Math.abs dy) (js/Math.abs dx))) :cancel
+    (and (>= dy drag-px) (> (js/Math.abs dy) (js/Math.abs dx))) :now
     (>= dx drag-px) :add
     :else :send))
 

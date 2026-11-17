@@ -552,12 +552,13 @@
      :ws/send [server (merge {:type "new" :id id :text sent} (new-picks (:new-settings db)) extra)]}))
 
 (defn send-for
-  "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat."
-  [db k typed]
+  "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.
+  now: the chat's running turn stops first and the message goes as soon as it has ended."
+  [db k typed & [now]]
   (let [chat (when (vector? k) (second k))
         server (if chat (first k) (default-server db))
         attach (get-in db [:attach (if chat k :new)])
-        out (outgoing attach typed)]
+        out (cond-> (outgoing attach typed) (and now chat) (assoc-in [:extra :now] true))]
     (cond
       (hold-send? db server chat attach out) {}
       chat (send-in-chat db k out)
@@ -572,16 +573,17 @@
 (defn heard-fx
   "What the mic's text does in the composer k it was held in ([server chat] or :new), wherever the
   person is now (hearing takes a moment; they may have opened another chat): it joins that
-  composer's draft; let go to send, the draft with it answers that chat's question or is sent."
+  composer's draft; let go to send (or :now: the running turn stops first), the draft with it
+  answers that chat's question or is sent."
   [db k heard dir]
   (let [text (mic/with-heard (get-in db [:drafts k] "") heard)
         with-text (assoc-in db [:drafts k] text)
         ask (when (vector? k) (first (get-in db [:chats k :asks])))
         answers (when ask (chat-pure/typed-answer ask (str/trim text) (get-in db [:attach k])))]
     (cond
-      (not= dir :send) {:db with-text}
+      (not (#{:send :now} dir)) {:db with-text}
       answers {:db (assoc-in db [:drafts k] "") :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
-      :else (let [sent (send-for with-text k text)] (if (seq sent) sent {:db with-text})))))
+      :else (let [sent (send-for with-text k text (= dir :now))] (if (seq sent) sent {:db with-text})))))
 
 (rf/reg-event-fx
  :mic/heard

@@ -36,7 +36,9 @@
 (deftest a-drag-right-adds-anything-else-sends
   (is (= :send (mic/gesture 0 0)))
   (is (= :send (mic/gesture -120 0)) "dragged left")
-  (is (= :send (mic/gesture 0 80)) "dragged down")
+  (is (= :now (mic/gesture 0 80)) "dragged down: send now")
+  (is (= :send (mic/gesture 0 (dec mic/drag-px))) "not far enough down")
+  (is (= :add (mic/gesture 90 60)) "more right than down")
   (is (= :send (mic/gesture (dec mic/drag-px) 0)))
   (is (= :add (mic/gesture mic/drag-px 0)))
   (is (= :add (mic/gesture 200 -60)) "more right than up")
