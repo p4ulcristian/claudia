@@ -763,3 +763,7 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .up-note { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the gear: when this version went live, very small (views/update_pill.cljs). */
 .up-ago { padding: 2px 2px 4px; font: 9.5px/1.2 var(--sans); color: var(--muted); text-align: center; opacity: 0.8; }
+/* The Copy pill over a selection, in the iPhone/iPad app (claudia.web.copy-pill). */
+.copy-pill { position: fixed; z-index: 95; width: 68px; height: 40px; border-radius: 20px; border: 0;
+  font: 600 15px/1 var(--sans); color: var(--bg); background: var(--fg); box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }

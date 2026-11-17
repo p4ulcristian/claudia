@@ -4,6 +4,7 @@
             [claudia.web.alerts :as alerts]
             [claudia.web.swipe :as swipe]
             [claudia.web.tip :as tip]
+            [claudia.web.copy-pill :as copy-pill]
             [claudia.web.native :as native]
             [claudia.web.order :as order]
             [claudia.web.presence :as presence]
@@ -39,6 +40,7 @@
   (viewport/install!)
   (swipe/install!)
   (tip/install!)
+  (copy-pill/install!)
   (alerts/install!)
   (md/install-copy!)
   (pictures/install-keys!)

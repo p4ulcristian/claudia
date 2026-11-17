@@ -496,6 +496,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     whatever the app can do better than the web view, the app does, and the page keeps working in a
     browser. Instead of: keeping the page's microphone in the app and only waking the app's session
     before each opening (WebKit owns that session; no guarantee it hands the input back).
+42. A Copy pill instead of the iOS edit menu (2026-11-17): in the iPhone/iPad app the iOS edit
+    menu is off outside text fields (ClaudiaWebView.swift), and a selection that rests gets one
+    Copy pill above it (claudia.web.copy-pill), which copies through the app (`claudiaText`,
+    UIPasteboard). In a text field the menu stays (Paste). Why: iOS 27 opens the edit menu right
+    under the selected text, in Safari too, so a finger reaching for the lower blue handle lands on
+    the menu; neither a page nor WKWebView can move that menu. Cost: Look Up, Translate and Search
+    Web are gone in the app. A browser keeps the iOS menu (a page can't turn it off) and shows no
+    pill. Instead of: keeping the iOS menu (the bug stays), a Copy button on every message (part of
+    a message still meets the bug).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
