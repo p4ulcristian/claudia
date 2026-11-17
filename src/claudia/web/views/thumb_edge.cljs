@@ -81,16 +81,28 @@
           :stroke-linejoin "round" :aria-hidden true}
     [:rect {:x 6 :y 6 :width 12 :height 12 :rx 2}]]])
 
+(def ^:private cog-path
+  ;; Lucide's "settings" cog (ISC licence).
+  (str "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73"
+       "l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73"
+       "l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2"
+       "v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73"
+       "l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73"
+       "l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"))
+
 (defn- settings-button
-  "Opens Settings (in the drawer, as the menu's Settings)."
+  "Settings, in the drawer: a tap opens it, a tap while it shows closes it."
   []
-  [:button.edge-step.edge-icon {:type "button" :aria-label "Settings" :data-tip "Settings"
-                                :on-click #(do (rf/dispatch [:sidebar/toggle true])
-                                               (rf/dispatch [:ops/settings true]))}
-   [:svg {:width 26 :height 26 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
-          :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
-    [:circle {:cx 12 :cy 12 :r 3}]
-    [:path {:d "M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"}]]])
+  (let [open? (:settings? @(rf/subscribe [:list-mode]))]
+    [:button.edge-step.edge-icon {:type "button" :aria-label "Settings" :data-tip "Settings"
+                                  :aria-pressed (boolean open?) :class (when open? "on")
+                                  :on-click #(if open?
+                                               (rf/dispatch [:sidebar/toggle false])
+                                               (do (rf/dispatch [:sidebar/toggle true])
+                                                   (rf/dispatch [:ops/settings true])))}
+     [:svg {:width 26 :height 26 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
+            :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
+      [:path {:d cog-path}] [:circle {:cx 12 :cy 12 :r 3}]]]))
 
 (defn- middle-row
   "Stop, the mic, Settings: an empty slot keeps the mic in the middle."
