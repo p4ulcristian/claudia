@@ -485,6 +485,17 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     bottom bar, the main buttons along an iPad's bottom edge (a phone habit; a held tablet's thumbs
     are rarely there), Apple's top toolbar (a convention, not a reach finding), and the same places
     for a mouse (the research is about fingers).
+41. The app records the mic (2026-11-17): in the iPhone/iPad app the composer's mic is recorded
+    by the app (NativeMic.swift, AVAudioEngine; the page's claudia.web.mic-native asks it over a
+    message handler) and the page gets the clip as 16 kHz WAV and the bars' spectrum. Every press
+    checks the app's audio session and engine and starts them again when they stopped. In a browser
+    the page records as before (getUserMedia + AudioWorklet), and a fresh opening that gives no
+    sound is tried again up to three times in the same press. Why: the hub's mic log showed the
+    web view's microphone opening live after a switch to another app and giving no sound, press
+    after press, for up to half a minute; the page cannot reach the app's audio session. Rule:
+    whatever the app can do better than the web view, the app does, and the page keeps working in a
+    browser. Instead of: keeping the page's microphone in the app and only waking the app's session
+    before each opening (WebKit owns that session; no guarantee it hands the input back).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

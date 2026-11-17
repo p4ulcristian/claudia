@@ -92,6 +92,11 @@
   [scroll-height scroll-top client-height]
   (< (- scroll-height scroll-top client-height) 80))
 
+(defn sent?
+  "Whether the outbox grew from before to now (counts): the person just sent a message."
+  [before now]
+  (> now (or before 0)))
+
 (defn wants-older?
   "Near the top, with earlier messages still to read and none loading."
   [state scroll-top]

@@ -160,3 +160,9 @@
   (is (true? (chat/sendable? "hi" [])))
   (is (true? (chat/sendable? "" [{:file "a"}])))
   (is (false? (chat/sendable? "hi" [{:busy true}]))))
+
+(deftest sent
+  (is (chat/sent? 0 1) "the outbox grew: a send")
+  (is (chat/sent? nil 1) "the first send")
+  (is (not (chat/sent? 1 1)) "nothing new")
+  (is (not (chat/sent? 2 1)) "the server took one: not a send"))

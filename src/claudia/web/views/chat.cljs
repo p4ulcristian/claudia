@@ -175,6 +175,20 @@
      nil)
    deps))
 
+(defn- use-bottom-on-send!
+  "The person sent a message (typed or spoken: the outbox grew): the column goes to its end and
+  follows it again, even when they had scrolled up, so they see what they sent."
+  [{:keys [box stuck]} outbox-count]
+  (let [before (h/use-ref outbox-count)]
+    (h/use-layout-effect
+     (fn []
+       (when (pure/sent? (.-current before) outbox-count)
+         (set! (.-current stuck) true)
+         (some-> (.-current box) to-bottom!))
+       (set! (.-current before) outbox-count)
+       nil)
+     [outbox-count])))
+
 (defn- use-follow-on-resize!
   "A shorter column (a phone's keyboard, the message box growing) keeps its end in view."
   [{:keys [box stuck]}]
@@ -288,6 +302,7 @@
     (jump! ck (:more state))
     (use-bottom-on-open! scroll ck)
     (use-keep-place! scroll ck first-id)
+    (use-bottom-on-send! scroll (count (:outbox oc)))
     (use-follow-bottom! scroll [ck (count msgs) (count (:text (peek msgs))) (count (:outbox oc)) running])
     (use-follow-on-resize! scroll)
     (use-follow-growth! scroll)

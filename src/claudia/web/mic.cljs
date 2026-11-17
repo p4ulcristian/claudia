@@ -15,8 +15,11 @@
   give its first ones within `first-ms`, a warm one whose last ones are older than `stall-ms` is
   opened again at the press, a track that ends or mutes or a context that stops running lets the
   microphone go, a page that opens the microphone tells the other Claudia pages to let theirs go
-  (BroadcastChannel), and a clip without a sample is an error, never sent."
+  (BroadcastChannel), and a clip without a sample is an error, never sent. An opening that gives no
+  sound is tried again, fresh, up to `max-tries` times in the same press before the press fails.
+  In the iPhone/iPad app the app records instead (claudia.web.mic-native, README decision 41)."
   (:require [claudia.web.api :as api]
+            [claudia.web.mic-native :as native]
             [claudia.web.pcm :as pcm]))
 
 (def ^:private idle-ms "How long the microphone stays warm after the last press." (* 10 60 1000))
@@ -26,7 +29,8 @@
 (def ^:private late-ms "Waited at release for the samples still on their way from the worklet." 80)
 (def ^:private stall-ms "A warm microphone whose last samples are older than this gives no sound." 400)
 (def ^:private first-ms "How long a fresh microphone may take to give its first samples." 2000)
-(def ^:private no-sound "The microphone gives no sound (another Claudia window or app may hold it): try again.")
+(def ^:private max-tries "Fresh openings one press makes while the microphone gives no sound." 3)
+(def no-sound "The microphone gives no sound (another Claudia window or app may hold it): try again.")
 
 ;; nil, or {:ctx :stream :analyser :node :ring [chunks] :clip [chunks]-or-nil :timer :last ms}
 (defonce ^:private warm (atom nil))
@@ -41,7 +45,7 @@
   []
   (some-> @steps (dissoc :at)))
 
-(defn warm? "Whether the microphone is warm now." [] (some? @warm))
+(defn warm? "Whether the microphone is warm now." [] (if (native/here?) (native/warm?) (some? @warm)))
 
 (defn- native-app []
   (when-let [n (.-claudiaNative js/window)] (str (.-platform n) " " (.-version n))))
@@ -61,7 +65,8 @@
 (defn available?
   "Promise of whether the mic can work here: a microphone API, AudioWorklet and the hub's listen service."
   []
-  (if (and (exists? js/AudioWorkletNode) (some-> js/navigator .-mediaDevices .-getUserMedia))
+  (if (or (native/here?)
+          (and (exists? js/AudioWorkletNode) (some-> js/navigator .-mediaDevices .-getUserMedia)))
     @listen?
     (js/Promise.resolve false)))
 
@@ -169,18 +174,37 @@
       (set! (.-onmessage ch) #(close!))
       ch)))
 
+(defn- open-once
+  "Promise of the warm state from one fresh opening: the microphone, the context, the first samples."
+  []
+  (reset! steps {:at (js/Date.now)})
+  (some-> ^js pages (.postMessage "taken"))
+  (-> (in-time (.getUserMedia (.-mediaDevices js/navigator) constraints)
+               15000 "The microphone didn't answer: try again.")
+      (.then (fn [stream] (step! :mic) (warm-up stream)))
+      (.then first-sound)))
+
+(defn retry?
+  "Whether an opening that failed with err-text, after tries openings, gets another one: only a
+  microphone that gave no sound does, up to `tries` openings."
+  [err-text tries]
+  (and (= err-text no-sound) (< tries max-tries)))
+
+(defn- open-trying
+  "Promise of the warm state, opening again (fresh) while the microphone gives no sound."
+  [tries]
+  (.catch (open-once)
+          (fn [e]
+            (if (retry? (.-message e) tries)
+              (open-trying (inc tries))
+              (throw e)))))
+
 (defn- open!
   "Promise of the warm state, opening the microphone when it is cold (one opening at a time)."
   []
   (or (some-> @warm js/Promise.resolve)
       @opening
-      (let [_ (reset! steps {:at (js/Date.now)})
-            _ (some-> ^js pages (.postMessage "taken"))
-            p (-> (in-time (.getUserMedia (.-mediaDevices js/navigator) constraints)
-                           15000 "The microphone didn't answer: try again.")
-                  (.then (fn [stream] (step! :mic) (warm-up stream)))
-                  (.then first-sound)
-                  (.finally #(reset! opening nil)))]
+      (let [p (.finally (open-trying 1) #(reset! opening nil))]
         (reset! opening p)
         p)))
 
@@ -202,23 +226,28 @@
   []
   (swap! warm #(when % (assoc % :clip nil :timer (js/setTimeout close! idle-ms)))))
 
-(defn start!
-  "Promise of a recording session: the microphone warm (and giving sound) and the clip running (from
-  pre-s back)."
+(defn- web-start!
   []
   (revive!)
   (.then (open!)
          (fn [w]
            (some-> (:timer w) js/clearTimeout)
            (swap! warm began (js/Math.round (* pre-s (rate w))))
-           {:analyser (:analyser @warm)})))
+           {:analyser (:analyser @warm) :rate (rate w)})))
 
-(defn discard! "Ends a session, keeping nothing." [_session] (cool!))
+(defn start!
+  "Promise of a recording session: the microphone warm (and giving sound) and the clip running (from
+  pre-s back). Recorded by the app when the page runs in it."
+  []
+  (if (native/here?) (native/start!) (web-start!)))
+
+(defn discard! "Ends a session, keeping nothing." [session]
+  (if (:native session) (native/discard! session) (cool!)))
 
 (defn- wav-of [chunks from]
   (js/Blob. #js [(pcm/wav (pcm/resampled (pcm/joined chunks) from pcm/rate) pcm/rate)] #js {:type "audio/wav"}))
 
-(defn stop!
+(defn- web-stop!
   "Promise of the session's clip (a WAV Blob), once the last samples arrived; the microphone stays
   warm. Refused when the clip holds no sample (the microphone gave no sound, or was let go)."
   [_session]
@@ -239,12 +268,21 @@
   (when (exists? js/document)
     (js/document.addEventListener "visibilitychange" #(when (= "hidden" js/document.visibilityState) (close!)))))
 
-(defn spectrum
-  "The voice's spectrum now, bytes 0-255 low to high, as a vector."
+(defn stop!
+  "Promise of the session's clip (a WAV Blob); refused when it holds no sample."
+  [session]
+  (if (:native session) (native/stop! session) (web-stop! session)))
+
+(defn- web-spectrum
   [{:keys [^js analyser]}]
   (let [a (js/Uint8Array. (.-frequencyBinCount analyser))]
     (.getByteFrequencyData analyser a)
     (vec (array-seq a))))
+
+(defn spectrum
+  "The voice's spectrum now, bytes 0-255 low to high (fftSize 512: 256 of them), as a vector."
+  [session]
+  (if (:native session) (native/spectrum session) (web-spectrum session)))
 
 (defn hear
   "Promise of the text the hub heard in a clip."

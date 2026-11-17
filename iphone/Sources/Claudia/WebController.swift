@@ -19,6 +19,8 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         // Persistent cookies and storage: the sign-in survives restarts.
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
+        config.userContentController.addScriptMessageHandler(NativeMic(), contentWorld: .page,
+                                                             name: NativeMic.name)
         webView = WKWebView(frame: .zero, configuration: config)
         #if DEBUG
         // Debug builds only (the Simulator test build): Safari's Web Inspector and Appium can reach

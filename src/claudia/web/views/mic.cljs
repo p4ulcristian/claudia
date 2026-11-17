@@ -32,7 +32,7 @@
      (let [raf (atom nil) eased (atom [])
            step (fn step []
                   (when-let [c (.-current canvas)]
-                    (when-let [s (.-current live)] (swap! eased pure/eased (pure/bar-levels (mic/spectrum s))))
+                    (when-let [s (.-current live)] (swap! eased pure/eased (pure/bar-levels (mic/spectrum s) (:rate s))))
                     (flower/draw! c (flower-state phase (.-current live) hold @eased)))
                   (reset! raf (js/requestAnimationFrame step)))]
        (when (#{:starting :recording} phase) (step))

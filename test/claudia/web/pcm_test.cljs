@@ -61,3 +61,9 @@
   (is (not (mic/sounding? {:ring []} 5000)) "never a sample: no sound")
   (is (mic/sounding? {:last 4800} 5000) "samples 200 ms ago")
   (is (not (mic/sounding? {:last 4000} 5000)) "nothing for a second: no sound"))
+
+(deftest mic-retry
+  (is (mic/retry? mic/no-sound 1) "a silent first opening is tried again")
+  (is (mic/retry? mic/no-sound 2) "and a silent second one")
+  (is (not (mic/retry? mic/no-sound 3)) "the third silent opening fails the press")
+  (is (not (mic/retry? "The microphone didn't answer: try again." 1)) "only no sound is retried"))
