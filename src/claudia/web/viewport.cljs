@@ -66,22 +66,40 @@
 (defn touch-blocked? [] @blocked)
 
 (defonce ^:private start
-  ;; Where the current one-finger touch began, until its first move decided it.
+  ;; Where and when the current one-finger touch began, until its first move decided it.
   (atom nil))
+
+(def ^:private hold-ms
+  "A touch that rests this long before it moves is a long press: iOS's text selection (a word
+  picked, then dragged wider) or a selection handle, never a pan of the page."
+  300)
 
 (defn- on-touchstart [^js e]
   (let [t (aget (.-touches e) 0)]
-    (reset! start (when (and t (= 1 (.-length (.-touches e)))) [(.-clientX t) (.-clientY t)]))
+    (reset! start (when (and t (= 1 (.-length (.-touches e))))
+                    [(.-clientX t) (.-clientY t) (.-timeStamp e)]))
     (reset! blocked false)))
+
+(defn selecting?
+  "Whether a touch that began at began-ms and first moved at now-ms, with a selection held or not,
+  belongs to iOS's text selection: a selection is held (its handles are being dragged), or the
+  finger rested hold-ms first (a long press). Its moves are never cancelled: a cancelled move
+  stops iOS's selection gestures (selecting on an iPad stalled or never started)."
+  [began-ms now-ms selection?]
+  (or selection? (>= (- now-ms began-ms) hold-ms)))
+
+(defn- selection? []
+  (let [^js s (js/window.getSelection)] (boolean (and s (not (.-isCollapsed s))))))
 
 (defn- decide!
   "On the touch's first real move: blocked unless something under it scrolls that way (or it is on
   a slider)."
-  [^js e [x y] ^js t]
+  [^js e [x y began] ^js t]
   (let [dx (- x (.-clientX t)) dy (- y (.-clientY t))]
     (when-not (and (zero? dx) (zero? dy))
       (let [target (when (instance? js/Element (.-target e)) (.-target e))]
-        (reset! blocked (and (not (some-> target (.closest "input[type=range]")))
+        (reset! blocked (and (not (selecting? began (.-timeStamp e) (selection?)))
+                             (not (some-> target (.closest "input[type=range]")))
                              (not (can-scroll? target dx dy))))
         (reset! start nil)))))
 

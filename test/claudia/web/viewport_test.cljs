@@ -18,3 +18,8 @@
     (is (false? (viewport/scrolls-by? box 10 0)))
     (is (true? (viewport/scrolls-by? (assoc box :overflow-x "scroll" :scroll-width 300) 10 0)))
     (is (false? (viewport/scrolls-by? (assoc box :overflow-x "scroll" :scroll-width 300) -10 0)))))
+
+(deftest a-selecting-finger-is-never-held
+  (is (viewport/selecting? 0 50 true) "a selection is held: its handles move freely")
+  (is (viewport/selecting? 0 400 false) "a long press: iOS picks and widens a selection")
+  (is (not (viewport/selecting? 0 50 false)) "a quick move with no selection may still be held"))
