@@ -449,3 +449,24 @@ button.cl-fn:hover { text-decoration: underline; }
 .prompt-entry .block-head b { font: 700 18px var(--hand); flex: 1; }
 .prompt-text { box-sizing: border-box; width: 100%; resize: vertical; font: 13px/1.45 var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .prompt-entry .error { color: var(--red); margin: 4px 0 0; }
+
+/* The prompt button in the chat's header and its popup (claudia.web.views.prompts/pick). */
+.prompt-btn { font: 500 11.5px var(--sans); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.prompt-btn b { color: var(--green); font-weight: 600; }
+.prompt-btn:hover, .prompt-btn.on { border-color: var(--accent); color: var(--fg); background: var(--bg); }
+.prompt-pop-back { position: fixed; inset: 0; z-index: 60; }
+.prompt-pop { position: fixed; z-index: 61; box-sizing: border-box; max-height: calc(100vh - 60px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / 0.45); padding: 10px; text-align: left; }
+.prompt-sec { font: 700 15px var(--hand); margin: 2px 0 6px; }
+.prompt-base { border: 1px dashed var(--line); border-radius: 8px; padding: 7px 9px; color: var(--muted); font-size: 12px; }
+.prompt-base .lock { color: var(--amber); }
+.prompt-base p { margin: 4px 0; }
+.prompt-base .link { background: none; border: 0; padding: 0; color: var(--blue); cursor: pointer; font: inherit; }
+.prompt-full { white-space: pre-wrap; font: 11px/1.4 var(--mono); color: var(--fg); max-height: 40vh; overflow-y: auto; margin: 6px 0 0; }
+.prompt-plus { text-align: center; color: var(--muted); margin: 6px 0; font-size: 16px; }
+.prompt-opt { display: flex; gap: 8px; align-items: flex-start; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.prompt-opt:hover { background: var(--bg); }
+.prompt-opt.sel { background: var(--green-bg); outline: 1px solid var(--green); }
+.prompt-opt .dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--muted); margin-top: 2px; flex: none; box-sizing: border-box; }
+.prompt-opt.sel .dot { border-color: var(--green); background: var(--green); }
+.prompt-opt small { display: block; color: var(--muted); }
+.prompt-edit { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); margin-top: 8px; padding: 8px 8px 2px; background: none; color: var(--blue); font: 13px var(--sans); text-align: left; cursor: pointer; }

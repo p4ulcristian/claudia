@@ -6,6 +6,7 @@
   (:require [clojure.string :as str]
             [claudia.node.http :as io]
             [claudia.shared.protocol :as p]
+            [claudia.slave.codeforms :as codeforms]
             [claudia.slave.store :as store]))
 
 (def max-name "The longest profile name." 60)
@@ -51,6 +52,12 @@
 
 (defn- keep! [ps] (store/kv! "" "promptProfiles" ps) ps)
 
+(defn answer
+  "What the page gets: the profiles and the built-in part every chat has (Claudia's part of the
+  system prompt, after Claude Code's own; shown locked above the profiles)."
+  []
+  {:profiles (profiles) :builtIn (codeforms/prompt-for)})
+
 ;; ---- the page's calls -------------------------------------------------------------------------
 
 (defn route
@@ -71,7 +78,7 @@
                  (if (and (string? text) (<= (count text) max-text))
                    (do (keep! (with-profile (profiles) n text))
                        (changed!)
-                       (io/send-json res 200 {:profiles (profiles)}))
+                       (io/send-json res 200 (answer)))
                    (io/send-json res 400 {:error (str "text: a string of at most " max-text " characters")})))))
       (.catch #(io/send-json res 400 {:error (str (.-message %))}))))
 
@@ -82,10 +89,10 @@
   (let [{:keys [op] n :name} (route (.-method req) url)]
     (cond
       (nil? op) nil
-      (= op :list) (io/send-json res 200 {:profiles (profiles)})
+      (= op :list) (io/send-json res 200 (answer))
       (:read-only who) (io/send-json res 403 {:error "Read only."})
       (= op :save) (save! req res n changed!)
       (= op :delete) (do (keep! (without-profile (profiles) n))
                          (changed!)
-                         (io/send-json res 200 {:profiles (profiles)})))
+                         (io/send-json res 200 (answer))))
     (some? op)))

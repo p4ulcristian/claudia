@@ -807,8 +807,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 60. Prompt profiles (2026-11-18, the user's call). A server keeps named prompt profiles (name, at
     most 60 characters; text, at most 20,000), added, edited and deleted in the Prompts window
-    (the header's prompt picker, "Edit prompts…"). A chat picks one in its header beside model and
-    effort (`settings.prompt`; a new chat carries the last chat's pick like its model). The
+    (the prompt popup's "Edit profiles…"). A chat picks one in its header beside model and effort:
+    a button names the pick ("Prompt: Reviewer", or "built-in"), and a click opens a popup with
+    the locked built-in part on top (a summary; Show full text gives its exact words), then None
+    and the profiles with their first lines, then Edit profiles… (`settings.prompt`; a new chat carries the last chat's pick like its model). The
     profile's text goes after Claudia's part of the system prompt (headed `# Prompt profile:
     <name>`), so the picture, secrets and folder rules stay; Claudia's own chat still gets her
     part last. A live chat takes a new pick, or a change to its profile's text, after its turn and
