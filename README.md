@@ -639,6 +639,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     image-to-3D tool is the way if it comes back), words in bubbles beside her, a spark drawn by the
     image model (it never got the logo's shape; the real path is drawn on top).
 
+50. Claudia's own chat wears her look (2026-11-18, the user's call): every chat has a colour; hers
+    is a gradient instead, deep green at the top to near black at the bottom, over the whole window
+    (the rail, the chat and the picture are see-through over it), with her own green theme whatever
+    colour her row has (`:root[data-claudia]`, set while `:open-claudia?`). Behind everything a few
+    faint columns of code fall (`claudia.web.views.claudia-rain`: 9 columns, 6 glyphs each, at most
+    9 % opacity, about eight frames a second, still when the reader asks for less motion). Instead
+    of: a flat colour like every other chat, or a dense rain that would fight the text.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

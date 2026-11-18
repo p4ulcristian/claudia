@@ -41,6 +41,17 @@
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
 }
 
+/* Claudia's own chat (README decision 50): her own green theme, whatever colour her row has, and the
+   whole window one gradient from deep green to near black, with a few faint columns of code falling
+   behind everything (claudia-rain). The rail, the picture and the chat are see-through over it. */
+:root[data-claudia] {
+  --hue: #2bd46a; --bg: #0b1c12; --bg2: #08150d; --panel: #10261a; --panel2: #143020; --line: #1f4a2e;
+  --fg: #e6f5ea; --muted: #8fb79c; --accent: #5cff8f; --board: transparent;
+}
+:root[data-claudia] body { background: linear-gradient(180deg, #0e2a19 0%, #0a1a10 45%, #050a07 100%); }
+:root[data-claudia] .rail, :root[data-claudia] .sidebar { background: rgba(3, 10, 6, 0.35); }
+.claudia-rain { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
 * { box-sizing: border-box; scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
 /* The page never scrolls (claudia.web.viewport): html is the window, and body the page's one layer,
