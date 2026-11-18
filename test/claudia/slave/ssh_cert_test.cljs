@@ -1,7 +1,9 @@
 (ns claudia.slave.ssh-cert-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as str]
+            [claudia.slave.front :as front]
             [claudia.slave.hub-call :as hub-call]
+            [claudia.slave.sshfront :as sshfront]
             [claudia.slave.ssh-cert :as ssh-cert]))
 
 (def ^:private block (ssh-cert/config-block "paul-claudia-agent"))
@@ -46,3 +48,31 @@
   (is (= {:url "u" :server "s" :key-file "k"}
          (hub-call/settings #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s" :CLAUDIA_HUB_KEY_FILE "k"})))
   (is (nil? (hub-call/settings #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s"}))))
+
+(deftest the-front-calls-the-hub-with-its-own-key
+  (is (= {:url "u" :server "s" :key-file "f"}
+         (hub-call/front-settings #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s" :FRONT_HUB_KEY_FILE "f"
+                                       :CLAUDIA_HUB_KEY_FILE "k"})))
+  (is (nil? (hub-call/front-settings #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s" :CLAUDIA_HUB_KEY_FILE "k"}))
+      "never a runner's key file"))
+
+(deftest a-certificate-is-one-ed25519-certificate-line
+  (is (= "ssh-ed25519-cert-v01@openssh.com AAAA c\n" (ssh-cert/cert-line " ssh-ed25519-cert-v01@openssh.com AAAA c\n")))
+  (is (nil? (ssh-cert/cert-line "ssh-ed25519-cert-v01@openssh.com AAAA\nHost evil")) "one line only")
+  (is (nil? (ssh-cert/cert-line "ssh-rsa AAAA")))
+  (is (nil? (ssh-cert/cert-line nil))))
+
+(deftest the-front-renews-only-agent-users-from-its-profiles-file
+  (let [ps (front/parse-profiles "paul p@x /s/p user=paul-claudia-agent\nann a@x /s/a\nbob b@x /s/b user=bob\n")]
+    (is (= ["paul"] (map :profile (sshfront/agent-profiles ps))))
+    (is (= "paul-claudia-agent" (:user (first (sshfront/agent-profiles ps))))))
+  (is (= "claudia-x" (front/profile-user "x" [])))
+  (is (= "u1" (front/profile-user "x" ["note" "user=u1" "user=u2"]))))
+
+(deftest the-runners-answers-to-the-renewal
+  (is (= {:public-key "ssh-ed25519 AAAA a"} (sshfront/public-key-of {:status 200 :body {:publicKey "ssh-ed25519 AAAA a"}})))
+  (is (= {:problem "public key: the runner answered 409: This runner does not run as an agent user."}
+         (sshfront/public-key-of {:status 409 :body {:error "This runner does not run as an agent user."}})))
+  (is (= {:problem "public key: the runner sent none"} (sshfront/public-key-of {:status 200 :body {}})))
+  (is (nil? (sshfront/runner-problem "certificate" {:status 200 :body {:ok true}})))
+  (is (= "certificate: the runner answered 400: no reason" (sshfront/runner-problem "certificate" {:status 400 :body {}}))))

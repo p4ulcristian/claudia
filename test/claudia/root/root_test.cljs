@@ -133,7 +133,10 @@
   (is (= :root (runner/request-op "POST" "/api/root/card" nil nil false)))
   (is (= :root (runner/request-op "POST" "/api/root/chat" nil nil false)))
   (is (nil? (runner/request-op "GET" "/api/root/chat" nil nil false)))
-  (is (= [404 {:error "Not found."}] (runner/root-route "ask" {:chatKey "k" :argv ["ls"]})) "no route answers allow"))
+  (is (= [404 {:error "Not found."}] (runner/root-route "ask" {:chatKey "k" :argv ["ls"]})) "no route answers allow")
+  (is (= [404 {:error "No such chat."}] (runner/root-route "known" {})) "no chat named")
+  (is (= :ssh (runner/request-op "POST" "/api/ssh/cert" nil nil false)))
+  (is (nil? (runner/request-op "GET" "/api/ssh/pubkey" nil nil false))))
 
 (deftest the-row-says-the-root-switch
   (is (true? (:root (view/row {:id "c" :root true} {} 0 0))))
@@ -146,6 +149,8 @@
   (is (= :refuse (front/root-call "POST" "/api/root/card")) "a runner's root route is never passed on")
   (is (= :refuse (front/root-call "POST" "/api/root/chat")))
   (is (nil? (front/root-call "POST" "/api/chats")))
+  (is (= :refuse (front/root-call "POST" "/api/ssh/cert")) "the SSH certificate routes are the front's own")
+  (is (= :refuse (front/root-call "POST" "/api/ssh/pubkey")))
   (is (not (some #(= "X-Claudia-Owner" (first %))
                  (front/runner-headers #js ["X-Claudia-Owner" "1"] {:own {:profile "p"} :target {:profile "p"}})))
       "the runner hears of no owner"))
@@ -180,6 +185,19 @@
     (is (false? (gate/switch-on? s "peter" "c1")) "per profile")
     (is (false? (gate/switch-on? s "paul" "c2")))
     (is (= {} (gate/with-switch s "paul" "c1" false)))))
+
+(deftest a-tap-counts-only-on-a-chat-of-the-target-profile
+  (is (nil? (gate/tap-problem own "c1")))
+  (is (= [403 {:error "Only the chat's owner may give it root."}] (gate/tap-problem writer "c1")))
+  (is (= [400 {:error "chat is needed."}] (gate/tap-problem own nil)))
+  (is (nil? (gate/chat-problem {:status 200 :body {:chat "c1"}})))
+  (is (= [404 {:error "No such chat."}] (gate/chat-problem {:status 404 :body {:error "No such chat."}})))
+  (is (= [502 {:error "The runner did not answer: x"}] (gate/chat-problem {:status 502 :body {:error "The runner did not answer: x"}})))
+  (is (= [502 {:error "The runner answered 500."}] (gate/chat-problem {:status 500 :body {}}))))
+
+(deftest kept-switches-only-of-profiles-here
+  (is (= {"paul/c1" true} (gate/switches-here {"paul/c1" true "peter/c2" true "x" true} [{:profile "paul"}])))
+  (is (= {} (gate/switches-here {"peter/c2" true} []))))
 
 (deftest the-helper-asks-only-for-agent-users-here
   (let [ps [{:profile "paul" :socket "/s"}]]

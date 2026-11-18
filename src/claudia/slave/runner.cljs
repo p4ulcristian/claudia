@@ -197,9 +197,11 @@
 
 (defn root-route
   "What the front's POST to /api/root/<sub> asks this runner, for display only (README decision 52:
-  the front decides): the chat a key names, a card to show or end, the switch to show. b: the body."
+  the front decides): whether a chat is here, the chat a key names, a card to show or end, the
+  switch to show. b: the body."
   [sub {:keys [chatKey chat ask argv cwd expires root]}]
   (case sub
+    "known" (if (known? chat) [200 {:chat chat}] [404 {:error "No such chat."}])
     "chat" (if-let [row (store/chat-by-key chatKey)] [200 {:chat (:id row)}] [404 {:error "No chat here has this session's key (CLAUDIA_CHAT_KEY)."}])
     "card" (if (and (known? chat) (string? ask) (vector? argv) (every? string? argv) (number? expires))
              (do (chats/show-root-card! chat ask argv (when (string? cwd) cwd) expires) [200 {:ok true}])
@@ -252,14 +254,15 @@
 (defn request-op
   "Which of the runner's own calls a request is (url without its query; chat-id and sub from
   /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png,
-  :me, :secret-read, :root (the front's root calls), or nil (the forms' and the API's calls, then not found)."
+  :me, :secret-read, :root (the front's root calls), :ssh (the front's SSH certificate calls), or nil (the forms' and the API's calls, then not found)."
   [method url chat-id sub chat-known]
   (cond
     (and chat-id (= "GET" method) (not chat-known)) :no-chat
     (and chat-id (= sub "picture.png") (= "GET" method)) :picture-png
     (and (= url "/api/me") (= "GET" method)) :me
     (and (= url "/api/secret/read") (= "POST" method)) :secret-read
-    (and (str/starts-with? url "/api/root/") (= "POST" method)) :root))
+    (and (str/starts-with? url "/api/root/") (= "POST" method)) :root
+    (and (str/starts-with? url "/api/ssh/") (= "POST" method)) :ssh))
 
 (defn chat-call
   "A request path (no query) of /api/chats/:id/<sub> as [id sub] (id decoded), else [nil nil]."
@@ -290,6 +293,7 @@
                                  :version h/version :commit h/commit})
       :secret-read (secret-read req res who)
       :root (root-call req res (subs url (count "/api/root/")))
+      :ssh (ssh-cert/call req res (subs url (count "/api/ssh/")))
       nil (cond
             (chat-ops/handle req res chat-ops-fns) nil
             (video/handle req res url who) nil
@@ -328,12 +332,10 @@
                (println "claudia runner" profile "on" socket-path "(host" host-socket ", cwd" chats/cwd ")")))))
 
 (defn- start!
-  "Once libsodium is ready: the host link, the chats, the 5-minute probe, the agent user's SSH
-  certificate and the server."
+  "Once libsodium is ready: the host link, the chats, the 5-minute probe and the server."
   []
   (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
   (chats/init!)
-  (ssh-cert/start!)
   ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
   (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
   (listen!))

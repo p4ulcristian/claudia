@@ -12,18 +12,26 @@
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
             [claudia.slave.rootfront :as rootfront]
+            [claudia.slave.sshfront :as sshfront]
             [claudia.slave.tokens :as tokens]))
 
 (def ^:private env (.-env js/process))
 
+(defn profile-user
+  "Whom a profile's host and runner run as, from the words after its socket on its profiles line: the
+  first `user=<name>`, else `claudia-<profile>` (as deploy/shared-server/install.sh's profile_user)."
+  [profile more]
+  (or (some #(second (re-matches #"user=(.+)" %)) more) (str "claudia-" profile)))
+
 (defn parse-profiles
   "The profiles file's text: `<profile> <email> <runner socket> [user=<linux user>]` per line; # starts
-  a comment. The user is install.sh's (whom the profile's host and runner run as); the front ignores it."
+  a comment. The user is whom the profile's host and runner run as: the front renews an agent
+  user's SSH certificate (claudia.slave.sshfront) and believes no runner about it."
   [text]
   (vec (for [line (str/split-lines text)
-             :let [[profile email socket] (str/split (str/trim (str/replace line #"#.*" "")) #"\s+")]
+             :let [[profile email socket & more] (str/split (str/trim (str/replace line #"#.*" "")) #"\s+")]
              :when (and (seq profile) (seq email) (seq socket))]
-         {:profile profile :email (str/lower-case email) :socket socket})))
+         {:profile profile :email (str/lower-case email) :socket socket :user (profile-user profile more)})))
 
 (def ^:private profiles (atom []))
 
@@ -91,11 +99,13 @@
             (when read-only [["X-Claudia-Read-Only" "1"]]))))
 
 (defn root-call
-  "What the front does with a hub call to url under /api/root/ (README decision 52): :front (the
-  person's tap, answered here), :refuse (a runner's root routes are never passed on), or nil."
+  "What the front does with a hub call to url under /api/root/ (README decision 52) or /api/ssh/
+  (decision 53): :front (the person's root tap, answered here), :refuse (a runner's root and SSH
+  certificate routes are the front's own, never passed on), or nil."
   [method url]
   (cond (and (= "POST" method) (#{"/api/root/answer" "/api/root/switch"} url)) :front
-        (str/starts-with? url "/api/root/") :refuse))
+        (str/starts-with? url "/api/root/") :refuse
+        (str/starts-with? url "/api/ssh/") :refuse))
 
 (defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
@@ -254,7 +264,7 @@
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})
-      (= :refuse (root-call (.-method req) url)) (io/send-json res 403 {:error "Not passed on: the runner's root routes are the front's own."})
+      (= :refuse (root-call (.-method req) url)) (io/send-json res 403 {:error "Not passed on: the runner's root and SSH routes are the front's own."})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
@@ -303,6 +313,7 @@
     (reset! profiles (parse-profiles (fs/readFileSync file "utf8")))
     (reset! hub-key (read-hub-key (.-FRONT_HUB_KEY_FILE env)))
     (rootfront/listen! profiles)
+    (sshfront/start! @profiles)
     (let [server (doto (http/createServer on-request)
                    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
                    (aset "requestTimeout" 0))

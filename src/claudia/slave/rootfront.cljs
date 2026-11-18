@@ -2,7 +2,8 @@
   "The front's side of root (README decision 52). The root helper asks here, on a socket only root
   can open (FRONT_ROOT_SOCKET); the person's taps arrive here as hub calls (POST /api/root/answer,
   /api/root/switch), so the proof of a tap lives with user claudia, which no agent user reaches. A
-  runner (the agent user's) only names the chat for a key and shows the card; it decides nothing."
+  runner (the agent user's) only names the chat for a key, says whether a chat is there (a tap on
+  one it lacks keeps nothing) and shows the card; it decides nothing."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
             ["node:http" :as http]
@@ -20,24 +21,36 @@
 
 (defn- state-file [] (env/env "FRONT_ROOT_STATE"))
 
-(defn- load-switches! []
-  (when-let [f (state-file)]
-    (let [v (try (p/read-json (fs/readFileSync f "utf8")) (catch :default _ nil))]
-      (swap! state assoc :switches (if (map? v) (update-keys v #(subs (str %) 1)) {})))))
-
 (defn- save-switches! [switches]
   (when-let [f (state-file)]
     (fs/writeFileSync (str f ".new") (p/write-json switches) #js {:mode (js/parseInt "600" 8)})
     (fs/renameSync (str f ".new") f)))
 
+(defn- load-switches!
+  "The kept switches, without those of profiles that have no runner here (the file then rewritten)."
+  [profiles]
+  (when-let [f (state-file)]
+    (let [v (try (p/read-json (fs/readFileSync f "utf8")) (catch :default _ nil))
+          kept (if (map? v) (update-keys v #(subs (str %) 1)) {})
+          here (gate/switches-here kept profiles)]
+      (swap! state assoc :switches here)
+      (when (not= kept here)
+        (js/console.log (str "root switches: dropped " (- (count kept) (count here)) " of profiles not here"))
+        (save-switches! here)))))
+
 (defn- runner-of [profiles profile] (some #(when (= profile (:profile %)) %) profiles))
+
+(defn- runner-call
+  "Promise of a runner's answer {:status :body} to POST path; status 502 when it did not answer."
+  [profiles profile path body]
+  (-> (io/socket-json (:socket (runner-of profiles profile)) path body runner-ms)
+      (.catch (fn [e] {:status 502 :body {:error (str "The runner did not answer: " (.-message e))}}))))
 
 (defn- to-runner
   "Promise of a runner's answer body to POST path (only for its display, or naming a chat)."
   [profiles profile path body]
-  (-> (io/socket-json (:socket (runner-of profiles profile)) path body runner-ms)
-      (.then (fn [{:keys [status body]}] (if (= 200 status) body {:error (or (:error body) (str "HTTP " status))})))
-      (.catch (fn [e] {:error (str "The runner did not answer: " (.-message e))}))))
+  (.then (runner-call profiles profile path body)
+         (fn [{:keys [status body]}] (if (= 200 status) body {:error (or (:error body) (str "HTTP " status))}))))
 
 ;; ---- the root helper's ask ----
 
@@ -89,7 +102,7 @@
   "The root helper's socket (FRONT_ROOT_SOCKET; unset: none): user claudia's, mode 0600, so only
   root (and this front) can open it."
   [profiles-atom]
-  (load-switches!)
+  (load-switches! @profiles-atom)
   (when-let [sock-path (env/env "FRONT_ROOT_SOCKET")]
     (let [server (http/createServer #(on-helper @profiles-atom %1 %2))]
       (try (fs/unlinkSync sock-path) (catch :default _))
@@ -109,14 +122,21 @@
           [200 {:ok true}]))))
 
 (defn- switch! [profiles route {:keys [chat on]}]
-  (let [profile (get-in route [:target :profile])]
-    (cond (not (gate/owner? route)) [403 {:error "Only the chat's owner may give it root."}]
-          (not (string? chat)) [400 {:error "chat is needed."}]
-          :else (let [switches (:switches (swap! state update :switches gate/with-switch profile chat (true? on)))]
-                  (save-switches! switches)
-                  (js/console.log (str "root switch of " profile "/" chat " " (if (true? on) "on" "off")))
-                  (to-runner profiles profile "/api/root/shown" {:chat chat :root (true? on)})
-                  [200 {:ok true :root (true? on)}]))))
+  (let [profile (get-in route [:target :profile])
+        switches (:switches (swap! state update :switches gate/with-switch profile chat (true? on)))]
+    (save-switches! switches)
+    (js/console.log (str "root switch of " profile "/" chat " " (if (true? on) "on" "off")))
+    (to-runner profiles profile "/api/root/shown" {:chat chat :root (true? on)})
+    [200 {:ok true :root (true? on)}]))
+
+(defn- tap!
+  "Promise of [status body] for the person's tap: the owner's only, on a chat the target profile's
+  runner says it has (else nothing is kept or settled), then act."
+  [profiles route {:keys [chat] :as body} act]
+  (if-let [problem (gate/tap-problem route chat)]
+    (js/Promise.resolve problem)
+    (.then (runner-call profiles (get-in route [:target :profile]) "/api/root/known" {:chat chat})
+           #(or (gate/chat-problem %) (act profiles route body)))))
 
 (defn handle
   "A hub call to /api/root/answer or /api/root/switch (route: the caller's, from the hub's headers)."
@@ -124,7 +144,8 @@
   (-> (io/read-json req 262144)
       (.then (fn [body]
                (case url
-                 "/api/root/answer" (answer! profiles route body)
-                 "/api/root/switch" (switch! profiles route body)
+                 "/api/root/answer" (tap! profiles route body answer!)
+                 "/api/root/switch" (tap! profiles route body switch!)
                  [404 {:error "Not found."}])))
-      (.then (fn [[status body]] (io/send-json res status body)))))
+      (.then (fn [[status body]] (io/send-json res status body)))
+      (.catch #(io/send-json res 500 {:error (.-message %)}))))
