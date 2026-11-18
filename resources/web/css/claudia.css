@@ -432,6 +432,9 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 /* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(var(--edge-t) + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
+/* Claudia's face at the rail's top draws bubbles, words and sparkles out to her right: the rail's
+   column lets them show over the chat beside it instead of cutting them at its edge. */
+.sidebar-slot:has(> .rail) { overflow: visible; position: relative; z-index: 3; }
 /* The vertical chalk lines run between the safe areas: never under the status bar or the home bar. */
 .sidebar::after, .rail::after { content: ""; position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
