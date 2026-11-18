@@ -439,3 +439,13 @@ button.cl-fn:hover { text-decoration: underline; }
 .ca-box b em { font: 700 11px var(--hand); font-style: normal; color: var(--amber); white-space: nowrap; }
 .ca-box span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9.5px var(--mono); color: var(--muted); }
 .ca-cut { text-align: center; }
+
+/* The Prompts window (claudia.web.views.prompts): the gallery's frame, one entry per profile. */
+.gallery.prompts { width: min(760px, 100%); }
+.prompt-new { display: flex; gap: 8px; margin-bottom: 18px; }
+.prompt-new input { flex: 1; min-width: 0; font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.prompt-entry { margin-bottom: 18px; }
+.prompt-entry .block-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.prompt-entry .block-head b { font: 700 18px var(--hand); flex: 1; }
+.prompt-text { box-sizing: border-box; width: 100%; resize: vertical; font: 13px/1.45 var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.prompt-entry .error { color: var(--red); margin: 4px 0 0; }

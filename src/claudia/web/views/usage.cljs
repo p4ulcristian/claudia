@@ -1,8 +1,9 @@
 (ns claudia.web.views.usage
   "Meters and the model: the chalk rings in the chat's header (the chat's context, a click runs
   /compact; its plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside
-  a button (pop-place), the model and effort pickers in the header, and the / command menu."
+  a button (pop-place), the model, effort and prompt pickers in the header, and the / command menu."
   (:require [re-frame.core :as rf]
+            [claudia.web.views.prompts :as prompts]
             [claudia.web.views.pure.usage :as pure]))
 
 (def ^:private k-tokens pure/k-tokens)
@@ -72,8 +73,9 @@
     (for [e efforts] ^{:key e} [:option {:value e} e])]])
 
 (defn pickers
-  "The chat's model and effort (applied on its next start; a live session takes them at once). A
-  new chat keeps them until it is made (events.cljs sends them with `created`)."
+  "The chat's model and effort (applied on its next start; a live session takes them at once) and
+  its prompt profile (a live session takes it after its turn). A new chat keeps them until it is
+  made (events.cljs sends them with `created`)."
   [{:keys [ck server state pending?]}]
   (let [server (or server @(rf/subscribe [:new-server]))
         server-meta @(rf/subscribe [:meta server])
@@ -89,7 +91,8 @@
          (effort-pick efforts settings
                       (pure/effort-shown (:effort state) (:defaultEfforts server-meta)
                                          (or (:model settings) ""))
-                      put!))])))
+                      put!))
+       [:f> prompts/pick server settings put!]])))
 
 ;; ---- the / menu ----
 

@@ -100,6 +100,7 @@
 .pick { min-width: 0; flex: 0 1 auto; }
 .pick.model { max-width: 150px; }
 .pick.effort { max-width: 90px; }
+.pick.prompt { max-width: 120px; }
 .pick select { font: 500 11.5px var(--sans); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 2px 2px 5px; width: 100%; cursor: pointer; text-overflow: ellipsis; }
 .pick select:hover, .pick select:focus { border-color: var(--line); color: var(--fg); background: var(--bg2); outline: none; }
 .pick select option { background: var(--panel); color: var(--fg); }

@@ -805,6 +805,19 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     file per program (a file the agent user could reach or fill), or the runner's word alone for
     who typed (it runs as the agent user).
 
+60. Prompt profiles (2026-11-18, the user's call). A server keeps named prompt profiles (name, at
+    most 60 characters; text, at most 20,000), added, edited and deleted in the Prompts window
+    (the header's prompt picker, "Edit prompts…"). A chat picks one in its header beside model and
+    effort (`settings.prompt`; a new chat carries the last chat's pick like its model). The
+    profile's text goes after Claudia's part of the system prompt (headed `# Prompt profile:
+    <name>`), so the picture, secrets and folder rules stay; Claudia's own chat still gets her
+    part last. A live chat takes a new pick, or a change to its profile's text, after its turn and
+    the work it started: its session starts again resumed, same conversation (the prompt's
+    version is per chat). A deleted profile leaves its chats on no profile. Instead of: a profile
+    that replaces Claudia's part (a profile without the drawing rules leaves the picture empty
+    and the 400-character stop hook still runs) or the whole system prompt (it drops Claude
+    Code's own tool and safety guidance).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

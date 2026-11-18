@@ -153,6 +153,7 @@
 (deftest a-new-chat-carries-its-picks
   (is (= {:model "m" :plan "p" :folder "/w"} (ev/new-picks {:model "m" :effort nil :plan "p" :folder "/w" :x 1})))
   (is (= {:color "teal"} (ev/new-picks {:color "teal"})))
+  (is (= {:prompt "Reviewer"} (ev/new-picks {:prompt "Reviewer" :model nil})))
   (is (= {} (ev/new-picks {:folder ""})))
   (is (= {} (ev/new-picks nil)))
   (is (= ["s" {:type "new" :id "id" :text "hi" :effort "high"}]

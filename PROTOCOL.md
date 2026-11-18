@@ -268,6 +268,9 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo), when the caller may read it (a view: below) |
 | `GET /api/prefs` | `{ hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
 | `PATCH /api/prefs` `{ hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
+| `GET /api/prompts` | `{ profiles: [{ name, text }] }`: this server's prompt profiles, by name (README decision 60) |
+| `PUT /api/prompts/<name>` `{ text }` | `{ profiles }`: the profile set (added when new; name ≤ 60, text ≤ 20,000 characters); chats on it take the new text after their turn (not for a view) |
+| `DELETE /api/prompts/<name>` | `{ profiles }`: the profile gone; chats on it run on no profile after their turn (not for a view) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
@@ -290,7 +293,7 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `prompt?`, `color?`, `talk?`, `bell?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one); the page ties its own data to the message by it (a dictated message's sound) |
 | `claudia` | | Claudia's own chat (README decision 48): the runner that has her (its `meta` frame says `claudia: true`) makes or finds it and answers `claudia { chat }`; elsewhere an `error` |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
@@ -305,7 +308,7 @@ Page → runner:
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
 | `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
-| `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick: its owner's last pick, `meta.planKey`), `talk?`, `bell?` (booleans) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message. Its speaker (`talk`) and bell: kept with the chat, then `chats` goes to every page |
+| `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick: its owner's last pick, `meta.planKey`), `prompt?` (a prompt profile's name; null = none: README decision 60), `talk?`, `bell?` (booleans) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message. Its speaker (`talk`) and bell: kept with the chat, then `chats` goes to every page |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
 | `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 | `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
@@ -330,7 +333,7 @@ Runner → page:
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
-| `settings` | `chat`, `settings: { model, effort, plan }`, `model?` (the model the session runs), `effort?` (the effort its turn runs with, known from its first tool call on), `commands?` (its slash command names) |
+| `settings` | `chat`, `settings: { model, effort, plan, prompt }`, `model?` (the model the session runs), `effort?` (the effort its turn runs with, known from its first tool call on), `commands?` (its slash command names) |
 | `meta` | `limits: [Limit]`, `limitsAt` (ms, when they were heard, or null), `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (the name of this profile's person's last pick, or null), `plans: [{ key, name }]` (the saved tokens a chat can be put on), `planKey` (the key of this profile's person's last pick: what a chat without a pick runs on, or null; README decision 57), `defaultEfforts: [{ model, effort }]` (the effort a chat runs with when it picks none, by its picked model, `""` for none, as heard from the sessions); sent after `chats` on `hello` and on every change |
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
 | `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |

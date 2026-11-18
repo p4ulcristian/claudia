@@ -18,6 +18,7 @@
             [claudia.web.views.rail :as rail]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.picture :as picture]
+            [claudia.web.views.prompts :as prompts]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.pure.reach :as reach]
@@ -150,6 +151,7 @@
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [gallery]
+   [prompts/overlay]
    [settings/settings-popup]
    [admin/dialog]
    [:f> world/overlay]])

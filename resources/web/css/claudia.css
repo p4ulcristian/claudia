@@ -136,6 +136,7 @@ code, pre { font-family: var(--mono); }
 .head-panel .pick select:hover, .head-panel .pick select:focus { border-color: var(--accent); color: var(--fg); background: var(--bg); outline: none; }
 .head-panel .pick.model { max-width: 200px; }
 .head-panel .pick.effort { max-width: 110px; }
+.head-panel .pick.prompt { max-width: 140px; }
 .head-picks { gap: 6px; }
 /* The server's state: turning arrows while reconnecting, a power sign when it is off. */
 .head-state { flex: none; align-self: center; display: grid; width: 16px; height: 16px; color: var(--amber); }
