@@ -1,11 +1,13 @@
 (ns claudia.web.views.settings
   "The list's title menu (whose chats, which servers) and the Settings screen, opened from the
-  settings menu (claudia.web.views.menu: its plan card and More settings): the instance chip, the
+  settings menu (claudia.web.views.menu: its plan card and More settings): over the list on a
+  phone, in the chat column on wider screens (README decision 24). It holds the instance chip, the
   hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), My words for
   dictation (views.my-words), all ~/Work
   sessions, Admin and Servers for admins, and each server's version and profile."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
+            [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
@@ -308,9 +310,10 @@
 
 (defn- back! [] (rf/dispatch [:ops/settings false]))
 
-(defn- use-escape-back!
-  "Escape goes back while shown, before the page's own keys see it (Escape there stops a chat)."
-  [shown?]
+(defn use-escape-back!
+  "Escape calls go-back! while shown, before the page's own keys see it (Escape there stops a chat);
+  Settings and the chat column's archived chats go back with it."
+  [shown? go-back!]
   (h/use-effect
    (fn []
      (when shown?
@@ -318,10 +321,10 @@
                    (when (and (= "Escape" (.-key e)) (not (some-> (.-target e) (.closest "input, textarea"))))
                      (.preventDefault e)
                      (.stopPropagation e)
-                     (back!)))]
+                     (go-back!)))]
          (js/window.addEventListener "keydown" esc true)
          #(js/window.removeEventListener "keydown" esc true))))
-   [shown?]))
+   [shown? go-back!]))
 
 (defn- chats-group [all-sessions?]
   [:section.st-group {:aria-label "Chats"}
@@ -339,11 +342,13 @@
         server @(rf/subscribe [:settings-server])
         ro @(rf/subscribe [:viewing-other?])
         {:keys [all-sessions?]} @(rf/subscribe [:list-mode])]
-    (use-escape-back! shown?)
+    (use-escape-back! shown? back!)
     [:div.st-pane {:role "dialog" :aria-label "Settings" :aria-hidden (not shown?) :inert (when-not shown? true)}
      [:header.st-head
       [:button.st-back {:on-click back!}
-       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Chats"]
+       ;; A phone goes back to its list; wider, back to the chat that was open.
+       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]]
+       (if (hooks/use-media "(max-width: 679px)") "Chats" "Back")]
       [:h2 "Settings"]]
      [:div.st-scroll
       [brand server]
@@ -358,7 +363,8 @@
          ^{:key server} [server-settings server]])]]))
 
 (defn settings-pane
-  "The Settings screen over the list; mounted while shown and for its slide out."
+  "The Settings screen: over the phone's list (mounted while shown and for its slide out), or in
+  the chat column."
   [shown?]
   (let [server @(rf/subscribe [:settings-server])]
     (r/with-let [_ (rf/dispatch [:ops/load-settings server])

@@ -91,15 +91,12 @@
        "l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"))
 
 (defn- settings-button
-  "Settings, in the drawer: a tap opens it, a tap while it shows closes it."
+  "Settings, in the chat column: a tap opens it, a tap while it shows closes it."
   []
   (let [open? (:settings? @(rf/subscribe [:list-mode]))]
     [:button.edge-step.edge-icon {:type "button" :aria-label "Settings" :data-tip "Settings"
                                   :aria-pressed (boolean open?) :class (when open? "on")
-                                  :on-click #(if open?
-                                               (rf/dispatch [:sidebar/toggle false])
-                                               (do (rf/dispatch [:sidebar/toggle true])
-                                                   (rf/dispatch [:ops/settings true])))}
+                                  :on-click #(rf/dispatch [:ops/settings (not open?)])}
      [:svg {:width 26 :height 26 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
             :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
       [:path {:d cog-path}] [:circle {:cx 12 :cy 12 :r 3}]]]))

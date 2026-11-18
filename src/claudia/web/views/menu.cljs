@@ -1,12 +1,13 @@
 (ns claudia.web.views.menu
-  "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot; the
-  list's foot while the list is open, and on a phone; 2026-11-18, it was a gear) shows whose chats
+  "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot;
+  the list's foot on a phone; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), the default
   plan's 5-hour and week use
   (a click opens Settings, where the plans are), Machines (the Systems popup in the menu's place),
   Archived chats, Forms, the Desktop popups switch, More settings, and the version (the sounds
   switch is the bell in the chat's header).
-  Every item that has more opens its own full screen."
+  Every item that has more opens its own full screen: in the chat column wider than a phone, over
+  the list on a phone."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
@@ -20,13 +21,10 @@
 
 ;; ---- what the items do ----
 
-(defn- open-settings! []
-  (rf/dispatch [:sidebar/toggle true])
-  (rf/dispatch [:ops/settings true]))
+;; Settings and the archived chats: over the list on a phone, in the chat column wider.
+(defn- open-settings! [] (rf/dispatch [:ops/settings true]))
 
-(defn- open-archived! []
-  (rf/dispatch [:sidebar/toggle true])
-  (rf/dispatch [:ops/archived true]))
+(defn- open-archived! [] (rf/dispatch [:ops/archived true]))
 
 (defn- open-forms! [] (rf/dispatch [:gallery/open true]))
 
@@ -88,7 +86,9 @@
   [act]
   (let [view @(rf/subscribe [:view])
         people @(rf/subscribe [:people])
-        mine (or (:name @(rf/subscribe [:me])) "Me")]
+        me @(rf/subscribe [:me])
+        owners @(rf/subscribe [:owners])
+        mine (or (:name me) "Me")]
     (when (seq people)
       [:<>
        [:div.mn-head "Whose chats"]
@@ -96,7 +96,7 @@
          ^{:key (str k)}
          [:button.mn-who {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
                           :on-click (act #(when (not= k view) (rf/dispatch [:ops/view k])))}
-          [:span.mn-face.small (menu-pure/initials (or k mine))]
+          [:span.mn-face.small (if-let [p (menu-pure/picture-of me owners k)] [:img {:src p :alt ""}] (menu-pure/initials (or k mine)))]
           [:span.mn-label label (when k [:span.mn-note "read only"])]
           (when (= k view) [:span.mn-tick "✓"])])
        [:div.mn-sep]])))
@@ -134,13 +134,14 @@
   (let [[open set-open] (h/use-state nil)
         box (h/use-ref nil)
         close! #(set-open nil)
-        {:keys [initials other?] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view]))]
+        {:keys [initials other? picture] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view])
+                                                                         @(rf/subscribe [:owners]))]
     [:<>
      [:button.mn-gear.mn-face {:ref #(set! (.-current box) %) :class [(when open "on") (when other? "other")]
                                :aria-label (str nm ": whose chats, settings") :aria-haspopup "menu" :aria-expanded (boolean open)
                                :data-tip (when-not open (if other? (str nm "'s chats, read only") (str nm " · settings")))
                                :on-click #(set-open (if open nil :menu))}
-      initials]
+      (if picture [:img {:src picture :alt ""}] initials)]
      (case open
        :menu [:f> menu-pop {:box box :close! close! :machines! #(set-open :machines)}]
        :machines [:f> systems/popup {:box box :close close!}]

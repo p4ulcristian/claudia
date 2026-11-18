@@ -53,7 +53,7 @@
   "What the host starts (resume? true: resumes) a chat's Claude Code with. prompt: the system
   prompt's addition; allowed: the allowed tools; edit-tools: the edit tools' matcher; worktrees?:
   edits and commands in Eye on Rainbow's worktrees are reported."
-  [{:keys [cwd id resume? env prompt allowed model effort mcp edit-tools worktrees?]}]
+  [{:keys [cwd id resume? env prompt allowed disallowed model effort mcp edit-tools worktrees?]}]
   {:options (cond-> {:cwd cwd
                      :env env
                      (if resume? :resume :sessionId) id
@@ -64,7 +64,8 @@
                      :allowDangerouslySkipPermissions true
                      :includePartialMessages true}
               model (assoc :model model)
-              effort (assoc :effort effort))
+              effort (assoc :effort effort)
+              (seq disallowed) (assoc :disallowedTools disallowed))
    :mcp mcp
    ;; A copy of each file before Claude's edit tools first touch it (the turn's changes).
    :hooks {:PreToolUse [{:matcher edit-tools}]

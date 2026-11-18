@@ -57,3 +57,12 @@
          (ops/with-older {:messages [{:id 2}] :loading-older true} [{:id 1}] false 2)))
   (is (= {:messages [{:id 3}] :loading-older false}
          (ops/with-older {:messages [{:id 3}] :loading-older true} [{:id 1}] false 2))))
+
+(deftest settings-over-the-list-or-in-the-chat-column
+  (is (= {:settings? true :screen :list :archived? true}
+         (ops/with-settings {:screen :chat :archived? true} true true))
+      "a phone: over the list, the archived list kept under it")
+  (is (= {:settings? true :screen :chat :archived? false}
+         (ops/with-settings {:screen :chat :archived? true} false true))
+      "wider: Settings takes the chat column from the archived chats")
+  (is (= {:settings? false :archived? true} (ops/with-settings {:archived? true} false false))))

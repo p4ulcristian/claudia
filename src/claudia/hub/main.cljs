@@ -9,12 +9,14 @@
             ["http" :as http]
             ["path" :as path]
             [clojure.string :as str]
+            [claudia.hub.claudia :as claudia]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
             [claudia.hub.health :as health]
             [claudia.hub.ops :as ops]
             [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
+            [claudia.hub.pictures :as pictures]
             [claudia.hub.push :as push]
             [claudia.hub.systems :as systems]
             [claudia.hub.videos :as videos]
@@ -147,6 +149,8 @@
    :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
    :updatedAt (progress/updated-at)
    :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))
+   ;; Everyone with their name and picture (the profile circles).
+   :people (pictures/people)
    ;; Servers without a profile of theirs: others' chats there, read only.
    :viewServers (mapv #(select-keys % [:name :label]) (config/view-servers person))})
 
@@ -180,6 +184,8 @@
         own? (or (= pathname "/hub/me") server-name)]
     (cond
       (= pathname "/hub/alive") (alive res)
+      ;; A server's call for Claudia's own chat: its hub key, no login (README decision 48).
+      (and (= pathname "/hub/server/claudia") (= "POST" (.-method req))) (claudia/call req res)
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
       (not email) (io/send-json res 401 {:error "not signed in"})

@@ -141,6 +141,30 @@
     (.on req "error" (fn [_] (js/clearTimeout t) (finish false)))
     (.end req)))
 
+(defn json!
+  "Promise of {:status :body} for a JSON call on server's front as who ({:email}): method, target
+  (path), body (data or nil). Unreachable or not JSON: {:status 502 :body {:error ..}}. 20 s at most."
+  [server method target who body]
+  (js/Promise.
+   (fn [done]
+     (let [text (when (some? body) (js/JSON.stringify (clj->js body)))
+           ^js req (http/request #js {:host (:host server) :port (:port server) :method method :path target
+                                      :headers (clj->js (cond-> (hub-headers server who)
+                                                          text (assoc "content-type" json-type)))
+                                      :agent agent :timeout 20000})
+           fail #(done {:status 502 :body (unreachable server)})]
+       (.on req "response"
+            (fn [^js answer]
+              (let [chunks (atom [])]
+                (.on answer "data" #(swap! chunks conj %))
+                (.on answer "end" #(done {:status (.-statusCode answer)
+                                          :body (try (js->clj (js/JSON.parse (.toString (js/Buffer.concat (into-array @chunks)) "utf8"))
+                                                              :keywordize-keys true)
+                                                     (catch :default _ (unreachable server)))})))))
+       (.on req "timeout" #(.destroy req (js/Error. "timeout")))
+       (.on req "error" (fn [_] (fail)))
+       (.end req text)))))
+
 ;; ---- WebSocket ----------------------------------------------------------------------------
 
 (def page-deflate

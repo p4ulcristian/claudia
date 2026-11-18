@@ -194,6 +194,10 @@
   (is (= {:folder "abc" :saved "f.txt"} (attach/upload-path "/up/abc/f.txt" "f"))))
 
 (deftest layout-numbers
+  (is (= :settings (shell/column-pane false {:settings? true :archived? true})))
+  (is (= :archived (shell/column-pane false {:archived? true})))
+  (is (nil? (shell/column-pane false {})))
+  (is (nil? (shell/column-pane true {:settings? true})) "a phone: over its list, not in the chat column")
   (is (= 300 (shell/dragged-width 0 1000 100)))
   (is (= 714 (shell/dragged-width 0 1000 900)))
   (is (= "minmax(300px, 1fr) 6px 16px" (shell/split-columns true 400)))
@@ -302,6 +306,9 @@
       (is (= :cancel (agents/mic-dir :cancel [helper]))))))
 
 (deftest the-profile-circle-shows-whose-chats
-  (is (= {:initials "P" :name "Paul" :other? false} (menu/profile-face {:name "Paul"} nil)))
-  (is (= {:initials "P" :name "Peter" :other? true} (menu/profile-face {:name "Paul"} "peter")))
-  (is (= {:initials "M" :name "Me" :other? false} (menu/profile-face nil nil))))
+  (let [me {:name "Paul" :email "p@x" :people [{:email "p@x" :picture "/hub/picture/a?v=1"} {:email "q@x" :picture nil}]}
+        owners {"peter" "q@x" "paul" "p@x"}]
+    (is (= {:initials "P" :name "Paul" :other? false :picture "/hub/picture/a?v=1"} (menu/profile-face me nil owners)))
+    (is (= {:initials "P" :name "Peter" :other? true :picture nil} (menu/profile-face me "peter" owners)))
+    (is (= "/hub/picture/a?v=1" (menu/picture-of me owners "paul")))
+    (is (= {:initials "M" :name "Me" :other? false :picture nil} (menu/profile-face nil nil nil)))))

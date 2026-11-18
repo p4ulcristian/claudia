@@ -63,14 +63,11 @@ code, pre { font-family: var(--mono); }
 
 /* ---------- Layout ----------
    The chats rail's column is always --rail-w (wide enough for a chat's name and server under its
-   circle); the full list opens over the page as a drawer. */
+   circle); wider than a phone it is the only chat list (README decision 24). */
 .app { --rail-w: 88px; display: grid; grid-template-columns: var(--rail-w) 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; }
 .app > main { grid-column: 2; }
 .sidebar-slot { overflow: hidden; min-width: 0; display: flex; }
-.app:not(.no-sidebar) .sidebar-slot { position: fixed; left: 0; top: 0; bottom: 0; z-index: 10; width: 250px; box-shadow: 4px 0 24px rgb(0 0 0 / 0.35); }
 .sidebar-slot > .sidebar { width: 250px; flex: none; }
-/* One menu button, always in the same top-left spot. */
-.menu-toggle { position: fixed; top: 10px; left: 10px; z-index: 20; font-size: 17px; }
 .split { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .left, .right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .divider { cursor: col-resize; position: relative; z-index: 2; touch-action: none; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); width: 2px; margin: 0 2px env(safe-area-inset-bottom); }
@@ -78,7 +75,16 @@ code, pre { font-family: var(--mono); }
 .divider::after { content: ""; position: absolute; top: 0; bottom: 0; left: -9px; right: -9px; }
 .divider:hover { --ink: var(--accent); width: 3px; margin: 0 1.5px env(safe-area-inset-bottom); }
 .split.folded > .divider { visibility: hidden; }
-.backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); z-index: 9; }
+/* Settings and the archived chats take the chat column, full height, over the chat (kept mounted,
+   hidden), wider than a phone (views/shell.cljs column-pane). */
+@media (min-width: 680px) {
+  .split > .left, .split > .col-pane { grid-column: 1; grid-row: 1; }
+  .split.col-covered > .left { visibility: hidden; }
+}
+.col-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.col-pane > .st-pane { position: relative; inset: auto; flex: 1; padding-top: 0; background: none; box-shadow: none; transform: none; visibility: visible; transition: none; }
+.ar-pane > .cs-chips, .ar-pane > .cs-list { margin-left: 10px; margin-right: 10px; }
+.ar-pane .st-head .cs-count { margin-left: auto; }
 
 /* ---------- Sidebar: the plain rules (chatops.css holds the list's own) ---------- */
 .sidebar { border-right: 0; position: relative; background: var(--bg2); display: flex; flex-direction: column; gap: 10px; padding: 14px 10px; min-height: 0; }
@@ -424,14 +430,27 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 /* The picture, the bar under it and the right rail: right.css. */
 
 /* ---------- The rail: one coloured circle per chat, like chat heads ---------- */
-.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(52px + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; padding: calc(var(--edge-t) + var(--top-safe)) 0 var(--edge-b); background: var(--bg2); border-right: 0; position: relative; min-height: 0; }
 .sidebar-slot > .rail { width: var(--rail-w); }
 /* The vertical chalk lines run between the safe areas: never under the status bar or the home bar. */
 .sidebar::after, .rail::after { content: ""; position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
-/* Face, 2D/3D, + and every chat sit 11 px apart (measured headless, 2026-11-14). */
-.rail > .logo-tools { padding: 4px 0 5px; }
+/* The rail's top: Claudia's face in a violet circle, her head over its top edge (the clip is the
+   circle's lower half and straight up from it), then 2D and 3D as two small circles. */
+.rail-head { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 0 9px; }
+.rail-face { position: relative; width: 50px; height: 68px; padding: 0; border-radius: 0 0 25px 25px; }
+.rail-face:hover { background: none; }
+.rail-face-ring { position: absolute; left: 0; bottom: 0; width: 50px; height: 50px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--violet); background: color-mix(in srgb, var(--violet) 55%, white); transition: box-shadow 0.15s; }
+.rail-face:hover .rail-face-ring, .rail-face:focus-visible .rail-face-ring { box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 35%, transparent); }
+.rail-face-clip { position: absolute; left: 2px; bottom: 2px; width: 46px; height: 66px; overflow: hidden; border-radius: 0 0 23px 23px; }
+.rail-face .face { position: absolute; left: -4px; bottom: 6px; width: 54px; height: 56px; display: block; pointer-events: none; }
+.rail-acts { flex: none; display: flex; justify-content: center; gap: 2px; }
+.rail .lt-dim { border: 0; border-radius: 0; overflow: visible; gap: 6px; }
+.rail .lt-dim button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; box-sizing: border-box;
+  border: 1.5px solid var(--line); font: 700 10px/1 var(--hand); color: var(--muted); }
+.rail .lt-dim button.on { background: var(--accent); border-color: var(--accent); color: var(--on-hue); }
 .lt-sound { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--muted); opacity: 0.7; }
 .lt-sound.on { color: var(--accent); opacity: 1; }
 .lt-sound svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
@@ -537,7 +556,7 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .f-kind::before, .rail-server::before, .server-mark::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
-.rbar-chip::before, .act-pill::before, .menu-toggle:hover::before {
+.rbar-chip::before, .act-pill::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -570,12 +589,6 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .act-pill { --chalk-bg: color-mix(in srgb, var(--panel) 82%, transparent); --ring: var(--chalk-r14-2); }
 .rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
 
-/* The menu button: Claudia's face (claudia.web.face), centred over the closed rail; a chalk ring on
-   hover. Her effects (bubbles, sparkles, z z z) spill out of the button, so nothing clips her. */
-.menu-toggle { width: 32px; height: 32px; padding: 0; border-radius: 50%; color: var(--fg); overflow: visible; --ring: var(--chalk-c32-2); --ink: var(--chalk-c, var(--chalk)); }
-.menu-toggle .face { width: 38px; height: 38px; margin: -3px; overflow: visible; pointer-events: none; display: block; }
-.menu-toggle:hover { background: none; }
-.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px); }
 /* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
 .rail-forms svg, .f-tree-row .fo { mask: var(--chalk-grain-soft) 0 0 / var(--chalk-grain-size); }
 
@@ -609,11 +622,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
    full screen) sit over the top-left corner; the app sets their size (WebController.swift, 0 when none).
    Wide: the rail is what lies under them, and it starts below them; the rest of the top stays.
    Narrow (phones' layout): each screen's first row starts right of them (chatops.css). */
-.rail { padding-top: calc(52px + var(--top-safe) + var(--window-buttons-height, 0px)); }
+.rail { padding-top: calc(var(--edge-t) + var(--top-safe) + var(--window-buttons-height, 0px)); }
 .sidebar { padding-top: calc(14px + var(--top-safe)); }
 @media (display-mode: standalone) { body { height: var(--vv-h, 100lvh); } }
-.menu-toggle { top: calc(var(--edge-t) + var(--top-safe) + var(--window-buttons-height, 0px)); left: calc(10px + env(safe-area-inset-left)); }
-.app.no-sidebar .menu-toggle { left: calc(var(--rail-w) / 2 - 16px + env(safe-area-inset-left)); }
 .sidebar-slot .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 
 /* ---------- Phones (under 680px) ----------
@@ -621,10 +632,11 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
    30% to the left under it (claudia.web.swipe follows the finger). */
 @media (max-width: 679px) {
   .phone-only { display: flex !important; }
-  .menu-toggle, .divider, .backdrop { display: none; }
+  .divider { display: none; }
   .app, .app.no-sidebar { display: block; position: relative; overflow: hidden; overflow: clip; }
   .sidebar-slot, .app:not(.no-sidebar) .sidebar-slot, .split > .left, .split > .right { position: absolute; inset: 0; width: auto; box-shadow: none; transition: transform 0.32s var(--screen-ease), visibility 0s; }
   .split { display: contents; }
+  .app:not(.no-sidebar) .sidebar-slot { z-index: 10; }
   .sidebar-slot > .sidebar { width: 100%; }
   .sidebar::after { display: none; }
   .split > .left { z-index: 12; background: var(--bg); padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.35); }
@@ -752,6 +764,8 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .mn-who:hover, .mn-who.on { background: var(--panel); }
 .mn-face.small { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--line); font: 700 12px var(--hand); }
 .mn-tick { margin-left: auto; color: var(--green); }
+.mn-face { overflow: hidden; padding: 0; }
+.mn-face img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .cs-foot { flex: none; height: var(--foot-h); display: flex; align-items: center; }
 .chat-menu.mn-pop { width: 290px; padding: 8px; gap: 2px; }
 .mn-plan { display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: var(--bg2); text-align: left; margin-bottom: 4px; }

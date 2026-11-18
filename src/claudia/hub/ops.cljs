@@ -25,6 +25,7 @@
             [claudia.shared.protocol :as protocol]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
+            [claudia.hub.pictures :as pictures]
             [claudia.hub.store :as store]
             [claudia.hub.systems :as systems]
             [claudia.hub.tokens :as tokens]))
@@ -425,6 +426,14 @@
     (-> (if (= pathname "/hub/github") (github-delivery req res) (enroll req res))
         (.catch (fn [e] (when-not (.-headersSent res) (fail res 400 (.-message e))))))))
 
+(defn- picture-call
+  "Profile pictures: an admin sets one (PUT /hub/admin/picture?email=), everyone reads them."
+  [^js req ^js res pathname admin?]
+  (cond (str/starts-with? pathname "/hub/picture/") (pictures/serve res pathname)
+        (not admin?) (fail res 403 "admins only")
+        (not= "PUT" (.-method req)) (fail res 405 "PUT only")
+        :else (pictures/put! req res (.get (.-searchParams (js/URL. (.-url req) "http://hub")) "email"))))
+
 (defn call
   "A signed-in caller's /hub/… call other than /hub/me and server state: admin? decides the admin
   pages. Answers 404 for anything else."
@@ -432,6 +441,8 @@
   (-> (js/Promise.resolve)
       (.then (fn []
                (cond
+                 (or (= pathname "/hub/admin/picture") (str/starts-with? pathname "/hub/picture/"))
+                 (picture-call req res pathname admin?)
                  (str/starts-with? pathname "/hub/admin")
                  (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
                  (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order"} pathname))

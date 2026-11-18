@@ -1,13 +1,13 @@
 (ns claudia.web.views.shell
-  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Desktop: the rail of chat circles
-  | the chat column | a 6 px divider | the picture; the full chat list (and Settings
-  in its place) opens over the rail as a drawer. Phone (under 680 px): three full screens, list ->
-  chat -> picture, one shown at a time."
+  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Desktop and iPad: the rail of
+  chat circles (the only chat list there, README decision 24) | the chat column | a 6 px divider |
+  the picture; Settings and the archived chats take the chat column, full height, with a Back to
+  the chat. Phone (under 680 px): three full screens, list -> chat -> picture, one shown at a time;
+  Settings slides over the list."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
             [claudia.web.admin :as admin]
-            [claudia.web.face.view :as face]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.asks :as asks]
             [claudia.web.views.attach :as attach]
@@ -23,6 +23,7 @@
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.thumb-edge :as thumb-edge]
             [claudia.web.views.search-panel :as search-panel]
+            [claudia.web.views.settings :as settings]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
@@ -41,8 +42,7 @@
    [color]))
 
 (defn- keys!
-  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+B (⌘B) opens or closes the list,
-  Ctrl+K (⌘K) opens the search panel."
+  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+K (⌘K) opens the search panel."
   []
   (h/use-effect
    (fn []
@@ -54,9 +54,6 @@
 
                  (and (.-altKey e) (= "KeyN" (.-code e)))
                  (do (.preventDefault e) (rf/dispatch [:nav/new]))
-
-                 (and (or (.-ctrlKey e) (.-metaKey e)) (= "b" (.toLowerCase (.-key e))))
-                 (do (.preventDefault e) (rf/dispatch [:sidebar/toggle]))
 
                  (and (or (.-ctrlKey e) (.-metaKey e)) (= "k" (.toLowerCase (.-key e))))
                  (do (.preventDefault e) (rf/dispatch [:search/open]))))]
@@ -100,39 +97,41 @@
     (let [server (or (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
       (when server [:f> codeforms/gallery server #(rf/dispatch [:gallery/open false])]))))
 
-(defn- menu-toggle [shown?]
-  [:button.icon.menu-toggle {:title (if shown? "Hide chats (Ctrl+B)" "Show chats (Ctrl+B)")
-                             :aria-expanded shown?
-                             :on-click #(rf/dispatch [:sidebar/toggle])}
-   [:f> face/face]])
+(defn- column-pane
+  "Settings or the archived chats in the chat column, over the chat (which stays mounted, hidden)."
+  [pane]
+  [:div.col-pane
+   (case pane
+     :settings [settings/settings-pane true]
+     :archived [:f> sidebar/archived-pane])])
 
-(defn- split-view [{:keys [phone? folded? chat-w set-chat-w]}]
-  [:main.split {:class (when folded? "folded")
+(defn- split-view [{:keys [phone? folded? chat-w set-chat-w pane]}]
+  [:main.split {:class [(when folded? "folded") (when pane "col-covered")]
                 :style (when-not phone?
                          {:grid-template-columns (pure/split-columns folded? chat-w)})}
    [chat/chat-pane]
+   (when pane [column-pane pane])
    [:div.divider {:on-pointer-down (when-not folded? #(drag-split! % set-chat-w))}]
    [picture/picture-pane]])
 
 (defn- layers
-  "Over the page: the list's backdrop, the menus, the drop zone."
-  [{:keys [shown? phone? draft-key ro]}]
+  "Over the page: the menus, the drop zone."
+  [{:keys [draft-key ro]}]
   [:<>
-   (when (and shown? (not phone?))
-     [:div.backdrop {:on-click #(rf/dispatch [:sidebar/toggle false])}])
    [chatmenu/chat-menu]
    [chatmenu/context-menu]
    [:f> attach/drop-zone draft-key (not ro)]])
 
 (defn- chats-view
-  "The rail or list and the chat with its picture: not drawn at all while the world covers them
-  (the world shows its own chat), so opening a chat there renders it once."
+  "The rail (wider than a phone) or the phone's list, and the chat with its picture: not drawn at
+  all while the world covers them (the world shows its own chat), so opening a chat there renders
+  it once."
   [{:keys [phone? shown? settings-shown?] :as m}]
   [:<>
-   (menu-toggle shown?)
    [:div.sidebar-slot
-    (when (and (not shown?) (not phone?)) [:f> rail/rail])
-    [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]]
+    (if phone?
+      [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]
+      [:f> rail/rail])]
    (split-view m)])
 
 (defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key world?] :as m}]
@@ -145,30 +144,29 @@
    [my-words/panel]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
-   (layers {:shown? shown? :phone? phone? :settings-shown? settings-shown? :ro ro :draft-key draft-key})
+   (layers {:ro ro :draft-key draft-key})
    [gallery]
    [admin/dialog]
    [:f> world/overlay]])
 
 (defn app []
   (let [screen @(rf/subscribe [:screen])
-        drawer? @(rf/subscribe [:sidebar?])
         color @(rf/subscribe [:open-color])
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
-        {:keys [settings?]} @(rf/subscribe [:list-mode])
+        {:keys [settings?] :as mode} @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
         phone? (hooks/use-media "(max-width: 679px)")
         narrow? (hooks/use-media "(max-width: 1099px)")
         edge? (hooks/use-media reach/touch-tablet)
         [chat-w set-chat-w] (h/use-state stored-width)
-        ;; Phone: the list shows unless a chat (or its picture) does. Desktop: the drawer.
-        shown? (if phone? (= screen :list) drawer?)]
+        ;; Phone: the list shows unless a chat (or its picture) does. Wider: never (the rail is the list).
+        shown? (and phone? (= screen :list))]
     (chat-colour! color)
     (keys!)
     (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
-               :chat-w chat-w :set-chat-w set-chat-w
+               :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown? :settings-shown? (and shown? settings?)
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

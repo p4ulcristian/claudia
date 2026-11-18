@@ -1,6 +1,12 @@
 (ns claudia.web.views.pure.shell
-  "The layout's numbers as plain data: the chat column's width while the divider is dragged, the
-  split's columns, the scrubber's marks.")
+  "The layout's numbers as plain data: what the chat column shows, the chat column's width while
+  the divider is dragged, the split's columns, the scrubber's marks.")
+
+(defn column-pane
+  "What takes the chat column wider than a phone (README decision 24): :settings, :archived (the
+  archived chats) or nil (the chat). A phone shows both over its list instead, so nil there."
+  [phone? {:keys [settings? archived?]}]
+  (cond phone? nil settings? :settings archived? :archived))
 
 (defn dragged-width
   "The chat column's width in px with the divider at client-x: at least 300, leaving 280 and the

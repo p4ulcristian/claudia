@@ -1,7 +1,9 @@
 (ns claudia.hub.main-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.hub.claudia :as hclaudia]
             [claudia.hub.config :as config]
-            [claudia.hub.main :as main]))
+            [claudia.hub.main :as main]
+            [claudia.hub.pictures :as pictures]))
 
 (defn- req [headers] #js {:headers (clj->js headers)})
 
@@ -63,3 +65,21 @@
   (is (= [{:name "destiny"} {:name "mishung"}]
          (config/others [{:name "box"} {:name "destiny"} {:name "mishung"}] ["box"])))
   (is (= [] (config/others [{:name "box"}] ["box"]))))
+
+(deftest pictures-are-png-or-webp-by-their-bytes
+  (is (= "image/png" (pictures/image-type (js/Buffer.from "89504e470d0a1a0a0000" "hex"))))
+  (is (= "image/webp" (pictures/image-type (js/Buffer.from "RIFF\u0000\u0000\u0000\u0000WEBPVP8 " "latin1"))))
+  (is (nil? (pictures/image-type (js/Buffer.from "<svg>" "utf8"))))
+  (is (= 16 (count (pictures/picture-key "a@b.c"))))
+  (is (= "/hub/picture/" (subs (pictures/url-of "a@b.c" 5) 0 13)))
+  (is (nil? (pictures/url-of "a@b.c" nil))))
+
+(deftest claudia-calls-need-the-servers-key-and-a-profile-there
+  (is (= "no server named" (hclaudia/caller-problem "" "a@b" true true)))
+  (is (= "not that server's key" (hclaudia/caller-problem "destiny" "a@b" false true)))
+  (is (= "no person named" (hclaudia/caller-problem "destiny" "" true true)))
+  (is (= "that person has no profile on that server" (hclaudia/caller-problem "destiny" "a@b" true false)))
+  (is (nil? (hclaudia/caller-problem "destiny" "a@b" true true)))
+  (is (= "/api/chat-ops/stop" (hclaudia/op-target "stop")))
+  (is (nil? (hclaudia/op-target "delete")))
+  (is (= {:server "box" :id "c" :title "T"} (hclaudia/row-of "box" {:id "c" :title "T" :scene "big"}))))
