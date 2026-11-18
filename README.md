@@ -818,6 +818,56 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     and the 400-character stop hook still runs) or the whole system prompt (it drops Claude
     Code's own tool and safety guidance).
 
+61. Bookmarked folders live on the hub, per person (2026-11-18, the user's call: many folders on
+    many machines, kept tidy from one place). A bookmark is `{ server, folder }` (an absolute path)
+    with an optional label; the hub keeps each person's list like the chat order (`bookmarks`,
+    keyed by email; `GET`/`PUT /hub/bookmarks { items }`), cleaned by `claudia.shared.bookmarks`:
+    absolute paths only, no `.` or `..` parts, each server and folder once, labels of at most 80
+    characters, at most 200. Every device shows the same list. Pin/Unpin on the Folders screen
+    changes it; the chat header's project list shows that server's bookmarks on top (★). A bookmark
+    whose folder is gone shows greyed as "missing" (the runner's `POST /api/folders/missing`).
+    Instead of: bookmarks per device in the browser's storage, or per server in each runner.
+
+62. The folder tree is react-arborist (2026-11-18, the user's call): the npm library (4.0.1, with
+    its peers react-dnd and react-dnd-html5-backend 16) used from Reagent with `:>`, rooted at "/"
+    with the work folder's path open at first, each folder's sub-folders loaded when it is first
+    opened (`GET /api/folders`). Only the rows are ours; arborist keeps the open state, the keys
+    and draws only the rows on screen. Dragging and renaming are off. Everything else on the
+    Folders screen (server pills, bookmarks, the detail panel, the buttons, the Trash list, the
+    dialogs) is our own Reagent in the chalk look (`claudia.web.views.folders`, `.folder-tree`,
+    `.folder-detail`, `.folder-trash`; `resources/web/css/folders.css`). The screen covers the
+    chats; the profile menu's Folders opens it (not while looking at another person's chats),
+    Escape or × closes it, and New chat here or a click on one of its chats closes it too.
+    Instead of: a tree of our own.
+
+63. Deleting goes to Claudia's own Trash per server (2026-11-18, the user's call). Move to Trash
+    moves the folder to `RUNNER_DATA/trash/<id>/<its name>` with a row in the runner's store
+    (`trash`: where it was, when, its size, who); `fs.rename`, and across filesystems (EXDEV) a
+    recursive copy, then the original removed (a whole copy whose original could not all be removed
+    stays in the Trash and the error says so). Restore moves it back (its parent made when gone) and
+    refuses while anything sits at the old path. The runner purges items older than 7 days, at start
+    and every hour. Delete now skips the Trash. Both ask first in a dialog naming the full path (symlinks
+    followed), the size and the git work that exists only there: files not committed, commits ahead
+    of the upstream, local branches without a live upstream, in the folder's repo and in repos up to
+    four folders below it (`GET /api/folders/facts?deep=1`). The Trash view lists each item with
+    Restore and Delete now, and Empty Trash with the total size. A size is `du -s` (`-sb` on Linux,
+    `-sk` on macOS) run in the background with a 5-minute limit and kept 10 minutes; the page asks
+    again every 2 s while it is measured. Instead of: deleting at once.
+
+64. The folder browser reaches the whole system (2026-11-18, the user's call). It shows whatever the
+    runner's user may read and deletes whatever that user may write: the OS permissions decide, and
+    EACCES or EPERM come back as "Permission denied" (403). A profile's home folder does not limit
+    it. Dot folders are hidden behind a "show hidden" switch. Whatever the permissions, the runner
+    never deletes "/", any top-level folder (`/etc`, `/usr`, `/var`, `/home`, `/root`, `/tmp`…, every
+    folder right under "/"), macOS's `/private/*`, the home folder, the work folder
+    (`CLAUDIA_CWD`) or any folder above them, and `RUNNER_DATA` or Claudia's install (the folder
+    holding the running `out/`), inside them or above them (`claudia.slave.folders.rules`). Every
+    path is resolved (`..`, every symlink followed) before any check; the tree lists real folders
+    only, not symlinks to them. The calls are the profile's own person's only: the front refuses
+    `/api/folders…` (403) to a view and to a write tick, and the runner refuses any call whose
+    `X-Claudia-Via` is not `own`; a read-only view keeps its limits (`claudia.slave.reach`).
+    Instead of: the browser kept inside `CLAUDIA_CWD` or the home folder.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

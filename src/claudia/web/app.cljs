@@ -8,6 +8,8 @@
             [claudia.web.selection :as selection]
             [claudia.web.native :as native]
             [claudia.web.order :as order]
+            [claudia.web.bookmarks :as bookmarks]
+            [claudia.web.folders]
             [claudia.web.presence :as presence]
             [claudia.web.tabs :as tabs]
             [reagent.dom.client :as rdc]
@@ -55,6 +57,7 @@
   (rf/dispatch-sync [:init])
   (presence/start!)
   (order/start!)
+  (bookmarks/start!)
   (tabs/start!)
   (voice-back/start!)
   (native/start!)

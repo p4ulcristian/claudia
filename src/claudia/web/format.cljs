@@ -1,5 +1,5 @@
 (ns claudia.web.format
-  "How the page writes times, durations and paths."
+  "How the page writes times, durations, sizes and paths."
   (:require [clojure.string :as str]))
 
 (defn when-text
@@ -17,3 +17,14 @@
   [secs]
   (let [s (max 0 (js/Math.floor secs))]
     (str (quot s 60) ":" (when (< (mod s 60) 10) "0") (mod s 60))))
+
+(def ^:private units ["B" "KiB" "MiB" "GiB" "TiB" "PiB"])
+
+(defn bytes-text
+  "Bytes in binary units, as the kernel counts: \"13.1 GiB\" (one decimal under 100, none above;
+  whole bytes as they are)."
+  [n]
+  (loop [v (or n 0) i 0]
+    (if (and (>= v 1024) (< i (dec (count units))))
+      (recur (/ v 1024) (inc i))
+      (str (cond (zero? i) v (< v 100) (.toFixed v 1) :else (js/Math.round v)) " " (nth units i)))))

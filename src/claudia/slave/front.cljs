@@ -126,6 +126,12 @@
         (str/starts-with? url "/api/root/") :refuse
         (str/starts-with? url "/api/ssh/") :refuse))
 
+(defn folders-refused?
+  "True when a call to url is the folder browser's (README decision 64) and the caller is not the
+  target profile's own person (a view or a write tick): those go to the profile's person only."
+  [url r]
+  (boolean (and (or (= url "/api/folders") (str/starts-with? url "/api/folders/")) (not= "own" (via-of r)))))
+
 (defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
@@ -288,6 +294,7 @@
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
+      (folders-refused? url r) (io/send-json res 403 {:error "Folders are the profile's own person's only."})
       (= :front (root-call (.-method req) url)) (rootfront/handle @profiles r url req res)
       :else (do (when-not (#{"GET" "HEAD"} (.-method req))
                   (js/console.log (passed-line "call" r (.-method req) url)))

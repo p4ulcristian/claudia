@@ -16,6 +16,7 @@
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
+            [claudia.web.views.folders :as folders]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.prompts :as prompts]
@@ -147,13 +148,14 @@
    [confirm/root-ask]
    [search-panel/panel]
    [my-words/panel]
-   (when-not world? (chats-view m))
-   (when (and (:edge? m) (not world?)) [thumb-edge/edge])
+   (when-not (or world? (:folders? m)) (chats-view m))
+   (when (and (:edge? m) (not world?) (not (:folders? m))) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [gallery]
    [prompts/overlay]
    [settings/settings-popup]
    [admin/dialog]
+   [folders/screen]
    [:f> world/overlay]])
 
 (defn app []
@@ -166,6 +168,7 @@
         mode @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
+        folders? @(rf/subscribe [:folders?])
         phone? (hooks/use-media "(max-width: 679px)")
         narrow? (hooks/use-media "(max-width: 1099px)")
         edge? (hooks/use-media reach/touch-tablet)
@@ -174,7 +177,7 @@
         shown? (and phone? (= screen :list))]
     (chat-colour! color claudia?)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge? :folders? folders?
                :claudia? claudia?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown?

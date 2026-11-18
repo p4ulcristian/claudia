@@ -29,6 +29,8 @@
             [claudia.slave.secret :as secret]
             [claudia.slave.ssh-cert :as ssh-cert]
             [claudia.slave.prompts :as prompts]
+            [claudia.slave.folders :as folders]
+            [claudia.slave.folders.trash :as folders-trash]
             [claudia.slave.store :as store]))
 
 (def ^:private env (.-env js/process))
@@ -315,6 +317,7 @@
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil
             (prompts/handle req res url who chats/prefs-changed!) nil
+            (folders/handle req res url who {:cwd chats/cwd :data data-dir}) nil
             (api/handle req res who) nil
             :else (io/send-json res 404 {:error "Not found."})))))
 
@@ -348,12 +351,14 @@
                (println "claudia runner" profile "on" socket-path "(host" host-socket ", cwd" chats/cwd ")")))))
 
 (defn- start!
-  "Once libsodium is ready: the host link, the chats, the 5-minute probe and the server."
+  "Once libsodium is ready: the host link, the chats, the 5-minute probe, the Trash's purge and the
+  server."
   []
   (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
   (chats/init!)
   ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
   (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
+  (folders-trash/start! data-dir)
   (listen!))
 
 (defn main [& _]

@@ -79,6 +79,14 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
     });
+    await step('Folders opens with the work folder in its tree and Escape closes it (README decisions 61 to 64)', async () => {
+      await page.locator('button.mn-face').first().click({ timeout: waitMs });
+      await page.getByRole('menuitem', { name: /Folders/ }).click({ timeout: waitMs });
+      await page.locator('.fd-screen .fd-node', { hasText: 'work' }).first().waitFor({ timeout: waitMs });
+      await page.locator('.fd-detail .fd-title', { hasText: 'work' }).waitFor({ timeout: waitMs });
+      await page.keyboard.press('Escape');
+      await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
+    });
     await step('the chat opens', async () => {
       await page.getByText(title, { exact: true }).first().click({ timeout: waitMs });
       await until('the chat frame', () => seen.heard.some((f) => f.type === 'chat' && f.chat === chatId));

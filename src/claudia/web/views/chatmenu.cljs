@@ -79,17 +79,19 @@
                                         ((act #(pick f))))))}])
 
 (defn project-list
-  "The projects of server a chat can go to (most chats first, current marked), a typed project
+  "The person's bookmarked folders on server (★, README decision 61), then the projects of server a
+  chat can go to (most chats first, current marked), a typed project
   name or folder path, or no project (none?: offered). pick gets the folder (\"\": no project);
   act: what wraps a pick (it closes the menu)."
   [{:keys [server current none? pick act]}]
   (let [[text set-text] (h/use-state "")
-        targets (pure/move-targets @(rf/subscribe [:all-rows]) server text)]
+        targets (pure/with-bookmarks (pure/move-targets @(rf/subscribe [:all-rows]) server text)
+                                     @(rf/subscribe [:bookmarks]) server text)]
     [:<>
      [move-input targets pick act set-text]
-     (for [{root :key label :label n :count} (take 12 targets)]
+     (for [{root :key label :label n :count mark :bookmark} (take 12 targets)]
        ^{:key root}
-       [move-item label n (= root current) (act #(pick root))])
+       [move-item (if mark (str "★ " label) label) n (= root current) (act #(pick root))])
      (when none?
        [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(pick ""))} "No project"])]))
 

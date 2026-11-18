@@ -1,7 +1,8 @@
 (ns claudia.web.views.pure.menu
-  "Where a menu opened at the mouse sits, the chat menu's Move to project, and the rail's subscription
-  button, as plain data."
+  "Where a menu opened at the mouse sits, the chat menu's Move to project (the person's bookmarks on
+  top, README decision 61), and the rail's subscription button, as plain data."
   (:require [clojure.string :as str]
+            [claudia.shared.bookmarks :as bookmarks]
             [claudia.web.views.pure.sidebar :as sidebar]))
 
 (defn menu-pos
@@ -45,6 +46,18 @@
          (remove #(= "" (:key %)))
          (filter #(or (empty? q) (str/includes? (str/lower-case (:label %)) q)))
          vec)))
+
+(defn with-bookmarks
+  "The move targets with the person's bookmarks on server first ({:key folder :label :bookmark
+  true}, those whose label or folder holds text), each folder once."
+  [targets items server text]
+  (let [q (sidebar/search-key text)
+        marks (for [b (bookmarks/on-server items server)
+                    :let [label (bookmarks/label-of b)]
+                    :when (or (empty? q) (str/includes? (str/lower-case (str label " " (:folder b))) q))]
+                {:key (:folder b) :label label :bookmark true})
+        marked (set (map :key marks))]
+    (into (vec marks) (remove #(marked (:key %))) targets)))
 
 (defn typed-folder
   "What Enter in the move box sends: the one project left by the text (targets: move-targets for it)

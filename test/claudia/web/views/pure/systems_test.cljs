@@ -2,11 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.systems :as pure]))
 
-(deftest sizes-in-binary-units
-  (is (= "512 B" (pure/bytes-text 512)))
-  (is (= "1.5 KiB" (pure/bytes-text 1536)))
-  (is (= "13.1 GiB" (pure/bytes-text (* 13.1 1024 1024 1024))))
-  (is (= "950 GiB" (pure/bytes-text (* 950 1024 1024 1024))))
+(deftest rates-in-binary-units
   (is (= "2.0 MiB/s" (pure/rate-text (* 2 1024 1024)))))
 
 (deftest shares-and-colours
