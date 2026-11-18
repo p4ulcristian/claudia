@@ -51,9 +51,14 @@
                       (mic/report! {:event "slow-start" :steps (mic/steps-now)}))
                    5000)))
 
+(defn- screen-angle
+  "How far the screen is turned from portrait, counterclockwise (degrees)."
+  []
+  (or (some-> js/screen .-orientation .-angle) (some-> js/window .-orientation) 0))
+
 (defn- started! [t0 warm s]
   (mic/report! {:event "started" :ms (js/Math.round (- (js/performance.now) t0)) :warm warm :steps (when-not warm (mic/steps-now))
-                :mic (:mic s)})
+                :mic (:mic s) :angle (screen-angle) :edge (some-> (pure/speak-edge (:mic s) (screen-angle)) name)})
   s)
 
 (defn- start-failed! [set-phase ^js err]
@@ -144,11 +149,6 @@
   (words/colour-var (if (vector? draft-key)
                       (get-in @(rf/subscribe [:servers]) [(first draft-key) :rows (second draft-key) :color])
                       (:color @(rf/subscribe [:new-settings])))))
-
-(defn- screen-angle
-  "How far the screen is turned from portrait, counterclockwise (degrees)."
-  []
-  (or (some-> js/screen .-orientation .-angle) (some-> js/window .-orientation) 0))
 
 (defn- speak-here
   "While recording in the app: a glow on the screen edge nearest the microphone iOS records from,

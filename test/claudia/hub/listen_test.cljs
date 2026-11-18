@@ -26,3 +26,8 @@
 (deftest words-of-keeps-strings
   (is (= ["a" "b"] (words/words-of {:words ["a" 1 "b"]})))
   (is (= [] (words/words-of {}))))
+
+(deftest log-line-keeps-the-microphone-ios-names
+  (is (= "mic: a@x.org {\"event\":\"started\",\"angle\":90,\"edge\":\"left\",\"mic\":{\"port\":\"MicrophoneBuiltIn\",\"location\":\"Upper\",\"orientation\":\"Front\"}}"
+         (listen/log-line "a@x.org" {:event "started" :angle 90 :edge "left"
+                                     :mic {:port "MicrophoneBuiltIn" :location "Upper" :orientation "Front" :evil 5}}))))
