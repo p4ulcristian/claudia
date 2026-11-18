@@ -5,3 +5,14 @@
 !version.json
 !node_modules/ws
 !node_modules/jose
+# sshpk and its dependencies (README decision 53)
+!node_modules/sshpk
+!node_modules/asn1
+!node_modules/safer-buffer
+!node_modules/assert-plus
+!node_modules/dashdash
+!node_modules/getpass
+!node_modules/jsbn
+!node_modules/tweetnacl
+!node_modules/ecc-jsbn
+!node_modules/bcrypt-pbkdf
