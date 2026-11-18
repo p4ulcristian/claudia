@@ -80,4 +80,7 @@ root_no_tap_file: /etc/claudia/root-no-tap
 # The front's socket for the root helper (claudia-front.service makes it, mode 0600).
 root_front_socket: /run/claudia-front/root.sock
 agent_bin_dir: /usr/local/lib/claudia-agent-bin
-agent_path: "/usr/local/lib/claudia-agent-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# The PATH used when /etc/claudia/env sets none.
+default_system_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# The agents' sessions: the shim's folder first, then Claudia's own PATH (role root_helper reads it).
+agent_path: "{{ agent_bin_dir }}:{{ claudia_env_path }}"

@@ -65,7 +65,7 @@
     create_home: true
     shell: /bin/bash
     password: "*"
-    comment: "Claudia break-glass: by hand only"
+    comment: "Claudia break-glass, by hand only"
 
 - name: Make break-glass's .ssh folder
   ansible.builtin.file:

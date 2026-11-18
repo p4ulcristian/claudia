@@ -9,6 +9,8 @@ Description=Claudia root helper (runs the agents' sudo commands it may)
 After=systemd-tmpfiles-setup.service
 
 [Service]
+# Claudia's PATH from /etc/claudia/env, so `node` is found where Claudia's units find it.
+Environment=PATH={{ claudia_env_path }}
 Environment=ROOT_SOCKET_DIR={{ root_socket_dir }}
 Environment=ROOT_NO_TAP={{ root_no_tap_file }}
 # The front keeps the person's word (switch, Allow); the helper asks it, never a runner.

@@ -5,6 +5,19 @@
 # root_lib_dir; nothing under /srv/claudia is used, so Claudia's automatic update cannot change the
 # guard (decision 54).
 
+# Claudia's own units take their PATH from /etc/claudia/env (node may live outside the usual
+# folders, e.g. /opt/claudia-tools/bin); the helper and the agents' sessions use that same PATH.
+- name: Read the PATH Claudia's units run with
+  ansible.builtin.slurp:
+    src: /etc/claudia/env
+  register: claudia_env_file
+
+- name: Keep that PATH
+  ansible.builtin.set_fact:
+    claudia_env_path: >-
+      {{ ((claudia_env_file.content | b64decode).splitlines()
+          | select('match', '^PATH=') | list | last | default('PATH=' ~ default_system_path))[5:] }}
+
 - name: Install the no-tap list (exact command lines the helper runs without asking)
   ansible.builtin.template:
     src: root-no-tap.j2
