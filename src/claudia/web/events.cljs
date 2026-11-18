@@ -439,11 +439,6 @@
  :nav/screen
  (fn [db [_ screen]] (assoc db :screen screen)))
 
-(rf/reg-event-fx
- :claudia/open
- ;; Claudia's face at the top of the rail: a stub, wired later to what opens her.
- (fn [_ _] (js/console.info "claudia/open") {}))
-
 (rf/reg-event-db
  :search/open
  ;; The search panel (README decision 45), over the page; the typed words stay from last time.
