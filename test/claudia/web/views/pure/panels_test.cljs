@@ -286,12 +286,16 @@
     (is (= ["running" "4:12 · 2 agents"] (sidebar/status-line {:running true :agents 2 :runningSince (- now 252000)} false now)))
     (is (= ["running" "0:05"] (sidebar/status-line {:running true :runningSince (- now 5000)} false now)))
     (is (= ["running" "1 agent"] (sidebar/status-line {:agents 1} false now)) "agents still running after the turn")
+    (is (= ["running" "6:30 · 2 agents"] (sidebar/status-line {:agents 2 :agentsSince (- now 390000)} false now))
+        "turn ended, agents left: the longest agent's clock")
+    (is (= ["running" "0:05 · 2 agents"] (sidebar/status-line {:running true :agents 2 :runningSince (- now 5000) :agentsSince (- now 390000)} false now))
+        "the turn runs: the chat's own clock")
     (is (= ["asks" "? asks · 3m"] (sidebar/status-line {:waiting true :running true :askedAt (- now 180000)} false now)))
     (is (= ["done" "done · 12m"] (sidebar/status-line {:ended (- now 720000) :at 1} true now)))
     (is (= ["quiet" "2h ago"] (sidebar/status-line {:at (- now 7200000) :ended 5} false now)))
     (is (= ["quiet" "now"] (sidebar/status-line {:at now} false now))))
-  (is (= [{:runningFor 4000 :runningSince 6000} {:asks [{:ago 100} {:ago 300}] :askedAt 9700} {:id "c"}]
-         (sidebar/with-clock-times [{:runningFor 4000} {:asks [{:ago 100} {:ago 300}]} {:id "c"}] 10000))))
+  (is (= [{:runningFor 4000 :runningSince 6000} {:asks [{:ago 100} {:ago 300}] :askedAt 9700} {:id "c"} {:agentsFor 500 :agentsSince 9500}]
+         (sidebar/with-clock-times [{:runningFor 4000} {:asks [{:ago 100} {:ago 300}]} {:id "c"} {:agentsFor 500}] 10000))))
 
 (deftest mic-now-keeps-helpers
   (testing "\"now\" stops the turn only when no helper runs"

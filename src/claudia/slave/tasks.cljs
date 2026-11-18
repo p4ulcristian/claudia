@@ -38,6 +38,19 @@
   [m]
   (remove #(or (:ambient %) (and (shell? %) (not (:background %)))) (vals m)))
 
+(defn oldest-running
+  "When the longest-running top among tasks (a chat's task map) started (ms), or nil when none
+  runs: the rail's agent clock (README decision 46)."
+  [m]
+  (let [by-id (into {} (map (juxt :id identity)) (counted m))
+        tops (into #{} (comp (filter #(= "running" (:status %))) (map #(top-of % by-id))) (vals by-id))]
+    (some->> (seq (keep :start tops)) (apply min))))
+
+(defn agents-since
+  "When chat's longest-running agent started (ms), or nil."
+  [chat]
+  (oldest-running (get @tasks chat)))
+
 (defn working
   "How many tops still run (the rail's \"agents working\" count)."
   [chat]

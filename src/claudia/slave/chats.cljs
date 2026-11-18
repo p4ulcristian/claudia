@@ -138,6 +138,8 @@
   (let [t (js/Date.now)]
     (mapv #(cond-> (assoc (view/row % (st (:id %)) (tasks/working (:id %)) t)
                           :project (projects/root-name (:folder %) cwd))
+             ;; The longest-running agent's clock (README decision 46), as ago like runningFor.
+             (tasks/agents-since (:id %)) (assoc :agentsFor (- t (tasks/agents-since (:id %))))
              (claudia/her? (:id %)) (assoc :claudia true))
           (store/chats))))
 
