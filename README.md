@@ -624,22 +624,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 49. Claudia's new look (2026-11-18, the user's picks one by one): a cool programmer girl, cyber-noir:
     orange bob, small oval sunglasses, a black leather jacket, the Claude spark as her hair clip.
-    Painted once with FLUX.2 [dev] in two pictures, glasses on and glasses pulled down to the tip of
-    her nose (`resources/web/face/noir-*.webp`, background cut away); over them everything that
-    moves is drawn in code: her eyes as vectors (they follow the mouse, blink, wink, close), the
-    lenses as her screen and the spark. Her brain (moods, events, idle clips:
-    `claudia.web.face.mind`, `clips`) stayed; `paint` maps a pose onto the new drawing. The glasses
-    come down when she has something to show with her eyes: the mouse near or on her, a chat's
-    news, a mood that is not calm (waiting on you, asleep, offline). The lenses show code rain while
-    chats work, a symbol for a feeling (! ? ♥ z) and words typed out in green
-    (`claudia.web.face.lens`); words replace the old speech bubbles. A chat's news names the chat
-    ("IRIS DONE ✓", "IR ASKS YOU ?", "EOR FAILED ✗") for 7 s while her eyes look at its circle in the
-    rail; a click on her then opens that chat (otherwise her own chat, decision 48). While words
-    are on her lenses she leans out of the rail three times bigger so they can be read. Her day
-    (her own clip `:daytime`): COFFEE in the morning, LUNCH, FOCUS, GG TODAY, GO TO BED at night.
-    Instead of: her head turning to the mouse (the user: only the eyes follow), words in bubbles
-    beside her, a spark drawn by the image model (it never got the logo's shape; the real path is
-    drawn on top).
+    Painted once with FLUX.2 [dev] with her glasses on (`resources/web/face/noir-up.webp`, background
+    cut away); over it the lenses and the spark are drawn in code. She stays still and cool: no
+    hops, squashes or turning, the spark never spins; only her sunglasses talk
+    (`claudia.web.face.lens`): code rain while chats work (faster when busy), a symbol (! ? z), and
+    words typed out in green instead of speech bubbles. A chat's news names the chat ("IRIS DONE ✓",
+    "IR ASKS YOU ?", "EOR FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
+    chat, decision 48). While words are on her lenses she leans out of the rail three times bigger
+    so they can be read. Her day (her own clip `:daytime`): COFFEE in the morning, LUNCH, FOCUS, GG
+    TODAY, GO TO BED at night. Her brain (moods, events, idle clips: `claudia.web.face.mind`,
+    `clips`) stayed; the cute effects (hearts, sparkles, notes) show nothing now. Instead of: a
+    second picture with the glasses pulled down and drawn eyes following the mouse (built, then
+    dropped by the user the same day), a 3D model (built from code: far below the painting; an
+    image-to-3D tool is the way if it comes back), words in bubbles beside her, a spark drawn by the
+    image model (it never got the logo's shape; the real path is drawn on top).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

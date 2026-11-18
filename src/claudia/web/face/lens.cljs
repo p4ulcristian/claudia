@@ -1,6 +1,6 @@
 (ns claudia.web.face.lens
-  "Claudia's sunglasses are her screen (2026-11-18): code rain while she works, a big symbol for a
-  feeling (! ? ♥ z), or words typed out in green and scrolled across both lenses (which chat
+  "Claudia's sunglasses are her screen (2026-11-18): code rain while she works, a big symbol (! ? z),
+  or words typed out in green and scrolled across both lenses (which chat
   finished, hi!, achoo!). Pure: what to show from the pose, and SVG markup from what to show and
   the time t in ms."
   (:require [clojure.string :as str]
@@ -9,7 +9,8 @@
 (defn- r1 [v] (.toFixed (js/Number v) 1))
 
 (def ^:private symbols
-  {:bang "!" :question "?" :z "z" :sparkles "✦" :hearts "♥" :notes "♪" :orbit "@" :confetti "★"})
+  "Only the cool ones: the rest of her old effects show nothing."
+  {:bang "!" :question "?" :z "z"})
 
 (def ^:private words {:cloud "OFFLINE" :poof "BYE" :swirl "ERROR"})
 
@@ -18,7 +19,7 @@
   [[kind arg]]
   (cond (= kind :word) {:kind :text :text (str/upper-case (first arg))}
         (words kind) {:kind :text :text (words kind) :color (if (= kind :swirl) art/red art/green)}
-        (symbols kind) {:kind :symbol :text (symbols kind) :color (if (= kind :hearts) art/red art/green)}
+        (symbols kind) {:kind :symbol :text (symbols kind) :color art/green}
         (= kind :dots) {:kind :rain :speed (if arg 3 1)}
         (= kind :sweat) {:kind :rain :speed 3}))
 
@@ -65,7 +66,7 @@
     (str "<text x=\"" (r1 x) "\" y=\"" (+ ry-y 11) "\" font-size=\"32\">" typed "</text>")))
 
 (defn markup
-  "The lenses' content as SVG markup: lenses ls (art/lenses :up or :down), what to show, time now."
+  "The lenses' content as SVG markup: lenses ls (art/lenses), what to show, time now."
   [ls {:keys [kind text color speed start]} now calm?]
   (let [body (case kind
                :rain (rain ls now (if calm? 0 speed))

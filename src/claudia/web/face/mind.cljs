@@ -196,11 +196,9 @@
         (update :blink #(or % (blink-now state now))))))
 
 (defn- aim
-  "Where she looks: at the chat her lenses talk about, the clip's way, else the mouse (in calm
-  moods), else the mood's, else ahead."
-  [{:keys [pointer mood ticker] :as state} now the-pose]
-  (or (:aim ticker)
-      (when (playing? state now) (:look the-pose))
+  "Where she looks: the clip's way, else the mouse (in calm moods), else the mood's, else ahead."
+  [{:keys [pointer mood] :as state} now the-pose]
+  (or (when (playing? state now) (:look the-pose))
       (when (and pointer (pointer-moods mood)) pointer)
       (:look the-pose)
       [0 0]))
