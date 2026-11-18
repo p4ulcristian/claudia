@@ -51,7 +51,7 @@ for p in "${profiles[@]}"; do
 	[ -n "$home" ] || { echo "profile $p: no Linux user $u" >&2; exit 1; }
 	usermod -aG claudia-run "$u"
 	# The chats' folder (CLAUDIA_CWD): Claude Code cannot start in a folder that is not there.
-	install -d -o "$u" -g "$(id -gn "$u")" "$home/Work"
+	[ -d "$home/Work" ] || install -d -m 700 -o "$u" -g "$(id -gn "$u")" "$home/Work"
 	user_dropins "$p" "$u" "$home"
 done
 systemctl daemon-reload
