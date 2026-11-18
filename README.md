@@ -662,8 +662,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 52. Root only through the root helper (2026-11-17/18, the user's picks: the root switch design).
     `claudia-root` runs as root on every server and listens on one socket per agent user,
-    `/run/claudia-root/<user>.sock`, in a folder only that user may enter, so the socket proves who
-    calls. A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
+    `/run/claudia-root/<user>/root.sock`, in a folder only that user may enter, so the socket proves who
+    calls. The helper and the shim are copied to `/usr/local/lib/claudia-root/` by `host/`
+    (decision 54), never by the automatic update, so the guard changes only when a person applies it. A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
     command, its folder and the chat's key (`CLAUDIA_CHAT_KEY`, set per session by the host) and
     streams the output back. The helper runs it when it matches the no-tap list exactly
     (`/etc/claudia/root-no-tap`: restart and status of known services, journalctl, nft list ruleset,
