@@ -68,8 +68,9 @@ no_tap_commands:
   - nft list ruleset
   - ss -tlnp
 
-# The guard (decision 52): root.js and the sudo shim are copied from a built Claudia checkout on the
-# computer running Ansible (`claudia_build_dir`: its out/root.js and deploy/sudo-shim) into
+# The guard (decision 52): root.js, sudo.js and the sudo shim are copied from a built Claudia checkout
+# on the computer running Ansible (`claudia_build_dir`: its out/root.js, out/sudo.js and
+# deploy/sudo-shim) into
 # root_lib_dir. Nothing under /srv/claudia (which deploy/update.sh replaces) is used by the guard,
 # so it changes only when a person applies this playbook.
 root_lib_dir: /usr/local/lib/claudia-root

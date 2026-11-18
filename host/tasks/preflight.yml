@@ -16,29 +16,31 @@
       example's placeholders), and every name in `migrate_profiles` among the people's profiles.
 
 # The guard comes from a built checkout on this computer (decision 54), never from the server's
-# /srv/claudia: out/root.js (npx shadow-cljs release root) and deploy/sudo-shim.
+# /srv/claudia: out/root.js and out/sudo.js (npx shadow-cljs release root sudo) and deploy/sudo-shim.
 - name: Stop unless claudia_build_dir names a build with the root helper and the shim
   ansible.builtin.assert:
     that:
       - claudia_build_dir is defined and claudia_build_dir is match('^/')
       - (claudia_build_dir ~ '/out/root.js') is file
+      - (claudia_build_dir ~ '/out/sudo.js') is file
       - (claudia_build_dir ~ '/deploy/sudo-shim') is file
     fail_msg: >-
       Set claudia_build_dir (inventory or -e) to an absolute path of a Claudia checkout on this
-      computer with out/root.js built and deploy/sudo-shim present.
+      computer with out/root.js and out/sudo.js built (npx shadow-cljs release root sudo).
   delegate_to: localhost
   become: false
   run_once: true
 
 # A shadow-cljs :node-script release leaves npm packages to node_modules at run time; the guard's
-# copy has none beside it, so root.js may only need Node's own modules.
-- name: Stop when root.js needs an npm package
+# copy has none beside it, so root.js and sudo.js may only need Node's own modules.
+- name: Stop when root.js or sudo.js needs an npm package
   ansible.builtin.assert:
-    that: preflight_root_js_packages | length == 0
-    fail_msg: "out/root.js requires {{ preflight_root_js_packages | join(', ') }}: the guard's copy has no node_modules."
+    that: preflight_js_packages | length == 0
+    fail_msg: "out/{{ item }} requires {{ preflight_js_packages | join(', ') }}: the guard's copy has no node_modules."
+  loop: [root.js, sudo.js]
   vars:
-    preflight_root_js_packages: >-
-      {{ lookup('ansible.builtin.file', claudia_build_dir ~ '/out/root.js')
+    preflight_js_packages: >-
+      {{ lookup('ansible.builtin.file', claudia_build_dir ~ '/out/' ~ item)
          | regex_findall('require\(\s*[\x27"]([^\x27"]+)[\x27"]\s*\)')
          | reject('match', '^node:')
          | reject('in', preflight_node_builtins)

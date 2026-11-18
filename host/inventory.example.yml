@@ -9,7 +9,8 @@ all:
     # The hub's SSH certificate authority, public half (decision 53).
     claudia_ssh_ca_pubkey: "ssh-ed25519 AAAA...placeholder... claudia-ca"
     # A Claudia checkout on the computer running Ansible, with the guard built
-    # (npx shadow-cljs release root): out/root.js and deploy/sudo-shim are copied from it.
+    # (npx shadow-cljs release root sudo): out/root.js, out/sudo.js and deploy/sudo-shim are copied
+    # from it.
     claudia_build_dir: /path/to/claudia
   children:
     claudia_servers:

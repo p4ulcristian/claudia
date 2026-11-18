@@ -11,8 +11,8 @@ to 55):
 - **Root helper.** `claudia-root.service` runs `/usr/local/lib/claudia-root/root.js` as root and
   listens on `/run/claudia-root/<agent user>/root.sock` (a folder only that agent user's group may
   enter). Its no-tap list is `/etc/claudia/root-no-tap`; the `sudo` shim comes first on the agents'
-  PATH (`/usr/local/lib/claudia-agent-bin/sudo` → `/usr/local/lib/claudia-root/sudo-shim`). root.js
-  and the shim are copied from a built checkout on your computer (`claudia_build_dir`), never taken
+  PATH (`/usr/local/lib/claudia-agent-bin/sudo` → `/usr/local/lib/claudia-root/sudo-shim`), which runs
+  the `sudo.js` beside it. root.js, sudo.js and the shim are copied from a built checkout on your computer (`claudia_build_dir`), never taken
   from `/srv/claudia`: the automatic update replaces `/srv/claudia`, so it cannot change the guard.
   The helper restarts when the copy changes.
 - **SSH.** sshd trusts the hub's certificate authority (`/etc/ssh/claudia-ca.pub`); each agent user
@@ -37,7 +37,7 @@ The inventory (servers, people, addresses, keys) stays outside this public repo.
 the repo's root:
 
 ```sh
-# a checkout with the guard built: npm ci && npx shadow-cljs release root
+# a checkout with the guard built: npm ci && npx shadow-cljs release root sudo
 ansible-playbook -i ~/.config/claudia-host/inventory.yml host/site.yml
 # open a NEW ssh login to each server (and one as break-glass); check Claudia works; then:
 ansible-playbook -i ~/.config/claudia-host/inventory.yml host/confirm.yml
@@ -52,10 +52,10 @@ word of its line in `/etc/claudia/profiles`, and the person's own Linux login), 
 `migrate_profiles`, `desktop_user`, `break_glass_tested`, `phase_b_remove_nopasswd`. For all hosts:
 `break_glass_pubkey` and `claudia_ssh_ca_pubkey` (the run stops when either is missing or still the
 example's placeholder), and `claudia_build_dir`, the absolute path of a Claudia checkout on your
-computer with `out/root.js` built (the run stops when it is missing, or when root.js needs an npm
-package: the guard's copy has no `node_modules` beside it). Everything else is in `group_vars/all.yml`. Host settings in the inventory
-win over `group_vars/all.yml`; group settings in the inventory file do not, so put per-server
-choices on the host.
+computer with `out/root.js` and `out/sudo.js` built (the run stops when either is missing, or when
+one needs an npm package: the guard's copy has no `node_modules` beside it). Everything else is in
+`group_vars/all.yml`. Host settings in the inventory win over `group_vars/all.yml`; group settings
+in the inventory file do not, so put per-server choices on the host.
 
 ## Undo and confirm
 

@@ -1,6 +1,6 @@
 ---
 # The root helper (README decision 52): its no-tap list, its socket folders, its program and unit,
-# and the sudo shim that agents meet first on their PATH. root.js and the shim are copied from a
+# and the sudo shim that agents meet first on their PATH. root.js, sudo.js and the shim are copied from a
 # built checkout on the computer running Ansible (`claudia_build_dir`, checked in preflight) into
 # root_lib_dir; nothing under /srv/claudia is used, so Claudia's automatic update cannot change the
 # guard (decision 54).
@@ -30,7 +30,7 @@
     group: root
     mode: "0755"
 
-- name: Copy the root helper and the sudo shim from the build
+- name: Copy the root helper, the sudo shim and its sudo.js from the build
   ansible.builtin.copy:
     src: "{{ claudia_build_dir }}/{{ item.from }}"
     dest: "{{ root_lib_dir }}/{{ item.to }}"
@@ -39,6 +39,8 @@
     mode: "0755"
   loop:
     - { from: out/root.js, to: root.js }
+    # The shim runs the sudo.js beside it (found through the sudo link).
+    - { from: out/sudo.js, to: sudo.js }
     - { from: deploy/sudo-shim, to: sudo-shim }
   notify: Restart the root helper
 
