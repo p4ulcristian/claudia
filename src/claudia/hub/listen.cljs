@@ -60,7 +60,7 @@
               (.then #(io/send-json res 200 %))
               (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))
 
-(def ^:private log-keys [:event :ms :warm :steps :bytes :chars :error :ua :app :angle :edge])
+(def ^:private log-keys [:event :ms :warm :steps :bytes :chars :error :ua :app :angle :edge :turns])
 
 (defn log-line
   "One line for the hub's log from a page's mic report (POST /hub/listen/log): the caller and the

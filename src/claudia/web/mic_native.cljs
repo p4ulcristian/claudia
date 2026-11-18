@@ -28,7 +28,8 @@
   (reset! last-spectrum [])
   (-> (ask "start")
       (.then (fn [^js r] (reset! warm true)
-               {:native true :rate (.-rate r) :mic (js->clj (.-mic r) :keywordize-keys true)}))
+               {:native true :rate (.-rate r) :mic (js->clj (.-mic r) :keywordize-keys true)
+                :turn (.-turn r)}))
       (.catch (fn [e] (reset! warm false) (throw (js/Error. (or (.-message e) (str e))))))))
 
 (defn discard! "Ends a session, keeping nothing." [_session] (.catch (ask "discard") (fn [_] nil)))
