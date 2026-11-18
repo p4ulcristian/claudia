@@ -99,3 +99,20 @@
     group: root
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
+
+# The front (user claudia) keeps the proof of a person's Allow (decision 52). An agent user in
+# group claudia could read the hub key (/etc/claudia/hub-key, root:claudia 0640) and speak as the hub.
+- name: Ask which groups each agent user is in
+  ansible.builtin.command: id -nG {{ item }}
+  register: agent_groups
+  changed_when: false
+  loop: "{{ agent_users }}"
+
+- name: Stop if an agent user is in group claudia
+  ansible.builtin.assert:
+    that: "'claudia' not in (item.stdout.split())"
+    fail_msg: "{{ item.item }} is in group claudia: it could read the hub key. Remove it first."
+    quiet: true
+  loop: "{{ agent_groups.results }}"
+  loop_control:
+    label: "{{ item.item }}"

@@ -77,5 +77,7 @@ root_lib_dir: /usr/local/lib/claudia-root
 # One folder per agent user, <dir>/<agent user>/, holding the socket root.sock (root.js makes it).
 root_socket_dir: /run/claudia-root
 root_no_tap_file: /etc/claudia/root-no-tap
+# The front's socket for the root helper (claudia-front.service makes it, mode 0600).
+root_front_socket: /run/claudia-front/root.sock
 agent_bin_dir: /usr/local/lib/claudia-agent-bin
 agent_path: "/usr/local/lib/claudia-agent-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
