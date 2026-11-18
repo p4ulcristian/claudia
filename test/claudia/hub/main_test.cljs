@@ -1,5 +1,6 @@
 (ns claudia.hub.main-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.hub.claudia :as hclaudia]
             [claudia.hub.config :as config]
             [claudia.hub.main :as main]
             [claudia.hub.pictures :as pictures]))
@@ -72,3 +73,13 @@
   (is (= 16 (count (pictures/picture-key "a@b.c"))))
   (is (= "/hub/picture/" (subs (pictures/url-of "a@b.c" 5) 0 13)))
   (is (nil? (pictures/url-of "a@b.c" nil))))
+
+(deftest claudia-calls-need-the-servers-key-and-a-profile-there
+  (is (= "no server named" (hclaudia/caller-problem "" "a@b" true true)))
+  (is (= "not that server's key" (hclaudia/caller-problem "destiny" "a@b" false true)))
+  (is (= "no person named" (hclaudia/caller-problem "destiny" "" true true)))
+  (is (= "that person has no profile on that server" (hclaudia/caller-problem "destiny" "a@b" true false)))
+  (is (nil? (hclaudia/caller-problem "destiny" "a@b" true true)))
+  (is (= "/api/chat-ops/stop" (hclaudia/op-target "stop")))
+  (is (nil? (hclaudia/op-target "delete")))
+  (is (= {:server "box" :id "c" :title "T"} (hclaudia/row-of "box" {:id "c" :title "T" :scene "big"}))))

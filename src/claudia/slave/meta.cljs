@@ -8,6 +8,7 @@
             ["node:fs" :as fs]
             [claudia.node.env :as env]
             [claudia.shared.text :as text]
+            [claudia.slave.claudia :as claudia]
             [claudia.slave.store :as store]
             [claudia.slave.tokens :as tokens]))
 
@@ -207,4 +208,6 @@
          :accountLabel (account-label)
          :defaultEfforts (vec (store/kv "" "defaultEfforts"))
          :plans (mapv #(select-keys % [:key :name]) (tokens/saved))
-         :planKey (:key (tokens/current))))
+         :planKey (:key (tokens/current))
+         ;; Claudia's own chat is on this server (README decision 48): her face opens it here.
+         :claudia (claudia/on?)))

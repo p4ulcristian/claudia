@@ -65,12 +65,13 @@
 (defn list-rows
   "Every shown server's chats in one list, each with its :server and :off (its socket not open),
   those in-list? only. In the order the chats were started (the TypeScript Claudia's list): a new chat
-  sits last."
+  sits last. Claudia's own chat is in no list: her face opens it (README decision 48)."
   [servers archived? hidden & [open]]
   (->> servers
        (remove (fn [[s]] (hidden s)))
        (mapcat (fn [[s {:keys [rows status]}]]
                  (map #(assoc % :server s :off (not= :open status)) (vals rows))))
+       (remove :claudia)
        (filter #(in-list? % archived? open))
        (sort-by events/list-order)))
 

@@ -9,6 +9,7 @@
             ["http" :as http]
             ["path" :as path]
             [clojure.string :as str]
+            [claudia.hub.claudia :as claudia]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
             [claudia.hub.health :as health]
@@ -183,6 +184,8 @@
         own? (or (= pathname "/hub/me") server-name)]
     (cond
       (= pathname "/hub/alive") (alive res)
+      ;; A server's call for Claudia's own chat: its hub key, no login (README decision 48).
+      (and (= pathname "/hub/server/claudia") (= "POST" (.-method req))) (claudia/call req res)
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
       (not email) (io/send-json res 401 {:error "not signed in"})

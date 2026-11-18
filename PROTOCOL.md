@@ -103,6 +103,7 @@ inline styles; fonts from Google Fonts; same-origin fetches and sockets; no fram
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
+| `POST /hub/server/claudia` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ as (email, with a profile on that server), op: chats \| new \| send \| archive \| stop, args }` → the operation's answer, carried out on the person's servers through each runner's `/api/chat-ops/…` (`GET chats` → `{ chats }`, `POST new { text, folder? }` → `{ chat }`, `POST send { chat, text }`, `POST archive { chat, archived }`, `POST stop { chat }` → `{ ok }`); 403 when the key or the profile does not match |
 | `GET /hub/picture/<key>` | a person's profile picture (PNG or WebP; key: 16 hex digits of the SHA-256 of their email), 404 without one |
 | `PUT /hub/admin/picture?email=<email>` (admins) | body: the picture (PNG or WebP, up to 512 KB) → `{ picture }` |
 | `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
@@ -270,6 +271,7 @@ Page → runner:
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
 | `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one); the page ties its own data to the message by it (a dictated message's sound) |
+| `claudia` | | Claudia's own chat (README decision 48): the runner that has her (its `meta` frame says `claudia: true`) makes or finds it and answers `claudia { chat }`; elsewhere an `error` |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |

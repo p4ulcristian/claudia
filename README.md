@@ -580,6 +580,25 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     gone. Instead of: one shared key for every server (a server's root would hold every front's key),
     or mutual TLS (certificates to issue and renew per server for the same proof).
 
+48. Claudia's own chat (2026-11-18, the user's picks one by one): her face at the rail's top opens a
+    chat with Claudia herself, one per profile, kept out of every chat list. She manages the
+    person's chats (the user calls them agents) on every server they have a profile on: lists,
+    starts, writes to, archives and stops them, only when asked, never on her own. Archiving can be
+    undone, so she archives without asking; stopping a running turn cannot, so `stop_chat` asks the
+    person first (a permit ask). She runs nothing in the background: her session runs with
+    `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and without Monitor, ScheduleWakeup, CronCreate,
+    CronDelete, RemoteTrigger and Workflow. She lives on the runner that has `CLAUDIA_HUB_URL`,
+    `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` and `CLAUDIA_OWNER_EMAIL` (destiny); its meta frame
+    says `claudia`, and the page's `claudia` frame there makes or finds her chat. Her tools
+    (`src/claudia/slave/claudia.cljs`) call the hub's `POST /hub/server/claudia` with that server's
+    name and hub key (the one key of decision 47, now also proving a server to the hub) and the
+    person; the gate passes that path without a login, the hub checks the key and that the person
+    has a profile on that server, then carries the operation out on each of the person's servers
+    (`/api/chat-ops/…` on the runners, `src/claudia/slave/chat_ops.cljs`). Only her chat has these
+    tools: decision 18 still holds for every other chat and program. Instead of: her actions
+    carried out by the person's open page (works only while a page is open), or every chat able to
+    drive others (what decision 18 removed).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

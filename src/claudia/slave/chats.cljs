@@ -18,6 +18,7 @@
             [claudia.slave.chats.turns :as turns]
             [claudia.slave.chats.view :as view]
             [claudia.shared.colours :as colours]
+            [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
@@ -135,8 +136,9 @@
   hub's clock may differ)."
   []
   (let [t (js/Date.now)]
-    (mapv #(assoc (view/row % (st (:id %)) (tasks/working (:id %)) t)
-                  :project (projects/root-name (:folder %) cwd))
+    (mapv #(cond-> (assoc (view/row % (st (:id %)) (tasks/working (:id %)) t)
+                          :project (projects/root-name (:folder %) cwd))
+             (claudia/her? (:id %)) (assoc :claudia true))
           (store/chats))))
 
 (defn- note-msg!
@@ -426,6 +428,21 @@
           (.then #(answers/text-result (shown/video-answer (path/basename file-path) % caption)))
           (.catch #(answers/refusal (str "Could not keep the video: " (.-message %))))))))
 
+(declare ask!)
+
+(defn- claudia-call
+  "Her tool call (claudia.slave.claudia): to the hub; stop_chat first asks the person (it cannot be
+  undone)."
+  [id tool args]
+  (let [go #(.then (claudia/call-hub! tool args)
+                   (fn [{:keys [ok text]}] (if ok (answers/text-result text) (answers/refusal text))))]
+    (if (= tool "stop_chat")
+      (.then (ask! id {:ask (answers/permit-ask (str (random-uuid)) "Stop chat" args "Stop a running chat?"
+                                                "Claudia wants to stop this chat's running turn. It cannot be undone.")
+                       :input args})
+             (fn [answer] (if (= "allow" (:behavior answer)) (go) (answers/refusal "The person said no."))))
+      (go))))
+
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
@@ -435,7 +452,9 @@
     ["workspace" "run_with_secret"] (secret-ask id args)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
-    (throw (js/Error. (str "No tool " server "/" tool)))))
+    (if (and (= server "claudia") (claudia/her? id))
+      (claudia-call id tool args)
+      (throw (js/Error. (str "No tool " server "/" tool))))))
 
 (defn- ask! [id entry] (js/Promise. (fn [done] (add-ask! id (assoc entry :resolve done)))))
 
@@ -921,10 +940,16 @@
 ;; Page actions -----------------------------------------------------------------------------------
 
 (defn- start-spec [id resume? child-env]
-  (let [s (settings id)]
-    (session/start-spec {:cwd cwd :id id :resume? resume? :env child-env
-                         :prompt (codeforms/prompt-for) :allowed tools/allowed-tools
-                         :model (:model s) :effort (:effort s) :mcp (codeforms/mcp-for)
+  (let [s (settings id)
+        her (claudia/her? id)]
+    (session/start-spec {:cwd cwd :id id :resume? resume?
+                         ;; Her chat runs nothing in the background (README decision 48).
+                         :env (cond-> child-env her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
+                         :prompt (cond-> (codeforms/prompt-for) her (str "\n\n" claudia/prompt))
+                         :allowed (cond-> tools/allowed-tools her (into claudia/allowed))
+                         :disallowed (when her claudia/disallowed)
+                         :model (:model s) :effort (:effort s)
+                         :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))
                          :edit-tools changes/edit-tools :worktrees? (worktree/on?)})))
 
 (defn- start-session!

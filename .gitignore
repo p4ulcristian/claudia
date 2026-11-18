@@ -6,3 +6,4 @@ out
 *.db
 .env*
 .clj-kondo/.cache
+.claude/
