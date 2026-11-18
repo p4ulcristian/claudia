@@ -445,6 +445,11 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .rail-face { position: relative; display: block; width: 56px; height: 58px; margin: 0 auto; padding: 0; overflow: visible; background: none; }
 .rail-face:hover { background: none; }
 .rail-face .face { display: block; width: 56px; height: 58px; overflow: visible; pointer-events: none; }
+/* Words on her lenses (a chat's news, her day): she leans out of the rail, three times bigger, so
+   they can be read; back to her place when they are gone. */
+.face { transform-origin: 8px 8px; transition: transform .35s cubic-bezier(.3,1.4,.5,1); }
+.face.big { transform: scale(3.2); position: relative; z-index: 20; }
+@media (prefers-reduced-motion: reduce) { .face { transition: none; } }
 /* A chat that finished since you looked: a big green check through its circle, drawn out of its middle. */
 .rail-check { position: absolute; top: 0; left: 50%; width: 42px; height: 42px; margin-left: -21px; pointer-events: none; overflow: visible; z-index: 2; }
 .rail-check path { fill: none; stroke: var(--green); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;

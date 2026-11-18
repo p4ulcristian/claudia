@@ -8,10 +8,13 @@
   (eased each step), :pointer (where the mouse is, nil when far), :hover?, :last-poke (when anything
   last happened), :blink-at / :next-blink / :next-idle (times), :clicks (recent click times),
   :away-at (when the page was hidden), :world (chat counts) and :hour."
-  (:require [claudia.web.face.clips :as clips]
+  (:require [clojure.string :as str]
+            [claudia.web.face.clips :as clips]
             [claudia.web.rowdiff :as rowdiff]))
 
 (def sleep-after-ms 180000)
+(def ticker-ms
+  "How long a chat's news stays on her lenses." 7000)
 (def hello-after-ms 60000)
 
 (defn initial
@@ -46,12 +49,17 @@
 (defn- chat-errors "Chats with an error, as a set of keys." [db]
   (set (keep (fn [[k c]] (when (:error c) k)) (:chats db))))
 
+(defn- chat-of
+  "Which chat an event is about, for her lenses: {:k [server id] :title}."
+  [db [s id :as k]]
+  {:k k :title (get-in db [:servers s :rows id :title])})
+
 (defn- failures
-  "A chat or the page got a new error."
+  "A chat (named) or the page got a new error."
   [before after]
-  (when (or (seq (remove (chat-errors before) (chat-errors after)))
-            (and (:error after) (not= (:error after) (:error before))))
-    [:failed]))
+  (let [k (first (remove (chat-errors before) (chat-errors after)))]
+    (cond k [[:failed (chat-of after k)]]
+          (and (:error after) (not= (:error after) (:error before))) [:failed])))
 
 (defn- list-events
   "The chat list opened or closed; another chat opened."
@@ -71,17 +79,21 @@
           :else [])))
 
 (defn- turn-events
-  "The chat rows' changes as event names; two or more done at once are one :many-done."
+  "The chat rows' changes as [event {:k :title}]; two or more done at once are one :many-done (its
+  title: theirs joined)."
   [before after]
-  (let [kinds (map first (rowdiff/row-events before after))
-        dones (count (filter #{:done} kinds))
+  (let [evs (rowdiff/row-events before after)
+        chat (fn [[_ k row]] {:k k :title (:title row)})
+        dones (filter #(= :done (first %)) evs)
         named {:waiting :asked :new :new-chat :started :started :gone :gone}]
-    (concat (when (= dones 1) [:done])
-            (when (> dones 1) [:many-done])
-            (keep named kinds))))
+    (concat (when (= 1 (count dones)) [[:done (chat (first dones))]])
+            (when (< 1 (count dones))
+              [[:many-done {:k (second (first dones)) :title (str/join " + " (keep #(:title (nth % 2)) dones))}]])
+            (keep (fn [[kind :as e]] (when-let [ev (named kind)] [ev (chat e)])) evs))))
 
 (defn db-events
-  "Everything she reacts to between two states of app-db, as event names."
+  "Everything she reacts to between two states of app-db: event names, or [name chat] for the ones
+  about one chat."
   [before after]
   (vec (concat (turn-events before after) (failures before after)
                (list-events before after) (typing-events before after))))
@@ -123,17 +135,38 @@
   (cond-> (assoc state :away-at nil)
     (and (:away-at state) (> (- now (:away-at state)) hello-after-ms)) (start-clip :hello now)))
 
+(def ^:private news
+  "What her lenses say about a chat, by event."
+  {:done " DONE \u2713" :many-done " DONE \u2713" :asked " ASKS YOU ?" :failed " FAILED \u2717"})
+
+(defn ticker-of
+  "The words for event ev about chat {:k :title} at now, nil when it is not news."
+  [ev {:keys [k title]} now]
+  (when-let [tail (news ev)]
+    {:text (str (str/upper-case (or title "a chat")) tail) :k k :start now
+     :color (if (= ev :failed) "#ff4a4a" "#3cff6a")}))
+
+(defn- on-chat
+  "A chat's news: the clip, and its words on her lenses."
+  [state ev chat now]
+  (let [t (ticker-of ev chat now)]
+    (cond-> (start-clip (poked state now) ev now chat)
+      t (assoc :ticker t))))
+
 (defn react
-  "Her state after event ev at time now: a db event name (db-events), :click, :hover-in, :hover-out,
-  :hidden, :visible or :drag."
-  [state ev now]
-  (case ev
-    :hover-in (-> (poked state now) (assoc :hover? true))
-    :hover-out (assoc state :hover? false)
-    :click (clicked (poked state now) now)
-    :hidden (assoc state :away-at now)
-    :visible (came-back (poked state now) now)
-    (start-clip (poked state now) ev now)))
+  "Her state after event e at time now: a db event (db-events: a name, or [name chat]), :click,
+  :hover-in, :hover-out, :hidden, :visible or :drag."
+  [state e now]
+  (let [[ev chat] (if (vector? e) e [e nil])]
+    (case ev
+      :hover-in (-> (poked state now) (assoc :hover? true))
+      :hover-out (assoc state :hover? false)
+      :click (clicked (poked state now) now)
+      :hidden (assoc state :away-at now)
+      :visible (came-back (poked state now) now)
+      (on-chat state ev chat now))))
+
+(defn clear-ticker "Her lenses go back to her own business." [state] (dissoc state :ticker))
 
 (defn point
   "The mouse at [dx dy] from her (in her own sizes, nil when far): she looks there."
@@ -163,9 +196,11 @@
         (update :blink #(or % (blink-now state now))))))
 
 (defn- aim
-  "Where she looks: the clip's way, else the mouse (in calm moods), else the mood's, else ahead."
-  [{:keys [pointer mood] :as state} now the-pose]
-  (or (when (playing? state now) (:look the-pose))
+  "Where she looks: at the chat her lenses talk about, the clip's way, else the mouse (in calm
+  moods), else the mood's, else ahead."
+  [{:keys [pointer mood ticker] :as state} now the-pose]
+  (or (:aim ticker)
+      (when (playing? state now) (:look the-pose))
       (when (and pointer (pointer-moods mood)) pointer)
       (:look the-pose)
       [0 0]))
@@ -189,7 +224,8 @@
   (let [weights (clips/idle-weights mood)]
     (if (or (not weights) hover? (playing? state now) (< now next-idle))
       state
-      (-> (start-clip state (clips/pick-weighted weights r1) now [(dec (* 2 r2)) (- (* 1.4 r3) 0.7)])
+      (-> (start-clip state (clips/pick-weighted weights r1) now
+                      {:dir [(dec (* 2 r2)) (- (* 1.4 r3) 0.7)] :hour (:hour state)})
           (assoc :next-idle (+ now 3500 (* 8000 r2)))))))
 
 (defn- blinking
@@ -205,6 +241,7 @@
   [state now dt rs hour]
   (let [mood (mood-of (:world state) (- now (:last-poke state)) hour)
         s1 (-> (assoc state :mood mood :hour hour)
+               (cond-> (some-> (:ticker state) :start (+ ticker-ms) (< now)) clear-ticker)
                (own-life now (take 3 rs))
                (blinking now (nth rs 3)))
         the-pose (pose s1 now)]
