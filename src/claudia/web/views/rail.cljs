@@ -1,7 +1,10 @@
 (ns claudia.web.views.rail
-  "The rail (desktop, the list closed; web/app.tsx of the TypeScript Claudia): under Claudia's face
-  the sounds and 2D/3D switches (claudia.web.views.logotools), then a circle per chat with its title under it; passive (ash) chats last, after a chalk line, with the same spacing. At its foot: the
-  settings gear (claudia.web.views.menu). Circles
+  "The rail, the one chat list wider than a phone (README decision 24; web/app.tsx of the
+  TypeScript Claudia): at its top Claudia's face in a violet circle, her head over its top edge (a
+  click: :claudia/open), and under it the 2D/3D switch as two small circles
+  (claudia.web.views.logotools); then a circle per chat with its title under it; passive (ash)
+  chats last, after a chalk line, with the same spacing. At its foot: your profile circle
+  (claudia.web.views.menu). Circles
   slide to their new places when the order changes; a new one grows in. Every circle with its title
   takes the same height (a title is cut after two lines; one line keeps the room of two), so the
   spacing never changes. On a touch screen, pulling the circles down from the top and letting go
@@ -14,6 +17,7 @@
             [re-frame.core :as rf]
             [claudia.shared.order :as order]
             [reagent.hooks :as h]
+            [claudia.web.face.view :as face]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.dot :as dot]
@@ -149,17 +153,35 @@
    [dot/chat-dot fresh false]
    [:span.rail-name title]])
 
+(defn- rail-acts
+  "Search and New chat, side by side (a mouse's way to both; the iPad's edge has its own)."
+  []
+  [:div.rail-acts
+   [:button.rail-dot.search {:title "Search chats (\u2318K)" :aria-label "Search chats"
+                             :on-click search-open/open!}
+    [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16 16l-3.5-3.5"}]]]
+   (when-not @(rf/subscribe [:new-chat-read-only?])
+     [:button.rail-dot.search {:title "New chat (Alt+N)" :aria-label "New chat" :on-click #(rf/dispatch [:nav/new])}
+      [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])])
+
 (defn- rail-top
-  "The search button where the screen has no right-edge column (the iPad's edge has search), and
-  the chat being started. A new chat starts from Alt+N, the list's New chat or the iPad's edge."
+  "Search and New chat where the screen has no right-edge column (the iPad's edge has both), and
+  the chat being started. A new chat also starts from Alt+N."
   [edge?]
   (let [fresh @(rf/subscribe [:fresh-chat])]
     [:<>
-     (when-not edge?
-       [:button.rail-dot.search {:title "Search chats (\u2318K)" :aria-label "Search chats"
-                                 :on-click search-open/open!}
-        [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16 16l-3.5-3.5"}]]])
+     (when-not edge? [rail-acts])
      (when fresh [fresh-dot fresh])]))
+
+(defn- rail-head
+  "Claudia's face in her circle (its ring drawn behind, her head over its top edge; a click opens
+  her, :claudia/open) and the 2D/3D switch under it."
+  []
+  [:div.rail-head
+   [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click #(rf/dispatch [:claudia/open])}
+    [:span.rail-face-ring {:aria-hidden true}]
+    [:span.rail-face-clip [:f> face/face]]]
+   [logotools/tools]])
 
 (defn- entry-view [m i {:keys [kind row] :as e}]
   (if (= kind :group)
@@ -176,9 +198,10 @@
         box (h/use-ref nil)
         pulled (use-pull! box)]
     (use-centre-open! box open)
+    (sidebar/scroll-open-into-view! [(str open) (count rows)])
     (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
     [:nav.rail {:aria-label "Chats"}
-     [logotools/tools]
+     [rail-head]
      [:div.rail-scroll
       (pull-mark pulled)
       [:div.rail-dots {:ref #(set! (.-current box) %)

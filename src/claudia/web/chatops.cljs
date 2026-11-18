@@ -117,7 +117,16 @@
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
-(rf/reg-event-db :ops/settings (fn [db [_ on]] (assoc db :settings? on :screen (if (db/phone?) :list (:screen db)))))
+;; Settings: on a phone it slides over the list (the list screen comes); wider, it takes the chat
+;; column in place of the archived chats (README decision 24).
+(defn with-settings
+  "db with Settings shown (on) or gone, for a phone (phone?) or a wider screen."
+  [db phone? on]
+  (cond-> (assoc db :settings? on)
+    phone? (assoc :screen :list)
+    (and on (not phone?)) (assoc :archived? false)))
+
+(rf/reg-event-db :ops/settings (fn [db [_ on]] (with-settings db (db/phone?) on)))
 
 (rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :settings? false :search nil :project-filter nil)))
 

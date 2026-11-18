@@ -177,16 +177,6 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .m-account select { font: inherit; color: var(--fg); padding-left: 0; }
 
 /* ---- a desktop: the opened sidebar is a drawer over the rail; Settings takes its place, wider ---- */
-@media (min-width: 680px) {
-  .app { --side-w: 340px; }
-  .app.settings-shown { --side-w: 380px; }
-  .app:not(.no-sidebar) .sidebar-slot { width: var(--side-w); transition: width 0.22s var(--screen-ease); }
-  .sidebar-slot > .sidebar.cs-side { width: var(--side-w); }
-  /* Room for the menu button, which stays in the top-left corner. */
-  .cs-head { padding-left: 34px; }
-  .st-head { padding-left: 50px; }
-}
-
 /* ---- phones: the list under the chat; the chat slides over it from the right ---- */
 @media (max-width: 679px) {
   .cs-pane { padding-left: 12px; padding-right: 12px; }

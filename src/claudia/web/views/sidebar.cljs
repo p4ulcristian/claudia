@@ -1,6 +1,7 @@
 (ns claudia.web.views.sidebar
-  "The chat list (the phone's list screen and the desktop's drawer) and the Settings screen its gear
-  opens over it (web/sidebar.tsx of the TypeScript Claudia). The list holds only chats: a header
+  "The chat list (the phone's list screen; wider screens have only the rail, README decision 24) and
+  the Settings screen its profile circle opens over it (web/sidebar.tsx of the TypeScript Claudia);
+  wider, the archived chats in the chat column (archived-pane). The list holds only chats: a header
   (whose chats as a title menu, the 5-hour and week rings, the gear, the search button that opens
   the search panel, claudia.web.views.search-panel, + on a desktop), the rows; + floats bottom
   right on a phone. Every server's chats in one list, in the order they were started. The archived
@@ -153,7 +154,7 @@
              :when (and (not (hidden server-name)) (= :closed (get-in all [server-name :status])))]
          ^{:key server-name} [:p.server-off-note (str (or label server-name) " is off · its chats as last seen")])])))
 
-(defn- scroll-open-into-view!
+(defn scroll-open-into-view!
   "The open chat stays in view in the list and the rail (only the list's own scroll moves)."
   [deps]
   (h/use-effect
@@ -166,6 +167,8 @@
                (< (.-top r) (.-top l)) (set! (.-scrollTop scroller) (- (.-scrollTop scroller) (- (.-top l) (.-top r)) 8)))))
      nil)
    deps))
+
+(def ^:private back-arrow [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]])
 
 (defn- list-head [ro phone? archived? n-archived]
   [:<>
@@ -181,7 +184,7 @@
    (when archived?
      [:div.cs-archived-head
       [:button.cs-archived {:on-click #(rf/dispatch [:ops/archived false])}
-       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]] "Back to chats"]
+       back-arrow "Back to chats"]
       [:span.cs-count (str n-archived " archived")]])])
 
 (defn- chip-button [label n on? tip on-click]
@@ -292,6 +295,24 @@
      (when (and (not ro) phone?)
        [:button.cs-fab {:aria-label "New chat" :on-click #(rf/dispatch [:nav/new])}
         [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M12 5v14M5 12h14"}]]])]))
+
+(defn- archived-back! [] (rf/dispatch [:ops/archived false]))
+
+(defn archived-pane
+  "The archived chats in the chat column (wider than a phone, README decision 24): Back (or Escape)
+  returns to the chat that was open; a pick opens that chat."
+  []
+  (let [rows @(rf/subscribe [:rows])
+        chip @(rf/subscribe [:project-filter])
+        m (list-state rows @(rf/subscribe [:all-rows]) {:archived? true :chip chip})]
+    (settings/use-escape-back! true archived-back!)
+    [:div.st-pane.ar-pane {:role "region" :aria-label "Archived chats"}
+     [:header.st-head
+      [:button.st-back {:on-click archived-back!} back-arrow "Back"]
+      [:h2 "Archived chats"]
+      [:span.cs-count (str (count rows) " archived")]]
+     [project-chips rows chip]
+     [:nav.cs-list {:aria-label "Archived chats"} [archived-rows m]]]))
 
 (defn- use-lingers
   "True while on, and for ms after it goes off (a screen that slides out stays mounted meanwhile)."

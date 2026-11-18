@@ -381,10 +381,10 @@
 ;; ---- navigation ----
 
 (defn on-chat-screen
-  "The chat screen, with the drawer, the search panel and Settings closed, and the list back to the
-  chats: a chat picked from the archived ones or a search leaves those behind."
+  "The chat screen, with the search panel, Settings and the archived chats closed, and the list back
+  to the chats: a chat picked from the archived ones or a search leaves those behind."
   [db]
-  (assoc db :screen :chat :sidebar? false :search-panel? false :settings? false
+  (assoc db :screen :chat :search-panel? false :settings? false
          :archived? false :search nil :project-filter nil))
 
 (defn switch-frames
@@ -439,17 +439,10 @@
  :nav/screen
  (fn [db [_ screen]] (assoc db :screen screen)))
 
-(defn toggle-sidebar
-  "The drawer (desktop) opened or closed (open? nil: switched); from a rail search it only folds
-  that back. Closing it leaves Settings, and a rail search's text."
-  [db open?]
-  (let [v (if (some? open?) open? (not (:sidebar? db)))]
-    (cond-> (assoc db :sidebar? v)
-      (not v) (assoc :settings? false))))
-
-(rf/reg-event-db
- :sidebar/toggle
- (fn [db [_ open?]] (toggle-sidebar db open?)))
+(rf/reg-event-fx
+ :claudia/open
+ ;; Claudia's face at the top of the rail: a stub, wired later to what opens her.
+ (fn [_ _] (js/console.info "claudia/open") {}))
 
 (rf/reg-event-db
  :search/open

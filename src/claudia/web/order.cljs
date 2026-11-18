@@ -95,8 +95,8 @@
 (rf/reg-sub
  :arranged
  ;; The list in the person's order, with groups (claudia.shared.order/arrange); a view of another
- ;; person's chats stays in its plain order.
- :<- [:rows]
+ ;; person's chats stays in its plain order. Never the archived chats (:chat-rows).
+ :<- [:chat-rows]
  :<- [:order-items]
  :<- [:viewing-other?]
  (fn [[rows items viewing?]]

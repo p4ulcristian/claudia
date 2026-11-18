@@ -1,12 +1,13 @@
 (ns claudia.web.views.menu
-  "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot; the
-  list's foot while the list is open, and on a phone; 2026-11-18, it was a gear) shows whose chats
+  "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot;
+  the list's foot on a phone; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), the default
   plan's 5-hour and week use
   (a click opens Settings, where the plans are), Machines (the Systems popup in the menu's place),
   Archived chats, Forms, the Desktop popups switch, More settings, and the version (the sounds
   switch is the bell in the chat's header).
-  Every item that has more opens its own full screen."
+  Every item that has more opens its own full screen: in the chat column wider than a phone, over
+  the list on a phone."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
@@ -20,13 +21,10 @@
 
 ;; ---- what the items do ----
 
-(defn- open-settings! []
-  (rf/dispatch [:sidebar/toggle true])
-  (rf/dispatch [:ops/settings true]))
+;; Settings and the archived chats: over the list on a phone, in the chat column wider.
+(defn- open-settings! [] (rf/dispatch [:ops/settings true]))
 
-(defn- open-archived! []
-  (rf/dispatch [:sidebar/toggle true])
-  (rf/dispatch [:ops/archived true]))
+(defn- open-archived! [] (rf/dispatch [:ops/archived true]))
 
 (defn- open-forms! [] (rf/dispatch [:gallery/open true]))
 

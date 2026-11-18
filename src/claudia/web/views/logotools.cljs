@@ -1,7 +1,8 @@
 (ns claudia.web.views.logotools
   "The switch by Claudia's face: 2D (the chats) or 3D (the world: the chats as robots, Alt+W). The
-  sounds switch moved to the chat's header (claudia.web.views.head). Shown under the face on the rail, in the open chat list's header and
-  in the world's bar, so the way back from the world is the same switch."
+  sounds switch moved to the chat's header (claudia.web.views.head). Shown under the face on the
+  rail (two small circles there), in the phone's chat list header and in the world's bar, so the
+  way back from the world is the same switch."
   (:require [re-frame.core :as rf]))
 
 (defn- dim-button [label on? world? tip]
