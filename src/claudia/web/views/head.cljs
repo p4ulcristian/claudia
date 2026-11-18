@@ -1,8 +1,9 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel in the chat's colour, three rows, the same
   for a new chat and a started one. Row 1: the title (a click renames it), the server's state, the
-  chat's Folders (README decisions 61 to 64), bell, its talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
-  project (with the chat's colour). Row 3: model and effort, then the context, 5-hour and week
+  chat's bell, its talking mode (a person speaking) and Archive. Row 2: the computer the chat runs
+  on (its popup: where it works), whose Claude subscription, the folder it works in (a click opens
+  Folders, README decisions 61 to 64) and its colour. Row 3: model and effort, then the context, 5-hour and week
   rings. A new chat picks all of them here before its first message (they go with `new`); once
   it has started the computer is fixed and every other pick changes the chat."
   (:require [claudia.web.views.pure.folders :as folders-pure]
@@ -10,9 +11,8 @@
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
             [claudia.web.api :as api]
+            [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
-            [claudia.web.views.chatmenu :as chatmenu]
-            [claudia.web.views.dot :as dot]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.systems :as systems-pure]
@@ -138,40 +138,17 @@
       [:path {:d "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"}]
       [:path {:d "M10 9.5h3a1.5 1.5 0 0 1 0 3h-3v-3M10 12.5V15M12.6 12.5 14 15"}]]]))
 
-(defn- folders-button
-  "Opens Folders (README decisions 61 to 64) on this chat's server with its folder selected (k: a
-  started chat, nil for a new one)."
-  [server folder k]
-  [:button.icon.folders {:type "button" :aria-label "Folders" :data-tip "Folders: pick this chat's folder, bookmarks, clean up"
-                         :on-click #(rf/dispatch [:folders/open {:server server :folder (not-empty folder) :chat k}])}
-   folders-pure/folder-icon])
-
-(defn- row-1 [{:keys [ck row ro new? settings server folder] :as hc}]
+(defn- row-1 [{:keys [ck row ro new? settings] :as hc}]
   (let [k (when-not new? ck)]
     [:div.head-row.r1
      [:f> head-names hc]
-     ;; The chat's own Folders, bell and speaker (README decisions 21, 61); a chat only looked at has none.
-     (when-not ro [folders-button server folder k])
+     ;; The chat's own bell and speaker (README decision 21); a chat only looked at has none.
      (when-not ro [alerts/bell-button k (if new? (:color settings) (:color row))])
      (when-not ro [talk/toggle k])
      (when (and row (not ro) @(rf/subscribe [:owner?])) [root-button ck])
      (when (and row (not ro)) (archive-button ck row))]))
 
-;; ---- row 2: computer, account, project ----
-
-(defn- computer-pick
-  "A new chat's computer (a pick of the servers there are); a started chat's, as its name."
-  [{:keys [new? server ro]}]
-  (let [servers @(rf/subscribe [:server-list])
-        all @(rf/subscribe [:servers])
-        label @(rf/subscribe [:server-label server])]
-    (field :computer "Computer"
-           (if (and new? (not ro) (> (count servers) 1))
-             [:label.pick.computer {:title "The computer this chat runs on"}
-              [:select {:value (str server) :on-change #(rf/dispatch [:new/server (.. % -target -value)])}
-               (for [{n :name l :label} servers]
-                 ^{:key n} [:option {:value n} (str l (when (= :closed (get-in all [n :status])) " (off)"))])]]
-             [:span.head-val {:title (str "Runs on " label)} label]))))
+;; ---- row 2: computer, account, folder, colour ----
 
 (defn- plan-limit [label l now]
   [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
@@ -231,56 +208,90 @@
      [server])
     sample))
 
+(defn- shown-folder
+  "The folder a chat works in: its own, else (not for a read-only view, whose runner is another
+  profile's) its server's work folder once known; nil while unknown."
+  [{:keys [server folder ro]}]
+  (or (not-empty folder)
+      (when-not ro
+        (or @(rf/subscribe [:work-folder server])
+            (do (rf/dispatch [:folders/load-work server]) nil)))))
+
 (defn- where-card
   "Where the chat works: the folder's full path, then its computer: name, system, kernel, processor,
   memory and uptime."
-  [{:keys [server folder]}]
+  [{:keys [server] :as hc}]
   (let [sample (use-machine server)
-        label @(rf/subscribe [:server-label server])]
+        label @(rf/subscribe [:server-label server])
+        shown (shown-folder hc)]
     [:div.where
-     [:div.where-path {:title folder} (if (seq folder) folder "The computer's working folder (no project)")]
+     [:div.where-path {:title shown} (or shown "The computer's work folder")]
      [:div.where-machine
       [:b label]
       (cond (nil? sample) [:span.muted "…"]
             (:error sample) [:span.muted "not reached"]
             :else (for [line (systems-pure/machine-lines sample)] ^{:key line} [:span line]))]]))
 
-(defn- project-pop
-  "Where the chat works (where-card), the chat's colour (a new one's goes with `new`), and the
-  projects it can move to (a new chat: start in). A pick closes it."
-  [{:keys [new? ck server row settings put!] :as hc} close!]
-  (let [act (fn [f] (fn [] (f) (close!)))]
-    [:div.proj-pop {:role "menu"}
-     [:f> where-card hc]
-     [:div.plan-title "Colour"]
-     (if new?
-       (palette (:color settings) (fn [c] (put! {:color c}) (close!)))
-       (palette (:color row) (fn [c] (rf/dispatch [:ops/color ck c]) (close!))))
-     [:div.plan-title "Project"]
-     (if new?
-       [:f> chatmenu/project-list {:server server :current (:folder settings) :none? (seq (:folder settings))
-                                   :pick #(put! {:folder %}) :act act}]
-       [chatmenu/chat-projects ck row act])]))
+(defn- server-list
+  "A new chat's computers to pick from (more than one); a pick closes the popup."
+  [server close!]
+  (let [servers @(rf/subscribe [:server-list])
+        all @(rf/subscribe [:servers])]
+    [:div.server-list
+     [:div.plan-title "Run on"]
+     (for [{n :name l :label} servers]
+       ^{:key n}
+       [:button.plan-item {:role "menuitemradio" :aria-checked (= n server) :class (when (= n server) "on")
+                           :on-click (fn [] (rf/dispatch [:new/server n]) (close!))}
+        [:span.plan-name (str l (when (= :closed (get-in all [n :status])) " (off)"))]])]))
 
-(defn- project-pick
-  "The project's small logo (dot/project-face) and its name (its folder's when it is in no
-  project); a click opens project-pop."
-  [{:keys [server row folder ro] :as hc}]
+(defn- computer-pick
+  "The computer the chat runs on: a click shows where it works (where-card) and, for a new chat with
+  more than one computer, the others to pick; a started chat's computer is fixed."
+  [{:keys [new? server ro] :as hc}]
   (let [[open toggle! close! box] (use-popup)
-        label (pure/project-label (get-in row [:project :name]) folder)]
-    (field :project "Project"
-           [:div.proj-pick {:ref #(set! (.-current box) %)}
-            [:button.proj-btn {:disabled ro :on-click toggle! :aria-haspopup "true" :aria-expanded open
-                               :title (str "Project of this chat" (when (seq folder) (str " · " folder)))}
-             [dot/project-face server folder]
-             [:span.proj-name label]]
-            (when open (project-pop hc close!))])))
+        label @(rf/subscribe [:server-label server])
+        pick? (and new? (not ro) (> (count @(rf/subscribe [:server-list])) 1))]
+    (field :computer "Computer"
+           [:div.plan-pick {:ref #(set! (.-current box) %)}
+            [:button.head-btn {:class (when-not new? "fixed") :on-click toggle! :aria-haspopup "true" :aria-expanded open
+                               :title (str "Runs on " label)} label]
+            (when open
+              [:div.proj-pop {:role "menu"}
+               [:f> where-card hc]
+               (when pick? [server-list server close!])])])))
+
+(defn- folder-pick
+  "The folder the chat works in, as a pill with the folder icon and its path (~ for the home, the
+  end kept when it is cut; a chat without a folder: the server's work folder). A click opens the
+  Folders modal (README decisions 61 to 64) on this chat's server, the folder selected."
+  [{:keys [new? ck server ro] :as hc}]
+  (let [shown (shown-folder hc)]
+    (field :project "Folder"
+           [:button.head-btn.folder-pill {:disabled ro :title (or shown "The computer's work folder")
+                                          :on-click #(rf/dispatch [:folders/open {:server server :folder shown :chat (when-not new? ck)}])}
+            folders-pure/folder-icon
+            [:span.folder-path [:bdi (if shown (format/tilde shown) "work folder")]]])))
+
+(defn- colour-pick
+  "The chat's colour as a swatch; a click opens the palette (a new chat's goes with `new`)."
+  [{:keys [new? ck row settings put! ro]}]
+  (let [[open toggle! close! box] (use-popup)
+        color (if new? (:color settings) (:color row))]
+    [:div.plan-pick {:ref #(set! (.-current box) %)}
+     [:button.colour-btn {:disabled ro :on-click toggle! :aria-haspopup "true" :aria-expanded open :aria-label "Colour"
+                          :data-tip "This chat's colour" :class (when (= color "ash") "passive")
+                          :style {:background (str "var(--c-" (or color "ash") ")")}}]
+     (when open
+       [:div.proj-pop.colour-pop
+        (palette color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!)))])]))
 
 (defn- row-2 [hc]
   [:div.head-row.r2
-   (computer-pick hc)
+   [:f> computer-pick hc]
    [:f> account-pick hc]
-   [:f> project-pick hc]])
+   [:f> folder-pick hc]
+   [:f> colour-pick hc]])
 
 ;; ---- row 3: model, effort, rings ----
 

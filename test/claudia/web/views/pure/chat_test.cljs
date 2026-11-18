@@ -123,12 +123,6 @@
     (is (nil? (chat/chat-plan plans nil nil)))
     (is (nil? (chat/chat-plan [] "paul" "paul")))))
 
-(deftest the-project-pickers-label
-  (is (= "Claudia" (chat/project-label "Claudia" "/home/x/Work/tools/claudia")))
-  (is (= "claudia" (chat/project-label nil "/home/x/Work/tools/claudia")))
-  (is (= "No project" (chat/project-label nil nil)))
-  (is (= "No project" (chat/project-label "" ""))))
-
 (deftest texts-fold-into-the-steps
   (let [msgs [{:id "u1" :role "user"}
               {:id "a1" :role "assistant" :text "Reading the runner."}

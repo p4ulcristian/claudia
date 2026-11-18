@@ -1,6 +1,6 @@
 (ns claudia.web.folders
-  "The Folders modal's place in the page (README decisions 61 to 64): opened from the folder button
-  in a chat's header (row 1), on that chat's server with its folder selected, over the page until
+  "The Folders modal's place in the page (README decisions 61 to 64): opened from the folder pill in
+  a chat's header (row 2) or the chat menu's Folders…, on that chat's server with its folder selected, over the page until
   Escape or ×. Select (a bookmark card's, or Use for this chat) sets the chat's folder and closes
   it: a new chat's folder pick, or a started chat moved there. A new chat started there, or a chat
   opened there, closes it too. The fetches of the runner's /api/folders… calls (PROTOCOL.md,
@@ -38,6 +38,26 @@
  :folders/open-chat
  (fn [{:keys [db]} [_ k]]
    {:db (dissoc db :folders) :fx [[:dispatch [:nav/open k]]]}))
+
+;; ---- each server's work folder (CLAUDIA_CWD, as the listing answers it) ----
+
+(rf/reg-event-fx
+ :folders/load-work
+ ;; Asked once per server (the header shows it for a chat without a folder).
+ (fn [{:keys [db]} [_ server]]
+   (when-not (contains? (:work-folders db) server)
+     {:db (assoc-in db [:work-folders server] nil) :folders/get-work server})))
+
+(rf/reg-fx
+ :folders/get-work
+ (fn [server]
+   (-> (api/fetch-json (api/url server "folders" {:path "/"}))
+       (.then #(rf/dispatch [:folders/work-loaded server (:cwd %)]))
+       (.catch (fn [_] nil)))))
+
+(rf/reg-event-db :folders/work-loaded (fn [db [_ server cwd]] (assoc-in db [:work-folders server] cwd)))
+
+(rf/reg-sub :work-folder (fn [db [_ server]] (get-in db [:work-folders server])))
 
 ;; ---- the runner's calls (promises; a refusal rejects with its error) ----
 

@@ -1,6 +1,7 @@
 (ns claudia.web.views.chatmenu
   "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (16 colours, or
-  passive ash, which remembers the colour it had), rename, fork, move to another project, archive."
+  passive ash, which remembers the colour it had), rename, fork, Folders… (the Folders modal for
+  this chat: pick its folder), archive."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -66,49 +67,7 @@
                                       "Escape" (do (.stopPropagation e) (set-renaming false))
                                       nil))}])
 
-(defn- move-item [label n on? on-click]
-  [:button.cm-item.cm-project {:role "menuitem" :class (when on? "on") :on-click on-click}
-   [:span.l label] (when n [:span.n n])])
-
-(defn- move-input [targets pick act set-text]
-  [:input.cm-rename {:auto-focus true :placeholder "Project name or folder path"
-                     :on-change #(set-text (.. % -target -value))
-                     :on-key-down (fn [e]
-                                    (when (= "Enter" (.-key e))
-                                      (when-let [f (pure/typed-folder targets (.. e -currentTarget -value))]
-                                        ((act #(pick f))))))}])
-
-(defn project-list
-  "The person's bookmarked folders on server (★, README decision 61), then the projects of server a
-  chat can go to (most chats first, current marked), a typed project
-  name or folder path, or no project (none?: offered). pick gets the folder (\"\": no project);
-  act: what wraps a pick (it closes the menu)."
-  [{:keys [server current none? pick act]}]
-  (let [[text set-text] (h/use-state "")
-        targets (pure/with-bookmarks (pure/move-targets @(rf/subscribe [:all-rows]) server text)
-                                     @(rf/subscribe [:bookmarks]) server text)]
-    [:<>
-     [move-input targets pick act set-text]
-     (for [{root :key label :label n :count mark :bookmark} (take 12 targets)]
-       ^{:key root}
-       [move-item (if mark (str "★ " label) label) n (= root current) (act #(pick root))])
-     (when none?
-       [:button.cm-item.cm-none {:role "menuitem" :on-click (act #(pick ""))} "No project"])]))
-
-(defn chat-projects
-  "project-list for the chat k (row: its row): a pick moves it."
-  [k row act]
-  [:f> project-list {:server (first k) :current (get-in row [:project :root]) :none? (boolean (:folder row))
-                     :pick #(rf/dispatch [:chat/folder k %]) :act act}])
-
-(defn- move-panel
-  "Move to project: back to the menu, then the projects."
-  [k row act set-moving]
-  [:<>
-   [:button.cm-item.cm-back {:role "menuitem" :on-click #(set-moving false)} "‹ Move to project"]
-   [chat-projects k row act]])
-
-(defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming set-moving]}]
+(defn- menu-items [{:keys [k forking error]} {:keys [title color archived folder]} {:keys [close act renaming set-renaming]}]
   [:<>
    (if (= color "ash")
      [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:ops/color k "wake"]))} "Make active"]
@@ -121,7 +80,9 @@
                      :on-click #(rf/dispatch [:ops/fork k nil])}
     (if forking "Forking…" "Fork chat")]
    (when error [:div.cm-error error])
-   [:button.cm-item {:role "menuitem" :on-click #(set-moving true)} "Move to project…"]
+   [:button.cm-item {:role "menuitem" :title "Pick this chat's folder in Folders (README decisions 61 to 64)"
+                     :on-click (act #(rf/dispatch [:folders/open {:server (first k) :folder (not-empty folder) :chat k}]))}
+    "Folders…"]
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 
@@ -129,18 +90,14 @@
   (let [box (h/use-ref nil)
         [pos set-pos] (h/use-state {:left x :top y})
         [renaming set-renaming] (h/use-state false)
-        [moving set-moving] (h/use-state false)
         close #(rf/dispatch [:ops/menu nil])
         act (fn [f] (fn [] (f) (close)))]
-    (use-in-view! box x y set-pos [x y renaming moving error])
+    (use-in-view! box x y set-pos [x y renaming error])
     (use-dismiss! (inside-of box) close)
     [:div.chat-menu {:ref #(set! (.-current box) %) :style pos :role "menu" :on-context-menu #(.preventDefault %)}
      [:div.cm-title (:title row)]
-     (if moving
-       [move-panel k row act set-moving]
-       [:<>
-        (swatches k (:color row) act)
-        (menu-items m row {:close close :act act :renaming renaming :set-renaming set-renaming :set-moving set-moving})])]))
+     (swatches k (:color row) act)
+     (menu-items m row {:close close :act act :renaming renaming :set-renaming set-renaming})]))
 
 (defn chat-menu []
   (let [m @(rf/subscribe [:menu])

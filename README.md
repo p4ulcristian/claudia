@@ -267,16 +267,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     rows, the same for a new chat and a started one. Row 1: the title (a click renames it), the
     server's state, the chat's bell (a chime, popup and push when it finishes or waits), talking mode (a
     person speaking, decision 21) and Archive. Row 2: the computer it runs on, whose Claude
-    subscription (decision 16), the project; each an icon (a computer, Claude's spark, a folder)
-    before a pill button. Row 3: model and effort, then the context, 5-hour and week rings. Every
+    subscription (decision 16), the folder it works in, its colour; each pill after an icon (a
+    computer, Claude's spark, a folder). The folder pill (2026-11-18, the user's call, in place of
+    the project pill) shows the folder icon and the chat's real working path, `~` for the home and
+    cut at its start so the end stays visible; a chat without a folder shows its server's work
+    folder (`CLAUDIA_CWD`, as `GET /api/folders` answers it); a click opens the Folders modal
+    (decisions 61 to 64). The colour button beside it is a swatch in the chat's colour that opens
+    the palette. Row 3: model and effort, then the context, 5-hour and week rings. Every
     pick is a pill button; a fixed value (a started chat's computer) has a dashed edge. A new chat
     picks all of them before its first message, and they go with the `new` frame, so the first
     turn already runs on them (before, model and effort followed `created`, after the first turn
     had begun). A new chat also has its colour from the moment it opens (the most different from
     what the server's other chats wear, decision 26), the header wears it, the
-    project popup's palette changes it, and it goes with `new` (decision 25). The project popup starts with where the chat works: the
-    folder's full path and its computer (name, system, kernel and architecture, processor and
-    cores, memory, uptime; `host` in the system sample). Once started, the computer is fixed and
+    colour button's palette changes it, and it goes with `new` (decision 25). The computer pill's
+    popup shows where the chat works: the folder's full path and its computer (name, system, kernel
+    and architecture, processor and cores, memory, uptime; `host` in the system sample), and for a
+    new chat with more than one computer the others to pick. Once started, the computer is fixed and
     every other pick changes the chat. The composer keeps only writing and sending, one row
     centred: the mic, Attach, the message, Send; the chips of background work sit right above it.
     Instead of: the computer above the composer and model and effort in its toolbar (settings
@@ -827,7 +833,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     absolute paths only, no `.` or `..` parts, each server and folder once, labels of at most 80
     characters, at most 200. Every device shows the same list. In the Folders modal one click
     pins: the ☆/★ at the right end of every tree row, the ★ on a bookmark card (unpin) and Pin/Unpin
-    in the folder's panel; the chat header's project list shows that server's bookmarks on top (★).
+    in the folder's panel; the modal shows that server's bookmarks as cards on top.
     A bookmark whose folder is gone shows greyed as "missing" (the runner's `POST
     /api/folders/missing`).
     Instead of: bookmarks per device in the browser's storage, or per server in each runner.
@@ -841,17 +847,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     and renaming are off. Everything else in the Folders modal (the bookmark cards, the detail
     panel, the buttons, the Trash list, the dialogs) is our own Reagent in the chalk look
     (`claudia.web.views.folders`, `.folder-tree`, `.folder-detail`, `.folder-trash`;
-    `resources/web/css/folders.css`). Where it opens (2026-11-18, the user's call): a folder button
-    in the chat header's row 1, for a new chat and a started one, not while only looking at another
-    person's chats; a big modal over the page on that chat's server, with the chat's folder (else
-    the work folder) selected and revealed in the tree. On top that server's bookmarks as cards:
+    `resources/web/css/folders.css`). Where it opens (2026-11-18, the user's call): the folder pill
+    in the chat header's row 2 (decision 22) and the chat menu's Folders…, for a new chat and a
+    started one, not while only looking at another person's chats; a big modal over the page on
+    that chat's server, with the chat's folder (else the work folder) selected and revealed in the
+    tree. On top that server's bookmarks as cards:
     the project's logo as the chats show it (`GET /api/project`, `/api/project/logo`; a folder icon
     when none), name, path, ★, "missing" greyed; a click highlights the card and reveals and
     selects its folder in the tree; each card has its own Select. Select, and Use for this chat in
     the selected folder's panel, sets the chat's folder and closes the modal: a new chat's folder
-    pick (as the project picker sets it), or a started chat moved there (the chat menu's Move to
-    project). New chat here stays a separate button; Escape or × closes the modal, and New chat
-    here or a click on one of its chats closes it too. Tree rows show no logo (asking each
+    pick, or a started chat moved there (the `folder` frame). New chat here stays a separate
+    button; Escape or × closes the modal, and New chat here or a click on one of its chats closes
+    it too. Tree rows show no logo (asking each
     visible project for its logo is one call and one logo search per row).
     Instead of: a tree of our own.
 

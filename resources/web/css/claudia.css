@@ -127,12 +127,12 @@ code, pre { font-family: var(--mono); }
 .head-ico { flex: none; width: 16px; height: 16px; color: var(--muted); }
 /* Every pick in the header is a pill button, so it reads as one; a fixed value (a started chat's
    computer) has a dashed edge and no hover. */
-.head-btn, .head-panel .proj-btn, .head-panel .pick select, .head-val { box-sizing: border-box; height: 28px; display: inline-flex; align-items: center; gap: 6px;
+.head-btn, .head-panel .pick select, .head-val { box-sizing: border-box; height: 28px; display: inline-flex; align-items: center; gap: 6px;
   padding: 0 11px; border-radius: 999px; font: 600 12.5px var(--sans); color: var(--fg); white-space: nowrap; max-width: 100%;
   background: var(--bg); border: 1px solid var(--line); transition: border-color 0.12s, color 0.12s; }
 .head-panel .pick select { width: auto; padding-right: 6px; cursor: pointer; }
-.head-val { border-style: dashed; background: transparent; }
-.head-btn:not(:disabled):hover, .head-btn[aria-expanded="true"], .head-panel .proj-btn:not(:disabled):hover, .head-panel .proj-btn[aria-expanded="true"],
+.head-val, .head-btn.fixed { border-style: dashed; background: transparent; }
+.head-btn:not(:disabled):hover, .head-btn[aria-expanded="true"],
 .head-panel .pick select:hover, .head-panel .pick select:focus { border-color: var(--accent); color: var(--fg); background: var(--bg); outline: none; }
 .head-panel .pick.model { max-width: 200px; }
 .head-panel .pick.effort { max-width: 110px; }
@@ -160,7 +160,7 @@ code, pre { font-family: var(--mono); }
 .server-chip { font-family: var(--sans); }
 @container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
 
-/* Chat colour: the palette, opened from the header's project picker. */
+/* Chat colour: the palette, opened from the header's colour button. */
 .palette { position: absolute; top: 24px; right: -6px; z-index: 30; display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
@@ -168,18 +168,20 @@ code, pre { font-family: var(--mono); }
 .swatch.passive { opacity: 0.85; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.12); }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .plan-pick { position: relative; }
-.proj-pick { position: relative; flex: 0 100 auto; min-width: 44px; }
-.proj-btn { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px; border-radius: 8px; font: 600 13px var(--sans); color: var(--fg); }
-.proj-btn:not(:disabled):hover, .proj-btn[aria-expanded="true"] { color: var(--accent); }
-.proj-name { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The project's face (claudia.web.views.dot), small before its name. */
-.proj-btn .rail-logo { flex: none; width: 16px; height: 16px; border-radius: 4px; }
-.proj-btn .rail-tag { flex: none; display: grid; place-items: center; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 3px; border-radius: 8px; box-shadow: inset 0 0 0 1px currentColor; font-size: 9px; }
-.proj-btn .rail-blank { flex: none; margin: 0 5px; }
+/* Row 2's folder pill: the folder icon and the working path, cut at its start so the end shows
+   (README decision 22); then the colour swatch that opens the palette. */
+.head-field:has(.folder-pill) { flex: 0 1 auto; min-width: 0; }
+.folder-pill { min-width: 0; max-width: 340px; }
+.folder-pill .fd-icon { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+.folder-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; font: 500 12px var(--mono); }
+.colour-btn { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+.colour-btn:not(:disabled):hover, .colour-btn[aria-expanded="true"] { box-shadow: 0 0 0 1.5px var(--accent); }
+.proj-pop.colour-pop { left: auto; right: -6px; width: auto; }
 .proj-pop { position: absolute; top: calc(100% + 8px); left: -6px; z-index: 30; display: grid; gap: 2px; width: 236px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); cursor: default; }
-/* Where the chat works, at the top of the project popup: the full path, then its computer. */
+/* Where the chat works, at the top of the computer popup: the full path, then its computer. */
 .proj-pop { width: 300px; max-height: calc(100vh - 140px); overflow-y: auto; overscroll-behavior: contain; }
 .where { display: grid; gap: 8px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px dashed var(--line); }
+.where:last-child { padding-bottom: 2px; margin-bottom: 0; border-bottom: 0; }
 .where-path { font: 500 12px/1.4 var(--mono); color: var(--fg); overflow-wrap: anywhere; user-select: all; }
 .where-machine { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
 .where-machine b { font: 700 15px var(--hand); color: var(--fg); }
