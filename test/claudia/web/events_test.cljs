@@ -251,11 +251,11 @@
         (is (= "mine" (get-in out [:drafts ["s" "other"]])))))
     (testing "sent: into that chat, with its draft"
       (let [fx (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :send)]
-        (is (= ["s" {:type "send" :chat "c" :text "half more"}] (:ws/send fx)))
+        (is (= ["s" {:type "send" :chat "c" :text "half more"}] (update (:ws/send fx) 1 dissoc :msg)))
         (is (= "mine" (get-in fx [:db :drafts ["s" "other"]])))))
     (testing "sent now: the runner stops the running turn first"
       (is (= ["s" {:type "send" :chat "c" :text "half more" :now true}]
-             (:ws/send (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :now)))))
+             (update (:ws/send (ev/heard-fx db ["s" "c"] {:text "more" :raw "more"} :now)) 1 dissoc :msg))))
     (testing "a question open in that chat is answered"
       (let [db (assoc-in db [:chats ["s" "c"] :asks] [{:id "q" :kind "question" :questions [{:question "Which?"}]}])
             fx (ev/heard-fx db ["s" "c"] {:text "this one" :raw "this one"} :send)]
@@ -281,3 +281,15 @@
     (is (= {:plan "max" :model "opus" :effort "high" :folder "/w/ir" :talk true :bell false}
            (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour")
     (is (= {:plan "pro" :folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour")))
+
+(deftest dictated-clips-are-tied-to-the-message-they-went-out-in
+  (let [base {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
+        added (:db (ev/heard-fx base ["s" "c"] {:text "one" :raw "one" :clip "c1"} :add))
+        fx (ev/heard-fx added ["s" "c"] {:text "two" :raw "two" :clip "c2"} :send)
+        msg (get-in fx [:ws/send 1 :msg])]
+    (is (= ["c1"] (get-in added [:voice-draft ["s" "c"]])))
+    (is (string? msg) "every send carries the id the page made for its message")
+    (is (= [:voice-back/tag [["c1" "c2"] msg]] (last (:fx fx))))
+    (is (nil? (get-in fx [:db :voice-draft ["s" "c"]])))
+    (testing "nothing sent: nothing tied"
+      (is (= {} (ev/with-voice-tagged {} added ["s" "c"]))))))

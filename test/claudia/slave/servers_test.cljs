@@ -196,3 +196,8 @@
     (is (str/includes? (news {} {"stats" "1"}) (tools/help-lines ["stats"])))
     (is (str/includes? (news {"stats" "0"} {"stats" "1"}) (str "Changed, their data now:\n" (tools/help-lines ["stats"]))))
     (is (str/includes? (news {"stats" "1"} {}) "Gone (draw refuses them): stats."))))
+
+(deftest a-send-carries-the-pages-message-id
+  (is (= "0b8f3a52-4c1e-4d2a-9a51-2f0c6f6f1e11" (runner/msg-id {:msg "0b8f3a52-4c1e-4d2a-9a51-2f0c6f6f1e11"})))
+  (is (nil? (runner/msg-id {:msg "../x"})) "not a uuid: the runner makes one")
+  (is (nil? (runner/msg-id {}))))

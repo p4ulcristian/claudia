@@ -102,7 +102,7 @@ inline styles; fonts from Google Fonts; same-origin fetches and sockets; no fram
 `x-frame-options: DENY`); `frame.html` has the html block's policy instead (`sandbox allow-scripts`,
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
-| `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }] }` (only servers this person may use) |
+| `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }] }` (servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
 | `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
 | `GET /anatomy/<version>/<file>` | an anatomy model or the index (`index.json`, `<system>/<id>.glb`) of the pinned version only (`claudia.shared.anatomy`): fetched once from the claudia-anatomy repository at that version's tag, kept in `HUB_DATA/anatomy`, then sent from disk with a year's immutable caching; 404 for another path, 502 when it can't be fetched |
 | `GET /hub/progress` | person | `{ builds: [{ commit, tree?, state, note, started, at }], release: { commit, tree, title, merged, machines: { <server>: { state: waiting\|done\|not reached, secs? } }, hub: { state, secs? } } \| null }`: the update pill (README decision 32) |
@@ -266,8 +266,8 @@ Page → runner:
 | `hello` | | runner answers `chats` |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
-| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
-| `send` | `chat`, `text`, `files?`, `images?`, `now?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended) |
+| `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `color?`, `talk?`, `bell?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the plan in use), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
+| `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one); the page ties its own data to the message by it (a dictated message's sound) |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |

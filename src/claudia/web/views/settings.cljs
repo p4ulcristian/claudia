@@ -32,17 +32,6 @@
      [@open])
     (into [:div.cs-title-box {:ref #(set! (.-current box) %)}] children)))
 
-(defn- whose-menu [open view people]
-  [:<>
-   [:div.cs-menu-head "Whose chats"]
-   (for [[k label] (pure/whose-items people)]
-     ^{:key (str k)}
-     [:button.cs-menu-item {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
-                            :on-click #(do (reset! open false) (when (not= k view) (rf/dispatch [:ops/view k])))}
-      [:span.cs-tick {:aria-hidden true} (when (= k view) "✓")]
-      [:span.cs-menu-label label]
-      (when k [:span.cs-menu-note "read only"])])])
-
 (defn- servers-menu [{:keys [view servers usable ticked]}]
   [:<>
    [:div.cs-menu-head "Servers"]
@@ -58,7 +47,7 @@
       [:span.cs-menu-label label]
       (when-not inv [:span.cs-menu-note.warn (str "no " (words/capital view) " here")])])])
 
-(defn- title-menu-box [open text {:keys [view people servers] :as m}]
+(defn- title-menu-box [open text {:keys [servers] :as m}]
   [:f> title-box open
    [:button.cs-title {:aria-haspopup "menu" :aria-expanded @open :on-click #(swap! open not)}
     text
@@ -66,24 +55,23 @@
    (when @open
      [:<>
       [:div.cs-menu {:role "menu"}
-       (when (seq people) (whose-menu open view people))
        (when (> (count servers) 1) (servers-menu m))]])])
 
 (defn title-menu []
   (let [open (r/atom false)]
     (fn []
       (let [view @(rf/subscribe [:view])
-            people @(rf/subscribe [:people])
-            servers @(rf/subscribe [:server-list])
+            ;; Another's chats: also the servers you have no profile on.
+            servers @(rf/subscribe [(if view :all-server-list :server-list)])
             hidden @(rf/subscribe [:hidden-servers])
             mes @(rf/subscribe [:server-mes])
             {:keys [archived?]} @(rf/subscribe [:list-mode])
             {:keys [usable ticked]} (pure/servers-in-view servers view mes hidden)
             hint (pure/servers-hint usable ticked)
             text [:<> [:span.cs-title-t (pure/list-title archived? view)] (when hint [:span.cs-title-hint (str "· " hint)])]]
-        (if-not (or (seq people) (> (count servers) 1))
+        (if-not (> (count servers) 1)
           [:h2.cs-title text]
-          (title-menu-box open text {:view view :people people :servers servers :usable usable :ticked ticked}))))))
+          (title-menu-box open text {:view view :servers servers :usable usable :ticked ticked}))))))
 
 (defn lock-icon []
   [:span.cs-ro {:title "Read only" :aria-label "read only"}

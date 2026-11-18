@@ -95,7 +95,11 @@
   (let [ps (front/parse-profiles "# who\nann ANN@x.org /s/a\nbob bob@x.org /s/b user=bobby # note\nbroken line\n")]
     (is (= [{:profile "ann" :email "ann@x.org" :socket "/s/a"} {:profile "bob" :email "bob@x.org" :socket "/s/b"}] ps))
     (is (= {:status 401 :error "No caller."} (front/route-of ps nil nil #{})))
-    (is (= 403 (:status (front/route-of ps "eve@x.org" nil #{}))))
+    (is (= {:own nil :target nil :viewing nil :read-only true} (front/route-of ps "eve@x.org" nil #{}))
+        "no profile here: only its /api/me (no target)")
+    (is (= {:own nil :target (second ps) :viewing "bob" :read-only true} (front/route-of ps "eve@x.org" "bob" #{"bob@x.org"}))
+        "no profile here: another's chats, read only even with a write tick")
+    (is (= [] (front/writable-profiles ps nil #{"bob@x.org"})))
     (is (= 404 (:status (front/route-of ps "ann@x.org" "zed" #{}))))
     (is (= {:own (first ps) :target (second ps) :viewing "bob" :read-only true} (front/route-of ps "ann@x.org" "bob" #{})))
     (is (= {:own (first ps) :target (second ps) :viewing "bob" :read-only false}

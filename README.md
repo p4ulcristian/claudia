@@ -216,6 +216,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     in the list with Try again and Throw away and holds the clips after it, so the order holds; after
     a reload kept clips come back that way. Words go to the composer the clip was spoken into
     (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
+    Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
+    deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
+    (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,
+    PROTOCOL.md), which ties the clips to it. On that message, ▶ plays the clips in spoken order
+    and "heard as" lists each one's raw and cleaned words: bad audio = the voice or the microphone,
+    raw wrong = the speech model, cleaned wrong = the cleanup. On the device that recorded them only
+    (never uploaded), deleted 30 minutes after they were spoken (swept at start and every minute).
+    Files: `src/claudia/web/voice_back.cljs`, `src/claudia/web/views/voice_back.cljs`.
     My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
     the listen service hears with each person's own names and terms and cleans the text up. The hub
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
@@ -290,6 +298,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     switch, More settings, and the version. Settings itself keeps what needs room: the Claude
     tokens, GitHub (decision 23), all ~/Work sessions, Admin and Servers for admins, each
     server's chat colours. The right half shows only the picture: the timeline view is gone.
+    Your profile circle (2026-11-18): the gear became a circle with your initials, or the initials
+    of the person whose chats you look at (dashed, amber: read only); its menu starts with Whose
+    chats (yours, then every other person's, read only), which left the list's title menu (that
+    keeps the servers).
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
     (never under the status bar or the home bar) and meet each other, the drawing board wears the
     chat's own background,
@@ -578,7 +590,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   A write tick (2026-11-16) lets a person open, start and send in another person's chats on every
   server where both have a profile: the hub names those people to each front (`X-Claudia-Writes`),
   which then passes the view on without `X-Claudia-Read-Only`; Claude runs as the owner's Linux user.
-  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile. A server gets its hub key with `deploy/pair.sh` (decision 47: a
+  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile.
+  Everyone reads everyone's chats (2026-11-18): a signed-in person may look at other profiles' chats,
+  read only, also on a server where they have no profile of their own (`/hub/me` `viewServers`; the
+  hub passes only `/api/me` and views there, the front answers with no target otherwise). Their own
+  chats stay on their own servers. A server gets its hub key with `deploy/pair.sh` (decision 47: a
   one-time secret printed as a key, pasted into Servers with the address the hub reaches its front
   at; the server fetches its key with the secret, once). Pairing a known server again gives it its
   key again.

@@ -31,6 +31,11 @@
  (fn [me] (:servers me)))
 
 (rf/reg-sub
+ :all-server-list
+ :<- [:me]
+ (fn [me] (into (vec (:servers me)) (:viewServers me))))
+
+(rf/reg-sub
  :multi-server?
  :<- [:server-list]
  (fn [servers] (> (count servers) 1)))
@@ -41,9 +46,9 @@
 
 (rf/reg-sub
  :server-label
- :<- [:server-list]
- (fn [servers [_ server]]
-   (or (:label (first (filter #(= server (:name %)) servers))) server)))
+ :<- [:me]
+ (fn [me [_ server]]
+   (or (:label (first (filter #(= server (:name %)) (concat (:servers me) (:viewServers me))))) server)))
 
 (rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
 (rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))

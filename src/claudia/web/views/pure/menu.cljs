@@ -16,6 +16,13 @@
   [person]
   (str/upper-case (apply str (take 2 (map first (str/split (str/trim (str person)) #"\s+"))))))
 
+(defn profile-face
+  "The profile circle at the bottom left: whose chats show. me: /hub/me ({:name}); view: the
+  profile looked at (nil: your own). -> {:initials :name :other?}."
+  [me view]
+  (let [nm (if view (str (str/upper-case (subs view 0 1)) (subs view 1)) (or (:name me) "Me"))]
+    {:initials (initials nm) :name nm :other? (some? view)}))
+
 (defn k-tokens
   "Tokens in thousands: 155k (0 for none)."
   [n]
