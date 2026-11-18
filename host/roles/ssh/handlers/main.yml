@@ -1,0 +1,8 @@
+---
+# sshd's whole configuration was checked (`sshd -t`, `sshd -T`) before this is notified to run.
+# try-reload-or-restart: reloads a running sshd, leaves a socket-activated one (Ubuntu) alone, which
+# reads its settings on the next login. Open sessions stay open either way.
+- name: Reload sshd
+  # No module: try-reload-or-restart leaves a socket-activated sshd alone; the module has no such state.
+  ansible.builtin.command: systemctl try-reload-or-restart {{ ssh_service }}  # noqa: command-instead-of-module
+  changed_when: true

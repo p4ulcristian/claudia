@@ -1,0 +1,66 @@
+---
+# Claudia's host standard (README decisions 51 to 55), applied by a person, never by deploy/update.sh:
+#   ansible-playbook -i ~/.config/claudia-host/inventory.yml host/site.yml
+# then, after checking a fresh login works, within `undo_after` (10 minutes):
+#   ansible-playbook -i ~/.config/claudia-host/inventory.yml host/confirm.yml
+# An unconfirmed run puts /etc back by itself. See host/README.md.
+
+- name: Apply Claudia's host standard
+  hosts: all
+  become: true
+  # One server at a time: a mistake shows on the first server, not on all of them at once.
+  serial: 1
+  tasks:
+    - name: Check the settings and read the server (changes nothing)
+      ansible.builtin.import_tasks: tasks/preflight.yml
+
+    # etckeeper first: the undo point is an etckeeper commit of /etc as it is now.
+    - name: Keep /etc in git
+      ansible.builtin.import_role:
+        name: etckeeper
+
+    - name: Arm the undo, before any change of the standard
+      ansible.builtin.import_role:
+        name: safe_apply
+        tasks_from: arm
+
+    - name: Agent users and break-glass
+      ansible.builtin.import_role:
+        name: users
+
+    - name: Root helper, no-tap list and sudo shim
+      ansible.builtin.import_role:
+        name: root_helper
+
+    - name: SSH without passwords, trusting the hub's certificates
+      ansible.builtin.import_role:
+        name: ssh
+
+    - name: Agent users reach the desktop session (hosts with desktop_user only)
+      ansible.builtin.include_role:
+        name: desktop_access
+      when: desktop_user is defined
+
+    - name: Move the listed profiles to their agent users (migrate_profiles only)
+      ansible.builtin.import_role:
+        name: migrate
+
+    - name: Phase B, the people's passwordless sudo goes (phase_b_remove_nopasswd only)
+      ansible.builtin.include_role:
+        name: sudo
+      when: phase_b_remove_nopasswd | bool
+
+    - name: Apply what is still waiting (sshd reload, systemd reload)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check the undo did not fire during the run
+      ansible.builtin.import_role:
+        name: safe_apply
+        tasks_from: still_armed
+
+    - name: Say what comes next
+      ansible.builtin.debug:
+        msg: >-
+          Applied; the undo fires in {{ undo_after }} from the start of this run unless confirmed. Open
+          a NEW ssh login to {{ inventory_hostname }} (and as {{ break_glass_user }}), check Claudia
+          works, then run host/confirm.yml.

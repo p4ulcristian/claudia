@@ -1,6 +1,8 @@
 (ns claudia.node.http
-  "Reading and answering HTTP requests, the same for the hub and every slave program."
-  (:require [clojure.string :as str]
+  "Reading and answering HTTP requests, the same for the hub and every slave program, and one JSON
+  call over a unix socket (the front, the runners and the root helper call each other so)."
+  (:require ["node:http" :as http]
+            [clojure.string :as str]
             [claudia.shared.protocol :as protocol]))
 
 (defn read-bytes
@@ -38,6 +40,12 @@
   (.writeHead res status #js {"content-type" "application/json; charset=utf-8" "cache-control" "no-store"})
   (.end res (protocol/write-json data)))
 
+(defn send-text
+  "Answers with text, never cached."
+  [^js res status text]
+  (.writeHead res status #js {"content-type" "text/plain; charset=utf-8" "cache-control" "no-store"})
+  (.end res text))
+
 (defn no-content
   "Answers 204 with no body, never cached."
   [^js res]
@@ -53,3 +61,22 @@
   "decodeURIComponent, or nil when s is not well encoded."
   [s]
   (try (js/decodeURIComponent s) (catch :default _ nil)))
+
+(defn socket-json
+  "Promise of {:status :body} for POSTing body (data, as JSON) to path on the unix socket socket;
+  :body is the answer as a map ({} when it is not a JSON object). Rejects when the socket does not
+  answer within ms. on-request, when given, gets the request (destroying it gives up the call)."
+  ([socket path body ms] (socket-json socket path body ms nil))
+  ([socket path body ms on-request]
+   (js/Promise.
+    (fn [done fail]
+      (let [req (http/request #js {:socketPath socket :method "POST" :path path :timeout ms
+                                   :headers #js {"content-type" "application/json"}}
+                              (fn [^js res]
+                                (.then (read-text res (* 1024 1024))
+                                       #(done {:status (.-statusCode res) :body (parse-object %)})
+                                       fail)))]
+        (.on req "timeout" #(.destroy req (js/Error. "no answer in time")))
+        (.on req "error" fail)
+        (when on-request (on-request req))
+        (.end req (protocol/write-json body)))))))

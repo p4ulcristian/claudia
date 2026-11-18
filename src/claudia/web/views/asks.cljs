@@ -161,22 +161,31 @@
       :component-will-unmount #(reset! paste nil)
       :reagent-render (fn [k ask] (secret-render paste k ask))})))
 
+(defn- permit-actions
+  "Deny and Allow: a \"Run as root\" card's go to the server's front (README decision 52), the
+  others' to the runner."
+  [k ask busy]
+  (let [root? (:root ask)]
+    [:div.actions
+     [:button {:disabled busy :on-click #(rf/dispatch (if root? [:root/answer k ask false] [:ask/deny k (:id ask)]))} "Deny"]
+     [:button.primary {:disabled busy :on-click #(rf/dispatch (if root? [:root/answer k ask true] [:ask/answer k (:id ask) {}]))}
+      "Allow"]]))
+
 (defn- permit-card
-  "A tool waiting for the person's OK (ExitPlanMode: the plan to approve), as the TypeScript
-  Claudia's PermitPanel. Allow goes as an answer, Deny as a deny."
+  "A tool waiting for the person's OK (ExitPlanMode: the plan to approve; a root command), as the
+  TypeScript Claudia's PermitPanel."
   [_k _ask]
   (let [open (r/atom false)]
     (fn [k ask]
-      (let [{:keys [busy]} @(rf/subscribe [:ask-state (:id ask)])]
+      (let [{:keys [busy error]} @(rf/subscribe [:ask-state (:id ask)])]
         [:section.panel.permit {:class (when busy "busy")}
          [:div.q-head [:span.chip.amber (:tool ask)] [:span.muted "needs your OK"]]
          [:h3 (:title ask)]
          (when-not (str/blank? (:description ask)) [:p.muted (:description ask)])
          [:button.link {:on-click #(swap! open not)} (if @open "Hide details" "Details")]
          (when @open [:pre.preview (:detail ask)])
-         [:div.actions
-          [:button {:disabled busy :on-click #(rf/dispatch [:ask/deny k (:id ask)])} "Deny"]
-          [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/answer k (:id ask) {}])} "Allow"]]]))))
+         (when error [:p.ask-error error])
+         (permit-actions k ask busy)]))))
 
 (defn- modal-view [k asks]
   (let [[peeking set-peek] (h/use-state false)

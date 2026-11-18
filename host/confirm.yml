@@ -1,0 +1,19 @@
+---
+# Keeps the last run of host/site.yml on each server (README decision 54):
+#   ansible-playbook -i ~/.config/claudia-host/inventory.yml host/confirm.yml
+# It logs in over a NEW ssh connection (no reuse of the run's open one), so a confirm that gets through
+# proves sshd still lets people in after the run. Where it cannot log in, nothing is confirmed and the
+# armed undo puts /etc back.
+
+- name: Confirm Claudia's host standard
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    # A fresh login, not the multiplexed connection the run may have left open.
+    ansible_ssh_args: -o ControlMaster=no -o ControlPath=none
+  tasks:
+    - name: Stop the undo and commit /etc as confirmed
+      ansible.builtin.import_role:
+        name: safe_apply
+        tasks_from: confirm

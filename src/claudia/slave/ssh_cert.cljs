@@ -1,0 +1,127 @@
+(ns claudia.slave.ssh-cert
+  "The agent user's SSH certificate (README decision 53). A runner running as an agent user
+  (`<profile>-claudia-agent`) with the hub link (claudia.slave.hub-call) keeps an ed25519 key in
+  ~/.ssh/claudia_agent, asks the hub for a one-hour certificate on start and every 45 minutes
+  (POST /hub/server/ssh-cert), writes it to ~/.ssh/claudia_agent-cert.pub, and keeps a managed
+  block in ~/.ssh/config so `ssh <server>` uses both and lands as the same agent user. A failure is
+  logged and tried again in 5 minutes; it never stops the runner. Other runners do nothing here."
+  (:require ["node:child_process" :as cp]
+            ["node:fs" :as fs]
+            ["node:os" :as os]
+            ["node:path" :as path]
+            [clojure.string :as str]
+            [claudia.shared.agent-user :as agent-user]
+            [claudia.shared.protocol :as protocol]
+            [claudia.slave.hub-call :as hub-call]))
+
+(defn- mode [octal] (js/parseInt octal 8))
+
+(def renew-ms "Between renewals: well inside the certificate's hour." (* 45 60 1000))
+(def retry-ms "After a failed renewal." (* 5 60 1000))
+
+(def block-begin "# >>> Claudia agent SSH (managed by Claudia's runner; edits inside are replaced) >>>")
+(def block-end "# <<< Claudia agent SSH <<<")
+
+(defn next-delay "When to renew again after a renewal that went ok? or not." [ok?] (if ok? renew-ms retry-ms))
+
+(defn config-block
+  "The managed ~/.ssh/config block for agent user `user` (its lines, markers included)."
+  [user]
+  (str/join "\n" [block-begin
+                  "Host *"
+                  "    IdentityFile ~/.ssh/claudia_agent"
+                  "    CertificateFile ~/.ssh/claudia_agent-cert.pub"
+                  "    IdentitiesOnly yes"
+                  (str "    User " user)
+                  block-end]))
+
+(defn merge-block
+  "The ssh config text with block in place of the managed one (between the markers), or added at
+  its end when it has none; every other line kept as it was. At the end, so a Host entry above it
+  still wins for its own options (ssh takes each option's first value)."
+  [text block]
+  (let [text (str text)
+        start (str/index-of text block-begin)
+        stop (when start (str/index-of text block-end start))]
+    (if (and start stop)
+      (str (subs text 0 start) block (subs text (+ stop (count block-end))))
+      (str text
+           (cond (str/blank? text) "" (str/ends-with? text "\n") "\n" :else "\n\n")
+           block "\n"))))
+
+(defn cert-request
+  "The body of POST /hub/server/ssh-cert: the agent user and its public key (one line)."
+  [user public-key]
+  {:user user :publicKey (str/trim (str public-key))})
+
+(defn certificate-of
+  "The certificate in the hub's answer {:ok :status :text}: {:certificate line}, or {:problem}."
+  [{:keys [ok status text]}]
+  (let [body (try (protocol/read-json text) (catch :default _ nil))
+        cert (when (map? body) (:certificate body))]
+    (if (and ok (string? cert) (str/starts-with? cert "ssh-ed25519-cert-v01@openssh.com "))
+      {:certificate (str (str/trim cert) "\n")}
+      {:problem (str "hub answered " status ": " (or (when (map? body) (:error body)) (str/trim (str text))))})))
+
+;; ---- the edges: files, ssh-keygen, the hub ----
+
+(defn- paths [^js me]
+  (let [dir (path/join (.-homedir me) ".ssh")]
+    {:dir dir :key (path/join dir "claudia_agent") :cert (path/join dir "claudia_agent-cert.pub")
+     :config (path/join dir "config")}))
+
+(defn- write-file!
+  "Writes text to file through a file beside it and a rename, so ssh never reads half of it."
+  [file text file-mode]
+  (let [tmp (str file ".claudia-tmp")]
+    (fs/writeFileSync tmp text #js {:mode file-mode})
+    (fs/chmodSync tmp file-mode)
+    (fs/renameSync tmp file)))
+
+(defn- ensure-key!
+  "Promise, resolved once the key exists (made with ssh-keygen the first time, mode 600)."
+  [{:keys [dir] key-file :key} user]
+  (fs/mkdirSync dir #js {:recursive true :mode (mode "700")})
+  (if (fs/existsSync key-file)
+    (js/Promise.resolve (fs/chmodSync key-file (mode "600")))
+    (js/Promise. (fn [done fail]
+                   (cp/execFile "ssh-keygen" #js ["-q" "-t" "ed25519" "-N" "" "-C" user "-f" key-file]
+                                (fn [err] (if err (fail err) (done (fs/chmodSync key-file (mode "600"))))))))))
+
+(defn- install!
+  "Writes the certificate and, when it changed, the managed block of ~/.ssh/config."
+  [{:keys [cert config]} user certificate]
+  (write-file! cert certificate (mode "644"))
+  (let [old (if (fs/existsSync config) (fs/readFileSync config "utf8") "")
+        new-text (merge-block old (config-block user))]
+    (when (not= old new-text) (write-file! config new-text (mode "600")))))
+
+(defn- renew!
+  "Promise of whether a new certificate is in place."
+  [ps user]
+  (-> (js/Promise.resolve)
+      ;; Inside the promise, so whatever throws is caught below and never stops the runner.
+      (.then #(ensure-key! ps user))
+      (.then #(hub-call/post! "/hub/server/ssh-cert" (cert-request user (fs/readFileSync (str (:key ps) ".pub") "utf8"))))
+      (.then (fn [answer]
+               (let [{:keys [certificate problem]} (certificate-of answer)]
+                 (when problem (throw (js/Error. problem)))
+                 (install! ps user certificate)
+                 (js/console.log (str "ssh certificate: renewed for " user))
+                 true)))
+      (.catch (fn [e] (js/console.error (str "ssh certificate: " (.-message e) "; again in 5 minutes")) false))))
+
+(defn- loop! [ps user]
+  (.then (renew! ps user)
+         (fn [ok?] (.unref (js/setTimeout #(loop! ps user) (next-delay ok?))))))
+
+(defn start!
+  "Keeps this runner's agent user's certificate fresh; nothing when the process does not run as an
+  agent user or has no hub link."
+  []
+  (let [^js me (os/userInfo)
+        user (.-username me)]
+    (when (agent-user/agent-user? user)
+      (if (hub-call/settings (.-env js/process))
+        (loop! (paths me) user)
+        (js/console.log "ssh certificate: off, this runner has no hub link (CLAUDIA_HUB_URL, CLAUDIA_SERVER_NAME, CLAUDIA_HUB_KEY_FILE)")))))

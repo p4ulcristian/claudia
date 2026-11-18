@@ -33,6 +33,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-hub`) |
 | hub | `HUB_ADMIN_GROUP` | a login group (`X-Auth-Request-Groups`) whose members are admins (optional) |
 | hub | `HUB_KEY_FILE` | the hub's secret (40+ characters, `openssl rand -base64 32`); each server's key is HMAC-SHA256 of its name under it. Required: without it the hub does not start |
+| hub | `HUB_SSH_CA_FILE` | the SSH certificate authority (README decision 53): an ed25519 private key in OpenSSH format without a passphrase (`ssh-keygen -t ed25519 -N '' -f <file>`). Unset or unreadable: `/hub/ssh-ca.pub` and `/hub/server/ssh-cert` answer 503, the rest of the hub runs |
 | hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
 | hub | `HUB_APNS_KEY_FILE`, `HUB_APNS_KEY_ID`, `HUB_APNS_TEAM_ID` | the APNs key (.p8) and its ids; `HUB_APNS_DRY_RUN=1` logs pushes instead |
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
@@ -50,6 +51,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | runner | `RUNNER_DATA` | folder for `claudia.db`, uploads and 3D scenes' videos (`videos/`) |
 | runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
+| runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server: Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48) and, when it runs as an agent user, its SSH certificate (`POST /hub/server/ssh-cert`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ key, name, by, at }`. Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
@@ -61,8 +63,11 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 `hub.json`:
 ```json
 { "servers": [ { "name": "home", "label": "Home", "address": "10.0.0.2:4540" } ],
-  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["home"] } ] }
+  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["home"], "profile": "paul" } ] }
 ```
+`profile` (optional): the person's profile name on every server, whose agent user is
+`<profile>-claudia-agent` (README decisions 51 and 53); lower-case letters, digits and dashes,
+starting with a letter, at most 18 characters, each person's own.
 The profiles file (front): one line per profile, `<profile> <email> <runner socket path>`.
 
 ## Who is calling
@@ -86,6 +91,9 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
 - A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
 - front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view
   of a profile whose owner's email is not in `X-Claudia-Writes`.
+- Root (README decision 52) is the front's, never a runner's: the front answers `POST /api/root/answer`
+  and `/api/root/switch` itself, only for the profile's own person (own profile = target profile; not
+  a writer, not a viewer), and never passes any other `/api/root/…` on (403).
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
 ## Hub HTTP
@@ -104,6 +112,8 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
 | `POST /hub/server/claudia` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ as (email, with a profile on that server), op: chats \| new \| send \| archive \| stop, args }` → the operation's answer, carried out on the person's servers through each runner's `/api/chat-ops/…` (`GET chats` → `{ chats }`, `POST new { text, folder? }` → `{ chat }`, `POST send { chat, text }`, `POST archive { chat, archived }`, `POST stop { chat }` → `{ ok }`); 403 when the key or the profile does not match |
+| `POST /hub/server/ssh-cert` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ user, publicKey }` → `{ certificate }`: an OpenSSH user certificate (one line) for `publicKey` (ed25519, one OpenSSH line), signed by `HUB_SSH_CA_FILE` (README decision 53). Only when `user` is `<profile>-claudia-agent`, that profile is a person's (the People table's profile names) and that person has a profile on that server. Principal exactly `user`, valid from 5 minutes before to 60 minutes after now, key id `<server>/<user>/<ISO time>`, a random serial, extension `permit-pty` only (no agent, port or X11 forwarding). 403 when the key, the user or the profile does not match; 400 for a key that is not ed25519; 503 without `HUB_SSH_CA_FILE` |
+| `GET /hub/ssh-ca.pub` | no login: the SSH authority's public key, one OpenSSH line (`ssh-ed25519 … claudia-hub-ca`), for every server's `TrustedUserCAKeys`; 503 without `HUB_SSH_CA_FILE` |
 | `GET /hub/picture/<key>` | a person's profile picture (PNG or WebP; key: 16 hex digits of the SHA-256 of their email), 404 without one |
 | `PUT /hub/admin/picture?email=<email>` (admins) | body: the picture (PNG or WebP, up to 512 KB) → `{ picture }` |
 | `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
@@ -144,8 +154,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `GET /hub/admin` | admin | the admin state |
 | `PUT /hub/admin/servers/:name` `{ label?, address? }` | admin | adds or changes a server (address `host:port`) |
 | `DELETE /hub/admin/servers/:name` | admin | removes it (and its peer request) |
-| `POST /hub/admin/people` `{ email, name?, admin? }` | admin | adds a person |
-| `PUT /hub/admin/people/:email` `{ name?, admin? }` | admin | changes a person |
+| `POST /hub/admin/people` `{ email, name?, admin?, profile? }` | admin | adds a person |
+| `PUT /hub/admin/people/:email` `{ name?, admin?, profile? }` | admin | changes a person; `profile`: their profile name (as in `hub.json`; `""` takes it away; 400 when another person has it) |
 | `DELETE /hub/admin/people/:email` | admin | removes them and their ticks |
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `PUT /hub/admin/writers` `{ email, owner, granted }` | admin | a write tick on or off: `email` may write to `owner`'s chats on every server where `owner` has a profile |
@@ -317,7 +327,7 @@ Runner → page:
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
-`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
+`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), root (bool: its root switch is on, README decision 52), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
 secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor, agentsFor? }`; `agentsFor` = ms since the longest-running of those agents started (none running: absent);
@@ -374,6 +384,10 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
 - `{ id, kind: "permit", tool, title, description, detail }`: a tool waiting for the person's OK
   (ExitPlanMode: the plan); every other tool is allowed without asking (each logged as
   `[<chat id 8>] auto-allowed <tool>: <input ≤ 300>`)
+- `{ id, kind: "permit", root: true, tool: "Run as root", title: "Run as root", argv, cwd, description
+  (the command), detail ("In <folder>" and the command), expires }`: shown for the front (Root
+  helper, below). The page answers it to the front, not with `answer`/`deny` (the runner ignores those
+  for it): `POST /s/<server>/api/root/answer { chat, ask, allow, argv, cwd }`
 
 `Scene`: `{ title, blocks: [Block] }` in order, top to bottom. Every `Block` is one form with its data
 (README decision 39): `{ id, name, width ("full"/"half"), form, data }`. `form` is `graph`, `pipeline`,
@@ -416,6 +430,68 @@ screenshot). A chat older than the history has only its last picture (turn `impo
    the value in the output with `[secret]`, and answers Claude with the output. The keypair is dropped.
 5. Deny or 10 minutes without an answer: Claude gets a refusal. Nothing is written anywhere: not the
    database, not a log, not a file. Only the ref, the reason and who allowed it are logged.
+
+## Root helper (`claudia-root`, `src/claudia/root`; README decision 52)
+
+`out/root.js` runs as root. The host standard (`host/`, Ansible) installs it with `out/sudo.js` and
+`deploy/sudo-shim` from a built checkout into a folder of its own (not the release folder Claudia's
+update replaces), with its unit `claudia-root.service` and the no-tap list; `deploy/update.sh` and
+`install.sh` never touch them. The proof of a person's tap lives in the front (user claudia: no
+agent user reaches it, every call to it needs the hub key, decision 47); a runner runs as the agent
+user, so it only names chats and shows cards. Settings:
+
+| Program | Variable | What |
+|---|---|---|
+| root | `ROOT_SOCKET_DIR` | the folder of the agent users' folders (default `/run/claudia-root`). Each folder is named after an agent user (`<profile>-claudia-agent`) and lets in only that user (Ansible: mode 0750, root:<the agent's group>). The helper listens on `<folder>/root.sock` in each (read at start: a new agent user needs a restart), group the folder's, mode 0660; a folder named otherwise, or that others may enter, is skipped and logged |
+| root | `ROOT_NO_TAP` | the no-tap list (default `/etc/claudia/root-no-tap`): one command per line, `#` starts a comment line; read on every command |
+| root | `ROOT_FRONT_SOCKET` | the front's root socket (default `/run/claudia-front/root.sock`) |
+| front | `FRONT_ROOT_SOCKET` | where the front takes the helper's asks (unset: none): its own, mode 0600 in a 0700 folder of user claudia's, so only root opens it (claudia-front.service: `/run/claudia-front/root.sock`) |
+| front | `FRONT_ROOT_STATE` | the root switches kept across restarts, `{ "<profile>/<chat>": true }` (unset: in memory only; the unit: `/var/lib/claudia-front/root-switches.json`) |
+
+The shim (`deploy/sudo-shim`, which runs the `sudo.js` beside it; `sudo [-n] [-E] [--] command args…`) sends
+newline-delimited JSON on `/run/claudia-root/<user>/root.sock` (`CLAUDIA_ROOT_SOCKET` overrides it;
+`CLAUDIA_SUDO_JS` the script). -n and -E are ignored; any other option is refused ("root shells are not
+offered; run the command itself"). No socket: "no root helper on this server", exit 1.
+
+1. Shim → helper, first line: `{ argv: [command, args…], cwd, chatKey (CLAUDIA_CHAT_KEY, may be null),
+   env: { LANG, LANGUAGE, LC_ALL, LC_CTYPE, LC_MESSAGES, TERM, COLUMNS, LINES, NO_COLOR (those set) } }`.
+   argv: 1 to 1000 strings, no NUL, 128 K characters in all.
+2. The helper decides. On the no-tap list: argv joined by single spaces equals a line exactly (no
+   globbing; an argument that is empty or holds white space never matches). Else it answers
+   `{ asking: true }` (the shim says it waits when nothing came within 1.5 s) and asks the front:
+   `POST /root/ask { agentUser, chatKey, argv, cwd }` on `ROOT_FRONT_SOCKET`, waiting up to 11
+   minutes; the shim leaving ends the call. Only status 200 with exactly `allow: true` and `via`
+   `switch` or `allow` runs the command; anything else refuses it.
+3. The front: `agentUser` must be `<profile>-claudia-agent` for a profile here. It asks that profile's
+   runner `POST /api/root/chat { chatKey }` → `{ chat }` (404: no chat has that key: no). Its own switch
+   for `<profile>/<chat>` on: `{ allow: true, via: "switch", chat }`. Else it makes a nonce, keeps
+   `{ profile, chat, argv, cwd }` under it and has the runner show the card: `POST /api/root/card
+   { chat, ask: nonce, argv, cwd, expires }`. The person's `POST /api/root/answer { chat, ask, allow,
+   argv, cwd }` through the hub counts only from the owner, for that open nonce, profile and chat, and
+   (for Allow) the very argv and cwd kept: `{ allow: true, via: "allow", chat }`. Deny `{ allow: false,
+   why: "The person said no.", chat }`; 10 minutes or the helper leaving: no too. Then `POST
+   /api/root/done { chat, ask }` takes the card away. A refused answer: 403 `{ error }`.
+4. `POST /api/root/switch { chat, on }` (the owner only, else 403) sets the front's switch, writes
+   `FRONT_ROOT_STATE`, and has the runner show it (`POST /api/root/shown { chat, root }` → the Row's
+   `root`). The runner's `/api/root/*` (chat, card, done, shown) decide nothing: an agent that calls
+   them can only show cards no one can answer, or a wrong `root` on its own Row.
+5. Helper → shim: `{ refused: why }` and the end, or `{ running: true }`, then `{ out: base64 }` and
+   `{ err: base64 }` (256 KB of bytes a frame at most) as the command writes, last `{ exit: n }` (a
+   signal: 128 + its number; a command not found: 127) and the end. The command runs with
+   `child_process.spawn(argv[0], argv[1…])`, no shell, in `cwd` when it is a folder (else `/`), with
+   root's PATH, HOME, USER, LOGNAME, SHELL, `SUDO_USER=<user>` and the env above only.
+6. Shim → helper after `running`: stdin as `{ in: base64 }` frames, then `{ eof: true }` (frames before
+   `running` are dropped). The shim leaving ends the command (SIGTERM).
+7. A line over 1 MB ends the connection. Every command is one journal line of the helper:
+   `root { user, chat ("key:<first 8 of the key>" or "no key"), argv, decision ("no-tap", "switch",
+   "allow", "refused: <why>", "gone before the answer"), exit? }`; the front logs each answer
+   (`root ask <nonce> of <chat>: allowed|denied by <profile>`) and switch change.
+
+The chat's key: a random key per chat (`chat_key` in the runner's store), set in every session's
+environment as `CLAUDIA_CHAT_KEY` when the runner has the host start it. A session started before
+there were keys has none until it starts again (its chat's commands are then refused). The runner
+names the chat for a key, and it is the agent user's: a tricked agent can at worst make a key name
+another chat of its own profile (one whose switch is on, or whose card the person then answers).
 
 ## Host ↔ runner (unix socket, JSON lines)
 

@@ -1,0 +1,13 @@
+# Claudia host standard (host/roles/desktop_access): a user unit, only for {{ desktop_user }}, enabled
+# in default.target. Starts claudia-desktop-access.service when the session's Wayland socket exists.
+[Unit]
+Description=Claudia: wait for this desktop session's Wayland socket
+ConditionUser={{ desktop_user }}
+
+[Path]
+# The socket itself (wayland-1), not the lock file the compositor makes just before it (wayland-1.lock).
+PathExistsGlob=%t/wayland-[0-9]
+Unit=claudia-desktop-access.service
+
+[Install]
+WantedBy=default.target

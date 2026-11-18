@@ -8,6 +8,7 @@
             ["node:os" :as os]
             ["node:path" :as path]
             ["node:child_process" :as cp]
+            ["node:crypto" :as crypto]
             [clojure.string :as str]
             [claudia.node.env :as env]
             [claudia.node.fs :as nfs]
@@ -243,17 +244,20 @@
 
 (defn- drop-asks!
   "Ends every open ask of a chat; answer? false when nobody is left to answer (the host went away and
-  sends its rpcs again)."
+  sends its rpcs again). A root card stays: the front ends it."
   [id answer? why]
-  (doseq [ask-id (keys (:asks (st id)))
-          :let [entry (take-ask! id ask-id)]]
+  (doseq [[ask-id entry] (:asks (st id))
+          :when (not (get-in entry [:ask :root]))]
+    (take-ask! id ask-id)
     (when answer?
       ((:resolve entry) (answers/dropped-answer (get-in entry [:ask :kind]) why)))))
 
 (defn answer!
-  "An answer to a question ask; on a permit ask (ExitPlanMode) it is the OK."
+  "An answer to a question ask; on a permit ask (ExitPlanMode) it is the OK. A root card is the
+  front's to answer: ignored here."
   [id ask-id chosen]
   (when-let [entry (get-in (st id) [:asks ask-id])]
+    (when-not (get-in entry [:ask :root])
     (case (get-in entry [:ask :kind])
       "question"
       (do (take-ask! id ask-id)
@@ -264,10 +268,10 @@
       "permit"
       (do (take-ask! id ask-id)
           ((:resolve entry) {:behavior "allow" :updatedInput (:input entry)}))
-      nil)))
+      nil))))
 
 (defn deny! [id ask-id who]
-  (when-let [entry (take-ask! id ask-id)]
+  (when-let [entry (when-not (get-in (st id) [:asks ask-id :ask :root]) (take-ask! id ask-id))]
     (if (= "secret" (get-in entry [:ask :kind]))
       (do (js/console.log (str "secret " (get-in entry [:ask :ref]) " (" (get-in entry [:ask :reason]) ") denied by " who))
           ((:resolve entry) (answers/refusal "The user said no to this secret. Nothing ran.")))
@@ -313,6 +317,43 @@
            (add-ask! id {:ask ask :resolve done :keys kp
                          :secret {:command command :env_name env_name}
                          :timer (js/setTimeout #(secret-expired! id ask-id args done) secret-ms)}))))))
+
+;; Root (README decision 52) ----------------------------------------------------------------------
+
+(defn chat-key!
+  "The chat's key, which its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it to the root
+  helper; the front asks this runner which chat it names): made once, random, kept with the chat."
+  [id]
+  (or (:chat-key (store/chat id))
+      (let [k (.toString (crypto/randomBytes 24) "base64url")]
+        (store/update! id {:chat_key k})
+        k)))
+
+(defn root-ask?
+  "Whether ask-id is an open \"Run as root\" card of chat id: the front answers it, never this runner."
+  [id ask-id]
+  (boolean (get-in (st id) [:asks ask-id :ask :root])))
+
+(defn show-root-card!
+  "The front's \"Run as root\" card for one command (argv in folder) of chat id under the front's
+  nonce ask-id, until the front says it is done (root-card-done!) or it expires. Display only: the
+  person's Allow goes to the front (README decision 52)."
+  [id ask-id argv folder expires]
+  (when-not (get-in (st id) [:asks ask-id])
+    (add-ask! id {:ask (answers/root-ask ask-id argv folder expires)
+                  :resolve (fn [_])
+                  :timer (js/setTimeout #(take-ask! id ask-id) (max 0 (- expires (js/Date.now))))})))
+
+(defn root-card-done!
+  "The front settled the root ask ask-id: its card goes."
+  [id ask-id]
+  (when (root-ask? id ask-id) (take-ask! id ask-id)))
+
+(defn root-shown!
+  "The front says the chat's root switch is on or off: the list shows it (display only)."
+  [id on?]
+  (store/update! id {:root (boolean on?)})
+  (changed!))
 
 ;; Tools ------------------------------------------------------------------------------------------
 
@@ -945,8 +986,10 @@
   (let [s (settings id)
         her (claudia/her? id)]
     (session/start-spec {:cwd cwd :id id :resume? resume?
-                         ;; Her chat runs nothing in the background (README decision 48).
-                         :env (cond-> child-env her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
+                         ;; The chat's key ties its sudo commands to it (README decision 52); her
+                         ;; chat runs nothing in the background (README decision 48).
+                         :env (cond-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                                her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
                          :prompt (cond-> (codeforms/prompt-for) her (str "\n\n" claudia/prompt))
                          :allowed (cond-> tools/allowed-tools her (into claudia/allowed))
                          :disallowed (when her claudia/disallowed)

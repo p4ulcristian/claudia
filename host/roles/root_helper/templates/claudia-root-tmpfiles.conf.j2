@@ -1,0 +1,7 @@
+# Claudia's root helper sockets (README decision 52), from host/roles/root_helper; made again at every
+# boot. The top folder is open; each agent user's folder only to root and that agent user's own
+# group, so a socket inside proves which agent user calls.
+d {{ root_socket_dir }} 0755 root root -
+{% for user in agent_users %}
+d {{ root_socket_dir }}/{{ user }} 0750 root {{ user }} -
+{% endfor %}

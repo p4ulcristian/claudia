@@ -1,0 +1,162 @@
+---
+# One profile (`profile`) moves from its person's user to its agent user.
+# Stops the profile's host and runner (its running chats stop), copies the data, switches the
+# profile's line in /etc/claudia/profiles, writes the units' drop-ins as install.sh does, starts both.
+
+- name: Name the users of profile {{ profile }}
+  ansible.builtin.set_fact:
+    migrate_person: "{{ people | selectattr('profile', 'equalto', profile) | first }}"
+    migrate_agent_user: "{{ profile ~ agent_suffix }}"
+
+- name: Read the Linux users again (the agent user is new)
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Name the homes of profile {{ profile }}
+  ansible.builtin.set_fact:
+    migrate_person_home: "{{ ansible_facts.getent_passwd[migrate_person.person_user][4] }}"
+    migrate_agent_home: "{{ ansible_facts.getent_passwd[migrate_agent_user][4] }}"
+
+# The data is taken from the person's home, so the profile must run as the person now.
+- name: Stop unless the profile runs as its person now, {{ profile }}
+  ansible.builtin.assert:
+    that: profile_users[profile] | default('') == migrate_person.person_user
+    fail_msg: >-
+      /etc/claudia/profiles has no line for {{ profile }}, or its line does not say
+      user={{ migrate_person.person_user }}. A machine running Claudia single-user is switched to shared mode
+      by hand first (host/README.md, "From single-user to shared").
+
+# Two runners on one SQLite store would damage it: the single-user units must be gone.
+# No module: asks another user's manager; the module needs it running.
+- name: Ask whether the person's single-user Claudia units still run  # noqa: command-instead-of-module
+  ansible.builtin.command: >-
+    systemctl --user --machine={{ migrate_person.person_user }}@
+    is-active claudia-runner.service claudia-host.service claudia-front.service
+  register: migrate_single_user_units
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop when they do
+  ansible.builtin.fail:
+    msg: >-
+      {{ migrate_person.person_user }} still runs Claudia's single-user units. Stop and disable them as
+      host/README.md says ("From single-user to shared"), then run again.
+  when: "'active' in migrate_single_user_units.stdout_lines"
+
+# The undo timer must still be waiting before the switch: a switch it could no longer undo is not
+# made.
+- name: Check the undo is still armed
+  ansible.builtin.include_role:
+    name: safe_apply
+    tasks_from: still_armed
+
+# Stopped first, so their SQLite store and Claude Code's sessions are copied at rest.
+- name: Stop the host and the runner of {{ profile }}
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - "claudia-runner@{{ profile }}.service"
+    - "claudia-host@{{ profile }}.service"
+
+# Where the person's data is: Claudia's defaults (~/Work, ~/.local/share/claudia) unless the
+# person's entry in `people` names other folders (`work_dir`, `runner_data`: the CLAUDIA_CWD and
+# RUNNER_DATA a single-user machine used). They land at the agent user's defaults, the folders
+# install.sh's drop-ins point to.
+- name: Copy the person's folders and files into the agent user's home (the source stays)
+  ansible.builtin.include_tasks: copy_one.yml
+  loop:
+    - { src: "{{ migrate_person.work_dir | default(migrate_person_home ~ '/Work') }}/", rel: Work/ }
+    - { src: "{{ migrate_person_home }}/.claude/", rel: .claude/ }
+    - { src: "{{ migrate_person_home }}/.claude.json", rel: .claude.json }
+    - { src: "{{ migrate_person.runner_data | default(migrate_person_home ~ '/.local/share/claudia') }}/", rel: .local/share/claudia/ }
+  loop_control:
+    loop_var: copy
+    label: "{{ copy.rel }}"
+
+- name: See whether the agent user has a chats' folder now
+  ansible.builtin.stat:
+    path: "{{ migrate_agent_home }}/Work"
+  register: migrate_agent_work
+
+# Only when missing, as install.sh does: Claude Code cannot start in a folder that is not there.
+- name: Make the chats' folder when the person had none
+  ansible.builtin.file:
+    path: "{{ migrate_agent_home }}/Work"
+    state: directory
+    owner: "{{ migrate_agent_user }}"
+    group: "{{ migrate_agent_user }}"
+    mode: "0700"
+  when: not migrate_agent_work.stat.exists
+
+# The copy still names the person's home: the runner's store (chats' folders, changed files' paths,
+# kv values), Claude Code's session folders (named after their cwd) and ~/.claude.json's projects.
+# claudia-migrate-paths rewrites those in the agent user's copy (tested; it has a --dry-run mode).
+# The session files' own "cwd" fields are left as they were.
+- name: Rewrite the person's home to the agent user's in the copied data, {{ profile }}
+  ansible.builtin.script:
+    cmd: >-
+      claudia-migrate-paths
+      --from {{ migrate_person_home | quote }}
+      --to {{ migrate_agent_home | quote }}
+      {% if migrate_person.work_dir is defined %}--map {{ migrate_person.work_dir | quote }} {{ (migrate_agent_home ~ '/Work') | quote }}{% endif %}
+    executable: python3
+  register: migrate_paths
+  changed_when: migrate_paths.stdout is search('rewrite [1-9]|rename |merge ')
+
+- name: Give the person read access to the agent user's Work folder
+  ansible.builtin.include_tasks: person_reads.yml
+
+- name: Switch the profile's line to the agent user
+  ansible.builtin.include_tasks: profile_line.yml
+
+- name: Make the drop-in folders of the units of {{ profile }}
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "claudia-host@{{ profile }}"
+    - "claudia-runner@{{ profile }}"
+
+- name: Point the units at the agent user, as install.sh's user_dropins writes them, {{ profile }}
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/etc/systemd/system/{{ item.unit }}.service.d/user.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - unit: "claudia-host@{{ profile }}"
+      content: |
+        [Service]
+        User={{ migrate_agent_user }}
+    - unit: "claudia-runner@{{ profile }}"
+      content: |
+        [Service]
+        User={{ migrate_agent_user }}
+        Environment=RUNNER_DATA={{ migrate_agent_home }}/.local/share/claudia CLAUDIA_CWD={{ migrate_agent_home }}/Work
+  loop_control:
+    label: "{{ item.unit }}"
+
+- name: Put the sudo shim first on the session host's PATH
+  ansible.builtin.include_role:
+    name: root_helper
+    tasks_from: agent_path
+  vars:
+    root_helper_person: "{{ people | selectattr('profile', 'equalto', profile) | first }}"
+
+- name: Read the units again
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Start the host and the runner as the agent user, {{ profile }}
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: started
+  loop:
+    - "claudia-host@{{ profile }}.service"
+    - "claudia-runner@{{ profile }}.service"

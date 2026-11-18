@@ -26,6 +26,7 @@
             [claudia.slave.pictures :as pictures]
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
+            [claudia.slave.ssh-cert :as ssh-cert]
             [claudia.slave.store :as store]))
 
 (def ^:private env (.-env js/process))
@@ -194,6 +195,24 @@
   {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
    :read-only (= "1" (aget (.-headers req) "x-claudia-read-only"))})
 
+(defn root-route
+  "What the front's POST to /api/root/<sub> asks this runner, for display only (README decision 52:
+  the front decides): the chat a key names, a card to show or end, the switch to show. b: the body."
+  [sub {:keys [chatKey chat ask argv cwd expires root]}]
+  (case sub
+    "chat" (if-let [row (store/chat-by-key chatKey)] [200 {:chat (:id row)}] [404 {:error "No chat here has this session's key (CLAUDIA_CHAT_KEY)."}])
+    "card" (if (and (known? chat) (string? ask) (vector? argv) (every? string? argv) (number? expires))
+             (do (chats/show-root-card! chat ask argv (when (string? cwd) cwd) expires) [200 {:ok true}])
+             [400 {:error "No such chat, or no command."}])
+    "done" (do (when (known? chat) (chats/root-card-done! chat (str ask))) [200 {:ok true}])
+    "shown" (do (when (known? chat) (chats/root-shown! chat (true? root))) [200 {:ok true}])
+    [404 {:error "Not found."}]))
+
+(defn- root-call [^js req ^js res sub]
+  (-> (io/read-json req 262144)
+      (.then #(let [[status body] (root-route sub %)] (io/send-json res status body)))
+      (.catch #(io/send-json res 400 {:error (.-message %)}))))
+
 (defn- secret-read
   "The vault read: op read on this profile's account, sealed to the asking runner's one-time key."
   [req res {:keys [read-only] who :profile}]
@@ -233,13 +252,14 @@
 (defn request-op
   "Which of the runner's own calls a request is (url without its query; chat-id and sub from
   /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png,
-  :me, :secret-read, or nil (the forms' and the API's calls, then not found)."
+  :me, :secret-read, :root (the front's root calls), or nil (the forms' and the API's calls, then not found)."
   [method url chat-id sub chat-known]
   (cond
     (and chat-id (= "GET" method) (not chat-known)) :no-chat
     (and chat-id (= sub "picture.png") (= "GET" method)) :picture-png
     (and (= url "/api/me") (= "GET" method)) :me
-    (and (= url "/api/secret/read") (= "POST" method)) :secret-read))
+    (and (= url "/api/secret/read") (= "POST" method)) :secret-read
+    (and (str/starts-with? url "/api/root/") (= "POST" method)) :root))
 
 (defn chat-call
   "A request path (no query) of /api/chats/:id/<sub> as [id sub] (id decoded), else [nil nil]."
@@ -269,6 +289,7 @@
       :me (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                                  :version h/version :commit h/commit})
       :secret-read (secret-read req res who)
+      :root (root-call req res (subs url (count "/api/root/")))
       nil (cond
             (chat-ops/handle req res chat-ops-fns) nil
             (video/handle req res url who) nil
@@ -307,10 +328,12 @@
                (println "claudia runner" profile "on" socket-path "(host" host-socket ", cwd" chats/cwd ")")))))
 
 (defn- start!
-  "Once libsodium is ready: the host link, the chats, the 5-minute probe and the server."
+  "Once libsodium is ready: the host link, the chats, the 5-minute probe, the agent user's SSH
+  certificate and the server."
   []
   (hostlink/connect! host-socket chats/on-host-event chats/on-host-lost)
   (chats/init!)
+  (ssh-cert/start!)
   ;; Models, commands and plan usage: every 5 minutes while a page is connected (runner.ts).
   (js/setInterval #(when (seq @conns) (chats/probe-soon! 0)) (* 5 60000))
   (listen!))

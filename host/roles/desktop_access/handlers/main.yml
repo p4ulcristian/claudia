@@ -1,0 +1,4 @@
+---
+- name: Read the desktop drop-ins
+  ansible.builtin.systemd_service:
+    daemon_reload: true

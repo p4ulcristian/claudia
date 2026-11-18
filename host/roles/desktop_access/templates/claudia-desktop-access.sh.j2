@@ -1,0 +1,22 @@
+#!/bin/sh
+# claudia-desktop-access: lets this machine's agent users reach {{ desktop_user }}'s graphical session
+# (installed by host/roles/desktop_access). Runs as {{ desktop_user }} at session start (user unit
+# claudia-desktop-access) and once as root from the playbook. Grants only:
+#   - passing through the runtime folder (x), so a path inside it can be opened,
+#   - read/write on the Wayland sockets (wayland-*), PipeWire's socket (pipewire-0) and
+#     PulseAudio's socket (pulse/native; x on pulse/).
+# Not pipewire-0-manager (PipeWire's privileged socket) and nothing else in the folder.
+# Chrome's DevTools port is TCP on localhost and needs nothing here.
+set -eu
+dir=${1:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}}
+[ -d "$dir" ] || exit 0
+for user in {{ agent_users | join(' ') }}; do
+	setfacl -m "u:$user:x" "$dir"
+	for socket in "$dir"/wayland-* "$dir"/pipewire-0; do
+		if [ -S "$socket" ]; then setfacl -m "u:$user:rw" "$socket"; fi
+	done
+	if [ -S "$dir/pulse/native" ]; then
+		setfacl -m "u:$user:x" "$dir/pulse"
+		setfacl -m "u:$user:rw" "$dir/pulse/native"
+	fi
+done

@@ -51,9 +51,10 @@
         working (or (boolean (:running s)) (pos? agents))
         ended (or (:ended r) 0)]
     {:id (:id r) :title (:title r) :folder (:folder r) :color (:color r)
-     ;; The chat's speaker and bell (README decision 21): kept with the chat, the same on every device.
+     ;; The chat's speaker and bell (README decision 21), its root switch (decision 52): kept with the chat.
      :talk (boolean (:talk r))
      :bell (not (false? (:bell r)))
+     :root (boolean (:root r))
      :running (boolean (:running s))
      :waiting (boolean (seq asks))
      :at (:at r)

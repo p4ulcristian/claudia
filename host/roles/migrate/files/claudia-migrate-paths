@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""claudia-migrate-paths: after a profile's data was copied from a person's home to its agent user's
+home (host/roles/migrate), the copied data still names the person's home. This rewrites those paths
+in the agent user's copy, nowhere else:
+
+  1. the runner's SQLite store (<to>/.local/share/claudia/claudia.db): chats.folder,
+     changes.path, and every string inside kv.value's JSON;
+  2. Claude Code's session folders (<to>/.claude/projects/<encoded cwd>): renamed to the encoded new
+     cwd. Claude Code names a folder after the session's cwd with every character other than a-z,
+     A-Z, 0-9 turned into '-' (as claudia.slave.history does to find them). The old cwd is read
+     from the folder's session files (their "cwd" field) where there is one; otherwise the folder's
+     name must begin with the encoded old home. The .jsonl files themselves are not changed;
+  3. the keys of "projects" in <to>/.claude.json.
+
+A path is rewritten only when it is a mapped folder itself or lies inside one (exact prefix up to a
+'/'). The mappings: every --map OLD NEW pair (most specific first), then --from -> --to.
+
+  claudia-migrate-paths --from /home/alice --to /home/alice-claudia-agent [--map OLD NEW]... [--dry-run]
+
+--dry-run prints what would change and changes nothing. Run it while the profile's runner and host
+are stopped. Files keep their owner and mode.
+"""
+import argparse
+import json
+import os
+import re
+import sqlite3
+import sys
+
+# Claude Code shortens longer names with a hash this script cannot reproduce; such folders are left.
+MAX_ENCODED = 200
+
+
+def encode(path):
+    return re.sub(r"[^a-zA-Z0-9]", "-", path)
+
+
+def make_mapper(pairs):
+    """pairs: [(old, new)] of absolute folders. Returns path -> new path (or the same path)."""
+    ordered = sorted(((o.rstrip("/"), n.rstrip("/")) for o, n in pairs), key=lambda p: -len(p[0]))
+
+    def mapped(path):
+        if not isinstance(path, str):
+            return path
+        for old, new in ordered:
+            if path == old or path.startswith(old + "/"):
+                return new + path[len(old):]
+        return path
+
+    return mapped
+
+
+def walk_json(value, mapped):
+    """value with every string rewritten by mapped."""
+    if isinstance(value, str):
+        return mapped(value)
+    if isinstance(value, list):
+        return [walk_json(v, mapped) for v in value]
+    if isinstance(value, dict):
+        return {k: walk_json(v, mapped) for k, v in value.items()}
+    return value
+
+
+def log(dry, text):
+    print(("would " if dry else "") + text)
+
+
+def table_columns(db, table):
+    return {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+
+
+def rewrite_column(db, table, column, change, dry):
+    """Every row's column passed through change(value); rows whose value differs are updated."""
+    if column not in table_columns(db, table):
+        return 0
+    rows = db.execute(f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL").fetchall()
+    count = 0
+    for rowid, value in rows:
+        new = change(value)
+        if new != value:
+            count += 1
+            if not dry:
+                db.execute(f"UPDATE {table} SET {column} = ? WHERE rowid = ?", (new, rowid))
+    log(dry, f"rewrite {count} row(s) of {table}.{column}")
+    return count
+
+
+def json_changer(mapped):
+    def change(text):
+        try:
+            value = json.loads(text)
+        except ValueError:
+            return text
+        new = walk_json(value, mapped)
+        return text if new == value else json.dumps(new, ensure_ascii=False, separators=(",", ":"))
+
+    return change
+
+
+def keep_owner(path, like):
+    st = os.stat(like)
+    if os.path.exists(path):
+        os.chown(path, st.st_uid, st.st_gid)
+
+
+def rewrite_store(data_dir, mapped, dry):
+    db_file = os.path.join(data_dir, "claudia.db")
+    if not os.path.isfile(db_file):
+        print(f"no store at {db_file}: skipped")
+        return
+    db = sqlite3.connect(db_file)
+    try:
+        with db:
+            rewrite_column(db, "chats", "folder", mapped, dry)
+            rewrite_column(db, "changes", "path", mapped, dry)
+            rewrite_column(db, "kv", "value", json_changer(mapped), dry)
+    finally:
+        db.close()
+    # Opening the store may leave -wal/-shm files beside it, made by this (root's) process.
+    for side in ("-wal", "-shm"):
+        keep_owner(db_file + side, db_file)
+
+
+def session_cwd(folder):
+    """The cwd recorded in the folder's session files, or None."""
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".jsonl"):
+            continue
+        with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as f:
+            for _, line in zip(range(50), f):
+                try:
+                    cwd = json.loads(line).get("cwd")
+                except (ValueError, AttributeError):
+                    continue
+                if isinstance(cwd, str) and cwd.startswith("/"):
+                    return cwd
+    return None
+
+
+def new_folder_name(name, cwd, mapped, old_home, new_home):
+    """The folder's new name, or None to leave it."""
+    if cwd is not None:
+        new_cwd = mapped(cwd)
+        return encode(new_cwd) if new_cwd != cwd else None
+    old_enc = encode(old_home.rstrip("/"))
+    new_enc = encode(new_home.rstrip("/"))
+    # Already the new home's (the encoding cannot tell /home/alice/x from /home/alice-x apart).
+    if name == new_enc or name.startswith(new_enc + "-"):
+        return None
+    if name == old_enc or name.startswith(old_enc + "-"):
+        return encode(new_home.rstrip("/")) + name[len(old_enc):]
+    return None
+
+
+def merge_into(src, dst, dry):
+    """Moves src's entries into the existing dst; an entry dst already has stays in src."""
+    for entry in sorted(os.listdir(src)):
+        if os.path.exists(os.path.join(dst, entry)):
+            print(f"kept {os.path.join(src, entry)}: {dst} has one already")
+        elif not dry:
+            os.rename(os.path.join(src, entry), os.path.join(dst, entry))
+    if not dry and not os.listdir(src):
+        os.rmdir(src)
+
+
+def rename_projects(projects, mapped, old_home, new_home, dry):
+    if not os.path.isdir(projects):
+        print(f"no Claude Code projects at {projects}: skipped")
+        return
+    for name in sorted(os.listdir(projects)):
+        folder = os.path.join(projects, name)
+        if not os.path.isdir(folder):
+            continue
+        new = new_folder_name(name, session_cwd(folder), mapped, old_home, new_home)
+        if new is None or new == name:
+            continue
+        if len(new) > MAX_ENCODED:
+            print(f"left {name}: its new name is longer than Claude Code names folders without a hash")
+            continue
+        target = os.path.join(projects, new)
+        if os.path.exists(target):
+            log(dry, f"merge {name} into {new}")
+            merge_into(folder, target, dry)
+        else:
+            log(dry, f"rename {name} -> {new}")
+            if not dry:
+                os.rename(folder, target)
+
+
+def rewrite_claude_json(path, mapped, dry):
+    if not os.path.isfile(path):
+        print(f"no {path}: skipped")
+        return
+    with open(path, encoding="utf-8") as f:
+        config = json.load(f)
+    projects = config.get("projects")
+    if not isinstance(projects, dict):
+        print(f"{path} has no projects: skipped")
+        return
+    fresh = {}
+    for key, value in projects.items():
+        new = mapped(key)
+        if new != key:
+            log(dry, f"rename project {key} -> {new}")
+        # A key already naming the new place wins over one moved onto it.
+        if new in fresh and new != key:
+            continue
+        fresh[new] = value
+    if fresh == projects:
+        return
+    config["projects"] = fresh
+    if dry:
+        return
+    st = os.stat(path)
+    tmp = path + ".claudia-migrate"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    os.replace(tmp, path)
+
+
+def main(argv):
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--from", dest="old_home", required=True, help="the person's home")
+    p.add_argument("--to", dest="new_home", required=True, help="the agent user's home (holds the copy)")
+    p.add_argument("--map", nargs=2, action="append", default=[], metavar=("OLD", "NEW"),
+                   help="a more specific folder mapping, e.g. the old work_dir -> <to>/Work")
+    p.add_argument("--dry-run", action="store_true", help="print what would change; change nothing")
+    a = p.parse_args(argv)
+    for d in [a.old_home, a.new_home] + [x for pair in a.map for x in pair]:
+        if not d.startswith("/") or d.rstrip("/") == "":
+            p.error(f"not an absolute folder: {d}")
+    mapped = make_mapper(a.map + [(a.old_home, a.new_home)])
+    rewrite_store(os.path.join(a.new_home, ".local/share/claudia"), mapped, a.dry_run)
+    rename_projects(os.path.join(a.new_home, ".claude/projects"), mapped, a.old_home, a.new_home, a.dry_run)
+    rewrite_claude_json(os.path.join(a.new_home, ".claude.json"), mapped, a.dry_run)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,99 @@
+---
+# sshd: no passwords, and trust in the hub's SSH certificate authority for agent users
+# (README decisions 53 and 54). Every file is checked by sshd before it is written, and the whole
+# configuration again before sshd reloads.
+
+- name: Install the hub's certificate authority (public half)
+  ansible.builtin.copy:
+    content: "{{ claudia_ssh_ca_pubkey }}\n"
+    dest: /etc/ssh/claudia-ca.pub
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload sshd
+
+- name: Make the principals folder
+  ansible.builtin.file:
+    path: /etc/ssh/claudia-principals
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Let each agent user's certificate in as that agent user only
+  ansible.builtin.copy:
+    content: "{{ item }}\n"
+    dest: "/etc/ssh/claudia-principals/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ agent_users }}"
+
+- name: List the principals files
+  ansible.builtin.find:
+    paths: /etc/ssh/claudia-principals
+    file_type: any
+  register: ssh_principals_files
+
+# A profile taken off `people` loses its certificate logins here.
+- name: Remove principals files of users that are no longer agent users here
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ ssh_principals_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: item.path | basename not in agent_users
+
+- name: Make the drop-in folder
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Debian, Ubuntu and current Arch already have this line at the top. When it is missing it goes at the
+# top, so the drop-ins come before the main file's own settings (sshd keeps the first value).
+- name: Make sshd read the drop-in folder first
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^\s*Include\s+/etc/ssh/sshd_config\.d/'
+    line: Include /etc/ssh/sshd_config.d/*.conf
+    insertbefore: BOF
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+- name: Write Claudia's sshd settings (checked by sshd first)
+  ansible.builtin.template:
+    src: 10-claudia.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-claudia.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+- name: Check sshd's whole configuration
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  check_mode: false
+
+- name: Read the settings sshd will use
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: ssh_effective
+  changed_when: false
+  check_mode: false
+
+# Catches an Include placed after a conflicting line, or another drop-in read before ours.
+- name: Stop unless sshd will use exactly these settings
+  ansible.builtin.assert:
+    that:
+      - ('passwordauthentication ' ~ ssh_settings.PasswordAuthentication) in ssh_effective.stdout_lines
+      - ('kbdinteractiveauthentication ' ~ ssh_settings.KbdInteractiveAuthentication) in ssh_effective.stdout_lines
+      - "'trustedusercakeys /etc/ssh/claudia-ca.pub' in ssh_effective.stdout_lines"
+      - "'authorizedprincipalsfile /etc/ssh/claudia-principals/%u' in ssh_effective.stdout_lines"
+    fail_msg: >-
+      sshd would not use Claudia's settings (another file sets them first). sshd was not reloaded;
+      the armed undo puts /etc back unless this run is confirmed.
+  when: not ansible_check_mode

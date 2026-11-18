@@ -7,16 +7,16 @@
 
   Only a runner with CLAUDIA_HUB_URL, CLAUDIA_SERVER_NAME, CLAUDIA_HUB_KEY_FILE (this server's hub
   key, as the front keeps it) and CLAUDIA_OWNER_EMAIL has her; elsewhere the face opens nothing."
-  (:require ["node:fs" :as fs]
-            [clojure.string :as str]
+  (:require [claudia.slave.hub-call :as hub-call]
             [claudia.slave.store :as store]))
 
 (defn config
-  "Her settings from env (a JS object): {:url :server :key-file :email}, or nil when one is missing."
+  "Her settings from env (a JS object): the hub link (claudia.slave.hub-call/settings) and :email,
+  or nil when one is missing."
   [^js env]
-  (let [c {:url (.-CLAUDIA_HUB_URL env) :server (.-CLAUDIA_SERVER_NAME env)
-           :key-file (.-CLAUDIA_HUB_KEY_FILE env) :email (.-CLAUDIA_OWNER_EMAIL env)}]
-    (when (every? seq (vals c)) c)))
+  (let [link (hub-call/settings env)
+        email (.-CLAUDIA_OWNER_EMAIL env)]
+    (when (and link (seq email)) (assoc link :email email))))
 
 (defn on? [] (some? (config (.-env js/process))))
 
@@ -91,12 +91,7 @@ list_chats, start_chat, send_to_chat, archive_chat, stop_chat.
 (defn call-hub!
   "Promise of the hub's answer (text) to her tool call."
   [tool args]
-  (let [{:keys [url server key-file email]} (config (.-env js/process))
+  (let [{:keys [email]} (config (.-env js/process))
         [op hub-args] (hub-op tool args)]
-    (-> (js/fetch (str (str/replace url #"/+$" "") "/hub/server/claudia")
-                  #js {:method "POST"
-                       :headers #js {"content-type" "application/json"
-                                     "x-claudia-server-name" server
-                                     "x-claudia-server-key" (str/trim (fs/readFileSync key-file "utf8"))}
-                       :body (js/JSON.stringify (clj->js {:as email :op op :args hub-args}))})
-        (.then (fn [^js r] (.then (.text r) (fn [t] {:ok (.-ok r) :text t})))))))
+    (-> (hub-call/post! "/hub/server/claudia" {:as email :op op :args hub-args})
+        (.then #(select-keys % [:ok :text])))))

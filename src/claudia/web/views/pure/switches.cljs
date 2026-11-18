@@ -23,6 +23,11 @@
   [row]
   (not (false? (:bell row))))
 
+(defn root-on?
+  "Whether the chat's root switch is on (README decision 52); a new chat has none."
+  [db k]
+  (boolean (and k (true? (:root (row-of db k))))))
+
 (defn with-switches
   "db with the chat's switches m ({:talk :bell}, those set) laid over: its Row, or the new chat's picks."
   [db [server id :as k] m]

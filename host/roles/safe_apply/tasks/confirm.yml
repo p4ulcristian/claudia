@@ -1,0 +1,38 @@
+---
+# Keeps a run (host/confirm.yml): stops the armed undo and records the kept state in etckeeper.
+
+- name: See whether a run is waiting for its confirm
+  # No module: is-active of a transient timer; the module has no such query.
+  ansible.builtin.command: systemctl is-active claudia-host-undo.timer  # noqa: command-instead-of-module
+  register: safe_apply_timer
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop when nothing is armed
+  ansible.builtin.fail:
+    msg: >-
+      No undo is waiting on this server: the run was confirmed already, or its 10 minutes passed and
+      /etc went back (read `journalctl -u claudia-host-undo`). Nothing to confirm.
+  when: safe_apply_timer.stdout != 'active'
+
+- name: Stop the undo
+  ansible.builtin.systemd_service:
+    name: claudia-host-undo.timer
+    state: stopped
+
+- name: See whether /etc has changes etckeeper has not committed
+  ansible.builtin.command: etckeeper unclean
+  args:
+    chdir: /etc
+  register: safe_apply_etc_unclean
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Commit /etc as confirmed
+  ansible.builtin.command:
+    argv: [etckeeper, commit, "claudia host standard: run confirmed"]
+    chdir: /etc
+  when: safe_apply_etc_unclean.rc == 0
+  changed_when: true

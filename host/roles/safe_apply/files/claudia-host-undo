@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# claudia-host-undo <commit>: puts /etc back to that etckeeper commit (README decision 54).
+# The host standard's playbook (host/site.yml) arms it with systemd-run before it changes anything;
+# host/confirm.yml stops the timer. When nobody confirms, this runs and undoes the run's /etc changes.
+#
+# What it puts back: every file under /etc that git tracks (users, groups, sudoers, sshd settings,
+# unit drop-ins, Claudia's profiles file). What it leaves: files outside /etc (homes, copied Work
+# folders, /usr/local), which change no access by themselves.
+#
+# History is kept: /etc's state before going back is committed first, then the restore is a new
+# commit on top, so `git -C /etc log` shows both.
+set -euo pipefail
+commit=${1:?usage: claudia-host-undo <etckeeper commit>}
+[[ $commit =~ ^[0-9a-f]{40}$ ]] || { echo "not a full commit id: $commit" >&2; exit 2; }
+cd /etc
+git cat-file -e "$commit^{commit}"
+
+# Whatever the run (or anyone since) changed, committed so it can still be read afterwards.
+if etckeeper unclean; then etckeeper commit "claudia-host-undo: /etc before going back to ${commit:0:7}"; fi
+
+# Whether a profile's user changed: then its host and runner must restart as the old user.
+profiles_changed=0
+git diff --quiet "$commit" HEAD -- claudia/profiles || profiles_changed=1
+root_unit_added=0
+git diff --quiet --diff-filter=A "$commit" HEAD -- systemd/system/claudia-root.service || root_unit_added=1
+
+# Files added since the commit go; files changed or removed since come back as they were.
+git diff --name-only -z --diff-filter=A "$commit" HEAD | xargs -0 -r rm -f --
+git checkout -f "$commit" -- .
+# Owners and modes as recorded in that commit (etckeeper's .etckeeper file).
+etckeeper init
+if etckeeper unclean; then etckeeper commit "claudia-host-undo: /etc back to ${commit:0:7}"; fi
+
+if [ $root_unit_added = 1 ]; then systemctl stop claudia-root.service || true; fi
+systemctl daemon-reload
+# sshd reads its settings again (a socket-activated sshd reads them on the next login anyway).
+if /usr/sbin/sshd -t; then
+	for unit in ssh.service sshd.service; do
+		if systemctl is-active -q "$unit"; then systemctl reload-or-restart "$unit"; fi
+	done
+fi
+if [ $profiles_changed = 1 ]; then
+	systemctl restart 'claudia-host@*.service' 'claudia-runner@*.service' || true
+fi
+echo "claudia-host-undo: /etc is back at ${commit:0:7}"

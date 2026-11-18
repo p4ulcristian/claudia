@@ -1,0 +1,43 @@
+---
+# One path (`copy.src`, absolute, in the person's home) to the agent user's home (`copy.rel`,
+# relative to it). A trailing / on both means a folder. Copied with rsync -a, owned by the agent
+# user; the person's copy is left as it is.
+
+- name: Name the target and the folders above it, {{ copy.rel }}
+  ansible.builtin.set_fact:
+    migrate_copy_dst: "{{ migrate_agent_home }}/{{ copy.rel }}"
+    # The folders above the target inside the agent's home, top first: .local/share/claudia/ ->
+    # [.local, .local/share]. Made here so the agent user owns them, not rsync (root).
+    migrate_copy_parents: >-
+      {%- set ns = namespace(acc=[], path='') -%}
+      {%- for part in (copy.rel.rstrip('/') | dirname).split('/') if part -%}
+      {%-   set ns.path = (ns.path ~ '/' ~ part) if ns.path else part -%}
+      {%-   set ns.acc = ns.acc + [ns.path] -%}
+      {%- endfor -%}
+      {{ ns.acc }}
+
+- name: See whether the person has {{ copy.src }}
+  ansible.builtin.stat:
+    path: "{{ copy.src.rstrip('/') }}"
+  register: migrate_copy_src_stat
+
+- name: Make the folders above the target in the agent user's home, {{ copy.rel }}
+  ansible.builtin.file:
+    path: "{{ migrate_agent_home }}/{{ item }}"
+    state: directory
+    owner: "{{ migrate_agent_user }}"
+    group: "{{ migrate_agent_user }}"
+    mode: "0700"
+  loop: "{{ migrate_copy_parents }}"
+  when: migrate_copy_src_stat.stat.exists
+
+- name: Copy to the agent user's home, {{ copy.rel }}
+  ansible.builtin.command:
+    argv:
+      - rsync
+      - -aH
+      - "--chown={{ migrate_agent_user }}:{{ migrate_agent_user }}"
+      - "{{ copy.src }}"
+      - "{{ migrate_copy_dst }}"
+  when: migrate_copy_src_stat.stat.exists
+  changed_when: true

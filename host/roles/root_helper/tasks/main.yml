@@ -1,0 +1,101 @@
+---
+# The root helper (README decision 52): its no-tap list, its socket folders, its program and unit,
+# and the sudo shim that agents meet first on their PATH. root.js, sudo.js and the shim are copied from a
+# built checkout on the computer running Ansible (`claudia_build_dir`, checked in preflight) into
+# root_lib_dir; nothing under /srv/claudia is used, so Claudia's automatic update cannot change the
+# guard (decision 54).
+
+- name: Install the no-tap list (exact command lines the helper runs without asking)
+  ansible.builtin.template:
+    src: root-no-tap.j2
+    dest: "{{ root_no_tap_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Describe the socket folders (one per agent user) to systemd-tmpfiles
+  ansible.builtin.template:
+    src: claudia-root-tmpfiles.conf.j2
+    dest: /etc/tmpfiles.d/claudia-root.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Make the root helper's socket folders
+
+- name: Make the guard's own folder
+  ansible.builtin.file:
+    path: "{{ root_lib_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy the root helper, the sudo shim and its sudo.js from the build
+  ansible.builtin.copy:
+    src: "{{ claudia_build_dir }}/{{ item.from }}"
+    dest: "{{ root_lib_dir }}/{{ item.to }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { from: out/root.js, to: root.js }
+    # The shim runs the sudo.js beside it (found through the sudo link).
+    - { from: out/sudo.js, to: sudo.js }
+    - { from: deploy/sudo-shim, to: sudo-shim }
+  notify: Restart the root helper
+
+- name: Install the root helper's unit
+  ansible.builtin.template:
+    src: claudia-root.service.j2
+    dest: /etc/systemd/system/claudia-root.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart the root helper
+
+- name: Make the folder whose sudo comes first on the agents' PATH
+  ansible.builtin.file:
+    path: "{{ agent_bin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Point sudo there at the guard's copy of the shim
+  ansible.builtin.file:
+    src: "{{ root_lib_dir }}/sudo-shim"
+    dest: "{{ agent_bin_dir }}/sudo"
+    state: link
+    force: true
+    follow: false
+
+- name: Put the shim first for agent users' login shells too (SSH arrivals)
+  ansible.builtin.template:
+    src: claudia-agent-path.sh.j2
+    dest: /etc/profile.d/claudia-agent-path.sh
+    owner: root
+    group: root
+    mode: "0644"
+
+# Only for profiles that already run as their agent user: a person's own user cannot enter an agent
+# user's socket folder, so the shim would break sudo for a profile not moved yet. Role migrate
+# writes it for the profiles it moves.
+- name: Put the shim first on the PATH of each moved profile's session host
+  ansible.builtin.include_tasks: agent_path.yml
+  loop: "{{ people }}"
+  loop_control:
+    loop_var: root_helper_person
+    label: "{{ root_helper_person.profile }}"
+  when: profile_users[root_helper_person.profile] | default('') == root_helper_person.profile ~ agent_suffix
+
+- name: Enable and start the root helper
+  ansible.builtin.systemd_service:
+    name: claudia-root.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply the changes now (restarts the helper when its program or unit changed)
+  ansible.builtin.meta: flush_handlers

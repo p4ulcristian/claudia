@@ -1,0 +1,106 @@
+---
+# Checks and facts before anything changes. Nothing here writes to the server.
+
+- name: Stop unless the settings are complete and sane
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Linux'
+      - people is defined and people | length > 0
+      - break_glass_pubkey is defined and break_glass_pubkey is match('^(ssh-ed25519|ecdsa-sha2-|sk-|ssh-rsa) ')
+      - "'placeholder' not in break_glass_pubkey"
+      - claudia_ssh_ca_pubkey is defined and claudia_ssh_ca_pubkey is match('^(ssh-ed25519|ecdsa-sha2-|ssh-rsa) ')
+      - "'placeholder' not in claudia_ssh_ca_pubkey"
+      - migrate_profiles | difference(people | map(attribute='profile')) | length == 0
+    fail_msg: >-
+      Needs `people` for this host, real `break_glass_pubkey` and `claudia_ssh_ca_pubkey` (not the
+      example's placeholders), and every name in `migrate_profiles` among the people's profiles.
+
+# The guard comes from a built checkout on this computer (decision 54), never from the server's
+# /srv/claudia: out/root.js and out/sudo.js (npx shadow-cljs release root sudo) and deploy/sudo-shim.
+- name: Stop unless claudia_build_dir names a build with the root helper and the shim
+  ansible.builtin.assert:
+    that:
+      - claudia_build_dir is defined and claudia_build_dir is match('^/')
+      - (claudia_build_dir ~ '/out/root.js') is file
+      - (claudia_build_dir ~ '/out/sudo.js') is file
+      - (claudia_build_dir ~ '/deploy/sudo-shim') is file
+    fail_msg: >-
+      Set claudia_build_dir (inventory or -e) to an absolute path of a Claudia checkout on this
+      computer with out/root.js and out/sudo.js built (npx shadow-cljs release root sudo).
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+# A shadow-cljs :node-script release leaves npm packages to node_modules at run time; the guard's
+# copy has none beside it, so root.js and sudo.js may only need Node's own modules.
+- name: Stop when root.js or sudo.js needs an npm package
+  ansible.builtin.assert:
+    that: preflight_js_packages | length == 0
+    fail_msg: "out/{{ item }} requires {{ preflight_js_packages | join(', ') }}: the guard's copy has no node_modules."
+  loop: [root.js, sudo.js]
+  vars:
+    preflight_js_packages: >-
+      {{ lookup('ansible.builtin.file', claudia_build_dir ~ '/out/' ~ item)
+         | regex_findall('require\(\s*[\x27"]([^\x27"]+)[\x27"]\s*\)')
+         | reject('match', '^node:')
+         | reject('in', preflight_node_builtins)
+         | unique | list }}
+    # Node's own modules that may be required without the node: prefix.
+    preflight_node_builtins: [assert, async_hooks, buffer, child_process, cluster, crypto, dgram,
+                              diagnostics_channel, dns, dns/promises, events, fs, fs/promises, http,
+                              http2, https, inspector, module, net, os, path, path/posix, perf_hooks,
+                              process, querystring, readline, readline/promises, stream,
+                              stream/promises, string_decoder, timers, timers/promises, tls, tty, url,
+                              util, util/types, v8, vm, worker_threads, zlib]
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Stop unless every profile name makes a valid agent user name
+  ansible.builtin.assert:
+    that:
+      - item.profile is match('^[a-z][a-z0-9-]*$')
+      - (item.profile ~ agent_suffix) | length <= 32
+      - item.person_user is defined and item.person_user | length > 0
+    fail_msg: "Profile {{ item.profile }}: lowercase letters, digits and '-', and <profile>{{ agent_suffix }} at most 32 characters."
+  loop: "{{ people }}"
+  loop_control:
+    label: "{{ item.profile }}"
+
+- name: Read the Linux users
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Stop unless every person's own Linux user exists
+  ansible.builtin.assert:
+    that: item.person_user in ansible_facts.getent_passwd
+    fail_msg: "Person user {{ item.person_user }} (profile {{ item.profile }}) does not exist on this server."
+  loop: "{{ people }}"
+  loop_control:
+    label: "{{ item.person_user }}"
+
+- name: Read Claudia's profiles file
+  ansible.builtin.slurp:
+    src: /etc/claudia/profiles
+  register: profiles_file
+  failed_when: false
+
+# profile_users: each profile's current Linux user, read the way deploy/shared-server/install.sh
+# reads it: `user=<name>` among the 4th and later words of the profile's line, else claudia-<profile>.
+- name: Work out whom each profile runs as now
+  ansible.builtin.set_fact:
+    profile_users: >-
+      {%- set ns = namespace(pairs=[]) -%}
+      {%- for line in ((profiles_file.content | default('')) | b64decode).splitlines() -%}
+      {%-   set words = (line.split('#') | first).split() -%}
+      {%-   if words | length >= 3 -%}
+      {%-     set named = words[3:] | select('match', '^user=.') | map('regex_replace', '^user=', '') | list -%}
+      {%-     set ns.pairs = ns.pairs + [{'key': words[0], 'value': (named | first) if named else 'claudia-' ~ words[0]}] -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ ns.pairs | items2dict }}
+
+- name: Name the agent users and the people's users
+  ansible.builtin.set_fact:
+    agent_users: "{{ people | map(attribute='profile') | map('regex_replace', '$', agent_suffix) | list }}"
+    person_users: "{{ people | map(attribute='person_user') | unique | list }}"

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chat with Claude on the left; Claude explains on the right, in a picture it draws.",
   "scripts": {
-    "build": "shadow-cljs release host runner front hub web && npm run build:web-files",
+    "build": "shadow-cljs release host runner front hub root sudo web && npm run build:web-files",
     "build:web-files": "node -e \"const fs=require('fs');if(!fs.existsSync('resources/web/index.html')){console.error('resources/web/index.html is missing: the page has nothing to load');process.exit(1)}fs.cpSync('resources/web','out/web',{recursive:true})\" && node bin/shiki-langs.mjs",
     "watch": "shadow-cljs watch web",
     "test": "shadow-cljs compile test && node out/test.js",
@@ -17,6 +17,7 @@
     "jose": "6.2.17",
     "libsodium-wrappers": "0.8.4",
     "playwright-core": "1.65.1",
+    "sshpk": "1.18.0",
     "ws": "8.23.0",
     "zod": "4.6.7"
   },
