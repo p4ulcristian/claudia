@@ -201,6 +201,9 @@
     (is (= {:model "m" :effort nil :plan "paul"} (session/settings-with s {:model "m"} ["paul" "peter"])))
     (is (= {:model nil :effort nil :plan "peter"} (session/settings-with s {:plan "peter" :other 1} ["paul" "peter"])))
     (is (nil? (:plan (session/settings-with s {:plan "gone"} ["paul" "peter"]))))
+    (is (= "Reviewer" (:prompt (session/settings-with s {:prompt "Reviewer"} ["paul"]))))
+    (is (nil? (:prompt (session/settings-with (assoc s :prompt "Reviewer") {:prompt ""} ["paul"]))))
+    (is (nil? (:prompt (session/settings-with (assoc s :prompt "Reviewer") {:prompt 3} ["paul"]))))
     (is (nil? (:plan (session/settings-with s {:plan nil} ["paul"]))))))
 
 (deftest a-session-starts-again-on-another-token

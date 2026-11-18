@@ -10,11 +10,13 @@
   (str "token-" (subs (sha256-hex (str t)) 0 8)))
 
 (defn settings-with
-  "A chat's settings with the change m laid over them (model, effort, plan); a plan that is not one
-  of the saved tokens' keys is no pick (nil)."
+  "A chat's settings with the change m laid over them (model, effort, plan, prompt); a plan that is
+  not one of the saved tokens' keys is no pick (nil); a prompt is a profile's name (nil: none)."
   [settings m saved-keys]
-  (update (merge settings (select-keys m [:model :effort :plan]))
-          :plan #(when (some #{%} saved-keys) %)))
+  (let [s (update (merge settings (select-keys m [:model :effort :plan :prompt]))
+                  :plan #(when (some #{%} saved-keys) %))]
+    (cond-> s
+      (contains? s :prompt) (update :prompt #(when (and (string? %) (not= "" %)) %)))))
 
 (defn flags-of
   "The chat's speaker and bell switches m sets ({:talk :bell}, booleans), only those it names."

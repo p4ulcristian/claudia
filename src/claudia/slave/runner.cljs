@@ -28,6 +28,7 @@
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
             [claudia.slave.ssh-cert :as ssh-cert]
+            [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]))
 
 (def ^:private env (.-env js/process))
@@ -149,8 +150,8 @@
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
 (defmethod on-chat-frame "settings" [_ f chat]
   (chats/set-flags! chat (select-keys f [:talk :bell]))
-  (when (some #(contains? f %) [:model :effort :plan])
-    (chats/set-settings! chat (select-keys f [:model :effort :plan]))))
+  (when (some #(contains? f %) [:model :effort :plan :prompt])
+    (chats/set-settings! chat (select-keys f [:model :effort :plan :prompt]))))
 
 (defmethod on-chat-frame "agent" [c f chat]
   (.then (chats/agent-detail chat (str (:agent f)))
@@ -183,7 +184,7 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame profile)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell])
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :talk :bell])
                                    (msg-id f))]
            (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)
@@ -313,6 +314,7 @@
             (video/handle req res url who) nil
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil
+            (prompts/handle req res url who chats/prefs-changed!) nil
             (api/handle req res who) nil
             :else (io/send-json res 404 {:error "Not found."})))))
 

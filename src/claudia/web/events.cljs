@@ -262,10 +262,10 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (def carried-keys
-  "What a new chat takes over from the last chat: the model, effort, project folder, speaker and
-  bell (not the colour: each chat gets its own; not the subscription: a new chat runs on its
+  "What a new chat takes over from the last chat: the model, effort, prompt profile, project folder,
+  speaker and bell (not the colour: each chat gets its own; not the subscription: a new chat runs on its
   person's last pick, README decision 57)."
-  [:model :effort :folder :talk :bell])
+  [:model :effort :prompt :folder :talk :bell])
 
 (defn carried-picks
   "The picks a new chat starts with after the chat k: that chat's settings, folder and switches, else
@@ -274,7 +274,7 @@
   (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:model :effort]) {:folder folder}
+            (merge (select-keys settings [:model :effort :prompt]) {:folder folder}
                    (select-keys row [:talk :bell]))))
     (select-keys (:new-settings db) carried-keys)))
 
@@ -297,11 +297,11 @@
   [[server {:type "open" :chat chat}]])
 
 (defn new-picks
-  "What a new chat's header picked, as `new` carries it: model, effort, plan, folder, colour, speaker
-  and bell, those set."
+  "What a new chat's header picked, as `new` carries it: model, effort, plan, prompt profile, folder,
+  colour, speaker and bell, those set."
   [new-settings]
   (into {} (filter (comp some? val))
-        (update (select-keys new-settings [:model :effort :plan :folder :color :talk :bell]) :folder not-empty)))
+        (update (select-keys new-settings [:model :effort :plan :prompt :folder :color :talk :bell]) :folder not-empty)))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text group picks]} (get-in db [:pending-new id])]

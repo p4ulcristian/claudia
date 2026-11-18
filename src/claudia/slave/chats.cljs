@@ -32,6 +32,7 @@
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.shown :as shown]
+            [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
             [claudia.slave.tasks :as tasks]
             [claudia.slave.tools :as tools]
@@ -664,10 +665,11 @@
     (swap! agent-timers assoc id (js/setTimeout #(agents-changed! id) 250))))
 
 (defn settings
-  "The chat's model and effort (nil = the user's default) and its plan (a saved token's key; nil =
-  its owner's last pick), applied on its next start."
+  "The chat's model and effort (nil = the user's default), its plan (a saved token's key; nil =
+  its owner's last pick) and its prompt profile (a name; nil = none), applied on its next start."
   [id]
-  (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
+  (merge {:model nil :effort nil :plan nil :prompt nil}
+         (select-keys (store/kv id "settings") [:model :effort :plan :prompt])))
 
 (def ^:private plan-continue-text
   "Continue where you stopped: this chat now runs on another Claude subscription.")
@@ -684,12 +686,15 @@
           (hostlink/send! {:op "interrupt" :id id}))
       (close-session! id))))
 
+(declare prompt-picked!)
+
 (defn set-settings! [id m]
   (let [before (settings id)
         s (session/settings-with before m (map :key (tokens/saved)))
         quiet #(.catch % (fn [_]))]
     (store/kv! id "settings" s)
     (when (not= (:plan before) (:plan s)) (plan-picked! id))
+    (when (not= (:prompt before) (:prompt s)) (prompt-picked! id))
     ;; A live session takes them now too.
     (when (:live (st id))
       (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
@@ -731,7 +736,16 @@
 
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
-(defn- prompt-version [] (session/hash36 (codeforms/prompt-for)))
+(defn- full-prompt
+  "The system prompt's addition for chat id: Claudia's part, its prompt profile's text (README
+  decision 60), and in Claudia's own chat her part."
+  [id]
+  (let [profile-part (some-> (:prompt (settings id)) prompts/profile prompts/prompt-part)]
+    (cond-> (codeforms/prompt-for)
+      profile-part (str "\n\n" profile-part)
+      (claudia/her? id) (str "\n\n" claudia/prompt))))
+
+(defn- prompt-version [id] (session/hash36 (full-prompt id)))
 (defn- tools-version [] (session/hash36 (js/JSON.stringify (clj->js (codeforms/mcp-for)))))
 
 (defn- close-session! [id]
@@ -765,12 +779,20 @@
                    (swap-chat! id assoc :stale true)
                    (restart-if-stale! id)))))))
 
+(defn- prompt-picked!
+  "Another prompt profile was picked for the chat: a live session starts again (resumed, same
+  conversation) with the new system prompt once its turn and the work it started are done."
+  [id]
+  (when (and (:live (st id)) (not= (prompt-version id) (:prompt (store/kv id "session"))))
+    (swap-chat! id assoc :stale true)
+    (restart-if-stale! id)))
+
 (defn prefs-changed!
-  "A form deleted or restored (the profile's prefs): every live chat gets the new draw tool now, and
-  a new system prompt after its turn."
+  "A form deleted or restored, or a prompt profile changed (the profile's prefs): every live chat
+  gets the new draw tool now, and a new system prompt after its turn when its own changed."
   []
   (doseq [[id s] @state :when (:live s)]
-    (when (not= (prompt-version) (:prompt (store/kv id "session")))
+    (when (not= (prompt-version id) (:prompt (store/kv id "session")))
       (swap-chat! id assoc :stale true)
       (restart-if-stale! id))
     ;; (still live: its turn or work runs; the tools now, the prompt after it)
@@ -963,7 +985,7 @@
     (set-running! cid (boolean busy))
     (when-not was
       (when (not= (:tools kept) (tools-version)) (swap-tools! cid))
-      (when (not= (:prompt kept) (prompt-version))
+      (when (not= (:prompt kept) (prompt-version cid))
         (swap-chat! cid assoc :stale true)
         (restart-if-stale! cid)))))
 
@@ -1004,7 +1026,7 @@
                          ;; chat runs nothing in the background (README decision 48).
                          :env (cond-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
                                 her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
-                         :prompt (cond-> (codeforms/prompt-for) her (str "\n\n" claudia/prompt))
+                         :prompt (full-prompt id)
                          :allowed (cond-> tools/allowed-tools her (into claudia/allowed))
                          :disallowed (when her claudia/disallowed)
                          :model (:model s) :effort (:effort s)
@@ -1016,7 +1038,7 @@
   [id resume? t account]
   (hostlink/send! {:op "start" :id id :spec (start-spec id resume? (run-env t))})
   (codeforms/forms-seen-now! id)
-  (store/kv! id "session" {:account account :tools (tools-version) :prompt (prompt-version)})
+  (store/kv! id "session" {:account account :tools (tools-version) :prompt (prompt-version id)})
   (swap-chat! id assoc :live true :account account :stale false :plan-changed false :final-counts {}))
 
 (defn- ensure-session!
