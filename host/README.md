@@ -8,19 +8,24 @@ to 55):
   token in use).
 - **break-glass.** A user with no password, one SSH key (kept in 1Password) and full sudo: the way
   in when Claudia is broken. Used by hand only, never by an agent.
-- **Root helper.** `claudia-root.service` (runs `/srv/claudia/out/root.js` as root), its socket
-  folders `/run/claudia-root/<agent user>/` (only that agent user's group may enter), its no-tap
-  list `/etc/claudia/root-no-tap`, and the `sudo` shim first on the agents' PATH
-  (`/usr/local/lib/claudia-agent-bin/sudo` → `/srv/claudia/deploy/sudo-shim`).
+- **Root helper.** `claudia-root.service` runs `/usr/local/lib/claudia-root/root.js` as root and
+  listens on `/run/claudia-root/<agent user>/root.sock` (a folder only that agent user's group may
+  enter). Its no-tap list is `/etc/claudia/root-no-tap`; the `sudo` shim comes first on the agents'
+  PATH (`/usr/local/lib/claudia-agent-bin/sudo` → `/usr/local/lib/claudia-root/sudo-shim`). root.js
+  and the shim are copied from a built checkout on your computer (`claudia_build_dir`), never taken
+  from `/srv/claudia`: the automatic update replaces `/srv/claudia`, so it cannot change the guard.
+  The helper restarts when the copy changes.
 - **SSH.** sshd trusts the hub's certificate authority (`/etc/ssh/claudia-ca.pub`); each agent user
   has a principals file naming only itself (`/etc/ssh/claudia-principals/<user>`); passwords and
   keyboard-interactive logins are off. ListenAddress is never touched.
 - **Desktop.** On a machine with a `desktop_user`, the agent users may use that person's Wayland,
-  PipeWire and PulseAudio sockets (role `desktop_access`). Chrome's DevTools port is TCP on
+  PipeWire and PulseAudio sockets, and the profiles' chats are pointed at them (role
+  `desktop_access`). Chrome's DevTools port is TCP on
   localhost and needs nothing.
 - **etckeeper.** /etc in git, so every run can be undone.
 - **Migration.** Once per profile, its chats, Claude Code's sessions and the runner's data are
-  copied from the person's home to the agent user's, and the profile switches to the agent user.
+  copied from the person's home to the agent user's, the paths inside the copy are rewritten, and the
+  profile switches to the agent user.
 
 It is applied by a person from their own computer. `deploy/update.sh` (Claudia's automatic update)
 never runs it: a merged mistake in Claudia cannot loosen a server's guard.
@@ -32,6 +37,7 @@ The inventory (servers, people, addresses, keys) stays outside this public repo.
 the repo's root:
 
 ```sh
+# a checkout with the guard built: npm ci && npx shadow-cljs release root
 ansible-playbook -i ~/.config/claudia-host/inventory.yml host/site.yml
 # open a NEW ssh login to each server (and one as break-glass); check Claudia works; then:
 ansible-playbook -i ~/.config/claudia-host/inventory.yml host/confirm.yml
@@ -45,14 +51,17 @@ Per host in the inventory: `people` (a list of `{profile, person_user}`: the pro
 word of its line in `/etc/claudia/profiles`, and the person's own Linux login), and when wanted
 `migrate_profiles`, `desktop_user`, `break_glass_tested`, `phase_b_remove_nopasswd`. For all hosts:
 `break_glass_pubkey` and `claudia_ssh_ca_pubkey` (the run stops when either is missing or still the
-example's placeholder). Everything else is in `group_vars/all.yml`. Host settings in the inventory
+example's placeholder), and `claudia_build_dir`, the absolute path of a Claudia checkout on your
+computer with `out/root.js` built (the run stops when it is missing, or when root.js needs an npm
+package: the guard's copy has no `node_modules` beside it). Everything else is in `group_vars/all.yml`. Host settings in the inventory
 win over `group_vars/all.yml`; group settings in the inventory file do not, so put per-server
 choices on the host.
 
 ## Undo and confirm
 
 1. Every run first commits /etc as it is (etckeeper), then arms an undo: a systemd timer,
-   `claudia-host-undo.timer`, that after `undo_after` (10 minutes) runs
+   `claudia-host-undo.timer`, that after `undo_after` (30 minutes on a server where this run moves
+   profiles, 10 otherwise) runs
    `/usr/local/sbin/claudia-host-undo <that commit>`.
 2. The run makes its changes. sshd is reloaded only after `sshd -t` passes and `sshd -T` shows the
    settings in effect.
@@ -69,7 +78,7 @@ none of them gives access by itself.
 
 A run refuses to start while an earlier run on that server waits for its confirm. When a run takes
 longer than `undo_after` (a large Work folder to copy), the undo fires during it; the run notices and
-stops. Raise `undo_after` (`-e undo_after=30min`) for such a server.
+stops. Raise `undo_after` (`-e undo_after=60min`) for such a server.
 
 ## Phase A and Phase B
 
@@ -100,15 +109,31 @@ agent user (the person's copies stay):
 | `~/.claude.json` | `~/.claude.json` |
 | `runner_data` (default `~/.local/share/claudia`) | `~/.local/share/claudia` |
 
-then the profile's line in `/etc/claudia/profiles` gets `user=<profile>-claudia-agent` (its other
+then the paths inside the copy are rewritten (below), the profile's line in `/etc/claudia/profiles` gets `user=<profile>-claudia-agent` (its other
 words stay), the units' drop-ins are written as `deploy/shared-server/install.sh` writes them, and the
 host and runner start as the agent user. The person may read the agent user's Work folder (ACLs, also
 on folders made later). A profile already on its agent user is skipped, so a second run copies
 nothing.
 
-Things the copy does not change: paths written inside the copied data still name the person's home
-(chats' folders in the runner's store, `~/.claude/projects/-home-<person>-Work…` session folders,
-project entries in `~/.claude.json`, symlinks).
+### The paths inside the copy
+
+The copy still names the person's home. `roles/migrate/files/claudia-migrate-paths` (Python, standard
+library only) rewrites it in the agent user's copy: a path that is `/home/<person>` or lies inside it
+becomes the same path under `/home/<agent user>` (and `work_dir`, when set, becomes `~/Work` first).
+Exact prefixes only: `/home/<person>-x/…` or a path in the middle of a text is left. It rewrites:
+
+- the runner's store `~/.local/share/claudia/claudia.db`: `chats.folder`, `changes.path`, and every
+  string in the JSON of `kv.value` (such as a chat's moved folder);
+- Claude Code's session folders `~/.claude/projects/<encoded cwd>`: renamed to the new cwd's name
+  (every character other than a-z, A-Z, 0-9 becomes `-`, as Claude Code names them). The old cwd is
+  read from the folder's session files; without one, the folder is renamed only when its name
+  begins with the encoded person's home. A new name longer than 200 characters is left (Claude Code
+  shortens those with a hash);
+- the keys of `projects` in `~/.claude.json`.
+
+It leaves: the `cwd` fields inside the session files (`.jsonl`), the pictures (scenes), Claude
+Code's prompt history, and symlinks. To see what it would do on a server:
+`python3 claudia-migrate-paths --from /home/<person> --to /home/<agent user> --dry-run`.
 
 ## From single-user to shared (by hand, before migrating)
 
@@ -144,9 +169,13 @@ With `desktop_user` set, `/usr/local/bin/claudia-desktop-access` gives every age
 `/run/user/<uid>` and `rw` on the Wayland sockets, `pipewire-0` and `pulse/native` (not
 `pipewire-0-manager`). `/run/user/<uid>` is made again at every login, so a user unit in
 `/etc/systemd/user` (only for `desktop_user`), enabled in `default.target`, runs it when the
-session's Wayland socket appears; the playbook also runs it once. A chat finds the session by the
-sockets' full paths (`WAYLAND_DISPLAY`, `PIPEWIRE_REMOTE`, `PULSE_SERVER`); setting those is not this
-playbook's part. A compositor restarted within one session makes a new socket the unit does not see
+session's Wayland socket appears; the playbook also runs it once.
+
+Each profile's session host gets a drop-in (`claudia-host@<profile>.service.d/desktop.conf`) that
+points its chats at the session by full paths: `WAYLAND_DISPLAY=/run/user/<uid>/wayland-1` (the
+socket's name as found when the playbook runs; wayland-1 when no session is up),
+`PIPEWIRE_REMOTE=/run/user/<uid>/pipewire-0`, `PULSE_SERVER=unix:/run/user/<uid>/pulse/native`.
+`XDG_RUNTIME_DIR` stays the agent's own. It takes effect when that host restarts next. A compositor restarted within one session makes a new socket the unit does not see
 until the next login.
 
 ## Files

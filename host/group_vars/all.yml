@@ -1,10 +1,11 @@
 ---
 # The host standard's settings, the same on every server (README decisions 51 to 55).
 #
-# Two settings are NOT set here on purpose: `break_glass_pubkey` and `claudia_ssh_ca_pubkey`.
-# Ansible ranks this file above the inventory file's own `vars:`, so a placeholder here would
-# silently win over the real key written in the inventory. Set both in the inventory (see
-# inventory.example.yml); the run stops before changing anything when either is missing.
+# Three settings are NOT set here on purpose: `break_glass_pubkey`, `claudia_ssh_ca_pubkey` and
+# `claudia_build_dir`. Ansible ranks this file above the inventory file's own `vars:`, so a
+# placeholder here would silently win over the real value written in the inventory. Set them in the
+# inventory (see inventory.example.yml) or with -e; the run stops before changing anything when one
+# is missing.
 #
 # Settings that differ per server (`people`, `migrate_profiles`, `phase_b_remove_nopasswd`,
 # `break_glass_tested`) go on the host in the inventory: host settings rank above this file.
@@ -16,8 +17,9 @@ agent_suffix: "-claudia-agent"
 break_glass_user: break-glass
 
 # How long a run stays undoable: after this, an unconfirmed run puts /etc back (decision 54).
-# A systemd time span. Raise it on a host whose migration copies a large Work folder.
-undo_after: 10min
+# A systemd time span: 30 minutes on a host that moves profiles in this run (copying a Work folder
+# takes time), 10 otherwise. Raise it with -e undo_after=... for a very large copy.
+undo_after: "{{ '30min' if migrate_profiles | length > 0 else '10min' }}"
 
 # The profiles that move from the person's user to the agent user in this run (role migrate).
 # Empty: nobody moves. Set it per host in the inventory, e.g. [alice].
@@ -36,26 +38,43 @@ ssh_settings:
   KbdInteractiveAuthentication: "no"
 
 # The no-tap list (/etc/claudia/root-no-tap, decision 52): commands the root helper runs without
-# asking. Each line of that file is one exact command line; nothing is a pattern.
+# asking. Each line of that file is one exact command line; nothing is a pattern. Because matching
+# is exact, the file spells out the common ways of typing the same command: every unit both with
+# and without `.service`, and each form below with UNIT replaced by the unit.
 #
-# For every unit below the file gets `systemctl restart <unit>`, `systemctl status <unit>` and
-# `journalctl -u <unit>`. Each profile's `claudia-runner@<profile>.service` and
-# `claudia-host@<profile>.service` are added to this list per host from `people`.
+# Each profile's `claudia-runner@<profile>.service` and `claudia-host@<profile>.service` are added
+# to the restartable units per host from `people`.
 no_tap_restartable_units:
   - claudia-front.service
 # Units whose status and journal may be read, but which the helper must not restart without a tap
 # (restarting the root helper from inside the root helper would cut off its own answer).
 no_tap_status_only_units:
   - claudia-root.service
+no_tap_restart_forms:
+  - systemctl restart UNIT
+no_tap_status_forms:
+  - systemctl status UNIT
+  - systemctl status UNIT --no-pager
+  - systemctl status --no-pager UNIT
+  - systemctl --no-pager status UNIT
+  - journalctl -u UNIT
+  - journalctl -u UNIT --no-pager
+  - journalctl --no-pager -u UNIT
+# journalctl's line counts: each N gives `journalctl -u UNIT -n N`, `… -n N --no-pager`,
+# `… --no-pager -n N` and `journalctl --no-pager -u UNIT -n N`.
+no_tap_journal_lines: [20, 50, 100, 200, 500]
 # Further exact command lines.
 no_tap_commands:
   - nft list ruleset
   - ss -tlnp
 
-# Where the root helper and the sudo shim live (decision 52). The shim and root.js come with
-# Claudia's release in /srv/claudia (root-owned); this playbook only points at them.
+# The guard (decision 52): root.js and the sudo shim are copied from a built Claudia checkout on the
+# computer running Ansible (`claudia_build_dir`: its out/root.js and deploy/sudo-shim) into
+# root_lib_dir. Nothing under /srv/claudia (which deploy/update.sh replaces) is used by the guard,
+# so it changes only when a person applies this playbook.
+root_lib_dir: /usr/local/lib/claudia-root
+# One folder per agent user, <dir>/<agent user>/, holding the socket root.sock (root.js makes it).
 root_socket_dir: /run/claudia-root
 root_no_tap_file: /etc/claudia/root-no-tap
 agent_bin_dir: /usr/local/lib/claudia-agent-bin
-sudo_shim: /srv/claudia/deploy/sudo-shim
 agent_path: "/usr/local/lib/claudia-agent-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

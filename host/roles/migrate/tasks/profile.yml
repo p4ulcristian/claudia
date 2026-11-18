@@ -90,6 +90,21 @@
     mode: "0700"
   when: not migrate_agent_work.stat.exists
 
+# The copy still names the person's home: the runner's store (chats' folders, changed files' paths,
+# kv values), Claude Code's session folders (named after their cwd) and ~/.claude.json's projects.
+# claudia-migrate-paths rewrites those in the agent user's copy (tested; it has a --dry-run mode).
+# The session files' own "cwd" fields are left as they were.
+- name: Rewrite the person's home to the agent user's in the copied data, {{ profile }}
+  ansible.builtin.script:
+    cmd: >-
+      claudia-migrate-paths
+      --from {{ migrate_person_home | quote }}
+      --to {{ migrate_agent_home | quote }}
+      {% if migrate_person.work_dir is defined %}--map {{ migrate_person.work_dir | quote }} {{ (migrate_agent_home ~ '/Work') | quote }}{% endif %}
+    executable: python3
+  register: migrate_paths
+  changed_when: migrate_paths.stdout is search('rewrite [1-9]|rename |merge ')
+
 - name: Give the person read access to the agent user's Work folder
   ansible.builtin.include_tasks: person_reads.yml
 

@@ -41,6 +41,55 @@
   args:
     creates: /etc/systemd/user/default.target.wants/claudia-desktop-access.path
 
+# The chats find the session by full paths; XDG_RUNTIME_DIR is not shared (it stays the agent's own).
+- name: Name the desktop user's runtime folder
+  ansible.builtin.set_fact:
+    desktop_access_runtime: "/run/user/{{ ansible_facts.getent_passwd[desktop_user][1] }}"
+
+- name: Look for the session's Wayland socket
+  ansible.builtin.find:
+    paths: "{{ desktop_access_runtime }}"
+    patterns: "wayland-[0-9]"
+    file_type: any
+  register: desktop_access_wayland
+
+# The socket's name now (wayland-1 when no session is up). A compositor that picks another name at a
+# later login needs a new run.
+- name: Pick the Wayland socket's name
+  ansible.builtin.set_fact:
+    desktop_access_wayland_name: >-
+      {{ (desktop_access_wayland.files | selectattr('issock') | map(attribute='path') | map('basename')
+          | sort | first) | default('wayland-1', true) }}
+
+- name: Make the drop-in folder of each profile's session host
+  ansible.builtin.file:
+    path: "/etc/systemd/system/claudia-host@{{ item.profile }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ people }}"
+  loop_control:
+    label: "{{ item.profile }}"
+
+# Takes effect when the host restarts next (that stops the profile's running chats, so not here).
+- name: Point each profile's chats at the desktop session's screen and sound
+  ansible.builtin.copy:
+    content: |
+      # Claudia host standard (host/roles/desktop_access): the desktop session of {{ desktop_user }}.
+      [Service]
+      Environment=WAYLAND_DISPLAY={{ desktop_access_runtime }}/{{ desktop_access_wayland_name }}
+      Environment=PIPEWIRE_REMOTE={{ desktop_access_runtime }}/pipewire-0
+      Environment=PULSE_SERVER=unix:{{ desktop_access_runtime }}/pulse/native
+    dest: "/etc/systemd/system/claudia-host@{{ item.profile }}.service.d/desktop.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ people }}"
+  loop_control:
+    label: "{{ item.profile }}"
+  notify: Read the desktop drop-ins
+
 - name: Apply the ACLs once now, when the desktop user's session is up
   ansible.builtin.command:
     argv:
