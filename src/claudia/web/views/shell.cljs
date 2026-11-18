@@ -23,12 +23,14 @@
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.thumb-edge :as thumb-edge]
             [claudia.web.views.search-panel :as search-panel]
+            [claudia.web.views.claudia-rain :as claudia-rain]
             [claudia.web.views.settings :as settings]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
-  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\")."
-  [color]
+  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\"); Claudia's own
+  chat wears her green gradient instead (\":root[data-claudia]\", README decision 50)."
+  [color claudia?]
   (h/use-effect
    (fn []
      (let [root js/document.documentElement
@@ -37,9 +39,10 @@
          (do (.setAttribute root "data-chat" color)
              (.setProperty (.-style root) "--hue" v))
          (do (.removeAttribute root "data-chat")
-             (.removeProperty (.-style root) "--hue"))))
+             (.removeProperty (.-style root) "--hue")))
+       (if claudia? (.setAttribute root "data-claudia" "") (.removeAttribute root "data-claudia")))
      nil)
-   [color]))
+   [color claudia?]))
 
 (defn- keys!
   "Escape stops the running turn, Alt+N starts a new chat, Ctrl+K (⌘K) opens the search panel."
@@ -134,10 +137,11 @@
       [:f> rail/rail])]
    (split-view m)])
 
-(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key world?] :as m}]
+(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key world? claudia?] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
                      (when narrow? "narrow") (when ro "read-only")]
              :data-screen (name screen)}
+   (when claudia? [:f> claudia-rain/rain])
    [asks/modal]
    [confirm/archive-ask]
    [search-panel/panel]
@@ -152,6 +156,7 @@
 (defn app []
   (let [screen @(rf/subscribe [:screen])
         color @(rf/subscribe [:open-color])
+        claudia? @(rf/subscribe [:open-claudia?])
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
@@ -164,9 +169,10 @@
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Wider: never (the rail is the list).
         shown? (and phone? (= screen :list))]
-    (chat-colour! color)
+    (chat-colour! color claudia?)
     (keys!)
     (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
+               :claudia? claudia?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown? :settings-shown? (and shown? settings?)
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

@@ -156,6 +156,13 @@
                                    :ro (events/read-only? db (events/default-server db))))))
 
 (rf/reg-sub
+ :open-claudia?
+ ;; Whether the open chat is Claudia's own (README decision 48): it wears her look (decision 50).
+ (fn [db]
+   (let [[s c] (:open db)]
+     (boolean (get-in db [:servers s :rows c :claudia])))))
+
+(rf/reg-sub
  :open-color
  ;; The colour the window wears: the open chat's; a new chat's (it has one from the start); every
  ;; screen wears a chat colour, there is no default look (README decision 25).
