@@ -17,6 +17,7 @@
     "jose": "6.2.17",
     "libsodium-wrappers": "0.8.4",
     "playwright-core": "1.65.1",
+    "sshpk": "1.18.0",
     "ws": "8.23.0",
     "zod": "4.6.7"
   },

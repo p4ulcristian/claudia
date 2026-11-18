@@ -26,6 +26,7 @@
             [claudia.hub.github-login :as github-login]
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
+            [claudia.hub.ssh-ca :as ssh-ca]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
 
@@ -186,6 +187,10 @@
       (= pathname "/hub/alive") (alive res)
       ;; A server's call for Claudia's own chat: its hub key, no login (README decision 48).
       (and (= pathname "/hub/server/claudia") (= "POST" (.-method req))) (claudia/call req res)
+      ;; A runner's SSH certificate for its agent user: its server's hub key, no login (decision 53).
+      (and (= pathname "/hub/server/ssh-cert") (= "POST" (.-method req))) (ssh-ca/call req res)
+      ;; The SSH authority's public key, for every server's TrustedUserCAKeys: no login, no secret.
+      (= pathname "/hub/ssh-ca.pub") (ssh-ca/public-key req res)
       (ops/open-call? pathname) (ops/open-call req res pathname)
       (and own? (not= "GET" (.-method req))) (do (.setHeader res "allow" "GET") (io/send-json res 405 {:error "GET only"}))
       (not email) (io/send-json res 401 {:error "not signed in"})
@@ -252,6 +257,7 @@
        (catch :default e
          (js/console.error (str "hub: store " data-dir " / hub.json " config-file ": " (.-message e)))
          (js/process.exit 1)))
+  (ssh-ca/start!)
   (narrate/start! data-dir)
   (github/start!)
   (releases/start! data-dir)

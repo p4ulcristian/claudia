@@ -678,13 +678,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     of: passwordless sudo, or a root shell per chat.
 
 53. Servers reach each other with one-hour SSH certificates (2026-11-18). The hub holds an SSH
-    certificate authority (`HUB_SSH_CA_FILE`, ed25519, signed with sshpk). A runner asks the hub for
-    its agent user's certificate with its hub key (decision 47); the principal is the agent user's
-    name, valid one hour, renewed before it ends. Every server trusts the authority
-    (`TrustedUserCAKeys`, `AuthorizedPrincipalsFile /etc/ssh/claudia-principals/%u`, an agent user's
-    name only), so an agent lands on another server as its own agent user, where sudo meets that
-    server's root helper. No agent holds a long-lived SSH key. Instead of: the person's keys (the hole
-    decision 51 closes), or keys copied to every server per agent user.
+    certificate authority (`HUB_SSH_CA_FILE`, ed25519, signed with sshpk; `claudia.hub.ssh-ca`). A
+    runner running as an agent user (`claudia.slave.ssh-cert`) keeps an ed25519 key in
+    `~/.ssh/claudia_agent` and asks the hub for its certificate on start and every 45 minutes
+    (`POST /hub/server/ssh-cert`, with its server's name and hub key as in decision 47; a failure is
+    logged and tried again in 5 minutes), writes it to `~/.ssh/claudia_agent-cert.pub`, and keeps a
+    managed block in `~/.ssh/config` (`Host *`: that key and certificate, `IdentitiesOnly`, `User`
+    the same agent user), so `ssh <server>` lands as the same agent user. The hub signs only for
+    `<profile>-claudia-agent` when that profile name is a person's in the People table (a Profile
+    column, set by an admin or in `hub.json`) and that person has a profile on the asking server.
+    The principal is exactly that name; valid from 5 minutes before to 60 minutes after signing; key
+    id `<server>/<user>/<time>`, which sshd logs; `permit-pty` only, no agent, port or X11
+    forwarding. Every server trusts the authority (`TrustedUserCAKeys` from `GET /hub/ssh-ca.pub`,
+    `AuthorizedPrincipalsFile /etc/ssh/claudia-principals/%u`, an agent user's name only), so an
+    agent lands on another server as its own agent user, where sudo meets that server's root
+    helper. No agent holds a long-lived SSH key. Instead of: the person's keys (the hole decision 51
+    closes), or keys copied to every server per agent user.
 
 54. The host standard is Ansible in `host/`, applied by a person, never by `deploy/update.sh`
     (2026-11-18). One playbook makes every Linux server the same: the agent users, `break-glass`,
@@ -714,7 +723,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
   is the source of truth for the servers, the people and the People table (per person: the servers
-  they use, a tick = their own profile there; whose chats they may write to; admin). A `hub.json`
+  they use, a tick = their own profile there; whose chats they may write to; admin; their profile
+  name, whose agent user alone gets SSH certificates, decision 53). A `hub.json`
   (`HUB_CONFIG`) is imported once into an empty store, then no longer read. Admins (the store's admin
   flag, or the login group `HUB_ADMIN_GROUP`) change it in Settings → Admin (People and Servers).
   A write tick (2026-11-16) lets a person open, start and send in another person's chats on every

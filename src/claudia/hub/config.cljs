@@ -6,6 +6,7 @@
   (:require ["fs" :as fs]
             [clojure.string :as str]
             [claudia.hub.store :as store]
+            [claudia.shared.agent-user :as agent-user]
             [claudia.shared.protocol :as protocol]))
 
 (def server-name #"^[a-z][a-z0-9-]{0,30}$")
@@ -35,15 +36,18 @@
      :address address}))
 
 (defn- read-person [known p]
-  (let [{:keys [email admin servers] p-name :name} p
+  (let [{:keys [email admin servers profile] p-name :name} p
         email (when (string? email) (str/lower-case (str/trim email)))]
     (when-not (and email (re-matches email-re email))
       (fail "people: " (pr-str (:email p)) " is not an email address"))
+    (when-not (or (nil? profile) (agent-user/profile-name? profile))
+      (fail "people: " email ": profile " (pr-str profile) " must be lower-case letters, digits and dashes, starting with a letter"))
     (doseq [s servers :when (not (known s))]
       (js/console.warn (str "hub.json: a person lists server " (pr-str s) ", which is not in servers; ignored")))
     {:email email
      :name (if (and (string? p-name) (not (str/blank? p-name))) p-name "")
      :admin (true? admin)
+     :profile profile
      :servers (->> servers (filter known) distinct vec)}))
 
 (defn parse
@@ -58,7 +62,10 @@
         people (mapv (partial read-person (set names)) (:people data))
         emails (map :email people)
         _ (when (not= (count emails) (count (set emails)))
-            (fail "people: an email is listed twice"))]
+            (fail "people: an email is listed twice"))
+        profiles (keep :profile people)
+        _ (when (not= (count profiles) (count (set profiles)))
+            (fail "people: a profile is given twice"))]
     {:servers servers :people people}))
 
 (defn- import! [file]
@@ -69,6 +76,7 @@
        (doseq [s servers] (store/save-server! s))
        (doseq [p people]
          (store/save-person! p)
+         (when (:profile p) (store/set-profile! (:email p) (:profile p)))
          (doseq [s (:servers p)] (store/set-access! (:email p) s true)))))
     (js/console.log (str "hub: imported " file ": " (count servers) " servers, " (count people) " people"))))
 

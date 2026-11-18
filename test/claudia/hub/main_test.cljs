@@ -66,6 +66,14 @@
          (config/others [{:name "box"} {:name "destiny"} {:name "mishung"}] ["box"])))
   (is (= [] (config/others [{:name "box"}] ["box"]))))
 
+(deftest hub-json-may-name-each-person-s-profile
+  (let [servers "\"servers\":[{\"name\":\"box\",\"address\":\"10.0.0.2:4540\"}]"
+        person #(str "{\"email\":\"" %1 "\",\"servers\":[\"box\"]" (when %2 (str ",\"profile\":\"" %2 "\"")) "}")
+        parse #(config/parse (str "{" servers ",\"people\":[" (apply str (interpose "," %&)) "]}"))]
+    (is (= ["paul" nil] (map :profile (:people (parse (person "a@x" "paul") (person "b@x" nil))))))
+    (is (thrown-with-msg? js/Error #"profile \"Paul\" must be" (parse (person "a@x" "Paul"))))
+    (is (thrown-with-msg? js/Error #"a profile is given twice" (parse (person "a@x" "paul") (person "b@x" "paul"))))))
+
 (deftest pictures-are-png-or-webp-by-their-bytes
   (is (= "image/png" (pictures/image-type (js/Buffer.from "89504e470d0a1a0a0000" "hex"))))
   (is (= "image/webp" (pictures/image-type (js/Buffer.from "RIFF\u0000\u0000\u0000\u0000WEBPVP8 " "latin1"))))

@@ -12,7 +12,6 @@
             [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
             [claudia.hub.store :as store]
-            [claudia.node.crypto :as crypto]
             [claudia.node.http :as io]))
 
 (def ^:private max-body (* 256 1024))
@@ -62,10 +61,7 @@
 (defn call
   "POST /hub/server/claudia from a server."
   [^js req ^js res]
-  (let [h (.-headers req)
-        server-name (str (aget h "x-claudia-server-name"))
-        key-ok? (and (seq server-name) (store/server server-name)
-                     (crypto/same-secret? (aget h "x-claudia-server-key") (hub-key/for-server server-name)))]
+  (let [{:keys [server-name key-ok?]} (hub-key/server-caller req)]
     (-> (io/read-json req max-body)
         (.then (fn [b]
                  (let [as (str/lower-case (str (:as b)))
