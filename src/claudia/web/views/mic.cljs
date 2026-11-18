@@ -7,13 +7,15 @@
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service."
-  (:require [claudia.web.mic :as mic]
+  (:require ["react-dom" :as react-dom]
+            [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
             [claudia.web.views.mic-clips :as clips]
             [claudia.web.views.mic-flower :as flower]
             [claudia.web.views.pure.mic :as pure]
             [re-frame.core :as rf]
             [claudia.web.views.pure.words :as words]
+            [reagent.core :as r]
             [reagent.hooks :as h]))
 
 (defn- flower-state
@@ -159,7 +161,10 @@
   so the device is held with that side free and towards the mouth. s: the recording session."
   [s]
   (when-let [edge (pure/speak-edge (:mic s) (screen-angle s))]
-    [:div.speak-here {:class (name edge) :aria-hidden true} [:span "speak here"]]))
+    ;; On the page's body: inside the mic its fixed position was the flower's, not the screen's.
+    (react-dom/createPortal
+     (r/as-element [:div.speak-here {:class (name edge) :aria-hidden true} [:span "speak here"]])
+     js/document.body)))
 
 (defn- view [{:keys [phase draft-key mic] :as parts}]
   [:div.mic {:class (name phase) :style {"--chat" (colour-of draft-key)}}
