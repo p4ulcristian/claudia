@@ -14,6 +14,17 @@ FROM gcr.io/distroless/nodejs24-debian13:nonroot
 COPY out/hub.js version.json /app/
 COPY node_modules/ws /app/node_modules/ws
 COPY node_modules/jose /app/node_modules/jose
+# sshpk and its dependencies: the SSH certificate authority (README decision 53).
+COPY node_modules/sshpk /app/node_modules/sshpk
+COPY node_modules/asn1 /app/node_modules/asn1
+COPY node_modules/safer-buffer /app/node_modules/safer-buffer
+COPY node_modules/assert-plus /app/node_modules/assert-plus
+COPY node_modules/dashdash /app/node_modules/dashdash
+COPY node_modules/getpass /app/node_modules/getpass
+COPY node_modules/jsbn /app/node_modules/jsbn
+COPY node_modules/tweetnacl /app/node_modules/tweetnacl
+COPY node_modules/ecc-jsbn /app/node_modules/ecc-jsbn
+COPY node_modules/bcrypt-pbkdf /app/node_modules/bcrypt-pbkdf
 COPY out/web /web
 WORKDIR /app
 ENV NODE_ENV=production HUB_HOST=0.0.0.0 HUB_PORT=4590 HUB_WEB=/web HUB_DATA=/data HUB_CONFIG=/data/hub.json
