@@ -197,12 +197,10 @@
        (when (not= (str/trim @v) (or profile ""))
          [:button {:on-click #(call! "PUT" (person-path p) {:profile (str/trim @v)})} "Save"])])))
 
-(defn- person-row [{p :email :as person} {:keys [servers people granted writes]} removing]
+(defn- person-row [{p :email :as person} removing]
   [:tr
    [:td.person {:title p} (person-label person)]
    [profile-cell person]
-   (server-ticks p servers granted)
-   (writer-ticks p people writes)
    [tick (:admin person) (str p " is an admin") "PUT" (person-path p) {:admin (not (:admin person))}]
    [:td.row-actions
     [remove-buttons (= @removing p) "Remove this person (and every tick)"
@@ -210,25 +208,34 @@
      #(do (reset! removing nil) (call! "DELETE" (person-path p)))
      #(reset! removing nil)]]])
 
-(defn- grid-head [servers people]
-  [:thead
-   [:tr [:th {:row-span 2} "Person"] [:th {:row-span 2} "Profile"]
-    [:th.group {:col-span (count servers)} "Uses server"]
-    [:th.group {:col-span (count people)} "May write to the chats of"]
-    [:th {:row-span 2} "Admin"] [:th {:row-span 2}]]
-   [:tr (for [s servers] ^{:key (:name s)} [:th {:title (:name s)} (:label s)])
-    (for [o people] ^{:key (:email o)} [:th {:title (:email o)} (person-label o)])]])
+(defn- people-table
+  "Who they are: profile name, admin, remove."
+  [people removing]
+  [:div.admin-grid-wrap
+   [:table.admin-table.grid
+    [:thead [:tr [:th "Person"] [:th "Profile"] [:th "Admin"] [:th]]]
+    [:tbody (for [person people] ^{:key (:email person)} [person-row person removing])]]])
 
-(defn- access-grid [{:keys [servers people access writers]} removing]
-  (let [m {:servers servers :people people
-           :granted (set (map (juxt :email :server) access))
-           :writes (set (map (juxt :email :owner) writers))}]
-    [:div.admin-grid-wrap
-     [:table.admin-table.grid
-      [grid-head servers people]
-      [:tbody
-       (for [person people]
-         ^{:key (:email person)} [person-row person m removing])]]]))
+(defn- tick-table
+  "One tick table: a row per person, a column per thing (servers, or people whose chats)."
+  [cols col-key col-label people cells]
+  [:div.admin-grid-wrap
+   [:table.admin-table.grid
+    [:thead [:tr [:th "Person"]
+             (for [c cols] ^{:key (col-key c)} [:th {:title (col-key c)} (col-label c)])]]
+    [:tbody
+     (for [{p :email :as person} people]
+       ^{:key p} [:tr [:td.person {:title p} (person-label person)] (cells p)])]]])
+
+(defn- access-tables [{:keys [servers people access writers]} removing]
+  (let [granted (set (map (juxt :email :server) access))
+        writes (set (map (juxt :email :owner) writers))]
+    [:<>
+     [:section [:h3 "People"] [people-table people removing]]
+     [:section [:h3 "Servers " [:span.muted.small "a tick: their own profile on that server"]]
+      [tick-table servers :name :label people #(server-ticks % servers granted)]]
+     [:section [:h3 "Chats " [:span.muted.small "a tick: they may write in that person's chats"]]
+      [tick-table people :email person-label people #(writer-ticks % people writes)]]]))
 
 (defn- person-form [email]
   [:section
@@ -243,16 +250,14 @@
         removing (r/atom nil)]
     (fn [{:keys [people] :as state}]
       [:<>
-       [:section
-        [:h3 "People " [:span.muted.small "each tick takes effect on their next request"]]
-        (if (seq people)
-          [access-grid state removing]
-          [:p.muted.small "Nobody yet."])
-        [:p.muted.small "Uses server: their own profile there. May write: they can open, start and send in that "
-         "person's chats on every server where both have a profile; Claude then runs as that person's "
-         "Linux user, with its logins. Without a tick, another's chats are read only. Profile: their "
-         "profile's name on every server; their chats run as <profile>-claudia-agent there, and only "
-         "that user gets SSH certificates from the hub."]]
+       (if (seq people)
+         [access-tables state removing]
+         [:section [:h3 "People"] [:p.muted.small "Nobody yet."]])
+       [:p.muted.small "Each tick takes effect on their next request. Servers: their own profile there; "
+        "their chats run as <profile>-claudia-agent, the only user the hub gives SSH certificates. "
+        "Chats: they may open, start and send in that person's chats on every server where both have a "
+        "profile; Claude acts in that person's name and the activity log records who typed. Everyone "
+        "may read everyone's chats without a tick."]
        [person-form email]])))
 
 (rf/reg-event-fx :admin/reset-email (fn [_ [_ a]] (reset! a "") nil))
