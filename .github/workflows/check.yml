@@ -98,6 +98,9 @@ jobs:
           npx shadow-cljs release host runner front hub root sudo web
           npm run build:web-files
 
+      - name: Hub image has every package hub.js loads (bin/hub-image-deps.mjs)
+        run: node bin/hub-image-deps.mjs
+
       - name: Smoke (the built programs and the page in a browser, bin/smoke.mjs)
         run: |
           npx playwright-core install --with-deps chromium-headless-shell
