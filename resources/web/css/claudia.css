@@ -225,6 +225,8 @@ code, pre { font-family: var(--mono); }
 /* Talking mode (views/talk.cljs): the header's speaker, a reply's play button. */
 .talk-toggle svg, .sound-toggle svg { width: 19px; height: 19px; }
 .talk-toggle.on, .sound-toggle.on { color: var(--accent); }
+.root-toggle svg { width: 19px; height: 19px; }
+.root-toggle.on { color: var(--red); }
 .say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }
@@ -526,6 +528,9 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .state-badge i { width: 3px; height: 3px; border-radius: 50%; background: var(--b); animation: chalk-dot 1.2s ease-in-out 3; }
 .state-badge i:nth-child(2) { animation-delay: 0.2s; }
 .state-badge i:nth-child(3) { animation-delay: 0.4s; }
+/* Root on (README decision 52): a red # at the circle's bottom right while the chat's root switch is on. */
+.root-badge { position: absolute; bottom: -5px; right: -7px; min-width: 16px; height: 16px; display: grid; place-items: center;
+  font: 700 11px/1 var(--hand); color: var(--bg2); background: var(--red); border-radius: 8px; pointer-events: none; z-index: 3; }
 /* Idle dots: the badges, moons and run dots move on for good only on the open chat; on the other
    chats they run a few times when they appear, then rest. */
 .rail-chat.on :is(.state-badge.waiting, .state-badge i, .moons i) { animation-iteration-count: infinite; }

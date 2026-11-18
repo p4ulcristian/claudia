@@ -664,9 +664,16 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `claudia-root` runs as root on every server and listens on one socket per agent user,
     `/run/claudia-root/<user>/root.sock`, in a folder only that user may enter, so the socket proves who
     calls. The helper and the shim are copied to `/usr/local/lib/claudia-root/` by `host/`
-    (decision 54), never by the automatic update, so the guard changes only when a person applies it. A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
+    (decision 54), never by the automatic update, so the guard changes only when a person applies it.
+    A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
     command, its folder and the chat's key (`CLAUDIA_CHAT_KEY`, set per session by the host) and
-    streams the output back. The helper runs it when it matches the no-tap list exactly
+    streams the output back. The proof of the person's word lives in the front (user claudia, which
+    no agent user reaches: every call to it needs the hub key, decision 47), never in the runner,
+    which runs as the agent user and could say anything: the switch is kept by the front, the person's
+    Allow and switch go to the front, the helper asks the front on a socket only root opens, and the
+    front takes an Allow only from the owner for the exact command it asked about. The runner only
+    names the chat for a key and shows the card, so a tricked agent can at worst point its command at
+    another chat of its own profile. The helper runs it when it matches the no-tap list exactly
     (`/etc/claudia/root-no-tap`: restart and status of known services, journalctl, nft list ruleset,
     ss -tlnp; never file writes, unit edits, package installs or shells), or when the chat's root
     switch is on (a red badge on the chat, on until the person turns it off), or when the person taps
@@ -801,7 +808,7 @@ Claude Code cuts long tool descriptions, so the forms' data is also in the syste
 
 ```
 npm ci
-npx shadow-cljs release host runner front hub web
+npx shadow-cljs release host runner front hub root sudo web
 ```
 
 ## Back from the TypeScript Claudia (2026-11-03)

@@ -6,7 +6,7 @@
 // nothing. Unit tests check each side of a wire; this checks that the page and the servers still
 // understand each other (#171 shipped a page whose every first frame the runner refused).
 //
-//   node bin/smoke.mjs            after `npx shadow-cljs release host runner front hub web` and
+//   node bin/smoke.mjs            after `npx shadow-cljs release host runner front hub root sudo web` and
 //                                 `npm run build:web-files`
 //
 // The browser: SMOKE_BROWSER=webkit runs Playwright's WebKit (`npx playwright-core install webkit`;

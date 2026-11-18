@@ -11,6 +11,7 @@
             [claudia.node.system :as system]
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
+            [claudia.slave.rootfront :as rootfront]
             [claudia.slave.tokens :as tokens]))
 
 (def ^:private env (.-env js/process))
@@ -88,6 +89,13 @@
     (concat pairs
             [["X-Claudia-Profile" (:profile target)]]
             (when read-only [["X-Claudia-Read-Only" "1"]]))))
+
+(defn root-call
+  "What the front does with a hub call to url under /api/root/ (README decision 52): :front (the
+  person's tap, answered here), :refuse (a runner's root routes are never passed on), or nil."
+  [method url]
+  (cond (and (= "POST" method) (#{"/api/root/answer" "/api/root/switch"} url)) :front
+        (str/starts-with? url "/api/root/") :refuse))
 
 (defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
@@ -246,9 +254,11 @@
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})
+      (= :refuse (root-call (.-method req) url)) (io/send-json res 403 {:error "Not passed on: the runner's root routes are the front's own."})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
+      (= :front (root-call (.-method req) url)) (rootfront/handle @profiles r url req res)
       :else (to-runner! req res r (+ (js/Date.now) retry-for-ms)))))
 
 (defn request-head
@@ -292,6 +302,7 @@
     (when-not (seq file) (throw (js/Error. "FRONT_PROFILES is not set.")))
     (reset! profiles (parse-profiles (fs/readFileSync file "utf8")))
     (reset! hub-key (read-hub-key (.-FRONT_HUB_KEY_FILE env)))
+    (rootfront/listen! profiles)
     (let [server (doto (http/createServer on-request)
                    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
                    (aset "requestTimeout" 0))

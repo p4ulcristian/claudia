@@ -123,6 +123,20 @@
                            :on-click #(rf/dispatch (if out? [:chat/archive ck false] [:archive/ask ck]))}
      [archive-icon out?]]))
 
+(defn- root-button
+  "The chat's root switch (README decision 52), only for its owner: red while on; turning it on asks
+  first."
+  [ck]
+  (let [on? @(rf/subscribe [:root? ck])]
+    [:button.icon.root-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Root"
+                               :data-tip (if on? "Root on: sudo runs without asking. Click to turn it off"
+                                             "Root off: each sudo command asks you first")
+                               :on-click #(rf/dispatch (if on? [:chat/root ck false] [:root/ask ck]))}
+     [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
+            :stroke-linecap "round" :stroke-linejoin "round"}
+      [:path {:d "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"}]
+      [:path {:d "M10 9.5h3a1.5 1.5 0 0 1 0 3h-3v-3M10 12.5V15M12.6 12.5 14 15"}]]]))
+
 (defn- row-1 [{:keys [ck row ro new? settings] :as hc}]
   (let [k (when-not new? ck)]
     [:div.head-row.r1
@@ -130,6 +144,7 @@
      ;; The chat's own bell and speaker (README decision 21); a chat only looked at has none.
      (when-not ro [alerts/bell-button k (if new? (:color settings) (:color row))])
      (when-not ro [talk/toggle k])
+     (when (and row (not ro) @(rf/subscribe [:owner?])) [root-button ck])
      (when (and row (not ro)) (archive-button ck row))]))
 
 ;; ---- row 2: computer, account, project ----

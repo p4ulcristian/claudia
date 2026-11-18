@@ -11,6 +11,13 @@ EnvironmentFile=/etc/claudia/env
 Environment=FRONT_PROFILES=/etc/claudia/profiles
 # The hub's poke (POST /api/update-check) lands here; claudia-update.path watches it.
 Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia/update-requested
+# The root helper asks here (README decision 52): a socket of user claudia's, 0600, in a folder only
+# claudia enters, so only root (and this front) open it; the root switches survive restarts.
+Environment=FRONT_ROOT_SOCKET=/run/claudia-front/root.sock FRONT_ROOT_STATE=/var/lib/claudia-front/root-switches.json
+RuntimeDirectory=claudia-front
+RuntimeDirectoryMode=0700
+StateDirectory=claudia-front
+StateDirectoryMode=0700
 ExecStart=/usr/bin/env node /srv/claudia/out/front.js
 Restart=always
 RestartSec=5

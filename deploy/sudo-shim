@@ -1,0 +1,9 @@
+#!/bin/sh
+# The sudo shim (README decision 52): the host standard (host/) installs it as `sudo` in a folder
+# that comes first on the chats' PATH, with out/sudo.js (claudia.root.sudo) beside it (symlinks to
+# the shim are followed). sudo.js sends the command to this user's root helper socket
+# (/run/claudia-root/<user>/root.sock) and streams the answer back; node, not sh, so stdin and the
+# output pass as raw bytes.
+#   sudo [-n] [-E] [--] command [args...]
+here=$(dirname "$(readlink -f "$0")")
+exec /usr/bin/env node "${CLAUDIA_SUDO_JS:-$here/sudo.js}" "$@"
