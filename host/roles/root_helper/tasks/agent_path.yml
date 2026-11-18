@@ -11,14 +11,47 @@
     group: root
     mode: "0755"
 
-- name: Set the PATH of claudia-host@{{ root_helper_person.profile }}
+# systemd lets EnvironmentFile= override Environment=, and the unit reads /etc/claudia/env (which
+# sets PATH) as a file, so an Environment=PATH here would lose. A file read after it wins.
+- name: Write the PATH file of claudia-host@{{ root_helper_person.profile }}
   ansible.builtin.copy:
     content: |
       # Claudia host standard (host/roles/root_helper): the sudo shim comes first (decision 52).
-      [Service]
-      Environment=PATH={{ agent_path }}
-    dest: "/etc/systemd/system/claudia-host@{{ root_helper_person.profile }}.service.d/agent-path.conf"
+      PATH={{ agent_path }}
+    dest: "/etc/claudia/agent-path-{{ root_helper_person.profile }}.env"
     owner: root
     group: root
     mode: "0644"
+
+# The runner builds each chat's environment from its own (claudia.slave.chats run-env), and the
+# session host runs the sessions: both read the file last.
+- name: Make the drop-in folder of claudia-runner@{{ root_helper_person.profile }}
+  ansible.builtin.file:
+    path: "/etc/systemd/system/claudia-runner@{{ root_helper_person.profile }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Read that file last in claudia-host@ and claudia-runner@{{ root_helper_person.profile }}
+  ansible.builtin.copy:
+    content: |
+      # Claudia host standard (host/roles/root_helper): the sudo shim comes first (decision 52).
+      # Read after /etc/claudia/env and profile-<p>.env, so its PATH wins.
+      [Service]
+      EnvironmentFile=/etc/claudia/agent-path-{{ root_helper_person.profile }}.env
+    dest: "/etc/systemd/system/claudia-{{ item }}@{{ root_helper_person.profile }}.service.d/agent-path.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [host, runner]
+  notify: Reload systemd
+
+# An agent user needs no setuid sudo: its sudo is the shim. A drop-in that loosened the host's
+# sandbox so a person's sessions could use the real sudo (NoNewPrivileges=no, ProtectSystem=no)
+# goes, so the unit's own NoNewPrivileges=yes and ProtectSystem=full apply again.
+- name: Remove a sudo-loosening drop-in of claudia-host@{{ root_helper_person.profile }}
+  ansible.builtin.file:
+    path: "/etc/systemd/system/claudia-host@{{ root_helper_person.profile }}.service.d/sudo.conf"
+    state: absent
   notify: Reload systemd
