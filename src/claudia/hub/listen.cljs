@@ -60,7 +60,7 @@
               (.then #(io/send-json res 200 %))
               (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))
 
-(def ^:private log-keys [:event :ms :warm :steps :bytes :chars :error :ua :app])
+(def ^:private log-keys [:event :ms :warm :steps :bytes :chars :error :ua :app :angle :edge])
 
 (defn log-line
   "One line for the hub's log from a page's mic report (POST /hub/listen/log): the caller and the
@@ -70,7 +70,12 @@
                           (map? v) (into {} (for [[k x] (take 6 v) :when (number? x)] [k x]))
                           (or (number? v) (boolean? v)) v
                           :else nil))
-        fields (into {} (for [k log-keys :let [v (cut (get body k))] :when (some? v)] [k v]))]
+        ;; The microphone iOS records from: its own names, short text only.
+        mic (into {} (for [k [:port :name :source :location :orientation]
+                           :let [x (get-in body [:mic k])] :when (string? x)]
+                       [k (subs x 0 (min 60 (count x)))]))
+        fields (cond-> (into {} (for [k log-keys :let [v (cut (get body k))] :when (some? v)] [k v]))
+                 (seq mic) (assoc :mic mic))]
     (str "mic: " email " " (js/JSON.stringify (clj->js fields)))))
 
 (defn log
