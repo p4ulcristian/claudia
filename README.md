@@ -586,7 +586,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   A write tick (2026-11-16) lets a person open, start and send in another person's chats on every
   server where both have a profile: the hub names those people to each front (`X-Claudia-Writes`),
   which then passes the view on without `X-Claudia-Read-Only`; Claude runs as the owner's Linux user.
-  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile. A server gets its hub key with `deploy/pair.sh` (decision 47: a
+  Without a tick another's chats stay read only, and secrets are only ever read for one's own profile.
+  Everyone reads everyone's chats (2026-11-18): a signed-in person may look at other profiles' chats,
+  read only, also on a server where they have no profile of their own (`/hub/me` `viewServers`; the
+  hub passes only `/api/me` and views there, the front answers with no target otherwise). Their own
+  chats stay on their own servers. A server gets its hub key with `deploy/pair.sh` (decision 47: a
   one-time secret printed as a key, pasted into Servers with the address the hub reaches its front
   at; the server fetches its key with the secret, once). Pairing a known server again gives it its
   key again.

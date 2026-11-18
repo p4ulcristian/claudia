@@ -114,7 +114,8 @@
   (let [[_ server-name rest-path] (re-matches #"^/s/([a-z][a-z0-9-]{0,30})(/.*)?$" pathname)
         email (caller req)
         person (some-> email config/person)
-        server (when (and person server-name) (config/server-of person server-name))
+        own (when (and person server-name) (config/server-of person server-name))
+        server (or own (when (and person server-name) (config/server server-name)))
         {:keys [view error] q :query} (take-view query)]
     (cond
       (not server-name) {:status 404 :error "not found"}
@@ -122,6 +123,8 @@
       (cross-site? req) {:status 403 :error "cross-site request"}
       (not person) {:status 403 :error "you have no access to Claudia here"}
       (not server) {:status 403 :error (str "no access to " server-name)}
+      ;; No profile there: only its /api/me (whose profiles it has) and another profile's view.
+      (and (not own) (not (seq view)) (not= rest-path "/api/me")) {:status 403 :error (str "no profile on " server-name)}
       :else (or (path-problem rest-path ws? view error)
                 {:server server :target (str rest-path q) :who {:email email :view view :writes (:writes person)}}))))
 
@@ -143,7 +146,9 @@
    :version (:version version-info)
    :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
    :updatedAt (progress/updated-at)
-   :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))})
+   :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))
+   ;; Servers without a profile of theirs: others' chats there, read only.
+   :viewServers (mapv #(select-keys % [:name :label]) (config/view-servers person))})
 
 (defn- server-call
   "/hub/servers/<name>/state (does its front answer) and /hub/servers/<name>/system (its numbers),

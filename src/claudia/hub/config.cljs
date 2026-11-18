@@ -112,6 +112,17 @@
   (when (store/may? (:email p) s-name)
     (with-address (store/server s-name))))
 
+(defn others
+  "The servers among all whose name is not in own, in all's order."
+  [all own]
+  (vec (remove #(contains? (set own) (:name %)) all)))
+
+(defn view-servers
+  "The servers this person has no profile on: they may look at the chats there, read only (every
+  signed-in person may read everyone's chats, README Servers and access)."
+  [p]
+  (mapv with-address (others (store/servers) (map :name (store/allowed (:email p))))))
+
 (defn server
   "Any server by name (the hub's own calls: push, pokes)."
   [s-name]

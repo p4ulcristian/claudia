@@ -32,15 +32,15 @@
  :ops/me-loaded
  ;; After /hub/me: each server's own /api/me (its profiles, version, commit) and GitHub login.
  (fn [{:keys [db]} _]
-   {:fx (vec (for [s (events/server-names db)]
+   {:fx (vec (for [s (events/all-server-names db)]
                [:api/call {:url (api-url s "me") :on-ok [:ops/server-me s] :on-fail [:ops/server-me s nil]}]))}))
 
 (defn view-servers
-  "The servers whose sockets are open for a view: all for your own chats; for another profile's,
-  the servers that have that profile."
+  "The servers whose sockets are open for a view: yours for your own chats; for another profile's,
+  every server that has that profile (also one you have no profile on: read only)."
   [db view]
   (if view
-    (filterv #(some #{view} (get-in db [:server-me % :profiles])) (events/server-names db))
+    (filterv #(some #{view} (get-in db [:server-me % :profiles])) (events/all-server-names db))
     (events/server-names db)))
 
 (defn view-due?
@@ -48,7 +48,7 @@
   [db]
   (boolean (and (:view db)
                 (not (:view-connected db))
-                (every? #(get-in db [:server-me %]) (events/server-names db)))))
+                (every? #(get-in db [:server-me %]) (events/all-server-names db)))))
 
 (defn connect-view
   "The view's servers connecting (db), and the sockets to open again."
@@ -99,7 +99,7 @@
 (rf/reg-sub :viewing-other? (fn [db] (events/viewing-other? db)))
 (rf/reg-sub :new-chat-read-only? (fn [db] (events/read-only? db (events/default-server db))))
 (rf/reg-sub :read-only-servers
-            (fn [db] (set (filter #(events/read-only? db %) (events/server-names db)))))
+            (fn [db] (set (filter #(events/read-only? db %) (events/all-server-names db)))))
 (rf/reg-sub :hidden-servers (fn [db] (set (:hidden-servers db))))
 (rf/reg-sub :server-me (fn [db [_ s]] (get-in db [:server-me s])))
 (rf/reg-sub :server-mes (fn [db] (:server-me db)))

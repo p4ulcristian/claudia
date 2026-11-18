@@ -13,7 +13,10 @@
 
 (deftest view-servers-have-the-profile
   (is (= ["one" "two"] (ops/view-servers db nil)))
-  (is (= ["one"] (ops/view-servers db "pat"))))
+  (is (= ["one"] (ops/view-servers db "pat")))
+  (let [wider (-> db (assoc-in [:me :viewServers] [{:name "three"}]) (assoc-in [:server-me "three"] {:profiles ["pat"]}))]
+    (is (= ["one" "two"] (ops/view-servers wider nil)) "your own chats: only your servers")
+    (is (= ["one" "three"] (ops/view-servers wider "pat")) "another's: also a server you have no profile on")))
 
 (deftest a-stored-view-connects-once-every-server-answered
   (is (true? (ops/view-due? (assoc db :view "pat"))))

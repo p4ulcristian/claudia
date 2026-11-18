@@ -59,6 +59,12 @@
   [db]
   (mapv :name (get-in db [:me :servers])))
 
+(defn all-server-names
+  "server-names, then the servers the person has no profile on, where they may look at others'
+  chats, read only (the hub's viewServers)."
+  [db]
+  (into (server-names db) (map :name) (get-in db [:me :viewServers])))
+
 (defn default-server
   "Where a new chat starts: the last used server while it is still offered, else the first."
   [db]

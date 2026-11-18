@@ -1,5 +1,6 @@
 (ns claudia.hub.main-test
   (:require [cljs.test :refer [deftest is testing]]
+            [claudia.hub.config :as config]
             [claudia.hub.main :as main]))
 
 (defn- req [headers] #js {:headers (clj->js headers)})
@@ -57,3 +58,8 @@
     (is (= {:host "127.0.0.1" :port 5000 :web-root "out/web" :config-file nil
             :data-dir "/h/.local/share/claudia-hub"}
            s))))
+
+(deftest view-servers-are-the-ones-without-a-profile
+  (is (= [{:name "destiny"} {:name "mishung"}]
+         (config/others [{:name "box"} {:name "destiny"} {:name "mishung"}] ["box"])))
+  (is (= [] (config/others [{:name "box"}] ["box"]))))

@@ -53,14 +53,15 @@
 (defn route-of
   "Whose runner a call goes to among profiles, for the caller's email, the profile it views (blank =
   its own) and the emails whose chats it may write to: {:own :target :viewing :read-only}, or
-  {:status :error}. Viewing another profile is read only unless its owner is in writes."
+  {:status :error}. Viewing another profile is read only unless its owner is in writes. A caller
+  with no profile here may look (read only): at another profile's chats, or its /api/me (target nil)."
   [profile-list email view writes]
   (let [own (some #(when (= (:email %) email) %) profile-list)
         target (when (seq view) (some #(when (= (:profile %) view) %) profile-list))
         other? (boolean (and target (not= (:profile target) (:profile own))))]
     (cond (not (seq email)) {:status 401 :error "No caller."}
-          (not own) {:status 403 :error "No profile on this server for this person."}
           (and (seq view) (not target)) {:status 404 :error (str "No profile " view " on this server.")}
+          (not own) {:own nil :target target :viewing (:profile target) :read-only true}
           :else {:own own
                  :target (or target own)
                  :viewing (when other? (:profile target))
@@ -70,7 +71,7 @@
   "The other profiles here the caller may write to: those whose owner's email is in writes."
   [profile-list own writes]
   (vec (for [{:keys [profile email]} profile-list
-             :when (and (not= profile (:profile own)) (contains? (set writes) email))]
+             :when (and own (not= profile (:profile own)) (contains? (set writes) email))]
          profile)))
 
 (defn- route
@@ -244,6 +245,7 @@
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
+      (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       :else (to-runner! req res r (+ (js/Date.now) retry-for-ms)))))
 
@@ -279,8 +281,8 @@
   (let [{:keys [status error] :as r} (if (from-hub? (.-headers req) @hub-key)
                                        (route (.-headers req))
                                        {:status 401 :error "Not the hub."})]
-    (if status
-      (.end sock (str "HTTP/1.1 " status " " error "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
+    (if (or status (not (:target r)))
+      (.end sock (str "HTTP/1.1 " (or status 403) " " (or error "No profile here") "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
       (splice! req sock head r (+ (js/Date.now) retry-for-ms)))))
 
 (defn main [& _]

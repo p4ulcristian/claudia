@@ -41,9 +41,9 @@
 
 (rf/reg-sub
  :server-label
- :<- [:server-list]
- (fn [servers [_ server]]
-   (or (:label (first (filter #(= server (:name %)) servers))) server)))
+ :<- [:me]
+ (fn [me [_ server]]
+   (or (:label (first (filter #(= server (:name %)) (concat (:servers me) (:viewServers me))))) server)))
 
 (rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
 (rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))
