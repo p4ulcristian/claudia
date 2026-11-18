@@ -70,14 +70,16 @@
 (defn- agents-text [n] (str n " agent" (when (not= n 1) "s")))
 
 (defn status-line
-  "The rail's line under a chat's name (README decision 46), [kind text]: running (how long, and
-  its agents), asks (a question waits on you, how long), done (finished since you looked, how
+  "The rail's line under a chat's name (README decision 46), [kind text]: running (the chat's clock
+  while its turn runs, else its longest-running agent's, and its agents), asks (a question waits on you, how long), done (finished since you looked, how
   long ago), quiet (last active). runningSince / askedAt are page times (with-clock-times)."
-  [{:keys [waiting running agents runningSince askedAt ended at]} done? now]
+  [{:keys [waiting running agents runningSince agentsSince askedAt ended at]} done? now]
   (let [n (or agents 0)]
     (cond
       waiting ["asks" (str "? asks" (when askedAt (str " \u00b7 " (short-ago askedAt now))))]
       (and running runningSince) ["running" (str (clock (- now runningSince)) (when (pos? n) (str " \u00b7 " (agents-text n))))]
+      ;; The turn ended, agents still work: the longest-running agent's clock.
+      (and (pos? n) agentsSince) ["running" (str (clock (- now agentsSince)) " \u00b7 " (agents-text n))]
       (or running (pos? n)) ["running" (if (pos? n) (agents-text n) "working")]
       (and done? (pos? ended)) ["done" (str "done \u00b7 " (short-ago ended now))]
       (pos? at) ["quiet" (let [a (short-ago at now)] (if (re-find #"\d[mh]$" a) (str a " ago") a))]
@@ -90,12 +92,13 @@
   (= "done" (first (status-line r done? 0))))
 
 (defn with-clock-times
-  "A server's chat rows as they came at now (page time): runningFor and the asks' ago become the page
-  times runningSince and askedAt, so a clock can run on without a new frame."
+  "A server's chat rows as they came at now (page time): runningFor, agentsFor and the asks' ago become
+  the page times runningSince, agentsSince and askedAt, so a clock can run on without a new frame."
   [chats now]
-  (mapv (fn [{:keys [runningFor asks] :as c}]
+  (mapv (fn [{:keys [runningFor agentsFor asks] :as c}]
           (cond-> c
             runningFor (assoc :runningSince (- now runningFor))
+            agentsFor (assoc :agentsSince (- now agentsFor))
             (seq asks) (assoc :askedAt (- now (apply max (map #(or (:ago %) 0) asks))))))
         chats))
 

@@ -67,17 +67,25 @@
           (:name project) [:span.rail-tag (get tags (:name project) "")]
           :else [:span.rail-blank {:aria-hidden true}])))))
 
+(def ^:private work-ring
+  "Twelve green dots round a working chat's circle; one bright dot steps once a second, like a
+  clock's second hand (2026-11-18: no spinning)."
+  [:svg.work-ring {:viewBox "0 0 50 50" :aria-hidden true}
+   (for [i (range 12) :let [a (* i (/ js/Math.PI 6))]]
+     ^{:key i} [:circle {:cx (+ 25 (* 21 (js/Math.sin a))) :cy (- 25 (* 21 (js/Math.cos a))) :r 2}])
+   [:circle.work-tick {:cx 25 :cy 4 :r 3}]])
+
 (defn chat-dot
   "row: a list row with :server. done?: finished since you looked (never in a read-only view, never
-  the open chat). plain?: the rail's circle (README decision 46): no badges, only a ring turning
-  while the chat works; its line under the name says the rest."
+  the open chat). plain?: the rail's circle (README decision 46): no badges, only the ticking
+  dotted ring while the chat works; its line under the name says the rest."
   [{:keys [server folder waiting running agents]} done? & [plain?]]
   (let [agents (or agents 0)
         state (cond waiting :waiting running :thinking done? :done)]
     (if plain?
       [:span.rail-dot
        [project-face server folder]
-       (when (or running (pos? agents)) [:span.work-ring {:aria-hidden true}])]
+       (when (or running (pos? agents)) work-ring)]
       [:span.rail-dot
        [project-face server folder]
        (if (and (not waiting) (not running) (pos? agents))

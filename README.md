@@ -573,7 +573,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Under the name (two lines, as before) a third line in words: “4:12 · 2 agents” while
     running (a live clock), “? asks · 3m” in amber while a question waits, “done · 12m”
     when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
-    (claudia.web.views.pure.sidebar/status-line). A chat that finished since you looked also gets a
+    (claudia.web.views.pure.sidebar/status-line). No spinning (2026-11-18): instead of the turning
+    ring, twelve green dots ring a working chat's circle and one bright dot steps round once a
+    second, like a clock's second hand. The chat has its own clock (its turn) and every agent its
+    own (from when it started): while the turn runs the line shows the chat's clock, once only
+    agents are left the longest-running agent's (“6:30 · 2 agents”, the row's `agentsFor`); each
+    agent's own clock stays on its chip over the composer. A chat that finished since you looked also gets a
     big green check drawn through its circle from the middle (2026-11-18), so done stands out. The list and the group card keep their badges.
     No card with more (started, project) on hover or long-press: dropped by the user the same day.
 47. The hub proves itself with a key, not with the network (2026-11-17, the user's call to move every

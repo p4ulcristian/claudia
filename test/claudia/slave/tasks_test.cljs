@@ -96,3 +96,12 @@
 (deftest running-ids-of-a-chat
   (is (= ["a"] (tasks/running-ids {"a" {:status "running"} "b" {:status "completed"} "c" {:status "stopped"}})))
   (is (= [] (tasks/running-ids nil))))
+
+(deftest the-agent-clock-is-the-longest-running-top
+  (let [m {"a" {:id "a" :status "running" :background true :type "task" :start 100}
+           "b" {:id "b" :status "running" :background true :type "task" :start 40}
+           "k" {:id "k" :status "running" :type "task" :start 10 :parent "a"}
+           "d" {:id "d" :status "completed" :background true :type "task" :start 5}
+           "f" {:id "f" :status "running" :type "local_bash" :start 1}}]
+    (is (= 40 (tasks/oldest-running m)) "a child runs on its top's clock; done and foreground shells don't count")
+    (is (nil? (tasks/oldest-running {"d" (m "d")})))))

@@ -320,7 +320,7 @@ Runner → page:
 `Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
-secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor }`;
+secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor, agentsFor? }`; `agentsFor` = ms since the longest-running of those agents started (none running: absent);
 `agents` = how many agents and background shells Claude started still run. `lastTurn` = `{ id (the
 result's uuid), ago, stopped, failed, reply (the start of the reply, plain text; "" unless it
 succeeded) }` or null; `runningFor` = ms since the turn began while the chat works (its turn or its
