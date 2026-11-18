@@ -647,6 +647,66 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     9 % opacity, about eight frames a second, still when the reader asks for less motion). Instead
     of: a flat colour like every other chat, or a dense rain that would fight the text.
 
+51. Every server runs chats as an agent user, never as a person (2026-11-18, the user's call after a
+    security review: a tricked agent running as a person with passwordless sudo is root on every
+    machine that person's SSH keys reach). On each Linux server a profile's host and runner run as
+    `<profile>-claudia-agent` (`paul-claudia-agent`, `peter-claudia-agent`, `ananda-claudia-agent`), a
+    plain user without sudo and without the person's SSH keys, files or logins. The chats' folder,
+    Claude Code's sessions and the runner's data move from the person's home to the agent user's
+    (`host/` moves them once). The people keep their own Linux users and logins for work by hand.
+    Root comes only through decision 52, other servers only through decision 53. Instead of: the
+    person's own user (`user=<person>` in `/etc/claudia/profiles`), or `claudia-<profile>` (the old
+    default name, which does not say it is an agent).
+
+52. Root only through the root helper (2026-11-17/18, the user's picks: the root switch design).
+    `claudia-root` runs as root on every server and listens on one socket per agent user,
+    `/run/claudia-root/<user>.sock`, in a folder only that user may enter, so the socket proves who
+    calls. A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
+    command, its folder and the chat's key (`CLAUDIA_CHAT_KEY`, set per session by the host) and
+    streams the output back. The helper runs it when it matches the no-tap list exactly
+    (`/etc/claudia/root-no-tap`: restart and status of known services, journalctl, nft list ruleset,
+    ss -tlnp; never file writes, unit edits, package installs or shells), or when the chat's root
+    switch is on (a red badge on the chat, on until the person turns it off), or when the person taps
+    Allow on the "Run as root" card for that one command (unanswered in 10 minutes = no). The chat's
+    owner may always turn root on or tap Allow. Every root command is logged with the chat and the
+    answer. The key ties a command to a chat; processes of one agent user can read each other's
+    environment, so the user boundary, not the key, is what stops an escape. Root is the whole
+    machine: other people's services included (the user's choice, decision 4 of the design). Instead
+    of: passwordless sudo, or a root shell per chat.
+
+53. Servers reach each other with one-hour SSH certificates (2026-11-18). The hub holds an SSH
+    certificate authority (`HUB_SSH_CA_FILE`, ed25519, signed with sshpk). A runner asks the hub for
+    its agent user's certificate with its hub key (decision 47); the principal is the agent user's
+    name, valid one hour, renewed before it ends. Every server trusts the authority
+    (`TrustedUserCAKeys`, `AuthorizedPrincipalsFile /etc/ssh/claudia-principals/%u`, an agent user's
+    name only), so an agent lands on another server as its own agent user, where sudo meets that
+    server's root helper. No agent holds a long-lived SSH key. Instead of: the person's keys (the hole
+    decision 51 closes), or keys copied to every server per agent user.
+
+54. The host standard is Ansible in `host/`, applied by a person, never by `deploy/update.sh`
+    (2026-11-18). One playbook makes every Linux server the same: the agent users, `break-glass`,
+    the root helper and its no-tap list, the sudo shim, the SSH certificate trust, sshd without
+    passwords, etckeeper. It lives in this repo, so it changes with the code, but the automatic update
+    never runs it: a merged mistake in Claudia cannot loosen a server's guard. A run arms an undo
+    first (`systemd-run`, back to the etckeeper commit before the run after 10 minutes) and is
+    confirmed at the end; an unconfirmed run undoes itself. Phase B (`phase_b_remove_nopasswd`)
+    removes the people's passwordless sudo, only after a week of the new setup and the user's go. The
+    inventory (servers, people, addresses) stays outside the repo. Instead of: Claudia's own update
+    setting up its host (the guarded program writing its own guard), or NixOS (a reinstall of every
+    machine).
+
+55. `break-glass` is the way in when Claudia is broken (2026-11-18). A user on every server with no
+    password, one SSH key kept in 1Password on the user's devices, and full sudo; used by hand only,
+    never by an agent. It is tested on a server before Phase B runs there.
+
+56. 1Password from any device (2026-11-18, the user's call; replaces decisions 1 and 7 of
+    [plan/1passwd-plan.md](plan/1passwd-plan.md)): a read-only 1Password service account for one
+    vault, "Claudia", which holds only machine tokens agents use, never people's logins. Its token is
+    kept encrypted under a key that only the person's passkey can produce (WebAuthn PRF), so a
+    server alone cannot read the vault: each read is an Allow plus Face ID on the iPad, iPhone or
+    desktop, and opens that chat's reads for an hour. Not built with decisions 51 to 55; a track of
+    its own.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
