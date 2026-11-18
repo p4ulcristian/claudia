@@ -9,6 +9,7 @@
             ["ws" :refer [WebSocketServer]]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.slave.activity :as activity]
             [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
             [claudia.slave.claudia :as claudia]
@@ -127,10 +128,11 @@
 
 (defmethod on-chat-frame "close" [c _ chat] (swap! (:open c) disj chat))
 
-(defmethod on-chat-frame "send" [_ f chat]
+(defmethod on-chat-frame "send" [c f chat]
   (let [files (uploads/own-files (:files f))
         images (sent-images f)]
     (when (or (seq (:text f)) (seq files) (seq images))
+      (activity/note-message! chat (:profile c) c)
       (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
@@ -166,10 +168,12 @@
 (defmethod on-chat-frame "code_edit" [_ f chat]
   (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat)))
 
-(defmethod on-chat-frame "code_send" [_ f chat]
+(defmethod on-chat-frame "code_send" [c f chat]
   (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
     (chats/set-scene! chat scene)
-    (when (seq text) (wake-with! chat text nil false nil))))
+    (when (seq text)
+      (activity/note-message! chat (:profile c) c)
+      (wake-with! chat text nil false nil))))
 
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))
@@ -181,6 +185,7 @@
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
                                    (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell])
                                    (msg-id f))]
+           (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
     :claudia (if (claudia/on?)
@@ -191,9 +196,13 @@
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})
     :chat (on-chat-frame c f chat)))
 
-(defn- caller [^js req]
-  {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
-   :read-only (= "1" (aget (.-headers req) "x-claudia-read-only"))})
+(defn- caller
+  "Whose chats a request is for, whether read only, and its sender as the front named them
+  ({:by :via}, README decision 59)."
+  [^js req]
+  (merge {:profile (or (aget (.-headers req) "x-claudia-profile") profile)
+          :read-only (= "1" (aget (.-headers req) "x-claudia-read-only"))}
+         (activity/sender (.-headers req))))
 
 (defn root-route
   "What the front's POST to /api/root/<sub> asks this runner, for display only (README decision 52:
@@ -270,12 +279,17 @@
   (let [[_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)]
     [(some-> chat-id js/decodeURIComponent) sub]))
 
-(def ^:private chat-ops-fns
-  "What the chat operations over HTTP do (claudia.slave.chat-ops): the same as the socket's frames."
+(defn- chat-ops-fns
+  "What the chat operations over HTTP do (claudia.slave.chat-ops) for caller who: the same as the
+  socket's frames, a message logged with its sender."
+  [who]
   {:rows chats/rows
    :known? known?
-   :new! (fn [text folder] (chats/new-chat! text folder nil {} nil))
-   :send! (fn [chat text] (wake-with! chat text nil false nil))
+   :new! (fn [text folder]
+           (doto (chats/new-chat! text folder nil {} nil) (activity/note-message! (:profile who) who)))
+   :send! (fn [chat text]
+            (activity/note-message! chat (:profile who) who)
+            (wake-with! chat text nil false nil))
    :archive! (fn [chat archived]
                (store/update! chat {:archived archived})
                (chats/session-follows-row! chat)
@@ -295,7 +309,7 @@
       :root (root-call req res (subs url (count "/api/root/")))
       :ssh (ssh-cert/call req res (subs url (count "/api/ssh/")))
       nil (cond
-            (chat-ops/handle req res chat-ops-fns) nil
+            (chat-ops/handle req res (chat-ops-fns who)) nil
             (video/handle req res url who) nil
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil

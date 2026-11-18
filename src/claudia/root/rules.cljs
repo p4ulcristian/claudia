@@ -3,7 +3,7 @@
   request is well formed, the no-tap list, what the front's answer means, the command's environment
   and exit code, and the log line."
   (:require [clojure.string :as str]
-            [claudia.shared.protocol :as p]))
+            [claudia.shared.activity :as activity]))
 
 (defn profile-of
   "The profile an agent user belongs to (\"paul-claudia-agent\" -> \"paul\"), nil for any other user."
@@ -66,16 +66,20 @@
                     [n v]))
          {"PATH" root-path "HOME" "/root" "USER" "root" "LOGNAME" "root" "SHELL" "/bin/sh" "SUDO_USER" user}))
 
+(defn- text-or-nil [v] (when (and (string? v) (seq v)) v))
+
 (defn verdict
   "What the front's answer (parsed JSON, nil when there was none or it was not JSON) decides:
-  {:allow true :via \"switch\"|\"allow\"} only for exactly that, else {:allow false :why}."
+  {:allow true :via \"switch\"|\"allow\"} only for exactly that, else {:allow false :why}; with the
+  front's :chat (the chat's id) and :by (the email of the person who allowed it) when it says them."
   [answer]
-  (if (and (map? answer) (true? (:allow answer)) (#{"switch" "allow"} (:via answer)))
-    {:allow true :via (:via answer)}
-    {:allow false
-     :why (if (and (map? answer) (string? (:why answer)) (seq (:why answer)))
-            (:why answer)
-            "The person did not allow it.")}))
+  (let [said (when (map? answer) {:chat (text-or-nil (:chat answer)) :by (text-or-nil (:by answer))})]
+    (into {} (remove (comp nil? val))
+          (merge said
+                 (if (and (map? answer) (true? (:allow answer)) (#{"switch" "allow"} (:via answer)))
+                   {:allow true :via (:via answer)}
+                   {:allow false
+                    :why (or (when (map? answer) (text-or-nil (:why answer))) "The person did not allow it.")})))))
 
 (defn exit-code
   "The shim's exit code for a command that ended with code, or was killed by signal number signo
@@ -86,10 +90,10 @@
         :else 1))
 
 (defn log-line
-  "One journal line for a root command: who, which chat, what, the decision and how it ended."
-  [{:keys [user chat argv decision exit]}]
-  (str "root " (p/write-json (cond-> {:user user :chat chat :argv argv :decision decision}
-                               (some? exit) (assoc :exit exit)))))
+  "One journal line for a root command (README decision 59): which agent user and chat, what, the
+  decision, who allowed it and how it ended."
+  [{:keys [user] :as entry}]
+  (activity/line (activity/root-entry (assoc entry :agent-user user :profile (profile-of user)))))
 
 (defn key-tag
   "A chat key as the log names it when the runner did not say the chat: its first 8 characters."

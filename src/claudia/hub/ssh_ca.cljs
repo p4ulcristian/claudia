@@ -115,12 +115,13 @@
     (if problem
       (io/send-json res 403 {:error problem})
       (let [now (js/Date.now)
+            id (key-id server-name user now)
             cert (certificate ca (subject-key publicKey) {:server server-name :user user :now now})]
-        (js/console.log (str "hub: ssh certificate " (key-id server-name user now)))
-        (io/send-json res 200 {:certificate cert})))))
+        (js/console.log (str "hub: ssh certificate " id))
+        (io/send-json res 200 {:certificate cert :keyId id})))))
 
 (defn call
-  "POST /hub/server/ssh-cert from a server: {user, publicKey} -> {certificate}."
+  "POST /hub/server/ssh-cert from a server: {user, publicKey} -> {certificate, keyId}."
   [^js req ^js res]
   (let [{ca :key problem :problem} @authority
         caller (hub-key/server-caller req)]

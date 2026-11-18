@@ -71,7 +71,10 @@
     (is (= "/root" (get e "HOME")))))
 
 (deftest only-an-exact-yes-from-the-front-runs
-  (is (= {:allow true :via "switch"} (rules/verdict {:allow true :via "switch" :chat "c"})))
+  (is (= {:allow true :via "switch" :chat "c"} (rules/verdict {:allow true :via "switch" :chat "c"})))
+  (is (= {:allow true :via "allow" :chat "c" :by "a@x.org"} (rules/verdict {:allow true :via "allow" :chat "c" :by "a@x.org"}))
+      "the front's chat id and who allowed it go to the log")
+  (is (= {:allow false :why "no" :chat "c"} (rules/verdict {:allow false :why "no" :chat "c" :by 3})))
   (is (= {:allow true :via "allow"} (rules/verdict {:allow true :via "allow"})))
   (is (false? (:allow (rules/verdict {:allow "true" :via "allow"}))))
   (is (false? (:allow (rules/verdict {:allow true}))))
@@ -88,9 +91,11 @@
   (is (= 1 (rules/exit-code nil nil)))
   (is (= "key:abcdefgh" (rules/key-tag "abcdefghijk")))
   (is (= "no key" (rules/key-tag nil)))
-  (let [l (rules/log-line {:user "u" :chat "c" :argv ["ls"] :decision "no-tap" :exit 0})]
-    (is (str/starts-with? l "root "))
-    (is (= {:user "u" :chat "c" :argv ["ls"] :decision "no-tap" :exit 0} (p/read-json (subs l 5)))))
+  (let [l (rules/log-line {:user "paul-claudia-agent" :chat "c" :argv ["ls"] :decision "allow" :by "a@x.org" :exit 0})]
+    (is (str/starts-with? l "activity "))
+    (is (= {:kind "root" :chat "c" :profile "paul" :agentUser "paul-claudia-agent" :argv ["ls"] :decision "allow"
+            :by "a@x.org" :exit 0}
+           (p/read-json (subs l 9)))))
   (is (not (str/includes? (rules/log-line {:user "u" :chat "c" :argv ["x"] :decision "refused: no"}) "exit"))))
 
 (deftest frames-go-as-lines-and-carry-bytes
@@ -180,11 +185,15 @@
       (is (nil? (gate/answer-problem pending {:chat "c1" :ask "n" :allow false} own))))))
 
 (deftest the-front-holds-the-switches
-  (let [s (gate/with-switch {} "paul" "c1" true)]
+  (let [s (gate/with-switch {} "paul" "c1" true "a@x.org")]
     (is (true? (gate/switch-on? s "paul" "c1")))
+    (is (= "a@x.org" (gate/switch-by s "paul" "c1")) "who turned it on")
+    (is (true? (gate/switch-on? {"paul/c1" true} "paul" "c1")) "a switch kept before decision 59")
+    (is (nil? (gate/switch-by {"paul/c1" true} "paul" "c1")))
+    (is (true? (get (gate/with-switch {} "paul" "c1" true nil) "paul/c1")))
     (is (false? (gate/switch-on? s "peter" "c1")) "per profile")
     (is (false? (gate/switch-on? s "paul" "c2")))
-    (is (= {} (gate/with-switch s "paul" "c1" false)))))
+    (is (= {} (gate/with-switch s "paul" "c1" false "a@x.org")))))
 
 (deftest a-tap-counts-only-on-a-chat-of-the-target-profile
   (is (nil? (gate/tap-problem own "c1")))
@@ -205,8 +214,8 @@
     (is (= "Not an agent user." (gate/ask-problem {:agentUser "paul" :argv ["ls"]} ps)))
     (is (= "No profile peter on this server." (gate/ask-problem {:agentUser "peter-claudia-agent" :argv ["ls"]} ps)))
     (is (string? (gate/ask-problem {:agentUser "paul-claudia-agent" :argv []} ps))))
-  (is (= {:allow true :via "allow" :chat "c"} (gate/verdict-of "c" true nil)))
-  (is (= {:allow false :why "no" :chat "c"} (gate/verdict-of "c" false "no"))))
+  (is (= {:allow true :via "allow" :chat "c" :by "a@x.org"} (gate/verdict-of "c" true nil "a@x.org")))
+  (is (= {:allow false :why "no" :chat "c"} (gate/verdict-of "c" false "no" "a@x.org"))))
 
 (deftest the-page-reads-the-root-switch
   (let [db {:servers {"s" {:rows {"c" {:root true} "d" {}}}}}]

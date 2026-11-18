@@ -10,6 +10,7 @@
             [claudia.node.env :as env]
             [claudia.node.http :as io]
             [claudia.root.rules :as rules]
+            [claudia.shared.activity :as activity]
             [claudia.shared.protocol :as p]
             [claudia.slave.rootgate :as gate]))
 
@@ -55,13 +56,14 @@
 ;; ---- the root helper's ask ----
 
 (defn- settle!
-  "Ends the open ask under nonce (allow or the why of a no): its card goes, the helper hears."
-  [profiles nonce allow why]
+  "Ends the open ask under nonce (allow or the why of a no; by: the email of the person who answered,
+  nil when nobody did): its card goes, the helper hears."
+  [profiles nonce allow why by]
   (when-let [{:keys [profile chat done timer]} (get-in @state [:pending nonce])]
     (js/clearTimeout timer)
     (swap! state update :pending dissoc nonce)
     (to-runner profiles profile "/api/root/done" {:chat chat :ask nonce})
-    (done (gate/verdict-of chat allow why))))
+    (done (gate/verdict-of chat allow why by))))
 
 (defn- wait-for-person
   "Promise of the verdict for argv in cwd of profile's chat: the card shown by the runner, the
@@ -70,12 +72,12 @@
   (js/Promise.
    (fn [done]
      (let [nonce (.toString (crypto/randomBytes 16) "hex")
-           timer (js/setTimeout #(settle! profiles nonce false "Nobody answered in 10 minutes.") ask-ms)]
+           timer (js/setTimeout #(settle! profiles nonce false "Nobody answered in 10 minutes." nil) ask-ms)]
        (swap! state assoc-in [:pending nonce] {:profile profile :chat chat :argv argv :cwd cwd :done done :timer timer})
-       (.on (.-socket req) "close" #(settle! profiles nonce false "The command went away."))
+       (.on (.-socket req) "close" #(settle! profiles nonce false "The command went away." nil))
        (.then (to-runner profiles profile "/api/root/card"
                          {:chat chat :ask nonce :argv argv :cwd cwd :expires (+ (js/Date.now) ask-ms)})
-              #(when (:error %) (settle! profiles nonce false (:error %))))))))
+              #(when (:error %) (settle! profiles nonce false (:error %) nil)))))))
 
 (defn- helper-ask
   "The root helper's {agentUser chatKey argv cwd}: the runner names the chat; the front's own switch
@@ -85,7 +87,8 @@
     (.then (to-runner profiles profile "/api/root/chat" {:chatKey chatKey})
            (fn [{:keys [chat error]}]
              (cond (not (string? chat)) {:allow false :why (or error "No chat for this key.")}
-                   (gate/switch-on? (:switches @state) profile chat) {:allow true :via "switch" :chat chat}
+                   (gate/switch-on? (:switches @state) profile chat)
+                   {:allow true :via "switch" :chat chat :by (gate/switch-by (:switches @state) profile chat)}
                    :else (wait-for-person profiles profile chat ask req))))))
 
 (defn- on-helper [profiles ^js req ^js res]
@@ -112,20 +115,28 @@
 
 ;; ---- the person's taps (hub calls, the caller's route known) ----
 
+(defn tap-line
+  "The front's activity line for the person's tap (README decision 59): route the caller's, chat the
+  chat, decision what the tap did, argv the command it answered (nil for a switch)."
+  [route chat decision argv]
+  (activity/line (activity/root-entry {:chat chat :profile (get-in route [:target :profile])
+                                       :agent-user (get-in route [:target :user]) :argv argv
+                                       :decision decision :by (get-in route [:own :email])})))
+
 (defn- answer! [profiles route {:keys [ask allow] :as a}]
   (let [pending (get-in @state [:pending ask])]
     (if-let [why (gate/answer-problem pending a route)]
       [403 {:error why}]
-      (do (js/console.log (str "root ask " ask " of " (:chat pending) ": " (if (true? allow) "allowed" "denied")
-                               " by " (get-in route [:own :profile])))
-          (settle! profiles ask (true? allow) "The person said no.")
+      (do (js/console.log (tap-line route (:chat pending) (if (true? allow) "allowed" "denied") (:argv pending)))
+          (settle! profiles ask (true? allow) "The person said no." (get-in route [:own :email]))
           [200 {:ok true}]))))
 
 (defn- switch! [profiles route {:keys [chat on]}]
   (let [profile (get-in route [:target :profile])
-        switches (:switches (swap! state update :switches gate/with-switch profile chat (true? on)))]
+        switches (:switches (swap! state update :switches gate/with-switch profile chat (true? on)
+                                   (get-in route [:own :email])))]
     (save-switches! switches)
-    (js/console.log (str "root switch of " profile "/" chat " " (if (true? on) "on" "off")))
+    (js/console.log (tap-line route chat (if (true? on) "switch on" "switch off") nil))
     (to-runner profiles profile "/api/root/shown" {:chat chat :root (true? on)})
     [200 {:ok true :root (true? on)}]))
 
