@@ -137,16 +137,22 @@
    :status "running" :background true :start now :active now
    :parent (:parent_task_id l) :ambient (boolean (:ambient l))})
 
+(defn without-gone
+  "The chat's tasks with every running background task whose id is not in live (a set or map of
+  the ids still in flight) ended at now."
+  [ts live now]
+  (reduce-kv (fn [acc id t]
+               (if (and (= "running" (:status t)) (:background t) (not (contains? live id)))
+                 (assoc acc id (assoc t :status "stopped" :end now))
+                 acc))
+             ts ts))
+
 (defn with-live-set
   "The chat's tasks after background_tasks_changed (live: task id -> its entry, the whole live set):
   a running background task missing from it has ended; every one in it is a background task."
   [ts live now]
   (as-> (or ts {}) ts
-    (reduce-kv (fn [acc id t]
-                 (if (and (= "running" (:status t)) (:background t) (not (contains? live id)))
-                   (assoc acc id (assoc t :status "stopped" :end now))
-                   acc))
-               ts ts)
+    (without-gone ts live now)
     (reduce-kv (fn [acc id l]
                  (if-let [t (get acc id)]
                    (assoc acc id (cond-> (assoc t :background true)
@@ -198,6 +204,18 @@
       "task_updated" (do (patch! chat (:task_id m) (updated-patch m now)) true)
       "task_notification" (do (patch! chat (:task_id m) (notification-patch m now)) true)
       false)))
+
+(defn turn-ended!
+  "A Stop hook's background_tasks (the session's background work still in flight; nil from a CLI
+  that does not send it): a background task this chat still shows running but missing from it has
+  ended, its end message lost (one sent while the runner restarted)."
+  [chat in-flight]
+  (when (and (some? in-flight) (contains? @tasks chat))
+    (let [before (get @tasks chat)
+          after (without-gone before (into #{} (map :id) in-flight) (js/Date.now))]
+      (when (not= before after)
+        (swap! tasks assoc chat after)
+        (changed! chat)))))
 
 (defn stopped!
   "Stop was asked: a task whose agent was stopped never reports its end, so it ends here."

@@ -36,6 +36,18 @@
             :parent nil :ambient false}
            (out "n")))))
 
+(deftest without-gone-ends-only-lost-background-tasks
+  (let [ts {"a" {:id "a" :status "running" :background true}
+            "b" {:id "b" :status "running" :background true}
+            "c" {:id "c" :status "completed" :background true :end 2}
+            "f" {:id "f" :status "running"}}
+        out (tasks/without-gone ts #{"b"} 7)]
+    (is (= {:id "a" :status "stopped" :background true :end 7} (out "a")) "lost: ended at the Stop")
+    (is (= (ts "b") (out "b")) "still in flight")
+    (is (= (ts "c") (out "c")) "already ended")
+    (is (= (ts "f") (out "f")) "a foreground task is not in the set")
+    (is (= ts (tasks/without-gone ts #{"a" "b"} 7)) "nothing lost: unchanged")))
+
 (deftest patches-from-task-messages
   (is (= {:status "running" :active 3 :tokens 10 :tools 2 :name "Now" :last-tool "Bash"}
          (tasks/progress-patch {:usage {:total_tokens 10 :tool_uses 2} :description "Now" :last_tool_name "Bash"} 3)))

@@ -483,8 +483,10 @@
       (emit! id {:type "settings" :settings (settings id) :model (:model (st id)) :effort level}))))
 
 (defn- on-stop!
-  "The turn wants to end: a final reply over the chat's limit is handed back to Claude."
+  "The turn wants to end: background tasks no longer in flight are ended, a final reply over the
+  chat's limit is handed back to Claude."
   [id input]
+  (tasks/turn-ended! id (:background_tasks input))
   (let [verdict (turns/stop-verdict (:last_assistant_message input) (or (:reply-sends (st id)) 0))]
     (when (:decision verdict)
       (swap-chat! id update :reply-sends (fnil inc 0))
