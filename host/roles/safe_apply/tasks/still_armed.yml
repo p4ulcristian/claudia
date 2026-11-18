@@ -1,0 +1,19 @@
+---
+# At the end of a run (and before the migration switches a profile): the undo must still be
+# waiting. When it already fired, part of this run was undone under it, and the run stops here.
+
+- name: See whether the undo is still waiting
+  # No module: is-active of a transient timer; the module has no such query.
+  ansible.builtin.command: systemctl is-active claudia-host-undo.timer  # noqa: command-instead-of-module
+  register: safe_apply_timer_now
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop when the undo already ran during this run
+  ansible.builtin.fail:
+    msg: >-
+      The undo timer is no longer waiting: it fired during this run (or was stopped), so /etc may be
+      back at the state before the run. Read `journalctl -u claudia-host-undo`, raise `undo_after`
+      and run again.
+  when: not ansible_check_mode and safe_apply_timer_now.stdout != 'active'

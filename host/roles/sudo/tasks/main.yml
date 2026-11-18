@@ -1,0 +1,74 @@
+---
+# Phase B (README decision 54): the people's sudo asks for their password again. Runs only when the
+# host sets `phase_b_remove_nopasswd: true` (site.yml), after a week on the new setup and the user's
+# go, and only once break-glass was tested on this server (`break_glass_tested: true`).
+#
+# Each drop-in in /etc/sudoers.d with a rule for a person's user that carries NOPASSWD is written again
+# without that tag (template nopasswd-removed.j2), checked by visudo before it is written. The rule
+# itself stays: people keep sudo, with their password. Afterwards sudo is asked directly what each
+# person may still run without a password; anything left (a group rule such as %wheel, or a line in
+# /etc/sudoers itself) stops the run with its name, to be fixed by hand.
+
+- name: Stop unless break-glass was tested on this server
+  ansible.builtin.assert:
+    that: break_glass_tested | bool
+    fail_msg: >-
+      Test break-glass here first (ssh in as {{ break_glass_user }}, run `sudo -n true`), then set
+      `break_glass_tested: true` for this host.
+
+# The run itself must still become root after this role: either as break-glass, or with the
+# person's sudo password given to Ansible (-K).
+- name: Stop when this run would lock itself out
+  ansible.builtin.assert:
+    that: >-
+      (ansible_user | default('')) not in person_users
+      or ansible_become_password is defined or ansible_become_pass is defined
+    fail_msg: >-
+      This run logs in as {{ ansible_user }}, whose passwordless sudo goes now. Run Phase B as
+      {{ break_glass_user }} (-u {{ break_glass_user }}) or give the sudo password (-K).
+
+- name: Find drop-ins with a passwordless rule for a person's user
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    contains: '^\s*({{ person_users | map("regex_escape") | join("|") }})\s.*NOPASSWD\s*:'
+    read_whole_file: false
+  register: sudo_nopasswd_files
+
+- name: Read those drop-ins
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop: "{{ sudo_nopasswd_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: sudo_nopasswd_texts
+
+- name: Write them again without NOPASSWD on the people's rules (checked by visudo)
+  ansible.builtin.template:
+    src: nopasswd-removed.j2
+    dest: "{{ item.source }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  loop: "{{ sudo_nopasswd_texts.results }}"
+  loop_control:
+    label: "{{ item.source }}"
+
+- name: Ask sudo what each person may run
+  ansible.builtin.command: sudo -n -l -U {{ item }}
+  register: sudo_person_rules
+  changed_when: false
+  check_mode: false
+  loop: "{{ person_users }}"
+
+- name: Stop when a person still has passwordless sudo from elsewhere
+  ansible.builtin.assert:
+    that: "'NOPASSWD' not in item.stdout"
+    fail_msg: >-
+      {{ item.item }} still has passwordless sudo from a rule this role does not edit (a group rule or
+      /etc/sudoers): {{ item.stdout_lines | select('search', 'NOPASSWD') | join(' / ') }}. Change it
+      by hand with visudo.
+  loop: "{{ sudo_person_rules.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode

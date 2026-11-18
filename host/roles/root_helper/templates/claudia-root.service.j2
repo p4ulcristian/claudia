@@ -1,0 +1,19 @@
+# Claudia's root helper (README decision 52). Installed by host/roles/root_helper, never by
+# deploy/update.sh: keep this unit out of deploy/shared-server/, whose claudia-*.service files
+# install.sh copies on every update. Runs as root and listens on one socket per agent user under
+# {{ root_socket_dir }}/<agent user>/, a folder only that user's group may enter (tmpfiles.d).
+# It does not start until Claudia's release brings out/root.js.
+[Unit]
+Description=Claudia root helper (runs the agents' sudo commands it may)
+After=systemd-tmpfiles-setup.service
+ConditionPathExists=/srv/claudia/out/root.js
+
+[Service]
+Environment=ROOT_SOCKET_DIR={{ root_socket_dir }}
+Environment=ROOT_NO_TAP={{ root_no_tap_file }}
+ExecStart=/usr/bin/env node /srv/claudia/out/root.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

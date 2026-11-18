@@ -1,0 +1,20 @@
+---
+# Moves profiles from the person's own user to the profile's agent user (README decision 51), once,
+# only for the profiles named in `migrate_profiles`. A profile whose line already says
+# user=<agent user> is skipped, so running again changes nothing (and never copies the person's
+# older files over the agent's newer ones).
+
+- name: Install rsync and the ACL tools
+  ansible.builtin.package:
+    name:
+      - rsync
+      - acl
+    state: present
+  when: migrate_profiles | length > 0
+
+- name: Move each listed profile
+  ansible.builtin.include_tasks: profile.yml
+  loop: "{{ migrate_profiles }}"
+  loop_control:
+    loop_var: profile
+  when: profile_users[profile] | default('') != profile ~ agent_suffix

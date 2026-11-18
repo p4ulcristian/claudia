@@ -1,0 +1,13 @@
+# Claudia host standard (host/roles/desktop_access): a user unit, only for {{ desktop_user }}. Gives
+# the agent users the session's Wayland, PipeWire and PulseAudio sockets. /run/user/<uid> is made
+# again at every login, so this runs at every session start: started by claudia-desktop-access.path
+# once the compositor's Wayland socket appears (PipeWire's sockets are up before that).
+[Unit]
+Description=Claudia: agent users reach this desktop session
+ConditionUser={{ desktop_user }}
+
+[Service]
+Type=oneshot
+# Stays "active" until logout, so the .path unit does not start it again and again.
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/claudia-desktop-access %t

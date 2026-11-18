@@ -1,0 +1,10 @@
+{# One sudoers drop-in (item: its slurp result), every line as it was except a person's own rule,
+   which loses its NOPASSWD: tag. #}
+{% set people_pattern = '^\\s*(' ~ (person_users | map('regex_escape') | join('|')) ~ ')\\s' %}
+{% for line in (item.content | b64decode).splitlines() %}
+{% if line is search(people_pattern) %}
+{{ line | regex_replace('NOPASSWD\\s*:\\s*', '') }}
+{% else %}
+{{ line }}
+{% endif %}
+{% endfor %}

@@ -1,0 +1,101 @@
+---
+# The agent users (decision 51) and break-glass (decision 55).
+
+- name: Make the group whose members read the Claude token in use (as install.sh does)
+  ansible.builtin.group:
+    name: claudia-run
+    system: true
+
+# A plain user per profile: its own group, its own home, no sudo, no password, no SSH keys.
+# It is reached over SSH only with an hour-long certificate from the hub (role ssh, decision 53).
+# Password '*' matches no password; unlike '!', sshd does not count it as a locked account.
+- name: Make each agent user's own group
+  ansible.builtin.group:
+    name: "{{ item }}"
+  loop: "{{ agent_users }}"
+
+- name: Make each agent user (no sudo, own group and home, member of claudia-run)
+  ansible.builtin.user:
+    name: "{{ item }}"
+    group: "{{ item }}"
+    groups: [claudia-run]
+    append: true
+    home: "/home/{{ item }}"
+    create_home: true
+    shell: /bin/bash
+    password: "*"
+    comment: "Claudia agent"
+  loop: "{{ agent_users }}"
+
+- name: Keep each agent user's home closed to others
+  ansible.builtin.file:
+    path: "/home/{{ item }}"
+    state: directory
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: "0750"
+  loop: "{{ agent_users }}"
+
+- name: Ask sudo what each agent user may run
+  ansible.builtin.command: sudo -n -l -U {{ item }}
+  register: users_agent_sudo
+  changed_when: false
+  check_mode: false
+  loop: "{{ agent_users }}"
+
+# A group rule (wheel, sudo, admin) or a stray drop-in naming an agent user would undo decision 51.
+- name: Stop when any agent user may use sudo
+  ansible.builtin.assert:
+    that: "'is not allowed to run sudo' in item.stdout"
+    fail_msg: "{{ item.item }} may use sudo ({{ item.stdout_lines | join(' / ') }}). Agent users must not."
+  loop: "{{ users_agent_sudo.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Make break-glass's group
+  ansible.builtin.group:
+    name: "{{ break_glass_user }}"
+
+- name: Make break-glass (no password; one SSH key; full sudo)
+  ansible.builtin.user:
+    name: "{{ break_glass_user }}"
+    group: "{{ break_glass_user }}"
+    home: "/home/{{ break_glass_user }}"
+    create_home: true
+    shell: /bin/bash
+    password: "*"
+    comment: "Claudia break-glass: by hand only"
+
+- name: Make break-glass's .ssh folder
+  ansible.builtin.file:
+    path: "/home/{{ break_glass_user }}/.ssh"
+    state: directory
+    owner: "{{ break_glass_user }}"
+    group: "{{ break_glass_user }}"
+    mode: "0700"
+
+# The whole file: break-glass's one key, nothing else (decision 55).
+- name: Give break-glass its one key
+  ansible.builtin.copy:
+    content: "{{ break_glass_pubkey }}\n"
+    dest: "/home/{{ break_glass_user }}/.ssh/authorized_keys"
+    owner: "{{ break_glass_user }}"
+    group: "{{ break_glass_user }}"
+    mode: "0600"
+
+- name: Check that sudo reads /etc/sudoers.d
+  ansible.builtin.command: grep -Eq '^[[:space:]]*[@#]includedir[[:space:]]+/etc/sudoers\.d' /etc/sudoers
+  changed_when: false
+  check_mode: false
+
+- name: Give break-glass full sudo without a password (checked by visudo before it is written)
+  ansible.builtin.copy:
+    content: |
+      # Claudia host standard (host/roles/users): the way in when Claudia is broken, by hand only.
+      {{ break_glass_user }} ALL=(ALL:ALL) NOPASSWD: ALL
+    dest: /etc/sudoers.d/90-claudia-break-glass
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s

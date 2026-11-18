@@ -1,0 +1,61 @@
+---
+# The host standard's settings, the same on every server (README decisions 51 to 55).
+#
+# Two settings are NOT set here on purpose: `break_glass_pubkey` and `claudia_ssh_ca_pubkey`.
+# Ansible ranks this file above the inventory file's own `vars:`, so a placeholder here would
+# silently win over the real key written in the inventory. Set both in the inventory (see
+# inventory.example.yml); the run stops before changing anything when either is missing.
+#
+# Settings that differ per server (`people`, `migrate_profiles`, `phase_b_remove_nopasswd`,
+# `break_glass_tested`) go on the host in the inventory: host settings rank above this file.
+
+# A profile's agent user is <profile> + this: alice -> alice-claudia-agent (decision 51).
+agent_suffix: "-claudia-agent"
+
+# The way in when Claudia is broken (decision 55): no password, one SSH key, full sudo.
+break_glass_user: break-glass
+
+# How long a run stays undoable: after this, an unconfirmed run puts /etc back (decision 54).
+# A systemd time span. Raise it on a host whose migration copies a large Work folder.
+undo_after: 10min
+
+# The profiles that move from the person's user to the agent user in this run (role migrate).
+# Empty: nobody moves. Set it per host in the inventory, e.g. [alice].
+migrate_profiles: []
+
+# Phase B: take away the people's passwordless sudo. Only after a week on the new setup and the
+# user's go, per host, and only once break-glass was tested there (`break_glass_tested: true`).
+phase_b_remove_nopasswd: false
+break_glass_tested: false
+
+# sshd settings written to /etc/ssh/sshd_config.d/10-claudia.conf (role ssh). The certificate
+# trust lines (TrustedUserCAKeys, AuthorizedPrincipalsFile) are added by the role itself.
+# ListenAddress is never touched.
+ssh_settings:
+  PasswordAuthentication: "no"
+  KbdInteractiveAuthentication: "no"
+
+# The no-tap list (/etc/claudia/root-no-tap, decision 52): commands the root helper runs without
+# asking. Each line of that file is one exact command line; nothing is a pattern.
+#
+# For every unit below the file gets `systemctl restart <unit>`, `systemctl status <unit>` and
+# `journalctl -u <unit>`. Each profile's `claudia-runner@<profile>.service` and
+# `claudia-host@<profile>.service` are added to this list per host from `people`.
+no_tap_restartable_units:
+  - claudia-front.service
+# Units whose status and journal may be read, but which the helper must not restart without a tap
+# (restarting the root helper from inside the root helper would cut off its own answer).
+no_tap_status_only_units:
+  - claudia-root.service
+# Further exact command lines.
+no_tap_commands:
+  - nft list ruleset
+  - ss -tlnp
+
+# Where the root helper and the sudo shim live (decision 52). The shim and root.js come with
+# Claudia's release in /srv/claudia (root-owned); this playbook only points at them.
+root_socket_dir: /run/claudia-root
+root_no_tap_file: /etc/claudia/root-no-tap
+agent_bin_dir: /usr/local/lib/claudia-agent-bin
+sudo_shim: /srv/claudia/deploy/sudo-shim
+agent_path: "/usr/local/lib/claudia-agent-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

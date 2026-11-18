@@ -1,0 +1,24 @@
+---
+# One profile (`root_helper_person`, an entry of `people`): its session host's sessions find the sudo shim before /usr/bin/sudo.
+# A drop-in beside install.sh's user.conf, which install.sh leaves alone. It takes effect when that
+# host restarts next (restarting it stops the profile's running chats, so this role does not).
+
+- name: Make the drop-in folder of claudia-host@{{ root_helper_person.profile }}
+  ansible.builtin.file:
+    path: "/etc/systemd/system/claudia-host@{{ root_helper_person.profile }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Set the PATH of claudia-host@{{ root_helper_person.profile }}
+  ansible.builtin.copy:
+    content: |
+      # Claudia host standard (host/roles/root_helper): the sudo shim comes first (decision 52).
+      [Service]
+      Environment=PATH={{ agent_path }}
+    dest: "/etc/systemd/system/claudia-host@{{ root_helper_person.profile }}.service.d/agent-path.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd

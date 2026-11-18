@@ -1,0 +1,8 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Make the root helper's socket folders
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/claudia-root.conf
+  changed_when: true

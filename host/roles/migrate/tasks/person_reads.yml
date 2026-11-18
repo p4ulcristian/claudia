@@ -1,0 +1,31 @@
+---
+# The person keeps reading what the agent makes (decision 51: people keep their own users for work by
+# hand): a pass through the agent user's home, read on everything in its Work folder, and a default
+# ACL on every folder there, so files made later are readable too. Read only: the person cannot
+# change the agent's files, and the agent never reaches the person's.
+
+- name: Let the person pass through the agent user's home
+  ansible.builtin.command:
+    argv: [setfacl, -m, "u:{{ migrate_person.person_user }}:x", "{{ migrate_agent_home }}"]
+  changed_when: true
+
+- name: Let the person read everything now in the agent user's Work folder
+  ansible.builtin.command:
+    argv: [setfacl, -R, -m, "u:{{ migrate_person.person_user }}:rX", "{{ migrate_agent_home }}/Work"]
+  changed_when: true
+
+- name: Let the person read what is made there later (default ACL on every folder)
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ migrate_agent_home }}/Work"
+      - -type
+      - d
+      - -exec
+      - setfacl
+      - -d
+      - -m
+      - "u:{{ migrate_person.person_user }}:rX"
+      - "{}"
+      - +
+  changed_when: true

@@ -1,0 +1,53 @@
+---
+# Arms the undo before any change of the standard (README decision 54): after `undo_after`
+# (10 minutes) a systemd timer puts /etc back to the etckeeper commit made just before this run,
+# unless host/confirm.yml stops it first. Runs right after role etckeeper.
+
+- name: See whether an earlier run is still waiting for its confirm
+  # No module: is-active of a transient timer; the module has no such query.
+  ansible.builtin.command: systemctl is-active claudia-host-undo.timer  # noqa: command-instead-of-module
+  register: safe_apply_timer
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop when an earlier run is not confirmed yet
+  ansible.builtin.fail:
+    msg: >-
+      An earlier run is still armed (claudia-host-undo.timer). Run host/confirm.yml to keep it, or
+      wait for it to undo itself; then run again. Arming twice would make the undo point the
+      unconfirmed state.
+  when: safe_apply_timer.stdout == 'active'
+
+- name: Install the undo program
+  ansible.builtin.copy:
+    src: claudia-host-undo
+    dest: /usr/local/sbin/claudia-host-undo
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Read the undo point (the etckeeper commit made just before)
+  # No module: reads one commit id; the git module clones.
+  ansible.builtin.command: git -C /etc rev-parse HEAD  # noqa: command-instead-of-module
+  register: safe_apply_undo_point
+  changed_when: false
+  check_mode: false
+
+- name: Clear a failed undo from an earlier run, so the unit name is free
+  ansible.builtin.command: systemctl reset-failed claudia-host-undo.service claudia-host-undo.timer
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Arm the undo
+  ansible.builtin.command:
+    argv:
+      - systemd-run
+      - --unit=claudia-host-undo
+      - "--on-active={{ undo_after }}"
+      - "--description=Claudia host standard: undo an unconfirmed run"
+      - /usr/local/sbin/claudia-host-undo
+      - "{{ safe_apply_undo_point.stdout }}"
+  changed_when: true
+  when: not ansible_check_mode

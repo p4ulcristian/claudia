@@ -1,0 +1,41 @@
+---
+# The profile's line in /etc/claudia/profiles gets user=<agent user>; its other words, its comment
+# and every other line stay as they are. install.sh reads this line on every update and writes the
+# units' drop-ins from it, so the line is what keeps the profile on the agent user.
+
+- name: Read the profiles file as it is now
+  ansible.builtin.slurp:
+    src: /etc/claudia/profiles
+  register: migrate_profiles_now
+
+- name: Read the profiles file's owner and mode
+  ansible.builtin.stat:
+    path: /etc/claudia/profiles
+  register: migrate_profiles_stat
+
+# Line by line: the profile's line is its words without any user=, then user=<agent user>, then its
+# comment; every other line exactly as it was.
+- name: Work out the new lines, {{ profile }}
+  ansible.builtin.set_fact:
+    migrate_profiles_lines: >-
+      {%- set ns = namespace(lines=[]) -%}
+      {%- for line in (migrate_profiles_now.content | b64decode).splitlines() -%}
+      {%-   set body = line.split('#') | first -%}
+      {%-   set comment = line[body | length:] -%}
+      {%-   set words = body.split() -%}
+      {%-   if words | length >= 3 and words[0] == profile -%}
+      {%-     set new = (words | reject('match', '^user=') | list + ['user=' ~ migrate_agent_user]) | join(' ') -%}
+      {%-     set ns.lines = ns.lines + [new ~ ((' ' ~ comment) if comment else '')] -%}
+      {%-   else -%}
+      {%-     set ns.lines = ns.lines + [line] -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ ns.lines }}
+
+- name: Write user=<agent user> on the profile's line, {{ profile }}
+  ansible.builtin.copy:
+    content: "{{ migrate_profiles_lines | join('\n') ~ '\n' }}"
+    dest: /etc/claudia/profiles
+    owner: "{{ migrate_profiles_stat.stat.pw_name }}"
+    group: "{{ migrate_profiles_stat.stat.gr_name }}"
+    mode: "{{ migrate_profiles_stat.stat.mode }}"

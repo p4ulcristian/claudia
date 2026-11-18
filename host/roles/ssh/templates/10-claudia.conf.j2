@@ -1,0 +1,10 @@
+# Claudia host standard (host/roles/ssh). Named 10-… so sshd reads it before the other files here:
+# for each setting, sshd keeps the first value it reads. ListenAddress is left to the server.
+{% for key, value in ssh_settings.items() %}
+{{ key }} {{ value }}
+{% endfor %}
+# Agents arrive with an hour-long certificate from the hub's authority (README decision 53), and a
+# certificate is accepted for a user only when that user's principals file names it: agent users
+# have one naming themselves; nobody else has one.
+TrustedUserCAKeys /etc/ssh/claudia-ca.pub
+AuthorizedPrincipalsFile /etc/ssh/claudia-principals/%u

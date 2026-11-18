@@ -1,0 +1,33 @@
+---
+# etckeeper keeps /etc in git, so every run can be undone to the commit before it (role safe_apply).
+# It runs before the undo is armed because the undo point is an etckeeper commit; installing it
+# adds only the package's own files and /etc/.git, and the first commit is /etc as it was.
+
+- name: Install etckeeper and git (apt on Debian/Ubuntu, pacman on Arch)
+  ansible.builtin.package:
+    name:
+      - etckeeper
+      - git
+    state: present
+
+- name: Start the /etc repository (Debian's package does this itself; Arch's does not)
+  ansible.builtin.command: etckeeper init
+  args:
+    chdir: /etc
+    creates: /etc/.git
+
+- name: See whether /etc has changes etckeeper has not committed
+  ansible.builtin.command: etckeeper unclean
+  args:
+    chdir: /etc
+  register: etckeeper_unclean
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Commit /etc as it is, so the undo point below is today's state
+  ansible.builtin.command:
+    argv: [etckeeper, commit, "claudia host standard: /etc before the run"]
+    chdir: /etc
+  when: etckeeper_unclean.rc == 0
+  changed_when: true

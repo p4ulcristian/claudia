@@ -1,0 +1,38 @@
+---
+# An example only. The real inventory (servers, people, addresses, keys) stays outside this public
+# repo, at ~/.config/claudia-host/inventory.yml (README decision 54). Copy this file there and fill
+# it in. Every name and address below is a placeholder.
+all:
+  vars:
+    # The public half of break-glass's SSH key (its private half stays in 1Password, decision 55).
+    break_glass_pubkey: "ssh-ed25519 AAAA...placeholder... break-glass"
+    # The hub's SSH certificate authority, public half (decision 53).
+    claudia_ssh_ca_pubkey: "ssh-ed25519 AAAA...placeholder... claudia-ca"
+  children:
+    claudia_servers:
+      hosts:
+        server-a:
+          ansible_host: 100.64.0.11
+          # The person who runs the playbook logs in as their own user and becomes root with sudo.
+          ansible_user: alice
+          # One entry per Claudia profile on this server: the profile's name (first word of its line
+          # in /etc/claudia/profiles) and the person's own, existing Linux login.
+          people:
+            - { profile: alice, person_user: alice }
+            - { profile: bob, person_user: bob }
+          # The profiles moved to their agent user in this run (role migrate). Start with one.
+          migrate_profiles: [alice]
+          # Phase B, per host, only after a week and the user's go:
+          # break_glass_tested: true
+          # phase_b_remove_nopasswd: true
+        desktop-a:
+          ansible_host: 100.64.0.12
+          ansible_user: alice
+          # The person at this machine's screen: the agent users may use their Wayland session and
+          # sound (role desktop_access). Leave it out on servers without a desktop.
+          desktop_user: alice
+          people:
+            # A machine that ran Claudia single-user may have kept its data elsewhere: work_dir and
+            # runner_data are that machine's old CLAUDIA_CWD and RUNNER_DATA (defaults: ~/Work and
+            # ~/.local/share/claudia of person_user).
+            - { profile: alice, person_user: alice, work_dir: /home/alice/Work, runner_data: /home/alice/.local/share/claudia }

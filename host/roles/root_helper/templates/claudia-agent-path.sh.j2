@@ -1,0 +1,10 @@
+# Claudia host standard (host/roles/root_helper): an agent user's login shells, such as an agent
+# arriving over SSH with its certificate (decision 53), find the sudo shim first, as its chats do.
+case "$(id -un)" in
+*{{ agent_suffix }})
+	case ":$PATH:" in
+	*:{{ agent_bin_dir }}:*) ;;
+	*) PATH="{{ agent_bin_dir }}:$PATH"; export PATH ;;
+	esac
+	;;
+esac

@@ -1,0 +1,50 @@
+---
+# Only on a host whose inventory sets `desktop_user` (the person who sits at that machine): the agent
+# users may use that person's graphical session, its screen (Wayland) and sound (PipeWire,
+# PulseAudio). Other hosts skip this role (site.yml).
+
+- name: Stop unless the desktop user exists
+  ansible.builtin.assert:
+    that: desktop_user in ansible_facts.getent_passwd
+    fail_msg: "desktop_user {{ desktop_user }} does not exist on this server."
+
+- name: Install the ACL tools
+  ansible.builtin.package:
+    name: acl
+    state: present
+
+- name: Install the program that gives the agent users the session's sockets
+  ansible.builtin.template:
+    src: claudia-desktop-access.sh.j2
+    dest: /usr/local/bin/claudia-desktop-access
+    owner: root
+    group: root
+    mode: "0755"
+
+# In /etc/systemd/user (every user's manager reads it), limited by ConditionUser to desktop_user.
+- name: Install the user units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/user/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - claudia-desktop-access.service
+    - claudia-desktop-access.path
+
+# --global: the link goes in /etc/systemd/user/default.target.wants, so it needs no running user
+# manager; ConditionUser keeps it to desktop_user.
+- name: Enable the path unit in default.target
+  # No module: --global: the module enables for one manager only.
+  ansible.builtin.command: systemctl --global enable claudia-desktop-access.path  # noqa: command-instead-of-module
+  args:
+    creates: /etc/systemd/user/default.target.wants/claudia-desktop-access.path
+
+- name: Apply the ACLs once now, when the desktop user's session is up
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/claudia-desktop-access
+      - "/run/user/{{ ansible_facts.getent_passwd[desktop_user][1] }}"
+  changed_when: true
+  when: not ansible_check_mode
