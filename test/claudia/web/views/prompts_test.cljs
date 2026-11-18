@@ -14,8 +14,3 @@
   (is (= "Review the diff." (prompts/first-line "  Review the diff.\nNever edit.")))
   (is (= "" (prompts/first-line nil)))
   (is (= 80 (count (prompts/first-line (apply str (repeat 100 "a")))))))
-
-(deftest popup-place-stays-in-the-window
-  (is (= {:top 46 :left 160} (prompts/popup-place {:right 500 :bottom 40} 340 1200)))
-  (is (= {:top 46 :left 6} (prompts/popup-place {:right 200 :bottom 40} 340 1200)))
-  (is (= {:top 46 :left 854} (prompts/popup-place {:right 1300 :bottom 40} 340 1200))))

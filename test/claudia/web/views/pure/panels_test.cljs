@@ -73,6 +73,13 @@
   (is (nil? (usage/matches "hello" {} {})))
   (is (= {:value "b"} (usage/chosen-model [{:value "a"} {:value "b"}] {:model "b"}))))
 
+(deftest the-model-effort-pill
+  (let [models [{:value "default" :name "Default"} {:value "claude-opus-5-5" :name "Opus 5.5"}]]
+    (is (= "Opus 5.5 · high" (usage/model-effort-text models {:model "claude-opus-5-5" :effort "high"} "Sonnet 5" "low")))
+    (is (= "Sonnet 5 · low" (usage/model-effort-text models {} "Sonnet 5" "low")) "nothing picked: what it runs with")
+    (is (= "Default model" (usage/model-effort-text models {} nil nil)))
+    (is (= "x-model · max" (usage/model-effort-text models {:model "x-model" :effort "max"} nil nil)) "a model no longer listed")))
+
 (deftest settings-title-menu
   (is (= "Paul's chats" (settings/list-title false "paul")))
   (is (= "Archived chats" (settings/list-title true "paul")))

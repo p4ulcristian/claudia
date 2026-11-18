@@ -79,27 +79,35 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('the header shows the folder pill with the work folder\'s path and the colour swatch, no project pill; Folders opens from the pill and a bookmark and a tree folder become the new chat\'s folder (README decisions 22, 61 to 64)', async () => {
+    if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill and the model · effort popup, no project pill and no select; the colour button first among the round buttons (README decision 22)', async () => {
+      const head = page.locator('.chat-head');
+      await head.locator('.head-row.r2 .head-pill').first().waitFor({ timeout: waitMs });
+      if (await head.locator('select, .proj-btn, .r1 .icon').count()) throw new Error('a select, the project pill or a row-1 button is still there');
+      const acts = await head.locator('.head-acts > *').evaluateAll((els) => els.map((e) => e.className));
+      if (!/head-act/.test(acts[0] ?? '')) throw new Error(`the first button is ${acts[0]}`);
+      await head.locator('.head-pill[aria-label="Model · effort"]').click({ timeout: waitMs });
+      await head.locator('.head-pop.model-pop').getByText('Model', { exact: true }).waitFor({ timeout: waitMs });
+      await page.keyboard.press('Escape');
+      await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
+    });
+    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Folders and keeps the draft, a bookmark\'s Select picks the folder and sends (README decisions 61 to 65)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
       const pill = page.locator('.chat-head .folder-pill');
-      const pick = pill.locator('.folder-path');
-      await until('the folder pill shows the work folder', async () => /\/work$/.test((await pick.textContent()) ?? ''));
-      await page.locator('.chat-head .colour-btn').waitFor({ timeout: waitMs });
-      if (await page.locator('.chat-head .proj-btn').count()) throw new Error('the project pill is still there');
-      await pill.click({ timeout: waitMs });
+      await pill.locator('.pill-empty', { hasText: 'Pick a folder' }).waitFor({ timeout: waitMs });
+      const box = page.getByPlaceholder('Message Claude…');
+      await box.fill('Start here please');
+      await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });
       await page.locator('.fd-detail .fd-title', { hasText: 'work' }).waitFor({ timeout: waitMs });
+      if (seen.sent.some((f) => f.type === 'new')) throw new Error('a new chat went out without a folder');
       await row('claude').click({ timeout: waitMs });
       await row('claude').locator('.fd-pin').click({ timeout: waitMs });
       await page.locator('.fd-card', { hasText: 'claude' }).getByRole('button', { name: 'Select' }).click({ timeout: waitMs });
       await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
-      await until('the folder pick is claude', async () => /\/claude$/.test((await pick.textContent()) ?? ''));
-      await pill.click({ timeout: waitMs });
-      await page.locator('.fd-detail .fd-title', { hasText: 'claude' }).waitFor({ timeout: waitMs });
-      await row('hub').click({ timeout: waitMs });
-      await page.locator('.fd-detail .fd-title', { hasText: 'hub' }).waitFor({ timeout: waitMs });
-      await page.getByRole('button', { name: 'Use for this chat' }).click({ timeout: waitMs });
-      await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
-      await until('the folder pick is hub', async () => /\/hub$/.test((await pick.textContent()) ?? ''));
+      await until('the new chat goes with the picked folder', () => seen.sent.some((f) => f.type === 'new' && /\/claude$/.test(f.folder ?? '') && f.text === 'Start here please'));
+      // The smoke stack has no Claude token: the runner's answer to that `new` is this error, expected here.
+      const noToken = (p) => /No Claude subscription for this chat yet/.test(p);
+      await until('the runner answers the new chat', () => seen.problems.some(noToken));
+      seen.problems = seen.problems.filter((p) => !noToken(p));
     });
     await step('the chat opens', async () => {
       await page.getByText(title, { exact: true }).first().click({ timeout: waitMs });

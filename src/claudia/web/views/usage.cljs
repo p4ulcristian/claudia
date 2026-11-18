@@ -1,33 +1,26 @@
 (ns claudia.web.views.usage
-  "Meters and the model: the chalk rings in the chat's header (the chat's context, a click runs
-  /compact; its plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside
-  a button (pop-place), the model, effort and prompt pickers in the header, and the / command menu."
+  "Meters and the model: the chalk rings (the chat's context in the header, a click runs /compact;
+  the plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside a button
+  (pop-place), the header's model · effort pill's state and popup, and the / command menu."
   (:require [re-frame.core :as rf]
-            [claudia.web.views.prompts :as prompts]
             [claudia.web.views.pure.usage :as pure]))
 
 (def ^:private k-tokens pure/k-tokens)
 (def pretty-model pure/pretty-model)
 (def ^:private level pure/level)
 
-(def ^:private compact-icon
-  "M17 7.5v6m-3.2-3.2 3.2 3.2 3.2-3.2M17 26.5v-6m-3.2 3.2 3.2-3.2 3.2 3.2M10.5 17h13")
-
-(defn ring
-  "A chalk ring with its percent; with on-click a button whose number turns into its icon on hover."
-  [{short-label :short :keys [percent tip icon on-click on-context-menu]}]
-  (let [r 14
+(defn mini-ring
+  "A small chalk ring (18 px) followed by its percent; tip names it. With on-click a button."
+  [{:keys [percent tip on-click on-context-menu]}]
+  (let [r 7
         len (* 2 js/Math.PI r)]
-    [(if on-click :button.ring.action :div.ring)
-     {:class (level percent) :data-tip tip :on-click on-click :on-context-menu on-context-menu}
-     [:svg {:viewBox "0 0 34 34" :aria-hidden true}
-      [:circle.r-track {:cx 17 :cy 17 :r r}]
-      [:circle.r-fill {:cx 17 :cy 17 :r r :transform "rotate(-90 17 17)"
-                       :stroke-dasharray (str (* (/ (min 100 percent) 100) len) " " len)}]
-      (when on-click
-        [:g.r-icon {:transform "translate(17 17) scale(0.7) translate(-17 -17)"} [:path {:d icon}]])]
-     [:span.r-num percent]
-     [:span.r-label short-label]]))
+    [(if on-click :button.mini-ring.action :span.mini-ring)
+     {:class (level percent) :data-tip tip :aria-label tip :on-click on-click :on-context-menu on-context-menu}
+     [:svg {:viewBox "0 0 18 18" :aria-hidden true}
+      [:circle.r-track {:cx 9 :cy 9 :r r}]
+      [:circle.r-fill {:cx 9 :cy 9 :r r :transform "rotate(-90 9 9)"
+                       :stroke-dasharray (str (* (/ (min 100 percent) 100) len) " " len)}]]
+     [:span.mr-num (str percent "%")]]))
 
 (defn pop-place
   "Where the popup opens by the rings in box: below them (the list's header) or beside them (the rail)."
@@ -42,57 +35,53 @@
   [{:keys [ck state pending?]}]
   (when-let [c (:context state)]
     (let [can? (and (not pending?) (not (:running state)))]
-      [ring {:short "ctx" :percent (:percent c) :icon compact-icon
-             :tip (str "Context " (:percent c) "% · " (k-tokens (:used c)) " of " (k-tokens (:max c))
-                       (when can? " · click to compact"))
-             :on-click (when can? #(rf/dispatch [:chat/compact ck]))
-             :on-context-menu (fn [^js e] (.preventDefault e)
-                                (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}])))
+      [mini-ring {:percent (:percent c)
+       :tip (str "Context " (:percent c) "% · " (k-tokens (:used c)) " of " (k-tokens (:max c))
+                 (when can? " · click to compact"))
+       :on-click (when can? #(rf/dispatch [:chat/compact ck]))
+       :on-context-menu (fn [^js e] (.preventDefault e)
+                          (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}])))
 
 ;; ---- model and effort ----
 
 (rf/reg-event-db :new/settings (fn [db [_ m]] (update db :new-settings merge m)))
 (rf/reg-sub :new-settings (fn [db] (:new-settings db)))
 
-(defn- model-pick [models settings running put!]
-  [:label.pick.model {:title (if (seq running) (str "Model: " running (when-not (:model settings) " (your default)")) "Model for this chat")}
-   [:select {:value (or (:model settings) "")
-             :on-change #(put! {:model (not-empty (.. % -target -value))})}
-    [:option {:value ""} (if (and (not (:model settings)) (seq running)) running "Default model")]
-    (for [m models :when (not= "default" (:value m))]
-      ^{:key (:value m)} [:option {:value (:value m)} (:name m)])]])
-
-(defn- effort-pick
-  "The chat's effort; with none picked, the effort its session runs with (running, known from its
-  first tool call on)."
-  [efforts settings running put!]
-  [:label.pick.effort {:title (str "Effort: " (or (:effort settings) (some-> running (str " (your default)")) "your default"))}
-   [:select {:value (or (:effort settings) "")
-             :on-change #(put! {:effort (not-empty (.. % -target -value))})}
-    [:option {:value ""} (or (when-not (:effort settings) running) "…")]
-    (for [e efforts] ^{:key e} [:option {:value e} e])]])
-
-(defn pickers
-  "The chat's model and effort (applied on its next start; a live session takes them at once) and
-  its prompt profile (a live session takes it after its turn). A new chat keeps them until it is
-  made (events.cljs sends them with `created`)."
-  [{:keys [ck server state pending?]}]
-  (let [server (or server @(rf/subscribe [:new-server]))
-        server-meta @(rf/subscribe [:meta server])
+(defn model-state
+  "What the header's model · effort pill and its popup need for the chat ({:ck :server :state}; no ck:
+  the new chat): the server's models, the chat's settings, how a pick is put, the picked model's
+  efforts, the model and effort it runs with when none is picked, and the pill's text."
+  [{:keys [ck server state]}]
+  (let [server-meta @(rf/subscribe [:meta server])
         models (:models server-meta)
         settings (if ck (:settings state) @(rf/subscribe [:new-settings]))
-        put! (fn [m] (if ck (rf/dispatch [:chat/settings ck m]) (rf/dispatch [:new/settings m])))
-        efforts (:efforts (pure/chosen-model models settings))
-        running (pretty-model (or (not-empty (:model state)) (when-not (:model settings) (:defaultModel server-meta))))]
-    (when (and (not pending?) (seq models) (not @(rf/subscribe [:read-only?])))
-      [:<>
-       (model-pick models settings running put!)
-       (when (seq efforts)
-         (effort-pick efforts settings
-                      (pure/effort-shown (:effort state) (:defaultEfforts server-meta)
-                                         (or (:model settings) ""))
-                      put!))
-       [:f> prompts/pick server settings put!]])))
+        running (pretty-model (or (not-empty (:model state)) (when-not (:model settings) (:defaultModel server-meta))))
+        effort-running (pure/effort-shown (:effort state) (:defaultEfforts server-meta) (or (:model settings) ""))]
+    {:models models :settings settings :running running :effort-running effort-running
+     :efforts (:efforts (pure/chosen-model models settings))
+     :put! (fn [m] (if ck (rf/dispatch [:chat/settings ck m]) (rf/dispatch [:new/settings m])))
+     :text (pure/model-effort-text models settings running effort-running)}))
+
+(defn- choice [label on? on-click]
+  [:button.plan-item {:type "button" :role "menuitemradio" :aria-checked on? :class (when on? "on") :on-click on-click}
+   [:span.plan-name label]])
+
+(defn model-effort-pop
+  "The models and the efforts to pick (\"Default\": the person's own, naming what it runs with); a
+  model pick keeps the popup open for the effort, an effort pick closes it."
+  [{:keys [models settings running efforts effort-running put!]} close!]
+  [:div.head-pop.model-pop {:role "menu"}
+   [:div.plan-title "Model"]
+   (choice (str "Default" (when (seq running) (str " (" running ")"))) (nil? (:model settings)) #(put! {:model nil}))
+   (for [m models :when (not= "default" (:value m))]
+     ^{:key (:value m)} [choice (:name m) (= (:value m) (:model settings)) #(put! {:model (:value m)})])
+   (when (empty? models) [:div.pop-note "The other models show once this server's Claude has answered."])
+   (when (seq efforts)
+     [:<>
+      [:div.plan-title "Effort"]
+      (choice (str "Default" (when effort-running (str " (" effort-running ")"))) (nil? (:effort settings))
+              #(do (put! {:effort nil}) (close!)))
+      (for [e efforts] ^{:key e} [choice e (= e (:effort settings)) #(do (put! {:effort e}) (close!))])])])
 
 ;; ---- the / menu ----
 

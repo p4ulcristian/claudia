@@ -68,4 +68,4 @@
    ;; a new chat's picks, kept from the last chat (events/carried-picks) across reloads; its colour
    ;; comes with the chat list (events/with-fresh-colour)
    :new-settings (let [v (stored "claudia.newPicks" nil)]
-                   (if (and v (= "object" (goog/typeOf v))) (dissoc (js->clj v :keywordize-keys true) :color :plan) {}))})
+                   (if (and v (= "object" (goog/typeOf v))) (dissoc (js->clj v :keywordize-keys true) :color :plan :folder) {}))})
