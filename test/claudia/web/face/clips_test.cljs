@@ -35,29 +35,16 @@
   (is (= "GO TO BED" (clips/daytime-word 3)))
   (is (= "ONE MORE COMMIT?" (clips/daytime-word 23))))
 
-(deftest eyes-look
-  (is (= {:cover 0 :line :lid :wide? false} (paint/eye-look :dot 0)))
-  (is (= :happy (:line (paint/eye-look :happy 0))))
-  (is (= :shut (:line (paint/eye-look :dot 0.9))) "a blink shuts plain eyes")
-  (is (= 0.4 (:cover (paint/eye-look :narrow 0))))
-  (is (:wide? (paint/eye-look :wide 0))))
-
-(deftest glasses
-  (is (not (paint/glasses-down? {:pose {:eyes :dot} :mood :idle})))
-  (is (paint/glasses-down? {:pose {:eyes :happy} :mood :idle}) "eyes worth showing")
-  (is (paint/glasses-down? {:pose {:eyes :dot} :mood :idle :ticker {:text "IR DONE"}}) "a chat's news")
-  (is (paint/glasses-down? {:pose {:eyes :dot} :mood :idle :pointer [0.3 0.2]}) "the mouse near")
-  (is (not (paint/glasses-down? {:pose {:eyes :dot} :mood :work :pointer [1 1]})) "the mouse far"))
-
 (deftest lenses-show
   (is (= :dark (:kind (lens/show {:fx []} nil))))
   (is (= {:kind :rain :speed 1} (select-keys (lens/show {:fx [[:dots false]]} nil) [:kind :speed])))
   (is (= "HI!" (:text (lens/show {:fx [[:notes] [:word ["hi!" 0.5]]]} nil))) "words win over symbols")
   (is (= "?" (:text (lens/show {:fx [[:question 0.5]]} nil))))
+  (is (= :dark (:kind (lens/show {:fx [[:hearts 0.5] [:sparkles 0.5]]} nil))) "nothing cute")
   (is (= "IR DONE" (:text (lens/show {:fx [[:word ["hi" 0]]]} {:text "IR DONE" :start 5}))) "the ticker wins"))
 
 (deftest lenses-draw
-  (let [ls (art/lenses :up)]
+  (let [ls art/lenses]
     (doseq [shown [{:kind :rain :speed 1} {:kind :symbol :text "!"} {:kind :text :text "IR DONE" :start 0}
                    {:kind :dark}]]
       (is (re-find #"^<ellipse" (lens/markup ls (merge {:color "#3cff6a" :start 0} shown) 1500 false)) (str shown)))
@@ -65,12 +52,8 @@
       (is (re-find #">IR DO<" (lens/ticker ls "IR DONE" 400))))))
 
 (deftest painting
-  (let [a (paint/attrs {:pose (clips/mood-pose :idle 0) :look [0 0] :spin 0 :mood :idle} 0 false)]
-    (is (= "inline" (get-in a [:open-far :display])))
-    (is (= 1 (get-in a [:up :opacity])))
+  (let [a (paint/attrs {:pose (clips/mood-pose :idle 0)} 0 false)]
     (is (= "face" (get-in a [:root :class])))
-    (is (string? (get-in a [:body :transform])))
-    (is (= "translate(0.00 0.00) rotate(0.00) scale(1.00 1.00) translate(0 0)" (paint/transform 0 0))))
+    (is (string? (get-in a [:lens :html]))))
   (testing "words on the lenses: she leans out, bigger"
-    (is (= "face big" (get-in (paint/attrs {:pose {} :look [0 0] :spin 0 :ticker {:text "X" :start 0}} 0 false)
-                              [:root :class])))))
+    (is (= "face big" (get-in (paint/attrs {:pose {} :ticker {:text "X" :start 0}} 0 false) [:root :class])))))
