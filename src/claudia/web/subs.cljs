@@ -31,6 +31,11 @@
  (fn [me] (:servers me)))
 
 (rf/reg-sub
+ :all-server-list
+ :<- [:me]
+ (fn [me] (into (vec (:servers me)) (:viewServers me))))
+
+(rf/reg-sub
  :multi-server?
  :<- [:server-list]
  (fn [servers] (> (count servers) 1)))

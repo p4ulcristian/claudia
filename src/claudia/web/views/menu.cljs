@@ -1,6 +1,8 @@
 (ns claudia.web.views.menu
-  "The settings menu (README decision 24): a gear at the bottom left (the rail's foot; the list's foot
-  while the list is open, and on a phone) opens a small menu: the default plan's 5-hour and week use
+  "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot; the
+  list's foot while the list is open, and on a phone; 2026-11-18, it was a gear) shows whose chats
+  show and opens a small menu: Whose chats (yours, or another person's, read only), the default
+  plan's 5-hour and week use
   (a click opens Settings, where the plans are), Machines (the Systems popup in the menu's place),
   Archived chats, Forms, the Desktop popups switch, More settings, and the version (the sounds
   switch is the bell in the chat's header).
@@ -10,6 +12,8 @@
             [claudia.web.alerts :as alerts]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.pure.menu :as menu-pure]
+            [claudia.web.views.pure.settings :as settings-pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.systems :as systems]
             [claudia.web.views.usage :as usage]))
@@ -79,11 +83,30 @@
     (when me
       [:div.mn-foot "Claudia " [:span.mono (or (:commit me) (str "v" (:version me)))] (when server (str " · " label))])))
 
+(defn- whose
+  "Whose chats show: yours, or another person's (read only); a pick reconnects every server."
+  [act]
+  (let [view @(rf/subscribe [:view])
+        people @(rf/subscribe [:people])
+        mine (or (:name @(rf/subscribe [:me])) "Me")]
+    (when (seq people)
+      [:<>
+       [:div.mn-head "Whose chats"]
+       (for [[k label] (settings-pure/whose-items people)]
+         ^{:key (str k)}
+         [:button.mn-who {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
+                          :on-click (act #(when (not= k view) (rf/dispatch [:ops/view k])))}
+          [:span.mn-face.small (menu-pure/initials (or k mine))]
+          [:span.mn-label label (when k [:span.mn-note "read only"])]
+          (when (= k view) [:span.mn-tick "✓"])])
+       [:div.mn-sep]])))
+
 (defn- menu-items
   "The menu's rows. act wraps an item's action (it closes the menu first); machines! swaps the menu
   for the Systems popup."
   [act machines!]
   [:<>
+   [whose act]
    [:f> plan-card act]
    (item [systems/computer-icon] "Machines" "CPU, memory, disks" machines!)
    (item archive-icon "Archived chats" nil (act open-archived!))
@@ -105,17 +128,19 @@
      (menu-items act machines!)]))
 
 (defn button
-  "The gear at the bottom left and what it opens: the menu, or the Systems popup from its Machines."
+  "The profile circle at the bottom left (whose chats show) and what it opens: the menu, or the
+  Systems popup from its Machines."
   []
   (let [[open set-open] (h/use-state nil)
         box (h/use-ref nil)
-        close! #(set-open nil)]
+        close! #(set-open nil)
+        {:keys [initials other?] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view]))]
     [:<>
-     [:button.mn-gear {:ref #(set! (.-current box) %) :class (when open "on")
-                       :aria-label "Settings" :aria-haspopup "menu" :aria-expanded (boolean open)
-                       :data-tip (when-not open "Settings")
-                       :on-click #(set-open (if open nil :menu))}
-      gear-icon]
+     [:button.mn-gear.mn-face {:ref #(set! (.-current box) %) :class [(when open "on") (when other? "other")]
+                               :aria-label (str nm ": whose chats, settings") :aria-haspopup "menu" :aria-expanded (boolean open)
+                               :data-tip (when-not open (if other? (str nm "'s chats, read only") (str nm " · settings")))
+                               :on-click #(set-open (if open nil :menu))}
+      initials]
      (case open
        :menu [:f> menu-pop {:box box :close! close! :machines! #(set-open :machines)}]
        :machines [:f> systems/popup {:box box :close close!}]

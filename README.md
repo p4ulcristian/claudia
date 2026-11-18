@@ -298,6 +298,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     switch, More settings, and the version. Settings itself keeps what needs room: the Claude
     tokens, GitHub (decision 23), all ~/Work sessions, Admin and Servers for admins, each
     server's chat colours. The right half shows only the picture: the timeline view is gone.
+    Your profile circle (2026-11-18): the gear became a circle with your initials, or the initials
+    of the person whose chats you look at (dashed, amber: read only); its menu starts with Whose
+    chats (yours, then every other person's, read only), which left the list's title menu (that
+    keeps the servers).
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
     (never under the status bar or the home bar) and meet each other, the drawing board wears the
     chat's own background,

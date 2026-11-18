@@ -300,3 +300,8 @@
       (is (= :now (agents/mic-dir :now nil)))
       (is (= :add (agents/mic-dir :add [helper])))
       (is (= :cancel (agents/mic-dir :cancel [helper]))))))
+
+(deftest the-profile-circle-shows-whose-chats
+  (is (= {:initials "P" :name "Paul" :other? false} (menu/profile-face {:name "Paul"} nil)))
+  (is (= {:initials "P" :name "Peter" :other? true} (menu/profile-face {:name "Paul"} "peter")))
+  (is (= {:initials "M" :name "Me" :other? false} (menu/profile-face nil nil))))
