@@ -79,13 +79,23 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    await step('Folders opens with the work folder in its tree and Escape closes it (README decisions 61 to 64)', async () => {
-      await page.locator('button.mn-face').first().click({ timeout: waitMs });
-      await page.getByRole('menuitem', { name: /Folders/ }).click({ timeout: waitMs });
-      await page.locator('.fd-screen .fd-node', { hasText: 'work' }).first().waitFor({ timeout: waitMs });
+    if (screen.name === 'desktop') await step('Folders opens from the header; a bookmark and a tree folder become the new chat\'s folder (README decisions 61 to 64)', async () => {
+      const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
+      const pick = page.locator('.chat-head .proj-name');
+      await page.locator('.chat-head button.icon.folders').click({ timeout: waitMs });
       await page.locator('.fd-detail .fd-title', { hasText: 'work' }).waitFor({ timeout: waitMs });
-      await page.keyboard.press('Escape');
+      await row('claude').click({ timeout: waitMs });
+      await row('claude').locator('.fd-pin').click({ timeout: waitMs });
+      await page.locator('.fd-card', { hasText: 'claude' }).getByRole('button', { name: 'Select' }).click({ timeout: waitMs });
       await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
+      await until('the folder pick is claude', async () => (await pick.textContent()) === 'claude');
+      await page.locator('.chat-head button.icon.folders').click({ timeout: waitMs });
+      await page.locator('.fd-detail .fd-title', { hasText: 'claude' }).waitFor({ timeout: waitMs });
+      await row('hub').click({ timeout: waitMs });
+      await page.locator('.fd-detail .fd-title', { hasText: 'hub' }).waitFor({ timeout: waitMs });
+      await page.getByRole('button', { name: 'Use for this chat' }).click({ timeout: waitMs });
+      await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
+      await until('the folder pick is hub', async () => (await pick.textContent()) === 'hub');
     });
     await step('the chat opens', async () => {
       await page.getByText(title, { exact: true }).first().click({ timeout: waitMs });

@@ -1,8 +1,9 @@
 (ns claudia.web.views.folder-detail
-  "The Folders screen's right side for the selected folder (README decisions 61 and 63): its name
+  "The Folders modal's right side for the selected folder (README decisions 61 and 63): its name
   (★ when bookmarked), full path and server, tiles (chats that used it, last touched, size, git),
-  the recent chats there (a click opens one), and New chat here, Pin/Unpin, Move to Trash… and
-  Delete now…, both asking first in a dialog with the full path, the size and the work not pushed."
+  the recent chats there (a click opens one), and Use for this chat (the chat's folder becomes it),
+  New chat here, Pin/Unpin, Move to Trash… and Delete now…, both asking first in a dialog with the
+  full path, the size and the work not pushed."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.folders :as folders]
@@ -76,7 +77,8 @@
   [{:keys [server p bookmarked? set-ask kept]}]
   [:<>
    [:div.fd-actions
-    [:button.fd-btn.primary {:on-click #(rf/dispatch [:folders/new-chat server p])} "New chat here"]
+    [:button.fd-btn.primary {:on-click #(rf/dispatch [:folders/use p])} "Use for this chat"]
+    [:button.fd-btn {:on-click #(rf/dispatch [:folders/new-chat server p])} "New chat here"]
     [:button.fd-btn {:on-click #(rf/dispatch [:bookmarks/toggle server p])} (if bookmarked? "Unpin" "Pin")]
     [:button.fd-btn.warn {:disabled (boolean kept) :on-click #(set-ask :trash)} "Move to Trash…"]
     [:button.fd-btn.danger {:disabled (boolean kept) :on-click #(set-ask :delete)} "Delete now…"]]

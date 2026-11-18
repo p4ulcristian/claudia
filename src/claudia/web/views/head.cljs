@@ -1,11 +1,12 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel in the chat's colour, three rows, the same
   for a new chat and a started one. Row 1: the title (a click renames it), the server's state, the
-  chat's bell, its talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
+  chat's Folders (README decisions 61 to 64), bell, its talking mode (a person speaking) and Archive. Row 2: the computer the chat runs on, whose Claude subscription, the
   project (with the chat's colour). Row 3: model and effort, then the context, 5-hour and week
   rings. A new chat picks all of them here before its first message (they go with `new`); once
   it has started the computer is fixed and every other pick changes the chat."
-  (:require [re-frame.core :as rf]
+  (:require [claudia.web.views.pure.folders :as folders-pure]
+            [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
             [claudia.web.api :as api]
@@ -137,11 +138,20 @@
       [:path {:d "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"}]
       [:path {:d "M10 9.5h3a1.5 1.5 0 0 1 0 3h-3v-3M10 12.5V15M12.6 12.5 14 15"}]]]))
 
-(defn- row-1 [{:keys [ck row ro new? settings] :as hc}]
+(defn- folders-button
+  "Opens Folders (README decisions 61 to 64) on this chat's server with its folder selected (k: a
+  started chat, nil for a new one)."
+  [server folder k]
+  [:button.icon.folders {:type "button" :aria-label "Folders" :data-tip "Folders: pick this chat's folder, bookmarks, clean up"
+                         :on-click #(rf/dispatch [:folders/open {:server server :folder (not-empty folder) :chat k}])}
+   folders-pure/folder-icon])
+
+(defn- row-1 [{:keys [ck row ro new? settings server folder] :as hc}]
   (let [k (when-not new? ck)]
     [:div.head-row.r1
      [:f> head-names hc]
-     ;; The chat's own bell and speaker (README decision 21); a chat only looked at has none.
+     ;; The chat's own Folders, bell and speaker (README decisions 21, 61); a chat only looked at has none.
+     (when-not ro [folders-button server folder k])
      (when-not ro [alerts/bell-button k (if new? (:color settings) (:color row))])
      (when-not ro [talk/toggle k])
      (when (and row (not ro) @(rf/subscribe [:owner?])) [root-button ck])

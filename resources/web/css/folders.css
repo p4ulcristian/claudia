@@ -1,9 +1,12 @@
-/* The Folders screen (claudia.web.views.folders, README decisions 61 to 64): the whole window, chalk
-   look; left the servers, bookmarks and the tree (react-arborist), right the selected folder or the
-   Trash. Under 680 px wide the two sides stack. */
+/* The Folders modal (claudia.web.views.folders, README decisions 61 to 64): a big card over the
+   page, chalk look; on top the server's bookmarks as cards, left the filter and the tree
+   (react-arborist), right the selected folder or the Trash. Under 680 px wide it fills the window
+   and the two sides stack. */
 
-.fd-screen { position: fixed; inset: 0; z-index: 30; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); color: var(--fg); }
-.fd-bar { display: flex; align-items: center; gap: 14px; padding: calc(10px + var(--top-safe)) 18px 10px; border-bottom: 1px solid var(--line); }
+.fd-backdrop { position: fixed; inset: 0; z-index: 44; display: grid; place-items: center; padding: max(3vh, var(--top-safe)) 3vw 3vh; background: rgb(0 0 0 / 0.5); animation: confirm-in 0.12s ease-out; }
+.fd-screen { width: min(1280px, 100%); height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); box-shadow: 0 18px 60px rgb(0 0 0 / 0.5); }
+.fd-bar { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+.fd-on { font: 15px var(--sans); color: var(--muted); }
 .fd-heading { margin: 0 auto 0 0; font: 700 26px/1 var(--hand); color: var(--accent); }
 .fd-switch { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .fd-close { font: 700 24px/1 var(--hand); color: var(--muted); padding: 2px 10px; border-radius: 8px; }
@@ -16,15 +19,27 @@
 .fd-warn { margin: 4px 0; color: var(--amber); font-size: 12.5px; overflow-wrap: anywhere; }
 ul.fd-warn { padding-left: 18px; }
 
-.fd-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-.fd-pill { padding: 3px 12px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-.fd-pill.on { color: var(--on-hue); background: var(--accent); border-color: var(--accent); }
 
-.fd-marks { display: grid; gap: 2px; flex: none; max-height: 30vh; overflow-y: auto; }
-.fd-mark { display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; border-radius: 6px; text-align: left; font-size: 13.5px; color: var(--fg); }
-.fd-mark:hover { background: var(--panel); }
-.fd-mark.missing { color: var(--muted); opacity: 0.55; cursor: default; }
-.fd-missing { font-size: 11.5px; font-style: italic; }
+.fd-missing { font-size: 11.5px; font-style: italic; color: var(--muted); }
+
+.fd-cards { display: flex; gap: 10px; overflow-x: auto; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.fd-card { position: relative; flex: none; width: 210px; display: grid; gap: 3px; align-content: start; padding: 10px 12px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); cursor: pointer; }
+.fd-card:hover { border-color: var(--chalk); }
+.fd-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.fd-card.missing { opacity: 0.5; cursor: default; }
+.fd-card-star { position: absolute; top: 6px; right: 8px; font-size: 16px; color: var(--amber); }
+.fd-card-face { width: 28px; height: 28px; display: grid; place-items: center; }
+.fd-card-face .rail-logo { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; }
+.fd-card-face .fd-icon { width: 24px; height: 24px; }
+.fd-card-name { font: 700 18px/1.15 var(--hand); padding-right: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-card-path { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.fd-card-use { justify-self: start; margin-top: 4px; }
+.fd-filter { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); color: var(--fg); font: 13.5px var(--sans); }
+.fd-pin { margin-left: auto; flex: none; width: 22px; color: var(--muted); font-size: 14px; opacity: 0; }
+.fd-node:hover .fd-pin, .fd-pin.on, .fd-node.on .fd-pin { opacity: 1; }
+.fd-pin.on { color: var(--amber); }
+@media (hover: none) { .fd-pin { opacity: 1; } }
+.icon.folders .fd-icon { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.4; }
 
 .fd-tree { flex: 1 1 0; min-height: 120px; overflow: hidden; }
 .fd-node { display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 13.5px; }
@@ -64,6 +79,8 @@ ul.fd-warn { padding-left: 18px; }
 .fd-trash .fd-btn.danger:last-child { justify-self: start; }
 
 @media (max-width: 679px) {
+  .fd-backdrop { padding: 0; }
+  .fd-screen { border-radius: 0; border: 0; }
   .fd-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 55%) minmax(0, 1fr); }
   .fd-left { border-right: 0; border-bottom: 1px solid var(--line); }
   .fd-right { padding: 14px; }

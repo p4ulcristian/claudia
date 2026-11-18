@@ -825,21 +825,34 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     with an optional label; the hub keeps each person's list like the chat order (`bookmarks`,
     keyed by email; `GET`/`PUT /hub/bookmarks { items }`), cleaned by `claudia.shared.bookmarks`:
     absolute paths only, no `.` or `..` parts, each server and folder once, labels of at most 80
-    characters, at most 200. Every device shows the same list. Pin/Unpin on the Folders screen
-    changes it; the chat header's project list shows that server's bookmarks on top (★). A bookmark
-    whose folder is gone shows greyed as "missing" (the runner's `POST /api/folders/missing`).
+    characters, at most 200. Every device shows the same list. In the Folders modal one click
+    pins: the ☆/★ at the right end of every tree row, the ★ on a bookmark card (unpin) and Pin/Unpin
+    in the folder's panel; the chat header's project list shows that server's bookmarks on top (★).
+    A bookmark whose folder is gone shows greyed as "missing" (the runner's `POST
+    /api/folders/missing`).
     Instead of: bookmarks per device in the browser's storage, or per server in each runner.
 
 62. The folder tree is react-arborist (2026-11-18, the user's call): the npm library (4.0.1, with
     its peers react-dnd and react-dnd-html5-backend 16) used from Reagent with `:>`, rooted at "/"
     with the work folder's path open at first, each folder's sub-folders loaded when it is first
     opened (`GET /api/folders`). Only the rows are ours; arborist keeps the open state, the keys
-    and draws only the rows on screen. Dragging and renaming are off. Everything else on the
-    Folders screen (server pills, bookmarks, the detail panel, the buttons, the Trash list, the
-    dialogs) is our own Reagent in the chalk look (`claudia.web.views.folders`, `.folder-tree`,
-    `.folder-detail`, `.folder-trash`; `resources/web/css/folders.css`). The screen covers the
-    chats; the profile menu's Folders opens it (not while looking at another person's chats),
-    Escape or × closes it, and New chat here or a click on one of its chats closes it too.
+    and draws only the rows on screen; its filter keeps the loaded folders whose name holds the
+    filter field's text, and a pasted or typed absolute path (Enter) is revealed instead. Dragging
+    and renaming are off. Everything else in the Folders modal (the bookmark cards, the detail
+    panel, the buttons, the Trash list, the dialogs) is our own Reagent in the chalk look
+    (`claudia.web.views.folders`, `.folder-tree`, `.folder-detail`, `.folder-trash`;
+    `resources/web/css/folders.css`). Where it opens (2026-11-18, the user's call): a folder button
+    in the chat header's row 1, for a new chat and a started one, not while only looking at another
+    person's chats; a big modal over the page on that chat's server, with the chat's folder (else
+    the work folder) selected and revealed in the tree. On top that server's bookmarks as cards:
+    the project's logo as the chats show it (`GET /api/project`, `/api/project/logo`; a folder icon
+    when none), name, path, ★, "missing" greyed; a click highlights the card and reveals and
+    selects its folder in the tree; each card has its own Select. Select, and Use for this chat in
+    the selected folder's panel, sets the chat's folder and closes the modal: a new chat's folder
+    pick (as the project picker sets it), or a started chat moved there (the chat menu's Move to
+    project). New chat here stays a separate button; Escape or × closes the modal, and New chat
+    here or a click on one of its chats closes it too. Tree rows show no logo (asking each
+    visible project for its logo is one call and one logo search per row).
     Instead of: a tree of our own.
 
 63. Deleting goes to Claudia's own Trash per server (2026-11-18, the user's call). Move to Trash
