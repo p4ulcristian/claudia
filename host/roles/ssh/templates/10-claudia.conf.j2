@@ -8,3 +8,10 @@
 # have one naming themselves; nobody else has one.
 TrustedUserCAKeys /etc/ssh/claudia-ca.pub
 AuthorizedPrincipalsFile /etc/ssh/claudia-principals/%u
+
+# An agent's commands over SSH find the sudo shim first, as its chats do (decision 52): a command
+# run over SSH is not a login shell, so /etc/profile.d does not apply. SetEnv overrides sshd's
+# default PATH for that session. Ended with `Match all`, so nothing after it is caught by the Match.
+Match User *{{ agent_suffix }}
+	SetEnv PATH={{ agent_path }}
+Match all
