@@ -52,7 +52,8 @@
                    5000)))
 
 (defn- started! [t0 warm s]
-  (mic/report! {:event "started" :ms (js/Math.round (- (js/performance.now) t0)) :warm warm :steps (when-not warm (mic/steps-now))})
+  (mic/report! {:event "started" :ms (js/Math.round (- (js/performance.now) t0)) :warm warm :steps (when-not warm (mic/steps-now))
+                :mic (:mic s)})
   s)
 
 (defn- start-failed! [set-phase ^js err]
@@ -63,7 +64,7 @@
 (defn- press!
   "Pointer down: the clip starts (the microphone opens if it is cold; the first time the browser
   asks for it)."
-  [^js e {:keys [hold live set-phase set-dir draft-key]}]
+  [^js e {:keys [hold live set-phase set-dir set-mic draft-key]}]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
@@ -79,6 +80,7 @@
       (-> p
           (.then (fn [s]
                    (set! (.-current live) s)
+                   (set-mic (:mic s))
                    (when (.-current hold)
                      (set! (.-current hold) (assoc (.-current hold) :rec-at (js/performance.now)))
                      (set-phase :recording))))
@@ -143,10 +145,23 @@
                       (get-in @(rf/subscribe [:servers]) [(first draft-key) :rows (second draft-key) :color])
                       (:color @(rf/subscribe [:new-settings])))))
 
-(defn- view [{:keys [phase draft-key] :as parts}]
+(defn- screen-angle
+  "How far the screen is turned from portrait, counterclockwise (degrees)."
+  []
+  (or (some-> js/screen .-orientation .-angle) (some-> js/window .-orientation) 0))
+
+(defn- speak-here
+  "While recording in the app: a glow on the screen edge nearest the microphone iOS records from,
+  so the device is held with that side free and towards the mouth."
+  [mic]
+  (when-let [edge (pure/speak-edge mic (screen-angle))]
+    [:div.speak-here {:class (name edge) :aria-hidden true} [:span "speak here"]]))
+
+(defn- view [{:keys [phase draft-key mic] :as parts}]
   [:div.mic {:class (name phase) :style {"--chat" (colour-of draft-key)}}
    [clips/clip-list]
-   (core parts)])
+   (core parts)
+   (when (= phase :recording) [speak-here mic])])
 
 (defn button
   "The mic, or nothing where the mic cannot work. draft-key: the composer it speaks into ([server
@@ -155,6 +170,7 @@
   (let [[ok set-ok] (h/use-state false)
         [phase set-phase] (h/use-state :idle)
         [dir set-dir] (h/use-state :send)
+        [mic set-mic] (h/use-state nil)
         hold (h/use-ref nil)
         live (h/use-ref nil)
         canvas (h/use-ref nil)]
@@ -162,5 +178,5 @@
     (use-flower! canvas live hold phase)
     (use-tap-hint! phase set-phase)
     (when ok
-      (view {:phase phase :dir dir :canvas canvas :hold hold :live live
-             :set-phase set-phase :set-dir set-dir :draft-key draft-key}))))
+      (view {:phase phase :dir dir :canvas canvas :hold hold :live live :mic mic
+             :set-phase set-phase :set-dir set-dir :set-mic set-mic :draft-key draft-key}))))

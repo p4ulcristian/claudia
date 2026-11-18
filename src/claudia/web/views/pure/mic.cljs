@@ -96,3 +96,26 @@
     (if-let [[r] (get held due)]
       (recur (dissoc held due) (inc due) (cond-> out r (conj r)))
       [(assoc line :next due :held held) out])))
+
+(defn device-edge
+  "Which edge of the device (held upright, in its natural portrait) the microphone iOS records
+  from sits at: :top or :bottom; nil when it is not the built-in microphone or iOS did not say."
+  [{:keys [port location orientation]}]
+  (when (= port "MicrophoneBuiltIn")
+    (case location
+      "Upper" :top
+      "Lower" :bottom
+      (case orientation
+        ("Top" "Front" "Back") :top
+        "Bottom" :bottom
+        nil))))
+
+(defn speak-edge
+  "The screen edge to speak at (:top :bottom :left :right) for mic (the app's report) with the
+  screen turned angle degrees counterclockwise from portrait (screen.orientation.angle), or nil."
+  [mic angle]
+  (when-let [e (device-edge mic)]
+    (let [turns {0 {:top :top :bottom :bottom} 90 {:top :left :bottom :right}
+                 180 {:top :bottom :bottom :top} 270 {:top :right :bottom :left}}]
+      (get-in turns [(mod (or angle 0) 360) e]))))
+

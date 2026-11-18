@@ -11,7 +11,8 @@ import WebKit
 ///
 /// Like the page's mic it stays warm after a press (`idle` seconds) and keeps the last second, so a
 /// clip starts half a second before the press. Messages (each answered through the reply):
-/// `{op: "start"}` -> {rate} once samples flow; `{op: "spectrum"}` -> 256 bytes, low to high, like
+/// `{op: "start"}` -> {rate, mic} once samples flow (mic: which microphone iOS records from, so the
+/// page can show where to speak: {port, name, source?, location?, orientation?}); `{op: "spectrum"}` -> 256 bytes, low to high, like
 /// an AnalyserNode's getByteFrequencyData (fftSize 512); `{op: "stop"}` -> the clip as base64 16 kHz
 /// WAV; `{op: "discard"}`; `{op: "close"}`. Only the hub's main frame is answered.
 final class NativeMic: NSObject, WKScriptMessageHandlerWithReply {
@@ -76,6 +77,22 @@ final class NativeMic: NSObject, WKScriptMessageHandlerWithReply {
         try session.setActive(true)
     }
 
+    /// The input iOS records from now: its port (MicrophoneBuiltIn, a headset, AirPods), and for the
+    /// built-in one the data source in use with where it sits (location Upper or Lower) and which way
+    /// it listens (orientation Front, Back, Top, Bottom, Left or Right). A data source can be several
+    /// microphones combined: it names a side of the device, not one hole.
+    static func micInfo() -> [String: String] {
+        let session = AVAudioSession.sharedInstance()
+        guard let input = session.currentRoute.inputs.first else { return [:] }
+        var m = ["port": input.portType.rawValue, "name": input.portName]
+        if let ds = input.selectedDataSource ?? session.inputDataSource {
+            m["source"] = ds.dataSourceName
+            if let l = ds.location { m["location"] = l.rawValue }
+            if let o = ds.orientation { m["orientation"] = o.rawValue }
+        }
+        return m
+    }
+
     private func sounding(within seconds: Double) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return Date().timeIntervalSince(lastSample) < seconds
@@ -135,7 +152,7 @@ final class NativeMic: NSObject, WKScriptMessageHandlerWithReply {
             clip = Array(ring.suffix(Int(rate * preSeconds)))
             let r = rate
             lock.unlock()
-            reply(["rate": r], nil)
+            reply(["rate": r, "mic": Self.micInfo()], nil)
         } else if Date() < until {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.waitForSound(until: until, reply) }
         } else {

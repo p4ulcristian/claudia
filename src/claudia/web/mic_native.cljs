@@ -22,11 +22,13 @@
 (defn warm? "Whether the app's microphone was warm at the last press." [] @warm)
 
 (defn start!
-  "Promise of a recording session once the app's microphone gives sound: {:native true :rate hz}."
+  "Promise of a recording session once the app's microphone gives sound: {:native true :rate hz
+  :mic {:port :name :source :location :orientation}} (mic: which microphone iOS records from)."
   []
   (reset! last-spectrum [])
   (-> (ask "start")
-      (.then (fn [^js r] (reset! warm true) {:native true :rate (.-rate r)}))
+      (.then (fn [^js r] (reset! warm true)
+               {:native true :rate (.-rate r) :mic (js->clj (.-mic r) :keywordize-keys true)}))
       (.catch (fn [e] (reset! warm false) (throw (js/Error. (or (.-message e) (str e))))))))
 
 (defn discard! "Ends a session, keeping nothing." [_session] (.catch (ask "discard") (fn [_] nil)))

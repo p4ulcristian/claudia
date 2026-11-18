@@ -832,3 +832,18 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 .rail-status.running { color: var(--green); opacity: 1; }
 .rail-status.asks { color: var(--amber); opacity: 1; }
 .rail-status.done { color: var(--fg); opacity: 1; }
+
+/* Where to speak (README decision 20): while the app records, a green glow on the screen edge
+   nearest the microphone iOS listens with. */
+.speak-here { position: fixed; z-index: 90; pointer-events: none; display: grid; place-items: center;
+  background: linear-gradient(var(--dir, to bottom), color-mix(in srgb, var(--green) 55%, transparent), transparent);
+  animation: speak-here 1.6s ease-in-out infinite; }
+.speak-here span { font: 700 15px var(--hand); color: var(--green); background: var(--bg); border: 1.5px solid var(--green); border-radius: 12px; padding: 2px 10px; }
+.speak-here.top { top: 0; left: 15%; right: 15%; height: 56px; --dir: to bottom; }
+.speak-here.bottom { bottom: 0; left: 15%; right: 15%; height: 56px; --dir: to top; }
+.speak-here.left { left: 0; top: 15%; bottom: 15%; width: 56px; --dir: to right; }
+.speak-here.right { right: 0; top: 15%; bottom: 15%; width: 56px; --dir: to left; }
+.speak-here.left span, .speak-here.right span { writing-mode: vertical-rl; }
+@keyframes speak-here { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .speak-here { animation: none; } }
+
