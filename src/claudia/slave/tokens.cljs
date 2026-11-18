@@ -1,13 +1,13 @@
 (ns claudia.slave.tokens
-  "Tokens. Claude: the hub keeps the saved ones (claudia.hub.tokens, README decision 10) and writes
-  the one in use here through the front (PUT /api/claude-token/current, a call only the hub can
-  make): CLAUDIA_TOKEN_FILE, which every chat reads on its next start, and the note of whose it is
-  beside it (`<token file>.json`: name, by, at; the runner shows the name). The front writes them
-  (on a shared server it runs as the page's own user): the token is readable by the runners' group
-  (0640, in a folder setgid to that group). Every saved token comes the same way (PUT
-  /api/claude-token/saved, README decision 16): one file each in `<token file>.d/<key>` and their
-  names in `<token file>.saved.json`, so each chat runs on the one picked for it (the token in use
-  is what a chat without a pick runs on). GitHub: the person's login, which the hub keeps and hands
+  "Tokens. Claude: the hub keeps the saved ones (claudia.hub.tokens, README decisions 10, 16, 57) and
+  writes every one here through the front (PUT /api/claude-token/saved, a call only the hub can
+  make): one file each in `<token file>.d/<key>` (CLAUDIA_TOKEN_FILE), their names in `<token
+  file>.saved.json`, so each chat runs on the one picked for it. There is no shared token: each
+  person's last header pick comes the same way (PUT /api/claude-token/picks) into `<token
+  file>.picks.json`, by the profile here whose email it is, and a profile's chats without a pick run
+  on its person's (no entry: they have none, and the chat's header asks for one). The front writes
+  them (it runs as its own user): the tokens are readable by the runners' group (0640, in a folder
+  setgid to that group). GitHub: the person's login, which the hub keeps and hands
   to this profile (PUT /api/github, README decision 23), given to gh (kept in this Linux user's
   ~/.config/gh); git uses gh as its credential helper and commits carry the account's name. The
   hub once takes a login gh already holds here into its keeping (GET /api/github/token)."
@@ -20,46 +20,12 @@
 (def ^:private env (.-env js/process))
 
 (defn- token-file [] (.-CLAUDIA_TOKEN_FILE env))
-(defn- note-file [] (some-> (token-file) (str ".json")))
 
 (defn- read-json-file [f] (try (p/read-json (fs/readFileSync f "utf8")) (catch :default _ nil)))
-
-(defn current
-  "The token in use here, without the token: {:key :name :by :at} (nil fields when none came from the hub)."
-  []
-  (let [note (when (some-> (token-file) fs/existsSync) (read-json-file (note-file)))]
-    {:key (:key note) :name (:name note) :by (:by note) :at (:at note)}))
 
 (defn- write-atomic! [f text mode]
   (fs/writeFileSync (str f ".new") text #js {:mode (js/parseInt mode 8)})
   (fs/renameSync (str f ".new") f))
-
-(defn current-problem
-  "What is wrong with the hub's token in use before it is written here ({:error :status?}), or nil:
-  the token text without whitespace is t."
-  [{token-name :name at :at} t file]
-  (cond
-    (not file) {:error "No token file is set here (CLAUDIA_TOKEN_FILE)." :status 501}
-    (not (re-matches #"^sk-ant-[A-Za-z0-9_-]{20,}$" t)) {:error "Not a Claude token."}
-    (not (and (string? token-name) (seq token-name) (number? at))) {:error "name and at are needed."}
-    :else nil))
-
-(defn- write-files!
-  "The note first (the runners read it again when the token file changes), then the token."
-  [{token-key :key token-name :name by :by at :at} t]
-  (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
-  (write-atomic! (note-file) (p/write-json {:key token-key :name token-name :by by :at at}) "644")
-  (write-atomic! (token-file) (str t "\n") "640")
-  (js/console.log (str "Claude token in use: \"" token-name "\" (from the hub, switched by " by ")")))
-
-(defn write-current!
-  "The hub's token in use, written over this server's: {:name :by :at :token} -> current, or {:error}."
-  [body]
-  (let [t (str/replace (str (:token body)) #"\s+" "")]
-    (or (current-problem body t (token-file))
-        (try (write-files! body t)
-             (current)
-             (catch :default e {:error (str "Couldn't write the token: " (.-message e)) :status 500})))))
 
 ;; ---- every saved token (a chat's own pick) ----
 
@@ -115,6 +81,58 @@
       :else (try (write-saved-files! rows)
                  {:tokens (saved)}
                  (catch :default e {:error (str "Couldn't write the tokens: " (.-message e)) :status 500})))))
+
+;; ---- each person's last pick (README decision 57) ----
+
+(defn- picks-file [] (some-> (token-file) (str ".picks.json")))
+
+(defn kept-picks
+  "The picks file's map (profile -> {:email :key :name :at}) as the hub's list: [{:email :key :name
+  :at}] by email."
+  [m]
+  (vec (sort-by :email (for [[_ v] m] (select-keys v [:email :key :name :at])))))
+
+(defn picks
+  "The picks kept here: [{:email :key :name :at}]."
+  []
+  (kept-picks (some-> (picks-file) read-json-file)))
+
+(defn picks-by-profile
+  "The hub's picks ([{:email :key :name :at}]) by the profile here whose email each is (profiles:
+  [{:profile :email}]); people without a profile here are left out. nil when one is not an email, a
+  saved token's key, a name and a time (nil: their profile's token)."
+  [rows profiles]
+  (let [ok? (fn [{e :email k :key n :name at :at}]
+              (and (string? e) (string? k) (re-matches key-shape k) (string? n) (seq n) (or (nil? at) (number? at))))
+        by-email (into {} (map (juxt :email :profile)) profiles)]
+    (when (and (sequential? rows) (every? ok? rows))
+      (into {} (for [r rows :let [prof (by-email (str/lower-case (:email r)))] :when prof]
+                 [prof (select-keys r [:email :key :name :at])])))))
+
+(defn- drop-shared-token!
+  "The token every chat once shared (before README decision 57) and its note go."
+  []
+  (doseq [f [(token-file) (str (token-file) ".json")]] (fs/rmSync f #js {:force true})))
+
+(defn write-picks!
+  "The hub's picks, written over this server's: {:picks [...]} -> {:picks (picks)}, or {:error}."
+  [body profiles]
+  (let [m (picks-by-profile (:picks body) profiles)]
+    (cond
+      (not (token-file)) {:error "No token file is set here (CLAUDIA_TOKEN_FILE)." :status 501}
+      (not m) {:error "picks: each needs email, key, name and at."}
+      :else (try (fs/mkdirSync (path/dirname (token-file)) #js {:recursive true})
+                 (write-atomic! (picks-file) (p/write-json m) "644")
+                 (drop-shared-token!)
+                 {:picks (picks)}
+                 (catch :default e {:error (str "Couldn't write the picks: " (.-message e)) :status 500})))))
+
+(defn current
+  "The token profile's chats without a pick run on, without the token: {:key :name :at} (nil fields
+  when its person has none)."
+  [profile]
+  (let [v (get (some-> (picks-file) read-json-file) (keyword profile))]
+    {:key (:key v) :name (:name v) :at (:at v)}))
 
 ;; ---- GitHub ----
 

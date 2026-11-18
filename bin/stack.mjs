@@ -113,7 +113,8 @@ function settings(tmp, ports, runnerSock, listenUrl) {
               RUNNER_DATA: join(tmp, 'runner'), CLAUDIA_CWD: join(tmp, 'work'), CLAUDE_CONFIG_DIR: join(tmp, 'claude'),
               CLAUDIA_TOKEN_FILE: join(tmp, 'token') },
     front: { HOME: tmp, FRONT_HOST: '127.0.0.1', FRONT_PORT: String(ports.front), FRONT_NAME: server,
-             FRONT_PROFILES: join(tmp, 'profiles'), FRONT_HUB_KEY_FILE: join(tmp, 'front-hub-key') },
+             FRONT_PROFILES: join(tmp, 'profiles'), FRONT_HUB_KEY_FILE: join(tmp, 'front-hub-key'),
+             CLAUDIA_TOKEN_FILE: join(tmp, 'token') },
     hub: { HOME: tmp, HUB_HOST: '127.0.0.1', HUB_PORT: String(ports.hub), HUB_CONFIG: join(tmp, 'hub.json'),
            HUB_DATA: join(tmp, 'hub'), HUB_WEB: join(repo, 'out', 'web'), HUB_COMMIT: 'c'.repeat(40),
            HUB_UPDATE_REQUEST: join(tmp, 'update-requested'), HUB_KEY_FILE: join(tmp, 'hub-secret'),
@@ -135,8 +136,9 @@ function writeConfig(tmp, frontPort, runnerSock) {
   }));
 }
 
-// startStack({listen, listenFails, moreChats}): the programs up and answering. -> {hubUrl, hubPort, out, stop()}
-export async function startStack({ listen = false, listenFails = 0, moreChats = 0 } = {}) {
+// startStack({listen, listenFails, moreChats, hubEnv}): the programs up and answering (hubEnv: more of
+// the hub's settings). -> {hubUrl, hubPort, tmp, out, stop()}
+export async function startStack({ listen = false, listenFails = 0, moreChats = 0, hubEnv = {} } = {}) {
   for (const f of ['hub.js', 'front.js', 'runner.js', 'web/index.html'])
     if (!existsSync(join(repo, 'out', f))) throw new Error(`out/${f} is missing: build first`);
   // The real path: macOS's temp folder (/var/folders/…) is behind a symlink (/private/var/…), and the
@@ -161,11 +163,11 @@ export async function startStack({ listen = false, listenFails = 0, moreChats = 
     await until('the runner\'s store', () => existsSync(join(tmp, 'runner', 'claudia.db')) && existsSync(runnerSock));
     seedRow(join(tmp, 'runner'), join(tmp, 'work'), moreChats);
     procs.push(program(out, state, 'front', 'front.js', env.front));
-    procs.push(program(out, state, 'hub', 'hub.js', env.hub));
+    procs.push(program(out, state, 'hub', 'hub.js', { ...env.hub, ...hubEnv }));
     const hubUrl = `http://127.0.0.1:${ports.hub}/`;
     await until('the hub', () => answers(hubUrl));
     await until('the front, through the hub', () => answers(`${hubUrl}s/${server}/api/me`));
-    return { hubUrl, hubPort: ports.hub, out, stop };
+    return { hubUrl, hubPort: ports.hub, tmp, out, stop };
   } catch (e) {
     stop();
     e.out = out;

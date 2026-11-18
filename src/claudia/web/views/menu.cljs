@@ -1,13 +1,11 @@
 (ns claudia.web.views.menu
   "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot;
   the list's foot on a phone; 2026-11-18, it was a gear) shows whose chats
-  show and opens a small menu: Whose chats (yours, or another person's, read only), the default
-  plan's 5-hour and week use
-  (a click opens Settings, where the plans are), Machines (the Systems popup in the menu's place),
-  Archived chats, Forms, the Desktop popups switch, More settings, and the version (the sounds
-  switch is the bell in the chat's header).
-  Every item that has more opens its own full screen: in the chat column wider than a phone, over
-  the list on a phone."
+  show and opens a small menu: Whose chats (yours, or another person's, read only), your own
+  plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
+  Settings, where the plans are), Machines (the Systems popup in the menu's place), Archived chats,
+  Forms, the Desktop popups switch, More settings (the Settings popup, README decision 58), and the
+  version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
@@ -47,12 +45,13 @@
      [:span.mn-bar [:i {:style {:width (str (min 100 p) "%")}}]]]))
 
 (defn- plan-card
-  "The default plan (the one a new chat starts on) with its 5-hour and week use; a click: Settings."
+  "The person's own plan (their last pick in a chat's header: what a new chat starts on, README
+  decision 57) with its 5-hour and week use; a click: Settings."
   [act]
   (let [now (hooks/use-now)
         tokens @(rf/subscribe [:tokens])
         live @(rf/subscribe [:live-limits])
-        in-use (get-in tokens [:inUse :name])
+        in-use (get-in tokens [:pick :name])
         row (some #(when (:in-use %) %) (usage-pure/token-rows (:tokens tokens) in-use live))]
     [:button.mn-plan {:role "menuitem" :on-click (act open-settings!) :title "Claude plans and tokens"}
      [:span.mn-plan-name (if in-use (str in-use "'s plan") "Claude plan") chev]
@@ -114,7 +113,7 @@
    [:div.mn-sep]
    [:div.mn-switches [alerts/popups-switch]]
    [:div.mn-sep]
-   (item gear-icon "More settings" "GitHub, colours, servers" (act open-settings!))
+   (item gear-icon "More settings" "Claude subscriptions, GitHub" (act open-settings!))
    [version-line]])
 
 (defn- menu-pop [{:keys [box close! machines!]}]

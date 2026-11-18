@@ -173,7 +173,7 @@
   [plans on pick]
   (let [now (hooks/use-now)
         tokens @(rf/subscribe [:tokens])
-        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) @(rf/subscribe [:live-limits]))]
+        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:pick :name]) @(rf/subscribe [:live-limits]))]
     (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
     [:div.plan-list {:role "menu"}
      [:div.plan-title "This chat's Claude subscription"]
@@ -187,7 +187,8 @@
 
 (defn- account-pick
   "Whose Claude subscription the chat runs on (README decision 16): a click opens the saved plans;
-  a pick applies at once."
+  a pick applies at once, and becomes the person's own last pick (README decision 57). None yet:
+  it asks for one."
   [{:keys [plans on put! ro]}]
   (let [[open toggle! close! box] (use-popup)]
     (when (seq plans)
@@ -195,8 +196,8 @@
              [:div.plan-pick {:ref #(set! (.-current box) %)}
               [:button.head-btn {:disabled ro :on-click toggle! :aria-haspopup "true" :aria-expanded open
                                  :title "Claude subscription of this chat"}
-               (or (:name on) "Default")]
-              (when open [:f> plan-list plans on (fn [k] (put! {:plan k}) (close!))])]))))
+               (or (:name on) "Pick one")]
+              (when open [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))])]))))
 
 (defn- palette [color pick]
   [:div.palette {:role "menu"}
@@ -278,7 +279,7 @@
   [on plans]
   (let [tokens @(rf/subscribe [:tokens])
         live @(rf/subscribe [:live-limits])
-        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:inUse :name]) live)]
+        rows (usage-pure/token-rows (:tokens tokens) (get-in tokens [:pick :name]) live)]
     (if on
       (some #(when (= (:key on) (:key %)) %) (usage-pure/plan-rows plans rows))
       {:five (usage-pure/limit-of (:limits live) "five_hour")

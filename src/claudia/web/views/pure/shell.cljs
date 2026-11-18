@@ -3,10 +3,11 @@
   the divider is dragged, the split's columns, the scrubber's marks.")
 
 (defn column-pane
-  "What takes the chat column wider than a phone (README decision 24): :settings, :archived (the
-  archived chats) or nil (the chat). A phone shows both over its list instead, so nil there."
-  [phone? {:keys [settings? archived?]}]
-  (cond phone? nil settings? :settings archived? :archived))
+  "What takes the chat column wider than a phone (README decision 24): :archived (the archived
+  chats) or nil (the chat). A phone shows them in its list instead, so nil there. Settings is a
+  popup over everything (README decision 58), never the column."
+  [phone? {:keys [archived?]}]
+  (when-not phone? (when archived? :archived)))
 
 (defn dragged-width
   "The chat column's width in px with the divider at client-x: at least 300, leaving 280 and the

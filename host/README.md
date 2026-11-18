@@ -4,8 +4,8 @@ One Ansible playbook that makes every Linux machine running Claudia the same (RE
 to 55):
 
 - **Agent users.** Each profile's chats run as `<profile>-claudia-agent`: a plain user with its own
-  group and home, no sudo, no password, no SSH keys; member of `claudia-run` (it reads the Claude
-  token in use).
+  group and home, no sudo, no password, no SSH keys; member of `claudia-run` (it reads the saved Claude
+  tokens and its person's pick).
 - **break-glass.** A user with no password, one SSH key (kept in 1Password) and full sudo: the way
   in when Claudia is broken. Used by hand only, never by an agent.
 - **Root helper.** `claudia-root.service` runs `/usr/local/lib/claudia-root/root.js` as root and

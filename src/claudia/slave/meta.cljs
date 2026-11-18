@@ -5,8 +5,6 @@
   levels and the slash commands, read once by a short Claude Code process that sends no message."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             [claudia.node.crypto :as crypto]
-            ["node:fs" :as fs]
-            [claudia.node.env :as env]
             [claudia.shared.text :as text]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.store :as store]
@@ -187,27 +185,21 @@
       (@on-change @state))))
 
 (defn plans-changed!
-  "The saved tokens or the one in use changed: the pages get the meta frame again."
+  "The saved tokens or the person's pick changed: the pages get the meta frame again."
   []
   (@on-change @state))
 
-(defn- account-label
-  "Whose token is in use (the saved token's name from Settings, src/account.ts label), or nil."
-  []
-  (when-let [f (env/env "CLAUDIA_TOKEN_FILE")]
-    (try (not-empty (:name (js->clj (js/JSON.parse (fs/readFileSync (str f ".json") "utf8")) :keywordize-keys true)))
-         (catch :default _ nil))))
-
 (defn frame
-  "The meta frame (src/meta.ts Meta): limits (and when they were heard), models, commands, the default model, and the token
-  in use (its name as a hash, and whose it is)."
-  []
+  "The meta frame (src/meta.ts Meta): limits (and when they were heard), models, commands, the default
+  model, and the token profile's chats without a pick run on (its hash, its name, its key: its
+  person's last pick, README decision 57)."
+  [profile]
   (assoc (select-keys @state [:limits :limitsAt :models :commands :defaultModel])
          :type "meta"
          :account (some->> (:account @state) (str "token-"))
-         :accountLabel (account-label)
+         :accountLabel (:name (tokens/current profile))
          :defaultEfforts (vec (store/kv "" "defaultEfforts"))
          :plans (mapv #(select-keys % [:key :name]) (tokens/saved))
-         :planKey (:key (tokens/current))
+         :planKey (:key (tokens/current profile))
          ;; Claudia's own chat is on this server (README decision 48): her face opens it here.
          :claudia (claudia/on?)))

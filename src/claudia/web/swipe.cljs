@@ -82,10 +82,9 @@
 (defn ease-out [k] (- 1 (js/Math.pow (- 1 k) 3)))
 
 (defn gesture-kind
-  "Which swipes the screen shown now has: Settings lies over the list, an agent's view over the chat."
-  [screen settings? agent?]
+  "Which swipes the screen shown now has: an agent's view lies over the chat."
+  [screen agent?]
   (cond
-    (and settings? (= screen "list")) :settings
     (= screen "list") :list
     (and (= screen "chat") agent?) :agent
     (= screen "chat") :chat
@@ -176,9 +175,6 @@
         left ($ ".app .split > .left")
         right ($ ".app .split > .right")]
     (case kind
-      :settings {:surface ($ ".st-pane")
-                 :moves [(slide-back ($ ".st-pane") ($ ".cs-pane") #(rf/dispatch [:ops/settings false])
-                                     #(not (.contains (.-classList ^js ($ ".app")) "settings-shown")))]}
       :list {:surface side
              :moves [(when (:open @rdb/app-db)
                        (slide-over left side #(rf/dispatch [:nav/screen :chat]) #(on? "chat")))]}
@@ -195,8 +191,7 @@
   "Where a touch may start (surface) and which moves it may make there, for the screen shown now."
   []
   (when-let [^js app ($ ".app")]
-    (let [settings? (boolean (and (.contains (.-classList app) "settings-shown") ($ ".st-pane")))
-          kind (gesture-kind (some-> app .-dataset .-screen) settings? (some? ($ ".ag-screen")))]
+    (let [kind (gesture-kind (some-> app .-dataset .-screen) (some? ($ ".ag-screen")))]
       (when kind
         (update (moves-for kind) :moves #(keep identity %))))))
 

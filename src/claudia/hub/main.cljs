@@ -102,7 +102,7 @@
     (and (not ws?) (not (some-> rest-path (str/starts-with? "/api/")))) {:status 404 :error "not found"}
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
     ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
-    (#{"/api/update-check" "/api/claude-token/current" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
+    (#{"/api/update-check" "/api/claude-token/picks" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     (#{"/api/github" "/api/github/token"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}

@@ -22,8 +22,8 @@ else git -C "$src" rev-parse HEAD > "$new/commit.txt" 2>/dev/null || true; fi
 chown -R root:root "$new"; chmod -R go-w "$new"
 rm -rf /srv/claudia.old; [ -d /srv/claudia ] && mv /srv/claudia /srv/claudia.old
 mv "$new" /srv/claudia
-# The Claude token in use: the front (user claudia) writes it, the runners (group
-# claudia-run) read it; the saved tokens beside it (<token file>.d) are the front's only.
+# The saved Claude tokens (<token file>.d) and each person's pick (<token file>.picks.json): the front
+# (user claudia) writes them, the runners (group claudia-run) read them.
 getent group claudia-run >/dev/null || groupadd --system claudia-run
 token_file=$(sed -n 's/^CLAUDIA_TOKEN_FILE=//p' /etc/claudia/env | tail -1)
 if [ -n "$token_file" ] && [ ! -d "$(dirname "$token_file")" ]; then

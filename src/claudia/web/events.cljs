@@ -262,9 +262,10 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (def carried-keys
-  "What a new chat takes over from the last chat: the subscription, model, effort, project folder,
-  speaker and bell (not the colour: each chat gets its own)."
-  [:plan :model :effort :folder :talk :bell])
+  "What a new chat takes over from the last chat: the model, effort, project folder, speaker and
+  bell (not the colour: each chat gets its own; not the subscription: a new chat runs on its
+  person's last pick, README decision 57)."
+  [:model :effort :folder :talk :bell])
 
 (defn carried-picks
   "The picks a new chat starts with after the chat k: that chat's settings, folder and switches, else
@@ -273,7 +274,7 @@
   (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:plan :model :effort]) {:folder folder}
+            (merge (select-keys settings [:model :effort]) {:folder folder}
                    (select-keys row [:talk :bell]))))
     (select-keys (:new-settings db) carried-keys)))
 

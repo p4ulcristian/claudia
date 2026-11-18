@@ -49,12 +49,11 @@
   (is (= 1 (swipe/ease-out 1))))
 
 (deftest gesture-kind-per-screen
-  (is (= :settings (swipe/gesture-kind "list" true false)))
-  (is (= :list (swipe/gesture-kind "list" false false)))
-  (is (= :agent (swipe/gesture-kind "chat" false true)))
-  (is (= :chat (swipe/gesture-kind "chat" true false)))
-  (is (= :picture (swipe/gesture-kind "picture" false false)))
-  (is (nil? (swipe/gesture-kind nil false false))))
+  (is (= :list (swipe/gesture-kind "list" false)))
+  (is (= :agent (swipe/gesture-kind "chat" true)))
+  (is (= :chat (swipe/gesture-kind "chat" false)))
+  (is (= :picture (swipe/gesture-kind "picture" false)))
+  (is (nil? (swipe/gesture-kind nil false))))
 
 (deftest the-wheel-as-a-finger
   (testing "wheel deltas in px"

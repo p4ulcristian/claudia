@@ -273,9 +273,9 @@
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
             :servers {"s" {:rows {"c" {:talk true :bell false :color "teal"}}}}
             :new-settings {:plan "pro" :color "red" :folder "/old"}}]
-    (is (= {:plan "max" :model "opus" :effort "high" :folder "/w/ir" :talk true :bell false}
-           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour")
-    (is (= {:plan "pro" :folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour")))
+    (is (= {:model "opus" :effort "high" :folder "/w/ir" :talk true :bell false}
+           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour or subscription")
+    (is (= {:folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour or subscription")))
 
 (deftest dictated-clips-are-tied-to-the-message-they-went-out-in
   (let [base {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}

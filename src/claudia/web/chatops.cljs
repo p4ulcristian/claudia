@@ -6,7 +6,6 @@
             [clojure.string :as str]
             [claudia.shared.protocol :as protocol]
             [claudia.web.api :as api]
-            [claudia.web.db :as db]
             [claudia.web.events :as events]
             [claudia.web.media :as media]))
 
@@ -122,16 +121,8 @@
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
-;; Settings: on a phone it slides over the list (the list screen comes); wider, it takes the chat
-;; column in place of the archived chats (README decision 24).
-(defn with-settings
-  "db with Settings shown (on) or gone, for a phone (phone?) or a wider screen."
-  [db phone? on]
-  (cond-> (assoc db :settings? on)
-    phone? (assoc :screen :list)
-    (and on (not phone?)) (assoc :archived? false)))
-
-(rf/reg-event-db :ops/settings (fn [db [_ on]] (with-settings db (db/phone?) on)))
+;; Settings: a popup over the whole window (README decision 58); the screen under it stays.
+(rf/reg-event-db :ops/settings (fn [db [_ on]] (assoc db :settings? on)))
 
 (rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :settings? false :search nil :project-filter nil)))
 
@@ -287,6 +278,14 @@
      {:fx [[:api/call {:url "/hub/claude-tokens" :on-ok [:ops/tokens]}]]})))
 
 (rf/reg-event-db :ops/tokens (fn [db [_ t]] (assoc db :tokens t)))
+
+;; A pick in a chat's header (README decision 57): the caller's own chats without a pick follow it on
+;; every server. A pick in another person's chat (a write tick) moves only that chat.
+(rf/reg-event-fx
+ :ops/token-picked
+ (fn [{:keys [db]} [_ k]]
+   (when (and (string? k) (not (events/viewing-other? db)))
+     {:fx [[:api/call {:method "POST" :url "/hub/claude-token/pick" :body {:key k} :on-ok [:ops/tokens]}]]})))
 (rf/reg-sub :tokens (fn [db] (:tokens db)))
 (rf/reg-sub :settings-server (fn [db] (or (:settings-server db) (first (events/server-names db)))))
 
