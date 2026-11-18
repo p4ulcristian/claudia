@@ -1,9 +1,11 @@
 (ns claudia.hub.hub-key
   "How the hub proves itself to a server's front (README decision 47): every call it makes carries
   X-Claudia-Hub-Key, that server's key (claudia.node.crypto/server-key) under the hub's secret in
-  HUB_KEY_FILE. A front answers no call without its key, so reaching its port is not enough."
+  HUB_KEY_FILE. A front answers no call without its key, so reaching its port is not enough. The
+  same key proves a server to the hub (server-caller: Claudia's chat, SSH certificates)."
   (:require ["node:fs" :as fs]
             [clojure.string :as str]
+            [claudia.hub.store :as store]
             [claudia.node.crypto :as crypto]
             [claudia.node.env :refer [env]]))
 
@@ -34,3 +36,14 @@
   "The hub's proof for that server's front, as a header map."
   [server-name]
   {"x-claudia-hub-key" (for-server server-name)})
+
+(defn server-caller
+  "Which server a server's call to the hub comes from (X-Claudia-Server-Name, X-Claudia-Server-Key):
+  {:server-name :key-ok?}; key-ok? only when that server is known and the key is its own, compared
+  in constant time."
+  [^js req]
+  (let [h (.-headers req)
+        server-name (str (aget h "x-claudia-server-name"))]
+    {:server-name server-name
+     :key-ok? (boolean (and (seq server-name) (store/server server-name)
+                            (crypto/same-secret? (aget h "x-claudia-server-key") (for-server server-name))))}))

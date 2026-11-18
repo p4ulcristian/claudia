@@ -185,9 +185,22 @@
         [tick on (str p " may write to " (person-label o) "'s chats") "PUT" "/hub/admin/writers"
          {:email p :owner owner :granted (not on)}]))))
 
+(defn- profile-cell
+  "The person's profile name (their agent user on every server is <profile>-claudia-agent, the
+  only name the hub signs SSH certificates for); Save when it was changed."
+  [{profile :profile}]
+  (let [v (r/atom (or profile ""))]
+    (fn [{p :email profile :profile}]
+      [:td.profile
+       [:input.mono {:value @v :placeholder "profile" :spell-check false :size 10
+                     :aria-label (str p "'s profile name") :on-change #(reset! v (value-of %))}]
+       (when (not= (str/trim @v) (or profile ""))
+         [:button {:on-click #(call! "PUT" (person-path p) {:profile (str/trim @v)})} "Save"])])))
+
 (defn- person-row [{p :email :as person} {:keys [servers people granted writes]} removing]
   [:tr
    [:td.person {:title p} (person-label person)]
+   [profile-cell person]
    (server-ticks p servers granted)
    (writer-ticks p people writes)
    [tick (:admin person) (str p " is an admin") "PUT" (person-path p) {:admin (not (:admin person))}]
@@ -199,7 +212,7 @@
 
 (defn- grid-head [servers people]
   [:thead
-   [:tr [:th {:row-span 2} "Person"]
+   [:tr [:th {:row-span 2} "Person"] [:th {:row-span 2} "Profile"]
     [:th.group {:col-span (count servers)} "Uses server"]
     [:th.group {:col-span (count people)} "May write to the chats of"]
     [:th {:row-span 2} "Admin"] [:th {:row-span 2}]]
@@ -237,7 +250,9 @@
           [:p.muted.small "Nobody yet."])
         [:p.muted.small "Uses server: their own profile there. May write: they can open, start and send in that "
          "person's chats on every server where both have a profile; Claude then runs as that person's "
-         "Linux user, with its logins. Without a tick, another's chats are read only."]]
+         "Linux user, with its logins. Without a tick, another's chats are read only. Profile: their "
+         "profile's name on every server; their chats run as <profile>-claudia-agent there, and only "
+         "that user gets SSH certificates from the hub."]]
        [person-form email]])))
 
 (rf/reg-event-fx :admin/reset-email (fn [_ [_ a]] (reset! a "") nil))

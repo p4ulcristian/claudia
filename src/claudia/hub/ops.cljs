@@ -21,6 +21,7 @@
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
+            [claudia.shared.agent-user :as agent-user]
             [claudia.shared.order :as order]
             [claudia.shared.protocol :as protocol]
             [claudia.hub.push :as push]
@@ -124,24 +125,53 @@
 
 (defn- admin-flag [b] (when (boolean? (:admin b)) (:admin b)))
 
+(defn profile-of-body
+  "The profile name a person's body sets: nil when it names none, \"\" to take it away."
+  [b]
+  (when (string? (:profile b)) (field (:profile b) 40)))
+
+(defn profile-problem
+  "What is wrong with giving email the profile name (nil or \"\": nothing to check), owner being
+  whose it is now (nil: nobody's), or nil."
+  [profile email owner]
+  (cond (str/blank? profile) nil
+        (not (agent-user/profile-name? profile))
+        "A profile name: lower-case letters, digits and dashes, starting with a letter, at most 18."
+        (and owner (not= owner email)) "That profile name is someone else's."
+        :else nil))
+
+(defn- save-person-and-profile!
+  "Writes the person, and their profile name when the body names one, together."
+  [p profile]
+  (store/transaction!
+   (fn []
+     (store/save-person! p)
+     (when (some? profile) (store/set-profile! (:email p) profile)))))
+
 (defn- add-person [req res _]
   (with-body req
     (fn [b]
-      (let [email (str/lower-case (field (:email b)))]
+      (let [email (str/lower-case (field (:email b)))
+            profile (profile-of-body b)]
         (if-not (re-matches config/email-re email)
           (fail res 400 "That isn't an email address.")
-          (do (store/save-person! {:email email :name (not-empty (field (:name b) 80)) :admin (admin-flag b)})
-              (changed! res)))))))
+          (if-let [problem (profile-problem profile email (some-> profile not-empty store/email-of-profile))]
+            (fail res 400 problem)
+            (do (save-person-and-profile! {:email email :name (not-empty (field (:name b) 80)) :admin (admin-flag b)} profile)
+                (changed! res))))))))
 
 (defn- save-person [req res email]
   (with-body req
     (fn [b]
-      (if-not (store/person email)
-        (fail res 404 "No such person.")
-        (do (store/save-person! {:email email
-                                 :name (when (string? (:name b)) (field (:name b) 80))
-                                 :admin (admin-flag b)})
-            (changed! res))))))
+      (let [profile (profile-of-body b)
+            problem (profile-problem profile email (some-> profile not-empty store/email-of-profile))]
+        (cond (not (store/person email)) (fail res 404 "No such person.")
+              problem (fail res 400 problem)
+              :else (do (save-person-and-profile! {:email email
+                                                   :name (when (string? (:name b)) (field (:name b) 80))
+                                                   :admin (admin-flag b)}
+                                                  profile)
+                        (changed! res)))))))
 
 (defn- drop-person [_ res email]
   (store/drop-person! email)

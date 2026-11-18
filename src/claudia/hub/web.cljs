@@ -3,6 +3,7 @@
   (:require ["fs" :as fs]
             ["path" :as path]
             [clojure.string :as str]
+            [claudia.node.http :as io]
             [claudia.shared.csp :as csp]))
 
 (def ^:private types
@@ -35,11 +36,6 @@
   (cheap: the ETag answers 304), so a page update is seen at once."
   #{".woff" ".woff2" ".ttf" ".otf" ".svg" ".png" ".jpg" ".jpeg" ".gif" ".webp" ".avif" ".ico" ".glb"})
 
-(defn- plain [^js res status text]
-  (.writeHead res status #js {"content-type" "text/plain; charset=utf-8"
-                              "cache-control" "no-store"})
-  (.end res text))
-
 (defn- relative
   "The URL path as a path inside the web folder, or nil for anything that could leave it or name a
   hidden file (`..`, `.git`, a NUL)."
@@ -63,7 +59,7 @@
   (if (and rel (re-matches #"^(?:js/)?[\w.-]+\.js$" rel))
     (do (.writeHead res 200 #js {"content-type" "text/javascript; charset=utf-8" "cache-control" "no-store"})
         (.end res stale-js))
-    (plain res 404 "Not found")))
+    (io/send-text res 404 "Not found")))
 
 (defn- file-headers
   "A file's response headers: its type, caching, validators and the page's security headers."
@@ -99,7 +95,7 @@
   (cond
     (not (#{"GET" "HEAD"} (.-method req)))
     (do (.setHeader res "allow" "GET, HEAD")
-        (plain res 405 "Method not allowed"))
+        (io/send-text res 405 "Method not allowed"))
 
     (or (= pathname "/") (= pathname "/new") (= pathname "/c") (str/starts-with? pathname "/c/"))
     (send-file req res (path/join root "index.html") "no-cache" "index.html")
@@ -109,4 +105,4 @@
       (let [ext (str/lower-case (path/extname rel))]
         (send-file req res (path/join root rel)
                    (if (kept ext) "public, max-age=604800" "no-cache") rel))
-      (plain res 404 "Not found"))))
+      (io/send-text res 404 "Not found"))))

@@ -27,6 +27,13 @@
      admin INTEGER NOT NULL DEFAULT 0,
      added_at INTEGER NOT NULL
    );
+   -- A person's profile name, the same on every server: their chats there run as the agent user
+   -- <profile>-claudia-agent, and the hub signs SSH certificates only for that name (README
+   -- decisions 51 and 53). No row: no certificates for them.
+   CREATE TABLE IF NOT EXISTS profiles (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     profile TEXT NOT NULL UNIQUE
+   );
    -- A tick in the grid: this person works on this server as their own profile there.
    CREATE TABLE IF NOT EXISTS access (
      email TEXT NOT NULL REFERENCES people (email) ON DELETE CASCADE,
@@ -213,8 +220,12 @@
 (defn- person-row [r]
   (when r (-> r (update :admin #(= 1 %)))))
 
+(def ^:private person-select
+  "SELECT p.email, p.name, p.admin, COALESCE(pr.profile, '') AS profile
+   FROM people p LEFT JOIN profiles pr ON pr.email = p.email")
+
 (defn people []
-  (mapv person-row (all "SELECT email, name, admin FROM people ORDER BY added_at, email")))
+  (mapv person-row (all (str person-select " ORDER BY p.added_at, p.email"))))
 
 (defn picture
   "A person's picture: {:type :data (bytes) :at}, or nil."
@@ -234,7 +245,7 @@
          email kind data at))
 
 (defn person [email]
-  (person-row (one "SELECT email, name, admin FROM people WHERE email = ?" email)))
+  (person-row (one (str person-select " WHERE p.email = ?") email)))
 
 (defn save-person!
   "Adds a person, or changes the name/admin given (nil leaves it)."
@@ -243,6 +254,19 @@
          ON CONFLICT (email) DO UPDATE SET name = COALESCE(?, people.name), admin = COALESCE(?, people.admin)"
          email person-name (when (some? admin) (if admin 1 0)) (now)
          person-name (when (some? admin) (if admin 1 0))))
+
+(defn set-profile!
+  "Sets a person's profile name; blank takes it away."
+  [email profile]
+  (if (seq profile)
+    (exec! "INSERT INTO profiles (email, profile) VALUES (?, ?)
+            ON CONFLICT (email) DO UPDATE SET profile = excluded.profile" email profile)
+    (exec! "DELETE FROM profiles WHERE email = ?" email)))
+
+(defn email-of-profile
+  "The email of the person whose profile name this is, or nil."
+  [profile]
+  (:email (one "SELECT email FROM profiles WHERE profile = ?" profile)))
 
 (defn drop-person! [email] (exec! "DELETE FROM people WHERE email = ?" email))
 

@@ -38,6 +38,12 @@
   (.writeHead res status #js {"content-type" "application/json; charset=utf-8" "cache-control" "no-store"})
   (.end res (protocol/write-json data)))
 
+(defn send-text
+  "Answers with text, never cached."
+  [^js res status text]
+  (.writeHead res status #js {"content-type" "text/plain; charset=utf-8" "cache-control" "no-store"})
+  (.end res text))
+
 (defn no-content
   "Answers 204 with no body, never cached."
   [^js res]

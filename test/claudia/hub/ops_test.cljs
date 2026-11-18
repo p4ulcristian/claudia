@@ -85,3 +85,14 @@
 (deftest the-chat-order-is-a-persons-own-call
   (is (= [:order] (ops/person-route "GET" "/hub/chat-order")))
   (is (= [:save-order] (ops/person-route "PUT" "/hub/chat-order"))))
+
+(deftest a-person-s-profile-name-is-checked-and-their-own
+  (is (nil? (ops/profile-of-body {})))
+  (is (= "" (ops/profile-of-body {:profile "  "})))
+  (is (= "paul" (ops/profile-of-body {:profile " paul "})))
+  (is (nil? (ops/profile-problem nil "p@x" nil)))
+  (is (nil? (ops/profile-problem "" "p@x" "q@x")))
+  (is (nil? (ops/profile-problem "paul" "p@x" nil)))
+  (is (nil? (ops/profile-problem "paul" "p@x" "p@x")))
+  (is (= "That profile name is someone else's." (ops/profile-problem "paul" "p@x" "q@x")))
+  (is (re-find #"^A profile name" (ops/profile-problem "Paul" "p@x" nil))))

@@ -33,6 +33,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | hub | `HUB_DATA` | folder of the hub's store `hub.db` and the peer requests (default `~/.local/share/claudia-hub`) |
 | hub | `HUB_ADMIN_GROUP` | a login group (`X-Auth-Request-Groups`) whose members are admins (optional) |
 | hub | `HUB_KEY_FILE` | the hub's secret (40+ characters, `openssl rand -base64 32`); each server's key is HMAC-SHA256 of its name under it. Required: without it the hub does not start |
+| hub | `HUB_SSH_CA_FILE` | the SSH certificate authority (README decision 53): an ed25519 private key in OpenSSH format without a passphrase (`ssh-keygen -t ed25519 -N '' -f <file>`). Unset or unreadable: `/hub/ssh-ca.pub` and `/hub/server/ssh-cert` answer 503, the rest of the hub runs |
 | hub | `HUB_PEERS_DIR`, `HUB_APPLIED_DIR` | peer requests for the gate's helper (default `HUB_DATA/peers`), its answers (default `HUB_DATA/peers-applied`) |
 | hub | `HUB_APNS_KEY_FILE`, `HUB_APNS_KEY_ID`, `HUB_APNS_TEAM_ID` | the APNs key (.p8) and its ids; `HUB_APNS_DRY_RUN=1` logs pushes instead |
 | hub | `HUB_GITHUB_SECRET_FILE`, `HUB_UPDATE_REQUEST`, `HUB_REPO` | the webhook secret, the file the gate's update helper watches, `owner/name` |
@@ -50,6 +51,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | runner | `RUNNER_DATA` | folder for `claudia.db`, uploads and 3D scenes' videos (`videos/`) |
 | runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
+| runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server: Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48) and, when it runs as an agent user, its SSH certificate (`POST /hub/server/ssh-cert`) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | file holding the Claude long-term token in use (`sk-ant-oat…`): the front writes it when the hub sends it (`PUT /api/claude-token/current`), runners read it on every session start; whose it is: `<token file>.json` `{ key, name, by, at }`. Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
@@ -61,8 +63,11 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 `hub.json`:
 ```json
 { "servers": [ { "name": "home", "label": "Home", "address": "10.0.0.2:4540" } ],
-  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["home"] } ] }
+  "people":  [ { "email": "a@example.com", "name": "Paul", "admin": true, "servers": ["home"], "profile": "paul" } ] }
 ```
+`profile` (optional): the person's profile name on every server, whose agent user is
+`<profile>-claudia-agent` (README decisions 51 and 53); lower-case letters, digits and dashes,
+starting with a letter, at most 18 characters, each person's own.
 The profiles file (front): one line per profile, `<profile> <email> <runner socket path>`.
 
 ## Who is calling
@@ -104,6 +109,8 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
 | `POST /hub/server/claudia` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ as (email, with a profile on that server), op: chats \| new \| send \| archive \| stop, args }` → the operation's answer, carried out on the person's servers through each runner's `/api/chat-ops/…` (`GET chats` → `{ chats }`, `POST new { text, folder? }` → `{ chat }`, `POST send { chat, text }`, `POST archive { chat, archived }`, `POST stop { chat }` → `{ ok }`); 403 when the key or the profile does not match |
+| `POST /hub/server/ssh-cert` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ user, publicKey }` → `{ certificate }`: an OpenSSH user certificate (one line) for `publicKey` (ed25519, one OpenSSH line), signed by `HUB_SSH_CA_FILE` (README decision 53). Only when `user` is `<profile>-claudia-agent`, that profile is a person's (the People table's profile names) and that person has a profile on that server. Principal exactly `user`, valid from 5 minutes before to 60 minutes after now, key id `<server>/<user>/<ISO time>`, a random serial, extension `permit-pty` only (no agent, port or X11 forwarding). 403 when the key, the user or the profile does not match; 400 for a key that is not ed25519; 503 without `HUB_SSH_CA_FILE` |
+| `GET /hub/ssh-ca.pub` | no login: the SSH authority's public key, one OpenSSH line (`ssh-ed25519 … claudia-hub-ca`), for every server's `TrustedUserCAKeys`; 503 without `HUB_SSH_CA_FILE` |
 | `GET /hub/picture/<key>` | a person's profile picture (PNG or WebP; key: 16 hex digits of the SHA-256 of their email), 404 without one |
 | `PUT /hub/admin/picture?email=<email>` (admins) | body: the picture (PNG or WebP, up to 512 KB) → `{ picture }` |
 | `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
@@ -144,8 +151,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `GET /hub/admin` | admin | the admin state |
 | `PUT /hub/admin/servers/:name` `{ label?, address? }` | admin | adds or changes a server (address `host:port`) |
 | `DELETE /hub/admin/servers/:name` | admin | removes it (and its peer request) |
-| `POST /hub/admin/people` `{ email, name?, admin? }` | admin | adds a person |
-| `PUT /hub/admin/people/:email` `{ name?, admin? }` | admin | changes a person |
+| `POST /hub/admin/people` `{ email, name?, admin?, profile? }` | admin | adds a person |
+| `PUT /hub/admin/people/:email` `{ name?, admin?, profile? }` | admin | changes a person; `profile`: their profile name (as in `hub.json`; `""` takes it away; 400 when another person has it) |
 | `DELETE /hub/admin/people/:email` | admin | removes them and their ticks |
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `PUT /hub/admin/writers` `{ email, owner, granted }` | admin | a write tick on or off: `email` may write to `owner`'s chats on every server where `owner` has a profile |
