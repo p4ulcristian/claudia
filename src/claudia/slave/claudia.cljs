@@ -93,5 +93,5 @@ list_chats, start_chat, send_to_chat, archive_chat, stop_chat.
   [tool args]
   (let [{:keys [email]} (config (.-env js/process))
         [op hub-args] (hub-op tool args)]
-    (-> (hub-call/post! "/hub/server/claudia" {:as email :op op :args hub-args})
+    (-> (hub-call/post! (hub-call/settings (.-env js/process)) "/hub/server/claudia" {:as email :op op :args hub-args})
         (.then #(select-keys % [:ok :text])))))

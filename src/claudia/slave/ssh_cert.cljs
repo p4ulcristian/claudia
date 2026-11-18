@@ -1,18 +1,19 @@
 (ns claudia.slave.ssh-cert
-  "The agent user's SSH certificate (README decision 53). A runner running as an agent user
-  (`<profile>-claudia-agent`) with the hub link (claudia.slave.hub-call) keeps an ed25519 key in
-  ~/.ssh/claudia_agent, asks the hub for a one-hour certificate on start and every 45 minutes
-  (POST /hub/server/ssh-cert), writes it to ~/.ssh/claudia_agent-cert.pub, and keeps a managed
-  block in ~/.ssh/config so `ssh <server>` uses both and lands as the same agent user. A failure is
-  logged and tried again in 5 minutes; it never stops the runner. Other runners do nothing here."
+  "The agent user's SSH certificate (README decision 53): the runner's side, and the pure parts the
+  front shares. The front (user claudia, which holds the hub key) renews it (claudia.slave.sshfront):
+  it asks a runner that runs as an agent user (`<profile>-claudia-agent`) for its public key (POST
+  /api/ssh/pubkey: the runner makes ~/.ssh/claudia_agent the first time), gets the one-hour
+  certificate from the hub, and hands it over (POST /api/ssh/cert); the runner writes it to
+  ~/.ssh/claudia_agent-cert.pub and keeps a managed block in ~/.ssh/config, so `ssh <server>` uses
+  both and lands as the same agent user. The runner never calls the hub for it, nor reads the hub key."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
+            [claudia.node.http :as io]
             [claudia.shared.agent-user :as agent-user]
-            [claudia.shared.protocol :as protocol]
-            [claudia.slave.hub-call :as hub-call]))
+            [claudia.shared.protocol :as protocol]))
 
 (defn- mode [octal] (js/parseInt octal 8))
 
@@ -54,16 +55,23 @@
   [user public-key]
   {:user user :publicKey (str/trim (str public-key))})
 
+(defn cert-line
+  "cert as one OpenSSH ed25519 user certificate line ending in a newline, or nil when it is not one."
+  [cert]
+  (let [line (when (string? cert) (str/trim cert))]
+    (when (and line (str/starts-with? line "ssh-ed25519-cert-v01@openssh.com ") (not (str/includes? line "\n")))
+      (str line "\n"))))
+
 (defn certificate-of
   "The certificate in the hub's answer {:ok :status :text}: {:certificate line}, or {:problem}."
   [{:keys [ok status text]}]
   (let [body (try (protocol/read-json text) (catch :default _ nil))
-        cert (when (map? body) (:certificate body))]
-    (if (and ok (string? cert) (str/starts-with? cert "ssh-ed25519-cert-v01@openssh.com "))
-      {:certificate (str (str/trim cert) "\n")}
+        cert (when (map? body) (cert-line (:certificate body)))]
+    (if (and ok cert)
+      {:certificate cert}
       {:problem (str "hub answered " status ": " (or (when (map? body) (:error body)) (str/trim (str text))))})))
 
-;; ---- the edges: files, ssh-keygen, the hub ----
+;; ---- the edges: files and ssh-keygen, on the front's calls ----
 
 (defn- paths [^js me]
   (let [dir (path/join (.-homedir me) ".ssh")]
@@ -96,32 +104,36 @@
         new-text (merge-block old (config-block user))]
     (when (not= old new-text) (write-file! config new-text (mode "600")))))
 
-(defn- renew!
-  "Promise of whether a new certificate is in place."
+(defn- public-key!
+  "Promise of [status body] for POST /api/ssh/pubkey: {:publicKey line}, the key made when missing."
   [ps user]
-  (-> (js/Promise.resolve)
-      ;; Inside the promise, so whatever throws is caught below and never stops the runner.
-      (.then #(ensure-key! ps user))
-      (.then #(hub-call/post! "/hub/server/ssh-cert" (cert-request user (fs/readFileSync (str (:key ps) ".pub") "utf8"))))
-      (.then (fn [answer]
-               (let [{:keys [certificate problem]} (certificate-of answer)]
-                 (when problem (throw (js/Error. problem)))
-                 (install! ps user certificate)
-                 (js/console.log (str "ssh certificate: renewed for " user))
-                 true)))
-      (.catch (fn [e] (js/console.error (str "ssh certificate: " (.-message e) "; again in 5 minutes")) false))))
+  (.then (ensure-key! ps user)
+         (fn [_] [200 {:publicKey (str/trim (fs/readFileSync (str (:key ps) ".pub") "utf8"))}])))
 
-(defn- loop! [ps user]
-  (.then (renew! ps user)
-         (fn [ok?] (.unref (js/setTimeout #(loop! ps user) (next-delay ok?))))))
+(defn- certificate!
+  "[status body] for POST /api/ssh/cert {certificate}: written with the config block, or why not."
+  [ps user {:keys [certificate]}]
+  (if-let [line (cert-line certificate)]
+    (do (install! ps user line)
+        (js/console.log (str "ssh certificate: installed for " user))
+        [200 {:ok true}])
+    [400 {:error "certificate must be one ssh-ed25519-cert-v01@openssh.com line."}]))
 
-(defn start!
-  "Keeps this runner's agent user's certificate fresh; nothing when the process does not run as an
-  agent user or has no hub link."
-  []
+(defn- answer [ps user sub body]
+  (case sub
+    "pubkey" (public-key! ps user)
+    "cert" (certificate! ps user body)
+    [404 {:error "Not found."}]))
+
+(defn call
+  "The front's POST /api/ssh/<sub> (pubkey, cert) on this runner's socket; 409 when this runner does
+  not run as an agent user."
+  [^js req ^js res sub]
   (let [^js me (os/userInfo)
         user (.-username me)]
-    (when (agent-user/agent-user? user)
-      (if (hub-call/settings (.-env js/process))
-        (loop! (paths me) user)
-        (js/console.log "ssh certificate: off, this runner has no hub link (CLAUDIA_HUB_URL, CLAUDIA_SERVER_NAME, CLAUDIA_HUB_KEY_FILE)")))))
+    (if-not (agent-user/agent-user? user)
+      (io/send-json res 409 {:error "This runner does not run as an agent user."})
+      (-> (io/read-json req 65536)
+          (.then #(answer (paths me) user sub %))
+          (.then (fn [[status body]] (io/send-json res status body)))
+          (.catch #(io/send-json res 500 {:error (.-message %)}))))))

@@ -1,23 +1,33 @@
 (ns claudia.slave.hub-call
-  "A runner's calls to the hub as its server (README decisions 47 and 48): CLAUDIA_HUB_URL,
-  CLAUDIA_SERVER_NAME and CLAUDIA_HUB_KEY_FILE (this server's hub key, as the front keeps it) go
-  with every call as X-Claudia-Server-Name and X-Claudia-Server-Key. Claudia's own chat and the SSH
-  certificate renewal (claudia.slave.ssh-cert) call through here."
+  "Calls to the hub as this server (README decisions 47, 48 and 53): the hub's address, this server's
+  name and its hub key go with every call as X-Claudia-Server-Name and X-Claudia-Server-Key. The
+  front calls through here for the agent users' SSH certificates (claudia.slave.sshfront, its own
+  FRONT_HUB_KEY_FILE); a runner for Claudia's own chat (CLAUDIA_HUB_KEY_FILE, readable by it)."
   (:require ["node:fs" :as fs]
             [clojure.string :as str]))
 
-(defn settings
-  "The hub link from env (a JS object): {:url :server :key-file}, or nil when one is missing."
-  [^js env]
-  (let [c {:url (.-CLAUDIA_HUB_URL env) :server (.-CLAUDIA_SERVER_NAME env)
-           :key-file (.-CLAUDIA_HUB_KEY_FILE env)}]
+(defn- link [url server key-file]
+  (let [c {:url url :server server :key-file key-file}]
     (when (every? seq (vals c)) c)))
+
+(defn settings
+  "A runner's hub link from env (a JS object): {:url :server :key-file} from CLAUDIA_HUB_URL,
+  CLAUDIA_SERVER_NAME and CLAUDIA_HUB_KEY_FILE, or nil when one is missing."
+  [^js env]
+  (link (.-CLAUDIA_HUB_URL env) (.-CLAUDIA_SERVER_NAME env) (.-CLAUDIA_HUB_KEY_FILE env)))
+
+(defn front-settings
+  "The front's hub link from env (a JS object): {:url :server :key-file} from CLAUDIA_HUB_URL,
+  CLAUDIA_SERVER_NAME and FRONT_HUB_KEY_FILE, or nil when one is missing."
+  [^js env]
+  (link (.-CLAUDIA_HUB_URL env) (.-CLAUDIA_SERVER_NAME env) (.-FRONT_HUB_KEY_FILE env)))
 
 (defn post!
   "Promise of the hub's answer {:ok :status :text} to a POST of body (data, sent as JSON) to path,
-  as this server. Rejects when the link is not set or the hub cannot be reached."
-  [path body]
-  (if-let [{:keys [url server key-file]} (settings (.-env js/process))]
+  as the server of hub-link ({:url :server :key-file}). Rejects when hub-link is nil or the hub
+  cannot be reached."
+  [hub-link path body]
+  (if-let [{:keys [url server key-file]} hub-link]
     (-> (js/Promise.resolve)
         ;; Inside the promise, so an unreadable key file rejects instead of throwing.
         (.then #(js/fetch (str (str/replace url #"/+$" "") path)
@@ -27,4 +37,4 @@
                                              "x-claudia-server-key" (str/trim (fs/readFileSync key-file "utf8"))}
                                :body (js/JSON.stringify (clj->js body))}))
         (.then (fn [^js r] (.then (.text r) (fn [t] {:ok (.-ok r) :status (.-status r) :text t})))))
-    (js/Promise.reject (js/Error. "CLAUDIA_HUB_URL, CLAUDIA_SERVER_NAME or CLAUDIA_HUB_KEY_FILE is not set"))))
+    (js/Promise.reject (js/Error. "no hub link: CLAUDIA_HUB_URL, CLAUDIA_SERVER_NAME or the hub key file is not set"))))

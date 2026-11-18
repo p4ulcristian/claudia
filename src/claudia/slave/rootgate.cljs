@@ -3,7 +3,8 @@
   front (user claudia, which an agent user cannot reach), never in a runner (which runs as the agent
   user). Its state: {:switches {\"<profile>/<chat>\" true} :pending {nonce {:profile :chat :argv
   :cwd}}}. The edges are in claudia.slave.rootfront."
-  (:require [claudia.root.rules :as rules]))
+  (:require [clojure.string :as str]
+            [claudia.root.rules :as rules]))
 
 (defn switch-key [profile chat] (str profile "/" chat))
 
@@ -22,6 +23,27 @@
   person, not one with a write tick or a viewer."
   [{:keys [own target]}]
   (boolean (and own target (= (:profile own) (:profile target)))))
+
+(defn switches-here
+  "switches without those of profiles that have no runner here (profiles: the front's list)."
+  [switches profiles]
+  (let [names (set (map :profile profiles))]
+    (into {} (filter (fn [[k _]] (contains? names (first (str/split (str k) #"/" 2))))) switches)))
+
+(defn tap-problem
+  "[status body] when a person's tap (an answer or a switch) on chat cannot count, before asking the
+  runner whether the chat is there; nil when it may go on. Only the owner taps (route: the caller's)."
+  [route chat]
+  (cond (not (owner? route)) [403 {:error "Only the chat's owner may give it root."}]
+        (not (string? chat)) [400 {:error "chat is needed."}]))
+
+(defn chat-problem
+  "[status body] when the runner's answer to POST /api/root/known ({:status :body}) does not say the
+  chat is there, else nil. Nothing is kept or answered for a chat the profile does not have."
+  [{:keys [status body]}]
+  (cond (= 200 status) nil
+        (= 404 status) [404 {:error "No such chat."}]
+        :else [502 {:error (or (:error body) (str "The runner answered " status "."))}]))
 
 (defn ask-problem
   "Why the root helper's ask {agentUser chatKey argv cwd} cannot go to a runner here (profiles: the

@@ -93,7 +93,8 @@
 
 (deftest front-routes-by-email
   (let [ps (front/parse-profiles "# who\nann ANN@x.org /s/a\nbob bob@x.org /s/b user=bobby # note\nbroken line\n")]
-    (is (= [{:profile "ann" :email "ann@x.org" :socket "/s/a"} {:profile "bob" :email "bob@x.org" :socket "/s/b"}] ps))
+    (is (= [{:profile "ann" :email "ann@x.org" :socket "/s/a" :user "claudia-ann"}
+            {:profile "bob" :email "bob@x.org" :socket "/s/b" :user "bobby"}] ps))
     (is (= {:status 401 :error "No caller."} (front/route-of ps nil nil #{})))
     (is (= {:own nil :target nil :viewing nil :read-only true} (front/route-of ps "eve@x.org" nil #{}))
         "no profile here: only its /api/me (no target)")

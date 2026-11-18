@@ -46,12 +46,13 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | front | `FRONT_HUB_KEY_FILE` | this server's hub key (written by `deploy/pair.sh`). Required: without it the front does not start |
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
 | front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
+| front | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME` | the hub's https address and this server's name as the hub knows it (its hub key is made of it). With them and `FRONT_HUB_KEY_FILE` the front calls the hub as its server for the agent users' SSH certificates (`POST /hub/server/ssh-cert`, README decision 53); unset: no certificates, logged at start when a profile runs as an agent user |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
 | runner | `RUNNER_DATA` | folder for `claudia.db`, uploads and 3D scenes' videos (`videos/`) |
 | runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
-| runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server: Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48) and, when it runs as an agent user, its SSH certificate (`POST /hub/server/ssh-cert`) |
+| runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server for Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48); never set it for a runner that runs as an agent user. The SSH certificates are the front's (README decision 53) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | where the Claude long-term tokens are kept (the file itself is no longer written: there is no shared token, README decision 57; the front deletes it and its `.json` note). Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one. Each person's last pick (`PUT /api/claude-token/picks`): `<token file>.picks.json` `{ <profile>: { email, key, name, at } }`; a chat without a pick starts on its profile's entry, and with none it does not start (its message gets an `error` asking to pick one in its header). Runners read them on every session start |
 | runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
@@ -68,7 +69,10 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 `profile` (optional): the person's profile name on every server, whose agent user is
 `<profile>-claudia-agent` (README decisions 51 and 53); lower-case letters, digits and dashes,
 starting with a letter, at most 18 characters, each person's own.
-The profiles file (front): one line per profile, `<profile> <email> <runner socket path>`.
+The profiles file (front): one line per profile, `<profile> <email> <runner socket path> [user=<linux
+user>]` (`#` starts a comment). The user is whom the profile's host and runner run as (default
+`claudia-<profile>`, as `deploy/shared-server/install.sh`); the front renews the SSH certificate of
+each such user that is an agent user (README decision 53).
 
 ## Who is calling
 
@@ -93,7 +97,8 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
   of a profile whose owner's email is not in `X-Claudia-Writes`.
 - Root (README decision 52) is the front's, never a runner's: the front answers `POST /api/root/answer`
   and `/api/root/switch` itself, only for the profile's own person (own profile = target profile; not
-  a writer, not a viewer), and never passes any other `/api/root/…` on (403).
+  a writer, not a viewer), and never passes any other `/api/root/…` on (403). Nor `/api/ssh/…`
+  (the SSH certificate routes, README decision 53): 403.
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
 ## Hub HTTP
@@ -223,6 +228,8 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
 | `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
+| `POST /api/ssh/pubkey` `{}` | a runner, the front only (never passed on from the hub: 403; README decision 53): `{ publicKey }`, the one line of `~/.ssh/claudia_agent.pub` of the agent user it runs as (the ed25519 key made with ssh-keygen the first time); 409 `{ error }` when it does not run as an agent user |
+| `POST /api/ssh/cert` `{ certificate }` | a runner, the front only: writes the certificate (one `ssh-ed25519-cert-v01@openssh.com` line, as the hub signed it) to `~/.ssh/claudia_agent-cert.pub` and the managed block of `~/.ssh/config` (`Host *`: that key and certificate, `IdentitiesOnly yes`, `User` the agent user it runs as): `{ ok: true }`; 400 for anything else, 409 when it does not run as an agent user. The front calls both on start and every 45 minutes for each profile whose `user=` in the profiles file is an agent user, the hub's `POST /hub/server/ssh-cert` between them (5 minutes after a failure) |
 | `GET /api/chats/:id/picture.png?turn=` | the live picture (or that turn's) as a PNG, drawn by the page's render mode in a headless Chromium (the camera); 404 no such picture, 503 `{ error }` when this server can't shoot (no browser, no built `out/web`) |
 | `POST /api/chats/:id/videos` `{ block, title, data, voice }` | a 3D scene's video (from the hub): `202 { id }`; it waits for its voice when `voice`, else is queued. One is made at a time: the render page in a headless browser of its own (1280×720 at 1.5×: 1920×1080) plays the story on a stepped clock and hands over JPEG frames; ffmpeg (`CLAUDIA_FFMPEG`, else `ffmpeg`) makes them H.264 and the voice AAC; the file is kept at `RUNNER_DATA/videos/<chat>/<id>.mp4` (+ `.json`) |
 | `PUT /api/chats/:id/videos/:vid/voice` `{ clips: [{ text, instruction, language, pcm }], error? }` | the narrator's clips (pcm: base64 of 16-bit mono PCM at 24 kHz) for a video waiting for them; it is queued. 409 when that video waits for none |
@@ -472,9 +479,13 @@ offered; run the command itself"). No socket: "no root helper on this server", e
    (for Allow) the very argv and cwd kept: `{ allow: true, via: "allow", chat }`. Deny `{ allow: false,
    why: "The person said no.", chat }`; 10 minutes or the helper leaving: no too. Then `POST
    /api/root/done { chat, ask }` takes the card away. A refused answer: 403 `{ error }`.
+   Before an answer or a switch counts, the front asks the target profile's runner `POST
+   /api/root/known { chat }` → 200 `{ chat }`, or 404 `{ error }` when it has no such chat: then the
+   front answers 404 `{ error: "No such chat." }` and keeps, settles and shows nothing (a runner that
+   does not answer: 502). At start it drops kept switches of profiles that have no runner here.
 4. `POST /api/root/switch { chat, on }` (the owner only, else 403) sets the front's switch, writes
    `FRONT_ROOT_STATE`, and has the runner show it (`POST /api/root/shown { chat, root }` → the Row's
-   `root`). The runner's `/api/root/*` (chat, card, done, shown) decide nothing: an agent that calls
+   `root`). The runner's `/api/root/*` (known, chat, card, done, shown) decide nothing: an agent that calls
    them can only show cards no one can answer, or a wrong `root` on its own Row.
 5. Helper → shim: `{ refused: why }` and the end, or `{ running: true }`, then `{ out: base64 }` and
    `{ err: base64 }` (256 KB of bytes a frame at most) as the command writes, last `{ exit: n }` (a
