@@ -186,6 +186,7 @@
        (rail-top (hooks/use-media reach/touch-tablet))
        (map-indexed #(entry-view m %1 %2) entries)]]
      [update-pill/pill]
-     ;; The iPad has Settings on its right edge, beside the mic (thumb_edge.cljs).
-     (when-not (hooks/use-media reach/touch-tablet) [:f> menu/button])
+     ;; Your profile circle (whose chats, the menu), on the iPad too; there Settings is also on the
+     ;; right edge, beside the mic (thumb_edge.cljs).
+     [:f> menu/button]
      [update-pill/updated]]))
