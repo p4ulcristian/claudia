@@ -436,16 +436,19 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .sidebar::after, .rail::after { content: ""; position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -2px; width: 6px; --ink: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /* By Claudia's face: sounds, and 2D (the chats) or 3D (the world). */
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
-/* The rail's top: Claudia's face in a violet circle, her head over its top edge (the clip is the
-   circle's lower half and straight up from it), then 2D and 3D as two small circles. */
+/* The rail's top: Claudia's face (no frame), then 2D and 3D as two small circles. */
 .rail-head { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 0 9px; }
-.rail-face { position: relative; width: 50px; height: 68px; padding: 0; border-radius: 0 0 25px 25px; }
+/* Claudia's face (README decision 48): bare, never clipped, so her animations show whole. */
+.rail-face { position: relative; display: block; width: 56px; height: 58px; margin: 0 auto; padding: 0; overflow: visible; background: none; }
 .rail-face:hover { background: none; }
-.rail-face-ring { position: absolute; left: 0; bottom: 0; width: 50px; height: 50px; box-sizing: border-box; border-radius: 50%;
-  border: 2px solid var(--violet); background: color-mix(in srgb, var(--violet) 55%, white); transition: box-shadow 0.15s; }
-.rail-face:hover .rail-face-ring, .rail-face:focus-visible .rail-face-ring { box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 35%, transparent); }
-.rail-face-clip { position: absolute; left: 2px; bottom: 2px; width: 46px; height: 66px; overflow: hidden; border-radius: 0 0 23px 23px; }
-.rail-face .face { position: absolute; left: -4px; bottom: 6px; width: 54px; height: 56px; display: block; pointer-events: none; }
+.rail-face .face { display: block; width: 56px; height: 58px; overflow: visible; pointer-events: none; }
+/* A chat that finished since you looked: a big green check through its circle, drawn out of its middle. */
+.rail-check { position: absolute; top: 0; left: 50%; width: 42px; height: 42px; margin-left: -21px; pointer-events: none; overflow: visible; z-index: 2; }
+.rail-check path { fill: none; stroke: var(--green); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 40; stroke-dashoffset: 40; animation: rail-check-in 0.45s ease-out 0.1s forwards;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--green) 60%, transparent)); }
+@keyframes rail-check-in { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .rail-check path { animation: none; stroke-dashoffset: 0; } }
 .rail-acts { flex: none; display: flex; justify-content: center; gap: 2px; }
 .rail .lt-dim { border: 0; border-radius: 0; overflow: visible; gap: 6px; }
 .rail .lt-dim button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; box-sizing: border-box;

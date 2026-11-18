@@ -1,7 +1,6 @@
 (ns claudia.web.views.rail
   "The rail, the one chat list wider than a phone (README decision 24; web/app.tsx of the
-  TypeScript Claudia): at its top Claudia's face in a violet circle, her head over its top edge (a
-  click: :claudia/open), and under it the 2D/3D switch as two small circles
+  TypeScript Claudia): at its top Claudia's face, bare (a click: :claudia/open), and under it the 2D/3D switch as two small circles
   (claudia.web.views.logotools); then a circle per chat with its title under it; passive (ash)
   chats last, after a chalk line, with the same spacing. At its foot: your profile circle
   (claudia.web.views.menu). Circles
@@ -116,6 +115,11 @@
         [kind text] (sidebar-pure/status-line r done? now)]
     [:span.rail-status {:class kind} text]))
 
+(def ^:private done-check
+  "The big check drawn through a finished chat's circle, from its middle out."
+  [:svg.rail-check {:viewBox "0 0 42 42" :aria-hidden true}
+   [:path {:d "M11 22 L18 29 L32 13"}]])
+
 (defn- rail-chat
   "A chat's circle with its title (its server in the hover text on the hub; the chat's header
   shows it under the title); dragged out of the window, the chat opens in a window of its own."
@@ -142,6 +146,7 @@
                         :on-click #(sidebar/pick! k (= k open) %)
                         :on-context-menu #(chatmenu/open-at! k %)})
      [dot/chat-dot r (and (not viewing?) (:unseen r) (not= k open)) true]
+     (when (sidebar-pure/done-mark? r (and (not viewing?) (:unseen r) (not= k open))) done-check)
      [:span.rail-name title]
      [:f> status r (and (not viewing?) (:unseen r) (not= k open))]]))
 
@@ -174,13 +179,12 @@
      (when fresh [fresh-dot fresh])]))
 
 (defn- rail-head
-  "Claudia's face in her circle (its ring drawn behind, her head over its top edge; a click opens
-  her, :claudia/open) and the 2D/3D switch under it."
+  "Claudia's face, no frame round her so her animations show whole (a click opens her chat,
+  :claudia/open), and the 2D/3D switch under it."
   []
   [:div.rail-head
    [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click #(rf/dispatch [:claudia/open])}
-    [:span.rail-face-ring {:aria-hidden true}]
-    [:span.rail-face-clip [:f> face/face]]]
+    [:f> face/face]]
    [logotools/tools]])
 
 (defn- entry-view [m i {:keys [kind row] :as e}]
