@@ -656,7 +656,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (`host/` moves them once). The people keep their own Linux users and logins for work by hand.
     Root comes only through decision 52, other servers only through decision 53. Instead of: the
     person's own user (`user=<person>` in `/etc/claudia/profiles`), or `claudia-<profile>` (the old
-    default name, which does not say it is an agent).
+    default name, which does not say it is an agent). The desktop (single-user today) moves to agent users too, with the agent users given its
+    person's screen and sound by ACLs on the Wayland and PipeWire sockets (the user's call); the
+    MacBook stays single-user (macOS has no shared mode in Claudia yet).
 
 52. Root only through the root helper (2026-11-17/18, the user's picks: the root switch design).
     `claudia-root` runs as root on every server and listens on one socket per agent user,
