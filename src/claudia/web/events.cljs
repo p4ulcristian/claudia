@@ -262,20 +262,19 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (def carried-keys
-  "What a new chat takes over from the last chat: the model, effort, prompt profile, project folder,
-  speaker and bell (not the colour: each chat gets its own; not the subscription: a new chat runs on its
-  person's last pick, README decision 57)."
-  [:model :effort :prompt :folder :talk :bell])
+  "What a new chat takes over from the last chat: the model, effort, prompt profile, speaker and bell
+  (not the colour: each chat gets its own; not the subscription: a new chat runs on its person's last
+  pick, README decision 57; not the folder: a new chat starts with none picked, README decision 65)."
+  [:model :effort :prompt :talk :bell])
 
 (defn carried-picks
-  "The picks a new chat starts with after the chat k: that chat's settings, folder and switches, else
-  (no chat open) the last new chat's picks, without its colour."
+  "The picks a new chat starts with after the chat k: that chat's settings and switches, else (no
+  chat open) the last new chat's picks, without its colour; never a folder (README decision 65)."
   [db k]
-  (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
+  (if-let [{:keys [settings]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:model :effort :prompt]) {:folder folder}
-                   (select-keys row [:talk :bell]))))
+            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:talk :bell]))))
     (select-keys (:new-settings db) carried-keys)))
 
 (defn created-db
@@ -412,7 +411,7 @@
   (let [[ps pc] (:open db)]
     {:db (-> (assoc (on-chat-screen db) :open nil :new-settings picks :new-server server :new-group nil)
              with-fresh-colour)
-     :store ["claudia.newPicks" (clj->js picks)]
+     :store ["claudia.newPicks" (clj->js (select-keys picks carried-keys))]
      :ws/send-all (if pc [[ps {:type "close" :chat pc}]] [])
      :history/push nil}))
 
@@ -594,6 +593,13 @@
      :store ["claudia.newServer" server]
      :ws/send [server (merge {:type "new" :id id :text sent} (new-picks (:new-settings db)) extra)]}))
 
+(defn folder-first
+  "A new chat's first message with no folder picked (README decision 65): nothing is sent, the draft
+  stays, and the Folders modal opens on server for the new chat; its Select picks the folder and then
+  sends (claudia.web.folders, :send? true)."
+  [db server]
+  {:db (-> db (assoc :folders {:server server :folder nil :chat nil :send? true}) (dissoc :world?))})
+
 (defn send-for
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.
   now: the chat's running turn stops first and the message goes as soon as it has ended."
@@ -606,6 +612,7 @@
     (cond
       (hold-send? db server chat attach out) {}
       chat (send-in-chat db k out)
+      (str/blank? (get-in db [:new-settings :folder])) (folder-first db server)
       :else (send-new-chat db (default-server db) (new-uuid) out))))
 
 (defn with-dictation-checked

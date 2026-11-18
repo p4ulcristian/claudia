@@ -7,4 +7,7 @@
   (is (= {:db {:open ["home" "c1"]} :fx [[:dispatch [:chat/folder ["home" "c1"] "/w/app"]]]}
          (folders/use-folder {:open ["home" "c1"] :folders {:server "home" :chat ["home" "c1"]}} "/w/app")))
   (is (= {:db {} :fx [[:dispatch [:new/settings {:folder "/w/app"}]]]}
-         (folders/use-folder {:folders {:server "home" :chat nil}} "/w/app"))))
+         (folders/use-folder {:folders {:server "home" :chat nil}} "/w/app")))
+  (is (= {:db {:drafts {:new "hi"}} :fx [[:dispatch [:new/settings {:folder "/w/app"}]] [:dispatch [:composer/send "hi"]]]}
+         (folders/use-folder {:drafts {:new "hi"} :folders {:server "home" :chat nil :send? true}} "/w/app"))
+      "opened on a held first message: the draft goes after the pick"))

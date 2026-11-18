@@ -1,6 +1,6 @@
 (ns claudia.web.views.prompts
-  "Prompt profiles (README decision 60): the picker in the chat's header (beside model and effort)
-  and the Prompts window, where a server's profiles are added, edited and deleted. A profile's text
+  "Prompt profiles (README decision 60): the popup of the prompt pill in the chat's header (beside
+  model · effort) and the Prompts window, where a server's profiles are added, edited and deleted. A profile's text
   goes after Claudia's part of the system prompt of every chat that picks it."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -32,7 +32,7 @@
 
 (defn- delete! [server n] (.catch (took! server (api/call-json "DELETE" (profile-url server n) nil)) (fn [_])))
 
-;; ---- the picker: a button with the chosen profile, its popup ----
+;; ---- the header pill's popup ----
 
 (defn picked-name
   "The chat's pick when it is one of profiles (else nil: none, deleted, or still loading)."
@@ -44,12 +44,6 @@
   [text]
   (let [l (str/trim (first (str/split-lines (str/trim (str text)))))]
     (if (> (count l) 80) (str (subs l 0 79) "…") l)))
-
-(defn popup-place
-  "Where the popup opens under a button whose rect is {:left :right :bottom}, w wide, inside a
-  window vw wide: right-aligned with the button, kept 6 px inside the window."
-  [{:keys [right bottom]} w vw]
-  {:top (+ bottom 6) :left (max 6 (min (- right w) (- vw w 6)))})
 
 (defn- built-in-card
   "The locked part every chat has; Show full text opens its exact words."
@@ -79,35 +73,20 @@
    [:button.prompt-edit {:type "button" :on-click #(do (choose! :edit) (rf/dispatch [:prompts/open server]))}
     "Edit profiles…"]])
 
-(defn- popup [server picked profiles place choose!]
-  (hooks/use-key (fn [e] (when (= "Escape" (.-key e)) (choose! :close))) false [choose!])
-  [:<>
-   [:div.prompt-pop-back {:on-click #(choose! :close)}]
-   [:div.prompt-pop {:role "dialog" :aria-label "Prompt" :style place}
-    [popup-body server picked profiles choose!]]])
+(defn use-profiles
+  "Loads server's profiles once the header shows it; the chat's picked profile's name (nil: none)."
+  [server settings]
+  (h/use-effect (fn [] (load! server) nil) [server])
+  (picked-name (:prompt settings) @(rf/subscribe [:prompts/list server])))
 
-(def ^:private popup-width 340)
-
-(defn- place-of [^js btn]
-  (let [r (.getBoundingClientRect btn)
-        w (min popup-width (- js/innerWidth 12))]
-    (assoc (popup-place {:right (.-right r) :bottom (.-bottom r)} w js/innerWidth) :width w)))
-
-(defn pick
-  "The chat's prompt profile: a button naming it; a click opens the popup (the locked built-in
-  part, the profiles to choose from, Edit profiles…). A live chat takes a pick after its turn."
-  [server settings put!]
+(defn pick-pop
+  "The header's prompt pill's popup: the locked built-in part, the profiles to choose from, Edit
+  profiles…. A pick closes it; a live chat takes it after its turn."
+  [server settings put! close!]
   (let [profiles @(rf/subscribe [:prompts/list server])
-        picked (picked-name (:prompt settings) profiles)
-        [place set-place] (h/use-state nil)
-        choose! (fn [v] (set-place nil) (when-not (keyword? v) (put! {:prompt v})))]
-    (h/use-effect (fn [] (load! server) nil) [server])
-    [:span.pick.prompt
-     [:button.prompt-btn {:type "button" :class (when place "on")
-                          :title "Prompt: the built-in part and the profile on top"
-                          :on-click #(if place (set-place nil) (set-place (place-of (.-currentTarget %))))}
-      "Prompt: " [:b (or picked "built-in")] (if place " ▴" " ▾")]
-     (when place [:f> popup server picked profiles place choose!])]))
+        choose! (fn [v] (close!) (when-not (keyword? v) (put! {:prompt v})))]
+    [:div.head-pop.prompt-pop {:role "dialog" :aria-label "Prompt"}
+     [popup-body server (picked-name (:prompt settings) profiles) profiles choose!]]))
 
 ;; ---- the Prompts window ----
 

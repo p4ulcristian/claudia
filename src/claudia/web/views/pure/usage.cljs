@@ -148,6 +148,16 @@
            (take 8)
            vec))))
 
+(defn model-effort-text
+  "The header's model · effort pill: the picked model's name (none: what it runs with, else
+  \"Default model\") and the picked effort (none: what it runs with), \"Opus 5.5 · high\"."
+  [models settings running effort-running]
+  (let [model (if (:model settings)
+                (or (some #(when (= (:value %) (:model settings)) (:name %)) models) (:model settings))
+                (or (not-empty running) "Default model"))
+        effort (or (:effort settings) effort-running)]
+    (str model (when (seq effort) (str " · " effort)))))
+
 (defn chosen-model
   "The model picked in settings (default when none) among models, else the first."
   [models settings]

@@ -12,18 +12,21 @@
 (rf/reg-event-db
  :folders/open
  ;; {:server :folder (the chat's, nil: the work folder) :chat ([server chat] of a started chat, nil
- ;; for a new one)}, or nil to close.
+ ;; for a new one) :send? (opened on a held first message)}, or nil to close.
  (fn [db [_ opts]] (if opts (-> db (assoc :folders opts) (dissoc :world?)) (dissoc db :folders))))
 
 (rf/reg-sub :folders (fn [db] (:folders db)))
 
 (defn use-folder
-  "What Select does with folder for the chat the modal was opened for ({:chat} of db's :folders):
-  a started chat moves there, a new chat's folder pick becomes it. The effects; the modal closes."
+  "What Select does with folder for the chat the modal was opened for ({:chat :send?} of db's
+  :folders): a started chat moves there, a new chat's folder pick becomes it, and when the modal
+  opened on a held first message (send?, README decision 65) the draft goes. The effects; the modal
+  closes."
   [db folder]
-  (let [k (get-in db [:folders :chat])]
+  (let [{k :chat send? :send?} (:folders db)]
     {:db (dissoc db :folders)
-     :fx [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]}))
+     :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
+           (and send? (not k)) (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}))
 
 (rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder]] (use-folder db folder)))
 

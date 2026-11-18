@@ -274,9 +274,18 @@
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
             :servers {"s" {:rows {"c" {:talk true :bell false :color "teal"}}}}
             :new-settings {:plan "pro" :color "red" :folder "/old"}}]
-    (is (= {:model "opus" :effort "high" :folder "/w/ir" :talk true :bell false}
-           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour or subscription")
-    (is (= {:folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour or subscription")))
+    (is (= {:model "opus" :effort "high" :talk true :bell false}
+           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour, subscription or folder")
+    (is (= {} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour, subscription or folder")))
+
+(deftest a-new-chats-first-message-needs-a-folder
+  (let [db {:me {:servers [{:name "s"}]} :new-server "s" :servers {"s" {:status :open}}
+            :drafts {:new "hello"} :new-settings {}}]
+    (is (= {:server "s" :folder nil :chat nil :send? true} (get-in (ev/send-for db :new "hello") [:db :folders]))
+        "no folder: Folders opens, nothing sent")
+    (is (nil? (:ws/send (ev/send-for db :new "hello"))))
+    (is (= "new" (get-in (ev/send-for (assoc-in db [:new-settings :folder] "/w/app") :new "hello") [:ws/send 1 :type]))
+        "with a folder it goes")))
 
 (deftest dictated-clips-are-tied-to-the-message-they-went-out-in
   (let [base {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}

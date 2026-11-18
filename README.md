@@ -263,27 +263,35 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/web/views/pure/talk.cljs`; `src/claudia/web/voice.cljs` is the one fetch of the
     hub's voice (the 3D narrator uses it too).
 
-22. The chat's header holds every setting (2026-11-14): one panel in the chat's colour, three
-    rows, the same for a new chat and a started one. Row 1: the title (a click renames it), the
-    server's state, the chat's bell (a chime, popup and push when it finishes or waits), talking mode (a
-    person speaking, decision 21) and Archive. Row 2: the computer it runs on, whose Claude
-    subscription (decision 16), the folder it works in, its colour; each pill after an icon (a
-    computer, Claude's spark, a folder). The folder pill (2026-11-18, the user's call, in place of
-    the project pill) shows the folder icon and the chat's real working path, `~` for the home and
-    cut at its start so the end stays visible; a chat without a folder shows its server's work
-    folder (`CLAUDIA_CWD`, as `GET /api/folders` answers it); a click opens the Folders modal
-    (decisions 61 to 64). The colour button beside it is a swatch in the chat's colour that opens
-    the palette. Row 3: model and effort, then the context, 5-hour and week rings. Every
-    pick is a pill button; a fixed value (a started chat's computer) has a dashed edge. A new chat
-    picks all of them before its first message, and they go with the `new` frame, so the first
+22. The chat's header holds every setting (2026-11-14; three rows by who, settings and usage since
+    2026-11-19, the user's approved layout): one panel lightly tinted with the chat's colour (its
+    background 7% of the colour, its edge 45%), the same for a new chat and a started one. Row 1:
+    the title (a click renames it) and the server's state only while it is off, offline or
+    reconnecting; nothing else. Row 2: five pills, one component and one look (rounded, a 1 px line,
+    a 16 px icon in the muted colour before the value, ▾ after it when it can be changed; a fixed
+    value, a started chat's computer, has a dashed edge and no ▾), wrapping on a narrow column:
+    the computer (its popup: where the chat works, the folder's full path and its computer: name,
+    system, kernel and architecture, processor and cores, memory, uptime, `host` in the system
+    sample; for a new chat with more than one computer the others to pick); the folder (the folder
+    icon and the chat's real working path in mono, `~` for the home, cut at its start so the end
+    stays visible; a started chat without a folder shows its server's work folder, `CLAUDIA_CWD` as
+    `GET /api/folders` answers it; a new chat with none picked says "Pick a folder", decision 65; a
+    click opens the Folders modal, decisions 61 to 64); whose Claude subscription (decision 16;
+    only when tokens are saved); model · effort in one pill ("Opus 5.5 · high"; its popup lists the
+    models and the efforts, no native selects); the prompt profile (decision 60). All five popups
+    share one style. Row 3: on the left the rings (the context for a started chat, a click
+    compacting it; the plan's 5-hour; its week), each an 18 px ring followed by its percent, its
+    tip naming it; on the right round 30 px buttons with tips: the colour (a filled dot in the
+    chat's colour; a click opens the palette), the bell (a chime, popup and push when it finishes
+    or waits), the speaker (talking mode, decision 21), root (its owner, a started chat, decision
+    52) and Archive (a started chat). A read-only view has no buttons and its pills change
+    nothing. A new chat picks them before its first message, and they go with the `new` frame, so
+    the first
     turn already runs on them (before, model and effort followed `created`, after the first turn
     had begun). A new chat also has its colour from the moment it opens (the most different from
     what the server's other chats wear, decision 26), the header wears it, the
-    colour button's palette changes it, and it goes with `new` (decision 25). The computer pill's
-    popup shows where the chat works: the folder's full path and its computer (name, system, kernel
-    and architecture, processor and cores, memory, uptime; `host` in the system sample), and for a
-    new chat with more than one computer the others to pick. Once started, the computer is fixed and
-    every other pick changes the chat. The composer keeps only writing and sending, one row
+    colour button's palette changes it, and it goes with `new` (decision 25). Once started, the
+    computer is fixed and every other pick changes the chat. The composer keeps only writing and sending, one row
     centred: the mic, Attach, the message, Send; the chips of background work sit right above it.
     Instead of: the computer above the composer and model and effort in its toolbar (settings
     spread over two places, account and project not settable before the chat existed), a header
@@ -889,6 +897,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `/api/folders…` (403) to a view and to a write tick, and the runner refuses any call whose
     `X-Claudia-Via` is not `own`; a read-only view keeps its limits (`claudia.slave.reach`).
     Instead of: the browser kept inside `CLAUDIA_CWD` or the home folder.
+
+65. A new chat starts with no folder picked (2026-11-19, the user's call: a chat that silently took
+    the folder of the chat on screen, or the one this browser remembered, worked in the wrong
+    project). A new chat no longer copies the open chat's folder, the last new chat's, or a chat
+    group's; the folder is not among the carried picks (`claudia.web.events/carried-keys`) and not
+    in what `claudia.newPicks` keeps. Its header's folder pill says "Pick a folder". Sending its
+    first message without a folder picked sends nothing: the draft stays and the Folders modal
+    opens on its server; Select there (a bookmark card's or Use for this chat) picks the folder and
+    then sends the draft; closing the modal leaves the draft as it was. A folder still comes with
+    a fork (its source's), Folders' New chat here, and Claudia's chat operations' `new { folder }`;
+    a `new` without a folder still runs in `CLAUDIA_CWD` (the runner is unchanged). Instead of: the
+    folder carried from the chat on screen or the last new chat.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
