@@ -66,3 +66,7 @@
          (ops/with-settings {:screen :chat :archived? true} false true))
       "wider: Settings takes the chat column from the archived chats")
   (is (= {:settings? false :archived? true} (ops/with-settings {:archived? true} false false))))
+
+(deftest owners-are-by-profile-name
+  (is (= {"paul" "p@x" "peter" "q@x"}
+         (ops/owners {"box" {:owners {:paul "p@x" :peter "q@x"}} "destiny" {:owners {:paul "p@x"}} "off" {:failed true}}))))

@@ -112,8 +112,13 @@
     (->> (vals server-me) (mapcat :profiles) (remove own) distinct sort vec)))
 
 (rf/reg-sub :people (fn [db] (people (:server-me db))))
-;; Whose each profile is, {profile email}, from every server's /api/me.
-(rf/reg-sub :owners (fn [db] (apply merge (keep :owners (vals (:server-me db))))))
+(defn owners
+  "Whose each profile is, {profile email}, from every server's /api/me (server-me: server -> its
+  answer, whose map keys came in as keywords)."
+  [server-me]
+  (into {} (for [[k email] (apply merge (keep :owners (vals server-me)))] [(name k) email])))
+
+(rf/reg-sub :owners (fn [db] (owners (:server-me db))))
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
