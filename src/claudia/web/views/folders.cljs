@@ -1,14 +1,19 @@
 (ns claudia.web.views.folders
-  "The Folders screen (README decisions 61 to 64), over the chats: on the left the person's servers
-  as pills, their bookmarks there (greyed \"missing\" when the folder is gone) and the tree from
-  \"/\" with the work folder open; on the right the selected folder (claudia.web.views.folder-detail)
-  or the Trash (claudia.web.views.folder-trash). Only the person's own servers: a view never
-  reaches these calls."
+  "The Folders modal (README decisions 61 to 64), over the page, opened from a chat's header on that
+  chat's server: on top the server's bookmarks as cards (the project's logo as the chats show it,
+  else a folder; name, path, ★ to unpin, \"missing\" greyed;
+  a click opens the tree there, Select uses it for the chat); on the left a filter field and the
+  tree from \"/\" with the chat's folder (else the work folder) selected; on the right the selected
+  folder (claudia.web.views.folder-detail: Use for this chat, New chat here, Pin, Trash, Delete
+  now) or the Trash (claudia.web.views.folder-trash). Only the person's own chats: a view has no
+  button for it and never reaches these calls."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.folders :as folders]
+            [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
             [claudia.shared.bookmarks :as bookmarks]
+            [claudia.web.views.dot :as dot]
             [claudia.web.views.folder-detail :as detail]
             [claudia.web.views.folder-trash :as trash]
             [claudia.web.views.folder-tree :as tree]
@@ -32,12 +37,13 @@
     [state load!]))
 
 (defn- use-first-load!
-  "Loads \"/\", then every folder down to the work folder, and selects the work folder (go!)."
-  [load! go!]
+  "Loads \"/\", then every folder down to start (the chat's folder, else the work folder), and
+  selects it (go!)."
+  [load! go! start]
   (h/use-effect
    (fn []
      (some-> (load! "/" false)
-             (.then (fn [cwd] (when cwd (go! cwd)))))
+             (.then (fn [cwd] (when-let [p (or start cwd)] (go! p)))))
      js/undefined)
    []))
 
@@ -54,33 +60,46 @@
      [server (pr-str paths)])
     missing))
 
-(defn- server-pills [server set-server]
-  (let [servers @(rf/subscribe [:server-list])]
-    (when (> (count servers) 1)
-      [:div.fd-pills
-       (for [{nm :name label :label} servers]
-         ^{:key nm}
-         [:button.fd-pill {:class (when (= nm server) "on") :on-click #(set-server nm)} (or label nm)])])))
+(defn- card
+  "One bookmark as a card: a click opens the tree there (on: it is the selected folder), ★ unpins,
+  Select uses it for the chat."
+  [server {:keys [folder label missing]} on? go!]
+  [:div.fd-card {:class [(when missing "missing") (when on? "on")] :title folder
+                 :on-click #(when-not missing (go! folder))}
+   [:button.fd-card-star {:type "button" :aria-label "Unpin" :title "Unpin"
+                          :on-click (fn [e] (.stopPropagation e) (rf/dispatch [:bookmarks/toggle server folder]))} "★"]
+   [:span.fd-card-face [dot/project-face server folder pure/folder-icon]]
+   [:span.fd-card-name label]
+   [:span.fd-card-path.mono [:bdi (format/tilde folder)]]
+   (if missing
+     [:span.fd-missing "missing"]
+     [:button.fd-btn.primary.fd-card-use {:type "button" :on-click (fn [e] (.stopPropagation e) (rf/dispatch [:folders/use folder]))}
+      "Select"])])
 
-(defn- bookmark-list [server go!]
+(defn- cards [server selected go!]
   (let [rows (bookmarks/on-server @(rf/subscribe [:bookmarks]) server)
         missing (use-missing server rows)]
-    [:div.fd-marks
-     [:div.fd-head "Bookmarks"]
+    [:div.fd-cards
      (if (empty? rows)
-       [:p.muted.fd-none "Pin a folder to keep it here."]
-       (for [{:keys [folder label missing]} (pure/bookmark-rows rows server missing)]
-         ^{:key folder}
-         [:button.fd-mark {:class (when missing "missing") :title folder
-                           :on-click #(when-not missing (go! folder))}
-          [:span "★ " label] (when missing [:span.fd-missing "missing"])]))]))
+       [:p.muted.fd-none "No bookmarks on this server yet: ☆ on a folder's row pins it here."]
+       (for [b (pure/bookmark-rows rows server missing)]
+         ^{:key (:folder b)} [card server b (= selected (:folder b)) go!]))]))
 
-(defn- top-bar [{:keys [hidden? set-hidden trash? set-trash]}]
+(defn- filter-field
+  "Filters the loaded folders by name; a pasted or typed absolute path (Enter) is revealed."
+  [text set-text go!]
+  (let [reveal! #(when-let [p (pure/typed-path %)] (go! p))]
+    [:input.fd-filter {:type "search" :value text :placeholder "Filter by name, or paste a path"
+                       :on-change #(set-text (.. % -target -value))
+                       :on-paste #(reveal! (.getData (.-clipboardData %) "text"))
+                       :on-key-down #(when (= "Enter" (.-key %)) (reveal! text))}]))
+
+(defn- top-bar [{:keys [label hidden? set-hidden trash? set-trash]}]
   [:header.fd-bar
-   [:h1.fd-heading "Folders"]
+   [:h1.fd-heading "Folders" [:span.fd-on (str " on " label)]]
    [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]
    [:button.fd-btn {:class (when trash? "on") :on-click #(set-trash (not trash?))} "Trash"]
-   [:button.fd-close {:aria-label "Close Folders" :title "Close (Escape)" :on-click #(rf/dispatch [:folders/open false])} "×"]])
+   [:button.fd-close {:aria-label "Close Folders" :title "Close (Escape)" :on-click #(rf/dispatch [:folders/open nil])} "×"]])
 
 (defn- right-side [{:keys [server selected trash? label on-gone on-restored]}]
   (let [items @(rf/subscribe [:bookmarks])]
@@ -91,52 +110,59 @@
                          :bookmarked? (bookmarks/bookmarked? items server selected)}]
       :else [:p.muted.fd-detail "Pick a folder."])))
 
+(defn- left-side
+  "The filter field and the tree (once the work folder is known)."
+  [{:keys [loaded cwd error hidden? selected reveal set-reveal load! go! pick! server]}]
+  (let [[text set-text] (h/use-state "")
+        pinned (set (map :folder (bookmarks/on-server @(rf/subscribe [:bookmarks]) server)))]
+    [:aside.fd-left
+     [filter-field text set-text go!]
+     (when cwd
+       [:f> tree/tree {:loaded loaded :cwd cwd :hidden? hidden? :pinned pinned :term (pure/filter-term text)
+                       :selected selected :reveal reveal :revealed! #(set-reveal nil) :on-open #(load! % false)
+                       :on-select pick! :on-pin #(rf/dispatch [:bookmarks/toggle server %])}])
+     (when error [:p.fd-warn error])]))
+
 (defn- browser
-  "One server's bookmarks, tree and the selected folder's panel."
-  [{:keys [server set-server]}]
+  "The server's bookmark cards, the tree and the selected folder's panel. start: the folder selected
+  first (nil: the work folder)."
+  [{:keys [server start]}]
   (let [[{:keys [loaded cwd error]} load!] (use-listings server)
         [selected set-selected] (h/use-state nil)
         [reveal set-reveal] (h/use-state nil)
         [hidden? set-hidden] (h/use-state false)
         [trash? set-trash] (h/use-state false)
         go! (fn [p] (set-trash false) (set-selected p) (doseq [up (pure/lineage p)] (load! up false)) (set-reveal p))
-        refresh! (fn [p] (when-let [up (pure/parent-of p)] (load! up true)))]
-    (use-first-load! load! go!)
+        refresh! (fn [p] (when-let [up (pure/parent-of p)] (load! up true)))
+        label @(rf/subscribe [:server-label server])]
+    (use-first-load! load! go! start)
     [:<>
-     [top-bar {:hidden? hidden? :set-hidden set-hidden :trash? trash? :set-trash set-trash}]
+     [top-bar {:label label :hidden? hidden? :set-hidden set-hidden :trash? trash? :set-trash set-trash}]
+     [:f> cards server selected go!]
      [:div.fd-body
-      [:aside.fd-left
-       [server-pills server set-server]
-       [:f> bookmark-list server go!]
-       (when cwd
-         [:f> tree/tree {:loaded loaded :cwd cwd :hidden? hidden? :selected selected :reveal reveal
-                         :revealed! #(set-reveal nil) :on-open #(load! % false)
-                         :on-select (fn [p] (set-trash false) (set-selected p))}])
-       (when error [:p.fd-warn error])]
+      [:f> left-side {:loaded loaded :cwd cwd :error error :hidden? hidden? :selected selected :reveal reveal
+                      :set-reveal set-reveal :load! load! :go! go! :server server
+                      :pick! (fn [p] (set-trash false) (set-selected p))}]
       [:section.fd-right
-       [right-side {:server server :selected selected :trash? trash? :label @(rf/subscribe [:server-label server])
+       [right-side {:server server :selected selected :trash? trash? :label label
                     :on-gone (fn [] (refresh! selected) (set-selected (pure/parent-of selected)))
                     :on-restored (fn [p] (refresh! p))}]]]]))
 
 (defn- close-on-escape
-  "Escape closes the screen (before the shell's Escape, which would stop the open chat's turn),
+  "Escape closes the modal (before the shell's Escape, which would stop the open chat's turn),
   unless a dialog is open: the dialog takes it."
   [^js e]
   (when (and (= "Escape" (.-key e)) (not (js/document.querySelector ".confirm-backdrop")))
     (.preventDefault e)
-    (rf/dispatch [:folders/open false])))
+    (rf/dispatch [:folders/open nil])))
 
-(defn- screen-view []
-  (let [servers @(rf/subscribe [:server-list])
-        first-server @(rf/subscribe [:new-server])
-        [server set-server] (h/use-state (if (some #(= first-server (:name %)) servers) first-server (:name (first servers))))]
-    (hooks/use-key close-on-escape true [])
-    [:div.fd-screen {:role "dialog" :aria-label "Folders"}
-     (if server
-       ^{:key server} [:f> browser {:server server :set-server set-server}]
-       [:p.muted.fd-detail "No server of yours to browse."])]))
+(defn- modal-view [{:keys [server folder]}]
+  (hooks/use-key close-on-escape true [])
+  [:div.fd-backdrop {:on-click #(rf/dispatch [:folders/open nil])}
+   [:div.fd-screen {:role "dialog" :aria-modal true :aria-label "Folders" :on-click #(.stopPropagation %)}
+    ^{:key server} [:f> browser {:server server :start folder}]]])
 
 (defn screen
-  "The Folders screen while it is open."
+  "The Folders modal while it is open ({:server :folder :chat} from the header)."
   []
-  (when @(rf/subscribe [:folders?]) [:f> screen-view]))
+  (when-let [opts @(rf/subscribe [:folders])] [:f> modal-view opts]))

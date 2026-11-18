@@ -55,10 +55,11 @@
 
 (defn project-face
   "A project's face: its logo, else its short tag, else a small dot for a folder without a project.
-  The chat's circle and the chat header's project picker draw it."
-  [_server _folder]
+  The chat's circle and the chat header's project picker draw it; with no-logo (the Folders modal's
+  bookmark cards) that is drawn instead of the tag and the dot."
+  [_server _folder & _]
   (let [broken (r/atom false)]
-    (fn [server folder]
+    (fn [server folder & [no-logo]]
       (let [project (when (seq folder) @(rf/subscribe [:project server folder]))
             view @(rf/subscribe [:view])
             tags @(rf/subscribe [:project-tags])]
@@ -66,6 +67,7 @@
         (cond
           (and (:logo project) (not @broken))
           [:img.rail-logo {:src (ops/logo-url view server folder) :alt "" :on-error #(reset! broken true)}]
+          no-logo no-logo
           (:name project) [:span.rail-tag (get tags (:name project) "")]
           :else [:span.rail-blank {:aria-hidden true}])))))
 

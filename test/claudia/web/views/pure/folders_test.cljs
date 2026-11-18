@@ -18,11 +18,20 @@
 (deftest the-tree-from-what-is-loaded
   (let [loaded {"/" [{:name "w" :path "/w" :hidden false} {:name ".cache" :path "/.cache" :hidden true}]
                 "/w" []}]
-    (is (= [{:id "/" :name "/" :loaded true
-             :children [{:id "/w" :name "w" :loaded true :children []}]}]
-           (pure/tree-data loaded false)))
-    (is (= ["/w" "/.cache"] (map :id (:children (first (pure/tree-data loaded true))))))
-    (is (= {:id "/x" :name "x" :loaded false :children []} (pure/tree-node {} false "/x" 0)) "not loaded: openable")))
+    (is (= [{:id "/" :name "/" :loaded true :pinned false
+             :children [{:id "/w" :name "w" :loaded true :pinned true :children []}]}]
+           (pure/tree-data {:loaded loaded :hidden? false :pinned #{"/w"}})))
+    (is (= ["/w" "/.cache"] (map :id (:children (first (pure/tree-data {:loaded loaded :hidden? true :pinned #{}}))))))
+    (is (= {:id "/x" :name "x" :loaded false :pinned false :children []} (pure/tree-node {:loaded {}} "/x" 0)) "not loaded: openable")))
+
+(deftest the-filter-field
+  (is (pure/name-matches? "Claudia-Folders" "folders"))
+  (is (not (pure/name-matches? "apps" "home")))
+  (is (= "app" (pure/filter-term " app ")))
+  (is (nil? (pure/filter-term "/home/ana")))
+  (is (= "/home/ana/Work" (pure/typed-path " /home/ana/Work/ ")))
+  (is (nil? (pure/typed-path "Work")))
+  (is (nil? (pure/typed-path "/a/../b"))))
 
 (deftest the-panel-lines
   (is (= "main · 2 not committed · 1 ahead" (pure/git-text {:branch "main" :dirty 2 :ahead 1 :behind 0})))

@@ -1,10 +1,15 @@
 (ns claudia.web.views.pure.folders
-  "The Folders screen's data (README decisions 61 to 64), pure: the tree's nodes from the folders
-  loaded so far, the folders opened at first, the detail panel's lines, and what the delete dialog
-  says about work not pushed."
+  "The Folders modal's data (README decisions 61 to 64), pure: the tree's nodes from the folders
+  loaded so far, the folders opened at first, the filter field, the detail panel's lines, and what
+  the delete dialog says about work not pushed."
   (:require [clojure.string :as str]
             [claudia.shared.bookmarks :as bookmarks]
             [claudia.web.format :as format]))
+
+(def folder-icon
+  "A folder, drawn in the chalk line (the tree's rows, the header's Folders button)."
+  [:svg.fd-icon {:viewBox "0 0 16 16" :aria-hidden true}
+   [:path {:d "M1.5 4a1 1 0 0 1 1-1h3.6l1.4 1.6h6a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"}]])
 
 (defn parent-of
   "An absolute path's parent folder (\"/\" for a top-level one), nil for \"/\"."
@@ -25,20 +30,39 @@
   (if hidden? entries (remove :hidden entries)))
 
 (defn tree-node
-  "The tree node of folder p: {:id :name :loaded :children}, children from loaded (path -> entries,
-  dot folders only when hidden?); [] while not loaded, so it can be opened (react-arborist's
-  internal node); depth guards the walk."
-  [loaded hidden? p depth]
+  "The tree node of folder p: {:id :name :loaded :pinned :children}, children from loaded (path ->
+  entries, dot folders only when hidden?); [] while not loaded, so it can be opened (react-arborist's
+  internal node); pinned: the bookmarked folders (a set); depth guards the walk."
+  [{:keys [loaded hidden? pinned] :as m} p depth]
   (let [entries (when (< depth 64) (get loaded p))]
     {:id p
      :name (base-name p)
      :loaded (some? entries)
-     :children (mapv #(tree-node loaded hidden? (:path %) (inc depth)) (shown-entries entries hidden?))}))
+     :pinned (contains? pinned p)
+     :children (mapv #(tree-node m (:path %) (inc depth)) (shown-entries entries hidden?))}))
 
 (defn tree-data
-  "The whole tree from \"/\", as react-arborist takes it (one root node)."
-  [loaded hidden?]
-  [(tree-node loaded hidden? "/" 0)])
+  "The whole tree from \"/\", as react-arborist takes it (one root node). m: {:loaded :hidden?
+  :pinned}."
+  [m]
+  [(tree-node m "/" 0)])
+
+(defn name-matches?
+  "The filter field's match: the folder's name holds term (case folded); the path is not searched,
+  or every folder below a match would match too."
+  [folder-name term]
+  (str/includes? (str/lower-case (str folder-name)) (str/lower-case (str/trim (str term)))))
+
+(defn filter-term
+  "What the filter field filters the tree by: its text, unless it is a path (starts with \"/\"),
+  which is revealed instead (typed-path)."
+  [text]
+  (let [t (str/trim (str text))] (when-not (str/starts-with? t "/") t)))
+
+(defn typed-path
+  "The folder a pasted or typed absolute path names (cleaned: no trailing slash), or nil."
+  [text]
+  (bookmarks/clean-folder (str/trim (str text))))
 
 (defn open-map
   "react-arborist's first open state: every folder down to cwd open."

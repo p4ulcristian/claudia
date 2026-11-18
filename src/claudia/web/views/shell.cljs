@@ -148,8 +148,8 @@
    [confirm/root-ask]
    [search-panel/panel]
    [my-words/panel]
-   (when-not (or world? (:folders? m)) (chats-view m))
-   (when (and (:edge? m) (not world?) (not (:folders? m))) [thumb-edge/edge])
+   (when-not world? (chats-view m))
+   (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [gallery]
    [prompts/overlay]
@@ -168,7 +168,6 @@
         mode @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
-        folders? @(rf/subscribe [:folders?])
         phone? (hooks/use-media "(max-width: 679px)")
         narrow? (hooks/use-media "(max-width: 1099px)")
         edge? (hooks/use-media reach/touch-tablet)
@@ -177,7 +176,7 @@
         shown? (and phone? (= screen :list))]
     (chat-colour! color claudia?)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge? :folders? folders?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
                :claudia? claudia?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown?

@@ -2,7 +2,7 @@
   "The person's bookmarked folders on the page (README decision 61): loaded from the hub (GET
   /hub/bookmarks) at start and whenever the page comes back to the front, changed by Pin/Unpin
   (claudia.shared.bookmarks), kept at once on the page and sent whole (PUT), so every device shows
-  the same list. The Folders screen and the chat header's project list show them."
+  the same list. The Folders modal and the chat header's project list show them."
   (:require [re-frame.core :as rf]
             [claudia.shared.bookmarks :as bm]
             [claudia.web.api :as api]))
