@@ -12,3 +12,8 @@
   ansible.builtin.systemd_service:
     name: claudia-root.service
     state: restarted
+
+- name: Restart the front
+  ansible.builtin.systemd:
+    name: claudia-front.service
+    state: restarted

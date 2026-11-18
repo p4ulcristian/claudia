@@ -12,11 +12,15 @@ all:
     # (npx shadow-cljs release root sudo): out/root.js, out/sudo.js and deploy/sudo-shim are copied
     # from it.
     claudia_build_dir: /path/to/claudia
+    # The hub's address; the front fetches the agent users' SSH certificates there (decision 53).
+    claudia_hub_url: https://hub.example
   children:
     claudia_servers:
       hosts:
         server-a:
           ansible_host: 100.64.0.11
+          # This server's name as the hub knows it (Admin → Servers).
+          claudia_server_name: server-a
           # The person who runs the playbook logs in as their own user and becomes root with sudo.
           ansible_user: alice
           # One entry per Claudia profile on this server: the profile's name (first word of its line

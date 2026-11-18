@@ -1,0 +1,13 @@
+---
+# The front's link to the hub (README decision 53): it fetches the agent users' one-hour SSH
+# certificates with the server's hub key, so it needs the hub's address and this server's name as
+# the hub knows it. Two lines in /etc/claudia/env (the rest of that file stays as written by hand).
+- name: Set the front's hub address and server name in /etc/claudia/env
+  ansible.builtin.lineinfile:
+    path: /etc/claudia/env
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  loop:
+    - { key: CLAUDIA_HUB_URL, value: "{{ claudia_hub_url }}" }
+    - { key: CLAUDIA_SERVER_NAME, value: "{{ claudia_server_name }}" }
+  notify: Restart the front

@@ -110,5 +110,8 @@
     state: started
     daemon_reload: true
 
+- name: Link the front to the hub (SSH certificates)
+  ansible.builtin.include_tasks: hub_link.yml
+
 - name: Apply the changes now (restarts the helper when its program or unit changed)
   ansible.builtin.meta: flush_handlers
