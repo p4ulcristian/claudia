@@ -10,9 +10,6 @@
   padding: calc(var(--edge-t) + var(--top-safe)) 10px var(--edge-b); transition: transform 0.32s var(--screen-ease); }
 .st-pane { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; min-height: 0; background: var(--bg2); padding-top: var(--top-safe); box-shadow: -10px 0 30px rgb(0 0 0 / 0.3);
   transform: translateX(100%); visibility: hidden; transition: transform 0.32s var(--screen-ease), visibility 0s 0.32s; }
-.app.settings-shown .st-pane { transform: none; visibility: visible; transition: transform 0.32s var(--screen-ease), visibility 0s; }
-@starting-style { .app.settings-shown .st-pane { transform: translateX(100%); } }
-.app.settings-shown .cs-pane { transform: translateX(-30%); }
 
 /* ---- the list's header: whose chats (a menu), the two usage rings, the gear, + ---- */
 .cs-head { position: relative; z-index: 4; display: flex; align-items: center; gap: 4px; min-height: 34px; }
@@ -120,7 +117,6 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-back { display: flex; align-items: center; gap: 1px; min-height: 32px; margin-left: -4px; color: var(--accent); font: 700 17px var(--hand); }
 .st-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; padding: 6px 14px calc(28px + env(safe-area-inset-bottom)); }
 .st-scroll > * { flex-shrink: 0; }
-.st-scroll .brand { padding: 0; min-height: 0; }
 .st-scroll .meters { padding: 10px 0 0; }
 .st-group { display: grid; border-radius: 12px; background: color-mix(in srgb, var(--panel) 80%, transparent); overflow: hidden; }
 .st-row { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; font-size: 14px; cursor: pointer; }
@@ -138,12 +134,31 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-switch input:checked + .st-knob::after { transform: translateX(16px); background: var(--fg); }
 .st-switch input:focus-visible + .st-knob { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* A server's own settings, as the old dialog laid them out. */
-.st-server { display: grid; gap: 12px; }
-.st-server section { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
-.st-server h3 { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.st-server p { margin: 0; }
-.st-server .token-form.named { grid-template-columns: minmax(0, 1fr) auto; }
-.st-server .token-form.named .token-name { grid-column: 1 / -1; }
+/* Settings (README decision 58): a popup over the whole window, centred; a sheet from the bottom on a phone. */
+.st-backdrop { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; padding: 4vh 16px; background: rgb(0 0 0 / 0.45); animation: confirm-in 0.12s ease-out; }
+.st-pop { width: min(520px, 100%); max-height: min(86vh, 760px); display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--bg2); box-shadow: 0 20px 60px rgb(0 0 0 / 0.4); overflow: hidden; }
+.st-pop .st-head { justify-content: space-between; padding: 12px 14px 4px; }
+.st-close { width: 32px; height: 32px; border-radius: 50%; font-size: 22px; line-height: 1; color: var(--muted); }
+.st-close:hover { background: var(--panel2); color: var(--fg); }
+.st-pop .st-scroll { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.st-pop section { display: grid; gap: 6px; }
+.st-pop section + section { border-top: 1px solid var(--line); padding-top: 12px; }
+.st-pop h3 { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.st-pop p { margin: 0; }
+.st-pop a { color: var(--accent); }
+.st-pop .token-form.named { grid-template-columns: minmax(0, 1fr) auto; }
+.st-pop .token-form.named .token-name { grid-column: 1 / -1; }
+.st-tokens { display: grid; gap: 4px; font-size: 13px; }
+.st-token { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.st-token-name { font-weight: 600; }
+.st-token .token-remove { margin-left: auto; }
+.st-admin { align-self: flex-start; padding: 6px 0 0; font-size: 13px; color: var(--accent); }
+@media (max-width: 679px) {
+  .st-backdrop { place-items: end stretch; padding: 0; }
+  .st-pop { width: 100%; max-height: 88vh; border-width: 1px 0 0; border-radius: 16px 16px 0 0; animation: st-sheet-in 0.22s var(--screen-ease); }
+}
+@keyframes st-sheet-in { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .st-backdrop, .st-pop { animation: none; } }
 .token-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .token-form input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; font-family: var(--mono); font-size: 12.5px; }
 .token-form input:focus { border-color: var(--blue); }
@@ -158,25 +173,13 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .word-chip button { border: 0; background: none; color: var(--muted); padding: 0 6px; font-size: 15px; line-height: 1; }
 .word-chip button:hover { color: var(--red); }
 .words-form input { font-family: var(--sans); }
-.choice { display: grid; gap: 6px; font-size: 13px; }
-.choice label { display: flex; gap: 8px; align-items: center; }
 
-/* The logo's chip: this instance's name and version, quiet beside the wordmark. */
-.wordmark { line-height: 1; }
-/* The chip gets its own row under the mark, so nothing in it is cut short. */
-.brand-break { flex-basis: 100%; height: 0; }
-.brand .instance { max-width: 100%; }
-.instance { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in oklch, var(--panel) 70%, transparent); font: 600 11px var(--sans); letter-spacing: 0.01em; white-space: nowrap; transform: translateY(1px); }
-.instance-name { color: var(--fg); overflow: hidden; text-overflow: ellipsis; }
-.instance-version { font: 500 10px var(--mono); color: var(--muted); }
-.instance-token { color: var(--accent); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.instance > * + * { padding-left: 5px; border-left: 1px solid var(--line); }
 
 /* Usage at the foot of the plan: one row per meter (label, chalk bar, %), each limit's reset under it. */
 .m-account { grid-column: 1 / -1; margin-top: 4px; white-space: nowrap; color: var(--fg); font: 700 15px var(--hand); }
 .m-account select { font: inherit; color: var(--fg); padding-left: 0; }
 
-/* ---- a desktop: the opened sidebar is a drawer over the rail; Settings takes its place, wider ---- */
+/* ---- a desktop: the opened sidebar is a drawer over the rail ---- */
 /* ---- phones: the list under the chat; the chat slides over it from the right ---- */
 @media (max-width: 679px) {
   .cs-pane { padding-left: 12px; padding-right: 12px; }

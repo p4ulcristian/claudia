@@ -101,11 +101,10 @@
       (when server [:f> codeforms/gallery server #(rf/dispatch [:gallery/open false])]))))
 
 (defn- column-pane
-  "Settings or the archived chats in the chat column, over the chat (which stays mounted, hidden)."
+  "The archived chats in the chat column, over the chat (which stays mounted, hidden)."
   [pane]
   [:div.col-pane
    (case pane
-     :settings [settings/settings-pane true]
      :archived [:f> sidebar/archived-pane])])
 
 (defn- split-view [{:keys [phone? folded? chat-w set-chat-w pane]}]
@@ -129,16 +128,16 @@
   "The rail (wider than a phone) or the phone's list, and the chat with its picture: not drawn at
   all while the world covers them (the world shows its own chat), so opening a chat there renders
   it once."
-  [{:keys [phone? shown? settings-shown?] :as m}]
+  [{:keys [phone? shown?] :as m}]
   [:<>
    [:div.sidebar-slot
     (if phone?
-      [:f> sidebar/sidebar {:shown? shown? :settings? settings-shown? :phone? phone?}]
+      [:f> sidebar/sidebar {:shown? shown? :phone? phone?}]
       [:f> rail/rail])]
    (split-view m)])
 
-(defn- app-view [{:keys [screen ro phone? narrow? shown? settings-shown? draft-key world? claudia?] :as m}]
-  [:div.app {:class [(when-not shown? "no-sidebar") (when settings-shown? "settings-shown")
+(defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia?] :as m}]
+  [:div.app {:class [(when-not shown? "no-sidebar")
                      (when narrow? "narrow") (when ro "read-only")]
              :data-screen (name screen)}
    (when claudia? [:f> claudia-rain/rain])
@@ -151,6 +150,7 @@
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [gallery]
+   [settings/settings-popup]
    [admin/dialog]
    [:f> world/overlay]])
 
@@ -161,7 +161,7 @@
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
-        {:keys [settings?] :as mode} @(rf/subscribe [:list-mode])
+        mode @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
         phone? (hooks/use-media "(max-width: 679px)")
@@ -175,5 +175,5 @@
     (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
                :claudia? claudia?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
-               :shown? shown? :settings-shown? (and shown? settings?)
+               :shown? shown?
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

@@ -110,12 +110,16 @@
      saved_by TEXT NOT NULL,
      saved_at INTEGER NOT NULL
    );
-   -- The one token every server's chats run on: which, who switched to it and when.
-   CREATE TABLE IF NOT EXISTS claude_token_use (
-     id INTEGER PRIMARY KEY CHECK (id = 1),
-     key TEXT NOT NULL REFERENCES claude_tokens (key),
-     used_by TEXT NOT NULL,
-     used_at INTEGER NOT NULL
+   -- The one token every server's chats ran on before README decision 57: gone, and carried over
+   -- to nobody.
+   DROP TABLE IF EXISTS claude_token_use;
+   -- The token a person last picked in a chat's header (README decision 57): their chats without
+   -- a pick run on it, on every server. Kept when that token is removed (it counts again if one is
+   -- saved under the same name).
+   CREATE TABLE IF NOT EXISTS claude_token_picks (
+     email TEXT PRIMARY KEY,
+     key TEXT NOT NULL,
+     picked_at INTEGER NOT NULL
    );
    -- A saved token's last usage limits as a server's chats heard them (JSON [Limit]) and when.
    CREATE TABLE IF NOT EXISTS claude_token_limits (
@@ -443,17 +447,24 @@
 
 (defn forget-claude-token-limits! [token-key] (exec! "DELETE FROM claude_token_limits WHERE key = ?" token-key))
 
-(defn claude-token-use
-  "{:key :name :by :at} of the token in use, or nil."
+(defn claude-token-picks
+  "Each person's last pick: {email {:key :at}}."
   []
-  (when-let [r (one "SELECT u.key, t.name, u.used_by, u.used_at FROM claude_token_use u
-                     JOIN claude_tokens t ON t.key = u.key WHERE u.id = 1")]
-    {:key (:key r) :name (:name r) :by (:used_by r) :at (:used_at r)}))
+  (into {} (for [r (all "SELECT email, key, picked_at FROM claude_token_picks")]
+             [(:email r) {:key (:key r) :at (:picked_at r)}])))
 
-(defn use-claude-token! [token-key by]
-  (exec! "INSERT INTO claude_token_use (id, key, used_by, used_at) VALUES (1, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET key = excluded.key, used_by = excluded.used_by, used_at = excluded.used_at"
-        token-key by (now)))
+(defn pick-claude-token!
+  "The token a person picked last in a chat's header."
+  [email token-key]
+  (exec! "INSERT INTO claude_token_picks (email, key, picked_at) VALUES (?, ?, ?)
+         ON CONFLICT (email) DO UPDATE SET key = excluded.key, picked_at = excluded.picked_at"
+         email token-key (now)))
+
+(defn people-on
+  "The people with their own profile on a server (a tick in the grid): [{:email :profile}]."
+  [server-name]
+  (all "SELECT a.email, COALESCE(pr.profile, '') AS profile FROM access a
+        LEFT JOIN profiles pr ON pr.email = a.email WHERE a.server = ? ORDER BY a.email" server-name))
 
 ;; GitHub logins ----------------------------------------------------------------------------------
 

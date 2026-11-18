@@ -384,19 +384,19 @@
 ;; Claude tokens (claudia.hub.tokens) -------------------------------------------------------------
 
 (defn token-route
-  "Which Claude-token call a method and path are: [:state], [:save], [:use], [:remove name-in-path]
+  "Which Claude-token call a method and path are: [:state], [:save], [:pick], [:remove name-in-path]
   or nil."
   [method pathname]
   (let [[_ gone] (re-matches #"^/hub/claude-tokens/([^/]+)$" pathname)]
     (cond
       (and (= pathname "/hub/claude-tokens") (= method "GET")) [:state]
       (and (= pathname "/hub/claude-token") (= method "PUT")) [:save]
-      (and (= pathname "/hub/claude-token/use") (= method "POST")) [:use]
+      (and (= pathname "/hub/claude-token/pick") (= method "POST")) [:pick]
       (and gone (= method "DELETE")) [:remove gone]
       :else nil)))
 
 (defn- token-call
-  "GET /hub/claude-tokens; PUT /hub/claude-token {name token}; POST /hub/claude-token/use {name};
+  "GET /hub/claude-tokens; PUT /hub/claude-token {name token}; POST /hub/claude-token/pick {key};
   DELETE /hub/claude-tokens/<name>."
   [^js req ^js res pathname email]
   (let [person {:email email}
@@ -405,7 +405,7 @@
     (case op
       :state (io/send-json res 200 (tokens/state person))
       :save (.then (with-body req #(tokens/save! person (:name %) (:token %))) answer)
-      :use (.then (with-body req #(tokens/use! person (:name %))) answer)
+      :pick (.then (with-body req #(tokens/pick! person (:key %))) answer)
       :remove (if-let [token-name (io/decode raw)]
                 (answer (tokens/remove! person token-name))
                 (fail res 400 "bad name"))

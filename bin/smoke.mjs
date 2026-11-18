@@ -66,6 +66,19 @@ async function visit(browser, hubUrl, screen) {
     await step('the chat list comes', () => until('the chats frame with the seeded chat',
       () => seen.heard.some((f) => f.type === 'chats' && f.chats.some((c) => c.id === chatId))));
     await step('the chat is in the list', () => page.getByText(title, { exact: true }).first().waitFor({ timeout: waitMs }));
+    await step('Settings opens as a popup and Escape closes it (README decision 58)', async () => {
+      await page.locator('button.mn-face').first().click({ timeout: waitMs });
+      await page.getByRole('menuitem', { name: /More settings/ }).click({ timeout: waitMs });
+      const pop = page.locator('.st-pop');
+      await pop.getByText('Claude subscriptions').waitFor({ timeout: waitMs });
+      await pop.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished)));
+      const box = await pop.boundingBox();
+      const view = page.viewportSize();
+      const sheet = Math.abs(box.y + box.height - view.height) < 2 && Math.abs(box.width - view.width) < 2;
+      if (sheet !== (screen.name === 'phone')) throw new Error(`placed at ${JSON.stringify(box)} in ${JSON.stringify(view)}`);
+      await page.keyboard.press('Escape');
+      await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
+    });
     await step('the chat opens', async () => {
       await page.getByText(title, { exact: true }).first().click({ timeout: waitMs });
       await until('the chat frame', () => seen.heard.some((f) => f.type === 'chat' && f.chat === chatId));

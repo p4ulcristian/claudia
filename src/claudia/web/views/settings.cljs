@@ -1,18 +1,14 @@
 (ns claudia.web.views.settings
-  "The list's title menu (whose chats, which servers) and the Settings screen, opened from the
-  settings menu (claudia.web.views.menu: its plan card and More settings): over the list on a
-  phone, in the chat column on wider screens (README decision 24). It holds the instance chip, the
-  hub's Claude tokens, the person's GitHub login (kept by the hub, on every server), My words for
-  dictation (views.my-words), all ~/Work
-  sessions, Admin and Servers for admins, and each server's version and profile."
+  "The list's title menu (whose chats, which servers) and Settings, a popup (README decision 58)
+  opened from the settings menu (claudia.web.views.menu: its plan card and More settings) and the
+  thumb edge's cog: centred, a sheet from the bottom on a phone. It holds only the hub's Claude
+  tokens (save, remove; no default, README decision 57) and the person's GitHub, plus a one-line
+  Admin link for admins (People and Servers have no other way in)."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
-            [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
-            [claudia.web.logo :as logo]
-            [claudia.web.views.my-words :as my-words]
             [claudia.web.views.pure.settings :as pure]
             [claudia.web.views.pure.words :as words]))
 
@@ -190,29 +186,7 @@
               [github-servers g]
               [token-form {:placeholder (if login "Replace with a new token" "GitHub token (ghp_…)") :save save-github!}]])]))
 
-(defn- server-settings [server]
-  (let [me @(rf/subscribe [:server-me server])]
-    [:p.muted.small (when-let [e (:email @(rf/subscribe [:me]))] (str "Signed in as " e " · ")) "profile " [:b (:profile me)]]))
-
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
-
-(defn switch-token!
-  "The saved token called n becomes the default on every server (the hub writes it into each one's
-  token file): what a new chat starts on and a chat without a pick runs on."
-  [n]
-  (rf/dispatch [:ops/put-now {:url "/hub/claude-token/use" :method "POST" :body {:name n}
-                              :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}]))
-
-(defn- server-sync
-  "Each of the person's servers: on the token in use, on another, or not reached."
-  [{:keys [inUse servers]}]
-  (when (seq servers)
-    [:p.small.token-servers
-     (for [s servers
-           :let [state (pure/sync-state s (:name inUse))]]
-       ^{:key (:name s)}
-       [:span {:class (name state) :title (pure/sync-title s state)}
-        (:label s) " " (case state :off "off" :on "✓" "…")])]))
 
 (defn- remove-token! [token-name]
   (when (js/confirm (str "Remove " token-name "'s token from the hub?"))
@@ -220,22 +194,13 @@
                                 :method "DELETE"
                                 :on-done (fn [ok _] (when ok (rf/dispatch [:ops/tokens ok])))}])))
 
-(defn- token-row [t in-use]
-  [:label
-   [:input {:type "radio" :name "claudeToken" :checked (= (:name t) in-use)
-            :on-change #(switch-token! (:name t))}]
-   (:name t) " " [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]
-   (when-not (= (:name t) in-use)
-     [:button.token-remove {:type "button" :title (str "Remove " (:name t) "'s token from the hub")
-                            :on-click (fn [e] (.preventDefault e) (remove-token! (:name t)))}
-      "Remove"])])
-
-(defn- in-use-note [tokens in-use]
-  [:p.small
-   (if in-use
-     [:<> "Default: " [:b in-use] ", set by " (get-in tokens [:inUse :by]) ", " (format/when-text (get-in tokens [:inUse :at])) "."]
-     "None saved yet.")
-   " A new chat starts on the default and stays on it; each chat's own is picked in its header."])
+(defn- token-row [t]
+  [:div.st-token
+   [:span.st-token-name (:name t)]
+   [:span.muted.small (str "saved by " (:by t) ", " (format/when-text (:at t)))]
+   [:button.token-remove {:type "button" :title (str "Remove " (:name t) "'s token from the hub")
+                          :on-click #(remove-token! (:name t))}
+    "Remove"]])
 
 (defn- save-token-form []
   [token-form {:named? true :placeholder "Claude token (sk-ant-…)"
@@ -244,75 +209,29 @@
                                                    :on-done (fn [ok err] (when ok (rf/dispatch [:ops/tokens ok])) (done err))}]))}])
 
 (defn- hub-tokens [tokens]
-  (let [in-use (get-in tokens [:inUse :name])]
-    [:<>
-     (in-use-note tokens in-use)
-     [server-sync tokens]
-     (when (seq (:tokens tokens))
-       [:div.choice
-        (for [t (:tokens tokens)] ^{:key (:name t)} [token-row t in-use])])
-     [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] ". Saving makes it the default."]
-     [save-token-form]]))
+  [:<>
+   [:p.small (if (seq (:tokens tokens)) "Saved on the hub, on every server." "None saved yet.")
+    " Each chat's is picked in its header; a new chat runs on the one you picked last."]
+   (when (seq (:tokens tokens))
+     [:div.st-tokens
+      (for [t (:tokens tokens)] ^{:key (:name t)} [token-row t])])
+   [:p.small "Add one, or replace one by its name: make it with " [:code "claude setup-token"] "."]
+   [save-token-form]])
 
 (defn- claude-subscription
-  "The hub's Claude tokens: one in use on every server; save, switch, remove."
+  "The hub's Claude tokens (README decision 57): the saved ones, add and remove; no default."
   []
   (let [tokens @(rf/subscribe [:tokens])]
     [:section.st-section.st-claude
-     [:h3 "Claude subscription " [:span.muted.small "kept by the hub, the same on every server"]]
+     [:h3 "Claude subscriptions " [:span.muted.small "kept by the hub"]]
      (cond
        (nil? tokens) [:p.small "Checking…"]
        (not (:on tokens)) [:p.small "This hub keeps no tokens (no key set): each server keeps the token it has."]
        :else (hub-tokens tokens))]))
 
-(defn- brand [server]
-  (let [me @(rf/subscribe [:server-me server])
-        token (get-in @(rf/subscribe [:tokens]) [:inUse :name])]
-    [:div.brand
-     [logo/mark]
-     [:span.wordmark "Claudia"]
-     (when me [:span.brand-break])
-     (when me
-       [:span.instance {:title (str "Claudia " (:version me) (when (:commit me) (str " (" (:commit me) ")"))
-                                    (when (:server me) (str " on " (:server me)))
-                                    (when token (str ", on " token "'s Claude subscription")))}
-        (when (:server me) [:span.instance-name (:server me)])
-        (when token [:span.instance-token token])
-        [:span.instance-version (or (:commit me) (str "v" (:version me)))]])]))
-
-
-(defn- server-pick
-  "Which server's settings (a tab each, with two or more), and its name, version and commit."
-  [servers server]
-  (let [all @(rf/subscribe [:servers])
-        me @(rf/subscribe [:server-me server])
-        label @(rf/subscribe [:server-label server])]
-    [:div.settings-servers
-     (when (> (count servers) 1)
-       [:div.profile-tabs {:role "tablist" :aria-label "Which server's settings"}
-        (for [{server-name :name tab-label :label} servers
-              :let [up? (= :open (get-in all [server-name :status]))]]
-          ^{:key server-name}
-          [:button {:role "tab" :aria-selected (= server-name server) :class (when (= server-name server) "on") :disabled (not up?)
-                    :title (if up? (str tab-label "'s settings") (str tab-label " is off"))
-                    :on-click #(rf/dispatch [:ops/load-settings server-name])}
-           tab-label
-           (when-not up? [:span.sf-note "off"])])])
-     (when me
-       [:p.muted.small [:b label] (when (:name me) (str " (" (:name me) ")")) " · Claudia " (:version me) " "
-        [:span.mono (:commit me)]])]))
-
-(defn- switch-row [on on-change label note]
-  [:label.st-row.st-switch
-   [:span.st-label label (when note [:span.st-note note])]
-   [:input {:type "checkbox" :role "switch" :checked (boolean on) :on-change #(on-change (.. % -target -checked))}]
-   [:span.st-knob]])
-
-(defn- back! [] (rf/dispatch [:ops/settings false]))
-
 (defn use-escape-back!
   "Escape calls go-back! while shown, before the page's own keys see it (Escape there stops a chat);
-  Settings and the chat column's archived chats go back with it."
+  the chat column's archived chats go back with it."
   [shown? go-back!]
   (h/use-effect
    (fn []
@@ -326,47 +245,56 @@
          #(js/window.removeEventListener "keydown" esc true))))
    [shown? go-back!]))
 
-(defn- chats-group [all-sessions?]
-  [:section.st-group {:aria-label "Chats"}
-   [switch-row all-sessions? #(rf/dispatch [:ops/all-sessions %]) "Show all ~/Work sessions"]])
+(defn- close! [] (rf/dispatch [:ops/settings false]))
 
-(defn- hub-group []
-  [:section.st-group {:aria-label "Admin"}
-   [:button.st-row {:on-click #(rf/dispatch [:admin/open :people])}
-    [:span.st-label "Admin " [:span.st-note "people: servers, write access, admins"]]]
-   [:button.st-row {:on-click #(rf/dispatch [:admin/open :servers])}
-    [:span.st-label "Servers " [:span.st-note "the servers this hub reaches"]]]])
+(defn- use-escape-close!
+  "Escape closes Settings, from its fields too, before the page's own keys see it."
+  []
+  (h/use-effect
+   (fn []
+     (let [esc (fn [^js e]
+                 (when (= "Escape" (.-key e))
+                   (.preventDefault e)
+                   (.stopPropagation e)
+                   (close!)))]
+       (js/window.addEventListener "keydown" esc true)
+       #(js/window.removeEventListener "keydown" esc true)))
+   []))
 
-(defn- settings-view [shown?]
-  (let [servers @(rf/subscribe [:server-list])
-        server @(rf/subscribe [:settings-server])
-        ro @(rf/subscribe [:viewing-other?])
-        {:keys [all-sessions?]} @(rf/subscribe [:list-mode])]
-    (use-escape-back! shown? back!)
-    [:div.st-pane {:role "dialog" :aria-label "Settings" :aria-hidden (not shown?) :inert (when-not shown? true)}
-     [:header.st-head
-      [:button.st-back {:on-click back!}
-       ;; A phone goes back to its list; wider, back to the chat that was open.
-       [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M12.5 4L6.5 10l6 6"}]]
-       (if (hooks/use-media "(max-width: 679px)") "Chats" "Back")]
-      [:h2 "Settings"]]
-     [:div.st-scroll
-      [brand server]
-      (when-not ro [claude-subscription])
-      (when-not ro [github-section])
-      (when-not ro [my-words/settings-section])
-      (chats-group all-sessions?)
-      (when (:admin @(rf/subscribe [:me])) (hub-group))
-      (when (and (not ro) @(rf/subscribe [:server-me server]))
-        [:div.st-server
-         [server-pick servers server]
-         ^{:key server} [server-settings server]])]]))
+(defn- admin-link
+  "The way into People and Servers, for admins only."
+  []
+  (when (:admin @(rf/subscribe [:me]))
+    [:button.st-admin {:type "button" :on-click #(do (close!) (rf/dispatch [:admin/open :people]))}
+     "Admin: people and servers"]))
 
-(defn settings-pane
-  "The Settings screen: over the phone's list (mounted while shown and for its slide out), or in
-  the chat column."
-  [shown?]
+(defn- settings-body []
+  (if @(rf/subscribe [:viewing-other?])
+    [:p.small "Settings are your own: switch to My chats to change them."]
+    [:<> [claude-subscription] [github-section]]))
+
+(defn- settings-card
+  "Settings as a popup (README decision 58): centred, a sheet from the bottom on a phone; Escape, a
+  click outside or the close button closes it."
+  []
+  (use-escape-close!)
+  [:div.st-backdrop {:on-pointer-down #(when (= (.-target %) (.-currentTarget %)) (close!))}
+   [:div.st-pop {:role "dialog" :aria-modal true :aria-label "Settings"}
+    [:header.st-head
+     [:h2 "Settings"]
+     [:button.st-close {:type "button" :aria-label "Close" :on-click close!} "×"]]
+    [:div.st-scroll
+     [settings-body]
+     [admin-link]]]])
+
+(defn- settings-loaded []
   (let [server @(rf/subscribe [:settings-server])]
-    (r/with-let [_ (rf/dispatch [:ops/load-settings server])
-                 _ (rf/dispatch [:words/load])]
-      [:f> settings-view shown?])))
+    (r/with-let [_ (rf/dispatch [:ops/load-settings server])]
+      [:f> settings-card])))
+
+(defn settings-popup
+  "Settings (README decision 58): the Claude subscriptions and GitHub, over the whole window while
+  open (the menu's plan card and More settings, the thumb edge's cog)."
+  []
+  (when (:settings? @(rf/subscribe [:list-mode]))
+    [settings-loaded]))

@@ -42,12 +42,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    Instead of: long handlers mixing reading, deciding and writing state, and a copy of each helper
    per file.
 10. Claude tokens are kept by the hub (2026-11-03): saved once in Settings, sealed in `hub.db` under a
-    key that lives only in the gate's secrets (`HUB_TOKEN_KEY_FILE`), one in use for every server.
-    The hub writes the one in use into each server's token file (the only copy a server keeps, since
-    Claude runs there) and brings a server that was off or is new along within a minute. The rail's
-    foot shows it (initials; a dashed ring while a server is not on it yet) and switches it; the
-    Forms button left the rail (Forms stays in Settings). Instead of: each server keeping and
-    switching its own saved tokens.
+    key that lives only in the gate's secrets (`HUB_TOKEN_KEY_FILE`). The hub writes them into each
+    server's token files (the only copies a server keeps, since Claude runs there) and brings a
+    server that was off or is new along within a minute. Which one a chat runs on: decisions 16 and
+    57 (the "one in use for every server", its switch on the rail's foot and later in Settings, is
+    gone since decision 57). Instead of: each server keeping and switching its own saved tokens.
 
 11. The page runs only its own code (2026-11-03): every library it uses comes from npm at the
     version in `package-lock.json` and is built into `out/web` (Shiki, Vega, three.js and QuickJS
@@ -141,11 +140,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     runs on (row 2, decision 22) and a click on it picks another saved one; the pick is
     kept with the chat and applies on its next message (its Claude Code starts again on that
     token). For that the hub sends every saved token to each server (`<token file>.d/<key>`, names
-    in `<token file>.saved.json`), not only the one in use. The one in use (decision 10) is now the
-    default: a new chat starts on it unless its header picked another, and stays on it; a chat without a pick (made before this,
-    or its pick was removed) runs on it. The default is set in Settings; the rail's button that
-    switched every chat at once is gone. Instead of: one token for every chat of every person,
-    where one person's switch moved everyone's chats.
+    in `<token file>.saved.json`). What a new chat and a chat without a pick run on: decision 57 (the
+    shared default this decision first kept, set in Settings, is gone). Instead of: one token for
+    every chat of every person, where one person's switch moved everyone's chats.
 
 17. The chat has a hard length limit (2026-11-12): a turn's final reply may have at most 400
     characters (`claudia.slave.tools/reply-limit`). The runner checks it in the Stop hook: a longer
@@ -236,7 +233,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
     `{text, raw}` back: text cleaned up, raw as heard. The draft gets the clean text; while the
     raw words differ and the draft still holds them, a chip over the composer shows the other
-    version and a tap swaps them (and back). Settings has My words: the list, Add, and × to remove,
+    version and a tap swaps them (and back). My words (the iPad edge's panel; in Settings until
+    decision 58): the list, Add, and × to remove,
     saved through `/hub/listen/words` (the caller's own list only; hidden without a listen
     service). When the person changes exactly one dictated word before sending, to one that looks
     like a name or a term (a capital not at a sentence's start, a capital inside, a digit, or
@@ -300,20 +298,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/web/views/settings.cljs`.
 
 24. Settings start from a small menu at the bottom left (2026-11-14): a gear at the rail's foot
-    (and the list's on a phone) opens the default plan's 5-hour and week use
+    (and the list's on a phone) opens your own plan's 5-hour and week use (decision 57)
     (a click: Settings), Machines (the Systems popup), Archived chats, Forms, the Desktop popups
-    switch, More settings, and the version. Settings itself keeps what needs room: the Claude
-    tokens, GitHub (decision 23), all ~/Work sessions, Admin and Servers for admins, each
-    server's chat colours. The right half shows only the picture: the timeline view is gone.
+    switch, More settings, and the version. Settings itself: decision 58 (only the Claude tokens and
+    GitHub, as a popup). The right half shows only the picture: the timeline view is gone.
     Your profile circle (2026-11-18): the gear became a circle with your initials, or the initials
     of the person whose chats you look at (dashed, amber: read only); its menu starts with Whose
     chats (yours, then every other person's, read only), which left the list's title menu (that
     keeps the servers).
     The rail is the only chat list on a desktop and an iPad (2026-11-18): the wide list that opened
     over it (Claudia's face top left, Ctrl+B) is gone there; a phone keeps its full-screen list.
-    Settings (More settings, the plan card, the iPad edge's cog) and Archived chats open in the
-    chat column, full height, and Back (or Escape) returns to the chat that was open; on a phone
-    they still slide over the list. The rail's top holds Claudia's face, bigger and with no frame
+    Archived chats open in the chat column, full height, and Back (or Escape) returns to the chat
+    that was open (Settings: a popup since decision 58). The rail's top holds Claudia's face, bigger and with no frame
     round her, so her animations show whole (a click opens her chat, decision 48), and under it 2D and
     3D as two small circles; then, where there is no right-edge column, search and New chat.
     Instead of: a second, wide list beside the rail, and Settings squeezed into a 380 px drawer.
@@ -725,6 +721,37 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     server alone cannot read the vault: each read is an Allow plus Face ID on the iPad, iPhone or
     desktop, and opens that chat's reads for an hour. Not built with decisions 51 to 55; a track of
     its own.
+
+57. Each person's chats run on the token that person picked last (2026-11-18, the user's call after
+    a shared default broke everyone's new chats: one person set the shared token in use to their
+    account, Anthropic refused that account, and every person's new chats failed). There is no
+    shared default token any more, and nothing about one in Settings. A token is chosen only in a
+    chat's header (decision 16). A new chat, and any chat without a pick (or whose pick was
+    removed), runs on the token its owner (the chat's profile's person) picked last in any chat's
+    header, on any server; the hub keeps that per person (`claude_token_picks`) and writes it to
+    each server where the person has a profile (`<token file>.picks.json`, by profile; `PUT
+    /api/claude-token/picks`). Before a person has ever picked, it is the saved token whose key is
+    their profile name (decision 51), if one is saved; else the chat has no token, its header says
+    "Pick one", and its message gets a clear error asking for a pick. A new chat takes its pick on
+    being made and keeps it, so a later pick elsewhere moves only chats without one; it no longer
+    carries the last chat's subscription. One person's pick never changes another person's chats:
+    a pick in another person's chat (a write tick) moves only that chat. Work without a chat (the
+    limits probe, Claudia's own chat) runs on the runner's profile's person's pick. Saving a token
+    switches nothing; any saved token may be removed. On the first start of this hub nobody's old
+    default is carried over: the shared one (`claude_token_use`) is dropped, and each person starts
+    on their profile-named token if saved. Each server's old shared token file goes on the first
+    picks write. Instead of: one default for everyone, which one person could set to a token that
+    then failed for all.
+
+58. Settings is a small popup with only the Claude tokens and GitHub (2026-11-18, the user's call):
+    centred on a desktop and an iPad, a sheet from the bottom on a phone; Escape, a click outside or
+    × closes it; opened as before (the menu's plan card and More settings, the iPad edge's cog).
+    It holds the saved Claude tokens with add and remove (decision 57: no default) and GitHub as
+    before (decision 23 or 37), plus a one-line Admin link for admins, since People and Servers
+    have no other way in. The brand (wordmark, version, the token chip), My words, the all ~/Work
+    sessions switch, the Admin and Servers rows, and the server tabs with "Signed in as … profile
+    …" left Settings; their features stay (My words on the iPad edge, Admin through the link).
+    Instead of: Settings as a full pane over the list or in the chat column (decision 24).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

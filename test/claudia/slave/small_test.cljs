@@ -131,12 +131,42 @@
   (is (= 3200 (render/shot-height 99999)))
   (is (= 700 (render/shot-height 700))))
 
-(deftest the-hubs-token-is-checked-before-it-is-written
-  (let [t (str "sk-ant-oat01-" (apply str (repeat 30 "a")))]
-    (is (= 501 (:status (tokens/current-problem {:name "Paul" :at 1} t nil))))
-    (is (= "Not a Claude token." (:error (tokens/current-problem {:name "Paul" :at 1} "x" "/f"))))
-    (is (= "name and at are needed." (:error (tokens/current-problem {:name "" :at 1} t "/f"))))
-    (is (nil? (tokens/current-problem {:name "Paul" :at 1} t "/f")))))
+(deftest each-persons-pick-is-kept-by-their-profile-here
+  (let [profiles [{:profile "paul" :email "p@x"} {:profile "ananda" :email "a@x"}]]
+    (is (= {"paul" {:email "P@x" :key "peter" :name "Peter" :at 7}
+            "ananda" {:email "a@x" :key "ananda" :name "Ananda" :at nil}}
+           (tokens/picks-by-profile [{:email "P@x" :key "peter" :name "Peter" :at 7 :more 1}
+                                     {:email "a@x" :key "ananda" :name "Ananda" :at nil}
+                                     {:email "z@x" :key "paul" :name "Paul" :at 1}]
+                                    profiles))
+        "by email, case aside; someone without a profile here is left out")
+    (is (= {} (tokens/picks-by-profile [] profiles)))
+    (is (nil? (tokens/picks-by-profile nil profiles)))
+    (is (nil? (tokens/picks-by-profile [{:email "p@x" :key "../x" :name "P" :at 1}] profiles)) "a key is a file name")
+    (is (nil? (tokens/picks-by-profile [{:email "p@x" :key "paul" :name "" :at 1}] profiles))))
+  (is (= [{:email "a@x" :key "k" :name "K" :at nil} {:email "p@x" :key "j" :name "J" :at 1}]
+         (tokens/kept-picks {:paul {:email "p@x" :key "j" :name "J" :at 1} :ananda {:email "a@x" :key "k" :name "K" :at nil}}))))
+
+(deftest a-profiles-chats-run-on-its-persons-pick-and-the-shared-token-goes
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-picks-"))
+        before (.-CLAUDIA_TOKEN_FILE (.-env js/process))
+        f (path/join dir "claude-token")]
+    (set! (.-CLAUDIA_TOKEN_FILE (.-env js/process)) f)
+    (try
+      (fs/writeFileSync f "sk-ant-old\n")
+      (fs/writeFileSync (str f ".json") "{}")
+      (is (= {:key nil :name nil :at nil} (tokens/current "paul")) "nothing picked: no token")
+      (is (= {:picks [{:email "p@x" :key "peter" :name "Peter" :at 7}]}
+             (tokens/write-picks! {:picks [{:email "p@x" :key "peter" :name "Peter" :at 7}]}
+                                  [{:profile "paul" :email "p@x"}])))
+      (is (= {:key "peter" :name "Peter" :at 7} (tokens/current "paul")))
+      (is (= {:key nil :name nil :at nil} (tokens/current "ananda")) "another profile is not moved")
+      (is (not (fs/existsSync f)) "the token every chat shared is gone")
+      (is (not (fs/existsSync (str f ".json"))))
+      (is (:error (tokens/write-picks! {:picks [{:email "p@x"}]} [{:profile "paul" :email "p@x"}])))
+      (finally
+        (if before (set! (.-CLAUDIA_TOKEN_FILE (.-env js/process)) before) (js-delete (.-env js/process) "CLAUDIA_TOKEN_FILE"))
+        (fs/rmSync dir #js {:recursive true :force true})))))
 
 (deftest the-front-keeps-the-newest-limits-per-token
   (is (= {"a" {:limits [2] :at 9} "b" {:limits [3] :at nil}}

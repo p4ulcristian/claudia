@@ -146,13 +146,14 @@
     (io/send-json res (or (:status v) 400) (dissoc v :status))
     (io/send-json res 200 v)))
 
-(defn- token-current
-  "The hub's own calls about the Claude token in use here (README decision 10): GET what it is (no
-  token), PUT the one the hub keeps in use. No caller: only the hub reaches this listener."
+(defn- token-picks
+  "The hub's own calls about each person's last pick (README decision 57): GET which are kept here,
+  PUT the hub's whole set (kept by the profile here whose email each is). No caller: only the hub
+  reaches this listener."
   [^js req ^js res]
   (case (.-method req)
-    "GET" (io/send-json res 200 (tokens/current))
-    "PUT" (.then (io/read-json req 65536) #(token-answer res (tokens/write-current! %)))
+    "GET" (io/send-json res 200 {:picks (tokens/picks)})
+    "PUT" (.then (io/read-json req 65536) #(token-answer res (tokens/write-picks! % @profiles)))
     (io/send-json res 405 {:error "GET or PUT"})))
 
 (defn- token-saved
@@ -247,7 +248,7 @@
       ;; From the hub itself (no caller).
       (= url "/api/update-check")
       (if (= "POST" (.-method req)) (update-check req res) (io/send-json res 405 {:error "POST only"}))
-      (= url "/api/claude-token/current") (token-current req res)
+      (= url "/api/claude-token/picks") (token-picks req res)
       (= url "/api/claude-token/saved") (token-saved req res)
       (= url "/api/claude-token/limits") (token-limits req res)
       (= url "/api/system") (system-sample req res)

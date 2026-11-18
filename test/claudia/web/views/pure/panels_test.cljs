@@ -194,10 +194,10 @@
   (is (= {:folder "abc" :saved "f.txt"} (attach/upload-path "/up/abc/f.txt" "f"))))
 
 (deftest layout-numbers
-  (is (= :settings (shell/column-pane false {:settings? true :archived? true})))
+  (is (= :archived (shell/column-pane false {:settings? true :archived? true})) "Settings is a popup, never the column")
   (is (= :archived (shell/column-pane false {:archived? true})))
   (is (nil? (shell/column-pane false {})))
-  (is (nil? (shell/column-pane true {:settings? true})) "a phone: over its list, not in the chat column")
+  (is (nil? (shell/column-pane true {:archived? true})) "a phone: over its list, not in the chat column")
   (is (= 300 (shell/dragged-width 0 1000 100)))
   (is (= 714 (shell/dragged-width 0 1000 900)))
   (is (= "minmax(300px, 1fr) 6px 16px" (shell/split-columns true 400)))
@@ -207,14 +207,6 @@
   (is (= "packed" (shell/density 100 200)))
   (is (= "" (shell/density 2 200)))
   (is (= 8 (shell/tip-left 0 50 0 500))))
-
-(deftest a-servers-token-state
-  (is (= :off (settings/sync-state {:ok false} "Paul")))
-  (is (= :on (settings/sync-state {:ok true :current "Paul"} "Paul")))
-  (is (= :behind (settings/sync-state {:ok true :current "Ananda"} "Paul")))
-  (is (= "Box not reached: down" (settings/sync-title {:label "Box" :error "down"} :off)))
-  (is (= "Box still runs on a token set by hand; the hub writes it within a minute"
-         (settings/sync-title {:label "Box"} :behind))))
 
 (deftest freshness-says-how-old
   (is (= "not heard yet" (usage/freshness nil 0)))

@@ -30,32 +30,41 @@
   (is (= 400 (first (tokens/save-problem true nil sample-token))))
   (is (= 400 (first (tokens/save-problem true "Paul" nil))))
   (is (nil? (tokens/save-problem true "Paul" sample-token)))
-  (is (= 404 (first (tokens/pick-problem true "x" ["paul"] "paul" false))))
-  (is (nil? (tokens/pick-problem true "paul" ["paul"] nil false)))
-  (is (= 409 (first (tokens/pick-problem true "paul" ["paul" "ananda"] "paul" true))))
-  (is (nil? (tokens/pick-problem true "ananda" ["paul" "ananda"] "paul" true))))
+  (is (= 503 (first (tokens/pick-problem false "paul" ["paul"]))))
+  (is (= 404 (first (tokens/pick-problem true "x" ["paul"]))))
+  (is (= 404 (first (tokens/pick-problem true nil ["paul"]))))
+  (is (nil? (tokens/pick-problem true "paul" ["paul" "ananda"]))))
 
-(deftest a-server-is-written-only-when-it-differs
-  (is (tokens/same-token? {:key "paul" :name "Paul" :at 5} {:name "Paul" :at 5 :key "paul"}))
-  (is (not (tokens/same-token? {:name "Paul" :at 5} {:name "Paul" :at 5 :key "paul"})) "a note without its key is written again")
-  (is (not (tokens/same-token? {:name "Paul" :at 4} {:name "Paul" :at 5})))
-  (is (= {:ok true :name "Paul" :at 5 :error nil :checked 9} (tokens/sync-record [200 {:name "Paul" :at 5}] 9)))
-  (is (= {:ok false :name nil :at nil :error "answered 404" :checked 9} (tokens/sync-record [404 {}] 9)))
-  (is (= "no route" (:error (tokens/sync-record [0 {:error "no route"}] 9)))))
+(deftest a-persons-chats-run-on-their-last-pick-else-their-profiles-token
+  (is (= {:key "ana" :at 5} (tokens/effective-pick {:key "ana" :at 5} ["paul" "ana"] "paul")))
+  (is (= {:key "paul" :at nil} (tokens/effective-pick nil ["paul" "ana"] "paul")) "never picked: the profile's")
+  (is (= {:key "paul" :at nil} (tokens/effective-pick {:key "gone" :at 5} ["paul"] "paul")) "the pick was removed")
+  (is (nil? (tokens/effective-pick nil ["ana"] "paul")) "nothing: the header asks")
+  (is (nil? (tokens/effective-pick nil ["ana"] "")) "no profile name"))
+
+(deftest each-server-gets-only-its-own-peoples-picks
+  (let [people [{:email "p@x" :profile "paul"} {:email "a@x" :profile "ananda"} {:email "z@x" :profile "zed"}]
+        saved [{:key "paul" :name "Paul"} {:key "peter" :name "Peter"}]
+        picks {"a@x" {:key "peter" :at 7} "q@x" {:key "paul" :at 1}}]
+    (is (= [{:email "a@x" :key "peter" :name "Peter" :at 7} {:email "p@x" :key "paul" :name "Paul" :at nil}]
+           (tokens/server-picks people picks saved))
+        "one person's pick moves only that person; zed has none; q@x is not on this server")
+    (is (tokens/same-picks? [{:email "p@x" :key "paul" :name "Paul" :at nil :more 1}
+                             {:email "a@x" :key "peter" :name "Peter" :at 7}]
+                            (tokens/server-picks people picks saved)))
+    (is (not (tokens/same-picks? [] (tokens/server-picks people picks saved))))))
 
 (deftest the-page-sees-names-never-tokens
-  (let [s (tokens/state-of true {:key "paul" :name "Paul" :by "a@b" :at 5}
+  (let [s (tokens/state-of true {:key "paul" :at 5}
                            [{:key "paul" :name "Paul" :saved-by "a@b" :saved-at 3}
                             {:key "ana" :name "Ana" :saved-by "a@b" :saved-at 4}]
-                           {"paul" {:limits [{:key "seven_day" :percent 31}] :heard-at 7}}
-                           [{:name "box" :label "Box"}]
-                           {"box" {:ok true :name "Paul"}})]
-    (is (= {:name "Paul" :by "a@b" :at 5} (:inUse s)))
+                           {"paul" {:limits [{:key "seven_day" :percent 31}] :heard-at 7}})]
+    (is (= {:name "Paul" :at 5} (:pick s)))
     (is (= [{:name "Paul" :by "a@b" :at 3 :limits [{:key "seven_day" :percent 31}] :heardAt 7}
             {:name "Ana" :by "a@b" :at 4 :limits [] :heardAt nil}]
-           (:tokens s)))
-    (is (= [{:name "box" :label "Box" :ok true :current "Paul" :error nil}] (:servers s))))
-  (is (= [] (:tokens (tokens/state-of false nil nil nil [] {})))))
+           (:tokens s))))
+  (is (nil? (:pick (tokens/state-of true nil [] {}))))
+  (is (= [] (:tokens (tokens/state-of false nil nil nil)))))
 
 (deftest a-servers-limits-go-to-saved-tokens-only
   (let [heard {:h1 {:limits [{:key "seven_day" :percent 40}] :at 9}

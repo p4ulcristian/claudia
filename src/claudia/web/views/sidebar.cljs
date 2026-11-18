@@ -314,23 +314,8 @@
      [project-chips rows chip]
      [:nav.cs-list {:aria-label "Archived chats"} [archived-rows m]]]))
 
-(defn- use-lingers
-  "True while on, and for ms after it goes off (a screen that slides out stays mounted meanwhile)."
-  [on ms]
-  (let [[left set-left] (h/use-state on)]
-    (h/use-effect
-     (fn []
-       (if on
-         (do (set-left true) js/undefined)
-         (let [t (js/setTimeout #(set-left false) ms)]
-           #(js/clearTimeout t))))
-     [on])
-    (or on left)))
-
 (defn sidebar
-  "The list, and Settings sliding over it while shown?."
-  [{:keys [shown? settings? phone?]}]
-  (let [mounted? (use-lingers settings? 400)]
-    [:aside.sidebar.cs-side {:aria-hidden (not shown?) :inert (when-not shown? true)}
-     [:f> chat-list phone?]
-     (when mounted? [settings/settings-pane settings?])]))
+  "The phone's list."
+  [{:keys [shown? phone?]}]
+  [:aside.sidebar.cs-side {:aria-hidden (not shown?) :inert (when-not shown? true)}
+   [:f> chat-list phone?]])

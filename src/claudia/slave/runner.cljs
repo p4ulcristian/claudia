@@ -177,7 +177,7 @@
     :read-only (send! c {:type "error" :chat chat :text "Read only."})
     :hello (do (reset! (:hello c) true)
                (send! c {:type "chats" :chats (chats/rows)})
-               (send! c (meta/frame)))
+               (send! c (meta/frame profile)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
                                    (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell])
                                    (msg-id f))]
@@ -349,6 +349,6 @@
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
   (reset! changes/data-dir data-dir)
-  (reset! meta/on-change (fn [_] (let [frame (meta/frame)]
+  (reset! meta/on-change (fn [_] (let [frame (meta/frame profile)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
   (.then secret/ready start!))

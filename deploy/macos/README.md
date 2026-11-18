@@ -58,8 +58,8 @@ The front answers only calls carrying this Mac's hub key (`FRONT_HUB_KEY_FILE`, 
    writes and loads the four agents.
 6. `bash ~/claudia/deploy/pair.sh https://<hub address>` prints a pairing key: paste it on the hub's
    Servers page with `<the Mac's address>:4540` (`FRONT_HOST:FRONT_PORT`); it writes the Mac's hub
-   key and restarts the front. Tick people for it on the Access page. The hub writes the Claude
-   token in use into `CLAUDIA_TOKEN_FILE` within a minute.
+   key and restarts the front. Tick people for it on the Access page. The hub writes the saved Claude
+   tokens and each person's pick beside `CLAUDIA_TOKEN_FILE` within a minute.
 7. A Mac that serves stays awake on power: `sudo pmset -c sleep 0` (or System Settings > Battery >
    Options: prevent automatic sleeping on power adapter when the display is off). After a reboot
    the agents start when the user logs in.

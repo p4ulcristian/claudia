@@ -1,7 +1,7 @@
 ---
 # The agent users (decision 51) and break-glass (decision 55).
 
-- name: Make the group whose members read the Claude token in use (as install.sh does)
+- name: Make the group whose members read the saved Claude tokens (as install.sh does)
   ansible.builtin.group:
     name: claudia-run
     system: true

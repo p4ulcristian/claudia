@@ -588,15 +588,27 @@
 
 (defn- folder-of [id] (:folder (store/chat id)))
 
-(defn- token []
-  (let [f (env/env "CLAUDIA_TOKEN_FILE")
-        t (when f (try (str/trim (fs/readFileSync f "utf8")) (catch :default _ nil)))]
-    (if (seq t) t (throw (js/Error. "No Claude token yet: add one in Settings (bottom left).")))))
+(def ^:private profile (env/env "RUNNER_PROFILE" ""))
+
+(def no-token-text
+  "What a chat says when it has no Claude subscription to run on (README decision 57)."
+  "No Claude subscription for this chat yet: pick one in its header (row 2), or save one in Settings.")
+
+(defn- own-pick
+  "The token this profile's person picked last (README decision 57), or nil."
+  []
+  (tokens/saved-token (:key (tokens/current profile))))
+
+(defn- token
+  "The token this profile's chats without a pick run on: its person's last pick; throws when there
+  is none."
+  []
+  (or (own-pick) (throw (js/Error. no-token-text))))
 
 
 (defn token-of
-  "The token chat id runs on: the saved one picked for it (README decision 16), else the one in use
-  here (no pick, or its pick is no longer saved)."
+  "The token chat id runs on: the saved one picked for it (README decision 16), else its owner's
+  last pick (no pick, or its pick is no longer saved; README decision 57)."
   [id]
   (or (tokens/saved-token (:plan (settings id))) (token)))
 
@@ -613,8 +625,8 @@
 
 (defn- run-env
   "The environment chats run with: the runner's own, the token (read on every start, so a new token
-  takes effect with the next session) and Claudia's helpers on the PATH. Without a token: the one
-  in use here, whose limits the meters then show."
+  takes effect with the next session) and Claudia's helpers on the PATH. Without a token: the
+  person's last pick, whose limits the meters then show."
   ([] (let [t (token)] (meta/use-token! t) (run-env t)))
   ([t] (session/run-env (.-env js/process) t bin-dir)))
 
@@ -652,7 +664,7 @@
 
 (defn settings
   "The chat's model and effort (nil = the user's default) and its plan (a saved token's key; nil =
-  the token in use here), applied on its next start."
+  its owner's last pick), applied on its next start."
   [id]
   (merge {:model nil :effort nil :plan nil} (select-keys (store/kv id "settings") [:model :effort :plan])))
 
@@ -764,15 +776,15 @@
     (swap-tools! id)))
 
 (defn- watch-token!
-  "Someone switched the token in Settings: the new plan's limits show now (runner.ts watch). The
-  saved tokens changed: the pages get the new list."
+  "The person picked another token in a chat's header: its limits show now (runner.ts watch). It or
+  the saved tokens changed: the pages get the new list and pick."
   []
   (when-let [f (env/env "CLAUDIA_TOKEN_FILE")]
     (try (fs/watch (path/dirname f)
                    (fn [_ file]
-                     (when (= file (path/basename f))
-                       (try (meta/use-token! (token)) (catch :default _ nil)))
-                     (when (#{(str (path/basename f) ".json") (str (path/basename f) ".saved.json")} file)
+                     (when (= file (str (path/basename f) ".picks.json"))
+                       (some-> (own-pick) meta/use-token!))
+                     (when (#{(str (path/basename f) ".picks.json") (str (path/basename f) ".saved.json")} file)
                        (meta/plans-changed!))))
          (catch :default e (js/console.error "token watch:" (text/error-text e))))))
 
@@ -1029,7 +1041,9 @@
       (.then (fn [info]
                (when (and info (not (:live (st id))) (view/keeps-session? (store/chat id)))
                  (let [t (token-of id)]
-                   (start-session! id true t (session/account-of t))))))))
+                   (start-session! id true t (session/account-of t))))))
+      ;; No token for it (README decision 57): it stays closed; its next message says so.
+      (.catch (fn [_] nil))))
 
 (defn open-sessions!
   "Every open chat (view/keeps-session?) that has no Claude Code running gets it resumed."
@@ -1103,8 +1117,8 @@
   the colour its header already wore. msg-id: the first message's id as the page made it (or nil)."
   [message folder images picks msg-id]
   (let [id (str (random-uuid))
-        ;; A new chat stays on the plan in use now unless one was picked: a later switch of that one moves no chat.
-        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) (dissoc picks :color :talk :bell) (map :key (tokens/saved)))]
+        ;; A new chat stays on its person's last pick unless one was picked: a later pick in another chat moves it not.
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current profile))) (dissoc picks :color :talk :bell) (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (new-chat-colour (:color picks))})

@@ -1,15 +1,16 @@
 (ns claudia.hub.tokens
-  "Claude subscriptions, kept by the hub (README decision 10): long-term tokens (`claude setup-token`)
-  saved once by name, sealed in the store (AES-256-GCM under the 32-byte key in HUB_TOKEN_KEY_FILE,
-  which is never in hub.db), and one of them in use on every server. The hub writes the one in use
-  into each server's token file through its front (PUT /api/claude-token/current, a call only the
-  hub makes): at once after a save or a switch, and every minute for a server that missed it (off,
-  new, reinstalled). The same minute it collects each server's last heard usage limits per token
-  (GET /api/claude-token/limits, by a hash of the token) and keeps the newest for each saved token,
-  for the page's popup of every token's limits. Every saved token goes to each server the same way
-  (PUT /api/claude-token/saved, README decision 16), so each chat runs on the one picked for it; the
-  one in use is what a chat without a pick runs on. Anyone signed in may save, switch or remove one; nobody can read one back.
-  Without a key file the hub keeps no tokens and leaves the servers' token files alone."
+  "Claude subscriptions, kept by the hub (README decisions 10, 16 and 57): long-term tokens (`claude
+  setup-token`) saved once by name, sealed in the store (AES-256-GCM under the 32-byte key in
+  HUB_TOKEN_KEY_FILE, which is never in hub.db). Every saved token goes to each server through its
+  front (PUT /api/claude-token/saved, a call only the hub makes), so each chat runs on the one picked
+  in its header. There is no shared default: each person's last header pick (else the saved token
+  named like their profile) goes to each server where they have a profile (PUT
+  /api/claude-token/picks), and their chats without a pick run on it. At once after a save, a pick or
+  a removal, and every minute for a server that missed it (off, new, reinstalled). The same minute
+  the hub collects each server's last heard usage limits per token (GET /api/claude-token/limits, by
+  a hash of the token) and keeps the newest for each saved token, for the page's popup of every
+  token's limits. Anyone signed in may save or remove one, and pick for themselves; nobody can read
+  one back. Without a key file the hub keeps no tokens and leaves the servers alone."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
             [clojure.string :as str]
@@ -20,9 +21,6 @@
             [claudia.hub.front :as front]))
 
 (defonce ^:private key-bytes (atom nil))
-
-;; server name -> {:ok :name :at :error :checked}: what the last look at that server found.
-(defonce ^:private synced (atom {}))
 
 (defn on? [] (some? @key-bytes))
 
@@ -65,13 +63,11 @@
     :else nil))
 
 (defn pick-problem
-  "Why a switch to (or removal of, remove? true) the token k is refused, or nil: saved = the saved
-  keys, in-use = the key in use."
-  [on k saved in-use remove?]
+  "Why a pick (or removal) of the token k is refused, or nil: saved = the saved keys."
+  [on k saved]
   (cond
     (not on) no-key
     (not (some #{k} saved)) [404 {:error "No saved token by that name."}]
-    (and remove? (= k in-use)) [409 {:error "That one is in use: switch to another first."}]
     :else nil))
 
 ;; ---- sealing ----
@@ -95,40 +91,48 @@
     (.setAuthTag d (.subarray b (- (.-length b) 16)))
     (str (.update d (.subarray b 12 (- (.-length b) 16)) js/undefined "utf8") (.final d "utf8"))))
 
+;; ---- each person's last pick (README decision 57) ----
+
+(defn effective-pick
+  "The token a person's chats without a pick run on: their last header pick ({:key :at}) while that
+  token is saved, else the saved token whose key is their profile name (:at nil), else nil."
+  [pick saved-keys profile]
+  (let [saved? (set saved-keys)]
+    (cond (saved? (:key pick)) (select-keys pick [:key :at])
+          (and (seq profile) (saved? profile)) {:key profile :at nil}
+          :else nil)))
+
+(defn server-picks
+  "What a server keeps for its people ([{:email :profile}]): [{:email :key :name :at}] by email, for
+  those with a token (picks: {email {:key :at}}; saved: [{:key :name}])."
+  [people picks saved]
+  (let [names (into {} (map (juxt :key :name)) saved)]
+    (vec (sort-by :email
+                  (for [{:keys [email profile]} people
+                        :let [p (effective-pick (get picks email) (keys names) profile)]
+                        :when p]
+                    {:email email :key (:key p) :name (names (:key p)) :at (:at p)})))))
+
+(defn same-picks?
+  "Whether a server keeps exactly these picks (have: its [{:email :key :name :at}])."
+  [have want]
+  (= (set (map #(select-keys % [:email :key :name :at]) have)) (set want)))
+
+(defn- sync-picks!
+  "Makes one server's picks the hub's: asks which it keeps, writes them all when they differ."
+  [server]
+  (let [want (server-picks (store/people-on (:name server)) (store/claude-token-picks) (store/claude-tokens))]
+    (-> (front/call server "GET" "/api/claude-token/picks" nil 5000)
+        (.then (fn [[status have]]
+                 (when (and (= 200 status) (not (same-picks? (:picks have) want)))
+                   (.then (front/call server "PUT" "/api/claude-token/picks" {:picks want} 5000)
+                          (fn [[wrote body]]
+                            (if (= 200 wrote)
+                              (js/console.log (str "tokens: " (:name server) " keeps " (count want) " people's picks"))
+                              (js/console.error (str "tokens: picks to " (:name server) ": " (:error body)))))))))
+        (.catch (fn [e] (js/console.error (str "tokens: picks to " (:name server) ": " (.-message e))))))))
+
 ;; ---- the servers' fronts ----
-
-(defn same-token?
-  "Whether a server already runs on the token in use (same key, name and switch time)."
-  [have in-use]
-  (and (= (:key have) (:key in-use)) (= (:name have) (:name in-use)) (= (:at have) (:at in-use))))
-
-(defn sync-record
-  "What a look at a server found, from its last answer [status body] at time now."
-  [[status body] now]
-  (let [ok (= 200 status)]
-    {:ok ok :name (when ok (:name body)) :at (when ok (:at body))
-     :error (when-not ok (or (:error body) (str "answered " status)))
-     :checked now}))
-
-(defn- write-token!
-  "Promise of [status body]: the token in use written to the server."
-  [server in-use]
-  (-> (front/call server "PUT" "/api/claude-token/current"
-                  {:key (:key in-use) :name (:name in-use) :by (:by in-use) :at (:at in-use)
-                   :token (unseal @key-bytes (:key in-use) (store/claude-token-sealed (:key in-use)))}
-                  5000)
-      (.then (fn [[status body :as answer]]
-               (when (= 200 status) (js/console.log (str "tokens: " (:name server) " now on \"" (:name body) "\"")))
-               answer))))
-
-(defn- sync-server!
-  "Makes one server's token in use the hub's: asks what it has, writes it when that differs."
-  [server in-use]
-  (-> (front/call server "GET" "/api/claude-token/current" nil 5000)
-      (.then (fn [[status have :as answer]]
-               (if (or (not= 200 status) (same-token? have in-use)) answer (write-token! server in-use))))
-      (.then #(swap! synced assoc (:name server) (sync-record % (js/Date.now))))
-      (.catch (fn [e] (swap! synced assoc (:name server) {:ok false :error (.-message e) :checked (js/Date.now)})))))
 
 (defn saved-rows
   "The saved tokens as a server keeps them, without the tokens: [{:key :name :at}] by key."
@@ -191,13 +195,14 @@
 (defonce ^:private again (atom false))
 
 (defn- sync-all []
-  (if-let [in-use (when (on?) (store/claude-token-use))]
-    (js/Promise.all (into-array (mapcat (fn [s] [(sync-server! s in-use) (sync-saved! s) (collect-limits! s)]) (config/all-servers))))
+  (if (on?)
+    (js/Promise.all (into-array (mapcat (fn [s] [(.then (sync-saved! s) #(sync-picks! s)) (collect-limits! s)])
+                                        (config/all-servers))))
     (js/Promise.resolve nil)))
 
 (defn sync!
-  "Promise: every server brought to the token in use (one run at a time; a call during a run makes
-  one more run after it)."
+  "Promise: every server brought to the hub's saved tokens and picks (one run at a time; a call
+  during a run makes one more run after it)."
   []
   (if-let [p @running]
     (do (reset! again true) p)
@@ -211,29 +216,27 @@
 ;; ---- what the page sees and does ----
 
 (defn state-of
-  "For the page: whether tokens are kept here, the one in use, the saved ones (names, with their
-  last heard limits: limits = key -> {:limits :heard-at}), and each of the person's servers: what it
-  runs on now (synced: server name -> record)."
-  [on in-use saved limits servers synced-now]
+  "For the page: whether tokens are kept here, the person's own pick (name, and when picked; nil
+  when it is the token named like their profile), and the saved ones (names, with their last heard
+  limits: limits = key -> {:limits :heard-at})."
+  [on pick saved limits]
   {:on on
-   :inUse (when in-use (select-keys in-use [:name :by :at]))
+   :pick (when pick {:name (some #(when (= (:key pick) (:key %)) (:name %)) saved) :at (:at pick)})
    :tokens (if on
              (mapv (fn [t] {:name (:name t) :by (:saved-by t) :at (:saved-at t)
                             :limits (get-in limits [(:key t) :limits] [])
                             :heardAt (get-in limits [(:key t) :heard-at])})
                    saved)
-             [])
-   :servers (vec (for [s servers
-                       :let [st (get synced-now (:name s))]]
-                   {:name (:name s) :label (:label s)
-                    :ok (boolean (:ok st)) :current (:name st) :error (:error st)}))})
+             [])})
 
 (defn state
-  "The page's view of the tokens for person."
+  "The page's view of the tokens for person ({:email})."
   [person]
-  (let [on (on?)]
-    (state-of on (when on (store/claude-token-use)) (when on (store/claude-tokens))
-              (when on (store/claude-token-limits)) (config/servers-of person) @synced)))
+  (let [on (on?)
+        saved (when on (store/claude-tokens))
+        pick (when on (effective-pick (get (store/claude-token-picks) (:email person)) (map :key saved)
+                                      (:profile (store/person (:email person)))))]
+    (state-of on pick saved (when on (store/claude-token-limits)))))
 
 (defn- settled
   "Promise of the state once the servers were brought along, or after 6 s (an off server must not
@@ -245,7 +248,7 @@
 (defn- saved-keys [] (map :key (store/claude-tokens)))
 
 (defn save!
-  "Saves (or replaces, by name) a token and switches every server to it. Promise of [status body]."
+  "Saves (or replaces, by name) a token; every server gets it. Promise of [status body]."
   [person raw-name raw-token]
   (let [n (clean-name raw-name)
         t (clean-token raw-token)]
@@ -253,27 +256,27 @@
       (js/Promise.resolve refusal)
       (let [k (fold n)]
         (store/transaction! #(do (store/save-claude-token! k n (seal @key-bytes k t) (:email person))
-                                 (store/forget-claude-token-limits! k)
-                                 (store/use-claude-token! k (:email person))))
-        (js/console.log (str "tokens: \"" n "\" saved and in use, by " (:email person)))
+                                 (store/forget-claude-token-limits! k)))
+        (js/console.log (str "tokens: \"" n "\" saved by " (:email person)))
         (.then (settled person) (fn [s] [200 s]))))))
 
-(defn use!
-  "Switches every server to a saved token. Promise of [status body]."
-  [person raw-name]
-  (let [k (some-> (clean-name raw-name) fold)]
-    (if-let [refusal (pick-problem (on?) k (when (on?) (saved-keys)) nil false)]
+(defn pick!
+  "The person picked the saved token k in a chat's header (README decision 57): their chats without
+  a pick run on it now, on every server. Promise of [status body]."
+  [person raw-key]
+  (let [k (when (string? raw-key) raw-key)]
+    (if-let [refusal (pick-problem (on?) k (when (on?) (saved-keys)))]
       (js/Promise.resolve refusal)
-      (do (store/use-claude-token! k (:email person))
-          (js/console.log (str "tokens: switched to \"" (:name (store/claude-token-use)) "\" by " (:email person)))
+      (do (store/pick-claude-token! (:email person) k)
+          (js/console.log (str "tokens: " (:email person) " picked \"" k "\""))
           (.then (settled person) (fn [s] [200 s]))))))
 
 (defn remove!
-  "Removes a saved token (not the one in use). [status body]."
+  "Removes a saved token: chats on it go to their owner's pick. [status body]."
   [person raw-name]
   (let [k (some-> (clean-name raw-name) fold)
         on (on?)]
-    (or (pick-problem on k (when on (saved-keys)) (when on (:key (store/claude-token-use))) true)
+    (or (pick-problem on k (when on (saved-keys)))
         (do (store/drop-claude-token! k)
             (sync!)
             (js/console.log (str "tokens: \"" raw-name "\" removed by " (:email person)))
