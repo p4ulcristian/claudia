@@ -94,7 +94,10 @@ each such user that is an agent user (README decision 53).
   `same-origin`/`none`, or an `Origin` whose host is not this one (`X-Forwarded-Host`, else `Host`).
 - A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
 - front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view
-  of a profile whose owner's email is not in `X-Claudia-Writes`.
+  of a profile whose owner's email is not in `X-Claudia-Writes`, and the sender (README decision
+  59): `X-Claudia-By: <the caller's email>` and `X-Claudia-Via: own|write-tick|view`. The front
+  drops every `X-Claudia-*` the caller sent before setting its own, so a call through the front
+  cannot name another sender.
 - Root (README decision 52) is the front's, never a runner's: the front answers `POST /api/root/answer`
   and `/api/root/switch` itself, only for the profile's own person (own profile = target profile; not
   a writer, not a viewer), and never passes any other `/api/root/…` on (403). Nor `/api/ssh/…`
@@ -117,7 +120,7 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 `x-frame-options: SAMEORIGIN`).
 | `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
 | `POST /hub/server/claudia` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ as (email, with a profile on that server), op: chats \| new \| send \| archive \| stop, args }` → the operation's answer, carried out on the person's servers through each runner's `/api/chat-ops/…` (`GET chats` → `{ chats }`, `POST new { text, folder? }` → `{ chat }`, `POST send { chat, text }`, `POST archive { chat, archived }`, `POST stop { chat }` → `{ ok }`); 403 when the key or the profile does not match |
-| `POST /hub/server/ssh-cert` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ user, publicKey }` → `{ certificate }`: an OpenSSH user certificate (one line) for `publicKey` (ed25519, one OpenSSH line), signed by `HUB_SSH_CA_FILE` (README decision 53). Only when `user` is `<profile>-claudia-agent`, that profile is a person's (the People table's profile names) and that person has a profile on that server. Principal exactly `user`, valid from 5 minutes before to 60 minutes after now, key id `<server>/<user>/<ISO time>`, a random serial, extension `permit-pty` only (no agent, port or X11 forwarding). 403 when the key, the user or the profile does not match; 400 for a key that is not ed25519; 503 without `HUB_SSH_CA_FILE` |
+| `POST /hub/server/ssh-cert` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ user, publicKey }` → `{ certificate, keyId }`: an OpenSSH user certificate (one line) for `publicKey` (ed25519, one OpenSSH line), signed by `HUB_SSH_CA_FILE` (README decision 53). Only when `user` is `<profile>-claudia-agent`, that profile is a person's (the People table's profile names) and that person has a profile on that server. Principal exactly `user`, valid from 5 minutes before to 60 minutes after now, key id `<server>/<user>/<ISO time>` (also `keyId`: the front logs it, README decision 59), a random serial, extension `permit-pty` only (no agent, port or X11 forwarding). 403 when the key, the user or the profile does not match; 400 for a key that is not ed25519; 503 without `HUB_SSH_CA_FILE` |
 | `GET /hub/ssh-ca.pub` | no login: the SSH authority's public key, one OpenSSH line (`ssh-ed25519 … claudia-hub-ca`), for every server's `TrustedUserCAKeys`; 503 without `HUB_SSH_CA_FILE` |
 | `GET /hub/picture/<key>` | a person's profile picture (PNG or WebP; key: 16 hex digits of the SHA-256 of their email), 404 without one |
 | `PUT /hub/admin/picture?email=<email>` (admins) | body: the picture (PNG or WebP, up to 512 KB) → `{ picture }` |
@@ -472,11 +475,13 @@ offered; run the command itself"). No socket: "no root helper on this server", e
    `switch` or `allow` runs the command; anything else refuses it.
 3. The front: `agentUser` must be `<profile>-claudia-agent` for a profile here. It asks that profile's
    runner `POST /api/root/chat { chatKey }` → `{ chat }` (404: no chat has that key: no). Its own switch
-   for `<profile>/<chat>` on: `{ allow: true, via: "switch", chat }`. Else it makes a nonce, keeps
+   for `<profile>/<chat>` on: `{ allow: true, via: "switch", chat, by }` (by: the email of who turned
+   it on, kept with the switch; README decision 59). Else it makes a nonce, keeps
    `{ profile, chat, argv, cwd }` under it and has the runner show the card: `POST /api/root/card
    { chat, ask: nonce, argv, cwd, expires }`. The person's `POST /api/root/answer { chat, ask, allow,
    argv, cwd }` through the hub counts only from the owner, for that open nonce, profile and chat, and
-   (for Allow) the very argv and cwd kept: `{ allow: true, via: "allow", chat }`. Deny `{ allow: false,
+   (for Allow) the very argv and cwd kept: `{ allow: true, via: "allow", chat, by }` (by: the
+   answering owner's email). Deny `{ allow: false,
    why: "The person said no.", chat }`; 10 minutes or the helper leaving: no too. Then `POST
    /api/root/done { chat, ask }` takes the card away. A refused answer: 403 `{ error }`.
    Before an answer or a switch counts, the front asks the target profile's runner `POST
@@ -495,9 +500,10 @@ offered; run the command itself"). No socket: "no root helper on this server", e
 6. Shim → helper after `running`: stdin as `{ in: base64 }` frames, then `{ eof: true }` (frames before
    `running` are dropped). The shim leaving ends the command (SIGTERM).
 7. A line over 1 MB ends the connection. Every command is one journal line of the helper:
-   `root { user, chat ("key:<first 8 of the key>" or "no key"), argv, decision ("no-tap", "switch",
-   "allow", "refused: <why>", "gone before the answer"), exit? }`; the front logs each answer
-   (`root ask <nonce> of <chat>: allowed|denied by <profile>`) and switch change.
+   `activity { kind: "root", chat (the front's chat id, else "key:<first 8 of the key>" or "no key"),
+   profile, agentUser, argv, decision ("no-tap", "switch", "allow", "refused: <why>", "gone before the
+   answer"), by?, exit? }` (README decision 59); the front logs each answer and switch change in the
+   same shape (decision "allowed", "denied", "switch on", "switch off", by the person's email).
 
 The chat's key: a random key per chat (`chat_key` in the runner's store), set in every session's
 environment as `CLAUDIA_CHAT_KEY` when the runner has the host start it. A session started before

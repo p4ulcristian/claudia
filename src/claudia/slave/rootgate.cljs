@@ -9,14 +9,25 @@
 (defn switch-key [profile chat] (str profile "/" chat))
 
 (defn switch-on?
-  "Whether the front holds the root switch of profile's chat on."
+  "Whether the front holds the root switch of profile's chat on (kept as the email of the person who
+  turned it on, or true from before README decision 59)."
   [switches profile chat]
-  (true? (get switches (switch-key profile chat))))
+  (let [v (get switches (switch-key profile chat))]
+    (boolean (or (true? v) (and (string? v) (seq v))))))
+
+(defn switch-by
+  "The email of the person who turned the root switch of profile's chat on, when kept."
+  [switches profile chat]
+  (let [v (get switches (switch-key profile chat))]
+    (when (and (string? v) (seq v)) v)))
 
 (defn with-switch
-  "switches with profile's chat turned on or off (off is left out)."
-  [switches profile chat on?]
-  (if on? (assoc switches (switch-key profile chat) true) (dissoc switches (switch-key profile chat))))
+  "switches with profile's chat turned on (kept as by, the email of the person who did, else true)
+  or off (left out)."
+  [switches profile chat on? by]
+  (if on?
+    (assoc switches (switch-key profile chat) (if (and (string? by) (seq by)) by true))
+    (dissoc switches (switch-key profile chat))))
 
 (defn owner?
   "Whether the caller (the front's route of a hub call: {:own :target}) is the target profile's own
@@ -68,8 +79,9 @@
         (not= (:cwd pending) cwd) "The folder shown is not the one asked for."))
 
 (defn verdict-of
-  "The root helper's answer for chat: allow (true: the person tapped Allow), or the why of a no."
-  [chat allow why]
+  "The root helper's answer for chat: allow (true: the person whose email is by tapped Allow), or the
+  why of a no."
+  [chat allow why by]
   (if allow
-    {:allow true :via "allow" :chat chat}
+    {:allow true :via "allow" :chat chat :by by}
     {:allow false :why why :chat chat}))

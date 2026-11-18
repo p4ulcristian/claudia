@@ -71,6 +71,13 @@
       {:certificate cert}
       {:problem (str "hub answered " status ": " (or (when (map? body) (:error body)) (str/trim (str text))))})))
 
+(defn key-id-of
+  "The certificate's key id in the hub's answer {:text} (README decision 53: <server>/<user>/<time>),
+  or nil when it says none."
+  [{:keys [text]}]
+  (let [body (try (protocol/read-json text) (catch :default _ nil))]
+    (when (and (map? body) (string? (:keyId body))) (:keyId body))))
+
 ;; ---- the edges: files and ssh-keygen, on the front's calls ----
 
 (defn- paths [^js me]

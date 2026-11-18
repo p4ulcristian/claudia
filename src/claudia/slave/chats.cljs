@@ -13,6 +13,7 @@
             [claudia.node.env :as env]
             [claudia.node.fs :as nfs]
             [claudia.shared.text :as text]
+            [claudia.slave.activity :as activity]
             [claudia.slave.chats.answers :as answers]
             [claudia.slave.chats.session :as session]
             [claudia.slave.chats.titles :as titles]
@@ -925,6 +926,7 @@
     (on-task-system! id m)))
 
 (defn- on-sdk [id m]
+  (activity/note-sdk! id m)
   (let [top (nil? (:parent_tool_use_id m))]
     ;; A turn Claude starts by itself (after a background task) is running too.
     (when (and top (#{"stream_event" "assistant"} (:type m)) (not (:running (st id))))

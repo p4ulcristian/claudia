@@ -674,7 +674,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     ss -tlnp; never file writes, unit edits, package installs or shells), or when the chat's root
     switch is on (a red badge on the chat, on until the person turns it off), or when the person taps
     Allow on the "Run as root" card for that one command (unanswered in 10 minutes = no). The chat's
-    owner may always turn root on or tap Allow. Every root command is logged with the chat and the
+    owner may always turn root on or tap Allow. Every root command is logged (decision 59) with the chat and the
     answer. The key ties a command to a chat; processes of one agent user can read each other's
     environment, so the user boundary, not the key, is what stops an escape. Root is the whole
     machine: other people's services included (the user's choice, decision 4 of the design). Instead
@@ -757,6 +757,53 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sessions switch, the Admin and Servers rows, and the server tabs with "Signed in as … profile
     …" left Settings; their features stay (My words on the iPad edge, Admin through the link).
     Instead of: Settings as a full pane over the list or in the chat column (decision 24).
+
+59. One activity log agents can't edit (2026-11-18, the user's call). Every action can be traced:
+    who typed (the person), whose chat (the profile, whose name it acts in), which agent Linux user
+    ran it, and what it did. Isolation inside a desktop does not matter; the record does. The log is
+    journald, one line per action, `activity {json}` (`claudia.shared.activity`). A line counts by
+    journald's trusted fields, never by its text: the kernel stamps `_UID` and systemd stamps
+    `_SYSTEMD_UNIT` from the sender's cgroup. A session's tool processes run under
+    `claudia-host@<profile>`, so they cannot write a line that shows under `claudia-runner@<profile>`,
+    `claudia-front` or `claudia-root`; an `activity` line from any other unit does not count.
+    - `claudia-runner@<profile>` (the agent user): every tool call it sees in a session's stream,
+      sub-agents' included, `{kind:"tool", chat, profile, agentUser, tool, id, agent (the sub-agent's
+      call, when one), input}` (input short: the Bash command, the file path, the URL, the pattern;
+      else the input as JSON; at most 500 characters); every tool result `{kind:"result", chat, tool,
+      id, ok, exit}` (exit: a Bash command's exit code when known); every message a person sends,
+      new chats and Claudia's chat operations included, `{kind:"message", chat, profile, by, via}`.
+      Authoritative for what the agent did: no tool process writes as this unit, as long as the
+      kernel forbids ptrace of a process that is not one's child (Yama `ptrace_scope` 1 or more;
+      the runner and the tools run as the same agent user).
+    - `claudia-front` (user claudia): `{kind:"connection", by, profile, via}` for each WebSocket it
+      passes on (it passes the frames untouched, so it logs the connection, not each message), and
+      `{kind:"call", by, profile, via, method, path}` for each HTTP call other than GET and HEAD it
+      passes on (Claudia's chat operations included); the person's root taps `{kind:"root", chat,
+      profile, agentUser, argv, decision ("allowed", "denied", "switch on", "switch off"), by}`; each
+      SSH certificate it hands to a runner `{kind:"ssh-cert", agentUser, keyId}` (the key id sshd
+      logs, decision 53). Authoritative for who: `by` is the email the hub vouched for (decision 47),
+      `via` is `own`, `write-tick` or `view`.
+    - `claudia-root` (root): each root command `{kind:"root", chat, profile, agentUser, argv,
+      decision ("no-tap", "switch", "allow", "refused: …", "gone before the answer"), by, exit}`;
+      `by` is the person who allowed it (the Allow tap, or who turned the chat's switch on), as the
+      front told the helper on root's own socket. argv keeps at most 64 words of 500 characters.
+      Authoritative for what ran as root.
+
+    Who typed a message: the front sets `X-Claudia-By` and `X-Claudia-Via` on what it passes to a
+    runner and drops every `X-Claudia-*` a caller sent, so nothing arriving through the front names
+    another sender. The runner's `by` repeats that. An agent user can reach its own runner's socket
+    without the front, and such a message's line can say anything, so the runner's `by` counts only
+    with the front's `connection` or `call` line by that person for that profile. Reading:
+    `journalctl -o json -u claudia-front -u 'claudia-runner@*' -u claudia-root | jq 'select(.MESSAGE|startswith("activity "))'`,
+    keeping only lines whose `_SYSTEMD_UNIT` is one of those units (`select(._SYSTEMD_UNIT ==
+    "claudia-front.service" or ._SYSTEMD_UNIT == "claudia-root.service" or
+    (._SYSTEMD_UNIT|startswith("claudia-runner@")))`) and reading the entry after the prefix
+    (`.MESSAGE[9:]|fromjson`). This holds for the system units (`deploy/shared-server`); programs
+    run as one person's user units (`journalctl --user`) have no such record, since a user may move
+    its own processes between its own units' cgroups. How long the journal keeps the lines is set
+    by `host/`. Instead of: a log
+    file per program (a file the agent user could reach or fill), or the runner's word alone for
+    who typed (it runs as the agent user).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

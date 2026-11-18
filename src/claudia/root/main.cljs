@@ -96,10 +96,11 @@
     (run-command! sock req user (assoc entry :decision "no-tap") on-frame)
     (do (send! sock {:asking true})
         (.then (ask-front sock user req)
-               (fn [{:keys [allow via why]}]
-                 (cond (.-destroyed sock) (log! (assoc entry :decision "gone before the answer"))
-                       allow (run-command! sock req user (assoc entry :decision via) on-frame)
-                       :else (refuse! sock entry why)))))))
+               (fn [{:keys [allow via why] :as v}]
+                 (let [entry (merge entry (select-keys v [:chat :by]))]
+                   (cond (.-destroyed sock) (log! (assoc entry :decision "gone before the answer"))
+                         allow (run-command! sock req user (assoc entry :decision via) on-frame)
+                         :else (refuse! sock entry why))))))))
 
 ;; ---- the sockets ----
 

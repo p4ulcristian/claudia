@@ -9,6 +9,7 @@
             [clojure.string :as str]
             [claudia.node.crypto :as crypto]
             [claudia.node.system :as system]
+            [claudia.shared.activity :as activity]
             [claudia.shared.protocol :as p]
             [claudia.slave.http :as h]
             [claudia.slave.rootfront :as rootfront]
@@ -84,19 +85,37 @@
          profile)))
 
 (defn- route
-  "Whose runner the call goes to: {:own :target :viewing :read-only}, or {:status :error}."
+  "Whose runner the call goes to: {:own :target :viewing :read-only :by (the caller's email)}, or
+  {:status :error}."
   [^js headers]
-  (route-of @profiles (caller-email headers) (some-> (aget headers "x-claudia-view") str/trim)
-            (caller-writes headers)))
+  (let [email (caller-email headers)
+        r (route-of @profiles email (some-> (aget headers "x-claudia-view") str/trim) (caller-writes headers))]
+    (if (:status r) r (assoc r :by email))))
+
+(defn via-of
+  "How the caller reaches the target profile's chats (README decision 59): \"own\" (its own),
+  \"write-tick\" (another's, with a write tick) or \"view\" (read only)."
+  [{:keys [viewing read-only]}]
+  (cond read-only "view" viewing "write-tick" :else "own"))
 
 (defn runner-headers
-  "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's own."
-  [^js raw {:keys [target read-only]}]
+  "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's own,
+  the sender among them (X-Claudia-By, X-Claudia-Via: README decision 59), so no caller sets them."
+  [^js raw {:keys [target read-only by] :as r}]
   (let [pairs (->> (partition 2 raw)
                    (remove #(str/starts-with? (str/lower-case (first %)) "x-claudia-")))]
     (concat pairs
             [["X-Claudia-Profile" (:profile target)]]
-            (when read-only [["X-Claudia-Read-Only" "1"]]))))
+            (when read-only [["X-Claudia-Read-Only" "1"]])
+            (when (seq by) [["X-Claudia-By" by] ["X-Claudia-Via" (via-of r)]]))))
+
+(defn passed-line
+  "The front's activity line for what it passes on to a runner (README decision 59): a WebSocket
+  (kind \"connection\", its frames go untouched) or an HTTP call that may change something (kind
+  \"call\": its method and path, no query, no body)."
+  [kind {:keys [target by] :as r} method url]
+  (activity/line (cond-> {:kind kind :by by :profile (:profile target) :via (via-of r)}
+                   (= kind "call") (assoc :method method :path (activity/cut url)))))
 
 (defn root-call
   "What the front does with a hub call to url under /api/root/ (README decision 52) or /api/ssh/
@@ -270,7 +289,9 @@
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
       (= :front (root-call (.-method req) url)) (rootfront/handle @profiles r url req res)
-      :else (to-runner! req res r (+ (js/Date.now) retry-for-ms)))))
+      :else (do (when-not (#{"GET" "HEAD"} (.-method req))
+                  (js/console.log (passed-line "call" r (.-method req) url)))
+                (to-runner! req res r (+ (js/Date.now) retry-for-ms))))))
 
 (defn request-head
   "An HTTP/1.1 request's first line and headers ([name value] pairs) as text, the blank line included."
@@ -306,7 +327,8 @@
                                        {:status 401 :error "Not the hub."})]
     (if (or status (not (:target r)))
       (.end sock (str "HTTP/1.1 " (or status 403) " " (or error "No profile here") "\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"))
-      (splice! req sock head r (+ (js/Date.now) retry-for-ms)))))
+      (do (js/console.log (passed-line "connection" r nil nil))
+          (splice! req sock head r (+ (js/Date.now) retry-for-ms))))))
 
 (defn main [& _]
   (let [file (.-FRONT_PROFILES env)]
