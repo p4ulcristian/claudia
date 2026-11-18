@@ -268,9 +268,9 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/project/logo?folder=<abs>` | the project's logo file (favicon, icon or logo in the repo), when the caller may read it (a view: below) |
 | `GET /api/prefs` | `{ hiddenForms: [forms deleted in the Forms window], notHere: [opt-in forms this runner lacks] }` |
 | `PATCH /api/prefs` `{ hiddenForms? }` | the same shape; hidden forms leave every live chat's draw tool at once (its system prompt after its turn) |
-| `GET /api/prompts` | `{ profiles: [{ name, text }] }`: this server's prompt profiles, by name (README decision 60) |
-| `PUT /api/prompts/<name>` `{ text }` | `{ profiles }`: the profile set (added when new; name ≤ 60, text ≤ 20,000 characters); chats on it take the new text after their turn (not for a view) |
-| `DELETE /api/prompts/<name>` | `{ profiles }`: the profile gone; chats on it run on no profile after their turn (not for a view) |
+| `GET /api/prompts` | `{ profiles: [{ name, text }], builtIn }`: this server's prompt profiles, by name, and `builtIn`, Claudia's part of the system prompt every chat has (README decision 60) |
+| `PUT /api/prompts/<name>` `{ text }` | `{ profiles, builtIn }`: the profile set (added when new; name ≤ 60, text ≤ 20,000 characters); chats on it take the new text after their turn (not for a view) |
+| `DELETE /api/prompts/<name>` | `{ profiles, builtIn }`: the profile gone; chats on it run on no profile after their turn (not for a view) |
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
