@@ -84,6 +84,9 @@
 
 (deftest the-chat-order-is-a-persons-own-call
   (is (= [:order] (ops/person-route "GET" "/hub/chat-order")))
+  (is (= [:bookmarks] (ops/person-route "GET" "/hub/bookmarks")))
+  (is (= [:save-bookmarks] (ops/person-route "PUT" "/hub/bookmarks")))
+  (is (nil? (ops/person-route "POST" "/hub/bookmarks")))
   (is (= [:save-order] (ops/person-route "PUT" "/hub/chat-order"))))
 
 (deftest a-person-s-profile-name-is-checked-and-their-own

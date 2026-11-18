@@ -1,18 +1,9 @@
 (ns claudia.web.views.pure.systems
   "The Systems popup's words and numbers (README decision 12), pure: sizes in binary units (GiB, as
-  the kernel counts), rates, ages and which colour a share gets.")
+  the kernel counts, claudia.web.format/bytes-text), rates, ages and which colour a share gets."
+  (:require [claudia.web.format :as format]))
 
-(def ^:private units ["B" "KiB" "MiB" "GiB" "TiB" "PiB"])
-
-(defn bytes-text
-  "Bytes as \"13.1 GiB\" (one decimal under 100, none above; whole bytes as they are)."
-  [n]
-  (loop [v (or n 0) i 0]
-    (if (and (>= v 1024) (< i (dec (count units))))
-      (recur (/ v 1024) (inc i))
-      (str (cond (zero? i) v (< v 100) (.toFixed v 1) :else (js/Math.round v)) " " (nth units i)))))
-
-(defn rate-text [n] (str (bytes-text n) "/s"))
+(defn rate-text [n] (str (format/bytes-text n) "/s"))
 
 (defn percent
   "part of whole in whole percent (0 when whole is 0)."
@@ -68,7 +59,7 @@
 (defn claudia-text
   "Claudia's own processes on the machine: \"runners ×2\" and their resident memory."
   [{:keys [kind rss] n :count}]
-  [(str (get kind-names kind kind) (when (> n 1) (str " ×" n))) (bytes-text rss)])
+  [(str (get kind-names kind kind) (when (> n 1) (str " ×" n))) (format/bytes-text rss)])
 
 (def kind-tips
   {"chats" "Claude Code and everything it runs, started by the hosts: resident memory (RSS)"})
@@ -77,7 +68,7 @@
   "A card's line: use, memory, temperature and power where reported."
   [{:keys [util memUsed memTotal temp power]}]
   (apply str (interpose " · " (remove nil? [(when util (str util "%"))
-                                            (when memTotal (str (bytes-text memUsed) " / " (bytes-text memTotal)))
+                                            (when memTotal (str (format/bytes-text memUsed) " / " (format/bytes-text memTotal)))
                                             (when temp (str temp " °C"))
                                             (when power (str (js/Math.round power) " W"))]))))
 
@@ -94,5 +85,5 @@
                [(:os host)
                 (when (:kernel host) (str "kernel " (:kernel host) (when (:arch host) (str " · " (:arch host)))))
                 (when (:model cpu) (str (:model cpu) (when (seq (:cores cpu)) (str " · " (count (:cores cpu)) " cores"))))
-                (when (:total memory) (str (bytes-text (:total memory)) " memory"))
+                (when (:total memory) (str (format/bytes-text (:total memory)) " memory"))
                 (when uptime (str "up " (uptime-text uptime)))])))

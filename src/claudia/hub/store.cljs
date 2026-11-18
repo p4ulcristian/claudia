@@ -154,6 +154,13 @@
      items TEXT NOT NULL,
      at INTEGER NOT NULL
    );
+   -- A person's bookmarked folders (claudia.shared.bookmarks, README decision 61), as JSON: the
+   -- same list on every device of theirs.
+   CREATE TABLE IF NOT EXISTS bookmarks (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     items TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );
    -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
    -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
    CREATE TABLE IF NOT EXISTS release_builder (
@@ -513,6 +520,16 @@
 
 (defn save-chat-order! [email items-json]
   (exec! "INSERT INTO chat_orders (email, items, at) VALUES (?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET items = excluded.items, at = excluded.at"
+         email items-json (now)))
+
+(defn bookmarks
+  "A person's bookmarked folders: {:items (JSON text) :at}, or nil."
+  [email]
+  (one "SELECT items, at FROM bookmarks WHERE email = ?" email))
+
+(defn save-bookmarks! [email items-json]
+  (exec! "INSERT INTO bookmarks (email, items, at) VALUES (?, ?, ?)
           ON CONFLICT (email) DO UPDATE SET items = excluded.items, at = excluded.at"
          email items-json (now)))
 

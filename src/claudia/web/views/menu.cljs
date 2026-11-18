@@ -4,7 +4,8 @@
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
   Settings, where the plans are), Machines (the Systems popup in the menu's place), Archived chats,
-  Forms, the Desktop popups switch, More settings (the Settings popup, README decision 58), and the
+  Forms, Folders (claudia.web.views.folders; not while looking at another person's chats), the
+  Desktop popups switch, More settings (the Settings popup, README decision 58), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -25,6 +26,8 @@
 (defn- open-archived! [] (rf/dispatch [:ops/archived true]))
 
 (defn- open-forms! [] (rf/dispatch [:gallery/open true]))
+
+(defn- open-folders! [] (rf/dispatch [:folders/open true]))
 
 ;; ---- the parts ----
 
@@ -73,6 +76,10 @@
   [:svg {:viewBox "0 0 20 20" :aria-hidden true}
    [:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]])
 
+(def ^:private folder-icon
+  [:svg {:viewBox "0 0 16 16" :aria-hidden true}
+   [:path {:d "M1.5 4a1 1 0 0 1 1-1h3.6l1.4 1.6h6a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"}]])
+
 (defn- version-line []
   (let [server @(rf/subscribe [:settings-server])
         me @(rf/subscribe [:server-me server])
@@ -110,6 +117,8 @@
    (item [systems/computer-icon] "Machines" "CPU, memory, disks" machines!)
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
+   (when-not @(rf/subscribe [:viewing-other?])
+     (item folder-icon "Folders" "bookmarks, new chats, cleaning up" (act open-folders!)))
    [:div.mn-sep]
    [:div.mn-switches [alerts/popups-switch]]
    [:div.mn-sep]

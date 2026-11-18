@@ -6,6 +6,7 @@
   card older than 8 s greys; a server that does not answer says so."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.pure.systems :as pure]
@@ -35,12 +36,12 @@
     [:div.sys-row {:class (pure/level p) :data-tip tip}
      [:span.sys-label label]
      [:span.m-bar [:span {:style {:width (str (min 100 p) "%")}}]]
-     [:span.sys-num (str (pure/bytes-text used) " / " (pure/bytes-text total))]]))
+     [:span.sys-num (str (format/bytes-text used) " / " (format/bytes-text total))]]))
 
 (defn- memory-rows [{:keys [memory]}]
   [:<>
    [bar-row "RAM" (:used memory) (:total memory)
-    (str "Used = total − available · " (pure/bytes-text (:cached memory)) " cache, free to take back")]
+    (str "Used = total − available · " (format/bytes-text (:cached memory)) " cache, free to take back")]
    (when (pos? (:swapTotal memory))
      [bar-row "Swap" (:swapUsed memory) (:swapTotal memory) "Swap in use"])])
 
@@ -49,7 +50,7 @@
    (for [d disks]
      ^{:key (:mount d)}
      [bar-row (:mount d) (:used d) (+ (:used d) (:avail d))
-      (str (:source d) " · " (:fs d) " · " (pure/bytes-text (:avail d)) " free")])])
+      (str (:source d) " · " (:fs d) " · " (format/bytes-text (:avail d)) " free")])])
 
 (defn- rate-row [label down up tip]
   [:div.sys-row.sys-rate {:data-tip tip}

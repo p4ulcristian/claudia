@@ -77,6 +77,17 @@
                 scene TEXT NOT NULL,
                 at INTEGER NOT NULL,
                 PRIMARY KEY (chat, turn)
+              );
+              -- Claudia's Trash (README decision 63): one row per folder moved to
+              -- RUNNER_DATA/trash/<id>/<name>; path = where it was, size in bytes (null: not measured),
+              -- by = who moved it (the front's X-Claudia-By).
+              CREATE TABLE IF NOT EXISTS trash (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                at INTEGER NOT NULL,
+                size INTEGER,
+                by TEXT
               );")
 
 (def ^:private added-columns
@@ -313,3 +324,23 @@
             to t (.-path r) (.-before r) (.-after r) (.-added r) (.-removed r) (.-status r) (.-skipped r) (.-at r)))
     (.exec ^js @db "COMMIT")
     (catch :default e (.exec ^js @db "ROLLBACK") (throw e))))
+
+;; trash ------------------------------------------------------------------------------------------
+
+(defn- trash-item-row [^js r]
+  (when r {:id (.-id r) :path (.-path r) :name (.-name r) :at (.-at r) :size (.-size r) :by (.-by r)}))
+
+(defn trash-items
+  "Every folder in the Trash, newest first."
+  []
+  (mapv trash-item-row (.all (stmt "SELECT * FROM trash ORDER BY at DESC"))))
+
+(defn trash-item [id] (trash-item-row (.get (stmt "SELECT * FROM trash WHERE id = ?") id)))
+
+(defn add-trash! [{item-path :path item-name :name :keys [id at size by]}]
+  (.run (stmt "INSERT INTO trash (id, path, name, at, size, by) VALUES (?, ?, ?, ?, ?, ?)")
+        id item-path item-name at size by))
+
+(defn set-trash-size! [id size] (.run (stmt "UPDATE trash SET size = ? WHERE id = ?") size id))
+
+(defn drop-trash! [id] (.run (stmt "DELETE FROM trash WHERE id = ?") id))

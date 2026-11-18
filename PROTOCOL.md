@@ -49,7 +49,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | front | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME` | the hub's https address and this server's name as the hub knows it (its hub key is made of it). With them and `FRONT_HUB_KEY_FILE` the front calls the hub as its server for the agent users' SSH certificates (`POST /hub/server/ssh-cert`, README decision 53); unset: no certificates, logged at start when a profile runs as an agent user |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
-| runner | `RUNNER_DATA` | folder for `claudia.db`, uploads and 3D scenes' videos (`videos/`) |
+| runner | `RUNNER_DATA` | folder for `claudia.db`, uploads, 3D scenes' videos (`videos/`) and the Trash (`trash/<id>/<folder name>`, README decision 63) |
 | runner | `CLAUDIA_FFMPEG` | the ffmpeg that makes 3D scenes' videos (default `ffmpeg` on the PATH; needs libx264 and AAC) |
 | runner | `RUNNER_PROFILE` | the profile's name (`paul`) |
 | runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server for Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48); never set it for a runner that runs as an agent user. The SSH certificates are the front's (README decision 53) |
@@ -102,6 +102,9 @@ each such user that is an agent user (README decision 53).
   and `/api/root/switch` itself, only for the profile's own person (own profile = target profile; not
   a writer, not a viewer), and never passes any other `/api/root/…` on (403). Nor `/api/ssh/…`
   (the SSH certificate routes, README decision 53): 403.
+- The folder browser (`/api/folders…`, README decision 64) is the profile's own person's only: the
+  front answers 403 to a view and to a write tick, and the runner answers 403 to any call whose
+  `X-Claudia-Via` is not `own`.
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
 ## Hub HTTP
@@ -184,6 +187,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `GET /hub/presence?page=<id>` | person | `{ elsewhere }`: another of the person's pages said active within 45 s (this page then makes no sound or popup) |
 | `GET /hub/chat-order` | person | `{ items, at }`: the person's chat order and groups (README decision 38); items: `{ chat: "<server>/<chat>" }` or `{ group, name, chats: ["<server>/<chat>"], folded, picks }`; `{ items: [], at: 0 }` before any |
 | `PUT /hub/chat-order` `{ items }` | person | the same shape: the whole list kept, as far as it is well formed (at most 500 items; picks: plan, model, effort, folder, server, talk, bell) |
+| `GET /hub/bookmarks` | person | `{ items, at }`: the person's bookmarked folders (README decision 61); items: `{ server, folder, label? }` (folder an absolute path); `{ items: [], at: 0 }` before any |
+| `PUT /hub/bookmarks` `{ items }` | person | the same shape: the whole list kept, as far as it is well formed (`claudia.shared.bookmarks`: absolute paths without `.` or `..` parts, each server and folder once, labels of at most 80 characters, at most 200 items) |
 | `GET /hub/github/state` | person | `{ app: { slug, installUrl } \| null, user: { login, accessExpiresAt, refreshExpiresAt } \| null, servers }`: the hub's GitHub App and the caller's connection (README decision 37) |
 | `GET /hub/github/connect` | person | 302 to GitHub's authorize page for the hub's GitHub App |
 | `GET /hub/github/callback?code&state` | person | the code traded for the caller's tokens (sealed), handed to their servers; 302 to the page. 400 not the caller's Connect, 502 GitHub gave no token |
@@ -274,6 +279,32 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
+
+## Runner HTTP: folders (`/api/folders…`; README decisions 61 to 64)
+
+Answered by the runner (through the front), for the profile's own person only (403 otherwise, above:
+"Who is calling"). The whole system is in reach as far as the runner's user may read (list, facts)
+and write (trash, delete, restore); EACCES/EPERM answer 403 `{ error: "Permission denied: …" }`,
+a missing folder 404, a path that is no absolute path or no folder 400. Every path is resolved
+(`..`, every symlink followed) before any check. `Entry` = `{ name, path, dir: true, mtime, hidden
+(the name starts with a dot) }`. `Trashed` = `{ id, path (where it was), name, at, size (bytes or
+null), by (who moved it), expires (at + 7 days) }`.
+
+| Call | Answer |
+|---|---|
+| `GET /api/folders?path=<abs>` | `{ path, entries: [Entry], cwd }`: the folders right inside `path` (default "/"; files and symlinks left out), sorted by name (case folded); `path` resolved; `cwd` = `CLAUDIA_CWD` resolved (the tree opens it at first) |
+| `GET /api/folders/facts?path=<abs>&deep=1?` | `{ path, mtime, size, measuring, chats: [{ id, title, at }], git, kept, inner? }`: `kept` = why the runner never deletes this folder (below), or null; `size` in bytes from `du -s` (`-sb`; macOS `-sk` × 1024) run in the background (5-minute limit, kept 10 minutes), null while `measuring` (ask again) or when du gave none; `chats` = this runner's chats whose folder is `path` or inside it (a chat without one: `CLAUDIA_CWD`), newest first, at most 20; `git` = `{ top, branch (null when detached), dirty (files not committed), ahead, behind, noUpstream: [local branches without a live upstream] }` of the repo `path` is in, or null; with `deep=1`, `inner` = the same for the repos below `path` (up to four folders down, at most 40, dot and build folders not walked) that hold work only there (dirty, ahead or noUpstream), `[]` when `path` is in a repo |
+| `POST /api/folders/missing` `{ paths }` | `{ missing }`: those of `paths` (at most 200 absolute paths) where no folder sits (gone or not a folder; a folder the runner may not look at counts as there): the bookmarks shown as missing |
+| `POST /api/folders/trash` `{ path }` | `{ ok, id }`: the folder moved to `RUNNER_DATA/trash/<id>/<name>` (`fs.rename`; across filesystems a recursive copy, then the original removed) and its row kept; 403 `{ error: "Claudia never deletes …" }` for the folders it never deletes (below) |
+| `POST /api/folders/delete` `{ path }` | `{ ok }`: the folder and everything in it deleted, without the Trash; refused like `trash` |
+| `GET /api/folders/trashed` | `{ items: [Trashed], total }`: the Trash, newest first; `total` = the known sizes summed (bytes) |
+| `POST /api/folders/restore` `{ id }` | `{ ok, path }`: the folder moved back where it was (its parent made when gone); 409 when anything sits at that path; 404 no such item |
+| `POST /api/folders/purge` `{ id? }` | `{ ok }`: that item deleted for good; without `id` the whole Trash. The runner also purges every item older than 7 days, at start and every hour |
+
+Never deleted, whatever the permissions (`claudia.slave.folders.rules/delete-refusal`): "/", every
+folder right under "/", macOS's `/private/*`, the runner's home folder and `CLAUDIA_CWD` and every
+folder above them, `RUNNER_DATA` and Claudia's install (the folder holding the running `out/`)
+with everything inside them and every folder above them.
 
 ## WebSocket (`/ws`): page ↔ runner
 
