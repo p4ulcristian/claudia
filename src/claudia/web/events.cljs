@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [claudia.shared.colours :as colours]
             [claudia.shared.files :as files]
+            [claudia.web.api :as api]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
             [claudia.web.updates :as updates]
@@ -499,11 +500,31 @@
 
 (rf/reg-event-fx
  :chat/root
- ;; The chat's root switch (README decision 52), on until its owner turns it off; the runner says
- ;; so to every page with the list.
+ ;; The chat's root switch (README decision 52), on until its owner turns it off: kept by the
+ ;; server's front (never the runner), which has the runner show it to every page with the list.
  (fn [{:keys [db]} [_ [s c :as k] on?]]
    {:db (switches/with-switches db k {:root on?})
-    :ws/send [s {:type "root" :chat c :on on?}]}))
+    :api/call {:method "POST" :url (api/url s "root/switch" nil) :body {:chat c :on on?}
+               :on-fail [:root/switch-failed k (not on?)]}}))
+
+(rf/reg-event-db
+ :root/switch-failed
+ (fn [db [_ k was message]]
+   (assoc (switches/with-switches db k {:root was}) :error (str "Root switch: " message) :error-from nil)))
+
+(rf/reg-event-fx
+ :root/answer
+ ;; Allow or Deny on a "Run as root" card goes to the server's front, with the command and folder
+ ;; the card showed: the front checks them against what it asked (README decision 52).
+ (fn [{:keys [db]} [_ [s c] ask allow?]]
+   {:db (assoc-in db [:ask-state (:id ask)] {:busy true})
+    :api/call {:method "POST" :url (api/url s "root/answer" nil)
+               :body {:chat c :ask (:id ask) :allow allow? :argv (:argv ask) :cwd (:cwd ask)}
+               :on-fail [:root/answer-failed (:id ask)]}}))
+
+(rf/reg-event-db
+ :root/answer-failed
+ (fn [db [_ id message]] (assoc-in db [:ask-state id] {:error message})))
 
 (rf/reg-event-db :root/ask (fn [db [_ k]] (assoc db :root-ask k)))
 (rf/reg-event-db :root/keep (fn [db _] (dissoc db :root-ask)))

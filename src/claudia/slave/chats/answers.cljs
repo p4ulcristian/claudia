@@ -100,18 +100,11 @@
 
 (defn root-ask
   "The \"Run as root\" card (README decision 52): a permit ask for one command (argv) in folder cwd,
-  open until expires."
+  open until expires; argv and cwd go back with the person's answer to the front, which checks them."
   [ask-id argv cwd expires]
   (let [cmd (text/fit (command-text argv) 2000)]
-    {:id ask-id :kind "permit" :root true :tool "Run as root"
+    {:id ask-id :kind "permit" :root true :tool "Run as root" :argv argv :cwd cwd
      :title "Run as root"
      :description cmd
      :detail (str "In " (if (seq cwd) cwd "/") "\n\n" cmd)
      :expires expires}))
-
-(defn root-answer
-  "What the root helper gets for a root ask's outcome (answer: the ask's resolve value)."
-  [chat-id answer]
-  (if (= "allow" (:behavior answer))
-    {:allow true :via "allow" :chat chat-id}
-    {:allow false :chat chat-id :why (or (not-empty (:message answer)) "The person said no.")}))

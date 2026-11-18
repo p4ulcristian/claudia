@@ -1,7 +1,7 @@
 (ns claudia.root.rules
   "The root helper's decisions as data (README decision 52): which folders it serves, whether a
-  request is well formed, the no-tap list, whose runner to ask, what the runner's answer means, the
-  command's environment and exit code, and the log line."
+  request is well formed, the no-tap list, what the front's answer means, the command's environment
+  and exit code, and the log line."
   (:require [clojure.string :as str]
             [claudia.shared.protocol :as p]))
 
@@ -15,12 +15,6 @@
   one but its owner and group may enter it (mode: the folder's permission bits)."
   [dir-name mode]
   (boolean (and (profile-of dir-name) (zero? (bit-and mode 7)))))
-
-(defn runner-socket
-  "The runner socket of profile: template's {profile} replaced (ROOT_RUNNER_SOCKET), else
-  /run/claudia-<profile>/runner.sock (claudia-runner@.service)."
-  [template profile]
-  (str/replace (or template "/run/claudia-{profile}/runner.sock") "{profile}" profile))
 
 (defn no-tap-list
   "The no-tap list file's text as a set of commands: one per line, ends trimmed, blank lines and
@@ -73,7 +67,7 @@
          {"PATH" root-path "HOME" "/root" "USER" "root" "LOGNAME" "root" "SHELL" "/bin/sh" "SUDO_USER" user}))
 
 (defn verdict
-  "What the runner's answer (parsed JSON, nil when there was none or it was not JSON) decides:
+  "What the front's answer (parsed JSON, nil when there was none or it was not JSON) decides:
   {:allow true :via \"switch\"|\"allow\"} only for exactly that, else {:allow false :why}."
   [answer]
   (if (and (map? answer) (true? (:allow answer)) (#{"switch" "allow"} (:via answer)))

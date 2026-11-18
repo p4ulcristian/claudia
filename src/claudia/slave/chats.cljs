@@ -244,18 +244,20 @@
 
 (defn- drop-asks!
   "Ends every open ask of a chat; answer? false when nobody is left to answer (the host went away and
-  sends its rpcs again). A root ask waits on the root helper, not the host: it stays then."
+  sends its rpcs again). A root card stays: the front ends it."
   [id answer? why]
   (doseq [[ask-id entry] (:asks (st id))
-          :when (or answer? (not (get-in entry [:ask :root])))]
+          :when (not (get-in entry [:ask :root]))]
     (take-ask! id ask-id)
     (when answer?
       ((:resolve entry) (answers/dropped-answer (get-in entry [:ask :kind]) why)))))
 
 (defn answer!
-  "An answer to a question ask; on a permit ask (ExitPlanMode) it is the OK."
+  "An answer to a question ask; on a permit ask (ExitPlanMode) it is the OK. A root card is the
+  front's to answer: ignored here."
   [id ask-id chosen]
   (when-let [entry (get-in (st id) [:asks ask-id])]
+    (when-not (get-in entry [:ask :root])
     (case (get-in entry [:ask :kind])
       "question"
       (do (take-ask! id ask-id)
@@ -266,10 +268,10 @@
       "permit"
       (do (take-ask! id ask-id)
           ((:resolve entry) {:behavior "allow" :updatedInput (:input entry)}))
-      nil)))
+      nil))))
 
 (defn deny! [id ask-id who]
-  (when-let [entry (take-ask! id ask-id)]
+  (when-let [entry (when-not (get-in (st id) [:asks ask-id :ask :root]) (take-ask! id ask-id))]
     (if (= "secret" (get-in entry [:ask :kind]))
       (do (js/console.log (str "secret " (get-in entry [:ask :ref]) " (" (get-in entry [:ask :reason]) ") denied by " who))
           ((:resolve entry) (answers/refusal "The user said no to this secret. Nothing ran.")))
@@ -320,7 +322,7 @@
 
 (defn chat-key!
   "The chat's key, which its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it to the root
-  helper, which asks this runner with it): made once, random, kept with the chat."
+  helper; the front asks this runner which chat it names): made once, random, kept with the chat."
   [id]
   (or (:chat-key (store/chat id))
       (let [k (.toString (crypto/randomBytes 24) "base64url")]
@@ -328,30 +330,28 @@
         k)))
 
 (defn root-ask?
-  "Whether ask-id is an open \"Run as root\" ask of chat id."
+  "Whether ask-id is an open \"Run as root\" card of chat id: the front answers it, never this runner."
   [id ask-id]
   (boolean (get-in (st id) [:asks ask-id :ask :root])))
 
-(defn- root-expired! [id ask-id done]
-  (when (take-ask! id ask-id)
-    (done {:behavior "deny" :message "Nobody answered in 10 minutes."})))
+(defn show-root-card!
+  "The front's \"Run as root\" card for one command (argv in folder) of chat id under the front's
+  nonce ask-id, until the front says it is done (root-card-done!) or it expires. Display only: the
+  person's Allow goes to the front (README decision 52)."
+  [id ask-id argv folder expires]
+  (when-not (get-in (st id) [:asks ask-id])
+    (add-ask! id {:ask (answers/root-ask ask-id argv folder expires)
+                  :resolve (fn [_])
+                  :timer (js/setTimeout #(take-ask! id ask-id) (max 0 (- expires (js/Date.now))))})))
 
-(defn root-ask!
-  "Promise of the root helper's answer for one command (argv in folder) of chat id: the \"Run as
-  root\" card; Allow runs it, Deny, the turn's end or 10 minutes without an answer do not."
-  [id argv folder]
-  (-> (js/Promise.
-       (fn [done]
-         (let [ask-id (str (random-uuid))]
-           (add-ask! id {:ask (answers/root-ask ask-id argv folder (+ (js/Date.now) secret-ms))
-                         :resolve done
-                         :timer (js/setTimeout #(root-expired! id ask-id done) secret-ms)}))))
-      (.then #(answers/root-answer id %))))
+(defn root-card-done!
+  "The front settled the root ask ask-id: its card goes."
+  [id ask-id]
+  (when (root-ask? id ask-id) (take-ask! id ask-id)))
 
-(defn set-root!
-  "Turns the chat's root switch on or off (README decision 52); every page and the hub hear it."
-  [id on? who]
-  (js/console.log (str "root switch of " id " " (if on? "on" "off") " by " who))
+(defn root-shown!
+  "The front says the chat's root switch is on or off: the list shows it (display only)."
+  [id on?]
   (store/update! id {:root (boolean on?)})
   (changed!))
 

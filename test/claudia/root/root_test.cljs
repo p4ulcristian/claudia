@@ -10,6 +10,7 @@
             [claudia.slave.chats.answers :as answers]
             [claudia.slave.chats.view :as view]
             [claudia.slave.front :as front]
+            [claudia.slave.rootgate :as gate]
             [claudia.slave.runner :as runner]
             [claudia.web.views.pure.switches :as switches]))
 
@@ -36,14 +37,12 @@
       (is (false? (rules/no-tap? l ["ss" "" "-tlnp"]))))
     (is (false? (rules/no-tap? l [])))))
 
-(deftest agent-users-and-their-runners
+(deftest agent-users-and-their-profiles
   (is (= "paul" (rules/profile-of "paul-claudia-agent")))
   (is (= "a-b" (rules/profile-of "a-b-claudia-agent")))
   (is (nil? (rules/profile-of "paul")))
   (is (nil? (rules/profile-of "break-glass")))
-  (is (nil? (rules/profile-of "-claudia-agent")))
-  (is (= "/run/claudia-paul/runner.sock" (rules/runner-socket nil "paul")))
-  (is (= "/tmp/r-paul.sock" (rules/runner-socket "/tmp/r-{profile}.sock" "paul"))))
+  (is (nil? (rules/profile-of "-claudia-agent"))))
 
 (deftest only-closed-agent-folders-are-served
   (is (true? (rules/serve-dir? "paul-claudia-agent" (js/parseInt "40750" 8))))
@@ -71,7 +70,7 @@
     (is (= "paul-claudia-agent" (get e "SUDO_USER")))
     (is (= "/root" (get e "HOME")))))
 
-(deftest only-an-exact-yes-from-the-runner-runs
+(deftest only-an-exact-yes-from-the-front-runs
   (is (= {:allow true :via "switch"} (rules/verdict {:allow true :via "switch" :chat "c"})))
   (is (= {:allow true :via "allow"} (rules/verdict {:allow true :via "allow"})))
   (is (false? (:allow (rules/verdict {:allow "true" :via "allow"}))))
@@ -126,37 +125,74 @@
   (is (= "systemctl restart nginx" (answers/command-text ["systemctl" "restart" "nginx"])))
   (is (= "sh -c 'echo hi > /etc/x' 'it'\\''s'" (answers/command-text ["sh" "-c" "echo hi > /etc/x" "it's"])))
   (let [a (answers/root-ask "a1" ["ls" "/root"] "/srv" 99)]
-    (is (= {:id "a1" :kind "permit" :root true :tool "Run as root" :title "Run as root"
+    (is (= {:id "a1" :kind "permit" :root true :tool "Run as root" :title "Run as root" :argv ["ls" "/root"] :cwd "/srv"
             :description "ls /root" :detail "In /srv\n\nls /root" :expires 99} a)))
-  (is (= "In /\n\nls" (:detail (answers/root-ask "a" ["ls"] nil 1))))
-  (is (= {:allow true :via "allow" :chat "c"} (answers/root-answer "c" {:behavior "allow"})))
-  (is (= {:allow false :chat "c" :why "The turn ended."} (answers/root-answer "c" {:behavior "deny" :message "The turn ended."})))
-  (is (= "The person said no." (:why (answers/root-answer "c" {:behavior "deny"})))))
+  (is (= "In /\n\nls" (:detail (answers/root-ask "a" ["ls"] nil 1)))))
 
-(deftest the-runner-answers-root-without-asking-only-with-the-switch
-  (is (= :root-ask (runner/request-op "POST" "/api/root/ask" nil nil false)))
-  (is (nil? (runner/request-op "GET" "/api/root/ask" nil nil false)))
-  (is (= {:allow true :via "switch" :chat "c"} (runner/root-verdict {:id "c" :root true})))
-  (is (nil? (runner/root-verdict {:id "c" :root false})) "the person is asked")
-  (is (false? (:allow (runner/root-verdict nil)))))
+(deftest the-runner-only-shows-root
+  (is (= :root (runner/request-op "POST" "/api/root/card" nil nil false)))
+  (is (= :root (runner/request-op "POST" "/api/root/chat" nil nil false)))
+  (is (nil? (runner/request-op "GET" "/api/root/chat" nil nil false)))
+  (is (= [404 {:error "Not found."}] (runner/root-route "ask" {:chatKey "k" :argv ["ls"]})) "no route answers allow"))
 
 (deftest the-row-says-the-root-switch
   (is (true? (:root (view/row {:id "c" :root true} {} 0 0))))
   (is (false? (:root (view/row {:id "c"} {} 0 0)))))
 
-(deftest only-the-owner-gets-the-owner-header
-  (let [own {:profile "paul"} other {:profile "peter"}]
-    (is (some #{["X-Claudia-Owner" "1"]} (front/runner-headers #js ["X-Claudia-Owner" "0"] {:own own :target own})))
-    (is (not (some #(= "X-Claudia-Owner" (first %)) (front/runner-headers #js [] {:own own :target other}))) "a write tick")
-    (is (not (some #(= "X-Claudia-Owner" (first %)) (front/runner-headers #js [] {:own nil :target other :read-only true}))))
-    (is (not (some #(= ["X-Claudia-Owner" "0"] %) (front/runner-headers #js ["X-Claudia-Owner" "0"] {:own own :target other}))) "never the caller's"))
-  (is (true? (front/runner-only? "/api/root/ask")))
-  (is (false? (front/runner-only? "/api/chats"))))
+(deftest the-front-keeps-root-calls-to-itself
+  (is (= :front (front/root-call "POST" "/api/root/answer")))
+  (is (= :front (front/root-call "POST" "/api/root/switch")))
+  (is (= :refuse (front/root-call "GET" "/api/root/switch")))
+  (is (= :refuse (front/root-call "POST" "/api/root/card")) "a runner's root route is never passed on")
+  (is (= :refuse (front/root-call "POST" "/api/root/chat")))
+  (is (nil? (front/root-call "POST" "/api/chats")))
+  (is (not (some #(= "X-Claudia-Owner" (first %))
+                 (front/runner-headers #js ["X-Claudia-Owner" "1"] {:own {:profile "p"} :target {:profile "p"}})))
+      "the runner hears of no owner"))
+
+(def ^:private own {:own {:profile "paul"} :target {:profile "paul"}})
+(def ^:private writer {:own {:profile "peter"} :target {:profile "paul"}})
+(def ^:private pending {:profile "paul" :chat "c1" :argv ["systemctl" "restart" "x"] :cwd "/srv"})
+
+(deftest only-the-owner-is-the-owner
+  (is (true? (gate/owner? own)))
+  (is (false? (gate/owner? writer)) "a write tick")
+  (is (false? (gate/owner? {:own nil :target {:profile "paul"} :read-only true})) "a viewer")
+  (is (false? (gate/owner? {}))))
+
+(deftest an-allow-counts-only-for-the-command-the-front-asked
+  (let [allow {:chat "c1" :ask "n" :allow true :argv ["systemctl" "restart" "x"] :cwd "/srv"}]
+    (is (nil? (gate/answer-problem pending allow own)))
+    (is (= "Only the chat's owner may give it root." (gate/answer-problem pending allow writer)))
+    (is (= "That root ask is no longer open." (gate/answer-problem nil allow own)))
+    (is (= "That root ask is another chat's." (gate/answer-problem pending (assoc allow :chat "c2") own)))
+    (is (= "That root ask is another profile's."
+           (gate/answer-problem (assoc pending :profile "peter") allow own)))
+    (is (= "The command shown is not the one asked for."
+           (gate/answer-problem pending (assoc allow :argv ["systemctl" "restart" "y"]) own)))
+    (is (= "The folder shown is not the one asked for." (gate/answer-problem pending (assoc allow :cwd "/") own)))
+    (testing "a Deny needs no matching command"
+      (is (nil? (gate/answer-problem pending {:chat "c1" :ask "n" :allow false} own))))))
+
+(deftest the-front-holds-the-switches
+  (let [s (gate/with-switch {} "paul" "c1" true)]
+    (is (true? (gate/switch-on? s "paul" "c1")))
+    (is (false? (gate/switch-on? s "peter" "c1")) "per profile")
+    (is (false? (gate/switch-on? s "paul" "c2")))
+    (is (= {} (gate/with-switch s "paul" "c1" false)))))
+
+(deftest the-helper-asks-only-for-agent-users-here
+  (let [ps [{:profile "paul" :socket "/s"}]]
+    (is (nil? (gate/ask-problem {:agentUser "paul-claudia-agent" :argv ["ls"]} ps)))
+    (is (= "Not an agent user." (gate/ask-problem {:agentUser "paul" :argv ["ls"]} ps)))
+    (is (= "No profile peter on this server." (gate/ask-problem {:agentUser "peter-claudia-agent" :argv ["ls"]} ps)))
+    (is (string? (gate/ask-problem {:agentUser "paul-claudia-agent" :argv []} ps))))
+  (is (= {:allow true :via "allow" :chat "c"} (gate/verdict-of "c" true nil)))
+  (is (= {:allow false :why "no" :chat "c"} (gate/verdict-of "c" false "no"))))
 
 (deftest the-page-reads-the-root-switch
   (let [db {:servers {"s" {:rows {"c" {:root true} "d" {}}}}}]
     (is (true? (switches/root-on? db ["s" "c"])))
     (is (false? (switches/root-on? db ["s" "d"])))
     (is (false? (switches/root-on? db nil))))
-  (is (contains? p/page->runner "root"))
-  (is (not (contains? p/read-only-ok "root"))))
+  (is (not (contains? p/page->runner "root")) "the switch never goes to a runner"))
