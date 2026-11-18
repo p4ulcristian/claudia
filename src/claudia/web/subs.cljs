@@ -20,6 +20,11 @@
 (rf/reg-sub :dictated-swap (fn [db [_ k]] (dictated/swappable (get-in db [:dictated k]) (get-in db [:drafts k]))))
 (rf/reg-sub :talk? (fn [db [_ k]] (switches/talk-on? db k)))   ; k nil: the new chat
 (rf/reg-sub :bell? (fn [db [_ k]] (switches/bell-on? db k)))
+(rf/reg-sub :root? (fn [db [_ k]] (switches/root-on? db k)))
+(rf/reg-sub :owner? (fn [db _] (not (events/viewing-other? db))))   ; the person's own chats, not a view
+(rf/reg-sub :root-ask   ; the chat whose root switch waits on a yes: {:k :title}, or nil
+            (fn [db _] (when-let [[s c :as k] (:root-ask db)]
+                         {:k k :title (get-in db [:servers s :rows c :title])})))
 (rf/reg-sub :archive-ask   ; the chat whose archiving waits on a yes: {:k :title}, or nil
             (fn [db _] (when-let [[s c :as k] (:archive-ask db)]
                          {:k k :title (get-in db [:servers s :rows c :title])})))

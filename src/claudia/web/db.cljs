@@ -48,6 +48,7 @@
    :error nil
    :loaded-commit nil      ; the hub's commit when the page loaded (claudia.web.updates)
    :archive-ask nil        ; [server chat] whose archiving waits on a yes (views.confirm)
+   :root-ask nil           ; [server chat] whose root switch waits on a yes (views.confirm)
 
    ;; claudia.web.chatops
    :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil

@@ -144,6 +144,7 @@
    (when claudia? [:f> claudia-rain/rain])
    [asks/modal]
    [confirm/archive-ask]
+   [confirm/root-ask]
    [search-panel/panel]
    [my-words/panel]
    (when-not world? (chats-view m))

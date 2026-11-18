@@ -20,6 +20,14 @@
   [opts body]
   [:f> card-view opts body])
 
+(defn root-ask
+  "Asked before a chat gets root (turning it off asks nothing)."
+  []
+  (when-let [{:keys [title]} @(rf/subscribe [:root-ask])]
+    [card {:title "Give this chat root?" :yes "Turn root on"
+           :on-yes #(rf/dispatch [:root/confirm]) :on-no #(rf/dispatch [:root/keep])}
+     [:p [:b (if (seq title) title "This chat")] " runs every sudo command as root without asking you, on the whole server, until you turn root off."]]))
+
 (defn archive-ask
   "Asked before a chat goes into the archive (unarchiving asks nothing)."
   []

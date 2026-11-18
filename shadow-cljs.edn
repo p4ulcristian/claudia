@@ -1,5 +1,6 @@
-;; Five builds from one source tree: the master (hub), the slave's three processes (front, runner,
-;; host) and the page (web), plus the tests (test/, every namespace ending in -test, run on Node).
+;; Seven builds from one source tree: the master (hub), the slave's three processes (front, runner,
+;; host), the root helper and its sudo shim (root, sudo; README decision 52) and the page (web), plus
+;; the tests (test/, every namespace ending in -test, run on Node).
 ;; Node builds run on plain Node (node:sqlite needs 22.13+).
 {:source-paths ["src" "test"]
  :dependencies [[reagent/reagent "2.0.1"]
@@ -9,6 +10,8 @@
   :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
+  :root   {:target :node-script :main claudia.root.main/main    :output-to "out/root.js"}
+  :sudo   {:target :node-script :main claudia.root.sudo/main    :output-to "out/sudo.js"}
   :test   {:target :node-test :output-to "out/test.js" :ns-regexp "-test$"}
   :web    {:target :browser
            :output-dir "out/web/js"

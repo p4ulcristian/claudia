@@ -81,13 +81,21 @@
             (caller-writes headers)))
 
 (defn runner-headers
-  "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's own."
-  [^js raw {:keys [target read-only]}]
+  "The request's headers for the runner: every X-Claudia-* the caller sent replaced by the front's
+  own. X-Claudia-Owner: the caller is the profile's own person (not one with a write tick), who
+  alone may give a chat root (README decision 52)."
+  [^js raw {:keys [own target read-only]}]
   (let [pairs (->> (partition 2 raw)
                    (remove #(str/starts-with? (str/lower-case (first %)) "x-claudia-")))]
     (concat pairs
             [["X-Claudia-Profile" (:profile target)]]
-            (when read-only [["X-Claudia-Read-Only" "1"]]))))
+            (when read-only [["X-Claudia-Read-Only" "1"]])
+            (when (and own (= (:profile own) (:profile target))) [["X-Claudia-Owner" "1"]]))))
+
+(defn runner-only?
+  "Whether a path is the runner's own, never passed on from the hub: the root helper's ask."
+  [url]
+  (str/starts-with? url "/api/root/"))
 
 (defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
@@ -246,6 +254,7 @@
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})
+      (runner-only? url) (io/send-json res 403 {:error "Only the root helper asks this."})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})

@@ -18,8 +18,10 @@
   ;; last_turn = the result's uuid, stopped / failed, reply = the start of Claude's reply (only when
   ;; it succeeded); ended is that turn's time, moved to when the work it left running settled.
   ;; talk = the chat's speaker (talking mode) is on; bell = it chimes and pushes when it finishes or waits.
+  ;; chat_key = the random key its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it); root =
+  ;; its root switch is on (README decision 52).
   [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
-   :last_turn :stopped :failed :reply :talk :bell])
+   :last_turn :stopped :failed :reply :talk :bell :chat_key :root])
 
 (def ^:private schema
   "The tables, made when missing."
@@ -85,7 +87,9 @@
    ["failed" "failed INTEGER NOT NULL DEFAULT 0"]
    ["reply" "reply TEXT NOT NULL DEFAULT ''"]
    ["talk" "talk INTEGER NOT NULL DEFAULT 0"]
-   ["bell" "bell INTEGER NOT NULL DEFAULT 1"]])
+   ["bell" "bell INTEGER NOT NULL DEFAULT 1"]
+   ["chat_key" "chat_key TEXT"]
+   ["root" "root INTEGER NOT NULL DEFAULT 0"]])
 
 (defn- add-missing-columns! [^js d]
   (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
@@ -155,11 +159,18 @@
      :failed (= 1 (.-failed r))
      :reply (or (.-reply r) "")
      :talk (= 1 (.-talk r))
-     :bell (not= 0 (.-bell r))}))
+     :bell (not= 0 (.-bell r))
+     :chat-key (.-chat_key r)
+     :root (= 1 (.-root r))}))
 
 (defn chats [] (mapv row (.all (stmt "SELECT * FROM chats ORDER BY at DESC"))))
 
 (defn chat [id] (row (.get (stmt "SELECT * FROM chats WHERE id = ?") id)))
+
+(defn chat-by-key
+  "The chat whose sessions run with chat-key (CLAUDIA_CHAT_KEY), or nil."
+  [chat-key]
+  (when (seq chat-key) (row (.get (stmt "SELECT * FROM chats WHERE chat_key = ?") chat-key))))
 
 (defn add! [{:keys [id title folder color at]}]
   (.run (stmt "INSERT OR IGNORE INTO chats (id, title, folder, color, created, at, seen) VALUES (?, ?, ?, ?, ?, ?, ?)")

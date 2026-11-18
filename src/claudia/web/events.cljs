@@ -497,6 +497,23 @@
 
 ;; ---- archiving asks first ----
 
+(rf/reg-event-fx
+ :chat/root
+ ;; The chat's root switch (README decision 52), on until its owner turns it off; the runner says
+ ;; so to every page with the list.
+ (fn [{:keys [db]} [_ [s c :as k] on?]]
+   {:db (switches/with-switches db k {:root on?})
+    :ws/send [s {:type "root" :chat c :on on?}]}))
+
+(rf/reg-event-db :root/ask (fn [db [_ k]] (assoc db :root-ask k)))
+(rf/reg-event-db :root/keep (fn [db _] (dissoc db :root-ask)))
+
+(rf/reg-event-fx
+ :root/confirm
+ (fn [{:keys [db]} _]
+   (cond-> {:db (dissoc db :root-ask)}
+     (:root-ask db) (assoc :fx [[:dispatch [:chat/root (:root-ask db) true]]]))))
+
 (rf/reg-event-db :archive/ask (fn [db [_ k]] (assoc db :archive-ask k)))
 (rf/reg-event-db :archive/keep (fn [db _] (dissoc db :archive-ask)))
 

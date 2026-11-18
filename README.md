@@ -660,7 +660,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 52. Root only through the root helper (2026-11-17/18, the user's picks: the root switch design).
     `claudia-root` runs as root on every server and listens on one socket per agent user,
-    `/run/claudia-root/<user>.sock`, in a folder only that user may enter, so the socket proves who
+    `/run/claudia-root/<user>/root.sock`, in a folder only that user may enter, so the socket proves who
     calls. A `sudo` shim comes first on the sessions' PATH, so Claude keeps typing `sudo`; it sends the
     command, its folder and the chat's key (`CLAUDIA_CHAT_KEY`, set per session by the host) and
     streams the output back. The helper runs it when it matches the no-tap list exactly
@@ -788,7 +788,7 @@ Claude Code cuts long tool descriptions, so the forms' data is also in the syste
 
 ```
 npm ci
-npx shadow-cljs release host runner front hub web
+npx shadow-cljs release host runner front hub root sudo web
 ```
 
 ## Back from the TypeScript Claudia (2026-11-03)

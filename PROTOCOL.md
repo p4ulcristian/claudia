@@ -85,7 +85,10 @@ The profiles file (front): one line per profile, `<profile> <email> <runner sock
   `same-origin`/`none`, or an `Origin` whose host is not this one (`X-Forwarded-Host`, else `Host`).
 - A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
 - front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view
-  of a profile whose owner's email is not in `X-Claudia-Writes`.
+  of a profile whose owner's email is not in `X-Claudia-Writes`, `X-Claudia-Owner: 1` when the caller
+  is that profile's own person (not one with a write tick): only the owner may give a chat root (the
+  `root` frame, Allow on a "Run as root" card; README decision 52). The front never passes
+  `/api/root/…` on (403): only the root helper calls it, on the runner's socket.
   A read-only caller may only `GET` and send `hello`/`open` on the socket.
 
 ## Hub HTTP
@@ -277,6 +280,7 @@ Page → runner:
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |
 | `secret` | `chat`, `ask`, `sealed` | the sealed secret for a `run_with_secret` ask |
 | `deny` | `chat`, `ask` | refuses a secret or permit ask |
+| `root` | `chat`, `on` (bool) | the chat's root switch (README decision 52), on until turned off; only the chat's owner (`X-Claudia-Owner`), else an `error`. Answering (`answer`) a "Run as root" ask is the owner's only too |
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `folder` | `chat`, `folder` (absolute, `~/…`, or relative to the runner's working folder; empty or null: no project) | the chat's working folder; Claude hears of it with the next message; `error` when no folder is there |
@@ -317,7 +321,7 @@ Runner → page:
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
 
-`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
+`Row`: `{ id, title, folder, project: { name, root } | null (the folder's project: its git repo, a worktree's repo, else the folder under its group in the working folder), color, talk (bool: its speaker, talking mode, is on), root (bool: its root switch is on, README decision 52), bell (bool: it chimes, pops up and pushes when it finishes or waits; false = quiet), running, waiting (bool: an open ask), at (last activity), started (when the chat was made; the list's order),
 preview (start of the last reply or the open question), unseen, archived, ended (when the last turn
 ended, 0 = never), asks: [{ id, kind: "question" | "secret" | "permit", text (the question, the
 secret's reason, or "<tool>: <description>"), ago }], agents, settling, lastTurn, runningFor, agentsFor? }`; `agentsFor` = ms since the longest-running of those agents started (none running: absent);
@@ -374,6 +378,9 @@ WebP; photos and video frames, at most 40), sent before the text. The read-only 
 - `{ id, kind: "permit", tool, title, description, detail }`: a tool waiting for the person's OK
   (ExitPlanMode: the plan); every other tool is allowed without asking (each logged as
   `[<chat id 8>] auto-allowed <tool>: <input ≤ 300>`)
+- `{ id, kind: "permit", root: true, tool: "Run as root", title: "Run as root", description (the
+  command), detail ("In <folder>" and the command), expires }`: the root helper waits on it (Root
+  helper, below); `answer` = Allow, `deny`, the turn's end or `expires` (10 minutes) = no
 
 `Scene`: `{ title, blocks: [Block] }` in order, top to bottom. Every `Block` is one form with its data
 (README decision 39): `{ id, name, width ("full"/"half"), form, data }`. `form` is `graph`, `pipeline`,
@@ -416,6 +423,53 @@ screenshot). A chat older than the history has only its last picture (turn `impo
    the value in the output with `[secret]`, and answers Claude with the output. The keypair is dropped.
 5. Deny or 10 minutes without an answer: Claude gets a refusal. Nothing is written anywhere: not the
    database, not a log, not a file. Only the ref, the reason and who allowed it are logged.
+
+## Root helper (`claudia-root`, `src/claudia/root`; README decision 52)
+
+`out/root.js` runs as root. The host standard (`host/`, Ansible) installs it with `out/sudo.js` and
+`deploy/sudo-shim` from a built checkout into a folder of its own (not the release folder Claudia's
+update replaces), with its unit `claudia-root.service` and the no-tap list; `deploy/update.sh` and
+`install.sh` never touch them. Settings:
+
+| Variable | What |
+|---|---|
+| `ROOT_SOCKET_DIR` | the folder of the agent users' folders (default `/run/claudia-root`). Each folder is named after an agent user (`<profile>-claudia-agent`) and lets in only that user (made by Ansible: owner root or the user, group the user's, mode 0750 or closer). The helper listens on `<folder>/root.sock` in each (read at start: a new agent user needs a restart), owner root, group the folder's, mode 0660; a folder named otherwise, or that others may enter, is skipped and logged |
+| `ROOT_NO_TAP` | the no-tap list (default `/etc/claudia/root-no-tap`): one command per line, `#` starts a comment line; read on every command |
+| `ROOT_RUNNER_SOCKET` | optional: the runner socket with `{profile}` for the profile (default `/run/claudia-{profile}/runner.sock`, claudia-runner@.service) |
+
+The shim (`deploy/sudo-shim`, which runs the `sudo.js` beside it; `sudo [-n] [-E] [--] command args…`) sends
+newline-delimited JSON on `/run/claudia-root/<user>/root.sock` (`CLAUDIA_ROOT_SOCKET` overrides it;
+`CLAUDIA_SUDO_JS` the script). -n and -E are ignored; any other option is refused ("root shells are not
+offered; run the command itself"). No socket: "no root helper on this server", exit 1.
+
+1. Shim → helper, first line: `{ argv: [command, args…], cwd, chatKey (CLAUDIA_CHAT_KEY, may be null),
+   env: { LANG, LANGUAGE, LC_ALL, LC_CTYPE, LC_MESSAGES, TERM, COLUMNS, LINES, NO_COLOR (those set) } }`.
+   argv: 1 to 1000 strings, no NUL, 128 K characters in all.
+2. The helper decides. On the no-tap list: argv joined by single spaces equals a line exactly (no
+   globbing; an argument that is empty or holds white space never matches). Else it answers
+   `{ asking: true }` and asks the runner of the user's profile (the user name without
+   `-claudia-agent`): `POST /api/root/ask { chatKey, argv, cwd, user }` on its socket, waiting up to
+   11 minutes. The runner finds the chat by its key (none: `{ allow: false, why }`); its root switch on:
+   `{ allow: true, via: "switch", chat }` at once; else a "Run as root" ask (an `Ask` of kind `permit`
+   with `root: true`) waits for the owner: Allow `{ allow: true, via: "allow", chat }`, Deny, the
+   turn's end or 10 minutes `{ allow: false, why, chat }`. Only status 200 with exactly
+   `allow: true` and `via` `switch` or `allow` runs the command; anything else refuses it.
+3. Helper → shim: `{ refused: why }` and the end, or `{ running: true }`, then `{ out: base64 }` and
+   `{ err: base64 }` (256 KB of bytes a frame at most) as the command writes, last `{ exit: n }` (a
+   signal: 128 + its number; a command not found: 127) and the end. The command runs with
+   `child_process.spawn(argv[0], argv[1…])`, no shell, in `cwd` when it is a folder (else `/`), with
+   root's PATH, HOME, USER, LOGNAME, SHELL, `SUDO_USER=<user>` and the env above only.
+4. Shim → helper after `running`: stdin as `{ in: base64 }` frames, then `{ eof: true }` (frames before
+   `running` are dropped). The shim leaving ends the command (SIGTERM).
+5. A line over 1 MB ends the connection. Every command is one journal line:
+   `root { user, chat ("key:<first 8 of the key>" or "no key"), argv, decision ("no-tap", "switch",
+   "allow", "refused: <why>", "gone before the answer"), exit? }`; the runner logs each switch change
+   (`root switch of <chat> on|off by <profile>`).
+
+The chat's key: a random key per chat (`chat_key` in the runner's store), set in every session's
+environment as `CLAUDIA_CHAT_KEY` when the runner has the host start it. A session started before
+there were keys has none until it starts again (its chat's commands are then refused: "No chat here
+has this session's key").
 
 ## Host ↔ runner (unix socket, JSON lines)
 

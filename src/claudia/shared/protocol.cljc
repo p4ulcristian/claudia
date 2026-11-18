@@ -18,7 +18,7 @@
 
 (def page->runner
   #{"hello" "open" "close" "new" "claudia" "send" "stop" "answer" "secret" "deny" "rename" "archive" "folder" "seen"
-    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send"})
+    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send" "root"})
 
 (def runner->page
   #{"chats" "chat" "created" "claudia" "msg" "delta" "scene" "turn" "ask" "asked" "error"

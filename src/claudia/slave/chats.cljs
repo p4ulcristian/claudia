@@ -8,6 +8,7 @@
             ["node:os" :as os]
             ["node:path" :as path]
             ["node:child_process" :as cp]
+            ["node:crypto" :as crypto]
             [clojure.string :as str]
             [claudia.node.env :as env]
             [claudia.node.fs :as nfs]
@@ -243,10 +244,11 @@
 
 (defn- drop-asks!
   "Ends every open ask of a chat; answer? false when nobody is left to answer (the host went away and
-  sends its rpcs again)."
+  sends its rpcs again). A root ask waits on the root helper, not the host: it stays then."
   [id answer? why]
-  (doseq [ask-id (keys (:asks (st id)))
-          :let [entry (take-ask! id ask-id)]]
+  (doseq [[ask-id entry] (:asks (st id))
+          :when (or answer? (not (get-in entry [:ask :root])))]
+    (take-ask! id ask-id)
     (when answer?
       ((:resolve entry) (answers/dropped-answer (get-in entry [:ask :kind]) why)))))
 
@@ -313,6 +315,45 @@
            (add-ask! id {:ask ask :resolve done :keys kp
                          :secret {:command command :env_name env_name}
                          :timer (js/setTimeout #(secret-expired! id ask-id args done) secret-ms)}))))))
+
+;; Root (README decision 52) ----------------------------------------------------------------------
+
+(defn chat-key!
+  "The chat's key, which its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it to the root
+  helper, which asks this runner with it): made once, random, kept with the chat."
+  [id]
+  (or (:chat-key (store/chat id))
+      (let [k (.toString (crypto/randomBytes 24) "base64url")]
+        (store/update! id {:chat_key k})
+        k)))
+
+(defn root-ask?
+  "Whether ask-id is an open \"Run as root\" ask of chat id."
+  [id ask-id]
+  (boolean (get-in (st id) [:asks ask-id :ask :root])))
+
+(defn- root-expired! [id ask-id done]
+  (when (take-ask! id ask-id)
+    (done {:behavior "deny" :message "Nobody answered in 10 minutes."})))
+
+(defn root-ask!
+  "Promise of the root helper's answer for one command (argv in folder) of chat id: the \"Run as
+  root\" card; Allow runs it, Deny, the turn's end or 10 minutes without an answer do not."
+  [id argv folder]
+  (-> (js/Promise.
+       (fn [done]
+         (let [ask-id (str (random-uuid))]
+           (add-ask! id {:ask (answers/root-ask ask-id argv folder (+ (js/Date.now) secret-ms))
+                         :resolve done
+                         :timer (js/setTimeout #(root-expired! id ask-id done) secret-ms)}))))
+      (.then #(answers/root-answer id %))))
+
+(defn set-root!
+  "Turns the chat's root switch on or off (README decision 52); every page and the hub hear it."
+  [id on? who]
+  (js/console.log (str "root switch of " id " " (if on? "on" "off") " by " who))
+  (store/update! id {:root (boolean on?)})
+  (changed!))
 
 ;; Tools ------------------------------------------------------------------------------------------
 
@@ -945,8 +986,10 @@
   (let [s (settings id)
         her (claudia/her? id)]
     (session/start-spec {:cwd cwd :id id :resume? resume?
-                         ;; Her chat runs nothing in the background (README decision 48).
-                         :env (cond-> child-env her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
+                         ;; The chat's key ties its sudo commands to it (README decision 52); her
+                         ;; chat runs nothing in the background (README decision 48).
+                         :env (cond-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                                her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
                          :prompt (cond-> (codeforms/prompt-for) her (str "\n\n" claudia/prompt))
                          :allowed (cond-> tools/allowed-tools her (into claudia/allowed))
                          :disallowed (when her claudia/disallowed)
