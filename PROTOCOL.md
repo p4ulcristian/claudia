@@ -102,7 +102,9 @@ inline styles; fonts from Google Fonts; same-origin fetches and sockets; no fram
 `x-frame-options: DENY`); `frame.html` has the html block's policy instead (`sandbox allow-scripts`,
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
-| `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }] }` (servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
+| `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
+| `GET /hub/picture/<key>` | a person's profile picture (PNG or WebP; key: 16 hex digits of the SHA-256 of their email), 404 without one |
+| `PUT /hub/admin/picture?email=<email>` (admins) | body: the picture (PNG or WebP, up to 512 KB) → `{ picture }` |
 | `GET /hub/alive` | no login: `{ alive, commit }`, 200 while the hub takes calls, 503 once it is stopping (the gate's proxy picks between the two hubs of an update by it) |
 | `GET /anatomy/<version>/<file>` | an anatomy model or the index (`index.json`, `<system>/<id>.glb`) of the pinned version only (`claudia.shared.anatomy`): fetched once from the claudia-anatomy repository at that version's tag, kept in `HUB_DATA/anatomy`, then sent from disk with a year's immutable caching; 404 for another path, 502 when it can't be fetched |
 | `GET /hub/progress` | person | `{ builds: [{ commit, tree?, state, note, started, at }], release: { commit, tree, title, merged, machines: { <server>: { state: waiting\|done\|not reached, secs? } }, hub: { state, secs? } } \| null }`: the update pill (README decision 32) |

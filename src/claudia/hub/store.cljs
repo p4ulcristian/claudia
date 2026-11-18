@@ -41,6 +41,13 @@
      PRIMARY KEY (email, owner),
      CHECK (email <> owner)
    );
+   -- A person's profile picture (the page's profile circles): PNG or WebP bytes, set by an admin.
+   CREATE TABLE IF NOT EXISTS pictures (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     type TEXT NOT NULL,
+     data BLOB NOT NULL,
+     at INTEGER NOT NULL
+   );
    -- The WireGuard pairings of before README decision 47 (servers now reach the hub over any
    -- private network and fetch a hub key): gone.
    DROP TABLE IF EXISTS pairings;
@@ -208,6 +215,23 @@
 
 (defn people []
   (mapv person-row (all "SELECT email, name, admin FROM people ORDER BY added_at, email")))
+
+(defn picture
+  "A person's picture: {:type :data (bytes) :at}, or nil."
+  [email]
+  (one "SELECT type, data, at FROM pictures WHERE email = ?" email))
+
+(defn picture-times
+  "When each person with a picture last got it: {email at}."
+  []
+  (into {} (map (juxt :email :at)) (all "SELECT email, at FROM pictures")))
+
+(defn save-picture!
+  "Sets a person's picture (type: image/png or image/webp; data: bytes)."
+  [email kind data at]
+  (exec! "INSERT INTO pictures (email, type, data, at) VALUES (?, ?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET type = excluded.type, data = excluded.data, at = excluded.at"
+         email kind data at))
 
 (defn person [email]
   (person-row (one "SELECT email, name, admin FROM people WHERE email = ?" email)))

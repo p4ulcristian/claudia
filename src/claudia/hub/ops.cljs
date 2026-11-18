@@ -25,6 +25,7 @@
             [claudia.shared.protocol :as protocol]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
+            [claudia.hub.pictures :as pictures]
             [claudia.hub.store :as store]
             [claudia.hub.systems :as systems]
             [claudia.hub.tokens :as tokens]))
@@ -432,6 +433,11 @@
   (-> (js/Promise.resolve)
       (.then (fn []
                (cond
+                 (= pathname "/hub/admin/picture")
+                 (cond (not admin?) (fail res 403 "admins only")
+                       (not= "PUT" (.-method req)) (fail res 405 "PUT only")
+                       :else (pictures/put! req res (.get (.-searchParams (js/URL. (.-url req) "http://hub")) "email")))
+                 (str/starts-with? pathname "/hub/picture/") (pictures/serve res pathname)
                  (str/starts-with? pathname "/hub/admin")
                  (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
                  (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order"} pathname))

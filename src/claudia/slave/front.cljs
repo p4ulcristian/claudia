@@ -93,6 +93,8 @@
   (io/send-json res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
                          :profiles (mapv :profile @profiles)
+                         ;; Whose each profile is (the page's profile circles take the hub's pictures by it).
+                         :owners (into {} (map (juxt :profile :email)) @profiles)
                          :writable (writable-profiles @profiles own (caller-writes headers))
                          :viewing viewing
                          :readOnly read-only

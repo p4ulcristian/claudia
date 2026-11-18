@@ -88,7 +88,9 @@
   [act]
   (let [view @(rf/subscribe [:view])
         people @(rf/subscribe [:people])
-        mine (or (:name @(rf/subscribe [:me])) "Me")]
+        me @(rf/subscribe [:me])
+        owners @(rf/subscribe [:owners])
+        mine (or (:name me) "Me")]
     (when (seq people)
       [:<>
        [:div.mn-head "Whose chats"]
@@ -96,7 +98,7 @@
          ^{:key (str k)}
          [:button.mn-who {:class (when (= k view) "on") :role "menuitemradio" :aria-checked (= k view)
                           :on-click (act #(when (not= k view) (rf/dispatch [:ops/view k])))}
-          [:span.mn-face.small (menu-pure/initials (or k mine))]
+          [:span.mn-face.small (if-let [p (menu-pure/picture-of me owners k)] [:img {:src p :alt ""}] (menu-pure/initials (or k mine)))]
           [:span.mn-label label (when k [:span.mn-note "read only"])]
           (when (= k view) [:span.mn-tick "✓"])])
        [:div.mn-sep]])))
@@ -134,13 +136,14 @@
   (let [[open set-open] (h/use-state nil)
         box (h/use-ref nil)
         close! #(set-open nil)
-        {:keys [initials other?] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view]))]
+        {:keys [initials other? picture] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view])
+                                                                         @(rf/subscribe [:owners]))]
     [:<>
      [:button.mn-gear.mn-face {:ref #(set! (.-current box) %) :class [(when open "on") (when other? "other")]
                                :aria-label (str nm ": whose chats, settings") :aria-haspopup "menu" :aria-expanded (boolean open)
                                :data-tip (when-not open (if other? (str nm "'s chats, read only") (str nm " · settings")))
                                :on-click #(set-open (if open nil :menu))}
-      initials]
+      (if picture [:img {:src picture :alt ""}] initials)]
      (case open
        :menu [:f> menu-pop {:box box :close! close! :machines! #(set-open :machines)}]
        :machines [:f> systems/popup {:box box :close close!}]

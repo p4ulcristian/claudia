@@ -15,6 +15,7 @@
             [claudia.hub.ops :as ops]
             [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
+            [claudia.hub.pictures :as pictures]
             [claudia.hub.push :as push]
             [claudia.hub.systems :as systems]
             [claudia.hub.videos :as videos]
@@ -147,6 +148,8 @@
    :commit (or (some-> (env "HUB_COMMIT" nil) not-empty (subs 0 7)) (:commit version-info) (:tree version-info))
    :updatedAt (progress/updated-at)
    :servers (mapv #(select-keys % [:name :label]) (config/servers-of person))
+   ;; Everyone with their name and picture (the profile circles).
+   :people (pictures/people)
    ;; Servers without a profile of theirs: others' chats there, read only.
    :viewServers (mapv #(select-keys % [:name :label]) (config/view-servers person))})
 

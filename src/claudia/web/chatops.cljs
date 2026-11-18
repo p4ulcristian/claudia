@@ -112,6 +112,8 @@
     (->> (vals server-me) (mapcat :profiles) (remove own) distinct sort vec)))
 
 (rf/reg-sub :people (fn [db] (people (:server-me db))))
+;; Whose each profile is, {profile email}, from every server's /api/me.
+(rf/reg-sub :owners (fn [db] (apply merge (keep :owners (vals (:server-me db))))))
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
