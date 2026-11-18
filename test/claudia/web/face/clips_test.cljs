@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.face.art :as art]
             [claudia.web.face.clips :as clips]
-            [claudia.web.face.fx :as fx]
+            [claudia.web.face.lens :as lens]
             [claudia.web.face.paint :as paint]))
 
 (deftest every-clip-poses-from-start-to-end
@@ -30,22 +30,47 @@
   (is (neg? (clips/hops 0.25 1 10)))
   (is (zero? (clips/shake 1 10))))
 
-(deftest eyes-and-mouths-draw
-  (doseq [kind [:dot :wide :narrow :half :sad :happy :shut :squeeze :spiral :star :heart] side [:far :near]]
-    (let [{:keys [dot line fill]} (art/eye kind side)]
-      (is (or dot line fill) (str kind side))))
-  (is (:filled? (art/mouth :grin)))
-  (is (= (art/mouth :smile) (art/mouth :no-such))))
+(deftest daytime-story
+  (is (= "LUNCH" (clips/daytime-word 12)))
+  (is (= "GO TO BED" (clips/daytime-word 3)))
+  (is (= "ONE MORE COMMIT?" (clips/daytime-word 23))))
 
-(deftest every-effect-draws
-  (doseq [e [[:dots true] [:sweat] [:bang 0.5] [:question 0.5] [:z] [:sparkles 0.5] [:hearts 0.5] [:notes]
-             [:orbit] [:cloud] [:poof 0.5] [:confetti 0.5] [:swirl 0.5] [:word ["hi!" 0.5]]]]
-    (is (re-find #"^<" (fx/draw [e] 1000)) (str e)))
-  (is (= "" (fx/draw [[:no-such]] 0))))
+(deftest eyes-look
+  (is (= {:cover 0 :line :lid :wide? false} (paint/eye-look :dot 0)))
+  (is (= :happy (:line (paint/eye-look :happy 0))))
+  (is (= :shut (:line (paint/eye-look :dot 0.9))) "a blink shuts plain eyes")
+  (is (= 0.4 (:cover (paint/eye-look :narrow 0))))
+  (is (:wide? (paint/eye-look :wide 0))))
+
+(deftest glasses
+  (is (not (paint/glasses-down? {:pose {:eyes :dot} :mood :idle})))
+  (is (paint/glasses-down? {:pose {:eyes :happy} :mood :idle}) "eyes worth showing")
+  (is (paint/glasses-down? {:pose {:eyes :dot} :mood :idle :ticker {:text "IR DONE"}}) "a chat's news")
+  (is (paint/glasses-down? {:pose {:eyes :dot} :mood :idle :pointer [0.3 0.2]}) "the mouse near")
+  (is (not (paint/glasses-down? {:pose {:eyes :dot} :mood :work :pointer [1 1]})) "the mouse far"))
+
+(deftest lenses-show
+  (is (= :dark (:kind (lens/show {:fx []} nil))))
+  (is (= {:kind :rain :speed 1} (select-keys (lens/show {:fx [[:dots false]]} nil) [:kind :speed])))
+  (is (= "HI!" (:text (lens/show {:fx [[:notes] [:word ["hi!" 0.5]]]} nil))) "words win over symbols")
+  (is (= "?" (:text (lens/show {:fx [[:question 0.5]]} nil))))
+  (is (= "IR DONE" (:text (lens/show {:fx [[:word ["hi" 0]]]} {:text "IR DONE" :start 5}))) "the ticker wins"))
+
+(deftest lenses-draw
+  (let [ls (art/lenses :up)]
+    (doseq [shown [{:kind :rain :speed 1} {:kind :symbol :text "!"} {:kind :text :text "IR DONE" :start 0}
+                   {:kind :dark}]]
+      (is (re-find #"^<ellipse" (lens/markup ls (merge {:color "#3cff6a" :start 0} shown) 1500 false)) (str shown)))
+    (testing "the ticker types 14 letters a second"
+      (is (re-find #">IR DO<" (lens/ticker ls "IR DONE" 400))))))
 
 (deftest painting
-  (let [a (paint/attrs {:pose (clips/mood-pose :idle 0) :look [0 0] :tilt 0 :spin 0} 0 false)]
-    (is (= "inline" (get-in a [:eye-far-dot :display])))
-    (is (= "none" (get-in a [:eye-far-line :display])))
+  (let [a (paint/attrs {:pose (clips/mood-pose :idle 0) :look [0 0] :spin 0 :mood :idle} 0 false)]
+    (is (= "inline" (get-in a [:open-far :display])))
+    (is (= 1 (get-in a [:up :opacity])))
+    (is (= "face" (get-in a [:root :class])))
     (is (string? (get-in a [:body :transform])))
-    (is (= "translate(0.00 0.00) rotate(0.00) scale(1.00 1.00) translate(0 0)" (paint/transform 0 0)))))
+    (is (= "translate(0.00 0.00) rotate(0.00) scale(1.00 1.00) translate(0 0)" (paint/transform 0 0))))
+  (testing "words on the lenses: she leans out, bigger"
+    (is (= "face big" (get-in (paint/attrs {:pose {} :look [0 0] :spin 0 :ticker {:text "X" :start 0}} 0 false)
+                              [:root :class])))))

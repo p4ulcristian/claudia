@@ -110,7 +110,7 @@
 
 (defn- blink2 [p _] {:blink (bump (mod (* 2 p) 1))})
 
-(defn- glance [_ dir] {:look dir})
+(defn- glance [_ {:keys [dir]}] {:look dir})
 
 (defn- twirl [p _] {:look [0.6 -1] :spin (* 30 (bump p)) :mouth :small :eyes (if (> p 0.6) :happy :dot)})
 
@@ -160,6 +160,16 @@
 
 (defn- look-at-you [p _] {:look [0 0] :mouth :cat :blush (* 0.9 (bump p))})
 
+(defn daytime-word
+  "What she says on her lenses at this hour of her day (README decision 49)."
+  [hour]
+  (cond (< hour 6) "GO TO BED" (< hour 10) "COFFEE \u2615" (< hour 12) "SHIP IT"
+        (< hour 14) "LUNCH" (< hour 16) "COFFEE #2" (< hour 19) "FOCUS"
+        (< hour 22) "GG TODAY" :else "ONE MORE COMMIT?"))
+
+(defn- daytime [p {:keys [hour]}]
+  {:eyes (if (< 0.2 p 0.8) :half :dot) :look [0.2 0.4] :fx [[:word [(daytime-word (or hour 12)) p]]]})
+
 (def clips
   "Every clip: how long (ms), how strong (a clip only replaces one of the same strength or weaker)
   and what it does."
@@ -198,13 +208,14 @@
    :puff {:ms 1500 :prio 0 :act puff}
    :nod-off {:ms 3200 :prio 0 :act nod-off}
    :love {:ms 1800 :prio 0 :act love}
-   :look-at-you {:ms 1600 :prio 0 :act look-at-you}})
+   :look-at-you {:ms 1600 :prio 0 :act look-at-you}
+   :daytime {:ms 4200 :prio 0 :act daytime}})
 
 (def idle-weights
   "How often each clip of her own comes when she is idle, by day and by night (sleepy)."
   {:idle {:glance 10 :blink2 5 :twirl 3 :sway 4 :hum 3 :whistle 2 :wink 2 :blep 2 :curious 2 :stretch 2
-          :yawn 1 :sneeze 1 :hiccup 1 :peek 3 :starry 1 :puff 2 :love 1 :look-at-you 3}
-   :sleepy {:glance 4 :yawn 6 :nod-off 5 :stretch 2 :blink2 3 :sway 2}
+          :yawn 1 :sneeze 1 :hiccup 1 :peek 3 :starry 1 :puff 2 :love 1 :look-at-you 3 :daytime 3}
+   :sleepy {:glance 4 :yawn 6 :nod-off 5 :stretch 2 :blink2 3 :sway 2 :daytime 2}
    :work {:twirl 3 :peek 2 :blink2 3 :sway 1}})
 
 (defn pick-weighted

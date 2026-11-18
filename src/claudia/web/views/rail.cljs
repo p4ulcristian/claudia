@@ -179,11 +179,11 @@
      (when fresh [fresh-dot fresh])]))
 
 (defn- rail-head
-  "Claudia's face, no frame round her so her animations show whole (a click opens her chat,
-  :claudia/open), and the 2D/3D switch under it."
+  "Claudia's face, no frame round her so her animations show whole (a click opens the chat her
+  lenses talk about, else her own chat), and the 2D/3D switch under it."
   []
   [:div.rail-head
-   [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click #(rf/dispatch [:claudia/open])}
+   [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click face/click!}
     [:f> face/face]]
    [logotools/tools]])
 

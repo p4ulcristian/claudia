@@ -22,16 +22,33 @@
     (is (= :idle (mind/mood-of w 0 14)))))
 
 (deftest events-from-db
-  (is (= [:done] (mind/db-events (db {"1" {:running true}}) (db {"1" {}}))))
-  (is (= [:many-done] (mind/db-events (db {"1" {:running true} "2" {:running true}}) (db {"1" {} "2" {}}))))
-  (is (= [:asked] (mind/db-events (db {"1" {}}) (db {"1" {:waiting true}}))))
-  (is (= [:new-chat] (mind/db-events (db {"1" {}}) (db {"1" {} "2" {}}))))
-  (is (= [:failed] (mind/db-events (db {}) (db {} :chats {["a" "1"] {:error "boom"}}))))
-  (is (= [:list-open] (mind/db-events (db {}) (db {} :sidebar? true))))
-  (is (= [:switch] (mind/db-events (db {} :open ["a" "1"]) (db {} :open ["a" "2"]))))
-  (testing "sending beats typing (the draft empties as it goes)"
-    (is (= [:sent] (mind/db-events (db {} :drafts {:new "hi"}) (db {} :outbox {["a" "1"] ["hi"]})))))
-  (is (= [:typing] (mind/db-events (db {} :drafts {:new "h"}) (db {} :drafts {:new "hi"})))))
+  (let [names #(mapv (fn [e] (if (vector? e) (first e) e)) %)]
+    (is (= [[:done {:k ["a" "1"] :title "Fix it"}]]
+           (mind/db-events (db {"1" {:running true :title "Fix it"}}) (db {"1" {:title "Fix it"}}))))
+    (is (= [:many-done] (names (mind/db-events (db {"1" {:running true} "2" {:running true}}) (db {"1" {} "2" {}})))))
+    (is (= "A + B" (:title (second (first (mind/db-events (db {"1" {:running true :title "A"} "2" {:running true :title "B"}})
+                                                           (db {"1" {:title "A"} "2" {:title "B"}})))))))
+    (is (= [:asked] (names (mind/db-events (db {"1" {}}) (db {"1" {:waiting true}})))))
+    (is (= [:new-chat] (names (mind/db-events (db {"1" {}}) (db {"1" {} "2" {}})))))
+    (is (= [[:failed {:k ["a" "1"] :title nil}]] (mind/db-events (db {}) (db {} :chats {["a" "1"] {:error "boom"}}))))
+    (is (= [:failed] (mind/db-events (db {}) (db {} :error "page"))))
+    (is (= [:list-open] (mind/db-events (db {}) (db {} :sidebar? true))))
+    (is (= [:switch] (mind/db-events (db {} :open ["a" "1"]) (db {} :open ["a" "2"]))))
+    (testing "sending beats typing (the draft empties as it goes)"
+      (is (= [:sent] (mind/db-events (db {} :drafts {:new "hi"}) (db {} :outbox {["a" "1"] ["hi"]})))))
+    (is (= [:typing] (mind/db-events (db {} :drafts {:new "h"}) (db {} :drafts {:new "hi"}))))))
+
+(deftest news-on-her-lenses
+  (let [s (mind/react (mind/initial 0) [:done {:k ["a" "1"] :title "Fix it"}] 100)]
+    (is (= "FIX IT DONE \u2713" (get-in s [:ticker :text])))
+    (is (= ["a" "1"] (get-in s [:ticker :k])))
+    (is (= :done (get-in s [:clip :id])))
+    (testing "it goes after a while"
+      (is (nil? (:ticker (mind/tick s (+ 101 mind/ticker-ms) 33 [0.5 0.5 0.5 0.5] 12)))))
+    (testing "new chats and started turns are not news"
+      (is (nil? (:ticker (mind/react (mind/initial 0) [:started {:k ["a" "1"] :title "x"}] 5))))))
+  (is (= "#ff4a4a" (:color (mind/ticker-of :failed {:title "x"} 0))))
+  (is (= "A CHAT ASKS YOU ?" (:text (mind/ticker-of :asked {} 0)))))
 
 (deftest clips-start-by-strength
   (let [s (mind/initial 0)]

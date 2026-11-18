@@ -1,12 +1,15 @@
 (ns claudia.web.face.view
-  "Claudia's face, alive in the menu button (2026-11-05; it replaced the three strokes). She watches
+  "Claudia's face, alive at the rail's top (2026-11-05; the noir look 2026-11-18). She watches
   the page (claudia.web.face.mind): chats working, waiting on you, done, failed, new or gone, the
   list opening, you typing, the mouse coming near, the page coming back after a while; and lives on
-  her own when nothing happens (claudia.web.face.clips). Drawn once as SVG; a frame loop (at most
-  30 a second, none while the page is hidden) writes only the attributes that changed."
+  her own when nothing happens (claudia.web.face.clips). A chat's news types out on her lenses while
+  she looks at its circle in the rail; a click then opens that chat. Drawn once as SVG; a frame loop
+  (at most 30 a second, none while the page is hidden) writes only the attributes that changed."
   (:require [re-frame.db :as rdb]
             [reagent.hooks :as h]
+            [re-frame.core :as rf]
             [claudia.web.face.art :as art]
+            [claudia.web.logo :as logo]
             [claudia.web.face.mind :as mind]
             [claudia.web.face.paint :as paint]
             [claudia.web.hooks :as hooks]))
@@ -15,48 +18,53 @@
 
 ;; ---- the drawing ----
 
-(defn- eye-svg [side]
-  (let [[x y] (art/eye-at side) s (name side)]
+(defn- eye-svg
+  "One drawn eye (side :far or :near): white and iris inside the almond, a skin lid that comes down
+  over it, the lid lines on top."
+  [side]
+  (let [{:keys [almond flick] [bx _ bw] :box} (art/eyes side) p (name side)]
     [:<>
-     [:g {:data-part (str "eye-" s "-dot")}
-      [:ellipse {:cx x :cy y :rx 17 :ry 22 :fill art/ink}]
-      [:circle {:cx (- x 7) :cy (- y 8) :r 5 :fill "#fff"}]]
-     [:path {:data-part (str "eye-" s "-line") :fill "none" :stroke art/ink :stroke-width 9
-             :stroke-linecap "round" :stroke-linejoin "round"}]
-     [:path {:data-part (str "eye-" s "-fill") :fill art/ink :stroke art/ink :stroke-width 4}]]))
+     [:clipPath {:id (str "face-eye-" p)} [:path {:d almond}]]
+     [:g {:data-part (str "open-" p) :clip-path (str "url(#face-eye-" p ")")}
+      [:rect {:x bx :y 240 :width bw :height 70 :fill art/sclera}]
+      [:use {:data-part (str "iris-" p) :href "#face-iris"}]
+      [:rect {:data-part (str "cover-" p) :x bx :width bw :fill art/skin}]]
+     [:g {:fill "none" :stroke art/ink :stroke-linecap "round" :stroke-linejoin "round"}
+      [:path {:data-part (str "lid-" p) :stroke-width 4.5}]
+      [:path {:d flick :stroke-width 3.2}]
+      [:path {:data-part (str "low-" p) :d (:low (art/eyes side)) :stroke-width 1.6}]]]))
 
-(defn- cheek-svg [side]
-  (let [[x y rx ry] (art/cheeks side)]
-    [:ellipse {:data-part (str "blush-" (name side)) :cx x :cy y :rx rx :ry ry :fill art/cheek
-               :filter "url(#face-soft)"}]))
+(defn- defs-svg []
+  [:defs
+   [:radialGradient#face-iris-fill {:cx 0.5 :cy 0.35 :r 0.7}
+    [:stop {:offset 0 :stop-color "#8dffbd"}] [:stop {:offset 0.4 :stop-color "#22c866"}]
+    [:stop {:offset 1 :stop-color "#08502a"}]]
+   [:filter#face-soft [:feGaussianBlur {:stdDeviation 1.4}]]
+   [:g#face-iris [:ellipse {:rx 12 :ry 14 :fill "url(#face-iris-fill)" :stroke "#06301a" :stroke-width 1.8}]
+    [:ellipse {:rx 4.5 :ry 5.5 :fill "#04160c"}] [:circle {:cx -4 :cy -6 :r 2.4 :fill "#fff"}]]
+   (for [[k ls] art/lenses]
+     ^{:key k} [:clipPath {:id (str "face-lens-" (name k))}
+                (for [[i [cx cy rx ry]] (map-indexed vector ls)] ^{:key i} [:ellipse {:cx cx :cy cy :rx rx :ry ry}])])
+   [:linearGradient#face-gold {:x1 0 :y1 0 :x2 1 :y2 1}
+    [:stop {:offset 0 :stop-color "#fff3b0"}] [:stop {:offset 0.45 :stop-color "#f2c94c"}]
+    [:stop {:offset 1 :stop-color "#b8862b"}]]])
 
-(defn- face-svg []
-  [:g {:data-part "face"}
-   [:path {:d art/face-shape :fill art/skin :stroke art/ink :stroke-width 7 :stroke-linejoin "round"}]
-   [:g {:data-part "feat"}
-    [cheek-svg :far] [cheek-svg :near] [eye-svg :far] [eye-svg :near]
-    [:path {:data-part "tongue" :d art/tongue :fill art/cheek :stroke art/ink :stroke-width 5}]
-    [:path {:data-part "mouth" :stroke art/ink :stroke-width 9 :stroke-linecap "round" :stroke-linejoin "round"}]]])
-
-(defn- hair-svg []
-  [:<>
-   [:g {:data-part "lock"}
-    [:path {:d art/lock-fill :fill art/hair}]
-    [:path {:d art/lock-edge :fill "none" :stroke art/ink :stroke-width 7 :stroke-linecap "round"}]]
-   [:g {:data-part "clip"}
-    [:g {:data-part "spin"}
-     [:path {:transform art/spark-transform :d art/spark :fill art/gold :stroke art/ink :stroke-width 16
-             :paint-order "stroke"}]]]])
+(defn- eyes-svg []
+  [:g {:data-part "eyes"}
+   [:g {:fill art/skin :filter "url(#face-soft)"} (for [d art/eye-cover] ^{:key d} [:path {:d d}])]
+   [eye-svg :far] [eye-svg :near]])
 
 (defn- head-svg [ref]
-  [:svg.face {:ref ref :viewBox art/view-box :aria-hidden true}
-   [:defs [:filter#face-soft {:x "-50%" :y "-50%" :width "200%" :height "200%"} [:feGaussianBlur {:stdDeviation 7}]]]
+  [:svg.face {:ref ref :data-part "root" :viewBox art/view-box :aria-hidden true}
+   [defs-svg]
    [:g {:data-part "body"}
-    [:g {:data-part "back"}
-     [:path {:d art/back-hair :fill art/hair :stroke art/ink :stroke-width 7 :stroke-linejoin "round"}]]
-    [face-svg]
-    [hair-svg]]
-   [:g {:data-part "fx"}]])
+    [:image {:data-part "up" :href (:up art/pictures) :width 512 :height 512}]
+    [:image {:data-part "down" :href (:down art/pictures) :width 512 :height 512 :opacity 0}]
+    [eyes-svg]
+    [:g {:data-part "lens-box"} [:g {:data-part "lens"}]]
+    [:g {:data-part "spark"}
+     [:path {:d logo/spark :fill "url(#face-gold)" :stroke "#2a1f12" :stroke-width 12 :stroke-linejoin "round"
+             :paint-order "stroke"}]]]])
 
 ;; ---- the edges: writing the drawing, listening to the page ----
 
@@ -79,6 +87,23 @@
     (.set written k v)
     (if (= a :html) (set! (.-innerHTML el) v) (.setAttribute el (name a) v))))
 
+(defn- chat-aim
+  "Where the chat k's circle is seen from her face, as a look [x y] (-1 to 1), nil when not shown."
+  [^js svg [s id]]
+  (when-let [^js el (.querySelector js/document (str ".rail-chat[data-slide=\"" s "/" id "\"]"))]
+    (let [a (.getBoundingClientRect svg) b (.getBoundingClientRect el)
+          dx (- (+ (.-left b) (/ (.-width b) 2)) (+ (.-left a) (/ (.-width a) 2)))
+          dy (- (+ (.-top b) (/ (.-height b) 2)) (+ (.-top a) (/ (.-height a) 2)))
+          n (max 1 (js/Math.hypot dx dy))]
+      [(/ dx n) (/ dy n)])))
+
+(defn- aim-ticker
+  "Her ticker's chat, looked at (its circle may have moved since the last frame)."
+  [state svg]
+  (if-let [k (get-in state [:ticker :k])]
+    (assoc-in state [:ticker :aim] (chat-aim svg k))
+    state))
+
 (defn- frame!
   "One frame at now: her next step from the last frame's time, drawn."
   [parts written last-at calm?]
@@ -87,7 +112,8 @@
     (when (>= dt 33)
       (reset! last-at now)
       (let [rs (repeatedly 4 #(js/Math.random))
-            state (swap! brain mind/tick now dt rs (.getHours (js/Date.)))]
+            state (swap! brain #(-> (aim-ticker % (:root parts))
+                                    (mind/tick now dt rs (.getHours (js/Date.)))))]
         (write! parts written (paint/attrs state now @calm?))))))
 
 (defn- watched-changed?
@@ -148,6 +174,13 @@
                  (js/requestAnimationFrame step)))]
     (js/requestAnimationFrame step)
     #(do (reset! stopped true) (unlisten) (remove-watch rdb/app-db ::face))))
+
+(defn click!
+  "A click on her: the chat her lenses talk about opens; else her own chat (:claudia/open)."
+  []
+  (if-let [k (get-in @brain [:ticker :k])]
+    (do (swap! brain mind/clear-ticker) (rf/dispatch [:nav/open k]))
+    (rf/dispatch [:claudia/open])))
 
 (defn face
   "Claudia's face, alive (use as [:f> face] inside the button it belongs to)."
