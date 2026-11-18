@@ -293,7 +293,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/web/views/settings.cljs`.
 
 24. Settings start from a small menu at the bottom left (2026-11-14): a gear at the rail's foot
-    (and the list's, when it is open or on a phone) opens the default plan's 5-hour and week use
+    (and the list's on a phone) opens the default plan's 5-hour and week use
     (a click: Settings), Machines (the Systems popup), Archived chats, Forms, the Desktop popups
     switch, More settings, and the version. Settings itself keeps what needs room: the Claude
     tokens, GitHub (decision 23), all ~/Work sessions, Admin and Servers for admins, each
@@ -302,6 +302,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     of the person whose chats you look at (dashed, amber: read only); its menu starts with Whose
     chats (yours, then every other person's, read only), which left the list's title menu (that
     keeps the servers).
+    The rail is the only chat list on a desktop and an iPad (2026-11-18): the wide list that opened
+    over it (Claudia's face top left, Ctrl+B) is gone there; a phone keeps its full-screen list.
+    Settings (More settings, the plan card, the iPad edge's cog) and Archived chats open in the
+    chat column, full height, and Back (or Escape) returns to the chat that was open; on a phone
+    they still slide over the list. The rail's top holds Claudia's face, bigger, in a violet circle
+    with her head over its top edge (a click: `:claudia/open`, not wired yet), and under it 2D and
+    3D as two small circles; then, where there is no right-edge column, search and New chat.
+    Instead of: a second, wide list beside the rail, and Settings squeezed into a 380 px drawer.
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
     (never under the status bar or the home bar) and meet each other, the drawing board wears the
     chat's own background,
@@ -310,6 +318,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     bottom inset moves all of them together. Instead of: a gear in the list's header with one
     long Settings scroll, the Systems computer alone on the rail, and a Picture | Timeline switch.
     Files: `src/claudia/web/views/menu.cljs`, `src/claudia/web/views/settings.cljs`,
+    `src/claudia/web/views/shell.cljs`, `src/claudia/web/views/rail.cljs`,
     `resources/web/css/claudia.css`.
 
 25. Chat colours everywhere, no default look (2026-11-14): every chat has one of the chat
@@ -498,7 +507,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
     - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
-      circles (no + since 2026-11-17: a new chat starts from the edge's New chat, Alt+N or the list) sit centred at middle height, the open chat kept in the middle; with more
+      circles (no + since 2026-11-17: a new chat starts from the edge's New chat or Alt+N) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
       bottom middle too (bottom middle is each screen's main action), the list ending in room as
@@ -553,7 +562,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 45. One search panel (2026-11-17, the user's picks one by one): a panel over the dimmed page, not
     the whole screen (claudia.web.views.search-panel). One list of every chat, open and archived:
     titles, projects, what was said. On every screen: the iPad's edge search, the rail's search
-    (only where there is no right-edge column), the list's search button, ⌘K / Ctrl+K. Before a
+    (only where there is no right-edge column), the phone list's search button, ⌘K / Ctrl+K. Before a
     word is typed: the ten archived chats last active (a row keeps no archiving time). A find: the
     title in the chat's colour, project, when, the lines that matched lit; a tap opens that chat at
     that message. Project chips under the field. ✕, Escape or a tap on the dimmed page closes it,

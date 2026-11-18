@@ -194,6 +194,10 @@
   (is (= {:folder "abc" :saved "f.txt"} (attach/upload-path "/up/abc/f.txt" "f"))))
 
 (deftest layout-numbers
+  (is (= :settings (shell/column-pane false {:settings? true :archived? true})))
+  (is (= :archived (shell/column-pane false {:archived? true})))
+  (is (nil? (shell/column-pane false {})))
+  (is (nil? (shell/column-pane true {:settings? true})) "a phone: over its list, not in the chat column")
   (is (= 300 (shell/dragged-width 0 1000 100)))
   (is (= 714 (shell/dragged-width 0 1000 900)))
   (is (= "minmax(300px, 1fr) 6px 16px" (shell/split-columns true 400)))

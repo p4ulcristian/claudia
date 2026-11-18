@@ -28,7 +28,6 @@
    :open nil               ; [server chat] of the open chat, or nil (a new chat)
    :tabs {}                ; other tabs of this browser: tab id -> {:open [server chat] :view} (claudia.web.tabs)
    :screen :list           ; phone only: :list | :chat | :picture
-   :sidebar? false         ; desktop: the full list open as a drawer over the rail (never kept)
    :search-panel? false    ; the search panel is open (claudia.web.views.search-panel)
    :turn-since {}          ; [server chat] -> when its running turn was first seen running (ms)
    :new-server (stored "claudia.newServer" nil) ; where a new chat starts (the last used)

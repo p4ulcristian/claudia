@@ -10,7 +10,6 @@
 (rf/reg-sub :servers (fn [db] (:servers db)))
 (rf/reg-sub :open (fn [db] (:open db)))
 (rf/reg-sub :screen (fn [db] (:screen db)))
-(rf/reg-sub :sidebar? (fn [db] (:sidebar? db)))
 (rf/reg-sub :search-panel? (fn [db] (:search-panel? db)))
 (rf/reg-sub :turn-since (fn [db [_ k]] (get-in db [:turn-since k])))
 (rf/reg-sub :error (fn [db] (:error db)))
@@ -82,6 +81,15 @@
  :<- [:hidden-server-set]
  :<- [:open]
  (fn [[servers archived? hidden open]] (list-rows servers archived? hidden open)))
+
+(rf/reg-sub
+ :chat-rows
+ ;; The chats, never the archived ones: the rail keeps them while the chat column shows the
+ ;; archived chats (README decision 24).
+ :<- [:servers]
+ :<- [:hidden-server-set]
+ :<- [:open]
+ (fn [[servers hidden open]] (list-rows servers false hidden open)))
 
 (rf/reg-sub
  :all-rows
