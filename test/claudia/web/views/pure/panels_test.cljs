@@ -322,3 +322,9 @@
   (is (false? (sidebar/done-mark? {:ended 5 :at 5} false)) "already seen")
   (is (false? (sidebar/done-mark? {:ended 5 :running true} true)) "running again")
   (is (false? (sidebar/done-mark? {:ended 5 :waiting true} true)) "a question waits"))
+
+(deftest the-seconds-dial-lights-the-clocks-seconds
+  (is (= 0 (sidebar/second-dot 0 4999)))
+  (is (= 7 (sidebar/second-dot 1000 (+ 1000 (* 1000 (+ 240 35))))) "4:35 -> 35 s -> the 7th dot from the top")
+  (is (= 11 (sidebar/second-dot 0 59999)))
+  (is (= 0 (sidebar/second-dot 0 60000)) "a new minute starts at the top"))

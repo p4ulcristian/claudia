@@ -85,6 +85,12 @@
       (pos? at) ["quiet" (let [a (short-ago at now)] (if (re-find #"\d[mh]$" a) (str a " ago") a))]
       :else ["quiet" ""])))
 
+(defn second-dot
+  "Which of the working ring's 12 dots is lit (0 at the top, clockwise): the clock's seconds, 5 a
+  dot, counted from since (ms; nil: the wall clock's seconds) to now."
+  [since now]
+  (mod (quot (quot (- now (or since 0)) 1000) 5) 12))
+
 (defn done-mark?
   "Whether a chat's circle carries the big check (it finished since you looked: the status line's
   done, nothing running or waiting)."
