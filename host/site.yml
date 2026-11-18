@@ -24,6 +24,10 @@
         name: safe_apply
         tasks_from: arm
 
+    - name: The journal kept on disk a year (the activity log, decision 59)
+      ansible.builtin.import_role:
+        name: journald
+
     - name: Agent users and break-glass
       ansible.builtin.import_role:
         name: users

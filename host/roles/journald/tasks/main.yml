@@ -1,0 +1,35 @@
+---
+# The activity log is journald (README decision 59): kept on disk across reboots, for up to a year
+# or journald_max_use, whichever comes first. A drop-in, so the distribution's journald.conf stays.
+- name: Make journald's drop-in folder
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Keep the journal on disk, up to a year
+  ansible.builtin.copy:
+    content: |
+      # Claudia host standard (host/roles/journald): the activity log lives here (decision 59).
+      [Journal]
+      Storage=persistent
+      SystemMaxUse={{ journald_max_use }}
+      MaxRetentionSec={{ journald_max_retention }}
+    dest: /etc/systemd/journald.conf.d/10-claudia.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart journald
+
+# A tool runs as the same agent user as its runner. With Yama's ptrace_scope at 1 or more, a process
+# may only trace its own children, so a tool cannot reach into the runner and write lines in its name
+# (decision 59). Most distributions default to 1; this keeps it so.
+- name: Keep ptrace limited to a process's own children
+  ansible.posix.sysctl:
+    name: kernel.yama.ptrace_scope
+    value: "1"
+    sysctl_file: /etc/sysctl.d/10-claudia-ptrace.conf
+    state: present
+    reload: true

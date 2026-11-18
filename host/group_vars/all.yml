@@ -84,3 +84,6 @@ agent_bin_dir: /usr/local/lib/claudia-agent-bin
 default_system_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # The agents' sessions: the shim's folder first, then Claudia's own PATH (role root_helper reads it).
 agent_path: "{{ agent_bin_dir }}:{{ claudia_env_path }}"
+# The journal holds the activity log (decision 59): kept a year, at most this much disk per server.
+journald_max_use: 10G
+journald_max_retention: 1year
