@@ -55,7 +55,7 @@
 
 (defn project-face
   "A project's face: its logo, else its short tag, else a small dot for a folder without a project.
-  The chat's circle and the chat header's project picker draw it; with no-logo (the Folders modal's
+  The chat's circle draws it; with no-logo (the Folders modal's
   bookmark cards) that is drawn instead of the tag and the dot."
   [_server _folder & _]
   (let [broken (r/atom false)]

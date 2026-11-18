@@ -79,23 +79,27 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('Folders opens from the header; a bookmark and a tree folder become the new chat\'s folder (README decisions 61 to 64)', async () => {
+    if (screen.name === 'desktop') await step('the header shows the folder pill with the work folder\'s path and the colour swatch, no project pill; Folders opens from the pill and a bookmark and a tree folder become the new chat\'s folder (README decisions 22, 61 to 64)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
-      const pick = page.locator('.chat-head .proj-name');
-      await page.locator('.chat-head button.icon.folders').click({ timeout: waitMs });
+      const pill = page.locator('.chat-head .folder-pill');
+      const pick = pill.locator('.folder-path');
+      await until('the folder pill shows the work folder', async () => /\/work$/.test((await pick.textContent()) ?? ''));
+      await page.locator('.chat-head .colour-btn').waitFor({ timeout: waitMs });
+      if (await page.locator('.chat-head .proj-btn').count()) throw new Error('the project pill is still there');
+      await pill.click({ timeout: waitMs });
       await page.locator('.fd-detail .fd-title', { hasText: 'work' }).waitFor({ timeout: waitMs });
       await row('claude').click({ timeout: waitMs });
       await row('claude').locator('.fd-pin').click({ timeout: waitMs });
       await page.locator('.fd-card', { hasText: 'claude' }).getByRole('button', { name: 'Select' }).click({ timeout: waitMs });
       await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
-      await until('the folder pick is claude', async () => (await pick.textContent()) === 'claude');
-      await page.locator('.chat-head button.icon.folders').click({ timeout: waitMs });
+      await until('the folder pick is claude', async () => /\/claude$/.test((await pick.textContent()) ?? ''));
+      await pill.click({ timeout: waitMs });
       await page.locator('.fd-detail .fd-title', { hasText: 'claude' }).waitFor({ timeout: waitMs });
       await row('hub').click({ timeout: waitMs });
       await page.locator('.fd-detail .fd-title', { hasText: 'hub' }).waitFor({ timeout: waitMs });
       await page.getByRole('button', { name: 'Use for this chat' }).click({ timeout: waitMs });
       await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
-      await until('the folder pick is hub', async () => (await pick.textContent()) === 'hub');
+      await until('the folder pick is hub', async () => /\/hub$/.test((await pick.textContent()) ?? ''));
     });
     await step('the chat opens', async () => {
       await page.getByText(title, { exact: true }).first().click({ timeout: waitMs });

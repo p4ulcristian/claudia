@@ -709,7 +709,7 @@
 
 (rf/reg-event-fx
  :chat/folder
- ;; Move to project: the chat's working folder (blank: no project).
+ ;; A chat's working folder (the Folders modal's Select; blank: none).
  (fn [_ [_ [s c] folder]]
    {:ws/send [s {:type "folder" :chat c :folder (str/trim (str folder))}]}))
 

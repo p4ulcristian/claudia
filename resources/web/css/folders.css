@@ -39,7 +39,6 @@ ul.fd-warn { padding-left: 18px; }
 .fd-node:hover .fd-pin, .fd-pin.on, .fd-node.on .fd-pin { opacity: 1; }
 .fd-pin.on { color: var(--amber); }
 @media (hover: none) { .fd-pin { opacity: 1; } }
-.icon.folders .fd-icon { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.4; }
 
 .fd-tree { flex: 1 1 0; min-height: 120px; overflow: hidden; }
 .fd-node { display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 13.5px; }

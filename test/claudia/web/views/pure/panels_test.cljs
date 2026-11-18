@@ -142,14 +142,6 @@
   (is (= "No match." (sidebar/empty-note "x" true))))
 
 (deftest menus
-  (let [rows [{:server "a" :project {:name "iris" :root "/w/iris"}} {:server "a" :project {:name "claudia" :root "/w/claudia"}}
-              {:server "a" :project {:name "claudia" :root "/w/claudia"}} {:server "b" :project {:name "x" :root "/w/x"}} {:server "a"}]]
-    (is (= ["/w/claudia" "/w/iris"] (map :key (menu/move-targets rows "a" ""))) "this server's projects, most chats first")
-    (is (= ["/w/iris"] (map :key (menu/move-targets rows "a" "IR"))))
-    (is (= "/w/iris" (menu/typed-folder (menu/move-targets rows "a" "ir") "ir")) "one project left: that one")
-    (is (= "~/Work/new" (menu/typed-folder [] " ~/Work/new ")))
-    (is (= "apps/new" (menu/typed-folder [{:key "/w/apps"}] "apps/new")) "a path stays a path")
-    (is (nil? (menu/typed-folder [] "  "))))
   (is (= {:left 6 :top 50} (menu/menu-pos 0 50 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))

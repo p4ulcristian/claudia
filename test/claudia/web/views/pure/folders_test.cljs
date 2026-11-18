@@ -1,9 +1,7 @@
 (ns claudia.web.views.pure.folders-test
-  "The Folders screen's data (claudia.web.views.pure.folders) and the project list's bookmarks
-  (claudia.web.views.pure.menu/with-bookmarks), on plain data."
+  "The Folders modal's data (claudia.web.views.pure.folders), on plain data."
   (:require [cljs.test :refer [deftest is]]
-            [claudia.web.views.pure.folders :as pure]
-            [claudia.web.views.pure.menu :as menu]))
+            [claudia.web.views.pure.folders :as pure]))
 
 (deftest paths-up-to-the-root
   (is (= "/home/ana" (pure/parent-of "/home/ana/Work")))
@@ -53,11 +51,3 @@
          (pure/bookmark-rows [{:server "home" :folder "/w/a" :label "A"} {:server "box" :folder "/x"}
                               {:server "home" :folder "/w/gone"}]
                              "home" #{"/w/gone"}))))
-
-(deftest the-project-list-shows-bookmarks-first
-  (let [targets [{:key "/w/app" :label "app" :count 3} {:key "/w/iris" :label "iris" :count 1}]
-        items [{:server "home" :folder "/w/iris" :label "Iris"} {:server "home" :folder "/srv/data"}
-               {:server "box" :folder "/w/app"}]]
-    (is (= ["/w/iris" "/srv/data" "/w/app"] (map :key (menu/with-bookmarks targets items "home" ""))))
-    (is (= [{:key "/srv/data" :label "data" :bookmark true}] (menu/with-bookmarks [] items "home" "srv")))
-    (is (= targets (menu/with-bookmarks targets [] "home" "")))))
