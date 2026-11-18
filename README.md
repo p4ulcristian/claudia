@@ -574,8 +574,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     running (a live clock), “? asks · 3m” in amber while a question waits, “done · 12m”
     when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
     (claudia.web.views.pure.sidebar/status-line). No spinning (2026-11-18): instead of the turning
-    ring, twelve green dots ring a working chat's circle and one bright dot steps round once a
-    second, like a clock's second hand. The chat has its own clock (its turn) and every agent its
+    ring, twelve green dots on a working chat's circle are a seconds dial: the dot of the clock's
+    seconds under the name is lit (5 seconds a dot, so it steps every 5 seconds), drawn in place,
+    never rotated. The chat has its own clock (its turn) and every agent its
     own (from when it started): while the turn runs the line shows the chat's clock, once only
     agents are left the longest-running agent's (“6:30 · 2 agents”, the row's `agentsFor`); each
     agent's own clock stays on its chip over the composer. A chat that finished since you looked also gets a
