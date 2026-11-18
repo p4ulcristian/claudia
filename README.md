@@ -306,8 +306,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     over it (Claudia's face top left, Ctrl+B) is gone there; a phone keeps its full-screen list.
     Settings (More settings, the plan card, the iPad edge's cog) and Archived chats open in the
     chat column, full height, and Back (or Escape) returns to the chat that was open; on a phone
-    they still slide over the list. The rail's top holds Claudia's face, bigger, in a violet circle
-    with her head over its top edge (a click: `:claudia/open`, not wired yet), and under it 2D and
+    they still slide over the list. The rail's top holds Claudia's face, bigger and with no frame
+    round her, so her animations show whole (a click opens her chat, decision 48), and under it 2D and
     3D as two small circles; then, where there is no right-edge column, search and New chat.
     Instead of: a second, wide list beside the rail, and Settings squeezed into a 380 px drawer.
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
@@ -573,7 +573,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Under the name (two lines, as before) a third line in words: “4:12 · 2 agents” while
     running (a live clock), “? asks · 3m” in amber while a question waits, “done · 12m”
     when it finished since you looked, “2h ago” / “Tue” / “12 Nov” when quiet
-    (claudia.web.views.pure.sidebar/status-line). The list and the group card keep their badges.
+    (claudia.web.views.pure.sidebar/status-line). A chat that finished since you looked also gets a
+    big green check drawn through its circle from the middle (2026-11-18), so done stands out. The list and the group card keep their badges.
     No card with more (started, project) on hover or long-press: dropped by the user the same day.
 47. The hub proves itself with a key, not with the network (2026-11-17, the user's call to move every
     machine off the gate's WireGuard onto Headscale): every call the hub makes on a front carries

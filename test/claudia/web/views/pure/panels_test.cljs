@@ -312,3 +312,9 @@
     (is (= {:initials "P" :name "Peter" :other? true :picture nil} (menu/profile-face me "peter" owners)))
     (is (= "/hub/picture/a?v=1" (menu/picture-of me owners "paul")))
     (is (= {:initials "M" :name "Me" :other? false :picture nil} (menu/profile-face nil nil nil)))))
+
+(deftest a-finished-chat-gets-the-big-check
+  (is (true? (sidebar/done-mark? {:ended 5 :at 5} true)))
+  (is (false? (sidebar/done-mark? {:ended 5 :at 5} false)) "already seen")
+  (is (false? (sidebar/done-mark? {:ended 5 :running true} true)) "running again")
+  (is (false? (sidebar/done-mark? {:ended 5 :waiting true} true)) "a question waits"))

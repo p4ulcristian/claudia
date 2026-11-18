@@ -83,6 +83,12 @@
       (pos? at) ["quiet" (let [a (short-ago at now)] (if (re-find #"\d[mh]$" a) (str a " ago") a))]
       :else ["quiet" ""])))
 
+(defn done-mark?
+  "Whether a chat's circle carries the big check (it finished since you looked: the status line's
+  done, nothing running or waiting)."
+  [r done?]
+  (= "done" (first (status-line r done? 0))))
+
 (defn with-clock-times
   "A server's chat rows as they came at now (page time): runningFor and the asks' ago become the page
   times runningSince and askedAt, so a clock can run on without a new frame."
