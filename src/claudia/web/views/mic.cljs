@@ -51,14 +51,18 @@
                       (mic/report! {:event "slow-start" :steps (mic/steps-now)}))
                    5000)))
 
-(defn- screen-angle
-  "How far the screen is turned from portrait, counterclockwise (degrees)."
-  []
-  (or (some-> js/screen .-orientation .-angle) (some-> js/window .-orientation) 0))
+(defn- turns
+  "Every word on the screen's turn: the app's (session s), window.orientation, screen.orientation."
+  [s]
+  {:native (:turn s) :window (.-orientation js/window) :screen (some-> js/screen .-orientation .-angle)})
+
+(defn- screen-angle [s]
+  (let [{:keys [native window screen]} (turns s)] (pure/turn-angle native window screen)))
 
 (defn- started! [t0 warm s]
   (mic/report! {:event "started" :ms (js/Math.round (- (js/performance.now) t0)) :warm warm :steps (when-not warm (mic/steps-now))
-                :mic (:mic s) :angle (screen-angle) :edge (some-> (pure/speak-edge (:mic s) (screen-angle)) name)})
+                :mic (:mic s) :angle (screen-angle s) :turns (turns s)
+                :edge (some-> (pure/speak-edge (:mic s) (screen-angle s)) name)})
   s)
 
 (defn- start-failed! [set-phase ^js err]
@@ -85,7 +89,7 @@
       (-> p
           (.then (fn [s]
                    (set! (.-current live) s)
-                   (set-mic (:mic s))
+                   (set-mic s)
                    (when (.-current hold)
                      (set! (.-current hold) (assoc (.-current hold) :rec-at (js/performance.now)))
                      (set-phase :recording))))
@@ -152,9 +156,9 @@
 
 (defn- speak-here
   "While recording in the app: a glow on the screen edge nearest the microphone iOS records from,
-  so the device is held with that side free and towards the mouth."
-  [mic]
-  (when-let [edge (pure/speak-edge mic (screen-angle))]
+  so the device is held with that side free and towards the mouth. s: the recording session."
+  [s]
+  (when-let [edge (pure/speak-edge (:mic s) (screen-angle s))]
     [:div.speak-here {:class (name edge) :aria-hidden true} [:span "speak here"]]))
 
 (defn- view [{:keys [phase draft-key mic] :as parts}]

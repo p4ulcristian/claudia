@@ -11,7 +11,7 @@ import WebKit
 ///
 /// Like the page's mic it stays warm after a press (`idle` seconds) and keeps the last second, so a
 /// clip starts half a second before the press. Messages (each answered through the reply):
-/// `{op: "start"}` -> {rate, mic} once samples flow (mic: which microphone iOS records from, so the
+/// `{op: "start"}` -> {rate, mic, turn} once samples flow (turn: the screen's turn, degrees) (mic: which microphone iOS records from, so the
 /// page can show where to speak: {port, name, source?, location?, orientation?}); `{op: "spectrum"}` -> 256 bytes, low to high, like
 /// an AnalyserNode's getByteFrequencyData (fftSize 512); `{op: "stop"}` -> the clip as base64 16 kHz
 /// WAV; `{op: "discard"}`; `{op: "close"}`. Only the hub's main frame is answered.
@@ -93,6 +93,19 @@ final class NativeMic: NSObject, WKScriptMessageHandlerWithReply {
         return m
     }
 
+    /// How far the app's screen is turned from portrait, counterclockwise, in degrees (0, 90, 180,
+    /// 270), from the window scene: the web view's screen.orientation said 0 in landscape on the iPad.
+    /// landscapeRight (the bottom edge on the right) puts the device's top on the left: 90.
+    static func screenTurn() -> Int {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        switch scene?.effectiveGeometry.interfaceOrientation {
+        case .landscapeRight: return 90
+        case .portraitUpsideDown: return 180
+        case .landscapeLeft: return 270
+        default: return 0
+        }
+    }
+
     private func sounding(within seconds: Double) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return Date().timeIntervalSince(lastSample) < seconds
@@ -152,7 +165,7 @@ final class NativeMic: NSObject, WKScriptMessageHandlerWithReply {
             clip = Array(ring.suffix(Int(rate * preSeconds)))
             let r = rate
             lock.unlock()
-            reply(["rate": r, "mic": Self.micInfo()], nil)
+            reply(["rate": r, "mic": Self.micInfo(), "turn": Self.screenTurn()], nil)
         } else if Date() < until {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.waitForSound(until: until, reply) }
         } else {

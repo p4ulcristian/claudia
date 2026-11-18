@@ -119,3 +119,11 @@
                  180 {:top :bottom :bottom :top} 270 {:top :right :bottom :left}}]
       (get-in turns [(mod (or angle 0) 360) e]))))
 
+(defn turn-angle
+  "How far the screen is turned from portrait, counterclockwise (0 90 180 270): the app's own word
+  (native) first, then window.orientation (WebKit keeps it on iOS; -90 is 270), then
+  screen.orientation.angle (0 in landscape in the iPad app's web view), else 0."
+  [native window-orientation screen-angle]
+  (let [a (or native window-orientation screen-angle 0)]
+    (mod a 360)))
+

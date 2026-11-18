@@ -77,3 +77,10 @@
     (is (= :top (mic/speak-edge {:port "MicrophoneBuiltIn" :orientation "Back"} 0)) "no location: the back faces from the top")
     (is (nil? (mic/speak-edge {:port "BluetoothHFP"} 0)) "AirPods: nothing to show")
     (is (nil? (mic/speak-edge nil 0)))))
+
+(deftest the-screens-turn-trusts-the-app-first
+  (is (= 90 (mic/turn-angle 90 0 0)))
+  (is (= 270 (mic/turn-angle nil -90 0)) "window.orientation -90: turned right")
+  (is (= 90 (mic/turn-angle nil 90 0)))
+  (is (= 0 (mic/turn-angle nil nil 0)))
+  (is (= 0 (mic/turn-angle nil nil nil))))
