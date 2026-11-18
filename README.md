@@ -216,6 +216,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     in the list with Try again and Throw away and holds the clips after it, so the order holds; after
     a reload kept clips come back that way. Words go to the composer the clip was spoken into
     (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
+    Where to speak (2026-11-18, the user held the iPad with the microphone covered): in the app,
+    each press's start answer says which microphone iOS records from (`mic`: its port, and for the
+    built-in one the data source with its location Upper/Lower and orientation Front/Back/Top/Bottom,
+    `NativeMic.micInfo`); while recording, a green "speak here" glow lights the screen edge nearest
+    it, turned with the screen (`screen.orientation.angle`). A data source can be several
+    microphones combined, so it names a side, not one hole. Headsets and AirPods show nothing; a
+    browser cannot tell, so it shows nothing. The hub's mic log gets `mic` with each start.
     Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
     deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
     (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,

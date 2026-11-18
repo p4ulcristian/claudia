@@ -64,3 +64,16 @@
   (is (= "12.345" (mic/clock-text 12345)))
   (is (= "1:02.345" (mic/clock-text 62345)))
   (is (= "0.000" (mic/clock-text -5)) "never below 0"))
+
+(deftest speak-here-follows-the-mic-and-the-turn
+  (let [front {:port "MicrophoneBuiltIn" :location "Upper" :orientation "Front"}
+        bottom {:port "MicrophoneBuiltIn" :location "Lower" :orientation "Bottom"}]
+    (is (= :top (mic/speak-edge front 0)))
+    (is (= :left (mic/speak-edge front 90)) "turned left: the device's top is on the left")
+    (is (= :right (mic/speak-edge front 270)))
+    (is (= :right (mic/speak-edge front -90)))
+    (is (= :bottom (mic/speak-edge bottom 0)))
+    (is (= :top (mic/speak-edge bottom 180)))
+    (is (= :top (mic/speak-edge {:port "MicrophoneBuiltIn" :orientation "Back"} 0)) "no location: the back faces from the top")
+    (is (nil? (mic/speak-edge {:port "BluetoothHFP"} 0)) "AirPods: nothing to show")
+    (is (nil? (mic/speak-edge nil 0)))))
