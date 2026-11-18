@@ -216,6 +216,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     in the list with Try again and Throw away and holds the clips after it, so the order holds; after
     a reload kept clips come back that way. Words go to the composer the clip was spoken into
     (`:mic/heard` with its key). Files: `src/claudia/web/views/mic_clips.cljs`.
+    Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
+    deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
+    (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,
+    PROTOCOL.md), which ties the clips to it. On that message, ▶ plays the clips in spoken order
+    and "heard as" lists each one's raw and cleaned words: bad audio = the voice or the microphone,
+    raw wrong = the speech model, cleaned wrong = the cleanup. On the device that recorded them only
+    (never uploaded), deleted 30 minutes after they were spoken (swept at start and every minute).
+    Files: `src/claudia/web/voice_back.cljs`, `src/claudia/web/views/voice_back.cljs`.
     My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
     the listen service hears with each person's own names and terms and cleans the text up. The hub
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets

@@ -84,14 +84,21 @@
 
 (defn- wake-with!
   "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
-  now: a running turn is stopped and the message goes once it has ended."
-  [chat text images now]
+  now: a running turn is stopped and the message goes once it has ended. msg-id: the message's id
+  as the page made it (or nil)."
+  [chat text images now msg-id]
   (store/update! chat {:archived false})
   (chats/wake! chat)
   (if now
-    (chats/send-after-stop! chat text images)
-    (if images (chats/send-text! chat text images) (chats/send-text! chat text)))
+    (chats/send-after-stop! chat text images msg-id)
+    (chats/send-text! chat text images msg-id))
   (chats-changed))
+
+(defn msg-id
+  "A send's or new chat's `msg`: the id the page made for the message (a uuid), else nil."
+  [f]
+  (let [m (:msg f)]
+    (when (and (string? m) (re-matches #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" m)) m)))
 
 (defmulti ^:private on-chat-frame
   "A page frame for a known chat: c the page socket, f the frame, chat its id."
@@ -120,7 +127,7 @@
   (let [files (uploads/own-files (:files f))
         images (sent-images f)]
     (when (or (seq (:text f)) (seq files) (seq images))
-      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f))))))
+      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
 (defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
@@ -158,7 +165,7 @@
 (defmethod on-chat-frame "code_send" [_ f chat]
   (when-let [{:keys [scene text]} (codeforms/code-send (chats/scene-of chat) f)]
     (chats/set-scene! chat scene)
-    (when (seq text) (wake-with! chat text nil false))))
+    (when (seq text) (wake-with! chat text nil false nil))))
 
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))
@@ -168,7 +175,8 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell]))]
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :color :talk :bell])
+                                   (msg-id f))]
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})

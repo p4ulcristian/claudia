@@ -750,8 +750,8 @@
   [id]
   (let [waiting (:after-stop (st id))]
     (swap-chat! id dissoc :after-stop)
-    (doseq [[text images] waiting]
-      (if images (send-text! id text images) (send-text! id text)))))
+    (doseq [[text images msg-id] waiting]
+      (send-text! id text images msg-id))))
 
 (defn- turn-end! [id m]
   (let [stopped (boolean (:stopping (st id)))
@@ -997,9 +997,10 @@
         :else (arm-idle! id)))
 
 (defn- send-now!
-  "The message into the live session; sent while a turn runs, it is queued until Claude takes it in."
-  [id message images was-live?]
-  (let [msg (turns/sent-msg (str (random-uuid)) message images (boolean (:running (st id))) (js/Date.now))]
+  "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
+  msg-id: the id the page made for it (nil: one is made here)."
+  [id message images msg-id was-live?]
+  (let [msg (turns/sent-msg (or msg-id (str (random-uuid))) message images (boolean (:running (st id))) (js/Date.now))]
     (swap-chat! id turns/with-sent msg)
     (store/kv! id "turn" (:id msg))
     (note-msg! id msg)
@@ -1010,14 +1011,15 @@
     (set-running! id true)))
 
 (defn send-text!
-  "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames).
-  Sent while a turn runs, it is queued until Claude takes it in."
-  [id message & [images]]
+  "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames);
+  msg-id: the message's id as the page made it (nil: one is made). Sent while a turn runs, it is
+  queued until Claude takes it in."
+  [id message & [images msg-id]]
   (-> (js/Promise.resolve)
       (.then (fn []
                (let [live? (boolean (:live (st id)))]
                  (.then (ensure-session! id) (fn [] live?)))))
-      (.then #(send-now! id message images %))
+      (.then #(send-now! id message images msg-id %))
       (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)})))))
 
 (defn new-chat-colour
@@ -1028,8 +1030,8 @@
 (defn new-chat!
   "Starts a chat with its first message; returns its id (the Claude Code session id). picks: the
   model, effort and plan chosen before it was made, in place before its first turn starts, and
-  the colour its header already wore."
-  [message folder images picks]
+  the colour its header already wore. msg-id: the first message's id as the page made it (or nil)."
+  [message folder images picks msg-id]
   (let [id (str (random-uuid))
         ;; A new chat stays on the plan in use now unless one was picked: a later switch of that one moves no chat.
         s (session/settings-with (assoc (settings id) :plan (:key (tokens/current))) (dissoc picks :color :talk :bell) (map :key (tokens/saved)))]
@@ -1039,18 +1041,18 @@
     (store/update! id (session/flags-of picks))
     (when (some some? (vals s)) (store/kv! id "settings" s))
     (changed!)
-    (send-text! id message images)
+    (send-text! id message images msg-id)
     id))
 
 (defn send-after-stop!
   "A message sent with now: while a turn runs, the turn stops and the message waits for its end
   (sent into a stopping turn, Claude Code could drop it with the turn); with none running it goes
-  at once."
-  [id message images]
+  at once. msg-id: the message's id as the page made it (or nil)."
+  [id message images msg-id]
   (if (:running (st id))
-    (do (swap-chat! id update :after-stop (fnil conj []) [message images])
+    (do (swap-chat! id update :after-stop (fnil conj []) [message images msg-id])
         (stop! id))
-    (if images (send-text! id message images) (send-text! id message))))
+    (send-text! id message images msg-id)))
 
 (defn stop! [id]
   (drop-asks! id true "The user stopped the turn.")

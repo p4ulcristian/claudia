@@ -12,6 +12,7 @@
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.md :as md]
+            [claudia.web.views.voice-back :as voice-back]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
@@ -86,6 +87,7 @@
       (when (and images (pos? images)) [attach/sent-images server chat id images])
       [user-text server chat text]]
      (when queued? [:span.queued-tag "queued"])
+     [voice-back/listen-back id]
      (when (and (not queued?) (or picture? (pos? files) forkable?))
        (msg-links ck id marks))]))
 
