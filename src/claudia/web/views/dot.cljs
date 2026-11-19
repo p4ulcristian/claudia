@@ -32,8 +32,8 @@
                     :animation-delay (str (* i 0.25) "s")}}])]))
 
 (defn project-tags
-  "Short tags for projects, unique among the ones listed: initials of a dashed name (eye-on-rainbow
-  -> eor), else the first letters, three when two projects would share two."
+  "Short tags for projects, unique among the ones listed: initials of a dashed name (iron-rainbow
+  -> ir), else the first letters, three when two projects would share two."
   [names]
   (let [all (distinct (filter seq names))
         tag (fn [n len]

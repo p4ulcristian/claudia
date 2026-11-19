@@ -32,8 +32,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
-   compacts), the model and effort per chat, and the `/` command menu. Edits inside Eye on Rainbow's
-   worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_EOR_URL` are set.
+   compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
+   worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
 
 9. The code is small pure functions (2026-11-03, after a local `keep` shadowing `clojure.core/keep`
    crashed the hub on every start): data in, data out, at most 30 lines each, effects at the edges,
@@ -636,7 +636,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     hops, squashes or turning, the spark never spins; only her sunglasses talk
     (`claudia.web.face.lens`): code rain while chats work (faster when busy), a symbol (! ? z), and
     words typed out in green instead of speech bubbles. A chat's news names the chat ("IRIS DONE ✓",
-    "IR ASKS YOU ?", "EOR FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
+    "IR ASKS YOU ?", "SENTINEL FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
     chat, decision 48). While words are on her lenses she leans out of the rail three times bigger
     so they can be read. Her day (her own clip `:daytime`): COFFEE in the morning, LUNCH, FOCUS, GG
     TODAY, GO TO BED at night. Her brain (moods, events, idle clips: `claudia.web.face.mind`,
