@@ -29,21 +29,51 @@
 
 ;; ---- one folder ----
 
+(defn- link-target!
+  "Promise of {:target :dir?} for the symlink at p: where it points, every link followed, and whether
+  a folder sits there; {:target nil :dir? false} when it is broken."
+  [p]
+  (-> (js/Promise.all #js [(.realpath fsp p) (.stat fsp p)])
+      (.then (fn [[target ^js st]] {:target target :dir? (.isDirectory st)}))
+      (.catch (fn [_] {:target nil :dir? false}))))
+
+(defn- folder-entry
+  "Promise of {:name :dir? true :mtime} for the folder named n inside folder."
+  [folder n]
+  (-> (.lstat fsp (path/join folder n))
+      (.then (fn [^js st] {:name n :dir? true :mtime (js/Math.round (.-mtimeMs st))}))
+      (.catch (fn [_] {:name n :dir? true :mtime nil}))))
+
+(defn- link-entry
+  "Promise of the symlink named n inside folder as an entry: a folder when it points to one, with
+  :link (its target, \"\" when broken)."
+  [folder n]
+  (-> (link-target! (path/join folder n))
+      (.then (fn [{:keys [target dir?]}]
+               (if dir?
+                 (.then (folder-entry folder n) #(assoc % :link target))
+                 {:name n :dir? false :link (or target "")})))))
+
 (defn- entry-of
-  "Promise of a directory entry of folder as {:name :dir? :mtime} (a symlink is no folder here)."
+  "Promise of a directory entry of folder as {:name :dir? :mtime :link?}: a symlink to a folder is a
+  folder with :link (its target)."
   [folder ^js d]
-  (if (.isDirectory d)
-    (-> (.lstat fsp (path/join folder (.-name d)))
-        (.then (fn [^js st] {:name (.-name d) :dir? true :mtime (js/Math.round (.-mtimeMs st))}))
-        (.catch (fn [_] {:name (.-name d) :dir? true :mtime nil})))
-    (js/Promise.resolve {:name (.-name d) :dir? false})))
+  (cond (.isDirectory d) (folder-entry folder (.-name d))
+        (.isSymbolicLink d) (link-entry folder (.-name d))
+        :else (js/Promise.resolve {:name (.-name d) :dir? false})))
 
 (defn entries!
-  "Promise of folder's entries ({:name :dir? :mtime}); rejects with the OS error."
+  "Promise of folder's entries ({:name :dir? :mtime :link?}); rejects with the OS error."
   [folder]
   (-> (.readdir fsp folder #js {:withFileTypes true})
       (.then (fn [ds] (js/Promise.all (.map ds #(entry-of folder %)))))
       (.then vec)))
+
+(defn logical!
+  "Promise of p with `..` resolved but its symlinks kept (the path the user walked), once p resolves
+  to something; rejects like real!."
+  [p]
+  (.then (real! p) (fn [_] (path/resolve p))))
 
 (defn- missing?!
   "Promise: true when no folder sits at p (gone, or something else there); a folder the runner may
@@ -70,13 +100,22 @@
       (.then (fn [^js st] {:name n :dir? (.isDirectory st) :mtime (js/Math.round (.-mtimeMs st)) :size (.-size st)}))
       (.catch (fn [_] {:name n :dir? false :mtime nil :size nil}))))
 
+(defn- content-entry
+  "Promise of the contents entry of picked ({:name :link?}) inside folder: stat-entry, and :link
+  (the target, \"\" when broken) for a symlink."
+  [folder {n :name :keys [link?]}]
+  (if link?
+    (-> (js/Promise.all #js [(stat-entry folder n) (link-target! (path/join folder n))])
+        (.then (fn [[e {:keys [target]}]] (assoc e :link (or target "")))))
+    (stat-entry folder n)))
+
 (defn contents!
   "Promise of folder's contents answer (rules/contents); rejects with the OS error."
   [folder]
   (-> (.readdir fsp folder #js {:withFileTypes true})
       (.then (fn [ds]
-               (let [picked (rules/first-entries (map (fn [^js d] {:name (.-name d) :dir? (.isDirectory d)}) ds))]
-                 (-> (js/Promise.all (into-array (map #(stat-entry folder (:name %)) picked)))
+               (let [picked (rules/first-entries (map (fn [^js d] {:name (.-name d) :dir? (.isDirectory d) :link? (.isSymbolicLink d)}) ds))]
+                 (-> (js/Promise.all (into-array (map #(content-entry folder %) picked)))
                      (.then #(rules/contents folder (vec %) (.-length ds)))))))))
 
 (defn file-stat!

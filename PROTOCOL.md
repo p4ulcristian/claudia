@@ -287,12 +287,12 @@ Answered by the runner (through the front), for the profile's own person only (4
 The whole system is in reach as far as the runner's user may read; EACCES/EPERM answer 403 `{ error: "Permission denied: …" }`,
 a missing folder 404, a path that is no absolute path or no folder 400. Every path is resolved
 (`..`, every symlink followed) before any check. `Entry` = `{ name, path, dir: true, mtime, hidden
-(the name starts with a dot) }`.
+(the name starts with a dot), link? (only on a symlink: its target) }`.
 
 | Call | Answer |
 |---|---|
-| `GET /api/folders?path=<abs>` | `{ path, entries: [Entry], cwd }`: the folders right inside `path` (default "/"; files and symlinks left out), sorted by name (case folded); `path` resolved; `cwd` = `CLAUDIA_CWD` resolved (the tree opens it at first) |
-| `GET /api/folders/contents?path=<abs>` | `{ path, entries: [Item], more }`: everything right inside `path`, folders first, then files, each by name (case folded), at most 5000 (`more` = how many were left out); symlinks followed. `Item` = `{ name, path, dir, mtime, size (bytes; null for a folder or a broken link), hidden, kind ("folder", "image", "video", "audio", "pdf" or "file") }` |
+| `GET /api/folders?path=<abs>` | `{ path, entries: [Entry], cwd }`: the folders right inside `path` (default "/"; files left out; a symlink to a folder is in, with `link` = its target), sorted by name (case folded); `path` with `..` resolved, symlinks kept (a linked folder stays where its link is); `cwd` = `CLAUDIA_CWD` resolved (the tree opens it at first) |
+| `GET /api/folders/contents?path=<abs>` | `{ path, entries: [Item], more }`: everything right inside `path`, folders first, then files, each by name (case folded), at most 5000 (`more` = how many were left out); symlinks followed, `path` kept as walked. `Item` = `{ name, path, dir, mtime, size (bytes; null for a folder or a broken link), hidden, kind ("folder", "image", "video", "audio", "pdf" or "file"), link? (only on a symlink: its target, "" when broken) }` |
 | `GET /api/folders/file?path=<abs>&read=1` | `{ path, text, mtime }` of a text file, or `{ path, error }` when it is over 2 MB, not text (a NUL byte) or unreadable |
 | `GET /api/folders/file?path=<abs>` | the file's bytes, for the kinds `claudia.slave.folders.rules/preview-types` names (images, video, audio, PDF; 415 for any other), with its content type, `x-content-type-options: nosniff`, and except for a PDF `content-security-policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:`; a `Range: bytes=…` header answers 206 with that range (416 when it can't be served); 404 for no file or an empty one |
 | `POST /api/folders/missing` `{ paths }` | `{ missing }`: those of `paths` (at most 200 absolute paths) where no folder sits (gone or not a folder; a folder the runner may not look at counts as there): the bookmarks shown as missing |

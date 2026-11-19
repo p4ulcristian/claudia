@@ -24,13 +24,16 @@
 ;; ---- one folder's listing ----
 
 (defn entry-row
-  "A folder entry {:name :mtime} inside parent as the page gets it."
-  [parent {entry-name :name :keys [mtime]}]
-  {:name entry-name :path (path/join parent entry-name) :dir true :mtime mtime
-   :hidden (str/starts-with? entry-name ".")})
+  "A folder entry {:name :mtime :link?} inside parent as the page gets it; a symlink keeps its own
+  path (the link's place) and names its target in :link."
+  [parent {entry-name :name :keys [mtime link]}]
+  (cond-> {:name entry-name :path (path/join parent entry-name) :dir true :mtime mtime
+           :hidden (str/starts-with? entry-name ".")}
+    link (assoc :link link)))
 
 (defn listing
-  "The folders among entries ({:name :dir? :mtime}) of parent, sorted by name (case folded)."
+  "The folders among entries ({:name :dir? :mtime :link?}) of parent, symlinks to folders included,
+  sorted by name (case folded)."
   [parent entries]
   (->> entries
        (filter :dir?)
@@ -67,11 +70,13 @@
           :else (first (str/split t #"/")))))
 
 (defn content-row
-  "An entry {:name :dir? :mtime :size} inside parent as the contents pane gets it."
-  [parent {entry-name :name :keys [dir? mtime size]}]
-  {:name entry-name :path (path/join parent entry-name) :dir (boolean dir?) :mtime mtime
-   :size (when-not dir? size) :hidden (str/starts-with? entry-name ".")
-   :kind (if dir? "folder" (kind-of entry-name))})
+  "An entry {:name :dir? :mtime :size :link?} inside parent as the contents pane gets it; a symlink
+  names its target in :link (\"\" when broken)."
+  [parent {entry-name :name :keys [dir? mtime size link]}]
+  (cond-> {:name entry-name :path (path/join parent entry-name) :dir (boolean dir?) :mtime mtime
+           :size (when-not dir? size) :hidden (str/starts-with? entry-name ".")
+           :kind (if dir? "folder" (kind-of entry-name))}
+    link (assoc :link link)))
 
 (defn ordered
   "Entries ({:name :dir?}) folders first, then files, each by name (case folded)."
