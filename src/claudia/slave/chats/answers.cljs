@@ -26,11 +26,10 @@
     :else nil))
 
 (defn secret-ask
-  "A secret ask as the page gets it: account and vault say where the value comes from, pubkey what
-  to seal it to, expires when it ends."
-  [ask-id {:keys [ref reason]} pubkey account vault expires]
-  {:id ask-id :kind "secret" :ref ref :reason reason :account account :vault vault
-   :pubkey pubkey :expires expires})
+  "A secret ask as the page gets it: pubkey is what the key broker (or the page, pasted) seals the
+  value to, expires when it ends (README decision 66)."
+  [ask-id {:keys [ref reason]} pubkey expires]
+  {:id ask-id :kind "secret" :ref ref :reason reason :pubkey pubkey :expires expires})
 
 (defn permit-ask
   "An ExitPlanMode call as a permit ask: the plan to OK."

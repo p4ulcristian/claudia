@@ -314,8 +314,7 @@
        (fn [done]
          (let [kp (secret/keypair)
                ask-id (str (random-uuid))
-               ask (answers/secret-ask ask-id args (:pubkey kp) (env/env "CLAUDIA_OP_ACCOUNT" "")
-                                       (env/env "CLAUDIA_VAULT_SERVER" "") (+ (js/Date.now) secret-ms))]
+               ask (answers/secret-ask ask-id args (:pubkey kp) (+ (js/Date.now) secret-ms))]
            (add-ask! id {:ask ask :resolve done :keys kp
                          :secret {:command command :env_name env_name}
                          :timer (js/setTimeout #(secret-expired! id ask-id args done) secret-ms)}))))))

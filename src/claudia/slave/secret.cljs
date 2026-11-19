@@ -1,25 +1,17 @@
 (ns claudia.slave.secret
-  "1Password secrets that never rest on the server (plan/1passwd-plan.md): a one-time keypair per
-  request, the value sealed to it by the vault server (or by the page, pasted), opened here, used by
-  one command and gone. Nothing here logs or stores a value."
+  "1Password secrets that never rest on the server (README decision 66): a one-time keypair per
+  request, the value sealed to it by the key broker on the gate (or by the page, pasted), opened
+  here, used by one command and gone. Nothing here logs or stores a value."
   (:require ["libsodium-wrappers" :as sodium]
             ["node:child_process" :as cp]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [claudia.node.sealbox :refer [b64 unb64]]))
 
 (def ready (.-ready sodium))
-
-;; Standard base64 with padding on the wire (PROTOCOL.md "Secrets").
-(defn- b64 [^js raw] (.toString (js/Buffer.from raw) "base64"))
-(defn- unb64 [s] (js/Uint8Array. (js/Buffer.from (str s) "base64")))
 
 (defn keypair []
   (let [^js kp (sodium/crypto_box_keypair)]
     {:public (.-publicKey kp) :private (.-privateKey kp) :pubkey (b64 (.-publicKey kp))}))
-
-(defn seal
-  "The value sealed to a base64 public key, as base64 (crypto_box_seal)."
-  [value pubkey]
-  (b64 (sodium/crypto_box_seal value (unb64 pubkey))))
 
 (defn open
   "The sealed value (base64) opened with the request's keypair; throws when it does not open."
@@ -53,21 +45,3 @@
                   (fn [^js err stdout stderr]
                     (done (run-result value (some? err) (when err (or (.-code err) (.-signal err)))
                                       stdout stderr)))))))
-
-(defn op-error
-  "Why op read failed, from its stderr (op's messages never hold the value), else the fallback."
-  [stderr fallback]
-  (str "op read failed: " (or (not-empty (first (str/split-lines (str/trim (str stderr))))) fallback)))
-
-(defn op-read
-  "Promise of the value at ref, read by the 1Password CLI from account (the desktop app asks for the
-  fingerprint). No shell: the ref is one argument."
-  [account ref]
-  (js/Promise.
-   (fn [done fail]
-     (cp/execFile "op" #js ["read" "--account" account ref]
-                  #js {:timeout 90000 :maxBuffer (* 1024 1024)}
-                  (fn [^js err stdout stderr]
-                    (if err
-                      (fail (js/Error. (op-error stderr (if (.-killed err) "timed out" (.-message err)))))
-                      (done (str/replace (str stdout) #"\r?\n$" ""))))))))

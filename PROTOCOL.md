@@ -55,8 +55,6 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | runner | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE` | the hub link: the hub's https address, this server's name and its hub key (the front's `FRONT_HUB_KEY_FILE`, readable by the runner). With them a runner calls the hub as its server for Claudia's own chat (with `CLAUDIA_OWNER_EMAIL`, README decision 48); never set it for a runner that runs as an agent user. The SSH certificates are the front's (README decision 53) |
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | where the Claude long-term tokens are kept (the file itself is no longer written: there is no shared token, README decision 57; the front deletes it and its `.json` note). Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one. Each person's last pick (`PUT /api/claude-token/picks`): `<token file>.picks.json` `{ <profile>: { email, key, name, at } }`; a chat without a pick starts on its profile's entry, and with none it does not start (its message gets an `error` asking to pick one in its header). Runners read them on every session start |
-| runner | `CLAUDIA_OP_ACCOUNT` | 1Password account (sign-in address or id) for this profile's reads |
-| runner | `CLAUDIA_VAULT_SERVER` | the server whose 1Password app unlocks for this profile (e.g. `home`) |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
 | runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_EOR_URL`, `CLAUDIA_EOR_TOKEN_FILE` (default `~/.config/eor/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Eye on Rainbow (`POST <url>/api/worktrees/touches`) |
 | host | `HOST_SOCKET` | unix socket it listens on |
@@ -92,7 +90,6 @@ each such user that is an agent user (README decision 53).
   `Set-Cookie` and the hop-by-hop headers.
 - `/hub/*` and `/s/*` refuse (403) a request another site's page made: `Sec-Fetch-Site` other than
   `same-origin`/`none`, or an `Origin` whose host is not this one (`X-Forwarded-Host`, else `Host`).
-- A view never reads secrets: `/s/<server>/api/secret/…` with `view` is refused (403).
 - front → runner: `X-Claudia-Profile: <profile>` (whose chats), `X-Claudia-Read-Only: 1` for a view
   of a profile whose owner's email is not in `X-Claudia-Writes`, and the sender (README decision
   59): `X-Claudia-By: <the caller's email>` and `X-Claudia-Via: own|write-tick|view`. The front
@@ -121,7 +118,7 @@ inline styles; fonts from Google Fonts; same-origin fetches and sockets; no fram
 `x-frame-options: DENY`); `frame.html` has the html block's policy instead (`sandbox allow-scripts`,
 inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by the page,
 `x-frame-options: SAMEORIGIN`).
-| `GET /hub/me` | `{ email, name, admin, servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
+| `GET /hub/me` | `{ email, name, admin, vault (a key broker is there: passkeys and secret approvals, README decision 66), servers: [{ name, label }], viewServers: [{ name, label }], people: [{ email, name, picture }] }` (people: everyone, picture the address of their profile picture or null; servers: this person's own profile is there; viewServers: the other servers, where they may only read others' chats: `/s/<server>/api/me` and calls with `view`) |
 | `POST /hub/server/claudia` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ as (email, with a profile on that server), op: chats \| new \| send \| archive \| stop, args }` → the operation's answer, carried out on the person's servers through each runner's `/api/chat-ops/…` (`GET chats` → `{ chats }`, `POST new { text, folder? }` → `{ chat }`, `POST send { chat, text }`, `POST archive { chat, archived }`, `POST stop { chat }` → `{ ok }`); 403 when the key or the profile does not match |
 | `POST /hub/server/ssh-cert` (a server: `X-Claudia-Server-Name`, `X-Claudia-Server-Key` = its hub key; no login) | body `{ user, publicKey }` → `{ certificate, keyId }`: an OpenSSH user certificate (one line) for `publicKey` (ed25519, one OpenSSH line), signed by `HUB_SSH_CA_FILE` (README decision 53). Only when `user` is `<profile>-claudia-agent`, that profile is a person's (the People table's profile names) and that person has a profile on that server. Principal exactly `user`, valid from 5 minutes before to 60 minutes after now, key id `<server>/<user>/<ISO time>` (also `keyId`: the front logs it, README decision 59), a random serial, extension `permit-pty` only (no agent, port or X11 forwarding). 403 when the key, the user or the profile does not match; 400 for a key that is not ed25519; 503 without `HUB_SSH_CA_FILE` |
 | `GET /hub/ssh-ca.pub` | no login: the SSH authority's public key, one OpenSSH line (`ssh-ed25519 … claudia-hub-ca`), for every server's `TrustedUserCAKeys`; 503 without `HUB_SSH_CA_FILE` |
@@ -459,22 +456,54 @@ the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the use
 id made for a turn Claude started itself), sends `pictures`, and answers the draw with text only: what changed (no
 screenshot). A chat older than the history has only its last picture (turn `imported`).
 
-## Secrets (1Password, `plan/1passwd-plan.md`)
+## Secrets (1Password through the key broker, README decision 66)
 
 1. Claude calls `mcp__workspace__run_with_secret { ref, env_name, reason, command }` in a chat on server S.
 2. S's runner makes a one-time keypair (libsodium `crypto_box_keypair`), sends `ask { kind: "secret", … pubkey }`.
-3. Allow: the page calls `POST /s/<vault>/api/secret/read { ref, pubkey, request }` (`request` = the
-   ask's `id`; `pubkey` and `sealed` are standard base64 with padding) on the person's
-   vault server V (the hub lets only that person's own profile through). V's runner runs
-   `op read --account <CLAUDIA_OP_ACCOUNT> <ref>` (the desktop app asks for the fingerprint), seals the
-   value to `pubkey` (`crypto_box_seal`) and answers `{ sealed }` (base64). Paste instead: the page
-   seals the pasted text to `pubkey` itself.
-   `pubkey` and `sealed` are standard base64 with padding.
+3. Allow with passkey: the page calls `POST /hub/approve/options { kind: "read", ref, pubkey, request }`
+   (`request` = the ask's `id`; `pubkey` and `sealed` are standard base64 with padding), the person
+   signs the answer's `options` with a passkey (`navigator.credentials.get`, user verification), and
+   the page sends `POST /hub/vault/read { challengeId, response }`. The broker checks the signature,
+   reads `ref` (only `op://<BROKER_VAULT>/…`) with its service account, seals the value to `pubkey`
+   (`crypto_box_seal`) and answers `{ sealed }`. Paste instead: the page seals the pasted text to
+   `pubkey` itself.
 4. The page sends `secret { chat, ask, sealed }` to S. S opens it, runs `command` (in the chat's folder,
    `sh -c`) with `env_name=<value>` in that process's environment only, replaces every occurrence of
    the value in the output with `[secret]`, and answers Claude with the output. The keypair is dropped.
 5. Deny or 10 minutes without an answer: Claude gets a refusal. Nothing is written anywhere: not the
-   database, not a log, not a file. Only the ref, the reason and who allowed it are logged.
+   database, not a log, not a file. Only the ref, the reason, who approved it and with which passkey
+   are logged.
+
+## Key broker (`claudia-broker`, `src/claudia/broker`; README decision 66)
+
+`out/broker.js` runs on the gate from the hub's image as its own container and user. It answers
+only on its unix socket, and only the hub calls it: every body carries the email the hub's login
+vouched for, put there by the hub. Settings:
+
+| Variable | What |
+|---|---|
+| `BROKER_SOCKET` | the unix socket it listens on (mode 0660; its folder is shared with the hub's container, whose user is in the socket's group). Required |
+| `BROKER_DATA` | folder for `broker.db`: passkeys (public keys), enrollment codes (hashes). Default `/data` |
+| `BROKER_OP_TOKEN_FILE` | the 1Password service account's token (read-only, one vault). Unset, empty or refused: reads answer 503, passkeys still work |
+| `BROKER_VAULT` | the only vault read (default `Claudia`) |
+| `BROKER_ORIGIN` | the hub's `https://host`: the page's origin. Required |
+| `BROKER_RP_ID` | the passkeys' relying party (default: the origin's host) |
+| `BROKER_COMMIT` | the commit, named to 1Password as the integration's version |
+| hub: `HUB_BROKER_SOCKET` | the broker's socket as the hub sees it; unset = no broker (`/hub/me` says `vault: false`, the broker's calls answer 503) |
+
+The hub's calls (signed in, same origin; the hub replaces any `email` in the body):
+
+| Call | Answer |
+|---|---|
+| `GET /hub/passkeys` | `{ passkeys: [{ id, name, createdAt, usedAt }] }` |
+| `POST /hub/approve/options` `{ kind: "read", ref, pubkey, request }` \| `{ kind: "add-passkey" }` \| `{ kind: "remove-passkey", id }` | `{ challengeId, options }` (WebAuthn request options, JSON); 409 no passkey yet, 400 a bad purpose |
+| `POST /hub/vault/read` `{ challengeId, response }` | `{ sealed }`; 403 the approval is not open, not theirs, for another kind, or the signature fails; 503 no token; 502 1Password's error |
+| `POST /hub/passkeys/register/options` `{ code }` (first passkey) \| `{ challengeId, response }` (an `add-passkey` approval) | `{ registrationId, options }` (WebAuthn creation options) |
+| `POST /hub/passkeys/register` `{ registrationId, response, name }` | `{ passkey }` |
+| `POST /hub/passkeys/remove` `{ challengeId, response }` (a `remove-passkey` approval) | `{ removed }` |
+
+Every challenge is used once and ends after 5 minutes. On the gate, `broker.js enroll <email>` prints
+a person's one-time code for their first passkey (30 minutes, 5 tries; a new one replaces the old).
 
 ## Root helper (`claudia-root`, `src/claudia/root`; README decision 52)
 

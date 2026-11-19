@@ -227,24 +227,6 @@
       (.then #(let [[status body] (root-route sub %)] (io/send-json res status body)))
       (.catch #(io/send-json res 400 {:error (.-message %)}))))
 
-(defn- secret-read
-  "The vault read: op read on this profile's account, sealed to the asking runner's one-time key."
-  [req res {:keys [read-only] who :profile}]
-  (let [account (.-CLAUDIA_OP_ACCOUNT env)]
-    (cond
-      read-only (io/send-json res 403 {:error "Read only."})
-      (not (seq account)) (io/send-json res 503 {:error "No 1Password account set for this profile (CLAUDIA_OP_ACCOUNT)."})
-      :else
-      (-> (io/read-text req 65536)
-          (.then (fn [body]
-                   (let [{:keys [ref pubkey request]} (p/read-json body)]
-                     (if-not (and (string? ref) (str/starts-with? ref "op://") (string? pubkey))
-                       (io/send-json res 400 {:error "ref must start with op:// and pubkey is needed."})
-                       (do (js/console.log (str "vault read " ref " for request " request " by " who))
-                           (-> (secret/op-read account ref)
-                               (.then (fn [value] (io/send-json res 200 {:sealed (secret/seal value pubkey)})))))))))
-          (.catch (fn [e] (io/send-json res 502 {:error (str (or (.-message e) e))})))))))
-
 (defn- query-param [^js req k]
   (.get (.-searchParams (js/URL. (.-url req) "http://runner")) k))
 
@@ -266,13 +248,12 @@
 (defn request-op
   "Which of the runner's own calls a request is (url without its query; chat-id and sub from
   /api/chats/:id/<sub>; chat-known: that chat is in the store): :no-chat, :picture-png,
-  :me, :secret-read, :root (the front's root calls), :ssh (the front's SSH certificate calls), or nil (the forms' and the API's calls, then not found)."
+  :me, :root (the front's root calls), :ssh (the front's SSH certificate calls), or nil (the forms' and the API's calls, then not found)."
   [method url chat-id sub chat-known]
   (cond
     (and chat-id (= "GET" method) (not chat-known)) :no-chat
     (and chat-id (= sub "picture.png") (= "GET" method)) :picture-png
     (and (= url "/api/me") (= "GET" method)) :me
-    (and (= url "/api/secret/read") (= "POST" method)) :secret-read
     (and (str/starts-with? url "/api/root/") (= "POST" method)) :root
     (and (str/starts-with? url "/api/ssh/") (= "POST" method)) :ssh))
 
@@ -308,7 +289,6 @@
       :picture-png (picture-png req res chat-id)
       :me (io/send-json res 200 {:server nil :profile (:profile who) :profiles [profile] :viewing nil :readOnly (:read-only who)
                                  :version h/version :commit h/commit})
-      :secret-read (secret-read req res who)
       :root (root-call req res (subs url (count "/api/root/")))
       :ssh (ssh-cert/call req res (subs url (count "/api/ssh/")))
       nil (cond

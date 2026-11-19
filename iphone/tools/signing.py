@@ -103,9 +103,10 @@ def entitlements(role, profile_path, *rest):
         if g["aps-environment"] != "production":
             sys.exit(f"the profile's aps-environment is {g['aps-environment']}, not production")
         e["aps-environment"] = "production"
-        # Passkeys inside the web view: Pocket ID's relying party must list this app in its
-        # /.well-known/apple-app-site-association (webcredentials).
-        e["com.apple.developer.associated-domains"] = [f"webcredentials:{passkey_host}"]
+        # Passkeys inside the web view: each relying party (Pocket ID's host for the sign-in, the
+        # hub's host for the key broker, README decision 66) must list this app in its
+        # /.well-known/apple-app-site-association (webcredentials). PASSKEY_HOST: space separated.
+        e["com.apple.developer.associated-domains"] = [f"webcredentials:{h}" for h in passkey_host.split()]
         e["keychain-access-groups"] = shared_keychain(g)
         ts = "com.apple.developer.usernotifications.time-sensitive"
         if g.get(ts):

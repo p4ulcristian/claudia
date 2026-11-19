@@ -34,9 +34,7 @@
 
 (deftest run-result-hides-the-secret
   (is (= {:text "a [secret] b\n[secret]" :error false} (secret/run-result "pw" false nil "a pw b" "pw")))
-  (is (= {:text "(no output)\n(exit 2)" :error true} (secret/run-result "pw" true 2 "" "")))
-  (is (= "op read failed: bad ref" (secret/op-error "bad ref\nmore" "x")))
-  (is (= "op read failed: timed out" (secret/op-error "  " "timed out"))))
+  (is (= {:text "(no output)\n(exit 2)" :error true} (secret/run-result "pw" true 2 "" ""))))
 
 (deftest logos-score-by-name-and-depth
   (is (= 100 (projects/logo-score "favicon.svg" 0)))

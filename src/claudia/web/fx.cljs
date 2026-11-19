@@ -1,8 +1,8 @@
 (ns claudia.web.fx
   "Effects that leave the page: HTTP, the address bar, local storage, sealing secrets."
-  (:require [re-frame.core :as rf]
+  (:require [claudia.web.passkey :as passkey]
+            [re-frame.core :as rf]
             [claudia.web.api :as api]
-            [claudia.shared.protocol :as protocol]
             [claudia.web.db :as db]
             [claudia.web.secret :as secret]
             [claudia.web.speech :as speech]
@@ -54,17 +54,15 @@
 
 (rf/reg-fx
  :secret/read
- ;; Allow: the person's vault server reads 1Password and seals the value to the ask's key.
+ ;; Allow: one of the person's passkeys approves, the key broker on the gate reads 1Password and
+ ;; seals the value to the ask's key (README decision 66).
  (fn [{:keys [server chat ask]}]
-   (-> (api/fetch-json (str "/s/" (js/encodeURIComponent (:vault ask)) "/api/secret/read")
-                   {:method "POST"
-                    :headers {"content-type" "application/json" "accept" "application/json"}
-                    :body (protocol/write-json {:ref (:ref ask) :pubkey (:pubkey ask) :request (:id ask)})})
-       (.then (fn [{:keys [sealed error]}]
+   (-> (passkey/read-sealed ask)
+       (.then (fn [sealed]
                 (if sealed
                   (secret-done server chat (:id ask) sealed)
-                  (rf/dispatch [:ask/state (:id ask) {:error (or error "The vault server gave no answer.")}]))))
-       (.catch #(rf/dispatch [:ask/state (:id ask) {:error (ex-message %)}])))))
+                  (rf/dispatch [:ask/state (:id ask) {:error "The key broker gave no answer."}]))))
+       (.catch #(rf/dispatch [:ask/state (:id ask) {:error (passkey/problem %)}])))))
 
 (rf/reg-fx
  :secret/seal

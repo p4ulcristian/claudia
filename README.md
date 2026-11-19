@@ -26,7 +26,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 5. A clean slate, not a mirror: v1 has chats, questions, the picture (graph, freeform, the forms
    pipeline/timeline/compare/chart/stats) and 1Password secrets; the rest comes back one at a time.
 6. Runs beside the old Claudia at its own address until the switch.
-7. Secrets from 1Password, never stored on a server: [plan/1passwd-plan.md](plan/1passwd-plan.md).
+7. Secrets from 1Password, never stored on a server: [plan/1passwd-plan.md](plan/1passwd-plan.md), read by the key broker on the gate since decision 66.
 
 8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
@@ -733,7 +733,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     password, one SSH key kept in 1Password on the user's devices, and full sudo; used by hand only,
     never by an agent. It is tested on a server before Phase B runs there.
 
-56. 1Password from any device (2026-11-18, the user's call; replaces decisions 1 and 7 of
+56. Replaced by decision 66 (2026-11-19). 1Password from any device (2026-11-18, the user's call; replaces decisions 1 and 7 of
     [plan/1passwd-plan.md](plan/1passwd-plan.md)): a read-only 1Password service account for one
     vault, "Claudia", which holds only machine tokens agents use, never people's logins. Its token is
     kept encrypted under a key that only the person's passkey can produce (WebAuthn PRF), so a
@@ -910,6 +910,36 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     a `new` without a folder still runs in `CLAUDIA_CWD` (the runner is unchanged). Instead of: the
     folder carried from the chat on screen or the last new chat.
 
+66. Secrets come from a key broker on the gate, approved with a passkey (2026-11-19, the user's
+    picks one by one; replaces decision 56 and decisions 1 to 3 and 7 of
+    [plan/1passwd-plan.md](plan/1passwd-plan.md)). One central place holds the keys, so the
+    servers are only workers. The keys live in one 1Password vault, "Claudia" (machine tokens only,
+    never people's logins). Only the key broker reads it (`src/claudia/broker`, `out/broker.js`),
+    with a read-only service account limited to that vault (`BROKER_OP_TOKEN_FILE`, the official
+    `@1password/sdk`). The broker runs on the gate from the hub's own image, as its own container
+    and user, beside the hub and not inside it. It listens on a unix socket only the hub's
+    container reaches, and the hub never holds the token. Every read needs a fresh passkey
+    signature. The page asks the broker for a challenge bound to that read (reference, the
+    runner's one-time key, the ask), the person signs it with Face ID, Touch ID or a PIN, and the
+    broker checks the signature (`@simplewebauthn/server`, user verification required, each
+    challenge used once, 5 minutes). Only then does it read the value and seal it to the runner's
+    one-time key (libsodium, as before), so the hub and the page carry only ciphertext. Passkeys
+    are Claudia's own, for the hub's host: not the gate login's (Pocket ID's), so a stolen login
+    cookie approves nothing. Any provider works (iCloud Keychain, 1Password, Google, …; no
+    attestation, no provider list), and a person keeps several, any one of which approves
+    (Settings → Passkeys). The first needs a one-time code made on the gate (`broker.js enroll
+    <email>`, 30 minutes, 5 tries). Every later one, and removing one, is approved by a passkey
+    already kept. The iPhone and iPad app carries `webcredentials:` for the hub's host as well
+    as Pocket ID's. The runner's own `op read` on a desktop (the vault server,
+    `CLAUDIA_OP_ACCOUNT`, `CLAUDIA_VAULT_SERVER`) is gone; pasting a value still works. What a
+    hacked hub can still do: it serves the page, so it can show one request and have the broker
+    approve another, once per tap. It cannot read the vault without a tap. Instead of: the token
+    sealed under each person's passkey with PRF (decision 56: Claudia would own recovery), the
+    hub reading 1Password itself (a hacked hub would read the whole vault), a proxy that makes
+    the calls with the keys (HTTP only), or a hardware SSH key (the user has none and wants none).
+    Next, not built here: the gate's SSH login as `core` by a 5-minute certificate the broker
+    signs after a passkey (after a tested `break-glass` user on the gate, decision 55).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -992,7 +1022,7 @@ Claude Code cuts long tool descriptions, so the forms' data is also in the syste
 
 ```
 npm ci
-npx shadow-cljs release host runner front hub root sudo web
+npx shadow-cljs release host runner front hub broker root sudo web
 ```
 
 ## Back from the TypeScript Claudia (2026-11-03)

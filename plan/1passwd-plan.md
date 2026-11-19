@@ -1,6 +1,9 @@
 # Plan: 1Password for Claudia, no secrets on the shared server
 
-Planned 2026-11-02. Nothing built yet.
+Planned 2026-11-02; built 2026-11 with the desktop `op read`. Since 2026-11-19 README decision 66
+replaces decisions 1 to 3 and 7 below: a key broker on the gate reads one vault with a service account,
+and each read is approved with a passkey. The rest (the one-time keypair, sealing, paste, nothing kept)
+still holds.
 
 ## Goal
 
