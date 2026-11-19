@@ -9,7 +9,6 @@
             [reagent.hooks :as h]
             [claudia.web.admin :as admin]
             [claudia.web.hooks :as hooks]
-            [claudia.web.views.asks :as asks]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
@@ -127,7 +126,6 @@
                      (when narrow? "narrow") (when ro "read-only")]
              :data-screen (name screen)}
    (when claudia? [:f> claudia-rain/rain])
-   [asks/modal]
    [confirm/archive-ask]
    [confirm/root-ask]
    (when-not world? (chats-view m))

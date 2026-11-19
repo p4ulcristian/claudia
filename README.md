@@ -1040,6 +1040,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     confirm card) stay; image zoom stays full screen. Instead of: Search and My words over the
     dimmed page, Settings, Prompts and Forms as centred windows, Machines in the menu's place, and
     the right half's view kept per browser.
+76. Claude's questions sit in the chat (2026-11-19, the user's call: "even questions should be in
+    the chat"). A question, a secret card and an OK card follow the chat's last message, the chat
+    following them to the bottom, while the right half keeps its view beside them; the keys stay
+    (1-9 pick, Enter answers), and a message typed in the composer still answers the first
+    question. Instead of: a modal over the whole window with "See picture" and a pill to bring it
+    back.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

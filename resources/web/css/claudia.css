@@ -430,21 +430,13 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .panel h3, .o-text, .panel .md, .panel p { overflow-wrap: anywhere; }
 .panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel pre { max-width: 100%; overflow-x: auto; }
-/* Claude's question: a modal over the whole window, so it has room to be read.
-   Esc or "See picture" hides it; the pill at the bottom brings it back. */
-.ask-modal { position: fixed; inset: 0; z-index: 40; overflow-y: auto; overscroll-behavior: contain; padding: 5vh 24px; display: grid; place-items: start center; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); }
-.ask-modal[hidden] { display: none; }
-.ask-modal .panel.ask { width: min(1040px, 100%); padding: 24px 28px; gap: 16px; font-size: 15px; }
-.ask-modal .panel h3 { font-size: 21px; }
-.ask-modal .question { gap: 12px; }
-.ask-modal .question + .question { padding-top: 18px; }
-.ask-modal .options { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
-.ask-modal .option { padding: 12px 14px; }
-.ask-modal .option.other { grid-column: 1 / -1; }
-.ask-modal .o-text .md { font-size: 14px; }
-.ask-modal .preview { font-size: 13px; max-height: 50vh; }
-.ask-modal .panel.permit, .ask-modal .panel.secret { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
-.ask-modal > * + * { margin-top: 16px; }
+/* Claude's questions in the chat, after the last message (README decision 76). */
+.asks-inline { display: grid; gap: 14px; margin-top: 10px; }
+.asks-inline .panel.ask, .asks-inline .panel.permit { padding: 16px 18px; gap: 12px; }
+.asks-inline .question + .question { padding-top: 14px; }
+.asks-inline .options { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+.asks-inline .option.other { grid-column: 1 / -1; }
+.asks-inline .preview { font-size: 13px; max-height: 40vh; }
 .ask-return { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 9px 18px; border-radius: 99px; border: 1px solid var(--violet); background: var(--violet-bg); color: var(--violet); font-weight: 600; box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
 
 /* Where a new chat starts: a row of servers over the composer of an empty chat. */

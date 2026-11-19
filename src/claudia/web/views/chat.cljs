@@ -3,7 +3,8 @@
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
   the working line) and the composer (the mic, Attach, the message and one Send). On a touch tablet
   the mic sits on the screen's right edge instead (claudia.web.views.thumb-edge, README decision 40)."
-  (:require [claudia.web.db :as db]
+  (:require [claudia.web.views.asks :as asks]
+            [claudia.web.db :as db]
             [clojure.string :as str]
             [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
@@ -291,7 +292,8 @@
      (for [[i b] (map-indexed vector blocks)]
        (feed-row ck i b marks))
      (when running (working-line state since))
-     (feed-tail ck state outbox queued running)]))
+     (feed-tail ck state outbox queued running)
+     [asks/in-chat ck (:asks state)]]))
 
 (defn- messages-view [{:keys [ck state] :as oc}]
   (let [box (h/use-ref nil)
@@ -312,7 +314,7 @@
     (use-bottom-on-open! scroll ck)
     (use-keep-place! scroll ck first-id)
     (use-bottom-on-send! scroll (count (:outbox oc)))
-    (use-follow-bottom! scroll [ck (count msgs) (count (:text (peek msgs))) (count (:outbox oc)) running])
+    (use-follow-bottom! scroll [ck (count msgs) (count (:text (peek msgs))) (count (:outbox oc)) running (count (:asks state))])
     (use-follow-on-resize! scroll)
     (use-follow-growth! scroll)
     (use-load-older! scroll ck state (count msgs))

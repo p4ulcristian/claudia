@@ -1,8 +1,8 @@
 (ns claudia.web.views.asks
-  "What Claude asks the person (web/panels.tsx of the TypeScript Claudia): its questions fill the
-  window as a modal, so they have room to be read; Esc or \"See picture\" hides it and the pill at the
-  bottom brings it back. Keys: 1-9 pick an option of the first question still without one, Enter
-  answers. The secret card (1Password through the key broker, approved with a passkey) sits in the same modal."
+  "What Claude asks the person (web/panels.tsx of the TypeScript Claudia), in the chat (README
+  decision 76): its cards follow the last message, the picture staying in view beside them. Keys:
+  1-9 pick an option of the first question still without one, Enter answers. The secret card
+  (1Password through the key broker, approved with a passkey) and the OK cards sit there too."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -10,21 +10,6 @@
             [claudia.web.md :as md]
             [claudia.web.passkey :as passkey]
             [claudia.web.views.pure.asks :as pure]))
-
-(defn- use-esc-peeks!
-  "Esc peeks at the picture, before the window's Esc (which would stop the chat)."
-  [active? on-peek]
-  (h/use-effect
-   (fn []
-     (when active?
-       (let [esc (fn [^js e]
-                   (when (= "Escape" (.-key e))
-                     (.preventDefault e)
-                     (.stopImmediatePropagation e)
-                     (on-peek)))]
-         (js/window.addEventListener "keydown" esc true)
-         #(js/window.removeEventListener "keydown" esc true))))
-   [active?]))
 
 (defn- card-key!
   "A key on the card: Enter answers (not in a text box with text), 1-9 pick an option of the first
@@ -46,14 +31,13 @@
           (.preventDefault e)
           (set-st #(pure/toggle % qs i (:label o))))))))
 
-(defn- use-card-keys! [active? ask qs keys-ref set-st]
+(defn- use-card-keys! [ask qs keys-ref set-st]
   (h/use-effect
    (fn []
-     (when active?
-       (let [k #(card-key! % qs keys-ref set-st)]
-         (js/window.addEventListener "keydown" k)
-         #(js/window.removeEventListener "keydown" k))))
-   [active? (:id ask)]))
+     (let [k #(card-key! % qs keys-ref set-st)]
+       (js/window.addEventListener "keydown" k)
+       #(js/window.removeEventListener "keydown" k)))
+   [(:id ask)]))
 
 (defn- option-button [{:keys [qs i multi? picked busy set-st]} n o]
   (let [on? (boolean (some #{(:label o)} picked))
@@ -94,7 +78,7 @@
       (other-option props)]
      (when (seq preview) [:pre.preview preview])]))
 
-(defn- question-card [k ask active? on-peek]
+(defn- question-card [k ask]
   (let [[st set-st] (h/use-state {}) ; question index -> {:picked [labels] :other text :focus label}
         qs (vec (:questions ask))
         {:keys [busy error]} @(rf/subscribe [:ask-state (:id ask)])
@@ -103,15 +87,13 @@
                     (rf/dispatch [:ask/answer k (:id ask) (pure/answers st qs)])))
         keys-ref (h/use-ref nil)]
     (set! (.-current keys-ref) {:st st :submit submit!})
-    (use-esc-peeks! active? on-peek)
-    (use-card-keys! active? ask qs keys-ref set-st)
+    (use-card-keys! ask qs keys-ref set-st)
     [:section.panel.ask {:class (when busy "busy")}
      (for [[i q] (map-indexed vector qs)]
        (question-view qs st busy set-st i q))
      (when error [:p.ask-error error])
      [:div.actions
       [:span.muted.small.key-hint (pure/key-hint qs)]
-      [:button {:type "button" :on-click on-peek} "See picture"]
       [:button.primary {:type "button" :disabled (or busy (not (pure/ready? st qs))) :on-click #(submit! st)} "Answer"]]]))
 
 (defn- secret-facts [ask]
@@ -220,26 +202,13 @@
          (when error [:p.ask-error error])
          (permit-actions k ask busy)]))))
 
-(defn- modal-view [k asks]
-  (let [[peeking set-peek] (h/use-state false)
-        first-id (:id (first asks))
-        on-peek (h/use-callback #(set-peek true) [])]
-    ;; A new question shows again.
-    (h/use-effect (fn [] (set-peek false) nil) [first-id])
-    [:<>
-     [:div.ask-modal {:hidden peeking :role "dialog" :aria-modal true :aria-label "Claude asks"}
-      (for [a asks]
-        (case (:kind a)
-          "secret" ^{:key (:id a)} [secret-card k a]
-          "permit" ^{:key (:id a)} [permit-card k a]
-          ^{:key (:id a)} [:f> question-card k a (not peeking) on-peek]))]
-     (when peeking
-       [:button.ask-return {:on-click #(set-peek false)} "Claude asks · answer"])]))
-
-(defn modal
-  "The open chat's asks over the whole window (never in another person's read-only view)."
-  []
-  (let [oc @(rf/subscribe [:open-chat])
-        asks (get-in oc [:state :asks])]
-    (when (and (seq asks) (not @(rf/subscribe [:read-only?])))
-      ^{:key (str (:ck oc))} [:f> modal-view (:ck oc) asks])))
+(defn in-chat
+  "Chat k's asks, after its last message (never in another person's read-only view)."
+  [k asks]
+  (when (and (seq asks) (not @(rf/subscribe [:read-only?])))
+    [:div.asks-inline {:role "region" :aria-label "Claude asks"}
+     (for [a asks]
+       (case (:kind a)
+         "secret" ^{:key (:id a)} [secret-card k a]
+         "permit" ^{:key (:id a)} [permit-card k a]
+         ^{:key (:id a)} [:f> question-card k a]))]))
