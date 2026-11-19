@@ -55,6 +55,7 @@
    "/vault/read" routes/read!
    "/vault/standing" routes/read-standing!
    "/keys/list" access/listing
+   "/keys/mine" access/mine
    "/keys/grants" access/grants!})
 
 (defn- answer! [^js res e]

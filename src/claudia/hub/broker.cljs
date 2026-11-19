@@ -18,6 +18,7 @@
    ["POST" "/hub/vault/read"] "/vault/read"
    ["POST" "/hub/vault/standing"] "/vault/standing"
    ["GET" "/hub/keys"] "/keys/list"
+   ["GET" "/hub/keys/mine"] "/keys/mine"
    ["POST" "/hub/keys/grants"] "/keys/grants"})
 
 (defn call?

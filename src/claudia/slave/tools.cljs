@@ -43,7 +43,7 @@ The draw call costs the user nothing to read, so prefer drawing over writing.
 The chat runs in ~/Work. When you start working in a project, call mcp__workspace__set_folder with its root folder; it hands you that project's CLAUDE.md and git status. Call it again whenever you move to another project. (If you edit a file first, the folder is set to that file's project automatically.) Run commands in the working folder (cd <folder> && …). The user sees the working folder, and the file changes you make are shown to them as diffs, so don't list your edits in the chat.
 
 ## Secrets
-When a command needs a password or token, never ask the user to paste it into the chat and never read it yourself. Call mcp__workspace__run_with_secret with the 1Password reference (op://Claudia/item/field: the key broker reads only the vault \"Claudia\"), the environment variable name, the reason and the command: the user approves it in Claudia with a passkey, the command runs with the value in that variable only, and the value is replaced by [secret] in the output you get.
+When a command needs a password or token, never ask the user to paste it into the chat and never read it yourself. First call mcp__workspace__list_secrets: it lists the keys you may use, by name, with their exact references (no values, no approval needed). Never guess a reference. Then call mcp__workspace__run_with_secret with one of those references (op://Claudia/item/field: the key broker reads only the vault \"Claudia\"), the environment variable name, the reason and the command: the user approves it in Claudia with a passkey, the command runs with the value in that variable only, and the value is replaced by [secret] in the output you get.
 
 ## Progress bars
 A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists.
@@ -199,7 +199,9 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
                                                       :caption (s "A few words about it")))}
    :set_folder {:description "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                 :inputSchema (obj ["path"] {:path (s "The project's root folder")})}
-   :run_with_secret {:description "Run one shell command that needs a secret from 1Password, without you ever seeing the secret. The user approves it in Claudia with a passkey, and the key broker reads it from the 1Password vault \"Claudia\" (or the user pastes the value); the command then runs with sh -c in the working folder, with the value in the environment variable env_name only. Every occurrence of the value in the output is replaced by [secret]. Refused if the user says no or does not answer within 10 minutes."
+   :list_secrets {:description "List the 1Password keys you may use in this chat, by name, with the exact op://Claudia/<item>/<field> references to pass to run_with_secret. No values are shown and nothing needs the user's approval. Call it before run_with_secret instead of guessing a reference."
+                  :inputSchema (obj [] {})}
+   :run_with_secret {:description "Run one shell command that needs a secret from 1Password, without you ever seeing the secret. Take ref from list_secrets; never guess it. The user approves it in Claudia with a passkey, and the key broker reads it from the 1Password vault \"Claudia\" (or the user pastes the value); the command then runs with sh -c in the working folder, with the value in the environment variable env_name only. Every occurrence of the value in the output is replaced by [secret]. Refused if the user says no or does not answer within 10 minutes."
                      :inputSchema (obj ["ref" "env_name" "reason" "command"]
                                        (array-map :ref (s "The 1Password reference in the vault Claudia: op://Claudia/<item>/<field>")
                                                   :env_name (s "The environment variable the command reads it from, e.g. GITHUB_TOKEN")
@@ -214,4 +216,5 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 
 (def allowed-tools
   ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
-   "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"])
+   "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"
+   "mcp__workspace__list_secrets"])

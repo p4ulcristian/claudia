@@ -101,7 +101,6 @@
   (let [t (str/trim (str s))]
     (if (seq t) (subs t 0 (min 60 (count t))) "Passkey")))
 
-
 (defn integration-version
   "The version named to 1Password: the commit's first 7 characters (1Password allows at most 20),
   or dev."
@@ -142,3 +141,64 @@
   "Whether the chat may still use the key without a tap."
   [standing k now]
   (boolean (some-> (get standing k) (>= now))))
+
+;; The keys a person may use, as references an agent passes to run_with_secret (README decision 77).
+
+(defn usable-items
+  "The vault's items this person may use: every item for an admin, else the ticked ones."
+  [admin? granted-ids items]
+  (filterv #(may-use? admin? granted-ids (:id %)) items))
+
+(defn item-labels
+  "An item's field labels and section names as plain data: only ids, titles and each field's section
+  id. Anything else a field carries (its value above all) is left out."
+  [{:keys [fields sections]}]
+  {:fields (mapv #(select-keys % [:id :title :section]) fields)
+   :sections (mapv #(select-keys % [:id :title]) sections)})
+
+(defn- plain-part?
+  "A title that can stand as one part of a reference: not blank, no slash or question mark, no space
+  at either end."
+  [s]
+  (boolean (and (string? s) (not (str/blank? s)) (= s (str/trim s)) (not (re-find #"[/?]" s)))))
+
+(defn ref-part
+  "A reference's part for something with a title and an id: the title when it is plain and unique
+  (unique?), else the id."
+  [title id unique?]
+  (if (and unique? (plain-part? title)) title id))
+
+(defn- repeated
+  "The lower-cased titles that appear more than once among xs (1Password matches names without case)."
+  [xs]
+  (set (for [[t n] (frequencies (map #(str/lower-case (str (:title %))) xs)) :when (> n 1)] t)))
+
+(defn- unique-in? [clashes title] (not (contains? clashes (str/lower-case (str title)))))
+
+(defn- field-entry
+  "One field's label, section name (when its section has one) and reference."
+  [prefix sections-by-id clashes {:keys [id title section]}]
+  (let [s (get sections-by-id section)
+        s-part (when-not (str/blank? (:title s)) (ref-part (:title s) (:id s) true))]
+    (cond-> {:label (str title)
+             :ref (str prefix (when s-part (str s-part "/")) (ref-part title id (unique-in? clashes title)))}
+      s-part (assoc :section (:title s)))))
+
+(defn item-entry
+  "An item as list_secrets shows it: its title and every field's label and reference
+  (op://<vault>/<item>/[<section>/]<field>). item-unique?: no other item in the vault has its title."
+  [vault {:keys [id title]} item-unique? labels]
+  (let [{:keys [fields sections]} (item-labels labels)
+        prefix (str "op://" vault "/" (ref-part title id item-unique?) "/")
+        by-id (into {} (map (juxt :id identity)) sections)]
+    {:title title
+     :fields (mapv (partial field-entry prefix by-id (repeated fields)) fields)}))
+
+(defn key-list
+  "What /keys/mine answers: the usable items in order, each with its fields' references. all-items:
+  every item of the vault (to tell clashing titles); labels-by-id: item id -> labels (an item without
+  labels lists no fields)."
+  [vault all-items usable labels-by-id]
+  (let [clashes (repeated all-items)]
+    {:vault vault
+     :items (mapv #(item-entry vault % (unique-in? clashes (:title %)) (get labels-by-id (:id %))) usable)}))

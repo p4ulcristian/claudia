@@ -372,6 +372,10 @@
     (cond-> {:db (update-in db [:chats k :asks] #(conj (remove-ask % (:id ask)) ask))}
       said (assoc :fx [[:speech/say said]]))))
 
+(defmethod on-frame "keys_ask" [db server {:keys [chat ask]}]
+  ;; list_secrets (README decision 77): answered at once with this person's keys, no card.
+  {:db db :keys/answer {:server server :chat chat :ask ask}})
+
 (defmethod on-frame "asked" [db server {:keys [chat ask]}]
   {:db (-> db
            (update-in [:chats [server chat] :asks] remove-ask ask)
@@ -461,7 +465,6 @@
  (fn [db [_ k text]]
    (cond-> (assoc-in db [:drafts k] text)
      (str/blank? text) (update :dictated dissoc k))))
-
 
 (rf/reg-event-fx
  :chat/switches

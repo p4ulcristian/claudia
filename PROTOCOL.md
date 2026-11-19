@@ -325,6 +325,7 @@ Page → runner:
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |
 | `secret` | `chat`, `ask`, `sealed` | the sealed secret for a `run_with_secret` ask |
 | `deny` | `chat`, `ask` | refuses a secret or permit ask |
+| `keys` | `chat`, `ask` (a `keys_ask`'s id), `answer` (`GET /hub/keys/mine`'s answer) \| `error` (its error text) | the person's keys for a `list_secrets` call (README decision 77); the first answer ends the ask, later ones are dropped |
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `folder` | `chat`, `folder` (absolute, `~/…`, or relative to the runner's working folder; empty or null: no project) | the chat's working folder; Claude hears of it with the next message; `error` when no folder is there |
@@ -353,6 +354,7 @@ Runner → page:
 | `turn` | `chat`, `running` (bool), `stopped` (when a turn ended: the person stopped it) |
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
+| `keys_ask` | `chat`, `ask` (an id): Claude called `list_secrets`. Sent to every page on this runner that sent `hello` and is not read-only, whether or not it has the chat open; the page fetches `GET /hub/keys/mine` and answers `keys` at once, with no card |
 | `error` | `chat?`, `text` |
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
@@ -454,6 +456,11 @@ screenshot). A chat older than the history has only its last picture (turn `impo
 
 ## Secrets (1Password through the key broker, README decision 66)
 
+0. Claude calls `mcp__workspace__list_secrets {}` for the references it may use (README decision 77):
+   S's runner sends `keys_ask { chat, ask }` to the person's open pages; the first page fetches
+   `GET /hub/keys/mine` and answers `keys { chat, ask, answer | error }`. Claude gets one line per
+   item and one line per field with its reference. No page in 60 seconds, or none connected: a
+   refusal that says so. No values pass, and nothing waits for a tap.
 1. Claude calls `mcp__workspace__run_with_secret { ref, env_name, reason, command }` in a chat on server S.
 2. S's runner makes a one-time keypair (libsodium `crypto_box_keypair`), sends `ask { kind: "secret", … pubkey }`.
 3. Allow with passkey: the page calls `POST /hub/approve/options { kind: "read", ref, pubkey, request }`
@@ -499,6 +506,7 @@ The hub's calls (signed in, same origin; the hub replaces any `email` in the bod
 | `POST /hub/passkeys/remove` `{ challengeId, response }` (a `remove-passkey` approval) | `{ removed }` |
 | `POST /hub/vault/standing` `{ ref, pubkey, request, chat }` | `{ sealed }` without a tap when this chat (`<server>/<chat id>`) read this key with a passkey in the last hour; 404 otherwise (ask for the passkey) |
 | `GET /hub/keys` | the broker's admins: `{ items: [{ id, title }], grants: [{ item, email }], admins }`; 403 others |
+| `GET /hub/keys/mine` | the keys this person may use (admins: every key; others: the ticked ones), titles sorted: `{ vault, items: [{ title, fields: [{ label, section?, ref }] }] }`, `ref` = `op://<vault>/<item>/[<section>/]<field>` ready for `run_with_secret` (an item, section or field whose title is blank, holds `/` or `?` or has a space at either end is named by its id, and so is an item whose title another item shares, or a field whose title another field of its item shares, without case; a section without a title is left out). No values and no passkey: labels come from 1Password's item reads, mapped to ids and titles at once, and are kept in memory until the item changes. 503 no token; 502 1Password's error |
 | `POST /hub/keys/grants` `{ challengeId, response }` (a `grants` approval: `{ kind: "grants", changes: [{ item, email, on }] }`, 1 to 200) | `{ grants }`; admins only |
 
 A read needs the key ticked for that person (admins: every key): 403 before the passkey asks, and again at the read. Every challenge is used once and ends after 5 minutes. On the gate, `broker.js admin <email>` makes a broker admin, and `broker.js enroll <email>` prints
