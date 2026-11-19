@@ -1032,8 +1032,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     only picks a petal. Let go,
     it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
     within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
-    anywhere 44 px from the left wall and the rail and 124 px from the top and the bottom; by the
-    rail its flower is half to the left, by the left wall half to the right (mirrored), else whole.
+    anywhere 124 px from the walls and the rail, and out of the rail its flower is whole, four ways
+    ("when it's not in sidebar, it should already be in flower with the four sides").
     Its spot is kept on the device (localStorage, as fractions of the screen, clamped again when
     the screen turns). The phone keeps its mic in the bottom middle with the whole flower and no
     move. Instead of: the 3x3 grid floating 18 px from

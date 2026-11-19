@@ -11,8 +11,8 @@
   drag past the petals (pure/move-px) in the first half second (pure/move-window-ms) drops the clip and the
   mic follows the finger on a spring
   (motion's useSpring: it trails and overshoots a little); let go, it glides there and stays (its
-  spot kept on this device), or let go on the rail or at its slot it glides home. Parked by a wall,
-  its flower is half, opening away from it."
+  spot kept on this device), or let go on the rail or at its slot it glides home. Out of the rail
+  its flower is whole, four ways."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
             [claudia.web.mic :as mic]
@@ -108,8 +108,8 @@
   (if spot (centre (js/document.querySelector ".mic-slot")) (centre button)))
 
 (defn- side-at
-  "The flower's side for a rail mic whose button's centre is at {:x}: in the rail or by it :left, by
-  the left wall :right, else nil (whole; pure/flower-side)."
+  "The flower's side for a rail mic whose button's centre is at {:x}: in the rail :left (half), out
+  of it nil (whole; pure/flower-side)."
   [rail? {:keys [x]}]
   (when rail? (pure/flower-side x js/innerWidth (rail-width))))
 
@@ -165,7 +165,7 @@
       (when (and rail? (not moving) (pure/moving? dx dy (- (js/performance.now) t0))) (start-move! parts))
       (if (:moving (.-current hold))
         (do (.set mx (.-clientX e)) (.set my (.-clientY e)))
-        (let [dir (if side (pure/half-gesture dx dy side) (pure/gesture dx dy))]
+        (let [dir (if side (pure/half-gesture dx dy) (pure/gesture dx dy))]
           (set! (.-current hold) (assoc (.-current hold) :dir dir))
           (set-dir dir))))))
 
