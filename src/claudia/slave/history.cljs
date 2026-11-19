@@ -47,6 +47,8 @@
       "mcp__workspace__set_folder" (str "folder " (shown-path (str (:path i)) nil))
       "mcp__workspace__run_with_secret" (str "secret: " (short-text (:reason i) 80))
       "mcp__workspace__show_image" (str "image " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
+      "mcp__workspace__list_bookmarks" "bookmarks"
+      "mcp__workspace__bookmark_folder" (str (if (:remove i) "unbookmark " "bookmark ") (or (not-empty (shown-path (str (:folder i)) nil)) "working folder"))
       "mcp__workspace__show_video" (str "video " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       (if (str/starts-with? tool "mcp__")
         (str/join " " (rest (str/split tool #"__")))

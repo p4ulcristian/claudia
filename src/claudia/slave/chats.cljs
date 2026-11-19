@@ -20,6 +20,7 @@
             [claudia.slave.chats.turns :as turns]
             [claudia.slave.chats.view :as view]
             [claudia.shared.colours :as colours]
+            [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.changes :as changes]
@@ -472,6 +473,18 @@
           (.then #(answers/text-result (shown/video-answer (path/basename file-path) % caption)))
           (.catch #(answers/refusal (str "Could not keep the video: " (.-message %))))))))
 
+(defn- bookmark-call
+  "list_bookmarks (args nil) or bookmark_folder (args): the owner's bookmarked folders on the hub
+  (claudia.slave.bookmarks)."
+  [id args]
+  (let [t (when args (bookmarks/target args (env/env "CLAUDIA_SERVER_NAME" "") (or (:folder (store/chat id)) cwd)
+                                       (os/homedir) nfs/dir?))
+        done #(if (:error %) (answers/refusal (:error %)) (answers/text-result (:text %)))]
+    (cond (not (bookmarks/on?)) (answers/refusal "Bookmarks are not on this server.")
+          (:error t) (done t)
+          t (.then (bookmarks/bookmark! args t) done)
+          :else (.then (bookmarks/list!) done))))
+
 (declare ask!)
 
 (defn- claudia-call
@@ -496,6 +509,8 @@
     ["workspace" "run_with_secret"] (secret-ask id args)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
+    ["workspace" "list_bookmarks"] (bookmark-call id nil)
+    ["workspace" "bookmark_folder"] (bookmark-call id args)
     (if (and (= server "claudia") (claudia/her? id))
       (claudia-call id tool args)
       (throw (js/Error. (str "No tool " server "/" tool))))))
@@ -1026,7 +1041,7 @@
                          :env (cond-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
                                 her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
                          :prompt (full-prompt id)
-                         :allowed (cond-> tools/allowed-tools her (into claudia/allowed))
+                         :allowed (cond-> tools/allowed-tools (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
                          :disallowed (when her claudia/disallowed)
                          :model (:model s) :effort (:effort s)
                          :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))

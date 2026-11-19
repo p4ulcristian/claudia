@@ -9,11 +9,15 @@
             [claudia.web.api :as api]
             [claudia.web.events :as events]))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  :folders/open
  ;; {:server :folder (the chat's, nil: the work folder) :chat ([server chat] of a started chat, nil
- ;; for a new one) :send? (opened on a held first message)}, or nil to close.
- (fn [db [_ opts]] (if opts (-> db (assoc :folders opts) (dissoc :world?)) (dissoc db :folders))))
+ ;; for a new one) :send? (opened on a held first message)}, or nil to close. Opening loads the
+ ;; bookmarks again: an agent may have changed them (README decision 67).
+ (fn [{:keys [db]} [_ opts]]
+   (if opts
+     {:db (-> db (assoc :folders opts) (dissoc :world?)) :bookmarks/get nil}
+     {:db (dissoc db :folders)})))
 
 (rf/reg-sub :folders (fn [db] (:folders db)))
 

@@ -6,8 +6,11 @@
   operation out on the person's servers as them (claudia.slave.chat-ops on each runner).
 
   Body {as, op, args}: op chats (every server's chats), new {server text folder?}, send {server
-  chat text}, archive {server chat archived}, stop {server chat}."
+  chat text}, archive {server chat archived}, stop {server chat}; and for any chat's bookmark tools
+  (README decision 67): bookmarks (the person's bookmarked folders, {items}), bookmark {server folder
+  label? remove?} (one bookmark added, relabelled or removed; server one of the person's)."
   (:require [clojure.string :as str]
+            [claudia.hub.bookmarks :as bookmarks]
             [claudia.hub.config :as config]
             [claudia.hub.hub-key :as hub-key]
             [claudia.hub.pass :as pass]
@@ -47,11 +50,24 @@
   ({"new" "/api/chat-ops/new" "send" "/api/chat-ops/send" "archive" "/api/chat-ops/archive"
     "stop" "/api/chat-ops/stop"} op))
 
+(defn- bookmark
+  "The bookmark op for person: their list with one bookmark changed, kept; 400 when the server is
+  not one of servers or the folder no absolute path."
+  [person servers args]
+  (let [email (:email person)
+        changed (when (some #(= (:server args) (:name %)) servers)
+                  (bookmarks/change (:items (bookmarks/of email)) args))]
+    (cond (nil? changed) {:status 400 :body {:error "not one of your servers"}}
+          (map? changed) {:status 400 :body changed}
+          :else {:status 200 :body (select-keys (bookmarks/save! email changed) [:items])})))
+
 (defn- operate [person {:keys [op args]}]
   (let [who {:email (:email person)}
         servers (config/servers-of person)]
-    (if (= op "chats")
-      (all-chats servers who)
+    (case op
+      "chats" (all-chats servers who)
+      "bookmarks" (js/Promise.resolve {:status 200 :body (select-keys (bookmarks/of (:email person)) [:items])})
+      "bookmark" (js/Promise.resolve (bookmark person servers args))
       (let [target (op-target op)
             server (some #(when (= (:server args) (:name %)) %) servers)]
         (cond (nil? target) (js/Promise.resolve {:status 400 :body {:error (str "no operation " op)}})

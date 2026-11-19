@@ -939,6 +939,17 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the calls with the keys (HTTP only), or a hardware SSH key (the user has none and wants none).
     Next, not built here: the gate's SSH login as `core` by a 5-minute certificate the broker
     signs after a passkey (after a tested `break-glass` user on the gate, decision 55).
+67. Agents keep bookmarks too (2026-11-19, the user's call: "build it"). Every chat on a runner
+    that reaches the hub as its owner (the settings of Claudia's own chat, decision 48:
+    `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE`, `CLAUDIA_OWNER_EMAIL`) gets
+    two workspace tools: `list_bookmarks` and `bookmark_folder { folder?, server?, label?, remove? }`
+    (`claudia.slave.bookmarks`). They change the same per-person list the Folders modal pins
+    (decision 61), through `POST /hub/server/claudia` ops `bookmarks` and `bookmark`, so the gate
+    passes no new path. On this server the folder may be `~/…` or relative to the chat's folder
+    and must exist; on another of the person's servers it must be absolute. The system prompt
+    says to bookmark only when asked. The Folders modal loads the list again whenever it opens, so
+    an agent's change shows there at once. Instead of: a new hub path (one more gate rule for the
+    same caller), or the runner writing the page's `PUT /hub/bookmarks` (it holds no login).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
