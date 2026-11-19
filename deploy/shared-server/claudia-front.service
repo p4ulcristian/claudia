@@ -14,6 +14,9 @@ Environment=CLAUDIA_UPDATE_TRIGGER=/var/lib/claudia/update-requested
 # The root helper asks here (README decision 52): a socket of user claudia's, 0600, in a folder only
 # claudia enters, so only root (and this front) open it; the root switches survive restarts.
 Environment=FRONT_ROOT_SOCKET=/run/claudia-front/root.sock FRONT_ROOT_STATE=/var/lib/claudia-front/root-switches.json
+# GitHub for services (README decision 78): the hub's 1-hour app tokens go to <dir>/<service>/token,
+# only for a service whose folder root made (owner claudia, the service's group, setgid, 2750).
+Environment=FRONT_GITHUB_SERVICES_DIR=/var/lib/claudia-github-services
 RuntimeDirectory=claudia-front
 RuntimeDirectoryMode=0700
 StateDirectory=claudia-front

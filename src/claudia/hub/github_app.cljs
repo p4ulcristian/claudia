@@ -106,8 +106,8 @@
 
 ;; ---- GitHub ----
 
-(defn- github-json
-  "Promise of [status body-map] of a call to GitHub (url: absolute)."
+(defn github-json
+  "Promise of [status body-map] of a call to GitHub (url: absolute; body-map {} unless an object)."
   [method url headers body]
   (-> (js/fetch url (clj->js (cond-> {:method method
                                       :headers (merge {"accept" "application/json" "user-agent" "claudia-hub"} headers)

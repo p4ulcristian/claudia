@@ -1095,6 +1095,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     server with Claudia's own chat, decision 48, and no person's login), or the agent reading the
     vault with `op` (decision 66 took the token off the servers).
 
+78. GitHub for services through the hub's GitHub App (2026-11-19, the user's call: "move all
+    three"): a program that is no person (a bot, CI slots) gets 1-hour installation tokens of the
+    app, never a personal token. The hub signs as the app (`HUB_GITHUB_APP_ID`,
+    `HUB_GITHUB_APP_PRIVATE_KEY_FILE`, from the gate's secrets), asks GitHub for a token that reaches
+    only the repositories named for that service (`HUB_GITHUB_APP_SERVICES`:
+    `<service>@<server>=<owner>/<repo>,…|<permission>:<read|write>,…`) with only that service's
+    permissions, replaces it 15 minutes before it runs out, and hands it to
+    the service's server (`PUT /api/github/service-token`, the hub's own call on the front). The
+    front writes it to `FRONT_GITHUB_SERVICES_DIR/<service>/token`, only for a service whose folder
+    root made (owner claudia, the service's group, setgid), so only that service reads it; what it
+    does on GitHub shows as the app's bot. Nobody approves anything per token: installing the app on
+    the account once is the only step. If the hub cannot reach GitHub or the server for an hour, the
+    service has no valid token until it can. The app asks for Actions write (runs cancelled and
+    dispatched), Statuses read, Administration write (runner registrations) and Secrets read (secret
+    names) for this. Instead of: a fine-grained personal
+    token on the server's disk, long-lived, acting as the person.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
