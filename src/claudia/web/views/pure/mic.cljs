@@ -26,20 +26,17 @@
     :else :send))
 
 (defn half-gesture
-  "The half flower's way (README decision 73): its petals open to one side of the mic, side :left
-  (the mic at the right wall or on its rail) or :right (at the left wall). From drag-px on, the
-  quarter of that half the finger points into, top to bottom :cancel :add :send :now (each 45
-  degrees, mirrored for :right); nearer, or on the other side of the mic, :send."
-  ([dx dy] (half-gesture dx dy :left))
-  ([dx dy side]
-   (let [dx (if (= side :right) (- dx) dx)]
-     (if (or (< (js/Math.hypot dx dy) drag-px) (pos? dx))
-       :send
-       (let [a (* (/ 180 js/Math.PI) (js/Math.atan2 dy dx))]
-         (cond (<= -135 a -90) :cancel
-               (< a -135) :add
-               (>= a 135) :send
-               :else :now))))))
+  "The half flower's way (README decision 73: the mic in its rail on the right wall, its petals only
+  to the left): from drag-px on, the left half's quarter the finger points into, top to bottom
+  :cancel :add :send :now (each 45 degrees); nearer, or to the right of the mic, :send."
+  [dx dy]
+  (if (or (< (js/Math.hypot dx dy) drag-px) (pos? dx))
+    :send
+    (let [a (* (/ 180 js/Math.PI) (js/Math.atan2 dy dx))]
+      (cond (<= -135 a -90) :cancel
+            (< a -135) :add
+            (>= a 135) :send
+            :else :now))))
 
 (def move-px
   "How far the finger goes from where the hold started for the mic to follow it (past the petals,
@@ -56,14 +53,9 @@
   [dx dy held-ms]
   (and (< held-ms move-window-ms) (> (js/Math.hypot dx dy) move-px)))
 
-(def edge-margin
-  "How far a moved mic's centre stays from the left wall and the rail: the button whole, a finger's
-  room beside it."
-  44)
-
 (def flower-room
-  "How far a moved mic's centre stays from the top and the bottom, and how much room beside it the
-  whole flower needs: its petals reach 116 px out."
+  "How far a moved mic's centre stays from every edge of the screen and from the rail: its whole
+  flower fits, the petals reaching 116 px out."
   124)
 
 (def home-px
@@ -71,10 +63,10 @@
   40)
 
 (defn clamp-spot
-  "A moved mic's centre {:x :y}: edge-margin from the left wall and the rail (the right rail-w px),
-  flower-room from the top and the bottom of a w x h screen."
+  "A moved mic's centre {:x :y}: flower-room from the walls of a w x h screen and from the rail (its
+  right rail-w px), so the whole flower opens there."
   [{:keys [x y]} w h rail-w]
-  {:x (-> x (max edge-margin) (min (- w rail-w edge-margin)))
+  {:x (-> x (max flower-room) (min (- w rail-w flower-room)))
    :y (-> y (max flower-room) (min (- h flower-room)))})
 
 (defn home?
@@ -85,13 +77,10 @@
       (and (some? slot) (< (js/Math.hypot (- x (:x slot)) (- y (:y slot))) home-px))))
 
 (defn flower-side
-  "Which flower a mic at x opens on a w-wide screen whose right rail-w px are the rail: :left (half,
-  to the left) without the whole flower's room to its right, :right (half, to the right) without it
-  to its left, else nil (whole)."
+  "Which flower a mic at x opens on a w-wide screen whose right rail-w px are the rail: in the rail
+  :left (half, to the left), out of it nil (the whole flower, four ways)."
   [x w rail-w]
-  (cond (< (- w rail-w x) flower-room) :left
-        (< x flower-room) :right
-        :else nil))
+  (when (> x (- w rail-w)) :left))
 
 (defn spot->stored "A spot as fractions of the screen, kept per device." [{:keys [x y]} w h]
   {:fx (/ x w) :fy (/ y h)})

@@ -5,8 +5,8 @@
   48 bars that follow the voice. Four petals open outside the bars: left sends, up cancels, right
   adds the words to the message, down sends now (the running turn stops first); letting go in place
   sends too. The petal the finger is over lights. On the tablet's rail (README decision 73) the
-  flower is half, opening away from the wall: its petals and bars only to one side of the mic (side
-  :left at the right wall and on the rail, :right at the left wall), top to bottom cancel, add, send,
+  flower is half (side :left): its petals and bars only to the left of the mic, top to bottom cancel,
+  add, send,
   now; and while the mic is dragged past the petals the disc alone shows, blue, saying move."
   (:require [claudia.web.views.pure.mic :as pure]))
 
@@ -91,26 +91,18 @@
   (set! (.-fillStyle g) (css el "--bg2"))
   (.fill g))
 
-(defn- on-side?
-  "Whether bar i of n points into side's half: :left 90 to 270 degrees, :right the rest."
-  [side i n]
-  (let [left? (<= (/ n 4) i (* 3 (/ n 4)))]
-    (if (= side :right) (not left?) left?)))
-
-(defn- side-petals
-  "The half flower's petals for side: :left as drawn, :right mirrored (angle a becomes 180 - a)."
-  [side]
-  (if (= side :right)
-    (mapv (fn [[w a0 a1 & more]] (into [w (- 180 a1) (- 180 a0)] more)) half-petals)
-    half-petals))
+(defn- left-half?
+  "Whether bar i of n points into the left half (90 to 270 degrees)."
+  [i n]
+  (<= (/ n 4) i (* 3 (/ n 4))))
 
 (defn- bars!
-  "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right); side (:left
-  or :right): only that half's."
+  "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right); side :left:
+  only the left half's."
   [^js g ^js el levels side]
   (set! (.-fillStyle g) (css el "--red"))
   (doseq [[i level] (map-indexed vector levels)
-          :when (and (> level 0.02) (or (nil? side) (on-side? side i (count levels))))]
+          :when (and (> level 0.02) (or (nil? side) (left-half? i (count levels))))]
     (.save g)
     (.rotate g (* 2 js/Math.PI (/ i pure/bar-count)))
     (.fillRect g bar-r -1.5 (+ 3 (* level bar-len)) 3)
@@ -142,27 +134,25 @@
     (set! (.-textBaseline g) "alphabetic")))
 
 (defn- ground-half!
-  "The half flower's ground: side's half round inside the petals."
-  [^js g ^js el side]
+  "The half flower's ground: the left half round inside the petals."
+  [^js g ^js el]
   (.beginPath g)
-  (if (= side :right)
-    (.arc g 0 0 petal-in (* -0.5 js/Math.PI) (/ js/Math.PI 2))
-    (.arc g 0 0 petal-in (/ js/Math.PI 2) (* 1.5 js/Math.PI)))
+  (.arc g 0 0 petal-in (/ js/Math.PI 2) (* 1.5 js/Math.PI))
   (.closePath g)
   (set! (.-fillStyle g) (css el "--bg2"))
   (.fill g))
 
 (defn- flower!
-  "The petals, their ground and the bars: whole (side nil), or half to side (:left or :right)."
+  "The petals, their ground and the bars: whole (side nil), or half to the left (side :left)."
   [^js g ^js canvas {:keys [side way levels]}]
-  (doseq [p (if side (side-petals side) petals)] (petal! g canvas way p))
-  (if side (ground-half! g canvas side) (ground! g canvas))
+  (doseq [p (if side half-petals petals)] (petal! g canvas way p))
+  (if side (ground-half! g canvas) (ground! g canvas))
   (bars! g canvas levels side))
 
 (defn draw!
   "One frame: the petals, the ground inside them, the bars, the disc (while moving: the disc
   alone). state: {:phase (:starting :recording :moving) :levels (one 0-1 per bar) :secs :way
-  :side (nil: whole; :left or :right: half)}."
+  :side (nil: whole; :left: half)}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
     (.setTransform g 1 0 0 1 0 0)
