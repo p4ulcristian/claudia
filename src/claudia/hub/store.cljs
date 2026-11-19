@@ -161,6 +161,13 @@
      items TEXT NOT NULL,
      at INTEGER NOT NULL
    );
+   -- What a person's right half shows (claudia.shared.views, README decision 75): the same on
+   -- every device of theirs.
+   CREATE TABLE IF NOT EXISTS right_views (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     view TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );
    -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
    -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
    CREATE TABLE IF NOT EXISTS release_builder (
@@ -532,6 +539,16 @@
   (exec! "INSERT INTO bookmarks (email, items, at) VALUES (?, ?, ?)
           ON CONFLICT (email) DO UPDATE SET items = excluded.items, at = excluded.at"
          email items-json (now)))
+
+(defn right-view
+  "What a person's right half shows: {:view :at}, or nil."
+  [email]
+  (one "SELECT view, at FROM right_views WHERE email = ?" email))
+
+(defn save-right-view! [email view]
+  (exec! "INSERT INTO right_views (email, view, at) VALUES (?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET view = excluded.view, at = excluded.at"
+         email view (now)))
 
 (defn release-builder
   "The release builder: {:host :token-hash :paired-at :seen-at}, or nil."

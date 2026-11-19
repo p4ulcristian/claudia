@@ -2,7 +2,7 @@
   "The hub's own operations beyond the pass-through (PROTOCOL.md, Hub operations): the admins'
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence), each person's chat order and bookmarked
-  folders (/hub/chat-order, /hub/bookmarks), Claude tokens (/hub/claude-token…),
+  folders (/hub/chat-order, /hub/bookmarks), what their right half shows (/hub/right-view), Claude tokens (/hub/claude-token…),
   each person's GitHub login (/hub/github-login), speech to text and each person's words for it
   (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
@@ -26,6 +26,7 @@
             [claudia.shared.agent-user :as agent-user]
             [claudia.shared.order :as order]
             [claudia.shared.protocol :as protocol]
+            [claudia.shared.views :as views]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
             [claudia.hub.pictures :as pictures]
@@ -353,6 +354,18 @@
   [req res email _]
   (with-body req (fn [b] (io/send-json res 200 (hub-bookmarks/save! email (:items b))))))
 
+(defn- right-view-of
+  "What a person's right half shows, as the page gets it: {:view} (the Drawing board before any)."
+  [email]
+  {:view (views/clean (:view (store/right-view email)))})
+
+(defn- save-right-view
+  "PUT /hub/right-view {view}: the person's pick, kept on every device (README decision 75)."
+  [req res email _]
+  (with-body req (fn [b]
+                   (store/save-right-view! email (name (views/clean (:view b))))
+                   (io/send-json res 200 (right-view-of email)))))
+
 (defn person-route
   "Which of a person's own calls this is: [op] or [op id-from-the-path] (still encoded), else nil."
   [method pathname]
@@ -369,6 +382,8 @@
       (and (= pathname "/hub/chat-order") (= method "PUT")) [:save-order]
       (and (= pathname "/hub/bookmarks") (= method "GET")) [:bookmarks]
       (and (= pathname "/hub/bookmarks") (= method "PUT")) [:save-bookmarks]
+      (and (= pathname "/hub/right-view") (= method "GET")) [:right-view]
+      (and (= pathname "/hub/right-view") (= method "PUT")) [:save-right-view]
       :else nil)))
 
 (def ^:private person-ops
@@ -381,6 +396,8 @@
    :save-order save-order
    :bookmarks (fn [_ res email _] (io/send-json res 200 (hub-bookmarks/of email)))
    :save-bookmarks save-bookmarks
+   :right-view (fn [_ res email _] (io/send-json res 200 (right-view-of email)))
+   :save-right-view save-right-view
    :elsewhere (fn [^js req res email _]
                 (let [page (.get (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) "")) "page")]
                   (io/send-json res 200 {:elsewhere (presence/elsewhere? email (str page))})))})
@@ -486,7 +503,7 @@
                  (picture-call req res pathname admin?)
                  (str/starts-with? pathname "/hub/admin")
                  (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
-                 (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order" "/hub/bookmarks"} pathname))
+                 (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order" "/hub/bookmarks" "/hub/right-view"} pathname))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
                  (= pathname "/hub/progress") (io/send-json res 200 (progress/now))

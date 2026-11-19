@@ -46,6 +46,27 @@
   (is (= :cancel (mic/gesture 30 -90)) "more up than right")
   (is (= :send (mic/gesture 0 (- 1 mic/drag-px))) "not far enough up"))
 
+(deftest the-half-flower-reads-the-left-half
+  (is (= :send (mic/half-gesture 0 0)) "in place")
+  (is (= :send (mic/half-gesture 60 -60)) "to the right of the mic")
+  (is (= :cancel (mic/half-gesture 0 -80)) "up")
+  (is (= :cancel (mic/half-gesture -30 -80)) "up, a little left")
+  (is (= :add (mic/half-gesture -80 -30)) "left, a little up")
+  (is (= :send (mic/half-gesture -80 30)) "left, a little down")
+  (is (= :now (mic/half-gesture -30 80)) "down, a little left")
+  (is (= :send (mic/half-gesture -30 0)) "not far enough"))
+
+(deftest the-mic-moves-past-the-petals
+  (is (not (mic/moving? 100 0)))
+  (is (mic/moving? -100 -100))
+  (is (= {:x 128 :y 692} (mic/clamp-spot {:x 10 :y 900} 1180 820 88)) "kept inside, the flower whole")
+  (is (= {:x 964 :y 400} (mic/clamp-spot {:x 1100 :y 400} 1180 820 88)) "kept off the rail")
+  (is (mic/home? {:x 1050 :y 100} {:x 1136 :y 410} 1180 88) "let go on the rail")
+  (is (mic/home? {:x 1030 :y 430} {:x 1136 :y 410} 1180 88) "near its slot")
+  (is (not (mic/home? {:x 600 :y 400} {:x 1136 :y 410} 1180 88)))
+  (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820 88)))
+  (is (nil? (mic/stored->spot {} 1180 820 88))))
+
 (deftest heard-clips-go-out-in-spoken-order
   (let [l0 {:next 0 :held {}}
         [l1 out1] (mic/in-order l0 1 {:text "second"})

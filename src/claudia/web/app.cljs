@@ -9,6 +9,7 @@
             [claudia.web.native :as native]
             [claudia.web.order :as order]
             [claudia.web.bookmarks :as bookmarks]
+            [claudia.web.right :as right]
             [claudia.web.folders]
             [claudia.web.presence :as presence]
             [claudia.web.tabs :as tabs]
@@ -58,6 +59,7 @@
   (presence/start!)
   (order/start!)
   (bookmarks/start!)
+  (right/start!)
   (tabs/start!)
   (voice-back/start!)
   (native/start!)

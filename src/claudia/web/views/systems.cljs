@@ -1,6 +1,6 @@
 (ns claudia.web.views.systems
-  "The Systems popup (README decision 12): Machines in the settings menu (claudia.web.views.menu)
-  opens a card per server the person may use (and the gate, for admins), each asking its own numbers every
+  "Machines (README decisions 12 and 75), a view of the right half opened from the profile menu
+  (claudia.web.views.menu) or the right half's dropdown: a card per server the person may use (and the gate, for admins), each asking its own numbers every
   2 s while open: every core's use split into user, system, steal and waiting on disk, memory,
   swap, disks, disk and network speed, temperatures, NVIDIA cards and Claudia's own processes. A
   card older than 8 s greys; a server that does not answer says so."
@@ -8,9 +8,7 @@
             [reagent.hooks :as h]
             [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
-            [claudia.web.views.chatmenu :as chatmenu]
-            [claudia.web.views.pure.systems :as pure]
-            [claudia.web.views.usage :as usage]))
+            [claudia.web.views.pure.systems :as pure]))
 
 (defn computer-icon []
   [:svg {:viewBox "0 0 20 20" :aria-hidden true}
@@ -103,7 +101,7 @@
           :else (pure/age-text age))]])
 
 (defn machine-card
-  "One machine's card (in the Systems popup, and big over the world), asking url every 2 s while it is
+  "One machine's card (in the Machines view, and big over the world), asking url every 2 s while it is
   shown."
   [{:keys [title url]}]
   (let [[{:keys [sample got-at]} set-got] (h/use-state {})
@@ -117,22 +115,12 @@
      (when (and error sample) [:div.sys-error error])
      (when sample [card-body sample])]))
 
-(defn- place
-  "Beside the computer, never taller than the window above its foot."
-  [box]
-  (let [p (usage/pop-place box true)]
-    (assoc p :max-height (- js/innerHeight (:bottom p) 6))))
-
-(defn popup
-  "The Systems popup beside box (the settings gear); close closes it."
-  [{:keys [box close]}]
-  (let [menu (h/use-ref nil)
-        me @(rf/subscribe [:me])]
-    (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t)) (some-> (.-current box) (.contains t))))
-                           close)
-    [:div.chat-menu.systems-pop {:ref #(set! (.-current menu) %) :role "dialog" :aria-label "Systems"
-                                 :style (place (.-current box))}
-     [:div.cm-title "Systems"]
+(defn pane
+  "Machines in the right half (README decision 75): a card per computer the person may use, and the
+  gate for admins."
+  []
+  (let [me @(rf/subscribe [:me])]
+    [:div.systems-pane.rv-pane {:role "region" :aria-label "Machines"}
      (when (:admin me) [:f> machine-card {:title "gate" :url "/hub/gate/system"}])
      (for [s (:servers me)]
        ^{:key (:name s)}

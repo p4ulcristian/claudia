@@ -353,10 +353,10 @@ code, pre { font-family: var(--mono); }
    near it so it shows past the finger; the button itself goes clear so the disc shows through. */
 .mic-flower { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; transform: translate(-50%, -50%); pointer-events: none; z-index: 30; }
 /* While the flower is open, the rail's chalk line (a masked layer painted over the flower) steps back. */
-body:has(.mic.starting, .mic.recording) .rail::after { visibility: hidden; }
+body:has(.mic.starting, .mic.recording, .mic.moving) .rail::after { visibility: hidden; }
 /* Nor does a mouse's hover tip cover the petals while the mic is held. */
-body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
-.mic.starting .mic-button, .mic.recording .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
+body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; }
+.mic.starting .mic-button, .mic.recording .mic-button, .mic.moving .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
 /* The clips being heard, over the composer, in spoken order, each with its loading clock. */
 .mic-clips { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 6; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; width: min(340px, 80vw); pointer-events: none; }
 .mic-clip { display: flex; justify-content: space-between; gap: 10px; padding: 6px 11px; border-radius: 10px; background: var(--panel2); box-shadow: 0 4px 14px rgb(0 0 0 / 0.35), inset 0 0 0 1.5px var(--line); font-size: 13px; }
@@ -430,21 +430,13 @@ body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
 .panel h3, .o-text, .panel .md, .panel p { overflow-wrap: anywhere; }
 .panel.ask pre, .panel.ask code, .panel.permit pre, .panel.permit code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel pre { max-width: 100%; overflow-x: auto; }
-/* Claude's question: a modal over the whole window, so it has room to be read.
-   Esc or "See picture" hides it; the pill at the bottom brings it back. */
-.ask-modal { position: fixed; inset: 0; z-index: 40; overflow-y: auto; overscroll-behavior: contain; padding: 5vh 24px; display: grid; place-items: start center; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); }
-.ask-modal[hidden] { display: none; }
-.ask-modal .panel.ask { width: min(1040px, 100%); padding: 24px 28px; gap: 16px; font-size: 15px; }
-.ask-modal .panel h3 { font-size: 21px; }
-.ask-modal .question { gap: 12px; }
-.ask-modal .question + .question { padding-top: 18px; }
-.ask-modal .options { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
-.ask-modal .option { padding: 12px 14px; }
-.ask-modal .option.other { grid-column: 1 / -1; }
-.ask-modal .o-text .md { font-size: 14px; }
-.ask-modal .preview { font-size: 13px; max-height: 50vh; }
-.ask-modal .panel.permit, .ask-modal .panel.secret { width: min(760px, 100%); padding: 22px 26px; font-size: 15px; }
-.ask-modal > * + * { margin-top: 16px; }
+/* Claude's questions in the chat, after the last message (README decision 76). */
+.asks-inline { display: grid; gap: 14px; margin-top: 10px; }
+.asks-inline .panel.ask, .asks-inline .panel.permit { padding: 16px 18px; gap: 12px; }
+.asks-inline .question + .question { padding-top: 14px; }
+.asks-inline .options { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+.asks-inline .option.other { grid-column: 1 / -1; }
+.asks-inline .preview { font-size: 13px; max-height: 40vh; }
 .ask-return { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 9px 18px; border-radius: 99px; border: 1px solid var(--violet); background: var(--violet-bg); color: var(--violet); font-weight: 600; box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
 
 /* Where a new chat starts: a row of servers over the composer of an empty chat. */
@@ -750,7 +742,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* ---------- The Systems popup (claudia.web.views.systems) ----------
    One card per machine: the cores as bars (user, system, steal filled; waiting on disk faint),
    then memory, disks, speeds, cards, temperatures and Claudia's own processes. */
-.chat-menu.systems-pop { width: 380px; grid-template-columns: minmax(0, 1fr); overflow-y: auto; gap: 8px; }
+.systems-pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .sys-card > * { min-width: 0; }
 .sys-card { display: grid; gap: 5px; padding: 8px 8px 9px; border-radius: 10px; background: var(--bg2); transition: opacity 0.3s; }
 .sys-card.stale { opacity: 0.55; filter: grayscale(0.7); }

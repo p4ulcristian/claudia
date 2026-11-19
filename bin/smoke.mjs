@@ -66,18 +66,15 @@ async function visit(browser, hubUrl, screen) {
     await step('the chat list comes', () => until('the chats frame with the seeded chat',
       () => seen.heard.some((f) => f.type === 'chats' && f.chats.some((c) => c.id === chatId))));
     await step('the chat is in the list', () => page.getByText(title, { exact: true }).first().waitFor({ timeout: waitMs }));
-    await step('Settings opens as a popup and Escape closes it (README decision 58)', async () => {
+    if (screen.name === 'desktop') await step('Settings opens in the right half from the menu, the dropdown names it, and the pick is kept on the hub (README decisions 58, 75)', async () => {
       await page.locator('button.mn-face').first().click({ timeout: waitMs });
       await page.getByRole('menuitem', { name: /More settings/ }).click({ timeout: waitMs });
-      const pop = page.locator('.st-pop');
-      await pop.getByText('Claude subscriptions').waitFor({ timeout: waitMs });
-      await pop.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished)));
-      const box = await pop.boundingBox();
-      const view = page.viewportSize();
-      const sheet = Math.abs(box.y + box.height - view.height) < 2 && Math.abs(box.width - view.width) < 2;
-      if (sheet !== (screen.name === 'phone')) throw new Error(`placed at ${JSON.stringify(box)} in ${JSON.stringify(view)}`);
-      await page.keyboard.press('Escape');
-      await page.locator('.st-backdrop').waitFor({ state: 'detached', timeout: waitMs });
+      await page.locator('.settings-pane').getByText('Claude subscriptions').waitFor({ timeout: waitMs });
+      await page.locator('.rp-button', { hasText: 'Settings' }).waitFor({ timeout: waitMs });
+      await until('PUT /hub/right-view settings', async () => (await page.evaluate(() => fetch('/hub/right-view').then((r) => r.json()))).view === 'settings');
+      await page.locator('.rp-button').click({ timeout: waitMs });
+      await page.getByRole('menuitemradio', { name: /Drawing board/ }).click({ timeout: waitMs });
+      await page.locator('.settings-pane').waitFor({ state: 'detached', timeout: waitMs });
     });
     if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill and the model · effort popup, no project pill and no select; the colour button first among the round buttons (README decision 22)', async () => {
       const head = page.locator('.chat-head');

@@ -185,6 +185,8 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `GET /hub/chat-order` | person | `{ items, at }`: the person's chat order and groups (README decision 38); items: `{ chat: "<server>/<chat>" }` or `{ group, name, chats: ["<server>/<chat>"], folded, picks }`; `{ items: [], at: 0 }` before any |
 | `PUT /hub/chat-order` `{ items }` | person | the same shape: the whole list kept, as far as it is well formed (at most 500 items; picks: plan, model, effort, folder, server, talk, bell) |
 | `GET /hub/bookmarks` | person | `{ items, at }`: the person's bookmarked folders (README decision 61); items: `{ server, folder, label? }` (folder an absolute path); `{ items: [], at: 0 }` before any |
+| `GET /hub/right-view` | person | `{ view }`: what the person's right half shows (README decision 75), one of `picture files search settings words machines prompts forms`; `picture` before any |
+| `PUT /hub/right-view` `{ view }` | person | the same shape: the pick kept for every device (an unknown view is kept as `picture`) |
 | `PUT /hub/bookmarks` `{ items }` | person | the same shape: the whole list kept, as far as it is well formed (`claudia.shared.bookmarks`: absolute paths without `.` or `..` parts, each server and folder once, labels of at most 80 characters, at most 200 items) |
 | `GET /hub/github/state` | person | `{ app: { slug, installUrl } \| null, user: { login, accessExpiresAt, refreshExpiresAt } \| null, servers }`: the hub's GitHub App and the caller's connection (README decision 37) |
 | `GET /hub/github/connect` | person | 302 to GitHub's authorize page for the hub's GitHub App |

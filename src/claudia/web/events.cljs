@@ -385,11 +385,11 @@
 ;; ---- navigation ----
 
 (defn on-chat-screen
-  "The chat screen, with the search panel, Settings and the archived chats closed, and the list back
-  to the chats: a chat picked from the archived ones or a search leaves those behind."
+  "The chat screen, with the archived chats closed and the list back to the chats: a chat picked
+  from the archived ones leaves them behind (Search and Settings are views of the right half and
+  stay, README decision 75)."
   [db]
-  (assoc db :screen :chat :search-panel? false :settings? false
-         :archived? false :search nil :project-filter nil))
+  (assoc db :screen :chat :archived? false :project-filter nil))
 
 (defn switch-frames
   "Moving from the open chat prev to k: close prev (when it is a chat), open k's chat (when it has one)."
@@ -442,15 +442,6 @@
 (rf/reg-event-db
  :nav/screen
  (fn [db [_ screen]] (assoc db :screen screen)))
-
-(rf/reg-event-db
- :search/open
- ;; The search panel (README decision 45), over the page; the typed words stay from last time.
- (fn [db _] (assoc db :search-panel? true)))
-
-(rf/reg-event-db
- :search/close
- (fn [db _] (assoc db :search-panel? false)))
 
 (rf/reg-event-fx
  :new/server
