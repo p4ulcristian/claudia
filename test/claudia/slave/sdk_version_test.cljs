@@ -38,6 +38,15 @@
   (is (= "/srv/claudia.sdk/0.3.326/node_modules/@anthropic-ai/claude-agent-sdk"
          (v/stored-package "/srv/claudia" "0.3.326"))))
 
+(deftest a-version-loads-from-the-store-copy-else-the-release
+  (is (= "/r.sdk/1" (v/package-dir "1" [["/r.sdk/1" "1"] ["/r/nm" "1"]])))
+  (testing "the release's own when the store lacks it (or holds another)"
+    (is (= "/r/nm" (v/package-dir "1" [["/r.sdk/1" nil] ["/r/nm" "1"]])))
+    (is (= "/r/nm" (v/package-dir "1" [["/r.sdk/1" "2"] ["/r/nm" "1"]]))))
+  (testing "none when neither holds it, or the version is unknown"
+    (is (nil? (v/package-dir "3" [["/r.sdk/3" nil] ["/r/nm" "1"]])))
+    (is (nil? (v/package-dir nil [["/x" nil]])))))
+
 (def ^:private idle-old
   {:live true :running false :settling false :background false :sdk "0.3.326" :newest "0.3.327"})
 

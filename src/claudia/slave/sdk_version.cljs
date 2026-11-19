@@ -57,6 +57,12 @@
   [release version]
   (str release ".sdk/" version "/node_modules/@anthropic-ai/claude-agent-sdk"))
 
+(defn package-dir
+  "The first of candidates ([[dir version-in-it] ...], in order of preference: the store copy, then
+  the release's own) that holds version v, or nil."
+  [v candidates]
+  (when v (some (fn [[dir found]] (when (= v found) dir)) candidates)))
+
 (defn move-to-newest?
   "Whether a chat's session closes now to move to the newest SDK: it is live, between turns, not
   settling (a background task just ended: Claude may start a turn of its own), with no background

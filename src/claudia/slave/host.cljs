@@ -4,10 +4,10 @@
   turns every callback (MCP tools, hooks, permission asks) into an rpc to the runner, which waits
   while the runner is away. Restarting it stops every chat, so it stays small and plain JS interop:
   the runner's options go to the SDK as they came. Each session loads the newest installed Agent SDK
-  when it starts (claudia.slave.host-sdk, README decision 80), so an SDK update needs no restart."
+  when it starts (claudia.slave.sdk-load, README decision 80), so an SDK update needs no restart."
   (:require ["node:net" :as net]
             ["node:fs" :as fs]
-            [claudia.slave.host-sdk :as host-sdk]
+            [claudia.slave.sdk-load :as sdk-load]
             [claudia.slave.lines :as lines]))
 
 (def socket-path
@@ -15,7 +15,7 @@
       (str (or (.. js/process -env -XDG_RUNTIME_DIR) "/tmp") "/claudia-host.sock")))
 
 ;; id -> {:spec :busy atom :closed atom :ready {:promise (the query runs: true; it never will: false)}
-;;        :run atom {:q query :push fn :end fn :sdk version :module (its host-sdk module) :started (a message came)
+;;        :run atom {:q query :push fn :end fn :sdk version :module (its sdk-load module) :started (a message came)
 ;;                   :sent [messages sent before that: a fallback query gets them again]
 ;;                   :failed [version why] (it fell back from that version)}}
 (defonce sessions (atom {}))
@@ -124,7 +124,7 @@
   with the messages sent so far, and the runner hears why. False when there is none to fall back to."
   [id s why]
   (let [failed (:sdk @(:run s))
-        m (when-not (:failed @(:run s)) (host-sdk/fallback failed))]
+        m (when-not (:failed @(:run s)) (sdk-load/fallback failed))]
     (when m
       (js/console.error (str "[" (subs id 0 8) "] Agent SDK " failed " failed (" why "); falling back to " (:version m)))
       (swap! (:run s) assoc :failed [failed why])
@@ -137,7 +137,7 @@
   messages kept for a fallback go."
   [s]
   (when-not (:started @(:run s))
-    (when-let [[v why] (:failed @(:run s))] (host-sdk/failed! v why))
+    (when-let [[v why] (:failed @(:run s))] (sdk-load/failed! v why))
     (swap! (:run s) assoc :started true :sent nil)))
 
 (defn- ended!
@@ -214,14 +214,14 @@
     {:promise p :resolve @d}))
 
 (defn- start!
-  "Starts the chat's session on the SDK new sessions take now (host-sdk/load!). Messages sent while
+  "Starts the chat's session on the SDK new sessions take now (sdk-load/load!). Messages sent while
   it loads wait in :sent."
   [id ^js spec]
   (close! id)
   (let [s {:spec spec :busy (atom false) :closed (atom false) :ready (deferred)
            :run (atom {:sent [] :started false})}]
     (swap! sessions assoc id s)
-    (-> (host-sdk/load!)
+    (-> (sdk-load/load!)
         (.then (fn [m]
                  (when-not @(:closed s)
                    (report! id m)
@@ -252,7 +252,7 @@
   started now would run on (sdk)."
   []
   #js {:ev "sessions"
-       :sdk (host-sdk/pick)
+       :sdk (sdk-load/pick)
        :list (into-array (for [[id {:keys [busy run]}] @sessions]
                            #js {:id id :busy @busy :sdk (:sdk @run)}))})
 
@@ -329,7 +329,7 @@
   (try (fs/unlinkSync socket-path) (catch :default _))
   (let [server (net/createServer connected)]
     ;; Listens once the SDK loaded at start is in (or failed): the first fallback of every session.
-    (.then (host-sdk/load-start!)
+    (.then (sdk-load/load-start!)
            (fn []
              (.listen server socket-path
                       (fn []

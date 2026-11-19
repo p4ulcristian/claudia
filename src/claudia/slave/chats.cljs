@@ -661,7 +661,7 @@
   "A turn ended or Claude Code reported a rate-limit change: read the exact numbers again soon."
   [ms]
   (some-> @probe-timer js/clearTimeout)
-  (reset! probe-timer (js/setTimeout #(try (meta/probe! cwd (run-env)) (catch :default _ nil)) ms)))
+  (reset! probe-timer (js/setTimeout #(try (meta/probe! cwd (run-env) @newest-sdk) (catch :default _ nil)) ms)))
 
 (defonce ^:private agent-timers (atom {}))
 
@@ -844,7 +844,7 @@
                       (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))))
                   2000)
   (refresh-titles!)
-  (try (meta/probe! cwd (run-env))
+  (try (meta/probe! cwd (run-env) @newest-sdk)
        (catch :default e (js/console.error "meta:" (text/error-text e))))
   (watch-token!))
 
@@ -1038,9 +1038,11 @@
 
 (defn- on-sessions!
   "The sessions the host holds: those it no longer holds (it restarted) have ended. Then every open
-  chat without one gets its session back, and an idle one on an older Agent SDK moves to the newest."
+  chat without one gets its session back, and an idle one on an older Agent SDK moves to the newest.
+  Another newest SDK: the models and commands are read again from it."
   [{sessions :list newest :sdk}]
-  (reset! newest-sdk newest)
+  ;; The model picker follows the SDK new sessions get.
+  (when (not= newest (first (reset-vals! newest-sdk newest))) (probe-soon! 0))
   (let [live (into {} (map (juxt :id identity)) sessions)]
     (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
       (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))

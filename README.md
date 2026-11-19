@@ -1137,7 +1137,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     host loaded the SDK once at its start, and `deploy/update.sh` never restarts hosts (a restart
     stops every turn and background job), so servers ran an old SDK until a restart by hand, while
     a new SDK comes about daily. Now each session loads its SDK when it starts (`op: "start"`,
-    `claudia.slave.host-sdk`): the version in the release's `node_modules`, the release being the
+    `claudia.slave.sdk-load`): the version in the release's `node_modules`, the release being the
     folder the host was started from by path, so after an update it is the new one. It is imported
     by absolute path with `?v=<version>` (Node keeps one module per URL), with the zod beside it. A
     running session keeps the module it started with; the host keeps every loaded one in memory and
@@ -1161,6 +1161,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     newest other loaded one); the messages sent so far go to the fallback, the runner shows the
     error in the chat (`{ ev: "sdk", error }`), and new sessions skip that version until another is
     installed (the top `sdk` is then the fallback, so idle chats are not closed over and over).
+    The model picker follows too: the runner's probe of models and slash commands loads the version
+    the host names for new sessions (the installed one before the host has answered), with the
+    same code (`claudia.slave.sdk-load`), and probes again whenever that version changes.
     This code itself reaches a host only with one restart by hand, like any host change; on a
     single-user Linux server the update that brings it still runs the old update.sh, so its store
     fills from the next update on (until then sessions load the release's own node_modules).

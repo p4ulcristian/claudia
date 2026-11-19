@@ -6,11 +6,13 @@
  :dependencies [[reagent/reagent "2.0.1"]
                 [re-frame/re-frame "1.4.7"]]
  :builds
- {;; The host imports each session's Agent SDK by path (claudia.slave.host-sdk, README decision 80):
-  ;; native import(), which Closure would rewrite in the code.
+ {;; The host imports each session's Agent SDK by path, the runner the one its model probe uses
+  ;; (claudia.slave.sdk-load, README decision 80): native import(), which Closure would rewrite in
+  ;; the code.
   :host   {:target :node-script :main claudia.slave.host/main   :output-to "out/host.js"
            :prepend "var claudia_import = function (url) { return import(url); };\n"}
-  :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"}
+  :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"
+           :prepend "var claudia_import = function (url) { return import(url); };\n"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
   :broker {:target :node-script :main claudia.broker.main/main  :output-to "out/broker.js"}

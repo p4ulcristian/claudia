@@ -1,7 +1,8 @@
-(ns claudia.slave.host-sdk
-  "The host's Agent SDKs (README decision 80): each session loads the newest installed release's SDK
-  when it starts, from a path of its own, so an SDK update needs no host restart. Loaded modules stay
-  in memory (a running session keeps the one it started with); a version that failed falls back."
+(ns claudia.slave.sdk-load
+  "Loading the Agent SDK a new session gets (README decision 80), for the host (each session loads
+  it when it starts, so an SDK update needs no host restart) and for the runner's probe of models
+  and commands (the same version as new sessions). Loaded modules stay in memory (a running session
+  keeps the one it started with); a version that failed falls back."
   (:require ["node:fs" :as fs]
             ["node:module" :as module]
             ["node:path" :as path]
@@ -11,37 +12,45 @@
 (def ^:private package "@anthropic-ai/claude-agent-sdk")
 
 (def release
-  "The release folder the host was started from (<release>/out/host.js): the path, not where it
-  pointed then, so after an update it names the new release."
+  "The release folder the program was started from (<release>/out/host.js or runner.js): the path,
+  not where it pointed then, so after an update it names the new release."
   (path/resolve (path/dirname (aget js/process.argv 1)) ".."))
 
 ;; version -> {:version :sdk (the module) :z (zod beside it) :dir}
 (defonce loaded (atom {}))
 ;; version -> why it failed to load or start (new sessions skip it until another is installed).
 (defonce broken (atom {}))
-;; The version loaded when the host started: the first fallback.
+;; The version loaded when the program started: the first fallback.
 (defonce start (atom nil))
 
-(defn- version-at [dir]
-  (.-version (js/JSON.parse (fs/readFileSync (path/join dir "package.json") "utf8"))))
+(defn- version-at
+  "The SDK version in package folder dir, nil when it has none."
+  [dir]
+  (try (.-version (js/JSON.parse (fs/readFileSync (path/join dir "package.json") "utf8")))
+       (catch :default _ nil)))
 
 (defn- release-package
   "The release's own SDK package folder, as Node resolves it from out/host.js."
   []
   (path/dirname (.resolve (module/createRequire (path/join release "out" "host.js")) package)))
 
+(defn- found
+  "{:version v :dir} of version v's package: its store copy, else the release's own (own: that
+  folder), nil when neither holds v."
+  [v own]
+  (let [stored (sdk-version/stored-package release v)
+        dir (sdk-version/package-dir v [[stored (version-at stored)] [own (version-at own)]])]
+    (when dir {:version v :dir dir})))
+
 (defn installed
   "The newest installed SDK: {:version :dir} of the release's package (its store copy when the store
   has it), nil when none is found."
   []
   (try
-    (let [own (release-package)
-          v (version-at own)
-          stored (sdk-version/stored-package release v)]
-      {:version v
-       :dir (if (try (= v (version-at stored)) (catch :default _ false)) stored own)})
+    (let [own (release-package)]
+      (found (version-at own) own))
     (catch :default e
-      (js/console.error "host: no Agent SDK in" release (.-message e))
+      (js/console.error "Agent SDK: none in" release (.-message e))
       nil)))
 
 (defn- import! [file v]
@@ -99,9 +108,18 @@
                               (assoc m :error (str "Agent SDK " (:version inst) " failed to load: " why))
                               (throw e)))))))))
 
+(defn load-version!
+  "Promise of SDK version v (the one the host says new sessions start on: the runner's probe), else,
+  when v is unknown, not installed here or fails to load, of load!."
+  [v]
+  (if-let [d (and v (not (contains? @broken v))
+                  (found v (try (release-package) (catch :default _ nil))))]
+    (.catch (load-dir! d) (fn [e] (failed! v (str (or (.-message e) e))) (load!)))
+    (load!)))
+
 (defn load-start!
-  "Loads the installed SDK when the host starts: the first fallback of every later session."
+  "Loads the installed SDK when the program starts: the first fallback of every later load."
   []
   (-> (load!)
-      (.then (fn [m] (reset! start (:version m)) (println "host: Agent SDK" (:version m) "from" (:dir m))))
-      (.catch (fn [e] (js/console.error "host: no Agent SDK loaded at start:" (.-message e))))))
+      (.then (fn [m] (reset! start (:version m)) (println "Agent SDK" (:version m) "from" (:dir m))))
+      (.catch (fn [e] (js/console.error "Agent SDK: none loaded at start:" (.-message e))))))

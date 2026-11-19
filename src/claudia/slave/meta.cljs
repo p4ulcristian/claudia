@@ -2,11 +2,12 @@
   "What every chat of the profile shares: the plan's usage limits (5-hour, week) from the SDK's
   rate_limit_event, kept per token (a hash of it, never the token) with when they were heard (the
   hub collects them for its popup of every token's limits); the models with their effort
-  levels and the slash commands, read once by a short Claude Code process that sends no message."
-  (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
-            [claudia.node.crypto :as crypto]
+  levels and the slash commands, read once by a short Claude Code process that sends no message, on
+  the Agent SDK a new session gets (README decision 80)."
+  (:require [claudia.node.crypto :as crypto]
             [claudia.shared.text :as text]
             [claudia.slave.claudia :as claudia]
+            [claudia.slave.sdk-load :as sdk-load]
             [claudia.slave.store :as store]
             [claudia.slave.tokens :as tokens]))
 
@@ -100,6 +101,8 @@
         (when (nil? (:account @state)) (publish! (assoc m :account k)))))))
 
 (defonce ^:private probing (atom false))
+;; [cwd env version] of a probe asked for while one ran.
+(defonce ^:private probe-again (atom nil))
 
 (defn limits-from
   "The plan usage call's rate_limits as Limits (src/meta.ts limitsFrom)."
@@ -154,20 +157,33 @@
                      (when (= k (:account @state)) (publish! m)))))))
       (.catch (fn [_] nil))))
 
+(defn- probe-on!
+  "The probe on SDK module sdk: models and commands, then the default model and the plan's usage."
+  [^js sdk cwd env]
+  (let [^js q (.query sdk #js {:prompt (never-prompt) :options #js {:cwd cwd :persistSession false :env (clj->js env)}})
+        k (some-> (get env "CLAUDE_CODE_OAUTH_TOKEN") token-key)]
+    (-> (js/Promise.all #js [(.supportedModels q) (.supportedCommands q)])
+        (.then (fn [[models commands]]
+                 (publish! {:models (models-of models) :commands (commands-of commands)})
+                 (js/Promise.all #js [(read-default-model! q) (read-usage! q k)])))
+        (.finally (fn [] (.close q))))))
+
 (defn probe!
   "Models, slash commands and the plan's usage (src/meta.ts probe), from a Claude Code process that
-  never gets a message. token: the one in use (its usage, when the plan reports it)."
-  [cwd env]
-  (when-not @probing
-    (reset! probing true)
-    (let [^js q (sdk/query #js {:prompt (never-prompt) :options #js {:cwd cwd :persistSession false :env (clj->js env)}})
-          k (some-> (get env "CLAUDE_CODE_OAUTH_TOKEN") token-key)]
-      (-> (js/Promise.all #js [(.supportedModels q) (.supportedCommands q)])
-          (.then (fn [[models commands]]
-                   (publish! {:models (models-of models) :commands (commands-of commands)})
-                   (js/Promise.all #js [(read-default-model! q) (read-usage! q k)])))
-          (.catch (fn [e] (js/console.error "meta probe:" (text/error-text e))))
-          (.finally (fn [] (.close q) (reset! probing false)))))))
+  never gets a message, on the Agent SDK a new session gets: version, as the host said (nil before
+  it did: the installed one; sdk-load/load-version!). env: the token in use (its usage, when the
+  plan reports it)."
+  [cwd env version]
+  (if @probing
+    ;; Asked during a probe (the host just named another version): once more after it.
+    (reset! probe-again [cwd env version])
+    (do (reset! probing true)
+        (-> (sdk-load/load-version! version)
+            (.then (fn [m] (probe-on! (:sdk m) cwd env)))
+            (.catch (fn [e] (js/console.error "meta probe:" (text/error-text e))))
+            (.finally (fn []
+                        (reset! probing false)
+                        (when-let [args (first (reset-vals! probe-again nil))] (apply probe! args))))))))
 
 (defn with-default-effort
   "The kept default efforts ([{:model :effort}]: the effort a chat runs with when it picks none,

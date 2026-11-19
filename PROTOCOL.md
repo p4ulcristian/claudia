@@ -612,7 +612,8 @@ Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", 
 `{ ev: "ended", id, error? }`, `{ ev: "sessions", sdk, list: [{ id, busy, sdk }] }` (answer to `list`,
 and sent on every runner connect so it can take running chats back; each session's `sdk` is the
 Agent SDK version it runs on, null while it loads; the top `sdk` is the version a session started
-now would run on: the installed release's, or its fallback when that one failed),
+now would run on: the installed release's, or its fallback when that one failed; the runner's
+probe of models and slash commands runs on it too, again whenever it changes),
 `{ ev: "sdk", id, sdk, error? }` (the session's query started on Agent SDK `sdk`; sent at every
 start and again when it falls back; `error`: why not the installed one: it failed to load, or its
 query failed before its first message, README decision 80), `{ ev: "cancel", rpc, id }` (the SDK
