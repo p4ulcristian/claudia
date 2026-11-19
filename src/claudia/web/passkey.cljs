@@ -24,12 +24,12 @@
   [ask]
   (-> (approve {:kind "read" :ref (:ref ask) :pubkey (:pubkey ask) :request (:id ask)})
       (.then #(api/post-json "/hub/vault/read" %))
-      (.then :sealed)))
+      (.then #(:sealed %))))
 
 (defn listing
   "Promise of the person's passkeys [{:id :name :createdAt :usedAt}]."
   []
-  (.then (api/fetch-json "/hub/passkeys") :passkeys))
+  (.then (api/fetch-json "/hub/passkeys") #(:passkeys %)))
 
 (defn- allowed
   "Promise of what lets this person add a passkey: the gate's code for the first, else a passkey's
@@ -48,7 +48,7 @@
                (.then (create options)
                       (fn [r] (api/post-json "/hub/passkeys/register"
                                              {:registrationId registrationId :response (js->clj r) :name passkey-name})))))
-      (.then :passkey)))
+      (.then #(:passkey %))))
 
 (defn remove!
   "Promise once the passkey id is removed (approved by one of the person's passkeys)."
