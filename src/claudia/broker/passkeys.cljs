@@ -8,7 +8,7 @@
             [claudia.broker.store :as store]
             [claudia.broker.webauthn :as webauthn]))
 
-;; Open registrations: id -> {:email :challenge :purpose {:kind "register"} :expires}.
+;; Open registrations: id -> {:email :challenge :purpose {:kind "register" :by-code} :expires}.
 (defonce ^:private registering (atom {}))
 
 (defn- fail [status text] (throw (ex-info text {:status status})))
@@ -23,19 +23,21 @@
   a passkey's approval of add-passkey."
   [cfg {:keys [email code challengeId response]}]
   (if (empty? (store/passkeys-of email))
-    (js/Promise.resolve (routes/use-code! email code))
+    (js/Promise.resolve (routes/check-code! email code))
     (routes/approve! cfg email challengeId "add-passkey" response)))
 
 (defn register-options
   "Options to make a new passkey, once the person is allowed to add one."
   [cfg {:keys [email] :as body}]
   (-> (allowed-to-add cfg body)
-      (.then (fn [_] (webauthn/registration-options cfg email (store/passkeys-of email))))
-      (.then (fn [^js o]
-               (let [id (.toString (crypto/randomBytes 18) "base64url")]
-                 (swap! registering rules/open-challenge id
-                        {:email email :challenge (.-challenge o) :purpose {:kind "register"}} (js/Date.now))
-                 {:registrationId id :options o})))))
+      (.then (fn [by]
+               (.then (webauthn/registration-options cfg email (store/passkeys-of email))
+                      (fn [^js o]
+                        (let [id (.toString (crypto/randomBytes 18) "base64url")]
+                          (swap! registering rules/open-challenge id
+                                 {:email email :challenge (.-challenge o)
+                                  :purpose {:kind "register" :by-code (= :code by)}} (js/Date.now))
+                          {:registrationId id :options o})))))))
 
 (defn- take-registration! [id email]
   (let [[e rest-open] (rules/take-challenge @registering id email "register" (js/Date.now))]
@@ -52,6 +54,8 @@
                  (when (store/passkey (:id k)) (fail 409 "That passkey is already kept."))
                  (let [row (assoc k :email email :name (rules/passkey-name passkey-name))]
                    (store/add-passkey! row (js/Date.now))
+                   ;; The enrollment code that let this first passkey in is used up only now.
+                   (when (get-in entry [:purpose :by-code]) (store/drop-code! email))
                    (js/console.log (str "broker: passkey \"" (:name row) "\" added for " email))
                    {:passkey (rules/passkey-view (store/passkey (:id k)))}))))))
 

@@ -73,13 +73,14 @@
 (defn- same-hash? [a b]
   (and (= (count a) (count b)) (crypto/timingSafeEqual (js/Buffer.from a) (js/Buffer.from b))))
 
-(defn use-code!
-  "A person's first passkey: their enrollment code must match. Wrong tries count; the code goes
-  once it is used, spent or expired."
+(defn check-code!
+  "A person's first passkey: their enrollment code must match. Wrong tries count; a spent or
+  expired code goes. A matching code stays until the passkey it lets in is kept
+  (claudia.broker.passkeys/register!), so a cancelled or failed passkey step does not use it up."
   [email code]
   (let [row (store/code-of email)]
     (case (rules/code-check row (js/Date.now) (and row (same-hash? (:hash row) (code-hash code))))
-      :ok (store/drop-code! email)
+      :ok :code
       :wrong (do (store/wrong-code! email) (fail 403 "That code is wrong."))
       :spent (do (store/drop-code! email) (fail 403 "That code has ended: make a new one on the gate."))
       :none (fail 403 "No enrollment code for you: make one on the gate (broker.js enroll <email>)."))))
