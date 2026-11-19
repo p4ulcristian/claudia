@@ -1,17 +1,13 @@
 (ns claudia.slave.folders.disk
   "The folder browser's disk work (README decisions 63 and 64): real paths, one folder's listing,
-  a folder's contents, sizes by `du -s` in the background (cached). It only reads (README decision
+  a folder's contents. It only reads (README decision
   69: Claudia's Folders never delete). The OS permissions of the runner's user decide; nothing here
   asks root."
-  (:require ["node:child_process" :as cp]
-            ["node:fs" :as fs]
+  (:require ["node:fs" :as fs]
             ["node:path" :as path]
             [claudia.slave.folders.rules :as rules]))
 
 (def ^:private fsp (.-promises fs))
-
-(def ^:private size-fresh-ms (* 10 60 1000))
-(def ^:private du-timeout-ms (* 5 60 1000))
 
 (defn real!
   "Promise of p with `..` resolved and every symlink followed; rejects (its code ENOENT, EACCES…)
@@ -49,11 +45,6 @@
       (.then (fn [ds] (js/Promise.all (.map ds #(entry-of folder %)))))
       (.then vec)))
 
-(defn mtime!
-  "Promise of a folder's modification time (ms), or nil."
-  [folder]
-  (-> (.stat fsp folder) (.then #(js/Math.round (.-mtimeMs ^js %))) (.catch (fn [_] nil))))
-
 (defn- missing?!
   "Promise: true when no folder sits at p (gone, or something else there); a folder the runner may
   not look at counts as there."
@@ -68,40 +59,6 @@
   (let [absolute (vec (filter #(path/isAbsolute %) ps))]
     (.then (js/Promise.all (into-array (map missing?! absolute)))
            (fn [flags] (vec (keep-indexed (fn [i gone] (when gone (nth absolute i))) flags))))))
-
-;; ---- sizes: `du -s` in the background, kept a while ----
-
-;; real path -> {:size (bytes or nil) :at :measuring bool}
-(defonce ^:private sizes (atom {}))
-
-(defn- du-args []
-  (if (= "darwin" (.-platform js/process)) [["-sk"] 1024] [["-sb"] 1]))
-
-(defn- measured! [folder size]
-  (swap! sizes assoc folder {:size size :at (js/Date.now) :measuring false}))
-
-(defn du!
-  "Promise of folder's size in bytes by `du -s` (nil when it gave none in du-timeout-ms). du exits 1
-  when some folder inside is unreadable; what it could read still counts."
-  [folder]
-  (let [[flags unit] (du-args)]
-    (js/Promise.
-     (fn [done _]
-       (cp/execFile "du" (clj->js (conj flags folder)) #js {:timeout du-timeout-ms :maxBuffer (* 1024 1024)}
-                    (fn [_ stdout _] (done (rules/du-bytes stdout unit))))))))
-
-(defn- measure! [folder]
-  (swap! sizes assoc folder {:size nil :at (js/Date.now) :measuring true})
-  (.then (du! folder) #(measured! folder %)))
-
-(defn size
-  "folder's size so far: {:size (bytes, nil while measuring or when du gave none) :measuring}; starts
-  a measure when there is none fresh."
-  [folder]
-  (let [hit (get @sizes folder)]
-    (if (and hit (or (:measuring hit) (< (- (js/Date.now) (:at hit)) size-fresh-ms)))
-      (select-keys hit [:size :measuring])
-      (do (measure! folder) {:size nil :measuring true}))))
 
 ;; ---- one folder's contents (files too) ----
 

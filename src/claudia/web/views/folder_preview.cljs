@@ -1,15 +1,14 @@
 (ns claudia.web.views.folder-preview
   "The Folders modal's right pane (README decision 68): the file picked in the contents pane,
   previewed (an image, a video or a sound to play, a PDF, Markdown rendered, code and text coloured
-  as the files form colours them), with its size and when it changed. A picked folder, or none
-  picked, shows the folder (claudia.web.views.folder-detail), and with none picked its README below."
+  as the files form colours them), with its size and when it changed. With nothing picked, the
+  folder's README; a picked folder, or no README, says to pick a file (README decision 74)."
   (:require [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.folders :as folders]
             [claudia.web.format :as format]
             [claudia.web.md :as md]
             [claudia.web.views.code :as code]
-            [claudia.web.views.folder-detail :as detail]
             [claudia.web.views.pure.folders :as pure]))
 
 (defn- use-text
@@ -61,12 +60,10 @@
        [:div.md.fd-pv-md {:dangerouslySetInnerHTML (r/unsafe-html (md/html (:text answer)))}]])))
 
 (defn pane
-  "The right pane. opts: :item (the picked item, nil for none), :folder (the tree's folder), :readme
-  (its README item, or nil), and folder-detail's :server :label :bookmarked? :chat :use?."
-  [{:keys [server item folder readme] :as opts}]
-  (if (and item (not (:dir item)))
-    ^{:key (:path item)} [:f> file-view {:server server :item item}]
-    [:<>
-     ^{:key (or (:path item) folder)}
-     [:f> detail/panel (assoc (select-keys opts [:server :label :bookmarked? :chat :use?]) :p (or (:path item) folder))]
-     (when (and (nil? item) readme) ^{:key (:path readme)} [:f> readme-view {:server server :item readme}])]))
+  "The right pane. opts: :server, :item (the picked item, nil for none), :readme (the folder's
+  README item, or nil)."
+  [{:keys [server item readme]}]
+  (cond
+    (and item (not (:dir item))) ^{:key (:path item)} [:f> file-view {:server server :item item}]
+    (and (nil? item) readme) ^{:key (:path readme)} [:f> readme-view {:server server :item readme}]
+    :else [:p.muted.fd-detail "Pick a file to preview it."]))

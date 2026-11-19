@@ -98,7 +98,7 @@ async function visit(browser, hubUrl, screen) {
       const box = page.getByPlaceholder('Message Claude…');
       await box.fill('Start here please');
       await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });
-      await page.locator('.fd-detail .fd-title', { hasText: 'work' }).waitFor({ timeout: waitMs });
+      await page.locator('.fd-files .fd-heading', { hasText: 'File Browser' }).waitFor({ timeout: waitMs });
       if (seen.sent.some((f) => f.type === 'new')) throw new Error('a new chat went out without a folder');
       await row('claude').click({ timeout: waitMs });
       await row('claude').locator('.fd-pin').click({ timeout: waitMs });

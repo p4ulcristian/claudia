@@ -171,18 +171,6 @@
                    {:same true}
                    (.then (repo-state root) #(graph-of root now limit branches %))))))))
 
-;; ---- the folder browser's question (README decision 63) ----
-
-(defn repo-facts
-  "Promise of the repo folder is in, {:top :current (branch, \"\" when detached) :tracking :dirty}
-  (as tracking and working-copy give them), or nil outside git."
-  [folder]
-  (.then (git folder ["rev-parse" "--show-toplevel"] true)
-         (fn [out]
-           (when-let [top (not-empty (str/trim out))]
-             (-> (all (git top ["symbolic-ref" "--quiet" "--short" "HEAD"] true) (tracking top) (working-copy top))
-                 (.then (fn [[current tr dirty]] {:top top :current (str/trim current) :tracking tr :dirty dirty})))))))
-
 ;; ---- one commit, or WORKING (the uncommitted changes) ----
 
 (def ^:private max-lines

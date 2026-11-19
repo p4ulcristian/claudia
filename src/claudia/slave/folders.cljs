@@ -1,7 +1,7 @@
 (ns claudia.slave.folders
   "The folder browser's calls on the runner (README decisions 63 and 64; PROTOCOL.md, \"Runner
   HTTP: folders\"): one folder's sub-folders, its contents (folders and files), one file's text or
-  bytes for its preview, and a folder's facts (size, chats, git). They only read: Folders never
+  bytes for its preview. They only read: Folders never
   delete or move anything (README decision 69). The whole system is in reach as far as the runner's
   user may read. Only the profile's own person may call them (the
   front's X-Claudia-Via \"own\"); a view or a write tick gets 403. Every path is resolved (`..`,
@@ -11,8 +11,6 @@
             [claudia.slave.folders.disk :as disk]
             [claudia.slave.folders.rules :as rules]
             [claudia.slave.files :as files]
-            [claudia.slave.git :as git]
-            [claudia.slave.store :as store]
             ["node:path" :as path]))
 
 (def ^:private max-body 65536)
@@ -21,7 +19,6 @@
   {["GET" "/api/folders"] :list
    ["GET" "/api/folders/contents"] :contents
    ["GET" "/api/folders/file"] :file
-   ["GET" "/api/folders/facts"] :facts
    ["POST" "/api/folders/missing"] :missing})
 
 (defn route
@@ -84,18 +81,6 @@
       (.catch (fn [^js e] (let [r (rules/error-reply (.-code e) (.-message e) p)]
                             (io/send-json res (:status r) (dissoc r :status)))))))
 
-(defn- repo-summary [folder]
-  (.then (git/repo-facts folder) #(when % (rules/git-summary %))))
-
-(defn- facts [p config]
-  (with-real p
-    (fn [real]
-      (-> (js/Promise.all #js [(disk/mtime! real) (repo-summary real)])
-          (.then (fn [[mtime g]]
-                   (merge {:path real :mtime mtime :git g
-                           :chats (rules/chats-in (store/chats) real (:cwd config))}
-                          (disk/size real))))))))
-
 (defn- body-path
   "Promise of the body's value under k (:path, :id, :paths) read from the request."
   [req k]
@@ -108,7 +93,6 @@
     :list (listing (.get q "path") (:cwd config))
     :contents (contents (.get q "path"))
     :file (file-text (.get q "path"))
-    :facts (facts (.get q "path") config)
     :missing (.then (body-path req :paths) #(.then (disk/missing! (take 200 (filter string? %))) (fn [m] {:missing m})))
     :not-found (js/Promise.resolve {:status 404 :error "Not found."})))
 

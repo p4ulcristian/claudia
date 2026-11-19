@@ -895,7 +895,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `X-Claudia-Via` is not `own`; a read-only view keeps its limits (`claudia.slave.reach`).
     Instead of: the browser kept inside `CLAUDIA_CWD` or the home folder.
 
-65. A new chat starts with no folder picked (2026-11-19, the user's call: a chat that silently took
+65. (Replaced the same day by decision 74: a new chat starts in the last chat's place.) A new chat starts with no folder picked (2026-11-19, the user's call: a chat that silently took
     the folder of the chat on screen, or the one this browser remembered, worked in the wrong
     project). A new chat no longer copies the open chat's folder, the last new chat's, or a chat
     group's; the folder is not among the carried picks (`claudia.web.events/carried-keys`) and not
@@ -1007,6 +1007,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     cannot move to another computer); New chat here and Pin stay. Opening the browser again, or
     another chat, starts on the chat's own computer. Instead of: a started chat's computer fixed
     in the browser.
+74. A new chat starts in the last chat's place, and the File Browser has no folder section
+    (2026-11-19, the user's call: "new chat should start last chat"; "remove the three buttons ...
+    I want to remove that section"). Replaces decision 65. New chat (and a group's +) starts on the
+    computer and in the folder of the chat open (its own folder, else that computer's work folder),
+    or with no chat open in the last new chat's (`claudia.newPicks` keeps the folder again); the
+    header's place pill shows it, and the File Browser changes it while working (a bookmark's
+    Select). A new chat that still has no folder (a fresh browser) asks for one on its first
+    message as decision 65 said. The File Browser's right pane shows only the picked file's
+    preview, else the folder's README: the folder section (its name, facts, Use for this chat, New
+    chat here, Pin, recent chats) is gone, and with it the runner's `GET /api/folders/facts` (the
+    folder's size by `du`, its chats, its git summary). Pinning stays on the tree's ☆ and the
+    cards' ★. Instead of: a new chat with no folder, and a folder section under the preview.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

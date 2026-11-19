@@ -2,13 +2,13 @@
   "The File Browser in the right half (README decisions 61 to 64, 68 to 72), in place of the picture
   while the header's place pill has it on, on the open chat's server; the top bar's computer toggle
   picks a new chat's computer (README decision 71) and, for a started chat, only which computer is
-  browsed (decision 72: on another one Select and Use for this chat are gone): on top the server's bookmarks as cards (the project's logo as the chats show it,
-  else a folder; name, path, ★ to unpin, \"missing\" greyed;
+  browsed (decision 72: on another one Select is gone): on top the server's bookmarks as cards (the
+  project's logo as the chats show it, else a folder; name, path, ★ to unpin, \"missing\" greyed;
   a click opens the tree there, Select uses it for the chat); on the left a filter field and the
   tree from \"/\" with the chat's folder (else the work folder) selected; in the middle what that
   folder holds, as a grid or a list (claudia.web.views.folder-contents); on the right the picked
-  file's preview, or the folder (claudia.web.views.folder-preview, folder-detail: Use for this
-  chat, New chat here, Pin). Nothing here deletes (README decision 69). Only the person's own
+  file's preview, else the folder's README (claudia.web.views.folder-preview; no folder section
+  since README decision 74). Nothing here deletes (README decision 69). Only the person's own
   chats: a view has no button for it and never reaches these calls."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -162,13 +162,10 @@
      [server p])
     answer))
 
-(defn- right-side [{:keys [server selected item readme label chat use?]}]
-  (let [items @(rf/subscribe [:bookmarks])
-        shown (or (:path item) selected)]
-    (if selected
-      [preview/pane {:server server :item item :folder selected :readme readme :label label :chat chat :use? use?
-                     :bookmarked? (bookmarks/bookmarked? items server shown)}]
-      [:p.muted.fd-detail "Pick a folder."])))
+(defn- right-side [{:keys [server selected item readme]}]
+  (if selected
+    [preview/pane {:server server :item item :readme readme}]
+    [:p.muted.fd-detail "Pick a folder."]))
 
 (defn- middle
   "The contents pane of the selected folder; picked: the picked item's path."
@@ -213,7 +210,6 @@
         [reveal set-reveal] (h/use-state nil)
         [hidden? set-hidden] (h/use-state false)
         go! (fn [p] (set-picked nil) (set-selected p) (doseq [up (pure/lineage p)] (load! up false)) (set-reveal p))
-        label @(rf/subscribe [:server-label server])
         use? (or (nil? chat) (= server home))]
     (use-first-load! load! go! start)
     [:<>
@@ -221,7 +217,7 @@
      [:f> cards server selected go! chat use?]
      [:f> body {:server server :loaded loaded :cwd cwd :error error :hidden? hidden? :selected selected
                 :set-selected set-selected :picked picked :set-picked set-picked :reveal reveal :set-reveal set-reveal
-                :load! load! :go! go! :label label :chat chat :use? use?}]]))
+                :load! load! :go! go!}]]))
 
 (defn- shown
   "The browser on the computer shown: a started chat's own at first, another one picked in the top
