@@ -16,6 +16,7 @@
 .fd-server:hover { color: var(--fg); border-color: var(--accent); }
 .fd-server.on { color: var(--fg); background: var(--panel2); border-color: var(--accent); }
 .fd-server.off { opacity: 0.55; }
+.fd-home { font: 400 12px var(--sans); color: var(--muted); }
 .fd-machine { margin: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fd-switch { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .fd-body { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(280px, 400px); min-height: 0; }

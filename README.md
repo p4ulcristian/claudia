@@ -995,9 +995,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     a new chat with more than one computer the name is a toggle of the person's computers (an off
     one dimmed): a pick makes it the new chat's computer, drops the folder picked on the one before,
     and starts the browser again there with that computer's own bookmarks (decision 61). A started
-    chat's computer stays fixed. So a new chat's first message without a folder (decision 65)
+    chat's computer stays fixed (decision 72: the toggle browses another computer). So a new chat's first message without a folder (decision 65)
     opens Files, where the person picks the computer and the folder, and Select sends it. Instead
     of: a computer pill with its own popup beside the folder pill.
+72. The File Browser browses any computer, also for a started chat (2026-11-19, the user's call:
+    "the title should be File Browser and we should be able to toggle the server"). The right
+    half's heading says File Browser. For a started chat the top bar's toggle lists all the
+    person's computers too, the chat's own marked "· this chat"; a pick only browses that computer
+    (its work folder, its own bookmarks): the chat stays on its own computer. While another
+    computer is shown, a bookmark's Select and the folder's Use for this chat are gone (a chat
+    cannot move to another computer); New chat here and Pin stay. Opening the browser again, or
+    another chat, starts on the chat's own computer. Instead of: a started chat's computer fixed
+    in the browser.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
