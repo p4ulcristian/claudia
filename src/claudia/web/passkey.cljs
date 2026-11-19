@@ -61,6 +61,19 @@
   [prepared]
   (.then (sign! prepared) #(api/post-json "/hub/passkeys/remove" %)))
 
+(defn key-access
+  "Promise of an admin's view of key access {:items :grants :admins}; rejects 403 for others."
+  []
+  (api/fetch-json "/hub/keys"))
+
+(defn save-grants!
+  "Call from the tap itself: the admin's passkey approves the prepared batch; promise of the
+  ticks as saved."
+  [prepared]
+  (-> (sign! prepared)
+      (.then #(api/post-json "/hub/keys/grants" %))
+      (.then #(:grants %))))
+
 (defn problem
   "A short text for why a passkey step failed: the browser's or the broker's own words."
   [e]

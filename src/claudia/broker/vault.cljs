@@ -28,6 +28,33 @@
 
 (defn ready? [] (some? @client))
 
+;; The vault's items {:at ms :items [{:id :title}]}: listed again after a minute.
+(defonce ^:private item-cache (atom nil))
+
+(defn- live-client []
+  (.then @client (fn [c] (or c (throw (ex-info "1Password refused the broker's token; see its log." {:status 503}))))))
+
+(defn- list-items [vault-title]
+  (-> (live-client)
+      (.then (fn [^js c]
+               (.then (.list (.-vaults c))
+                      (fn [vs]
+                        (let [^js v (some #(when (= vault-title (.-title ^js %)) %) vs)]
+                          (when-not v (throw (ex-info (str "The broker cannot see the vault " vault-title ".") {:status 503})))
+                          (.list (.-items c) (.-id v)))))))
+      (.then (fn [items] (mapv (fn [^js i] {:id (.-id i) :title (.-title i)}) items)))))
+
+(defn items
+  "Promise of the vault's items [{:id :title}], titles sorted; no values."
+  [vault-title]
+  (let [{:keys [at] cached :items} @item-cache]
+    (if (and cached (< (- (js/Date.now) at) 60000))
+      (js/Promise.resolve cached)
+      (.then (list-items vault-title)
+             (fn [xs] (let [sorted (vec (sort-by :title xs))]
+                        (reset! item-cache {:at (js/Date.now) :items sorted})
+                        sorted))))))
+
 (defn read-sealed
   "Promise of the value at ref sealed to pubkey (base64). The plain value lives only inside this
   function's promise chain."

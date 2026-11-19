@@ -495,8 +495,10 @@ The hub's calls (signed in, same origin; the hub replaces any `email` in the bod
 | `POST /hub/passkeys/register/options` `{ code }` (first passkey) \| `{ challengeId, response }` (an `add-passkey` approval) | `{ registrationId, options }` (WebAuthn creation options) |
 | `POST /hub/passkeys/register` `{ registrationId, response, name }` | `{ passkey }` |
 | `POST /hub/passkeys/remove` `{ challengeId, response }` (a `remove-passkey` approval) | `{ removed }` |
+| `GET /hub/keys` | the broker's admins: `{ items: [{ id, title }], grants: [{ item, email }], admins }`; 403 others |
+| `POST /hub/keys/grants` `{ challengeId, response }` (a `grants` approval: `{ kind: "grants", changes: [{ item, email, on }] }`, 1 to 200) | `{ grants }`; admins only |
 
-Every challenge is used once and ends after 5 minutes. On the gate, `broker.js enroll <email>` prints
+A read needs the key ticked for that person (admins: every key): 403 before the passkey asks, and again at the read. Every challenge is used once and ends after 5 minutes. On the gate, `broker.js admin <email>` makes a broker admin, and `broker.js enroll <email>` prints
 a person's one-time code for their first passkey (30 minutes, 5 tries; a new one replaces the old).
 
 ## Root helper (`claudia-root`, `src/claudia/root`; README decision 52)

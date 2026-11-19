@@ -152,6 +152,11 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-token { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .st-token-name { font-weight: 600; }
 .st-token .token-remove { margin-left: auto; }
+/* Settings → Keys (README decision 66): who may use which key, a tick per person. */
+.st-keys { border-collapse: collapse; font-size: 13px; width: 100%; }
+.st-keys th, .st-keys td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.st-keys th:first-child, .st-keys td:first-child { text-align: left; }
+.st-keys td.changed { background: var(--amber-bg, rgba(255, 190, 60, 0.15)); }
 .st-admin { align-self: flex-start; padding: 6px 0 0; font-size: 13px; color: var(--accent); }
 @media (max-width: 679px) {
   .st-backdrop { place-items: end stretch; padding: 0; }

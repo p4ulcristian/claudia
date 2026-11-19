@@ -77,3 +77,21 @@
   (is (= "48908a5" (rules/integration-version "48908a5635dc0a73069e1e6980728a7e505bf116")))
   (is (= "abc" (rules/integration-version "abc")))
   (is (= "dev" (rules/integration-version nil))))
+
+(deftest key-access-rules
+  (is (= "GitHub" (rules/ref-item "Claudia" "op://Claudia/GitHub/token")))
+  (is (nil? (rules/ref-item "Claudia" "op://Other/GitHub/token")))
+  (let [items [{:id "i1" :title "GitHub"} {:id "i2" :title "i1"}]]
+    (is (= "i1" (:id (rules/find-item items "i1"))))
+    (is (= "i1" (:id (rules/find-item items "GitHub"))))
+    (is (nil? (rules/find-item items "nope"))))
+  (is (rules/may-use? true [] "i1"))
+  (is (rules/may-use? false ["i1"] "i1"))
+  (is (not (rules/may-use? false ["i2"] "i1"))))
+
+(deftest grant-batches-are-checked
+  (is (= [{:item "i1" :email "p@x" :on true}] (rules/grant-changes [{:item "i1" :email "p@x" :on true :x 1}])))
+  (is (nil? (rules/grant-changes [])))
+  (is (nil? (rules/grant-changes [{:item "i1" :email "P@x" :on true}])))
+  (is (nil? (rules/grant-changes [{:item "i1" :email "p@x" :on "yes"}])))
+  (is (= "grants" (:kind (rules/purpose "Claudia" {:kind "grants" :changes [{:item "i" :email "p@x" :on false}]})))))
