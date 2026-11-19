@@ -5,7 +5,9 @@
 (def ok {:name "bot" :token (str "ghs_" (apply str (repeat 36 "a"))) :login "claudia-1[bot]"})
 
 (deftest a-good-body-passes
-  (is (= ok (g/checked (assoc ok :expiresAt 1)))))
+  (is (= ok (g/checked (assoc ok :expiresAt 1))))
+  (let [long-token (str "ghs_" (apply str (repeat 96 "aB3_")) "x.y-z")]
+    (is (= long-token (:token (g/checked (assoc ok :token long-token)))) "GitHub's 390-character tokens with . and -")))
 
 (deftest bad-bodies-are-refused
   (is (:error (g/checked (assoc ok :name "../etc"))) "no path in a name")

@@ -16,7 +16,7 @@
   [{svc :name :keys [token login]}]
   (cond
     (not (and (string? svc) (re-matches #"^[a-z][a-z0-9-]{0,31}$" svc))) {:error "Not a service name."}
-    (not (and (string? token) (re-matches #"^ghs_[A-Za-z0-9_]{20,255}$" token))) {:error "Not an app installation token."}
+    (not (and (string? token) (re-matches #"^ghs_[A-Za-z0-9_.-]{20,1024}$" token))) {:error "Not an app installation token."}
     (not (and (string? login) (re-matches #"^[A-Za-z0-9][A-Za-z0-9-]{0,38}\[bot\]$" login))) {:error "Not an app's bot login."}
     :else {:name svc :token token :login login}))
 
