@@ -1022,12 +1022,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     order is to be looked at again). Held on the rail, the flower is half: its petals and the
     voice's bars only to the left, still centred on the mic, top to bottom cancel, add, send, now,
     each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
-    px from the press), the clip is dropped and the mic follows the finger, a blue disc saying
-    move; let go, it stays there with its whole flower (its centre kept 128 px inside the screen
-    and off the rail, so the flower fits), its slot in the rail a dashed ring; let go on the rail or
-    within 130 px of the slot, it goes home. Its spot is kept on the device (localStorage, as
-    fractions of the screen, clamped again when the screen turns). The phone keeps its mic in the
-    bottom middle with the whole flower and no move. Instead of: the 3x3 grid floating 18 px from
+    px from the press), the clip is dropped and the mic follows the finger on a spring (`motion`'s
+    useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would have some
+    personality"): it trails the finger and overshoots a little, a blue disc saying move. Only in
+    the first 2 s of a hold ("if I talk for already two seconds, then dragging will not be
+    possible"): later the hold is talk and a drag only picks a petal. Let go,
+    it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
+    within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
+    anywhere 44 px from the left wall and the rail and 124 px from the top and the bottom; by the
+    rail its flower is half to the left, by the left wall half to the right (mirrored), else whole.
+    Its spot is kept on the device (localStorage, as fractions of the screen, clamped again when
+    the screen turns). The phone keeps its mic in the bottom middle with the whole flower and no
+    move. Instead of: the 3x3 grid floating 18 px from
     the edge over the page, the mic 128 px in so the whole flower fitted.
 74. A new chat starts in the last chat's place, and the File Browser has no folder section
     (2026-11-19, the user's call: "new chat should start last chat"; "remove the three buttons ...

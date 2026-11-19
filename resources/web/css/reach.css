@@ -40,10 +40,9 @@
   .thumb-edge .mic-button svg { width: 30px; height: 30px; }
   .edge-gap { width: 64px; height: 64px; flex: none; }
   /* Dragged out of the rail, the mic sits where it was let go (its centre there) and its slot
-     stays as a dashed ring; while dragged it trails the finger a little. */
+     stays as a dashed ring (its spring: claudia.web.views.mic). */
   .mic-slot { box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--line); }
   .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
-  .mic.moving { transition: left 0.12s ease-out, top 0.12s ease-out; }
   .thumb-edge .mic.moved .mic-clips, .thumb-edge .mic.moved .mic-hint { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
   .edge-icon { font-size: 0; }
   .edge-icon svg { width: 28px; height: 28px; }

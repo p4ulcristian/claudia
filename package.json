@@ -18,6 +18,7 @@
     "diff": "9.0.0",
     "jose": "6.2.17",
     "libsodium-wrappers": "0.8.4",
+    "motion": "14.14.0",
     "playwright-core": "1.65.1",
     "sshpk": "1.18.0",
     "ws": "8.23.0",
