@@ -6,7 +6,9 @@
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.db :as db]
+            [claudia.web.folders :as folders]
             [claudia.web.views.codeforms :as codeforms]
+            [claudia.web.views.folders :as folder-views]
             [claudia.web.views.forms :as forms]
             [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
@@ -90,27 +92,38 @@
 
 ;; ---- the pane ----
 
+(defn- stage
+  "The picture: the live one, or an earlier one from the history (read only)."
+  [oc hist ro]
+  [:div.right-scroll
+   [:div.stage {:class (when (:viewing? hist) "past")}
+    [:f> picture-view {:scene (:scene hist) :k (:ck oc)
+                       :live? (and (not (:viewing? hist)) (not ro))}]]])
+
+(defn- files?
+  "True when the right half shows Files (README decision 70): toggled on, and not a read-only view
+  (another profile's runner answers no folder calls)."
+  [ro]
+  (and (= :files @(rf/subscribe [:right-view])) (not ro)))
+
 (defn picture-pane
-  "The right half of the open chat."
+  "The right half of the open chat: the picture, or Files while the header's folder pill has it on;
+  the bar under it either way."
   []
   (let [oc @(rf/subscribe [:open-chat])
         hist @(rf/subscribe [:picture-history])
         fold @(rf/subscribe [:fold-state])
         ro @(rf/subscribe [:read-only?])
         phone? (db/phone?)
-        ;; The picture shown: the live one, or an earlier one from the history (read only).
-        scene (:scene hist)
         asks (get-in oc [:state :asks])]
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
       [:section.right
-       [:div.right-scroll
-        [:div.stage {:class (when (:viewing? hist) "past")}
-         [:f> picture-view {:scene scene :k (:ck oc)
-                            :live? (and (not (:viewing? hist)) (not ro))}]]]
+       (if (files? ro)
+         [folder-views/pane (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))]
+         [stage oc hist ro])
        (when (:chat oc)
-         [rightbar/bar (when (seq (:blocks scene)) [snapshot/button oc hist])])
+         [rightbar/bar (when (seq (:blocks (:scene hist))) [snapshot/button oc hist])])
        (when (seq asks)
          [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
           "Claude asks you something"])])))
-

@@ -595,10 +595,10 @@
 
 (defn folder-first
   "A new chat's first message with no folder picked (README decision 65): nothing is sent, the draft
-  stays, and the Folders modal opens on server for the new chat; its Select picks the folder and then
-  sends (claudia.web.folders, :send? true)."
-  [db server]
-  {:db (-> db (assoc :folders {:server server :folder nil :chat nil :send? true}) (dissoc :world?))})
+  stays, and the right half shows Files for the new chat; its Select picks the folder and then sends
+  (claudia.web.folders, :send? true)."
+  [_db _server]
+  {:fx [[:dispatch [:folders/open {:chat nil :send? true}]]]})
 
 (defn send-for
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.

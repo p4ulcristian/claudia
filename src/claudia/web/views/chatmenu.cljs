@@ -1,7 +1,7 @@
 (ns claudia.web.views.chatmenu
   "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (16 colours, or
-  passive ash, which remembers the colour it had), rename, fork, Folders… (the Folders modal for
-  this chat: pick its folder), archive."
+  passive ash, which remembers the colour it had), rename, fork, Files… (opens the chat with Files
+  in the right half: pick its folder), archive."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -67,7 +67,7 @@
                                       "Escape" (do (.stopPropagation e) (set-renaming false))
                                       nil))}])
 
-(defn- menu-items [{:keys [k forking error]} {:keys [title color archived folder]} {:keys [close act renaming set-renaming]}]
+(defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming]}]
   [:<>
    (if (= color "ash")
      [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:ops/color k "wake"]))} "Make active"]
@@ -80,9 +80,9 @@
                      :on-click #(rf/dispatch [:ops/fork k nil])}
     (if forking "Forking…" "Fork chat")]
    (when error [:div.cm-error error])
-   [:button.cm-item {:role "menuitem" :title "Pick this chat's folder in Folders (README decisions 61 to 64)"
-                     :on-click (act #(rf/dispatch [:folders/open {:server (first k) :folder (not-empty folder) :chat k}]))}
-    "Folders…"]
+   [:button.cm-item {:role "menuitem" :title "Open this chat with Files in the right half (README decision 70)"
+                     :on-click (act #(rf/dispatch [:folders/open {:chat k}]))}
+    "Files…"]
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 

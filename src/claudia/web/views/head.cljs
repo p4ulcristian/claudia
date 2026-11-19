@@ -11,6 +11,7 @@
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
             [claudia.web.api :as api]
+            [claudia.web.folders :as folders]
             [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.prompts :as prompts]
@@ -287,13 +288,16 @@
       [:span.folder-path [:bdi (if shown (format/tilde shown) "work folder")]])))
 
 (defn- folder-pick
-  "The folder the chat works in; a click opens the Folders modal (README decisions 61 to 64) on this
-  chat's server, the folder selected."
-  [{:keys [new? ck server ro folder] :as hc}]
-  (let [shown (when-not (and new? (empty? folder)) (shown-folder hc))]
+  "The folder the chat works in; a click toggles the right half between the picture and Files, the
+  folder browser on this chat's server with its folder selected (README decision 70). Lit while
+  Files shows."
+  [{:keys [new? ro folder] :as hc}]
+  (let [shown (when-not (and new? (empty? folder)) (shown-folder hc))
+        files? (= :files @(rf/subscribe [:right-view]))]
     [:div.head-field
-     [pill {:k :folder :label (str "Folder" (when shown (str ": " shown))) :value (folder-value hc) :ro ro :class "folder-pill"
-            :on-click #(rf/dispatch [:folders/open {:server server :folder shown :chat (when-not new? ck)}])}]]))
+     [pill {:k :folder :label (str "Folder" (when shown (str ": " shown)) (if files? " · hide Files" " · show Files"))
+            :value (folder-value hc) :ro ro :open files? :class (str "folder-pill" (when files? " on"))
+            :on-click #(rf/dispatch [:right/toggle-files])}]]))
 
 (defn- model-pick
   "Model · effort in one pill; its popup lists both (claudia.web.views.usage)."
@@ -385,16 +389,16 @@
 
 (defn- head-context
   "What the rows need, the same for a new chat (oc nil or not started) and a started one: where it
-  runs, its settings and how a pick is put, its plans and the plan it runs on."
+  runs (folders/chat-place), its settings and how a pick is put, its plans and the plan it runs on."
   [{:keys [ck state row pending?] :as oc} ro]
-  (let [new? (not (and oc (or row (seq (:messages state)) pending?)))
-        server (if new? @(rf/subscribe [:new-server]) (:server oc))
+  (let [place (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))
+        {:keys [new? server]} place
         settings (if new? @(rf/subscribe [:new-settings]) (:settings state))
         {:keys [plans planKey]} @(rf/subscribe [:meta server])]
     (assoc (if new? {} oc)
            :new? new? :oc oc :server server :settings settings :plans plans
            :on (pure/chat-plan plans (:plan settings) planKey)
-           :folder (if new? (:folder settings) (or (:folder row) (:folder state)))
+           :folder (:folder place)
            :ro (or ro (and (not new?) (or pending? (not row))))
            :put! (if new? #(rf/dispatch [:new/settings %]) #(rf/dispatch [:chat/settings ck %])))))
 

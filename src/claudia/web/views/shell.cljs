@@ -16,7 +16,6 @@
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
-            [claudia.web.views.folders :as folders]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.prompts :as prompts]
@@ -155,7 +154,6 @@
    [prompts/overlay]
    [settings/settings-popup]
    [admin/dialog]
-   [folders/screen]
    [:f> world/overlay]])
 
 (defn app []
