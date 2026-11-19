@@ -61,8 +61,8 @@
     that:
       - item.profile is match('^[a-z][a-z0-9-]*$')
       - (item.profile ~ agent_suffix) | length <= 32
-      - item.person_user is defined and item.person_user | length > 0
-    fail_msg: "Profile {{ item.profile }}: lowercase letters, digits and '-', and <profile>{{ agent_suffix }} at most 32 characters."
+      - item.person_user is not defined or item.person_user | length > 0
+    fail_msg: "Profile {{ item.profile }}: lowercase letters, digits and '-', and <profile>{{ agent_suffix }} at most 32 characters; person_user, when given, not empty."
   loop: "{{ people }}"
   loop_control:
     label: "{{ item.profile }}"
@@ -71,13 +71,21 @@
   ansible.builtin.getent:
     database: passwd
 
-- name: Stop unless every person's own Linux user exists
+# person_user is left out for a profile whose person has no login of their own on this server (their
+# work runs only as the agent user); such a profile cannot be migrated.
+- name: Stop unless every named person's own Linux user exists
   ansible.builtin.assert:
     that: item.person_user in ansible_facts.getent_passwd
     fail_msg: "Person user {{ item.person_user }} (profile {{ item.profile }}) does not exist on this server."
-  loop: "{{ people }}"
+  loop: "{{ people | selectattr('person_user', 'defined') | list }}"
   loop_control:
     label: "{{ item.person_user }}"
+
+- name: Stop when a profile to migrate names no person user
+  ansible.builtin.assert:
+    that: (people | selectattr('profile', 'equalto', item) | first).person_user is defined
+    fail_msg: "Profile {{ item }} is in migrate_profiles but names no person_user to move it from."
+  loop: "{{ migrate_profiles }}"
 
 - name: Read Claudia's profiles file
   ansible.builtin.slurp:
@@ -103,4 +111,4 @@
 - name: Name the agent users and the people's users
   ansible.builtin.set_fact:
     agent_users: "{{ people | map(attribute='profile') | map('regex_replace', '$', agent_suffix) | list }}"
-    person_users: "{{ people | map(attribute='person_user') | unique | list }}"
+    person_users: "{{ people | selectattr('person_user', 'defined') | map(attribute='person_user') | unique | list }}"

@@ -28,6 +28,7 @@
       {{ break_glass_user }} (-u {{ break_glass_user }}) or give the sudo password (-K).
 
 - name: Find drop-ins with a passwordless rule for a person's user
+  when: person_users | length > 0
   ansible.builtin.find:
     paths: /etc/sudoers.d
     contains: '^\s*({{ person_users | map("regex_escape") | join("|") }})\s.*NOPASSWD\s*:'
@@ -37,7 +38,7 @@
 - name: Read those drop-ins
   ansible.builtin.slurp:
     src: "{{ item.path }}"
-  loop: "{{ sudo_nopasswd_files.files }}"
+  loop: "{{ sudo_nopasswd_files.files | default([]) }}"
   loop_control:
     label: "{{ item.path }}"
   register: sudo_nopasswd_texts
