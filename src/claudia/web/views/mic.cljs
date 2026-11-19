@@ -8,7 +8,8 @@
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
   On the tablet's rail (README decision 73) the flower is half, to the left, and the mic moves: a
-  drag past the petals (pure/move-px) drops the clip and the mic follows the finger on a spring
+  drag past the petals (pure/move-px) in the first 2 s (pure/move-window-ms) drops the clip and the
+  mic follows the finger on a spring
   (motion's useSpring: it trails and overshoots a little); let go, it glides there and stays (its
   spot kept on this device), or let go on the rail or at its slot it glides home. Parked by a wall,
   its flower is half, opening away from it."
@@ -159,9 +160,9 @@
   "Pointer move while held: where the finger went chooses what letting go does (pure/gesture, on
   the rail's half flower pure/half-gesture); on the rail, past the petals, the mic moves."
   [^js e {:keys [hold set-dir ^js mx ^js my] :as parts}]
-  (when-let [{:keys [x0 y0 side rail? moving]} (.-current hold)]
+  (when-let [{:keys [x0 y0 t0 side rail? moving]} (.-current hold)]
     (let [dx (- (.-clientX e) x0) dy (- (.-clientY e) y0)]
-      (when (and rail? (not moving) (pure/moving? dx dy)) (start-move! parts))
+      (when (and rail? (not moving) (pure/moving? dx dy (- (js/performance.now) t0))) (start-move! parts))
       (if (:moving (.-current hold))
         (do (.set mx (.-clientX e)) (.set my (.-clientY e)))
         (let [dir (if side (pure/half-gesture dx dy side) (pure/gesture dx dy))]

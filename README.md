@@ -1024,7 +1024,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
     px from the press), the clip is dropped and the mic follows the finger on a spring (`motion`'s
     useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would have some
-    personality"): it trails the finger and overshoots a little, a blue disc saying move. Let go,
+    personality"): it trails the finger and overshoots a little, a blue disc saying move. Only in
+    the first 2 s of a hold ("if I talk for already two seconds, then dragging will not be
+    possible"): later the hold is talk and a drag only picks a petal. Let go,
     it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
     within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
     anywhere 44 px from the left wall and the rail and 124 px from the top and the bottom; by the

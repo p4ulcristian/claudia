@@ -46,10 +46,15 @@
   116 px out, and a finger's width more): the clip is dropped and the mic moves."
   130)
 
+(def move-window-ms
+  "How long after the press a drag can still move the mic: later the hold is talk, and a drag only
+  picks a petal."
+  2000)
+
 (defn moving?
-  "Whether a drag of dx, dy px from where the hold started moves the mic."
-  [dx dy]
-  (> (js/Math.hypot dx dy) move-px))
+  "Whether a drag of dx, dy px from where the hold started, held-ms after the press, moves the mic."
+  [dx dy held-ms]
+  (and (< held-ms move-window-ms) (> (js/Math.hypot dx dy) move-px)))
 
 (def edge-margin
   "How far a moved mic's centre stays from the left wall and the rail: the button whole, a finger's
