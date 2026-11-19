@@ -943,7 +943,7 @@
   (tasks/load! id true)
   (tasks/on-system! id m)
   (when (and (turns/task-notice? m)
-             ;; An agent's own shells and agents are part of it: their notices are its.
+             ;; An agent's own shells and agents are part of it while it runs: their notices are its.
              (not (tasks/child? id (:task_id m)))
              ;; A foreground agent's answer is its tool result, not a notice.
              (tasks/background? id (:task_id m)))
@@ -988,13 +988,15 @@
   (set-running! id false))
 
 (defn- session-held!
-  "The host holds the chat's session (busy: its turn runs). After a runner start: the runner's tools
-  or instructions changed since this session started (an update): the new tools now, the
-  instructions after its turn."
-  [cid busy]
+  "The host holds the chat's session (busy: its turn runs; background: its live background set as the
+  host last heard it, nil before the first, which ends the saved tasks that finished while this
+  runner was away). After a runner start: the runner's tools or instructions changed since this
+  session started (an update): the new tools now, the instructions after its turn."
+  [cid {:keys [busy background]}]
   (let [was (:live (st cid))
         kept (store/kv cid "session")]
     (tasks/load! cid true)
+    (when (some? background) (tasks/on-system! cid {:subtype "background_tasks_changed" :tasks background}))
     (swap-chat! cid assoc :live true :account (:account kept))
     (when busy (swap-chat! cid assoc :since (or (:since (st cid)) (js/Date.now))))
     (set-running! cid (boolean busy))
@@ -1010,10 +1012,10 @@
   "The sessions the host holds: those it no longer holds (it restarted) have ended. Then every open
   chat without one gets its session back."
   [sessions]
-  (let [live (into {} (map (juxt :id :busy)) sessions)]
+  (let [live (into {} (map (juxt :id identity)) sessions)]
     (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
       (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))
-    (doseq [[cid busy] live] (session-held! cid busy))
+    (doseq [[cid held] live] (session-held! cid held))
     (open-sessions!)))
 
 (defn on-host-event [{:keys [ev id] :as e}]

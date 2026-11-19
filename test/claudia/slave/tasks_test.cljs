@@ -105,3 +105,47 @@
            "f" {:id "f" :status "running" :type "local_bash" :start 1}}]
     (is (= 40 (tasks/oldest-running m)) "a child runs on its top's clock; done and foreground shells don't count")
     (is (nil? (tasks/oldest-running {"d" (m "d")})))))
+
+;; The case seen on 2026-11-20: a background fork finished while the background shell it started
+;; still ran (Claude Code keeps it running); the rail said "1 agent" and the list showed none running.
+(def ^:private outlived
+  {"fork" {:id "fork" :type "fork" :status "completed" :background true :start 10 :end 50}
+   "fg" {:id "fg" :type "local_bash" :status "completed" :background false :start 12 :end 20 :parent "fork"}
+   "early" {:id "early" :type "local_bash" :status "completed" :background true :start 15 :end 40 :parent "fork"}
+   "sh" {:id "sh" :type "local_bash" :status "running" :background true :start 45 :parent "fork"}})
+
+(deftest a-shell-that-outlives-its-agent-is-a-row-of-its-own
+  (is (= #{"fork" "sh"} (set (map :id (tasks/tops outlived)))) "the shell that ended before its agent stays part of it")
+  (is (= ["sh"] (map :id (tasks/running-tops outlived))))
+  (is (= 45 (tasks/oldest-running outlived)) "the rail's clock is the shell's, a row the list shows running")
+  (testing "while its agent runs, the shell is part of it"
+    (let [m (assoc-in outlived ["fork" :status] "running")]
+      (is (= ["fork"] (map :id (tasks/tops m))))
+      (is (= 10 (tasks/oldest-running m)))))
+  (testing "once it ends after its agent, it stays a row of its own"
+    (let [m (update outlived "sh" assoc :status "completed" :end 90)]
+      (is (= #{"fork" "sh"} (set (map :id (tasks/tops m)))))
+      (is (empty? (tasks/running-tops m))))))
+
+(deftest every-running-task-has-a-running-top
+  (let [m (assoc outlived "kid" {:id "kid" :type "general-purpose" :status "running" :background true
+                                 :start 30 :parent "fork"}
+                 "kid-sh" {:id "kid-sh" :type "local_bash" :status "running" :background true
+                           :start 31 :parent "kid"})
+        by-id (into {} (map (juxt :id identity)) (vals m))]
+    (is (= "kid" (:id (tasks/top-of (m "kid-sh") by-id))) "a running agent of a finished one keeps its own shells")
+    (is (every? #(= "running" (:status (tasks/top-of % by-id))) (filter #(= "running" (:status %)) (vals m))))))
+
+(deftest part-of-agent-decides-whose-notice-it-is
+  (is (true? (tasks/part-of-agent? outlived "early")))
+  (is (false? (tasks/part-of-agent? outlived "sh")) "its end is the chat's notice: its agent is gone")
+  (is (false? (tasks/part-of-agent? outlived "fork")))
+  (is (false? (tasks/part-of-agent? outlived "none"))))
+
+(deftest a-held-sessions-live-set-ends-the-saved-tasks-that-finished
+  (let [saved (tasks/loaded (vals outlived) true 60)
+        after (tasks/with-live-set saved {} 70)]
+    (is (= "running" (get-in saved ["sh" :status])) "a live session's saved shell may still run")
+    (is (= {:status "stopped" :end 70} (select-keys (after "sh") [:status :end])))
+    (is (empty? (tasks/running-tops after)))
+    (is (= "running" (get-in (tasks/with-live-set saved {"sh" {:task_id "sh"}} 70) ["sh" :status])))))
