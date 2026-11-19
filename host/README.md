@@ -48,7 +48,8 @@ Python and sudo. Only builtin modules are used. Add `--limit <host>` to do one s
 server at a time anyway (`serial: 1`).
 
 Per host in the inventory: `people` (a list of `{profile, person_user}`: the profile's name, the first
-word of its line in `/etc/claudia/profiles`, and the person's own Linux login), and when wanted
+word of its line in `/etc/claudia/profiles`, and the person's own Linux login; leave `person_user`
+out when the person has no login of their own on that server, as then the profile cannot be migrated), and when wanted
 `migrate_profiles`, `desktop_user`, `break_glass_tested`, `phase_b_remove_nopasswd`. For all hosts:
 `break_glass_pubkey` and `claudia_ssh_ca_pubkey` (the run stops when either is missing or still the
 example's placeholder), and `claudia_build_dir`, the absolute path of a Claudia checkout on your
