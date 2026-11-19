@@ -30,22 +30,36 @@
   (if hidden? entries (remove :hidden entries)))
 
 (defn tree-node
-  "The tree node of folder p: {:id :name :loaded :pinned :children}, children from loaded (path ->
-  entries, dot folders only when hidden?); [] while not loaded, so it can be opened (react-arborist's
-  internal node); pinned: the bookmarked folders (a set); depth guards the walk."
-  [{:keys [loaded hidden? pinned] :as m} p depth]
+  "The tree node of folder p: {:id :name :loaded :pinned :link :children}, children from loaded
+  (path -> entries, dot folders only when hidden?); [] while not loaded, so it can be opened
+  (react-arborist's internal node); pinned: the bookmarked folders (a set); link: the target when p
+  is a symlink, left out otherwise; depth guards the walk (a link back up never ends)."
+  [{:keys [loaded hidden? pinned] :as m} p depth link]
   (let [entries (when (< depth 64) (get loaded p))]
-    {:id p
-     :name (base-name p)
-     :loaded (some? entries)
-     :pinned (contains? pinned p)
-     :children (mapv #(tree-node m (:path %) (inc depth)) (shown-entries entries hidden?))}))
+    (cond-> {:id p
+             :name (base-name p)
+             :loaded (some? entries)
+             :pinned (contains? pinned p)
+             :children (mapv #(tree-node m (:path %) (inc depth) (:link %)) (shown-entries entries hidden?))}
+      link (assoc :link link))))
 
 (defn tree-data
   "The whole tree from \"/\", as react-arborist takes it (one root node). m: {:loaded :hidden?
   :pinned}."
   [m]
-  [(tree-node m "/" 0)])
+  [(tree-node m "/" 0 nil)])
+
+(defn link-title
+  "A row's hover text: its path, and for a symlink where it points (\"broken\" when nowhere)."
+  [p link]
+  (cond (nil? link) p
+        (= "" link) (str p "\nSymlink, broken")
+        :else (str p "\nSymlink to " link)))
+
+(def link-mark
+  "The mark a symlink wears beside its icon: a bent arrow, drawn in the chalk line."
+  [:svg.fd-link {:viewBox "0 0 12 12" :aria-label "symlink" :role "img"}
+   [:path {:d "M3 2.5v3.5a2 2 0 0 0 2 2h4.5M7.5 5.5L10 8l-2.5 2.5"}]])
 
 (defn name-matches?
   "The filter field's match: the folder's name holds term (case folded); the path is not searched,

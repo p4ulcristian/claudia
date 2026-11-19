@@ -32,9 +32,10 @@
     (r/as-element
      [:div.fd-node {:style (js->clj (.-style props) :keywordize-keys true)
                     :class [(when (.-isSelected node) "on") (when bare? "bare")]
-                    :title (.-id d)}
+                    :title (pure/link-title (.-id d) (.-link d))}
       [caret node]
       pure/folder-icon
+      (when (some? (.-link d)) pure/link-mark)
       [:span.fd-name (.-name d)]
       [pin-toggle (.-pinned d) #(.. props -tree -props (onPin (.-id d)))]])))
 

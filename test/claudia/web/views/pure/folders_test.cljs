@@ -20,7 +20,20 @@
              :children [{:id "/w" :name "w" :loaded true :pinned true :children []}]}]
            (pure/tree-data {:loaded loaded :hidden? false :pinned #{"/w"}})))
     (is (= ["/w" "/.cache"] (map :id (:children (first (pure/tree-data {:loaded loaded :hidden? true :pinned #{}}))))))
-    (is (= {:id "/x" :name "x" :loaded false :pinned false :children []} (pure/tree-node {:loaded {}} "/x" 0)) "not loaded: openable")))
+    (is (= {:id "/x" :name "x" :loaded false :pinned false :children []} (pure/tree-node {:loaded {}} "/x" 0 nil)) "not loaded: openable")))
+
+(deftest a-symlink-in-the-tree
+  (let [loaded {"/h" [{:name "wt" :path "/h/wt" :hidden false :link "/srv/wt"}]
+                "/h/wt" [{:name "main" :path "/h/wt/main" :hidden false}]}
+        node (pure/tree-node {:loaded loaded} "/h" 0 nil)
+        link (first (:children node))]
+    (is (= "/srv/wt" (:link link)) "the link's target rides on its node")
+    (is (= "/h/wt" (:id link)) "the linked folder sits where its link is")
+    (is (= ["/h/wt/main"] (map :id (:children link))) "its folders open under the link's path")
+    (is (not (contains? (first (:children link)) :link)) "a plain folder has no :link"))
+  (is (= "/h/wt" (pure/link-title "/h/wt" nil)))
+  (is (= "/h/wt\nSymlink to /srv/wt" (pure/link-title "/h/wt" "/srv/wt")))
+  (is (= "/h/x\nSymlink, broken" (pure/link-title "/h/x" ""))))
 
 (deftest the-filter-field
   (is (pure/name-matches? "Claudia-Folders" "folders"))

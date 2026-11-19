@@ -124,3 +124,11 @@
   .fd-left { border-right: 0; border-bottom: 1px solid var(--line); }
   .fd-right { padding: 14px; }
 }
+
+/* a symlink's mark (README decision 63): a bent arrow beside the icon in the tree, a badge on the item's face in the contents pane */
+.fd-link { width: 11px; height: 11px; flex: none; fill: none; stroke: var(--blue); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.fd-gi-face, .fd-li-face { position: relative; }
+.fd-gi-face { display: grid; }
+.fd-link-badge { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); }
+.fd-li-face .fd-link-badge { width: 13px; height: 13px; right: 0; bottom: -4px; }
+.fd-li-face .fd-link-badge .fd-link { width: 9px; height: 9px; }

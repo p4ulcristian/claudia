@@ -23,6 +23,16 @@
                               {:name "apps" :dir? true :mtime 2} {:name ".git" :dir? true :mtime 1}])))
   (is (= "/x" (:path (rules/entry-row "/" {:name "x" :mtime 0})))))
 
+(deftest a-symlink-to-a-folder-is-listed-and-named
+  (is (= [{:name "wt" :path "/h/wt" :dir true :mtime 3 :hidden false :link "/srv/wt"}]
+         (rules/listing "/h" [{:name "wt" :dir? true :mtime 3 :link "/srv/wt"}
+                              {:name "old" :dir? false :link ""}]))
+      "kept at the link's own path; a link to no folder stays out of the tree")
+  (is (= {:name "old" :path "/h/old" :dir false :mtime nil :size nil :hidden false :kind "file" :link ""}
+         (rules/content-row "/h" {:name "old" :dir? false :mtime nil :size nil :link ""}))
+      "a broken link in the contents pane says so")
+  (is (not (contains? (rules/content-row "/h" {:name "a.txt" :dir? false :mtime 1 :size 2}) :link))))
+
 (deftest the-trash-expires-after-a-week
   (let [day (* 24 60 60 1000)
         items [{:id "a" :at 0 :size 10} {:id "b" :at (* 6 day) :size nil} {:id "c" :at day :size 5}]]
