@@ -135,6 +135,7 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-switch input:focus-visible + .st-knob { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* A server's own settings, as the old dialog laid them out. */
 /* Settings (README decisions 58 and 75): a view of the right half. */
+.settings-pane { display: flex; flex-direction: column; gap: 14px; }
 .settings-pane section { display: grid; gap: 6px; }
 .settings-pane section + section { border-top: 1px solid var(--line); padding-top: 12px; }
 .settings-pane h3 { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
