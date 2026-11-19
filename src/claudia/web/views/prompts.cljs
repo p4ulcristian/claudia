@@ -1,6 +1,6 @@
 (ns claudia.web.views.prompts
   "Prompt profiles (README decision 60): the popup of the prompt pill in the chat's header (beside
-  model · effort) and the Prompts window, where a server's profiles are added, edited and deleted. A profile's text
+  model · effort) and the Prompts view of the right half (README decision 75), where a server's profiles are added, edited and deleted. A profile's text
   goes after Claudia's part of the system prompt of every chat that picks it."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
@@ -17,7 +17,11 @@
        (assoc-in [:prompts-built-in server] (:builtIn answer)))))
 (rf/reg-sub :prompts/list (fn [db [_ server]] (get-in db [:prompts server])))
 (rf/reg-sub :prompts/built-in (fn [db [_ server]] (get-in db [:prompts-built-in server])))
-(rf/reg-event-db :prompts/open (fn [db [_ server]] (assoc db :prompts-open server)))
+(rf/reg-event-fx
+ :prompts/open
+ ;; The Prompts view of the right half for server's profiles (README decision 75).
+ (fn [{:keys [db]} [_ server]]
+   {:db (assoc db :prompts-open server) :fx [[:dispatch [:right/view :prompts]]]}))
 (rf/reg-sub :prompts/open (fn [db] (:prompts-open db)))
 
 (defn- took! [server p]
@@ -88,7 +92,7 @@
     [:div.head-pop.prompt-pop {:role "dialog" :aria-label "Prompt"}
      [popup-body server (picked-name (:prompt settings) profiles) profiles choose!]]))
 
-;; ---- the Prompts window ----
+;; ---- the Prompts view ----
 
 (defn- profile-entry
   "One profile: its name, its text to edit, Save (when changed) and Delete."
@@ -117,26 +121,21 @@
               :on-change #(set-n (.. % -target -value))}]
      [:button {:type "submit" :disabled (or (str/blank? n) taken?)} "Add"]]))
 
-(defn- window-head [close]
-  [:header
-   [:h2 "Prompts"]
-   [:p.muted "Profiles a chat can pick in its header. The text goes after Claudia's own instructions; a chat on a profile takes a change after its turn."]
-   [:button.icon {:type "button" :on-click close :title "Close (Esc)"} "×"]])
-
-(defn window
-  "The server's prompt profiles to add, edit and delete. Escape or a click outside closes it."
-  [server close]
+(defn- window
+  "The server's prompt profiles to add, edit and delete."
+  [server]
   (let [profiles @(rf/subscribe [:prompts/list server])]
     (h/use-effect (fn [] (load! server) nil) [server])
-    (hooks/use-key (fn [e] (when (= "Escape" (.-key e)) (close))) false [close])
-    [:div.gallery-backdrop {:on-click close}
-     [:div.gallery.prompts {:role "dialog" :aria-label "Prompts" :on-click #(.stopPropagation %)}
-      (window-head close)
-      [:f> new-profile server profiles]
-      (for [p profiles] ^{:key (:name p)} [:f> profile-entry server p])]]))
+    [:div.gallery.prompts.rv-pane {:role "region" :aria-label "Prompts"}
+     [:header
+      [:p.muted (str "Profiles a chat can pick in its header, on " @(rf/subscribe [:server-label server])
+                     ". The text goes after Claudia's own instructions; a chat on a profile takes a change after its turn.")]]
+     [:f> new-profile server profiles]
+     (for [p profiles] ^{:key (:name p)} [:f> profile-entry server p])]))
 
-(defn overlay
-  "The Prompts window, while one is open."
+(defn pane
+  "Prompts in the right half: the profiles of the server last opened from a prompt pill, else the
+  open chat's server, else the new chat's."
   []
-  (when-let [server @(rf/subscribe [:prompts/open])]
-    [:f> window server #(rf/dispatch [:prompts/open nil])]))
+  (when-let [server (or @(rf/subscribe [:prompts/open]) (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
+    ^{:key server} [:f> window server]))

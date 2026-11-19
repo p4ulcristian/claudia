@@ -1024,6 +1024,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     chat here, Pin, recent chats) is gone, and with it the runner's `GET /api/folders/facts` (the
     folder's size by `du`, its chats, its git summary). Pinning stays on the tree's ☆ and the
     cards' ★. Instead of: a new chat with no folder, and a folder section under the preview.
+75. The right half's views, picked in a dropdown and kept per person (2026-11-19, the user's call:
+    "Search should do too. Settings too. All the views that we have in pop up should do this"; "a
+    drop down so we could change between settings, file browser, and all the other windows"; "the
+    drawing table or file browser, whichever is chosen, that should be per profile"). The right
+    half's top row is a dropdown naming the view shown: Drawing board (Claude's picture), File
+    Browser, Search, Settings, My words, Machines, Prompts, Forms (`claudia.shared.views`). The
+    buttons that opened pop-ups open the view instead (the place pill and the edge's search, My
+    words and cog toggle theirs with the Drawing board; ⌘K, the menu's Machines, Forms and More
+    settings, a prompt pill's edit). The pick is the person's, on the hub (`GET/PUT
+    /hub/right-view`, table `right_views`), so every device shows the same view; a read-only view of
+    another person's chats shows the Drawing board for the File Browser. Search stays beside the
+    chat a find opens; the Drawing board's bar shows only under the Drawing board. On a phone a view
+    brings the right half's screen up. Small pop-ups tied to a button (the header pills, menus, the
+    confirm card) stay; image zoom stays full screen. Instead of: Search and My words over the
+    dimmed page, Settings, Prompts and Forms as centred windows, Machines in the menu's place, and
+    the right half's view kept per browser.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

@@ -750,7 +750,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 /* ---------- The Systems popup (claudia.web.views.systems) ----------
    One card per machine: the cores as bars (user, system, steal filled; waiting on disk faint),
    then memory, disks, speeds, cards, temperatures and Claudia's own processes. */
-.chat-menu.systems-pop { width: 380px; grid-template-columns: minmax(0, 1fr); overflow-y: auto; gap: 8px; }
+.systems-pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .sys-card > * { min-width: 0; }
 .sys-card { display: grid; gap: 5px; padding: 8px 8px 9px; border-radius: 10px; background: var(--bg2); transition: opacity 0.3s; }
 .sys-card.stale { opacity: 0.55; filter: grayscale(0.7); }

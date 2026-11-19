@@ -71,7 +71,7 @@
    (let [servers (view-servers db view)]
      {:db (-> db
               (assoc :view view :view-connected true :open nil :screen :list :chats {} :search nil
-                     :archived? false :settings? false)
+                     :archived? false)
               (assoc :servers (events/connecting-servers servers)))
       :store ["claudia.view" view]
       :history/push nil
@@ -121,10 +121,7 @@
 
 ;; ---- the list's modes: archived chats, all sessions, search ----
 
-;; Settings: a popup over the whole window (README decision 58); the screen under it stays.
-(rf/reg-event-db :ops/settings (fn [db [_ on]] (assoc db :settings? on)))
-
-(rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :settings? false :search nil :project-filter nil)))
+(rf/reg-event-db :ops/archived (fn [db [_ on]] (assoc db :archived? on :search nil :project-filter nil)))
 
 ;; The archived list's project chip: a project's root, "" for the chats with no project, nil for all.
 (rf/reg-event-db :ops/project-filter (fn [db [_ k]] (assoc db :project-filter k)))
@@ -154,7 +151,7 @@
    {:db (update-in db [:sessions server] (fn [l] (vec (remove #(= id (:id %)) l))))
     :fx [[:dispatch [:nav/open [server id]]]]}))
 
-(rf/reg-sub :list-mode (fn [db] {:archived? (:archived? db) :all-sessions? (:all-sessions? db) :settings? (:settings? db)}))
+(rf/reg-sub :list-mode (fn [db] {:archived? (:archived? db) :all-sessions? (:all-sessions? db)}))
 (rf/reg-sub :sessions (fn [db] (:sessions db)))
 
 (defonce ^:private search-timer (atom nil))

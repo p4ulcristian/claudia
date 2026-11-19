@@ -1,6 +1,7 @@
 (ns claudia.web.folders
-  "Files in the right half (README decisions 61 to 64, 68 to 70): the folder pill in a chat's header
-  (row 2) toggles the right half between the picture and Files, the folder browser of the open
+  "Files in the right half (README decisions 61 to 64, 68 to 70, 75): the place pill in a chat's
+  header (row 2) toggles the right half between the Drawing board and the File Browser
+  (claudia.web.right), the folder browser of the open
   chat's server with its folder selected; the chat menu's Folders… opens that chat and its Files.
   Select (a bookmark card's, or Use for this chat) sets the chat's folder: a new chat's folder pick,
   or a started chat moved there. A new chat's first message without a folder opens Files and waits
@@ -9,42 +10,14 @@
   (:require [re-frame.core :as rf]
             [claudia.web.api :as api]
             [claudia.web.db :as db]
-))
-
-;; ---- the right half: the picture or Files (README decision 70) ----
-
-(def ^:private view-key "claudia.rightView")
-
-(defn right-view "What the right half shows from what the page stored: :files, else :picture." [stored]
-  (if (= stored "files") :files :picture))
-
-(defn- stored-view [] (right-view (try (js/localStorage.getItem view-key) (catch :default _ nil))))
-
-(rf/reg-sub :right-view (fn [db] (or (:right-view db) (stored-view))))
-
-(rf/reg-fx :folders/store-view (fn [v] (try (js/localStorage.setItem view-key (name v)) (catch :default _ nil))))
-
-(defn show-view
-  "The effects that make the right half show v (:picture or :files); Files loads the bookmarks again
-  (an agent may have changed them, README decision 67) and, on a phone, brings the right half up."
-  [db v phone?]
-  (cond-> {:db (cond-> (assoc db :right-view v) (= v :files) (dissoc :world?)) :folders/store-view v}
-    (= v :files) (assoc :bookmarks/get nil)
-    (and (= v :files) phone?) (assoc-in [:db :screen] :picture)))
-
-(rf/reg-event-fx :right/view (fn [{:keys [db]} [_ v]] (show-view db v (db/phone?))))
-
-(rf/reg-event-fx
- :right/toggle-files
- (fn [{:keys [db]} _]
-   (show-view db (if (= :files (or (:right-view db) (stored-view))) :picture :files) (db/phone?))))
+            [claudia.web.right :as right]))
 
 (rf/reg-event-fx
  :folders/open
  ;; Files for chat k ([server chat]; nil: the new chat), opened on a held first message when send?.
  ;; Another chat than the open one is opened first.
  (fn [{:keys [db]} [_ {k :chat send? :send?}]]
-   (cond-> (show-view (cond-> db send? (assoc :folders {:send? true})) :files (db/phone?))
+   (cond-> (right/show-view (cond-> db send? (assoc :folders {:send? true})) :files (db/phone?))
      (and k (not= k (:open db))) (assoc :fx [[:dispatch [:nav/open k]]]))))
 
 (defn chat-place
@@ -62,9 +35,10 @@
   :send?, README decision 65) the draft goes and the picture comes back. The effects."
   [db folder k]
   (let [send? (and (not k) (get-in db [:folders :send?]))]
-    {:db (cond-> (dissoc db :folders) send? (assoc :right-view :picture))
-     :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
-           send? (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}))
+    (cond-> {:db (cond-> (dissoc db :folders) send? (assoc :right-view :picture :right-saving true))
+             :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
+                   send? (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}
+      send? (assoc :right/put :picture))))
 
 (rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder k]] (use-folder db folder k)))
 

@@ -192,7 +192,6 @@
 .f-flow-cap { margin: 12px 0 0; font: 15px/1.45 var(--sans); }
 
 /* The forms gallery: a page over the app. */
-.gallery-backdrop { position: fixed; inset: 0; z-index: 45; background: rgb(0 0 0 / 0.5); display: grid; place-items: center; padding: 3vh 2vw; }
 .gallery { width: min(1100px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 26px 30px; border-radius: 16px; background: var(--board); box-shadow: 0 16px 60px rgb(0 0 0 / 0.5); position: relative; display: block; container-type: inline-size; }
 .gallery header { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin-bottom: 18px; }
 .gallery header h2 { margin: 0; font: 700 30px var(--hand); }

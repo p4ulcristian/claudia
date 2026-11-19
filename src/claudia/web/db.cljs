@@ -28,7 +28,6 @@
    :open nil               ; [server chat] of the open chat, or nil (a new chat)
    :tabs {}                ; other tabs of this browser: tab id -> {:open [server chat] :view} (claudia.web.tabs)
    :screen :list           ; phone only: :list | :chat | :picture
-   :search-panel? false    ; the search panel is open (claudia.web.views.search-panel)
    :turn-since {}          ; [server chat] -> when its running turn was first seen running (ms)
    :new-server (stored "claudia.newServer" nil) ; where a new chat starts (the last used)
    :pending-new {}         ; uuid -> {:server :text}: a new chat sent, `created` not back yet
@@ -36,7 +35,6 @@
    :drafts {}              ; [server chat] or :new -> composer text
    :dictated {}            ; draft key -> [{:text :raw :shown}]: what the mic put in it (pure/dictated)
    :my-words nil           ; claudia.web.words: nil unknown, {:off true} no listen service, {:words :busy :error}
-   :words-panel? false     ; the My words panel is open (claudia.web.views.my-words)
    :words-offer nil        ; a corrected word offered for My words
    :words-offered (let [v (stored "claudia.wordsOffered" #js [])] (if (array? v) (set v) #{})) ; lower case, offered once
    :ask-state {}           ; ask id -> {:busy bool :error text}
@@ -54,7 +52,6 @@
    :view (stored "claudia.view" nil)          ; another profile's chats (read only), or nil
    :hidden-servers (let [v (stored "claudia.hiddenServers" #js [])] (if (array? v) (set v) #{}))
    :server-me {}           ; server -> its GET /api/me
-   :settings? false        ; Settings in the sidebar's place
    :archived? false        ; the list shows archived chats
    :project-filter nil     ; the archived list's project chip: a project root, "" = no project, nil = all
    :all-sessions? (stored "claudia.allSessions" false)

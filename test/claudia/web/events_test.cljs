@@ -180,9 +180,9 @@
   (is (= [{:id 2}] (ev/remove-ask [{:id 1} {:id 2}] 1))))
 
 (deftest navigation
-  (is (= {:screen :chat :search-panel? false :settings? false
-          :archived? false :search nil :project-filter nil}
-         (ev/on-chat-screen {:settings? true :archived? true :search {:text "x"} :project-filter "/w/a"})))
+  (is (= {:screen :chat :archived? false :search {:text "x"} :project-filter nil}
+         (ev/on-chat-screen {:archived? true :search {:text "x"} :project-filter "/w/a"}))
+      "the archived chats close; Search keeps its words (it stays in the right half)")
   (is (= [["s" {:type "close" :chat "a"}] ["t" {:type "open" :chat "b"}]] (ev/switch-frames ["s" "a"] ["t" "b"])))
   (is (= [["t" {:type "open" :chat "b"}]] (ev/switch-frames nil ["t" "b"])))
   (is (= [] (ev/switch-frames nil nil))))

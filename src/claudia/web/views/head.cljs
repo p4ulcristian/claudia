@@ -246,7 +246,7 @@
     [:div.head-field
      [pill {:k :folder :label (str label (if files? " · hide Files" " · show Files"))
             :value (place-value hc) :ro ro :open files? :class (str "folder-pill place-pill" (when files? " on"))
-            :on-click #(rf/dispatch [:right/toggle-files])}]]))
+            :on-click #(rf/dispatch [:right/toggle :files])}]]))
 
 (defn- model-pick
   "Model · effort in one pill; its popup lists both (claudia.web.views.usage)."

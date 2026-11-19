@@ -10,6 +10,12 @@
             [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.folders :as folder-views]
             [claudia.web.views.forms :as forms]
+            [claudia.web.views.my-words :as my-words]
+            [claudia.web.views.prompts :as prompts]
+            [claudia.web.views.right-pick :as right-pick]
+            [claudia.web.views.search-panel :as search-panel]
+            [claudia.web.views.settings :as settings]
+            [claudia.web.views.systems :as systems]
             [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
             [claudia.web.views.snapshot :as snapshot]))
@@ -100,15 +106,35 @@
     [:f> picture-view {:scene (:scene hist) :k (:ck oc)
                        :live? (and (not (:viewing? hist)) (not ro))}]]])
 
-(defn- files?
-  "True when the right half shows Files (README decision 70): toggled on, and not a read-only view
-  (another profile's runner answers no folder calls)."
+(defn- forms-pane
+  "The Forms gallery for the open chat's server, else the new chat's."
+  [oc]
+  (when-let [server (or (:server oc) @(rf/subscribe [:new-server]))]
+    ^{:key server} [:f> codeforms/gallery server]))
+
+(defn- shown-view
+  "The view the right half shows (README decision 75): the person's pick, but the Drawing board for
+  the File Browser in a read-only view (another profile's runner answers no folder calls)."
   [ro]
-  (and (= :files @(rf/subscribe [:right-view])) (not ro)))
+  (let [v @(rf/subscribe [:right-view])]
+    (if (and ro (= v :files)) :picture v)))
+
+(defn- view-pane
+  "The view v's pane (the Drawing board's is the stage)."
+  [v oc hist ro]
+  (case v
+    :files [folder-views/pane (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))]
+    :search [:div.right-scroll [search-panel/pane]]
+    :settings [:div.right-scroll [settings/pane]]
+    :words [:div.right-scroll [my-words/pane]]
+    :machines [:div.right-scroll [systems/pane]]
+    :prompts [:div.right-scroll [prompts/pane]]
+    :forms [:div.right-scroll [forms-pane oc]]
+    [stage oc hist ro]))
 
 (defn picture-pane
-  "The right half of the open chat: the picture, or Files while the header's folder pill has it on;
-  the bar under it either way."
+  "The right half of the open chat: the dropdown over the view picked in it (the Drawing board, the
+  File Browser, Search, …), and the Drawing board's bar under it."
   []
   (let [oc @(rf/subscribe [:open-chat])
         hist @(rf/subscribe [:picture-history])
@@ -118,12 +144,12 @@
         asks (get-in oc [:state :asks])]
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
-      [:section.right
-       (if (files? ro)
-         [folder-views/pane (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))]
-         [stage oc hist ro])
-       (when (:chat oc)
-         [rightbar/bar (when (seq (:blocks (:scene hist))) [snapshot/button oc hist])])
-       (when (seq asks)
-         [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
-          "Claude asks you something"])])))
+      (let [v (shown-view ro)]
+        [:section.right
+         [:f> right-pick/pick v ro]
+         [view-pane v oc hist ro]
+         (when (and (:chat oc) (= v :picture))
+           [rightbar/bar (when (seq (:blocks (:scene hist))) [snapshot/button oc hist])])
+         (when (seq asks)
+           [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
+            "Claude asks you something"])]))))

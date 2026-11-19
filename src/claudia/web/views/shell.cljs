@@ -14,18 +14,13 @@
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
-            [claudia.web.views.codeforms :as codeforms]
             [claudia.web.views.rail :as rail]
-            [claudia.web.views.my-words :as my-words]
             [claudia.web.views.picture :as picture]
-            [claudia.web.views.prompts :as prompts]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.thumb-edge :as thumb-edge]
-            [claudia.web.views.search-panel :as search-panel]
             [claudia.web.views.claudia-rain :as claudia-rain]
-            [claudia.web.views.settings :as settings]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
@@ -46,7 +41,7 @@
    [color claudia?]))
 
 (defn- keys!
-  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+K (⌘K) opens the search panel."
+  "Escape stops the running turn, Alt+N starts a new chat, Ctrl+K (⌘K) opens Search in the right half."
   []
   (h/use-effect
    (fn []
@@ -60,7 +55,7 @@
                  (do (.preventDefault e) (rf/dispatch [:nav/new]))
 
                  (and (or (.-ctrlKey e) (.-metaKey e)) (= "k" (.toLowerCase (.-key e))))
-                 (do (.preventDefault e) (rf/dispatch [:search/open]))))]
+                 (do (.preventDefault e) (rf/dispatch [:right/view :search]))))]
        (js/window.addEventListener "keydown" k)
        #(js/window.removeEventListener "keydown" k)))
    []))
@@ -90,16 +85,6 @@
              (when @width (try (js/localStorage.setItem "chatW" (str @width)) (catch :default _ nil))))]
     (js/window.addEventListener "pointermove" move)
     (js/window.addEventListener "pointerup" up)))
-
-(rf/reg-event-db :gallery/open (fn [db [_ v]] (assoc db :gallery? v)))
-(rf/reg-sub :gallery? (fn [db] (:gallery? db)))
-
-(defn- gallery
-  "The Forms window (the rail's and Settings' Forms): every form on sample data, the templates."
-  []
-  (when @(rf/subscribe [:gallery?])
-    (let [server (or (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
-      (when server [:f> codeforms/gallery server #(rf/dispatch [:gallery/open false])]))))
 
 (defn- column-pane
   "The archived chats in the chat column, over the chat (which stays mounted, hidden)."
@@ -145,14 +130,9 @@
    [asks/modal]
    [confirm/archive-ask]
    [confirm/root-ask]
-   [search-panel/panel]
-   [my-words/panel]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
-   [gallery]
-   [prompts/overlay]
-   [settings/settings-popup]
    [admin/dialog]
    [:f> world/overlay]])
 

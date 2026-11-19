@@ -30,7 +30,7 @@
 
 (defn- words-button []
   [:button.edge-step.edge-icon {:type "button" :aria-label "My words" :data-tip "My words"
-                                :on-click #(rf/dispatch [:words/panel true])}
+                                :on-click #(rf/dispatch [:right/toggle :words])}
    [:svg {:width 28 :height 28 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
           :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
     [:path {:d "M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"}]
@@ -93,10 +93,10 @@
 (defn- settings-button
   "Settings, in the chat column: a tap opens it, a tap while it shows closes it."
   []
-  (let [open? (:settings? @(rf/subscribe [:list-mode]))]
+  (let [open? (= :settings @(rf/subscribe [:right-view]))]
     [:button.edge-step.edge-icon {:type "button" :aria-label "Settings" :data-tip "Settings"
                                   :aria-pressed (boolean open?) :class (when open? "on")
-                                  :on-click #(rf/dispatch [:ops/settings (not open?)])}
+                                  :on-click #(rf/dispatch [:right/toggle :settings])}
      [:svg {:width 26 :height 26 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
             :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
       [:path {:d cog-path}] [:circle {:cx 12 :cy 12 :r 3}]]]))

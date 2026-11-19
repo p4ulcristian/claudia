@@ -1,7 +1,7 @@
 (ns claudia.web.search-open
-  "Opening the search panel (claudia.web.views.search-panel) from a button, with the keyboard up on
-  an iPhone or iPad. Apart from the panel, so the list, the rail and the edge can open it without
-  depending on what the panel draws with."
+  "Opening Search in the right half (claudia.web.views.search-panel, README decision 75) from a
+  button, with the keyboard up on an iPhone or iPad. Apart from the view, so the list, the rail and
+  the edge can open it without depending on what it draws with."
   (:require [re-frame.core :as rf]))
 
 (defonce ^:private stand-in (atom nil))
@@ -17,7 +17,7 @@
     (js/document.body.append el)
     (.focus el)
     (reset! stand-in el))
-  (rf/dispatch [:search/open]))
+  (rf/dispatch [:right/view :search]))
 
 (defn take-focus!
   "The panel's field takes the focus from the stand-in."

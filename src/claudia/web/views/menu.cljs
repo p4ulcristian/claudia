@@ -3,8 +3,8 @@
   the list's foot on a phone; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
-  Settings, where the plans are), Machines (the Systems popup in the menu's place), Archived chats,
-  Forms, the Desktop popups switch, More settings (the Settings popup, README decision 58), and the
+  Settings, where the plans are), Machines, Archived chats, Forms, the Desktop popups switch, More
+  settings (Machines, Forms and Settings open in the right half, README decision 75), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -20,11 +20,13 @@
 ;; ---- what the items do ----
 
 ;; Settings and the archived chats: over the list on a phone, in the chat column wider.
-(defn- open-settings! [] (rf/dispatch [:ops/settings true]))
+(defn- open-settings! [] (rf/dispatch [:right/view :settings]))
 
 (defn- open-archived! [] (rf/dispatch [:ops/archived true]))
 
-(defn- open-forms! [] (rf/dispatch [:gallery/open true]))
+(defn- open-forms! [] (rf/dispatch [:right/view :forms]))
+
+(defn- open-machines! [] (rf/dispatch [:right/view :machines]))
 
 ;; ---- the parts ----
 
@@ -101,13 +103,12 @@
        [:div.mn-sep]])))
 
 (defn- menu-items
-  "The menu's rows. act wraps an item's action (it closes the menu first); machines! swaps the menu
-  for the Systems popup."
-  [act machines!]
+  "The menu's rows. act wraps an item's action (it closes the menu first)."
+  [act]
   [:<>
    [whose act]
    [:f> plan-card act]
-   (item [systems/computer-icon] "Machines" "CPU, memory, disks" machines!)
+   (item [systems/computer-icon] "Machines" "CPU, memory, disks" (act open-machines!))
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
    [:div.mn-sep]
@@ -116,7 +117,7 @@
    (item gear-icon "More settings" "Claude subscriptions, GitHub" (act open-settings!))
    [version-line]])
 
-(defn- menu-pop [{:keys [box close! machines!]}]
+(defn- menu-pop [{:keys [box close!]}]
   (let [menu (h/use-ref nil)
         act (fn [f] (fn [] (close!) (f)))]
     (chatmenu/use-dismiss! (fn [t] (or (some-> (.-current menu) (.contains t)) (some-> (.-current box) (.contains t))))
@@ -124,11 +125,10 @@
     (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
     [:div.chat-menu.mn-pop {:ref #(set! (.-current menu) %) :role "menu" :aria-label "Settings"
                             :style (usage/pop-place (.-current box) true)}
-     (menu-items act machines!)]))
+     (menu-items act)]))
 
 (defn button
-  "The profile circle at the bottom left (whose chats show) and what it opens: the menu, or the
-  Systems popup from its Machines."
+  "The profile circle at the bottom left (whose chats show) and the menu it opens."
   []
   (let [[open set-open] (h/use-state nil)
         box (h/use-ref nil)
@@ -141,7 +141,4 @@
                                :data-tip (when-not open (if other? (str nm "'s chats, read only") (str nm " · settings")))
                                :on-click #(set-open (if open nil :menu))}
       (if picture [:img {:src picture :alt ""}] initials)]
-     (case open
-       :menu [:f> menu-pop {:box box :close! close! :machines! #(set-open :machines)}]
-       :machines [:f> systems/popup {:box box :close close!}]
-       nil)]))
+     (when open [:f> menu-pop {:box box :close! close!}])]))

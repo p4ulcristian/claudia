@@ -247,27 +247,11 @@
          #(js/window.removeEventListener "keydown" esc true))))
    [shown? go-back!]))
 
-(defn- close! [] (rf/dispatch [:ops/settings false]))
-
-(defn- use-escape-close!
-  "Escape closes Settings, from its fields too, before the page's own keys see it."
-  []
-  (h/use-effect
-   (fn []
-     (let [esc (fn [^js e]
-                 (when (= "Escape" (.-key e))
-                   (.preventDefault e)
-                   (.stopPropagation e)
-                   (close!)))]
-       (js/window.addEventListener "keydown" esc true)
-       #(js/window.removeEventListener "keydown" esc true)))
-   []))
-
 (defn- admin-link
   "The way into People and Servers, for admins only."
   []
   (when (:admin @(rf/subscribe [:me]))
-    [:button.st-admin {:type "button" :on-click #(do (close!) (rf/dispatch [:admin/open :people]))}
+    [:button.st-admin {:type "button" :on-click #(rf/dispatch [:admin/open :people])}
      "Admin: people and servers"]))
 
 (defn- settings-body []
@@ -275,28 +259,13 @@
     [:p.small "Settings are your own: switch to My chats to change them."]
     [:<> [claude-subscription] [github-section] [passkeys/passkeys-section] [key-access/keys-section]]))
 
-(defn- settings-card
-  "Settings as a popup (README decision 58): centred, a sheet from the bottom on a phone; Escape, a
-  click outside or the close button closes it."
+(defn pane
+  "Settings in the right half (README decisions 58 and 75): the Claude subscriptions, GitHub and
+  passkeys (opened from the menu's plan card and More settings, the thumb edge's cog, the right
+  half's dropdown)."
   []
-  (use-escape-close!)
-  [:div.st-backdrop {:on-pointer-down #(when (= (.-target %) (.-currentTarget %)) (close!))}
-   [:div.st-pop {:role "dialog" :aria-modal true :aria-label "Settings"}
-    [:header.st-head
-     [:h2 "Settings"]
-     [:button.st-close {:type "button" :aria-label "Close" :on-click close!} "×"]]
-    [:div.st-scroll
-     [settings-body]
-     [admin-link]]]])
-
-(defn- settings-loaded []
   (let [server @(rf/subscribe [:settings-server])]
     (r/with-let [_ (rf/dispatch [:ops/load-settings server])]
-      [:f> settings-card])))
-
-(defn settings-popup
-  "Settings (README decision 58): the Claude subscriptions, GitHub and passkeys, over the whole window while
-  open (the menu's plan card and More settings, the thumb edge's cog)."
-  []
-  (when (:settings? @(rf/subscribe [:list-mode]))
-    [settings-loaded]))
+      [:div.settings-pane.rv-pane {:role "region" :aria-label "Settings"}
+       [settings-body]
+       [admin-link]])))

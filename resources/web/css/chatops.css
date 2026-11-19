@@ -134,20 +134,14 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-switch input:checked + .st-knob::after { transform: translateX(16px); background: var(--fg); }
 .st-switch input:focus-visible + .st-knob { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* A server's own settings, as the old dialog laid them out. */
-/* Settings (README decision 58): a popup over the whole window, centred; a sheet from the bottom on a phone. */
-.st-backdrop { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; padding: 4vh 16px; background: rgb(0 0 0 / 0.45); animation: confirm-in 0.12s ease-out; }
-.st-pop { width: min(520px, 100%); max-height: min(86vh, 760px); display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--bg2); box-shadow: 0 20px 60px rgb(0 0 0 / 0.4); overflow: hidden; }
-.st-pop .st-head { justify-content: space-between; padding: 12px 14px 4px; }
-.st-close { width: 32px; height: 32px; border-radius: 50%; font-size: 22px; line-height: 1; color: var(--muted); }
-.st-close:hover { background: var(--panel2); color: var(--fg); }
-.st-pop .st-scroll { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
-.st-pop section { display: grid; gap: 6px; }
-.st-pop section + section { border-top: 1px solid var(--line); padding-top: 12px; }
-.st-pop h3 { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.st-pop p { margin: 0; }
-.st-pop a { color: var(--accent); }
-.st-pop .token-form.named { grid-template-columns: minmax(0, 1fr) auto; }
-.st-pop .token-form.named .token-name { grid-column: 1 / -1; }
+/* Settings (README decisions 58 and 75): a view of the right half. */
+.settings-pane section { display: grid; gap: 6px; }
+.settings-pane section + section { border-top: 1px solid var(--line); padding-top: 12px; }
+.settings-pane h3 { margin: 0 0 4px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.settings-pane p { margin: 0; }
+.settings-pane a { color: var(--accent); }
+.settings-pane .token-form.named { grid-template-columns: minmax(0, 1fr) auto; }
+.settings-pane .token-form.named .token-name { grid-column: 1 / -1; }
 .st-tokens { display: grid; gap: 4px; font-size: 13px; }
 .st-token { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .st-token-name { font-weight: 600; }
@@ -158,12 +152,6 @@ button.cs-title:hover, button.cs-title[aria-expanded="true"] { background: var(-
 .st-keys th:first-child, .st-keys td:first-child { text-align: left; }
 .st-keys td.changed { background: var(--amber-bg, rgba(255, 190, 60, 0.15)); }
 .st-admin { align-self: flex-start; padding: 6px 0 0; font-size: 13px; color: var(--accent); }
-@media (max-width: 679px) {
-  .st-backdrop { place-items: end stretch; padding: 0; }
-  .st-pop { width: 100%; max-height: 88vh; border-width: 1px 0 0; border-radius: 16px 16px 0 0; animation: st-sheet-in 0.22s var(--screen-ease); }
-}
-@keyframes st-sheet-in { from { transform: translateY(100%); } }
-@media (prefers-reduced-motion: reduce) { .st-backdrop, .st-pop { animation: none; } }
 .token-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .token-form input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); outline: none; font-family: var(--mono); font-size: 12.5px; }
 .token-form input:focus { border-color: var(--blue); }
@@ -347,22 +335,17 @@ body.chat-dragging .order-item { touch-action: none; }
 .group-card-chat:hover { background: var(--bg2); }
 .group-card-chat.on { background: color-mix(in srgb, var(--chat, var(--grey)) 16%, var(--panel)); }
 .group-card-title { flex: 1; min-width: 0; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
-/* The search panel (views/search_panel.cljs): over the dimmed page, not the whole screen; a tap on
-   the dimmed page closes it. */
-.sp-back { position: fixed; inset: 0; z-index: 80; background: rgb(0 0 0 / 0.5); display: flex; justify-content: center;
-  padding: max(6vh, env(safe-area-inset-top)) 16px 16px; animation: confirm-in 0.12s ease-out; }
-.sp-panel { width: min(720px, 100%); max-height: 86vh; display: flex; flex-direction: column; gap: 10px; padding: 14px;
-  background: var(--panel); border-radius: 16px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.5), inset 0 0 0 1.5px var(--line); align-self: flex-start; }
+/* Search and My words (views/search_panel.cljs, views/my_words.cljs): views of the right half. */
+.sp-panel { display: flex; flex-direction: column; gap: 10px; }
 .sp-field { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--bg);
   box-shadow: inset 0 0 0 1.5px var(--accent); }
 .sp-field > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
 .sp-field input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: 16px var(--sans); outline: none; }
-.sp-close { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--fg); font-size: 15px; }
-.sp-list { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+.sp-list { min-height: 0; }
 .rail-dot.search svg, .cs-search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .sp-stand-in { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
 /* The My words panel (views/my_words.cljs, from the iPad's edge): the search panel's frame. */
-.wp-panel { gap: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.wp-panel { gap: 12px; }
 .wp-head { display: flex; align-items: center; gap: 10px; }
 .wp-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .wp-panel p { margin: 0; }

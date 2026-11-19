@@ -60,13 +60,5 @@
 
 (rf/reg-event-db :words/dismiss (fn [db _] (dissoc db :words-offer)))
 
-(rf/reg-event-fx
- :words/panel
- ;; The My words panel opened (the list read again) or closed.
- (fn [{:keys [db]} [_ on]]
-   (cond-> {:db (assoc db :words-panel? on)}
-     on (assoc :fx [[:dispatch [:words/load]]]))))
-
 (rf/reg-sub :my-words (fn [db] (:my-words db)))
-(rf/reg-sub :words-panel? (fn [db] (:words-panel? db)))
 (rf/reg-sub :words-offer (fn [db] (:words-offer db)))

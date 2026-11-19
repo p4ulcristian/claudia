@@ -10,7 +10,6 @@
 (rf/reg-sub :servers (fn [db] (:servers db)))
 (rf/reg-sub :open (fn [db] (:open db)))
 (rf/reg-sub :screen (fn [db] (:screen db)))
-(rf/reg-sub :search-panel? (fn [db] (:search-panel? db)))
 (rf/reg-sub :turn-since (fn [db [_ k]] (get-in db [:turn-since k])))
 (rf/reg-sub :error (fn [db] (:error db)))
 (rf/reg-sub :pending-new (fn [db] (:pending-new db)))

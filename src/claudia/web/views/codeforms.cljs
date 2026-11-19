@@ -107,7 +107,7 @@
   [{:keys [kind] nm :name} on-yes on-no]
   [confirm/card {:title (str "Delete this " kind "?") :yes "Delete" :on-yes on-yes :on-no on-no}
    (if (= kind "template")
-     [:p [:b nm] " goes from the Forms window and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
+     [:p [:b nm] " goes from the Forms view and Claude can't draw it by name any more. Pictures that already use it keep their copy."]
      [:p "Claude stops getting the " [:b nm] " form, in open chats too. Pictures that already have one keep showing it, and you can restore it here any time."])])
 
 (defn not-here-of
@@ -118,7 +118,7 @@
            (filter forms/opt-in forms/order))))
 
 (defn- set-hidden!
-  "The forms deleted in the Forms window: shown at once, saved on the server, then read again."
+  "The forms deleted in the Forms view: shown at once, saved on the server, then read again."
   [server info hidden]
   (rf/dispatch [:codeforms/info server (assoc info :hidden hidden)])
   (-> (api/fetch-json (api/url server "forms" nil)
@@ -130,11 +130,9 @@
   (-> (api/fetch-json (api/url server (str "templates/" (js/encodeURIComponent nm)) nil) {:method "DELETE"})
       (.finally #(load-info! server))))
 
-(defn- gallery-head [close]
+(def ^:private gallery-head
   [:header
-   [:h2 "Forms"]
-   [:p.muted "What Claude can draw on the right. Ask for one by its name, or for changes to a block by the name on its badge."]
-   [:button.icon {:type "button" :on-click close :title "Close (Esc)"} "×"]])
+   [:p.muted "What Claude can draw on the right. Ask for one by its name, or for changes to a block by the name on its badge."]])
 
 (defn- form-entries [fs hidden on-hide set-deleting]
   [:div.g-list
@@ -171,21 +169,19 @@
 
 (defn gallery
   "Every kind of block Claude can draw, each on sample data with its when-line, and the templates
-  saved on this server. A built-in form can be deleted (Claude no longer gets it) and restored.
-  Escape or a click outside closes it."
-  [server close]
+  saved on this server, as a view of the right half (README decision 75). A built-in form can be
+  deleted (Claude no longer gets it) and restored."
+  [server]
   (let [info @(rf/subscribe [:codeforms/info server])
         [deleting set-deleting] (h/use-state nil) ; {:kind "form"|"template" :name}
         hidden (vec (:hidden info))
         on-hide #(set-hidden! server info %)
         fs (remove (not-here-of info) forms/order)]
     (h/use-effect (fn [] (load-info! server) nil) [server])
-    (hooks/use-key (fn [e] (when (= "Escape" (.-key e)) (close))) false [close])
-    [:div.gallery-backdrop {:on-click close}
-     [:div.gallery.right-scroll {:role "dialog" :aria-label "Forms" :on-click #(.stopPropagation %)}
-      (gallery-head close)
-      (form-entries fs hidden on-hide set-deleting)
-      [:h3.g-section "Templates"]
-      (template-entries info (count fs) set-deleting)]
+    [:div.gallery.rv-pane {:role "region" :aria-label "Forms"}
+     gallery-head
+     (form-entries fs hidden on-hide set-deleting)
+     [:h3.g-section "Templates"]
+     (template-entries info (count fs) set-deleting)
      (when deleting
        [confirm-delete deleting (confirm-yes server hidden on-hide deleting set-deleting) #(set-deleting nil)])]))

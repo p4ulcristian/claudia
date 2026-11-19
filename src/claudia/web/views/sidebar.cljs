@@ -3,10 +3,10 @@
   the Settings screen its profile circle opens over it (web/sidebar.tsx of the TypeScript Claudia);
   wider, the archived chats in the chat column (archived-pane). The list holds only chats: a header
   (whose chats as a title menu, the 5-hour and week rings, the gear, the search button that opens
-  the search panel, claudia.web.views.search-panel, + on a desktop), the rows; + floats bottom
+  Search in the right half, claudia.web.views.search-panel, + on a desktop), the rows; + floats bottom
   right on a phone. Every server's chats in one list, in the order they were started. The archived
   list runs newest first under time sections, each row with its project, narrowed by its project
-  chips. Picking a chat brings the chats list back (events/on-chat-screen). The search panel draws
+  chips. Picking a chat brings the chats list back (events/on-chat-screen). Search draws
   its finds and its recently archived chats with this namespace's found-list and archived-rows."
   (:require [claudia.web.search-open :as search-open]
             [claudia.shared.order :as order]
