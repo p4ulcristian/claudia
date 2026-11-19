@@ -6,7 +6,6 @@
             [reagent.hooks :as h]
             [claudia.shared.forms :as forms]
             [claudia.web.api :as api]
-            [claudia.web.hooks :as hooks]
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.calls :as calls]
             [claudia.web.views.clojure :as clojure]

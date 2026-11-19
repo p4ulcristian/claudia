@@ -5,8 +5,7 @@
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
-            [claudia.web.api :as api]
-            [claudia.web.hooks :as hooks]))
+            [claudia.web.api :as api]))
 
 ;; ---- the server's profiles ----
 

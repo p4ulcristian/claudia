@@ -6,8 +6,7 @@
   (:require [clojure.string :as str]
             [claudia.web.views.pure.dictated :as dictated]
             [re-frame.core :as rf]
-            [reagent.core :as r]
-            [reagent.hooks :as h]))
+            [reagent.core :as r]))
 
 ;; ---- Settings ----
 
