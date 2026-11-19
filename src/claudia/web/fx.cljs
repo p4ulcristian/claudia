@@ -44,6 +44,15 @@
        (.then #(rf/dispatch (conj on-ok %)))
        (.catch #(rf/dispatch (conj on-fail (ex-message %)))))))
 
+(rf/reg-fx
+ :keys/answer
+ ;; list_secrets: the keys this person may use (names and references, never values) from the key
+ ;; broker, sent back to the asking runner (README decision 77).
+ (fn [{:keys [server chat ask]}]
+   (-> (api/fetch-json "/hub/keys/mine")
+       (.then #(ws/send! server {:type "keys" :chat chat :ask ask :answer %}))
+       (.catch #(ws/send! server {:type "keys" :chat chat :ask ask :error (ex-message %)})))))
+
 ;; ---- secrets: the value is never in app-db; only ciphertext passes through here ----
 
 (defn- secret-done [server chat ask-id sealed]

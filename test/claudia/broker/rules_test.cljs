@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [claudia.broker.main :as main]
             [claudia.broker.rules :as rules]
+            [claudia.broker.vault :as vault]
             [claudia.hub.broker :as hub-broker]))
 
 (def key44 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
@@ -64,6 +65,8 @@
   (is (= "/vault/read" (hub-broker/target "POST" "/hub/vault/read")))
   (is (nil? (hub-broker/target "GET" "/hub/vault/read")))
   (is (hub-broker/call? "/hub/approve/options"))
+  (is (= "/keys/mine" (hub-broker/target "GET" "/hub/keys/mine")))
+  (is (nil? (hub-broker/target "POST" "/hub/keys/mine")))
   (is (not (hub-broker/call? "/hub/vault/other"))))
 
 (deftest settings-take-the-relying-party-from-the-origin
@@ -105,3 +108,57 @@
     (is (not (rules/standing? s k (+ 1001 rules/standing-ms))))
     (is (not (rules/standing? s (rules/standing-key "a@x" "home/c2" "i1") 2000)))
     (is (not (rules/standing? s (rules/standing-key "a@x" "home/c1" "i2") 2000)))))
+
+(deftest a-person-sees-only-the-keys-they-may-use
+  (let [items [{:id "i1" :title "GitHub"} {:id "i2" :title "Vultr"}]]
+    (is (= items (rules/usable-items true [] items)))
+    (is (= [{:id "i2" :title "Vultr"}] (rules/usable-items false ["i2" "gone"] items)))
+    (is (= [] (rules/usable-items false [] items)))))
+
+(deftest labels-never-keep-a-value
+  (let [l (rules/item-labels {:fields [{:id "f1" :title "token" :value "s3cret" :fieldType "Concealed" :details {:code "1"}}]
+                              :sections [{:id "s1" :title "API" :value "x"}]
+                              :notes "hidden"})]
+    (is (= {:fields [{:id "f1" :title "token"}] :sections [{:id "s1" :title "API"}]} l))
+    (is (not (re-find #"s3cret|hidden" (pr-str l))))))
+
+(deftest references-are-exact
+  (is (= "GitHub" (rules/ref-part "GitHub" "i1" true)))
+  (is (= "i1" (rules/ref-part "GitHub" "i1" false)) "a clashing title gives the id")
+  (is (= "i1" (rules/ref-part "a/b" "i1" true)))
+  (is (= "i1" (rules/ref-part " pad" "i1" true)))
+  (is (= "i1" (rules/ref-part "" "i1" true)))
+  (let [all [{:id "i1" :title "GitHub"} {:id "i2" :title "Hetzner"} {:id "i3" :title "hetzner"}]
+        usable [{:id "i1" :title "GitHub"} {:id "i2" :title "Hetzner"}]
+        labels {"i1" {:fields [{:id "username" :title "username" :value "me"}
+                               {:id "f2" :title "token" :section "s1" :value "ghp_x"}
+                               {:id "f3" :title "Token" :section "s2"}
+                               {:id "f4" :title "note" :section "s3"}]
+                      :sections [{:id "s1" :title "API"} {:id "s2" :title "CI/CD"} {:id "s3" :title ""}]}}
+        out (rules/key-list "Claudia" all usable labels)]
+    (is (= {:vault "Claudia"
+            :items [{:title "GitHub"
+                     :fields [{:label "username" :ref "op://Claudia/GitHub/username"}
+                              {:label "token" :section "API" :ref "op://Claudia/GitHub/API/f2"}
+                              {:label "Token" :section "CI/CD" :ref "op://Claudia/GitHub/s2/f3"}
+                              {:label "note" :ref "op://Claudia/GitHub/note"}]}
+                    {:title "Hetzner" :fields []}]}
+           out))
+    (is (not (re-find #"ghp_x|\"me\"" (pr-str out))))
+    (is (= "op://Claudia/i2/x" (get-in (rules/key-list "Claudia" all usable {"i2" {:fields [{:id "x" :title "x"}]}}) [:items 1 :fields 0 :ref]))
+        "an item whose title another item shares is named by its id")))
+
+(deftest an-sdk-item-gives-labels-only
+  (let [answer #js {:individualResponses
+                    #js [#js {:content #js {:id "i1" :title "GitHub" :notes "n0tes"
+                                            :fields #js [#js {:id "f1" :title "token" :sectionId "s1" :value "ghp_s3cret"
+                                                              :fieldType "Concealed" :details #js {:content #js {:code "123456"}}}
+                                                         #js {:id "f2" :title "user" :sectionId "" :value "me@x"}]
+                                            :sections #js [#js {:id "s1" :title "API"}]}}
+                         #js {:error #js {:type "itemNotFound"}}]}
+        out (#'vault/fetched-labels answer {"i1" "2026-11-19"})]
+    (is (= {"i1" {:updated "2026-11-19"
+                  :labels {:fields [{:id "f1" :title "token" :section "s1"} {:id "f2" :title "user" :section nil}]
+                           :sections [{:id "s1" :title "API"}]}}}
+           out))
+    (is (not (re-find #"s3cret|me@x|123456|n0tes" (pr-str out))))))

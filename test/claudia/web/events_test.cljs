@@ -300,3 +300,8 @@
     (is (nil? (get-in fx [:db :voice-draft ["s" "c"]])))
     (testing "nothing sent: nothing tied"
       (is (= {} (ev/with-voice-tagged {} added ["s" "c"]))))))
+
+(deftest a-keys-ask-is-answered-without-a-card
+  (let [fx (ev/on-frame {:chats {}} "s" {:type "keys_ask" :chat "c" :ask "a"})]
+    (is (= {:server "s" :chat "c" :ask "a"} (:keys/answer fx)))
+    (is (= {:chats {}} (:db fx)) "no ask card is added")))

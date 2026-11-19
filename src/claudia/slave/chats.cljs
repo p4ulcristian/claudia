@@ -32,6 +32,7 @@
             [claudia.slave.projects :as projects]
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
+            [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.shown :as shown]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
@@ -261,17 +262,17 @@
   [id ask-id chosen]
   (when-let [entry (get-in (st id) [:asks ask-id])]
     (when-not (get-in entry [:ask :root])
-    (case (get-in entry [:ask :kind])
-      "question"
-      (do (take-ask! id ask-id)
-          ((:resolve entry) {:behavior "allow" :updatedInput (assoc (:input entry) :answers chosen)})
-          (let [said (history/answer-text (get-in entry [:ask :questions]) chosen)]
-            (when (seq said)
-              (note-msg! id {:id (str "answer-" ask-id) :role "user" :text said :at (js/Date.now)}))))
-      "permit"
-      (do (take-ask! id ask-id)
-          ((:resolve entry) {:behavior "allow" :updatedInput (:input entry)}))
-      nil))))
+      (case (get-in entry [:ask :kind])
+        "question"
+        (do (take-ask! id ask-id)
+            ((:resolve entry) {:behavior "allow" :updatedInput (assoc (:input entry) :answers chosen)})
+            (let [said (history/answer-text (get-in entry [:ask :questions]) chosen)]
+              (when (seq said)
+                (note-msg! id {:id (str "answer-" ask-id) :role "user" :text said :at (js/Date.now)}))))
+        "permit"
+        (do (take-ask! id ask-id)
+            ((:resolve entry) {:behavior "allow" :updatedInput (:input entry)}))
+        nil))))
 
 (defn deny! [id ask-id who]
   (when-let [entry (when-not (get-in (st id) [:asks ask-id :ask :root]) (take-ask! id ask-id))]
@@ -507,6 +508,7 @@
     ["picture" "save_template"] (answers/text-result (codeforms/save-template! (current-scene id) args))
     ["workspace" "set_folder"] (set-folder id (:path args))
     ["workspace" "run_with_secret"] (secret-ask id args)
+    ["workspace" "list_secrets"] (secrets-list/ask! id)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
     ["workspace" "list_bookmarks"] (bookmark-call id nil)
@@ -620,7 +622,6 @@
   is none."
   []
   (or (own-pick) (throw (js/Error. no-token-text))))
-
 
 (defn token-of
   "The token chat id runs on: the saved one picked for it (README decision 16), else its owner's

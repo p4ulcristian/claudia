@@ -48,6 +48,7 @@
       "mcp__workspace__run_with_secret" (str "secret: " (short-text (:reason i) 80))
       "mcp__workspace__show_image" (str "image " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       "mcp__workspace__list_bookmarks" "bookmarks"
+      "mcp__workspace__list_secrets" "keys I may use"
       "mcp__workspace__bookmark_folder" (str (if (:remove i) "unbookmark " "bookmark ") (or (not-empty (shown-path (str (:folder i)) nil)) "working folder"))
       "mcp__workspace__show_video" (str "video " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       (if (str/starts-with? tool "mcp__")

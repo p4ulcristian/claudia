@@ -1078,6 +1078,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     question. Instead of: a modal over the whole window with "See picture" and a pill to bring it
     back.
 
+77. Agents list the keys they may use (2026-11-19). Agents had to guess `op://Claudia/<item>/<field>` for `run_with_secret`, and guesses hit
+    "no such item". Every chat now has the workspace tool `list_secrets` (no arguments): the items
+    of the vault the chat's person may use (decision 66: admins every key, others the ticked ones),
+    each with its fields' labels, their sections' names and a ready reference, never a value. The
+    key broker answers `/keys/mine` (hub `GET /hub/keys/mine`, the email the login vouched for)
+    without a passkey tap: it shows only names, and only of keys the person may already use. Field
+    labels need one 1Password item read per item (one `getAll`); the broker maps each item to ids
+    and titles at once, so no value reaches the answer, a log or its cache, and reads an item again
+    only when it changed. The runner holds no login, so it sends `keys_ask` to the person's open
+    pages (every page of that runner that is not read-only, the chat open or not); the first page
+    fetches the list and answers `keys` with no card to press. No page connected, or none answering
+    in 60 seconds, no key broker, or a broker without a token: the agent gets a refusal that says
+    which. The prompt's Secrets section tells agents to call `list_secrets` before
+    `run_with_secret`. Instead of: the runner calling the hub itself (it has a hub key only on the
+    server with Claudia's own chat, decision 48, and no person's login), or the agent reading the
+    vault with `op` (decision 66 took the token off the servers).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

@@ -27,6 +27,7 @@
             [claudia.slave.pictures :as pictures]
             [claudia.slave.render :as render]
             [claudia.slave.secret :as secret]
+            [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.ssh-cert :as ssh-cert]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.folders :as folders]
@@ -48,6 +49,18 @@
 
 (defn- emit [chat frame]
   (doseq [c @conns :when (contains? @(:open c) chat)] (send! c frame)))
+
+(defn- answering-pages
+  "The page sockets that may answer for this runner's person: greeted and not read-only."
+  []
+  (filter #(and @(:hello %) (not (:read-only %))) @conns))
+
+(defn- send-pages!
+  "Sends frame to every page that may answer (list_secrets' ask); returns how many got it."
+  [frame]
+  (let [cs (answering-pages)]
+    (doseq [c cs] (send! c frame))
+    (count cs)))
 
 (defn- chats-changed []
   (let [frame {:type "chats" :chats (chats/rows)}]
@@ -142,6 +155,7 @@
 (defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
 (defmethod on-chat-frame "secret" [c f chat] (chats/secret! chat (:ask f) (:sealed f) (:profile c)))
 (defmethod on-chat-frame "deny" [c f chat] (chats/deny! chat (:ask f) (:profile c)))
+(defmethod on-chat-frame "keys" [_ f chat] (secrets-list/answer! chat (:ask f) f))
 (defmethod on-chat-frame "rename" [_ f chat] (chats/rename! chat (:title f)))
 (defmethod on-chat-frame "archive" [_ f chat]
   (store/update! chat {:archived (boolean (:archived f))})
@@ -351,6 +365,7 @@
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed})
+  (reset! secrets-list/send-pages! send-pages!)
   (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame profile)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
