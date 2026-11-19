@@ -37,3 +37,11 @@
   (is (= "App" (bm/label-of {:folder "/w/app" :label "App"})))
   (is (= "app" (bm/label-of {:folder "/w/app"})))
   (is (= "/" (bm/label-of {:folder "/"}))))
+
+(deftest pinned-adds-or-relabels
+  (let [items [{:server "home" :folder "/a"}]]
+    (is (= [{:server "home" :folder "/a"} {:server "box" :folder "/b" :label "B"}] (bm/pinned items "box" "/b" "B")))
+    (is (= [{:server "home" :folder "/a" :label "A"}] (bm/pinned items "home" "/a" "A")))
+    (is (= items (bm/pinned items "home" "/a" nil)))
+    (is (= [] (bm/unpinned items "home" "/a")))
+    (is (= items (bm/unpinned items "box" "/a")))))

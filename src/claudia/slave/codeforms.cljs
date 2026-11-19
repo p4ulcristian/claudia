@@ -10,6 +10,7 @@
             [clojure.string :as str]
             [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]
+            [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
@@ -481,16 +482,17 @@
 
 (defn mcp-for
   "The tools for a chat (src/chat.ts tools): the draw tool offers this runner's forms, less the
-  deleted ones."
+  deleted ones; the bookmark tools where the runner reaches the hub as its owner (README decision 67)."
   []
   {:picture (tools/picture-mcp (offered))
-   :workspace tools/workspace-mcp})
+   :workspace (cond-> tools/workspace-mcp (bookmarks/on?) (merge bookmarks/mcp))})
 
 (defn prompt-for
   "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then every form this runner
   offers with its data (the one place they are said: Claude Code cuts long tool descriptions)."
   []
-  (str tools/system-append "\n\n" (tools/forms-prompt (offered))))
+  (str tools/system-append (when (bookmarks/on?) (str "\n" bookmarks/prompt))
+       "\n\n" (tools/forms-prompt (offered))))
 
 (defn- touches?
   "Whether a block of a draw call draws something (one only moved, renamed or resized does not)."

@@ -6,7 +6,8 @@
   each person's GitHub login (/hub/github-login), speech to text and each person's words for it
   (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
-  (:require [claudia.hub.listen :as listen]
+  (:require [claudia.hub.bookmarks :as hub-bookmarks]
+            [claudia.hub.listen :as listen]
             [claudia.hub.listen-words :as listen-words]
             [claudia.hub.narrate :as narrate]
             [claudia.node.http :as io]
@@ -23,7 +24,6 @@
             [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
             [claudia.shared.agent-user :as agent-user]
-            [claudia.shared.bookmarks :as bookmarks]
             [claudia.shared.order :as order]
             [claudia.shared.protocol :as protocol]
             [claudia.hub.push :as push]
@@ -348,20 +348,10 @@
       (store/save-chat-order! email (protocol/write-json (order/clean-items (:items b))))
       (io/send-json res 200 (order-of email)))))
 
-(defn- bookmarks-of
-  "A person's bookmarked folders as the page gets them: {:items :at} ({:items [] :at 0} before any)."
-  [email]
-  (if-let [{:keys [items at]} (store/bookmarks email)]
-    {:items (bookmarks/clean-items (protocol/read-json items)) :at at}
-    {:items [] :at 0}))
-
 (defn- save-bookmarks
   "PUT /hub/bookmarks {items}: the person's whole list, kept as far as it is well formed."
   [req res email _]
-  (with-body req
-    (fn [b]
-      (store/save-bookmarks! email (protocol/write-json (bookmarks/clean-items (:items b))))
-      (io/send-json res 200 (bookmarks-of email)))))
+  (with-body req (fn [b] (io/send-json res 200 (hub-bookmarks/save! email (:items b))))))
 
 (defn person-route
   "Which of a person's own calls this is: [op] or [op id-from-the-path] (still encoded), else nil."
@@ -389,7 +379,7 @@
    :presence beat
    :order (fn [_ res email _] (io/send-json res 200 (order-of email)))
    :save-order save-order
-   :bookmarks (fn [_ res email _] (io/send-json res 200 (bookmarks-of email)))
+   :bookmarks (fn [_ res email _] (io/send-json res 200 (hub-bookmarks/of email)))
    :save-bookmarks save-bookmarks
    :elsewhere (fn [^js req res email _]
                 (let [page (.get (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) "")) "page")]

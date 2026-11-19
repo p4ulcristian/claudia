@@ -65,6 +65,19 @@
     (filterv #(not (and (= server (:server %)) (= folder (:folder %)))) items)
     (clean-items (conj (vec items) {:server server :folder folder}))))
 
+(defn pinned
+  "items with folder on server bookmarked: added at the end with label (when not there), or its label
+  set to label (when there and label is given)."
+  [items server folder label]
+  (if (bookmarked? items server folder)
+    (clean-items (mapv #(if (and label (= server (:server %)) (= folder (:folder %))) (assoc % :label label) %) items))
+    (clean-items (conj (vec items) (cond-> {:server server :folder folder} label (assoc :label label))))))
+
+(defn unpinned
+  "items without the bookmark of folder on server."
+  [items server folder]
+  (filterv #(not (and (= server (:server %)) (= folder (:folder %)))) items))
+
 (defn label-of
   "What a bookmark shows: its label, else its folder's last part (\"/\" for the root)."
   [{:keys [label folder]}]
