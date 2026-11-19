@@ -147,7 +147,7 @@ files are served without either check (they hold no data). The hub listens on `H
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
 `/s/<server>/api/update-check`, `/s/<server>/api/claude-token/picks`,
-`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github` and `/s/<server>/api/github/token` are refused (404): only
+`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github`, `/s/<server>/api/github/token` and `/s/<server>/api/github/service-token` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -233,6 +233,7 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `PUT /api/claude-token/saved` `{ tokens: [{ key, name, at, token }] }` | the front, the hub only: the whole set, written over the one kept here (a token no longer in it is deleted); answers like GET; 400 when one is not a key (`[a-z0-9-]{1,24}`), a name, a time and a Claude token |
 | `PUT /api/claude-token/picks` `{ picks: [{ email, key, name, at }] }` | the front, the hub only: the whole set, kept by the profile here whose email each is (others left out) in `<token file>.picks.json`, written over the one kept here; the old shared token file goes; an idle session without a pick starts again on its person's with its next message; answers like GET; 400 when one is not an email, a key (`[a-z0-9-]{1,24}`), a name and a time or null |
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
+| `PUT /api/github/service-token` `{ name, token, expiresAt, login }` | the front, the hub only (README decision 78): a service's 1-hour app installation token written to `FRONT_GITHUB_SERVICES_DIR/<name>/token` (and `login`, the app's bot) through a rename; `{ ok: true }`, 400 `{ error }` not a service name, `ghs_` token or bot login, 404 when root made no folder for that service, 501 when the front has no `FRONT_GITHUB_SERVICES_DIR` |
 | `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `POST /api/ssh/pubkey` `{}` | a runner, the front only (never passed on from the hub: 403; README decision 53): `{ publicKey }`, the one line of `~/.ssh/claudia_agent.pub` of the agent user it runs as (the ed25519 key made with ssh-keygen the first time); 409 `{ error }` when it does not run as an agent user |

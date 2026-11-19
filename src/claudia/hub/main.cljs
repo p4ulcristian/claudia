@@ -24,6 +24,7 @@
             [claudia.hub.narrate :as narrate]
             [claudia.node.anatomy :as anatomy]
             [claudia.hub.github-app :as github-app]
+            [claudia.hub.github-services :as github-services]
             [claudia.hub.github-login :as github-login]
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
@@ -105,7 +106,8 @@
     ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
     (#{"/api/update-check" "/api/claude-token/picks" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
-    (#{"/api/github" "/api/github/token"} rest-path) {:status 404 :error "not found"}
+    ;; A service's app token (README decision 78): the hub's own, never a page's.
+    (#{"/api/github" "/api/github/token" "/api/github/service-token"} rest-path) {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
@@ -269,7 +271,8 @@
   (push/start!)
   (tokens/start!)
   (github-login/start!)
-  (github-app/start!))
+  (github-app/start!)
+  (github-services/start!))
 
 (defn- exit!
   "The store closes last, once no request can reach it any more, then the process exits."

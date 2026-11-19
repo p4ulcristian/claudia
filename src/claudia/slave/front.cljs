@@ -11,6 +11,7 @@
             [claudia.node.system :as system]
             [claudia.shared.activity :as activity]
             [claudia.shared.protocol :as p]
+            [claudia.slave.github-services :as github-services]
             [claudia.slave.http :as h]
             [claudia.slave.rootfront :as rootfront]
             [claudia.slave.sshfront :as sshfront]
@@ -287,6 +288,7 @@
       (= url "/api/claude-token/saved") (token-saved req res)
       (= url "/api/claude-token/limits") (token-limits req res)
       (= url "/api/system") (system-sample req res)
+      (= url "/api/github/service-token") (github-services/handle req res)
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
       status (io/send-json res status {:error error})

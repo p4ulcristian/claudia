@@ -44,7 +44,10 @@ const manifest = (name) => ({
   hook_attributes: { url: `${hub}/hub/github/app-hook`, active: false },
   default_permissions: {
     contents: 'write', pull_requests: 'write', issues: 'write', workflows: 'write',
-    actions: 'read', checks: 'read', metadata: 'read',
+    actions: 'write', checks: 'read', statuses: 'read', metadata: 'read',
+    // Services' installation tokens (README decision 78): runs cancelled and dispatched, self-hosted
+    // runner registrations, secret names.
+    administration: 'write', secrets: 'read',
   },
   default_events: [],
 });
