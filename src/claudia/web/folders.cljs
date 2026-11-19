@@ -70,18 +70,9 @@
 
 (defn listing! [server p] (api/fetch-json (api/url server "folders" {:path p})))
 
-(defn facts-url [server p deep?] (api/url server "folders/facts" {:path p :deep (when deep? 1)}))
-
-(defn facts! [server p deep?] (api/fetch-json (facts-url server p deep?)))
-
-(defn trashed! [server] (api/fetch-json (api/url server "folders/trashed" nil)))
+(defn facts-url [server p] (api/url server "folders/facts" {:path p}))
 
 (defn missing! [server paths] (api/post-json (api/url server "folders/missing" nil) {:paths paths}))
-
-(defn act!
-  "POST /api/folders/<what> (trash, delete, restore, purge) with body."
-  [server what body]
-  (api/post-json (api/url server (str "folders/" what) nil) body))
 
 (defn contents! [server p] (api/fetch-json (api/url server "folders/contents" {:path p})))
 

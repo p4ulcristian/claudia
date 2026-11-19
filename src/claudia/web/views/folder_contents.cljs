@@ -1,8 +1,10 @@
 (ns claudia.web.views.folder-contents
-  "The Folders modal's middle pane (README decision 67): what the folder selected in the tree holds,
+  "The Folders modal's middle pane (README decision 68): what the folder selected in the tree holds,
   as a grid (images as their own thumbnails, other files as their tag) or a list (name, size,
   modified). A click picks an item (the preview pane shows it); a click on the empty space picks
-  none (the preview shows the folder); a double-click or Enter on a folder opens it in the tree.
+  none (the preview shows the folder); a second click on the same folder within
+  pure/double-click-ms, or Enter, opens it in the tree. The two clicks are timed here, not by the
+  browser's dblclick: the first click redraws the panes, and a touch screen sends no dblclick.
   Grid or list stays as the person left it, in the page's storage."
   (:require [reagent.hooks :as h]
             [claudia.web.folders :as folders]
@@ -36,12 +38,20 @@
    [:button {:type "button" :class (when (= mode :list) "on") :aria-pressed (= mode :list) :title "List"
              :on-click #(set-mode :list)} list-icon]])
 
+(defn- clicked!
+  "A click on item: opens a folder clicked a second time in a row (pure/opens?), else picks item.
+  last-click: a ref of the last click {:path :at}."
+  [item {:keys [pick! open! last-click]}]
+  (let [click {:path (:path item) :at (js/Date.now)}]
+    (if (pure/opens? item (.-current last-click) click)
+      (do (set! (.-current last-click) nil) (open! (:path item)))
+      (do (set! (.-current last-click) click) (pick! (:path item))))))
+
 (defn- item-props
   "What every item does, in the grid and the list."
-  [item {:keys [picked pick! open!]}]
+  [item {:keys [picked open!] :as ctx}]
   {:type "button" :class (when (= picked (:path item)) "on") :title (:name item)
-   :on-click (fn [e] (.stopPropagation e) (pick! (:path item)))
-   :on-double-click #(when (:dir item) (open! (:path item)))
+   :on-click (fn [e] (.stopPropagation e) (clicked! item ctx))
    :on-key-down #(when (and (:dir item) (= "Enter" (.-key %))) (.preventDefault %) (open! (:path item)))})
 
 (defn- face [server item]
@@ -73,8 +83,10 @@
 (defn pane
   "The middle pane. opts: :server, :folder, :items (shown, nil while loading), :more, :error,
   :picked (the picked item's path), :pick! (a path or nil), :open! (a folder's path)."
-  [{:keys [folder items more] :as ctx}]
-  (let [[mode set-mode] (use-mode)]
+  [{:keys [folder items more] :as opts}]
+  (let [[mode set-mode] (use-mode)
+        last-click (h/use-ref nil)
+        ctx (assoc opts :last-click last-click)]
     [:section.fd-mid
      [:header.fd-mid-bar
       [:span.fd-mid-name (pure/base-name folder)]

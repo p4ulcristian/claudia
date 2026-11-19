@@ -1,5 +1,5 @@
 (ns claudia.web.views.folder-preview
-  "The Folders modal's right pane (README decision 67): the file picked in the contents pane,
+  "The Folders modal's right pane (README decision 68): the file picked in the contents pane,
   previewed (an image, a video or a sound to play, a PDF, Markdown rendered, code and text coloured
   as the files form colours them), with its size and when it changed. A picked folder, or none
   picked, shows the folder (claudia.web.views.folder-detail), and with none picked its README below."
@@ -62,11 +62,11 @@
 
 (defn pane
   "The right pane. opts: :item (the picked item, nil for none), :folder (the tree's folder), :readme
-  (its README item, or nil), and folder-detail's :server :label :bookmarked? :on-gone."
+  (its README item, or nil), and folder-detail's :server :label :bookmarked?."
   [{:keys [server item folder readme] :as opts}]
   (if (and item (not (:dir item)))
     ^{:key (:path item)} [:f> file-view {:server server :item item}]
     [:<>
      ^{:key (or (:path item) folder)}
-     [:f> detail/panel (assoc (select-keys opts [:server :label :bookmarked? :on-gone]) :p (or (:path item) folder))]
+     [:f> detail/panel (assoc (select-keys opts [:server :label :bookmarked?]) :p (or (:path item) folder))]
      (when (and (nil? item) readme) ^{:key (:path readme)} [:f> readme-view {:server server :item readme}])]))

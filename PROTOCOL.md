@@ -277,15 +277,14 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
 
-## Runner HTTP: folders (`/api/folders…`; README decisions 61 to 64)
+## Runner HTTP: folders (`/api/folders…`; README decisions 61 to 64, 68, 69)
 
 Answered by the runner (through the front), for the profile's own person only (403 otherwise, above:
-"Who is calling"). The whole system is in reach as far as the runner's user may read (list, facts)
-and write (trash, delete, restore); EACCES/EPERM answer 403 `{ error: "Permission denied: …" }`,
+"Who is calling"). Every call only reads: nothing deletes, moves or trashes (README decision 69).
+The whole system is in reach as far as the runner's user may read; EACCES/EPERM answer 403 `{ error: "Permission denied: …" }`,
 a missing folder 404, a path that is no absolute path or no folder 400. Every path is resolved
 (`..`, every symlink followed) before any check. `Entry` = `{ name, path, dir: true, mtime, hidden
-(the name starts with a dot) }`. `Trashed` = `{ id, path (where it was), name, at, size (bytes or
-null), by (who moved it), expires (at + 7 days) }`.
+(the name starts with a dot) }`.
 
 | Call | Answer |
 |---|---|
@@ -293,18 +292,11 @@ null), by (who moved it), expires (at + 7 days) }`.
 | `GET /api/folders/contents?path=<abs>` | `{ path, entries: [Item], more }`: everything right inside `path`, folders first, then files, each by name (case folded), at most 5000 (`more` = how many were left out); symlinks followed. `Item` = `{ name, path, dir, mtime, size (bytes; null for a folder or a broken link), hidden, kind ("folder", "image", "video", "audio", "pdf" or "file") }` |
 | `GET /api/folders/file?path=<abs>&read=1` | `{ path, text, mtime }` of a text file, or `{ path, error }` when it is over 2 MB, not text (a NUL byte) or unreadable |
 | `GET /api/folders/file?path=<abs>` | the file's bytes, for the kinds `claudia.slave.folders.rules/preview-types` names (images, video, audio, PDF; 415 for any other), with its content type, `x-content-type-options: nosniff`, and except for a PDF `content-security-policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:`; a `Range: bytes=…` header answers 206 with that range (416 when it can't be served); 404 for no file or an empty one |
-| `GET /api/folders/facts?path=<abs>&deep=1?` | `{ path, mtime, size, measuring, chats: [{ id, title, at }], git, kept, inner? }`: `kept` = why the runner never deletes this folder (below), or null; `size` in bytes from `du -s` (`-sb`; macOS `-sk` × 1024) run in the background (5-minute limit, kept 10 minutes), null while `measuring` (ask again) or when du gave none; `chats` = this runner's chats whose folder is `path` or inside it (a chat without one: `CLAUDIA_CWD`), newest first, at most 20; `git` = `{ top, branch (null when detached), dirty (files not committed), ahead, behind, noUpstream: [local branches without a live upstream] }` of the repo `path` is in, or null; with `deep=1`, `inner` = the same for the repos below `path` (up to four folders down, at most 40, dot and build folders not walked) that hold work only there (dirty, ahead or noUpstream), `[]` when `path` is in a repo |
+| `GET /api/folders/facts?path=<abs>` | `{ path, mtime, size, measuring, chats: [{ id, title, at }], git }`: `size` in bytes from `du -s` (`-sb`; macOS `-sk` × 1024) run in the background (5-minute limit, kept 10 minutes), null while `measuring` (ask again) or when du gave none; `chats` = this runner's chats whose folder is `path` or inside it (a chat without one: `CLAUDIA_CWD`), newest first, at most 20; `git` = `{ top, branch (null when detached), dirty (files not committed), ahead, behind, noUpstream: [local branches without a live upstream] }` of the repo `path` is in, or null |
 | `POST /api/folders/missing` `{ paths }` | `{ missing }`: those of `paths` (at most 200 absolute paths) where no folder sits (gone or not a folder; a folder the runner may not look at counts as there): the bookmarks shown as missing |
-| `POST /api/folders/trash` `{ path }` | `{ ok, id }`: the folder moved to `RUNNER_DATA/trash/<id>/<name>` (`fs.rename`; across filesystems a recursive copy, then the original removed) and its row kept; 403 `{ error: "Claudia never deletes …" }` for the folders it never deletes (below) |
-| `POST /api/folders/delete` `{ path }` | `{ ok }`: the folder and everything in it deleted, without the Trash; refused like `trash` |
-| `GET /api/folders/trashed` | `{ items: [Trashed], total }`: the Trash, newest first; `total` = the known sizes summed (bytes) |
-| `POST /api/folders/restore` `{ id }` | `{ ok, path }`: the folder moved back where it was (its parent made when gone); 409 when anything sits at that path; 404 no such item |
-| `POST /api/folders/purge` `{ id? }` | `{ ok }`: that item deleted for good; without `id` the whole Trash. The runner also purges every item older than 7 days, at start and every hour |
 
-Never deleted, whatever the permissions (`claudia.slave.folders.rules/delete-refusal`): "/", every
-folder right under "/", macOS's `/private/*`, the runner's home folder and `CLAUDIA_CWD` and every
-folder above them, `RUNNER_DATA` and Claudia's install (the folder holding the running `out/`)
-with everything inside them and every folder above them.
+Folders moved to the Trash before decision 69 stay in `RUNNER_DATA/trash/<id>/` until 7 days after
+they were trashed; the runner purges them at start and every hour, and no call reaches them.
 
 ## WebSocket (`/ws`): page ↔ runner
 

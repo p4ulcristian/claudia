@@ -39,13 +39,6 @@
   (is (= "measuring…" (pure/size-text {:size nil :measuring true})))
   (is (= "unknown" (pure/size-text {:size nil :measuring false}))))
 
-(deftest unpushed-lines-name-work-only-here
-  (is (= ["1 file not committed" "2 commits not pushed" "branches without an upstream: spike"]
-         (pure/unpushed-lines {:git {:top "/w/a" :dirty 1 :ahead 2 :noUpstream ["spike"]} :inner []})))
-  (is (= ["/srv/b: 3 files not committed"]
-         (pure/unpushed-lines {:git nil :inner [{:top "/srv/b" :dirty 3 :ahead 0 :noUpstream []}]})))
-  (is (= [] (pure/unpushed-lines {:git {:top "/w" :dirty 0 :ahead 0 :noUpstream []}}))))
-
 (deftest bookmark-rows-mark-missing-folders
   (is (= [{:folder "/w/a" :label "A" :missing false} {:folder "/w/gone" :label "gone" :missing true}]
          (pure/bookmark-rows [{:server "home" :folder "/w/a" :label "A"} {:server "box" :folder "/x"}
@@ -75,4 +68,11 @@
     (is (= :none (pure/preview-way {:kind "file" :name "dump.sql" :size (inc pure/text-max)}))))
   (testing "grid unless list was stored"
     (is (= :list (pure/view-mode "list")))
-    (is (= :grid (pure/view-mode nil)))))
+    (is (= :grid (pure/view-mode nil))))
+  (testing "a second click on the same folder within double-click-ms opens it"
+    (let [dir {:dir true :path "/w/src"}]
+      (is (true? (pure/opens? dir {:path "/w/src" :at 1000} {:path "/w/src" :at 1300}))))
+    (is (false? (pure/opens? {:dir true :path "/w/src"} {:path "/w/src" :at 1000} {:path "/w/src" :at (+ 1000 pure/double-click-ms)})))
+    (is (false? (pure/opens? {:dir true :path "/w/src"} {:path "/w/test" :at 1000} {:path "/w/src" :at 1100})) "another item first")
+    (is (false? (pure/opens? {:dir true :path "/w/src"} nil {:path "/w/src" :at 1100})) "a first click")
+    (is (false? (pure/opens? {:path "/w/a.txt"} {:path "/w/a.txt" :at 1000} {:path "/w/a.txt" :at 1100})) "files never open")))

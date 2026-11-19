@@ -1,8 +1,7 @@
 (ns claudia.web.views.pure.folders
   "The Folders modal's data (README decisions 61 to 64), pure: the tree's nodes from the folders
   loaded so far, the folders opened at first, the filter field, the contents pane's items, how a
-  file is previewed, the detail panel's lines, and what the delete dialog says about work not
-  pushed."
+  file is previewed and when a second click opens a folder, and the detail panel's lines."
   (:require [clojure.string :as str]
             [claudia.shared.bookmarks :as bookmarks]
             [claudia.web.format :as format]))
@@ -116,6 +115,15 @@
         (re-find #"(?i)\.(md|markdown)$" (str item-name)) :markdown
         :else :text))
 
+(def double-click-ms "How close two clicks on one folder come to open it." 450)
+
+(defn opens?
+  "True when click ({:path :at}) on item opens it: a folder, clicked right after last-click (the same path,
+  within double-click-ms)."
+  [item last-click click]
+  (boolean (and (:dir item) last-click (= (:path last-click) (:path click))
+                (< (- (:at click) (:at last-click)) double-click-ms))))
+
 (defn view-mode
   "The contents pane's mode from what the page stored: :list, else :grid."
   [stored]
@@ -140,22 +148,6 @@
   (cond (number? size) (format/bytes-text size)
         measuring "measuring…"
         :else "unknown"))
-
-(defn- repo-lines
-  "What is only here in one repo summary g, as lines (its folder named when named? is true)."
-  [{:keys [top dirty ahead noUpstream]} named?]
-  (let [where (when named? (str (format/tilde top) ": "))]
-    (cond-> []
-      (pos? dirty) (conj (str where dirty " file" (when (not= 1 dirty) "s") " not committed"))
-      (pos? ahead) (conj (str where ahead " commit" (when (not= 1 ahead) "s") " not pushed"))
-      (seq noUpstream) (conj (str where "branches without an upstream: " (str/join ", " noUpstream))))))
-
-(defn unpushed-lines
-  "The delete dialog's warnings from a folder's facts: work in its repo, and in repos inside it,
-  that exists only here."
-  [{:keys [git inner]}]
-  (vec (concat (when git (repo-lines git false))
-               (mapcat #(repo-lines % true) inner))))
 
 ;; ---- bookmarks on the screen ----
 

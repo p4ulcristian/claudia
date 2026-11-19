@@ -6,33 +6,6 @@
             [claudia.slave.folders.rules :as rules]
             [claudia.slave.front :as front]))
 
-(def ^:private kept
-  {:home "/home/ana" :cwd "/home/ana/Work" :data "/home/ana/.local/share/claudia" :install "/srv/claudia-releases/abc"})
-
-(deftest delete-refusal-keeps-the-system-and-claudia
-  (testing "the root, every top-level folder and macOS's /private ones"
-    (is (= "the root folder" (rules/delete-refusal "/" kept)))
-    (doseq [p ["/etc" "/usr" "/var" "/home" "/root" "/boot" "/bin" "/tmp" "/mnt"]]
-      (is (= "a top-level system folder" (rules/delete-refusal p kept)) p))
-    (is (= "a system folder" (rules/delete-refusal "/private/etc" kept))))
-  (testing "the home and work folders and their ancestors, not what is inside them"
-    (is (= "the home folder, or a folder above it" (rules/delete-refusal "/home/ana" kept)))
-    (is (= "the work folder (CLAUDIA_CWD), or a folder above it" (rules/delete-refusal "/home/ana/Work" kept)))
-    (is (nil? (rules/delete-refusal "/home/ana/Work/old-app" kept)))
-    (is (nil? (rules/delete-refusal "/home/ana/Downloads" kept)))
-    (is (nil? (rules/delete-refusal "/home/anabel" kept)) "a name sharing the start is another folder"))
-  (testing "Claudia's data and install, inside them and above them"
-    (is (= "Claudia's own data (RUNNER_DATA)" (rules/delete-refusal "/home/ana/.local/share/claudia" kept)))
-    (is (= "Claudia's own data (RUNNER_DATA)" (rules/delete-refusal "/home/ana/.local/share/claudia/trash/x" kept)))
-    (is (= "Claudia's own data (RUNNER_DATA)" (rules/delete-refusal "/home/ana/.local" kept)))
-    (is (= "Claudia's own install" (rules/delete-refusal "/srv/claudia-releases" kept)))
-    (is (= "Claudia's own install" (rules/delete-refusal "/srv/claudia-releases/abc/out" kept)))
-    (is (nil? (rules/delete-refusal "/srv/other" kept))))
-  (testing "a missing kept folder refuses nothing; no absolute path refuses"
-    (is (nil? (rules/delete-refusal "/srv/x/y" {:home nil :cwd nil :data nil :install nil})))
-    (is (= "not an absolute path" (rules/delete-refusal "Work/x" kept)))
-    (is (= "not an absolute path" (rules/delete-refusal nil kept)))))
-
 (deftest error-reply-names-the-os-error
   (is (= 403 (:status (rules/error-reply "EACCES" "x" "/a"))))
   (is (= 403 (:status (rules/error-reply "EPERM" "x" "/a"))))
@@ -62,9 +35,6 @@
     (is (= ["a"] (map :id (rules/expired items (* 7 day)))))
     (is (= ["a" "c"] (map :id (rules/expired items (* 8 day)))))
     (is (= [] (rules/expired items (dec (* 7 day)))))
-    (is (= 15 (rules/trash-total items)))
-    (is (= 0 (rules/trash-total [])))
-    (is (= (* 7 day) (:expires (rules/trash-row {:id "a" :path "/p" :name "p" :at 0 :size 1 :by "x"}))))
     (is (= {:dir "/d/trash/i" :moved "/d/trash/i/app"} (rules/trash-place "/d" "i" "app")))))
 
 (deftest chats-in-names-the-folders-chats
@@ -75,24 +45,23 @@
     (is (= [{:id "2" :title "b" :at 3} {:id "1" :title "a" :at 1}] (rules/chats-in rows "/w/app" "/w")))
     (is (= ["4" "2" "3" "1"] (map :id (rules/chats-in rows "/w" "/w"))) "no folder: the work folder")))
 
-(deftest git-summary-says-what-is-not-pushed
+(deftest git-summary-says-where-a-repo-stands
   (let [g (rules/git-summary {:top "/w/app" :current "main"
                               :tracking {"main" {:upstream "origin/main" :ahead 2 :behind 1}
                                          "spike" {:upstream "" :ahead 0 :behind 0}
                                          "old" {:upstream "origin/old" :gone true}}
                               :dirty {:total 3}})]
-    (is (= {:top "/w/app" :branch "main" :dirty 3 :ahead 2 :behind 1 :noUpstream ["old" "spike"]} g))
-    (is (rules/unpushed? g)))
+    (is (= {:top "/w/app" :branch "main" :dirty 3 :ahead 2 :behind 1 :noUpstream ["old" "spike"]} g)))
   (let [clean (rules/git-summary {:top "/r" :current "" :tracking {} :dirty {:total 0}})]
-    (is (= {:top "/r" :branch nil :dirty 0 :ahead 0 :behind 0 :noUpstream []} clean))
-    (is (not (rules/unpushed? clean)))))
+    (is (= {:top "/r" :branch nil :dirty 0 :ahead 0 :behind 0 :noUpstream []} clean))))
 
 (deftest folder-calls-route-and-are-the-owners-only
   (is (= :list (folders/route "GET" "/api/folders")))
   (is (= :facts (folders/route "GET" "/api/folders/facts")))
-  (is (= :trash (folders/route "POST" "/api/folders/trash")))
-  (is (= :purge (folders/route "POST" "/api/folders/purge")))
-  (is (= :not-found (folders/route "DELETE" "/api/folders/trash")))
+  (testing "Folders never delete (README decision 69): the old trash and delete calls are gone"
+    (doseq [u ["/api/folders/trash" "/api/folders/delete" "/api/folders/restore" "/api/folders/purge"]]
+      (is (= :not-found (folders/route "POST" u)) u))
+    (is (= :not-found (folders/route "GET" "/api/folders/trashed"))))
   (is (nil? (folders/route "GET" "/api/foldersx")))
   (is (folders/own? {:via "own"}))
   (is (not (folders/own? {:via "write-tick"})))

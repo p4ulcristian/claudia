@@ -1,42 +1,14 @@
 (ns claudia.slave.folders.rules
-  "The folder browser's rules as plain data (README decisions 63 and 64): which folders the runner
-  never deletes, a folder's listing, a folder's contents and which files preview, the Trash's expiry and total, a folder's chats, the git summary
-  the delete dialog shows, and the errors the OS gives as clear words."
+  "The folder browser's rules as plain data (README decisions 63, 64, 68 and 69): a folder's
+  listing, its contents and which files preview, when a leftover Trash item expires, a folder's
+  chats, its git summary, and the errors the OS gives as clear words."
   (:require ["node:path" :as path]
             [clojure.string :as str]
             [claudia.slave.reach :as reach]))
 
-(def keep-ms "How long the Trash keeps a folder." (* 7 24 60 60 1000))
+(def keep-ms "How long a leftover Trash item stays (README decision 69)." (* 7 24 60 60 1000))
 
 (def max-chats "The most chats a folder's facts name." 20)
-
-;; ---- what is never deleted ----
-
-(defn- at-or-above?
-  "True when p is the folder top or one of its ancestors."
-  [p top]
-  (boolean (and top (reach/within? p top))))
-
-(defn- at-or-inside?
-  "True when p is the folder top or inside it."
-  [p top]
-  (boolean (and top (reach/within? top p))))
-
-(defn delete-refusal
-  "Why the runner never deletes the folder real (absolute, symlinks followed), or nil when the OS may
-  decide. kept: {:home :cwd :data :install} (each real, or nil): the home folder and the work folder
-  (CLAUDIA_CWD) and their ancestors, Claudia's own data (RUNNER_DATA) and install, and inside them."
-  [real {:keys [home cwd data install]}]
-  (cond
-    (not (and (string? real) (path/isAbsolute real))) "not an absolute path"
-    (= real "/") "the root folder"
-    (= (path/dirname real) "/") "a top-level system folder"
-    (= (path/dirname real) "/private") "a system folder"
-    (at-or-above? real home) "the home folder, or a folder above it"
-    (at-or-above? real cwd) "the work folder (CLAUDIA_CWD), or a folder above it"
-    (or (at-or-inside? real data) (at-or-above? real data)) "Claudia's own data (RUNNER_DATA)"
-    (or (at-or-inside? real install) (at-or-above? real install)) "Claudia's own install"
-    :else nil))
 
 ;; ---- errors ----
 
@@ -140,19 +112,11 @@
   [items now]
   (filterv #(<= (expires-at %) now) items))
 
-(defn trash-total "The trashed items' size in bytes (unknown sizes count 0)." [items]
-  (reduce + 0 (keep :size items)))
-
 (defn trash-place
   "Where trashed item id of a folder named folder-name lives: {:dir (RUNNER_DATA/trash/<id>) :moved}."
   [data id folder-name]
   (let [dir (path/join data "trash" id)]
     {:dir dir :moved (path/join dir folder-name)}))
-
-(defn trash-row
-  "A trashed item as the page gets it."
-  [item]
-  (assoc (select-keys item [:id :path :name :at :size :by]) :expires (expires-at item)))
 
 ;; ---- a folder's chats ----
 
@@ -169,7 +133,7 @@
 ;; ---- git ----
 
 (defn git-summary
-  "What the delete dialog says about a repo: {:top :branch (nil when detached) :dirty (files not
+  "What a folder's facts say about its repo: {:top :branch (nil when detached) :dirty (files not
   committed) :ahead :behind (of the current branch's upstream) :noUpstream (local branches without
   a live upstream, sorted)}. tracking: branch -> {:upstream :gone :ahead :behind}."
   [{:keys [top current tracking dirty]}]
@@ -180,9 +144,3 @@
      :ahead (or (:ahead t) 0)
      :behind (or (:behind t) 0)
      :noUpstream (vec (sort (for [[b {:keys [upstream gone]}] tracking :when (or (str/blank? upstream) gone)] b)))}))
-
-(defn unpushed?
-  "True when a repo summary has work only here: files not committed, commits ahead, or branches
-  without an upstream."
-  [{:keys [dirty ahead noUpstream]}]
-  (boolean (or (pos? dirty) (pos? ahead) (seq noUpstream))))

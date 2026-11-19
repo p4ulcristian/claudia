@@ -1,7 +1,7 @@
 /* The Folders modal (claudia.web.views.folders, README decisions 61 to 64): a big card over the
-   page, chalk look; on top the server's bookmarks as cards, then three panes (README decision 67):
+   page, chalk look; on top the server's bookmarks as cards, then three panes (README decision 68):
    left the filter and the tree (react-arborist), in the middle the folder's contents as a grid or a
-   list, right the picked file's preview, the folder, or the Trash. The right pane is quiet: small
+   list, right the picked file's preview or the folder. The right pane is quiet: small
    type, label-value lines, no tiles. Under 1000 px the preview goes under the contents; under
    680 px wide it fills the window and the panes stack. */
 
@@ -19,7 +19,6 @@
 .fd-head { font: 700 15px var(--hand); color: var(--muted); margin: 2px 0 4px; }
 .fd-none { margin: 0; font-size: 12.5px; }
 .fd-warn { margin: 4px 0; color: var(--amber); font-size: 12.5px; overflow-wrap: anywhere; }
-ul.fd-warn { padding-left: 18px; }
 
 
 .fd-missing { font-size: 11.5px; font-style: italic; color: var(--muted); }
@@ -66,18 +65,11 @@ ul.fd-warn { padding-left: 18px; }
 .fd-btn:hover, .fd-btn.on { background: var(--panel2); }
 .fd-btn:disabled { opacity: 0.45; cursor: default; background: none; }
 .fd-btn.primary { color: var(--on-hue); background: var(--accent); border-color: var(--accent); }
-.fd-btn.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, var(--line)); }
-.fd-btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 50%, var(--line)); }
 .fd-chats { display: grid; gap: 2px; }
 .fd-chat { display: flex; justify-content: space-between; gap: 12px; padding: 3px 6px; border-radius: 6px; text-align: left; color: var(--fg); font-size: 12.5px; }
 .fd-chat:hover { background: var(--panel); }
 .fd-chat-at { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.fd-ask { display: grid; gap: 6px; }
-.fd-ask-path { color: var(--fg) !important; overflow-wrap: anywhere; font-size: 12.5px !important; }
 
-.fd-trash-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-.fd-trash-text { display: grid; gap: 2px; font-size: 13px; overflow-wrap: anywhere; }
-.fd-trash .fd-btn.danger:last-child { justify-self: start; }
 
 /* the contents pane */
 .fd-mid { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
