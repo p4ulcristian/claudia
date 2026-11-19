@@ -228,6 +228,8 @@
 .confirm-no:hover, .confirm-no:focus-visible { background: var(--panel2); }
 .confirm-yes { color: var(--on-hue); background: var(--red); }
 .confirm-yes:hover { filter: brightness(1.1); }
+.confirm-yes:disabled { opacity: 0.5; cursor: default; filter: none; }
+.confirm-error { color: var(--red); }
 @keyframes confirm-in { from { opacity: 0; } }
 @keyframes confirm-pop { from { opacity: 0; transform: scale(0.94) translateY(6px); } }
 .g-entry.deleted { opacity: 0.45; }
