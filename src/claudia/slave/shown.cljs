@@ -64,34 +64,10 @@
           (.then #(fsp/copyFile file-path (path/join dir k)))
           (.then (constantly k))))))
 
-(defn byte-range
-  "The bytes a Range header asks for of a file of size bytes: {:start :end} (end included), :bad
-  when it can't be served (the answer is 416), nil for the whole file (no header, or one this
-  doesn't read: several ranges, other units)."
-  [header size]
-  (when-let [[_ a b] (re-matches #"bytes=(\d*)-(\d*)" (str/trim (str header)))]
-    (let [a (when (seq a) (js/parseInt a 10))
-          b (when (seq b) (js/parseInt b 10))]
-      (cond (and (nil? a) (nil? b)) nil
-            (nil? a) (if (pos? b) {:start (max 0 (- size b)) :end (dec size)} :bad)
-            (>= a size) :bad
-            (and b (< b a)) :bad
-            :else {:start a :end (min (dec size) (or b (dec size)))}))))
-
 (defn- file-of [chat k]
   (when (and (re-matches chat-re (str chat)) (re-matches key-re (str k)))
     (let [p (path/join @root chat k)]
       (when (try (.isFile (fs/statSync p)) (catch :default _ false)) p))))
-
-(defn- send-range [^js res f size mime r]
-  (if (= r :bad)
-    (do (.writeHead res 416 #js {"content-range" (str "bytes */" size)}) (.end res))
-    (let [{:keys [start end]} (or r {:start 0 :end (dec size)})
-          head #js {"content-type" mime "content-length" (str (inc (- end start))) "accept-ranges" "bytes"
-                    "cache-control" "private, max-age=86400" "x-content-type-options" "nosniff"}]
-      (when r (aset head "content-range" (str "bytes " start "-" end "/" size)))
-      (.writeHead res (if r 206 200) head)
-      (.pipe (fs/createReadStream f #js {:start start :end end}) res))))
 
 (defn serve!
   "Answers with the stored video k of chat (the whole file, or the range the request asks for)."
@@ -100,5 +76,6 @@
     (let [size (.-size (fs/statSync f))]
       (if (zero? size)
         (io/send-json res 404 {:error "No such video."})
-        (send-range res f size (get video-types (path/extname f)) (byte-range (.. req -headers -range) size))))
+        (io/send-range res f size {"content-type" (get video-types (path/extname f)) "cache-control" "private, max-age=86400"}
+                       (io/byte-range (.. req -headers -range) size))))
     (io/send-json res 404 {:error "No such video."})))

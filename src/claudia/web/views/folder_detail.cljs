@@ -1,6 +1,7 @@
 (ns claudia.web.views.folder-detail
-  "The Folders modal's right side for the selected folder (README decisions 61 and 63): its name
-  (★ when bookmarked), full path and server, tiles (chats that used it, last touched, size, git),
+  "The Folders modal's right pane for a folder (README decisions 61, 63 and 67): its name (★ when
+  bookmarked), full path and server, its facts in quiet lines (chats that used it, last touched,
+  size, git),
   the recent chats there (a click opens one), and Use for this chat (the chat's folder becomes it),
   New chat here, Pin/Unpin, Move to Trash… and Delete now…, both asking first in a dialog with the
   full path, the size and the work not pushed."
@@ -22,15 +23,17 @@
                               [server p on?])]
     [facts error]))
 
-(defn- tile [label value]
-  [:div.fd-tile [:span.fd-tile-label label] [:span.fd-tile-value value]])
+(defn- fact [label value]
+  [:<> [:dt label] [:dd value]])
 
-(defn- tiles [{:keys [chats mtime git] :as facts}]
-  [:div.fd-tiles
-   (tile "Chats here" (if facts (str (count chats) (when (>= (count chats) 20) "+")) "…"))
-   (tile "Last touched" (if facts (or (format/when-text mtime) "unknown") "…"))
-   (tile "Size" (if facts (pure/size-text facts) "…"))
-   (tile "Git" (cond (nil? facts) "…" git (pure/git-text git) :else "not in a repo"))])
+(defn- facts-list
+  "The folder's facts as quiet label-value lines: chats that used it, last touched, size, git."
+  [{:keys [chats mtime git] :as facts}]
+  [:dl.fd-facts
+   (fact "Chats here" (if facts (str (count chats) (when (>= (count chats) 20) "+")) "…"))
+   (fact "Last touched" (if facts (or (format/when-text mtime) "unknown") "…"))
+   (fact "Size" (if facts (pure/size-text facts) "…"))
+   (fact "Git" (cond (nil? facts) "…" git (pure/git-text git) :else "not in a repo"))])
 
 (defn- chat-list [server chats]
   (when (seq chats)
@@ -93,7 +96,7 @@
      [:h2.fd-title (pure/base-name p) (when bookmarked? [:span.fd-star {:title "Bookmarked"} " ★"])]
      [:div.fd-where.mono (str (format/tilde p) " · " label)]
      (when error [:p.fd-warn error])
-     [tiles facts]
+     [facts-list facts]
      [buttons {:server server :p p :bookmarked? bookmarked? :set-ask set-ask :kept (:kept facts)}]
      [chat-list server (:chats facts)]
      (when ask

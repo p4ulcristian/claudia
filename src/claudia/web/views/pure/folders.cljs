@@ -1,7 +1,8 @@
 (ns claudia.web.views.pure.folders
   "The Folders modal's data (README decisions 61 to 64), pure: the tree's nodes from the folders
-  loaded so far, the folders opened at first, the filter field, the detail panel's lines, and what
-  the delete dialog says about work not pushed."
+  loaded so far, the folders opened at first, the filter field, the contents pane's items, how a
+  file is previewed, the detail panel's lines, and what the delete dialog says about work not
+  pushed."
   (:require [clojure.string :as str]
             [claudia.shared.bookmarks :as bookmarks]
             [claudia.web.format :as format]))
@@ -68,6 +69,57 @@
   "react-arborist's first open state: every folder down to cwd open."
   [cwd]
   (into {} (map (fn [p] [p true])) (lineage cwd)))
+
+;; ---- the contents pane and the preview ----
+
+(defn shown-items
+  "A folder's contents as the pane shows them: dot entries only when hidden?."
+  [entries hidden?]
+  (vec (if hidden? entries (remove :hidden entries))))
+
+(defn count-text
+  "The contents pane's count: \"3 folders · 12 files\" (\"Empty\" for none), and how many were
+  left out (more)."
+  [items more]
+  (let [dirs (count (filter :dir items))
+        n (fn [k word] (str k " " word (when (not= 1 k) "s")))
+        parts (cond-> []
+                (pos? dirs) (conj (n dirs "folder"))
+                (pos? (- (count items) dirs)) (conj (n (- (count items) dirs) "file"))
+                (pos? more) (conj (str more " more not shown")))]
+    (if (seq parts) (str/join " · " parts) "Empty")))
+
+(def ^:private readme-re #"(?i)^readme(\.(md|markdown|txt))?$")
+
+(defn readme-of
+  "The folder's README among its contents (a Markdown one first), as an item, or nil."
+  [entries]
+  (first (sort-by #(if (re-find #"(?i)\.(md|markdown)$" (:name %)) 0 1)
+                  (filter #(and (not (:dir %)) (re-matches readme-re (:name %))) entries))))
+
+(def thumb-max "The largest image the grid draws as its own thumbnail (bigger ones show their tag)." (* 8 1024 1024))
+
+(defn thumb?
+  "True when the grid draws this item from its own bytes."
+  [{:keys [kind size]}]
+  (and (= kind "image") (number? size) (<= size thumb-max)))
+
+(def text-max "The largest file the preview reads as text (the runner's limit)." 2000000)
+
+(defn preview-way
+  "How the preview shows an item: :folder, :image, :video, :audio, :pdf, :markdown, :text, or :none
+  (too big to read as text)."
+  [{:keys [dir kind size] item-name :name}]
+  (cond dir :folder
+        (#{"image" "video" "audio" "pdf"} kind) (keyword kind)
+        (and (number? size) (> size text-max)) :none
+        (re-find #"(?i)\.(md|markdown)$" (str item-name)) :markdown
+        :else :text))
+
+(defn view-mode
+  "The contents pane's mode from what the page stored: :list, else :grid."
+  [stored]
+  (if (= stored "list") :list :grid))
 
 ;; ---- the detail panel ----
 

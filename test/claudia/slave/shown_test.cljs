@@ -3,26 +3,10 @@
             ["node:http" :as http]
             ["node:os" :as os]
             ["node:path" :as path]
-            [cljs.test :refer [async deftest is testing]]
+            [cljs.test :refer [async deftest is]]
             [claudia.slave.api :as api]
             [claudia.slave.history :as history]
             [claudia.slave.shown :as shown]))
-
-(deftest which-bytes-a-range-asks-for
-  (is (nil? (shown/byte-range nil 100)) "no header: the whole file")
-  (is (= {:start 0 :end 1} (shown/byte-range "bytes=0-1" 100)) "Safari's first probe")
-  (is (= {:start 10 :end 99} (shown/byte-range "bytes=10-" 100)))
-  (is (= {:start 10 :end 99} (shown/byte-range "bytes=10-500" 100)) "an end past the file is cut")
-  (is (= {:start 90 :end 99} (shown/byte-range "bytes=-10" 100)) "the last 10")
-  (is (= {:start 0 :end 99} (shown/byte-range "bytes=-500" 100)))
-  (testing "ranges that can't be served"
-    (is (= :bad (shown/byte-range "bytes=100-" 100)))
-    (is (= :bad (shown/byte-range "bytes=5-2" 100)))
-    (is (= :bad (shown/byte-range "bytes=-0" 100))))
-  (testing "headers this doesn't read: the whole file"
-    (is (nil? (shown/byte-range "bytes=0-1,5-9" 100)))
-    (is (nil? (shown/byte-range "items=0-1" 100)))
-    (is (nil? (shown/byte-range "bytes=-" 100)))))
 
 (deftest a-stored-videos-key
   (is (= "17-0a0b0c0d.mp4" (shown/new-key 17 "0a0b0c0d" ".mp4")))

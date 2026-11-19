@@ -1,7 +1,8 @@
 (ns claudia.node.http
   "Reading and answering HTTP requests, the same for the hub and every slave program, and one JSON
   call over a unix socket (the front, the runners and the root helper call each other so)."
-  (:require ["node:http" :as http]
+  (:require ["node:fs" :as fs]
+            ["node:http" :as http]
             [clojure.string :as str]
             [claudia.shared.protocol :as protocol]))
 
@@ -51,6 +52,33 @@
   [^js res]
   (.writeHead res 204 #js {"cache-control" "no-store"})
   (.end res))
+
+(defn byte-range
+  "The bytes a Range header asks for of a file of size bytes: {:start :end} (end included), :bad
+  when it can't be served (the answer is 416), nil for the whole file (no header, or one this
+  doesn't read: several ranges, other units)."
+  [header size]
+  (when-let [[_ a b] (re-matches #"bytes=(\d*)-(\d*)" (str/trim (str header)))]
+    (let [a (when (seq a) (js/parseInt a 10))
+          b (when (seq b) (js/parseInt b 10))]
+      (cond (and (nil? a) (nil? b)) nil
+            (nil? a) (if (pos? b) {:start (max 0 (- size b)) :end (dec size)} :bad)
+            (>= a size) :bad
+            (and b (< b a)) :bad
+            :else {:start a :end (min (dec size) (or b (dec size)))}))))
+
+(defn send-range
+  "Answers with file f of size bytes, the whole file or range r (byte-range's answer: 206, or 416
+  for :bad). head: the headers besides the length and range ones (content-type, cache-control, CSP)."
+  [^js res f size head r]
+  (if (= r :bad)
+    (do (.writeHead res 416 #js {"content-range" (str "bytes */" size)}) (.end res))
+    (let [{:keys [start end]} (or r {:start 0 :end (dec size)})
+          all (cond-> (merge {"x-content-type-options" "nosniff"} head
+                             {"content-length" (str (inc (- end start))) "accept-ranges" "bytes"})
+                r (assoc "content-range" (str "bytes " start "-" end "/" size)))]
+      (.writeHead res (if r 206 200) (clj->js all))
+      (.pipe (fs/createReadStream f #js {:start start :end end}) res))))
 
 (defn url-host
   "A host as it goes in a URL: an IPv6 address (it holds a colon) in brackets."

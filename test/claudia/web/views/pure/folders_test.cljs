@@ -1,6 +1,6 @@
 (ns claudia.web.views.pure.folders-test
   "The Folders modal's data (claudia.web.views.pure.folders), on plain data."
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.folders :as pure]))
 
 (deftest paths-up-to-the-root
@@ -51,3 +51,28 @@
          (pure/bookmark-rows [{:server "home" :folder "/w/a" :label "A"} {:server "box" :folder "/x"}
                               {:server "home" :folder "/w/gone"}]
                              "home" #{"/w/gone"}))))
+
+(deftest the-contents-pane-and-the-preview
+  (testing "dot entries only with show hidden"
+    (is (= ["a"] (mapv :name (pure/shown-items [{:name "a"} {:name ".git" :hidden true}] false))))
+    (is (= 2 (count (pure/shown-items [{:name "a"} {:name ".git" :hidden true}] true)))))
+  (testing "the count line"
+    (is (= "Empty" (pure/count-text [] 0)))
+    (is (= "1 folder · 2 files" (pure/count-text [{:dir true} {} {}] 0)))
+    (is (= "3 files · 9 more not shown" (pure/count-text [{} {} {}] 9))))
+  (testing "the README: a Markdown one first, never a folder"
+    (is (= "README.md" (:name (pure/readme-of [{:name "readme.txt"} {:name "README.md"} {:name "src" :dir true}]))))
+    (is (nil? (pure/readme-of [{:name "README" :dir true}]))))
+  (testing "thumbnails only for images up to thumb-max"
+    (is (true? (pure/thumb? {:kind "image" :size 1000})))
+    (is (false? (pure/thumb? {:kind "image" :size (inc pure/thumb-max)})))
+    (is (false? (pure/thumb? {:kind "file" :size 10}))))
+  (testing "how each item is previewed"
+    (is (= :folder (pure/preview-way {:dir true})))
+    (is (= :video (pure/preview-way {:kind "video" :size 1e9})))
+    (is (= :markdown (pure/preview-way {:kind "file" :name "Notes.MD" :size 10})))
+    (is (= :text (pure/preview-way {:kind "file" :name "core.cljs" :size 10})))
+    (is (= :none (pure/preview-way {:kind "file" :name "dump.sql" :size (inc pure/text-max)}))))
+  (testing "grid unless list was stored"
+    (is (= :list (pure/view-mode "list")))
+    (is (= :grid (pure/view-mode nil)))))

@@ -951,6 +951,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     an agent's change shows there at once. Instead of: a new hub path (one more gate rule for the
     same caller), or the runner writing the page's `PUT /hub/bookmarks` (it holds no login).
 
+67. The Folders modal has three panes: tree, contents, preview (2026-11-19, the user's pick of three
+    layouts). Under the bookmark cards: the tree on the left, in the middle what the selected
+    folder holds (folders first, then files), as a grid (images as their own thumbnails up to
+    8 MiB, other files as their extension's tag) or a list (name, size, modified), the choice kept
+    in the page's storage; on the right a quiet pane: the picked file previewed (images, video and
+    sound to play, PDF in the browser's viewer, Markdown rendered, any other file up to 2 MB read
+    as text and coloured as the files form colours code), or with nothing picked the folder itself
+    (its facts in label-value lines, the actions, the recent chats, its README). A click picks, a
+    double-click or Enter opens a folder. The runner lists a folder's contents
+    (`GET /api/folders/contents`, at most 5000 entries) and sends one file's text or bytes
+    (`GET /api/folders/file`): bytes only for the kinds it previews, in byte ranges, under a CSP
+    that runs nothing, so an HTML or SVG file never runs as a page. Instead of: a Quick Look
+    overlay over a full-width grid, or the preview under the contents.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

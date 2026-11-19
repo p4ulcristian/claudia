@@ -101,3 +101,29 @@
   (is (front/folders-refused? "/api/folders/trash" {:viewing "ana" :read-only false}))
   (is (not (front/folders-refused? "/api/folders/trash" {:viewing nil :read-only false})))
   (is (not (front/folders-refused? "/api/chats" {:viewing "ana" :read-only true}))))
+
+(deftest a-files-kind-and-preview-type
+  (is (= "image" (rules/kind-of "Logo.PNG")))
+  (is (= "video" (rules/kind-of "clip.webm")))
+  (is (= "audio" (rules/kind-of "a.mp3")))
+  (is (= "pdf" (rules/kind-of "Terms.pdf")))
+  (is (= "file" (rules/kind-of "core.cljs")))
+  (is (= "file" (rules/kind-of ".png")) "a leading dot is no extension")
+  (is (= "image/svg+xml" (rules/preview-type "icon.svg")))
+  (is (nil? (rules/preview-type "page.html")) "HTML is never sent as itself"))
+
+(deftest a-folders-contents
+  (testing "folders first, then files, each by name case folded"
+    (is (= ["b" "Z" "a.txt" "C.md"]
+           (mapv :name (rules/ordered [{:name "C.md"} {:name "Z" :dir? true} {:name "a.txt"} {:name "b" :dir? true}])))))
+  (testing "rows as the page gets them; the count of what was left out"
+    (is (= {:path "/w"
+            :entries [{:name "src" :path "/w/src" :dir true :mtime 5 :size nil :hidden false :kind "folder"}
+                      {:name ".env" :path "/w/.env" :dir false :mtime 6 :size 10 :hidden true :kind "file"}]
+            :more 3}
+           (rules/contents "/w" [{:name ".env" :dir? false :mtime 6 :size 10} {:name "src" :dir? true :mtime 5 :size 4096}] 5))))
+  (testing "at most max-contents entries are stat'ed"
+    (is (= rules/max-contents (count (rules/first-entries (map (fn [i] {:name (str i)}) (range (+ 10 rules/max-contents))))))))
+  (testing "the two new calls are routes"
+    (is (= :contents (folders/route "GET" "/api/folders/contents")))
+    (is (= :file (folders/route "GET" "/api/folders/file")))))

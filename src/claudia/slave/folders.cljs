@@ -1,6 +1,7 @@
 (ns claudia.slave.folders
   "The folder browser's calls on the runner (README decisions 63 and 64; PROTOCOL.md, \"Runner
-  HTTP: folders\"): one folder's sub-folders, a folder's facts (size, chats, git), and the Trash.
+  HTTP: folders\"): one folder's sub-folders, its contents (folders and files), one file's text or
+  bytes for its preview, a folder's facts (size, chats, git), and the Trash.
   The whole system is in reach as far as the runner's user may read and write; the runner never
   deletes the folders rules/delete-refusal names. Only the profile's own person may call them (the
   front's X-Claudia-Via \"own\"); a view or a write tick gets 403. Every path is resolved (`..`,
@@ -10,14 +11,18 @@
             [claudia.slave.folders.disk :as disk]
             [claudia.slave.folders.rules :as rules]
             [claudia.slave.folders.trash :as trash]
+            [claudia.slave.files :as files]
             [claudia.slave.git :as git]
             [claudia.slave.store :as store]
-            ["node:os" :as os]))
+            ["node:os" :as os]
+            ["node:path" :as path]))
 
 (def ^:private max-body 65536)
 
 (def ^:private routes
   {["GET" "/api/folders"] :list
+   ["GET" "/api/folders/contents"] :contents
+   ["GET" "/api/folders/file"] :file
    ["GET" "/api/folders/facts"] :facts
    ["GET" "/api/folders/trashed"] :trashed
    ["POST" "/api/folders/trash"] :trash
@@ -59,6 +64,39 @@
           (.then (fn [es] {:path real :entries (rules/listing real es) :cwd (disk/real-or-nil cwd)}))
           (.catch (fn [^js e] (rules/error-reply (.-code e) (.-message e) real)))))))
 
+(defn- contents [p]
+  (with-real p
+    (fn [real] (.catch (disk/contents! real) (fn [^js e] (rules/error-reply (.-code e) (.-message e) real))))))
+
+(defn- file-text
+  "A file's text for its preview ({:path :text :mtime}, or {:path :error} when it is too big, not
+  text or unreadable)."
+  [p]
+  (with-real p
+    (fn [real] (assoc (files/read-text (path/dirname real) (path/basename real) nil) :path real))))
+
+(def ^:private file-csp
+  "The bytes of a previewed file run nothing: an SVG opened by itself draws, its scripts never run."
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+
+(defn- send-file!
+  "Sends the file at p (resolved) for its preview, in byte ranges when asked (video seeking, Safari):
+  only the kinds rules/preview-types names (415 for others), 404 when p is no file."
+  [^js req ^js res p]
+  (-> (disk/real! p)
+      (.then (fn [real] (.then (disk/file-stat! real) (fn [st] [real st]))))
+      (.then (fn [[real st]]
+               (let [t (rules/preview-type (path/basename real))]
+                 (cond (nil? st) (io/send-json res 404 {:error (str "No such file: " real)})
+                       (nil? t) (io/send-json res 415 {:error "No preview for this kind of file."})
+                       (zero? (:size st)) (io/send-json res 404 {:error "The file is empty."})
+                       :else (io/send-range res real (:size st)
+                                            (cond-> {"content-type" t "cache-control" "private, no-cache"}
+                                              (not= t "application/pdf") (assoc "content-security-policy" file-csp))
+                                            (io/byte-range (.. req -headers -range) (:size st)))))))
+      (.catch (fn [^js e] (let [r (rules/error-reply (.-code e) (.-message e) p)]
+                            (io/send-json res (:status r) (dissoc r :status)))))))
+
 (defn- repo-summary [folder]
   (.then (git/repo-facts folder) #(when % (rules/git-summary %))))
 
@@ -92,6 +130,8 @@
   (let [kept #(kept-folders config)]
     (case op
       :list (listing (.get q "path") (:cwd config))
+      :contents (contents (.get q "path"))
+      :file (file-text (.get q "path"))
       :facts (facts (.get q "path") (= "1" (.get q "deep")) config)
       :trashed (js/Promise.resolve (trash/listed))
       :trash (.then (body-path req :path) (fn [p] (with-real p #(trash/trash! % (kept) (:by who)))))
@@ -113,8 +153,10 @@
   [^js req ^js res url who config]
   (if-let [op (route (.-method req) url)]
     (do (if (own? who)
-          (reply! res (answer op {:q (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) ""))
-                                  :req req :who who :config config}))
+          (let [q (js/URLSearchParams. (or (second (str/split (.-url req) #"\?" 2)) ""))]
+            (if (and (= op :file) (not= "1" (.get q "read")))
+              (send-file! req res (.get q "path"))
+              (reply! res (answer op {:q q :req req :who who :config config}))))
           (io/send-json res 403 {:error "Folders are the profile's own person's only."}))
         true)
     false))
