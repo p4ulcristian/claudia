@@ -1,7 +1,6 @@
 (ns claudia.web.fx
   "Effects that leave the page: HTTP, the address bar, local storage, sealing secrets."
-  (:require [claudia.web.passkey :as passkey]
-            [re-frame.core :as rf]
+  (:require [re-frame.core :as rf]
             [claudia.web.api :as api]
             [claudia.web.db :as db]
             [claudia.web.secret :as secret]
@@ -53,16 +52,12 @@
     (rf/dispatch [:ask/state ask-id {:error "Not connected to the chat's server. Try again."}])))
 
 (rf/reg-fx
- :secret/read
- ;; Allow: one of the person's passkeys approves, the key broker on the gate reads 1Password and
- ;; seals the value to the ask's key (README decision 66).
- (fn [{:keys [server chat ask]}]
-   (-> (passkey/read-sealed ask)
-       (.then (fn [sealed]
-                (if sealed
-                  (secret-done server chat (:id ask) sealed)
-                  (rf/dispatch [:ask/state (:id ask) {:error "The key broker gave no answer."}]))))
-       (.catch #(rf/dispatch [:ask/state (:id ask) {:error (passkey/problem %)}])))))
+ :secret/send
+ ;; The value the key broker sealed to the ask's key (the card's passkey tap, README decision 66).
+ (fn [{:keys [server chat ask sealed]}]
+   (if sealed
+     (secret-done server chat (:id ask) sealed)
+     (rf/dispatch [:ask/state (:id ask) {:error "The key broker gave no answer."}]))))
 
 (rf/reg-fx
  :secret/seal
