@@ -21,8 +21,10 @@
            ;; A dev build loads its files as script tags, not eval (the page's policy forbids eval).
            :devtools {:loader-mode :script}
            ;; Big libraries load on first use: three.js and the 3D view (claudia.web.scene3d), Shiki
-           ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs) and Vega
-           ;; (claudia.web.chart). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
+           ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs), Vega
+           ;; (claudia.web.chart), CodeMirror and the editor form (claudia.web.editor), ELK for the
+           ;; graph form's layout (claudia.web.views.graph) and libsodium for sealing a pasted secret
+           ;; (claudia.web.secret). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
            ;; native import() shadow.esm/dynamic-import calls (Closure would rewrite one in the code).
            ;; health first (README decision 35): the page's word on whether this release works, so
            ;; it runs, and reports, even when the rest of the page's code breaks on load.
@@ -32,6 +34,9 @@
                      :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}
                      :shiki {:entries [claudia.web.shiki.lib] :depends-on #{:main}}
                      :chart {:entries [claudia.web.chart] :depends-on #{:main}}
+                     :editor {:entries [claudia.web.editor.view] :depends-on #{:main}}
+                     :elk {:entries [claudia.web.graph.elk] :depends-on #{:main}}
+                     :secret {:entries [claudia.web.secret.sodium] :depends-on #{:main}}
                      ;; The 3D world (claudia.web.world): on the 3D module, which already holds three.js.
                      :world {:entries [claudia.web.world.view] :depends-on #{:scene3d}}}
            ;; libsodium's and QuickJS's Node paths (fs, crypto) are never taken in a browser.

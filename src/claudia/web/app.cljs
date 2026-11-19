@@ -66,8 +66,9 @@
   (mount!))
 
 (defn- script-tag-modules!
-  "The lazy modules (scene3d, shiki, chart) load as script tags: the module loader's default fetches
-  them and evals the text, which the page's policy forbids (claudia.shared.csp)."
+  "The lazy modules (scene3d, shiki, chart, editor, elk, secret, world) load as script tags: the
+  module loader's default fetches them and evals the text, which the page's policy forbids
+  (claudia.shared.csp)."
   []
   (doto (loader/getModuleLoader)
     (.setSourceUrlInjection false)
