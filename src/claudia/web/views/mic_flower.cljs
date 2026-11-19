@@ -4,7 +4,9 @@
   and red once it records, with the time spoken so far and what letting go would do; round it the
   48 bars that follow the voice. Four petals open outside the bars: left sends, up cancels, right
   adds the words to the message, down sends now (the running turn stops first); letting go in place
-  sends too. The petal the finger is over lights."
+  sends too. The petal the finger is over lights. On the tablet's rail (README decision 73) the
+  flower is half: its petals and bars only to the left of the mic, top to bottom cancel, add, send,
+  now; and while the mic is dragged past the petals the disc alone shows, blue, saying move."
   (:require [claudia.web.views.pure.mic :as pure]))
 
 (def size "The canvas, CSS px (square, centred on the button)." 240)
@@ -22,6 +24,13 @@
    [:cancel -135 -45 "✕" "cancel" "--red"]
    [:add -35 35 "+" "add" "--blue"]
    [:now 55 125 :now "now" "--amber"]])
+
+(def ^:private half-petals
+  ;; The half flower's: the left half in four, 4 degrees apart.
+  [[:cancel -133 -92 "✕" "cancel" "--red"]
+   [:add -178 -137 "+" "add" "--blue"]
+   [:send 137 178 "➤" "send" "--green"]
+   [:now 92 133 :now "now" "--amber"]])
 
 (def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now"})
 
@@ -81,22 +90,36 @@
   (set! (.-fillStyle g) (css el "--bg2"))
   (.fill g))
 
+(defn- left-half?
+  "Whether bar i of n points into the left half (90 to 270 degrees)."
+  [i n]
+  (<= (/ n 4) i (* 3 (/ n 4))))
+
 (defn- bars!
-  "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right)."
-  [^js g ^js el levels]
+  "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right); half?: only
+  the left half's."
+  [^js g ^js el levels half?]
   (set! (.-fillStyle g) (css el "--red"))
   (doseq [[i level] (map-indexed vector levels)
-          :when (> level 0.02)]
+          :when (and (> level 0.02) (or (not half?) (left-half? i (count levels))))]
     (.save g)
     (.rotate g (* 2 js/Math.PI (/ i pure/bar-count)))
     (.fillRect g bar-r -1.5 (+ 3 (* level bar-len)) 3)
     (.restore g)))
 
-(defn- disc! [^js g ^js el {:keys [phase secs way]}]
-  (let [warm? (= phase :recording)]
+(defn- disc-text
+  "The disc's two lines: above the mic icon, under it."
+  [{:keys [phase secs way]}]
+  (case phase
+    :recording [(pure/clock-text (* 1000 secs)) (get words way)]
+    :moving ["" "move"]
+    ["…" "waking"]))
+
+(defn- disc! [^js g ^js el {:keys [phase] :as state}]
+  (let [[above under] (disc-text state)]
     (.beginPath g)
     (.arc g 0 0 disc-r 0 (* 2 js/Math.PI))
-    (set! (.-fillStyle g) (css el (if warm? "--red" "--amber")))
+    (set! (.-fillStyle g) (css el (case phase :recording "--red" :moving "--blue" "--amber")))
     (.fill g)
     (set! (.-fillStyle g) "#fff")
     (set! (.-textAlign g) "center")
@@ -104,23 +127,38 @@
     ;; the word below, both the same distance from it.
     (set! (.-textBaseline g) "middle")
     (set! (.-font g) (str "700 11px " (css el "--mono")))
-    (.fillText g (if warm? (pure/clock-text (* 1000 secs)) "…") 0 -23)
+    (.fillText g above 0 -23)
     (set! (.-font g) (str "600 10px " (css el "--sans")))
-    (.fillText g (if warm? (get words way) "waking") 0 23)
+    (.fillText g under 0 23)
     (set! (.-textBaseline g) "alphabetic")))
 
+(defn- ground-half!
+  "The half flower's ground: the left half round inside the petals."
+  [^js g ^js el]
+  (.beginPath g)
+  (.arc g 0 0 petal-in (/ js/Math.PI 2) (* 1.5 js/Math.PI))
+  (.closePath g)
+  (set! (.-fillStyle g) (css el "--bg2"))
+  (.fill g))
+
+(defn- flower!
+  "The petals, their ground and the bars: whole, or half (only to the left)."
+  [^js g ^js canvas {:keys [half? way levels]}]
+  (doseq [p (if half? half-petals petals)] (petal! g canvas way p))
+  (if half? (ground-half! g canvas) (ground! g canvas))
+  (bars! g canvas levels half?))
+
 (defn draw!
-  "One frame: the petals, the ground inside them, the bars, the disc. state: {:phase :levels (one
-  0-1 per bar) :secs :way}."
+  "One frame: the petals, the ground inside them, the bars, the disc (while moving: the disc
+  alone). state: {:phase (:starting :recording :moving) :levels (one 0-1 per bar) :secs :way
+  :half?}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
     (.setTransform g 1 0 0 1 0 0)
     (.clearRect g 0 0 (.-width canvas) (.-height canvas))
     (.setTransform g dpr 0 0 dpr 0 0)
     (.translate g (/ size 2) (/ size 2))
-    (doseq [p petals] (petal! g canvas (:way state) p))
-    (ground! g canvas)
-    (bars! g canvas (:levels state))
+    (when-not (= :moving (:phase state)) (flower! g canvas state))
     (disc! g canvas state)))
 
 (defn wipe! [^js canvas]

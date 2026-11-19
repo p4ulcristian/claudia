@@ -25,6 +25,54 @@
     (>= dx drag-px) :add
     :else :send))
 
+(defn half-gesture
+  "The half flower's way (the mic on the tablet's right wall, its petals only to the left): from
+  drag-px on, the left half's quarter the finger points into, top to bottom :cancel :add :send :now
+  (each 45 degrees); nearer, or to the right of the mic, :send."
+  [dx dy]
+  (if (or (< (js/Math.hypot dx dy) drag-px) (pos? dx))
+    :send
+    (let [a (* (/ 180 js/Math.PI) (js/Math.atan2 dy dx))]
+      (cond (<= -135 a -90) :cancel
+            (< a -135) :add
+            (>= a 135) :send
+            :else :now))))
+
+(def move-px
+  "How far the finger goes from where the hold started for the mic to follow it (past the petals,
+  116 px out, and a finger's width more): the clip is dropped and the mic moves."
+  130)
+
+(defn moving?
+  "Whether a drag of dx, dy px from where the hold started moves the mic."
+  [dx dy]
+  (> (js/Math.hypot dx dy) move-px))
+
+(def spot-margin
+  "How far a moved mic's centre stays from the screen's edges and the rail: the whole flower fits."
+  128)
+
+(defn clamp-spot
+  "A moved mic's centre {:x :y} kept spot-margin inside a w x h screen whose right rail-w px are
+  the rail."
+  [{:keys [x y]} w h rail-w]
+  {:x (-> x (max spot-margin) (min (- w rail-w spot-margin)))
+   :y (-> y (max spot-margin) (min (- h spot-margin)))})
+
+(defn home?
+  "Whether a mic let go at {:x :y} goes back into the rail: on the rail (x past w - rail-w -
+  spot-margin / 2), or within move-px of its slot {:x :y}."
+  [{:keys [x y]} slot w rail-w]
+  (or (> x (- w rail-w (/ spot-margin 2)))
+      (and (some? slot) (< (js/Math.hypot (- x (:x slot)) (- y (:y slot))) move-px))))
+
+(defn spot->stored "A spot as fractions of the screen, kept per device." [{:keys [x y]} w h]
+  {:fx (/ x w) :fy (/ y h)})
+
+(defn stored->spot "A kept spot on a w x h screen, clamped (the screen may have turned)." [{:keys [fx fy]} w h rail-w]
+  (when (and (number? fx) (number? fy))
+    (clamp-spot {:x (* fx w) :y (* fy h)} w h rail-w)))
+
 (defn clock-text
   "A recording's time in ms with its milliseconds, so the start shows at once: \"0.000\",
   \"12.345\" under a minute, \"1:02.345\" from then on."

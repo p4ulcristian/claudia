@@ -353,10 +353,10 @@ code, pre { font-family: var(--mono); }
    near it so it shows past the finger; the button itself goes clear so the disc shows through. */
 .mic-flower { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; transform: translate(-50%, -50%); pointer-events: none; z-index: 30; }
 /* While the flower is open, the rail's chalk line (a masked layer painted over the flower) steps back. */
-body:has(.mic.starting, .mic.recording) .rail::after { visibility: hidden; }
+body:has(.mic.starting, .mic.recording, .mic.moving) .rail::after { visibility: hidden; }
 /* Nor does a mouse's hover tip cover the petals while the mic is held. */
-body:has(.mic.starting, .mic.recording) .tip-root { display: none; }
-.mic.starting .mic-button, .mic.recording .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
+body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; }
+.mic.starting .mic-button, .mic.recording .mic-button, .mic.moving .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
 /* The clips being heard, over the composer, in spoken order, each with its loading clock. */
 .mic-clips { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 6; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; width: min(340px, 80vw); pointer-events: none; }
 .mic-clip { display: flex; justify-content: space-between; gap: 10px; padding: 6px 11px; border-radius: 10px; background: var(--panel2); box-shadow: 0 4px 14px rgb(0 0 0 / 0.35), inset 0 0 0 1.5px var(--line); font-size: 13px; }
