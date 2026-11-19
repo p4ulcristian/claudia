@@ -870,7 +870,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     visible project for its logo is one call and one logo search per row).
     Instead of: a tree of our own.
 
-63. Deleting goes to Claudia's own Trash per server (2026-11-18, the user's call). Move to Trash
+63. Replaced by decision 69 (2026-11-19). Deleting goes to Claudia's own Trash per server (2026-11-18, the user's call). Move to Trash
     moves the folder to `RUNNER_DATA/trash/<id>/<its name>` with a row in the runner's store
     (`trash`: where it was, when, its size, who); `fs.rename`, and across filesystems (EXDEV) a
     recursive copy, then the original removed (a whole copy whose original could not all be removed
@@ -884,7 +884,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `-sk` on macOS) run in the background with a 5-minute limit and kept 10 minutes; the page asks
     again every 2 s while it is measured. Instead of: deleting at once.
 
-64. The folder browser reaches the whole system (2026-11-18, the user's call). It shows whatever the
+64. Its never-deleted list replaced by decision 69 (2026-11-19). The folder browser reaches the whole system (2026-11-18, the user's call). It shows whatever the
     runner's user may read and deletes whatever that user may write: the OS permissions decide, and
     EACCES or EPERM come back as "Permission denied" (403). A profile's home folder does not limit
     it. Dot folders are hidden behind a "show hidden" switch. Whatever the permissions, the runner
@@ -951,7 +951,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     an agent's change shows there at once. Instead of: a new hub path (one more gate rule for the
     same caller), or the runner writing the page's `PUT /hub/bookmarks` (it holds no login).
 
-67. The Folders modal has three panes: tree, contents, preview (2026-11-19, the user's pick of three
+68. The Folders modal has three panes: tree, contents, preview (2026-11-19, the user's pick of three
     layouts). Under the bookmark cards: the tree on the left, in the middle what the selected
     folder holds (folders first, then files), as a grid (images as their own thumbnails up to
     8 MiB, other files as their extension's tag) or a list (name, size, modified), the choice kept
@@ -959,11 +959,22 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sound to play, PDF in the browser's viewer, Markdown rendered, any other file up to 2 MB read
     as text and coloured as the files form colours code), or with nothing picked the folder itself
     (its facts in label-value lines, the actions, the recent chats, its README). A click picks, a
-    double-click or Enter opens a folder. The runner lists a folder's contents
+    second click on the same folder within 450 ms, or Enter, opens it (timed by the page, not the
+    browser's dblclick: the first click redraws the panes, and touch screens send none). The runner lists a folder's contents
     (`GET /api/folders/contents`, at most 5000 entries) and sends one file's text or bytes
     (`GET /api/folders/file`): bytes only for the kinds it previews, in byte ranges, under a CSP
     that runs nothing, so an HTML or SVG file never runs as a page. Instead of: a Quick Look
     overlay over a full-width grid, or the preview under the contents.
+
+69. Folders never delete (2026-11-19, the user's call: "don't delete files, Claude can do it
+    anyway"; replaces the Trash and Delete now of decision 63 and the never-deleted list of
+    decision 64). The Folders modal has no Move to Trash, Delete now, Trash view or delete dialog,
+    and the runner has no call that deletes, moves or trashes (`/api/folders/trash`, `delete`,
+    `restore`, `purge`, `trashed` and the facts' `deep`, `kept` and `inner` are gone). To delete a
+    folder, the person asks Claude in a chat, where the step shows in the conversation and the
+    activity log. Folders trashed before stay in `RUNNER_DATA/trash/` until 7 days after they were
+    trashed, when the runner's hourly purge removes them; then the Trash is empty for good.
+    Instead of: a file manager's select-and-Delete with a Trash.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

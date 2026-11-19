@@ -335,12 +335,4 @@
   []
   (mapv trash-item-row (.all (stmt "SELECT * FROM trash ORDER BY at DESC"))))
 
-(defn trash-item [id] (trash-item-row (.get (stmt "SELECT * FROM trash WHERE id = ?") id)))
-
-(defn add-trash! [{item-path :path item-name :name :keys [id at size by]}]
-  (.run (stmt "INSERT INTO trash (id, path, name, at, size, by) VALUES (?, ?, ?, ?, ?, ?)")
-        id item-path item-name at size by))
-
-(defn set-trash-size! [id size] (.run (stmt "UPDATE trash SET size = ? WHERE id = ?") size id))
-
 (defn drop-trash! [id] (.run (stmt "DELETE FROM trash WHERE id = ?") id))
