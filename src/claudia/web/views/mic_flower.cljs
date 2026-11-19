@@ -1,18 +1,20 @@
 (ns claudia.web.views.mic-flower
-  "The mic's flower (README decision 20): while the mic is held, a 240 px canvas round the button,
-  big enough to show past the finger on it. In the middle a disc, amber while the microphone wakes
-  and red once it records, with the time spoken so far and what letting go would do; round it the
-  48 bars that follow the voice. Four petals open outside the bars: left sends, up cancels, right
-  adds the words to the message, down sends now (the running turn stops first); letting go in place
-  sends too. The petal the finger is over lights. On the tablet's rail (README decision 73) the
-  flower is half (side :left): its petals and bars only to the left of the mic, top to bottom cancel,
-  add, send,
-  now; and while the mic is dragged past the petals the disc alone shows, blue, saying move."
+  "The mic's flower (README decision 20): while the mic is held, a 300 px canvas round the button,
+  always centred on it, big enough to show past the finger on it. In the middle a disc, amber while
+  the microphone wakes and red once it records, with the time spoken so far and what letting go
+  would do; round it the 48 bars that follow the voice. Four petals open outside the bars: up sends,
+  right cancels, down sends now (the running turn stops first), left adds the words to the message;
+  letting go in place sends too. The petal the finger is over lights. On the tablet's rail (README
+  decision 73) the flower is half (side :left): its petals and bars only to the left of the mic, top
+  to bottom cancel, add, send, now. A mic that moves (:movable) has a ring round the petals, all the
+  way round, saying move: the finger in it drops the clip, and while the mic follows the finger the
+  ring alone shows, lit, round a blue disc saying move."
   (:require [claudia.web.views.pure.mic :as pure]))
 
-(def size "The canvas, CSS px (square, centred on the button)." 240)
+(def size "The canvas, CSS px (square, centred on the button): the move ring fits." 300)
 
-;; Radii, CSS px from the middle: the disc, the bars (from bar-r, up to bar-len long), the petals.
+;; Radii, CSS px from the middle: the disc, the bars (from bar-r, up to bar-len long), the petals;
+;; the move ring from pure/ring-in to pure/ring-out, so it is drawn where it is hit.
 (def ^:private disc-r 36)
 (def ^:private bar-r 39)
 (def ^:private bar-len 24)
@@ -21,10 +23,10 @@
 
 (def ^:private petals
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.
-  [[:send 145 215 "➤" "send" "--green"]
-   [:cancel -135 -45 "✕" "cancel" "--red"]
-   [:add -35 35 "+" "add" "--blue"]
-   [:now 55 125 :now "now" "--amber"]])
+  [[:send -135 -45 "➤" "send" "--green"]
+   [:cancel -35 35 "✕" "cancel" "--red"]
+   [:now 55 125 :now "now" "--amber"]
+   [:add 145 215 "+" "add" "--blue"]])
 
 (def ^:private half-petals
   ;; The half flower's: the left half in four, 4 degrees apart.
@@ -133,6 +135,30 @@
     (.fillText g under 0 23)
     (set! (.-textBaseline g) "alphabetic")))
 
+(def ^:private ring-words
+  ;; Where the ring says move: the four gaps between the petals (degrees), so a half flower shows two.
+  [-135 -45 45 135])
+
+(defn- ring!
+  "The move ring round the petals, all the way round, saying move in the gaps between them: faint,
+  or lit (on) while the mic moves."
+  [^js g ^js el on]
+  (let [r (/ (+ pure/ring-in pure/ring-out) 2)]
+    (petal-path! g pure/ring-in pure/ring-out 0 360)
+    (set! (.-fillStyle g) (css el "--bg2"))
+    (.fill g)
+    (set! (.-globalAlpha g) (if on 0.92 0.16))
+    (set! (.-fillStyle g) (css el "--blue"))
+    (.fill g)
+    (set! (.-globalAlpha g) 1)
+    (set! (.-fillStyle g) (if on (css el "--bg2") (css el "--blue")))
+    (set! (.-textAlign g) "center")
+    (set! (.-textBaseline g) "middle")
+    (set! (.-font g) (str "600 11px " (css el "--sans")))
+    (doseq [a ring-words]
+      (.fillText g "move" (* r (js/Math.cos (rad a))) (* r (js/Math.sin (rad a)))))
+    (set! (.-textBaseline g) "alphabetic")))
+
 (defn- ground-half!
   "The half flower's ground: the left half round inside the petals."
   [^js g ^js el]
@@ -150,15 +176,16 @@
   (bars! g canvas levels side))
 
 (defn draw!
-  "One frame: the petals, the ground inside them, the bars, the disc (while moving: the disc
-  alone). state: {:phase (:starting :recording :moving) :levels (one 0-1 per bar) :secs :way
-  :side (nil: whole; :left: half)}."
+  "One frame: the move ring (a mic that moves), the petals, the ground inside them, the bars, the
+  disc (while moving: the ring lit and the disc). state: {:phase (:starting :recording :moving)
+  :levels (one 0-1 per bar) :secs :way :side (nil: whole; :left: half) :movable}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
     (.setTransform g 1 0 0 1 0 0)
     (.clearRect g 0 0 (.-width canvas) (.-height canvas))
     (.setTransform g dpr 0 0 dpr 0 0)
     (.translate g (/ size 2) (/ size 2))
+    (when (:movable state) (ring! g canvas (= :moving (:phase state))))
     (when-not (= :moving (:phase state)) (flower! g canvas state))
     (disc! g canvas state)))
 

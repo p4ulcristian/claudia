@@ -195,11 +195,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it cannot start before the press), or the microphone open whenever the composer shows.
     The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
     messages went out swapped): held, the mic opens a 240 px flower round itself, always centred on
-    the mic (320 px until 2026-11-17: on the iPad's edge it ran off the screen): a 72 px disc,
+    the mic (320 px until 2026-11-17: on the iPad's edge it ran off the screen; a 300 px canvas
+    since 2026-11-20 so the move ring of decision 73 fits): a 72 px disc,
     amber while waking and red while recording, the time spoken in it; round the disc the 48 bars
     that follow the voice (back 2026-11-16: the bars, not a breathing disc, show the voice). Four
-    petals open outside the bars: left sends, up throws the clip away, right adds the words to the message,
-    down sends now (the running turn stops first, 2026-11-17); letting go in place sends too. Each clip let go waits in a list over
+    petals open outside the bars: up sends, right throws the clip away, down sends now (the running
+    turn stops first, 2026-11-17), left adds the words to the message; letting go in place sends
+    too (2026-11-20, the user's call; before: left sent, up threw away, right added). Each clip let go waits in a list over
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.
@@ -1030,18 +1032,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     opening to the left holds Settings, so the rail has no cog) and the version's line ("so the
     chats have more place"). A desktop keeps them at the chats' rail's foot. Held on the rail, the flower is half: its petals and the
     voice's bars only to the left, still centred on the mic, top to bottom cancel, add, send, now,
-    each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
-    px from the press), the clip is dropped and the mic follows the finger on a spring (`motion`'s
-    useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would have some
-    personality"): it trails the finger and overshoots a little, a blue disc saying move. Only in
-    the first half second of a hold ("make this half a second"): later the hold is talk and a drag
-    only picks a petal. Let go,
-    it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
-    within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
-    anywhere 124 px from the walls and the rail, and out of the rail its flower is whole, four ways
-    ("when it's not in sidebar, it should already be in flower with the four sides").
+    each a quarter of the left half; in place or to the right sends. Round the petals a ring
+    (124 to 148 px from the mic's centre, all the way round) says move (2026-11-20, the user's call;
+    before: an unseen flick past 130 px in the first half second of a hold): the finger reaching
+    the ring at any time while holding drops the clip and the mic follows the finger on a spring
+    (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
+    have some personality"): it trails the finger and overshoots a little, the ring lit round a blue
+    disc saying move. Let go, it glides there and stays, its slot in the rail a dashed ring. It may
+    sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
+    from the walls and the rail so the whole flower fitted). It glides home only when the button
+    let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the
+    slot or anywhere on the rail, and "it jumps too easy back on its place" before that). Out of
+    the rail its flower is whole, four ways ("when it's not in sidebar, it should already be in
+    flower with the four sides"); on the rail, half. Near an edge the flower stays centred on the
+    mic and is cut off by the screen: a petal or part of the ring past the edge cannot be reached,
+    letting go in place still sends, and the mic can be moved away through the ring's other side.
     Its spot is kept on the device (localStorage, as fractions of the screen, clamped again when
-    the screen turns). The phone keeps its mic in the bottom middle with the whole flower and no
+    the screen turns so the button stays on it). The phone keeps its mic in the bottom middle with the whole flower and no
     move. Instead of: the 3x3 grid floating 18 px from
     the edge over the page, the mic 128 px in so the whole flower fitted.
 74. A new chat starts in the last chat's place, and the File Browser has no folder section

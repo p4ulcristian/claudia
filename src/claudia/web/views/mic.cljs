@@ -2,17 +2,18 @@
   "The composer's mic: a 56 px round button at the composer's left end, under the left thumb of a
   tablet held in landscape. Hold it and talk: a flower opens round it (views/mic_flower.cljs), big
   enough to show past the finger: amber while the microphone wakes, red once it records, with the
-  time spoken and bars round it that follow the voice. Let go in place (or dragged left or down) and the clip is heard and sent; dragged
-  right, the words only join the draft; dragged up, the clip is thrown away. Each clip let go waits
+  time spoken and bars round it that follow the voice. Let go in place or dragged up and the clip is
+  heard and sent; dragged down, it is sent now (the running turn stops first); dragged left, the
+  words only join the draft; dragged right, the clip is thrown away. Each clip let go waits
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
   On the tablet's rail (README decision 73) the flower is half, to the left, and the mic moves: a
-  drag past the petals (pure/move-px) in the first half second (pure/move-window-ms) drops the clip and the
-  mic follows the finger on a spring
-  (motion's useSpring: it trails and overshoots a little); let go, it glides there and stays (its
-  spot kept on this device), or let go on the rail or at its slot it glides home. Out of the rail
-  its flower is whole, four ways."
+  ring round the petals says move, and the finger reaching it (pure/in-ring?) at any time while
+  holding drops the clip and the mic follows the finger on a spring (motion's useSpring: it trails
+  and overshoots a little), its button kept on the screen; let go, it glides there and stays (its
+  spot kept on this device), or, covering half its slot or more (pure/home?), it glides home. Out
+  of the rail its flower is whole, four ways."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
             [claudia.web.mic :as mic]
@@ -29,8 +30,8 @@
   "What the flower shows now: the phase, the bars' levels (eased), seconds spoken, the way letting
   go goes."
   [phase ^js live hold levels]
-  (let [{:keys [dir rec-at side]} (.-current hold)]
-    {:phase phase :levels levels :way (or dir :send) :side side
+  (let [{:keys [dir rec-at side rail?]} (.-current hold)]
+    {:phase phase :levels levels :way (or dir :send) :side side :movable rail?
      :secs (if rec-at (/ (- (js/performance.now) rec-at) 1000) 0)
      :live live}))
 
@@ -84,28 +85,35 @@
 (defn- rail-width []
   (or (some-> (js/document.querySelector ".thumb-edge") .-offsetWidth) 88))
 
+(defn- button-r
+  "The rail mic's button's radius, px."
+  []
+  (/ (or (some-> (js/document.querySelector ".thumb-edge .mic-button") .-offsetWidth) 64) 2))
+
 (defn- kept-spot
-  "The mic's spot on this device, clamped to the screen now, or nil (in the rail)."
+  "The mic's spot on this device, clamped so its button is on the screen now, or nil (in the rail)."
   []
   (let [kept (try (js->clj (js/JSON.parse (.getItem js/localStorage spot-key)) :keywordize-keys true)
                   (catch :default _ nil))]
     (when (map? kept)
-      (pure/stored->spot kept js/innerWidth js/innerHeight (rail-width)))))
+      (pure/stored->spot kept js/innerWidth js/innerHeight (button-r)))))
 
 (defn- keep-spot! [spot]
   (if spot
     (.setItem js/localStorage spot-key (js/JSON.stringify (clj->js (pure/spot->stored spot js/innerWidth js/innerHeight))))
     (.removeItem js/localStorage spot-key)))
 
-(defn- centre [^js el]
+(defn- circle
+  "An element as a circle on the screen: its centre {:x :y} and radius :r (half its width)."
+  [^js el]
   (when el
     (let [r (.getBoundingClientRect el)]
-      {:x (+ (.-left r) (/ (.-width r) 2)) :y (+ (.-top r) (/ (.-height r) 2))})))
+      {:x (+ (.-left r) (/ (.-width r) 2)) :y (+ (.-top r) (/ (.-height r) 2)) :r (/ (.-width r) 2)})))
 
-(defn- slot-centre
+(defn- slot-circle
   "Where the mic sits in the rail: its slot when it has moved out, else the button itself."
   [^js button spot]
-  (if spot (centre (js/document.querySelector ".mic-slot")) (centre button)))
+  (if spot (circle (js/document.querySelector ".mic-slot")) (circle button)))
 
 (defn- side-at
   "The flower's side for a rail mic whose button's centre is at {:x}: in the rail :left (half), out
@@ -126,8 +134,8 @@
       ;; The composer as it is at the press: the one the person spoke into, even when another chat
       ;; is open by the time the words are heard.
       (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p :k draft-key
-                              :rail? rail? :side (side-at rail? (centre (.-currentTarget e)))
-                              :slot (when rail? (slot-centre (.-currentTarget e) spot)) :from (centre (.-currentTarget e))})
+                              :rail? rail? :side (side-at rail? (circle (.-currentTarget e)))
+                              :slot (when rail? (slot-circle (.-currentTarget e) spot)) :from (circle (.-currentTarget e))})
       (set-dir :send)
       (set-phase :starting)
       (watch-start! hold p)
@@ -146,8 +154,8 @@
   (.jump mx x) (.jump my y) (.jump sx x) (.jump sy y))
 
 (defn- start-move!
-  "The finger went past the petals on the rail: the clip is dropped and the mic, out of its place,
-  starts following the finger from where it sat."
+  "The finger reached the move ring: the clip is dropped and the mic, out of its place, starts
+  following the finger from where it sat."
   [{:keys [hold live set-phase set-free] :as parts}]
   (let [{:keys [p from]} (.-current hold)]
     (set! (.-current hold) (assoc (.-current hold) :moving true))
@@ -156,18 +164,30 @@
     (set-phase :moving)
     (.then p (fn [s] (set! (.-current live) nil) (mic/discard! s)))))
 
+(defn- on-screen
+  "Where a moved mic's button goes for a finger at x y: there, kept wholly on the screen."
+  [x y r]
+  (pure/clamp-spot {:x x :y y} js/innerWidth js/innerHeight r))
+
+(defn- follow!
+  "The mic, moving, pulled towards the finger (its button kept on the screen)."
+  [^js e {:keys [hold ^js mx ^js my]}]
+  (let [{:keys [x y]} (on-screen (.-clientX e) (.-clientY e) (:r (:from (.-current hold))))]
+    (.set mx x) (.set my y)))
+
 (defn- drag!
   "Pointer move while held: where the finger went chooses what letting go does (pure/gesture, on
-  the rail's half flower pure/half-gesture); on the rail, past the petals, the mic moves."
-  [^js e {:keys [hold set-dir ^js mx ^js my] :as parts}]
-  (when-let [{:keys [x0 y0 t0 side rail? moving]} (.-current hold)]
-    (let [dx (- (.-clientX e) x0) dy (- (.-clientY e) y0)]
-      (when (and rail? (not moving) (pure/moving? dx dy (- (js/performance.now) t0))) (start-move! parts))
-      (if (:moving (.-current hold))
-        (do (.set mx (.-clientX e)) (.set my (.-clientY e)))
-        (let [dir (if side (pure/half-gesture dx dy) (pure/gesture dx dy))]
-          (set! (.-current hold) (assoc (.-current hold) :dir dir))
-          (set-dir dir))))))
+  the rail's half flower pure/half-gesture); on the rail, the finger in the move ring moves the mic."
+  [^js e {:keys [hold set-dir] :as parts}]
+  (when-let [{:keys [x0 y0 side rail? moving from]} (.-current hold)]
+    (when (and rail? (not moving) (pure/in-ring? (- (.-clientX e) (:x from)) (- (.-clientY e) (:y from))))
+      (start-move! parts))
+    (if (:moving (.-current hold))
+      (follow! e parts)
+      (let [dx (- (.-clientX e) x0) dy (- (.-clientY e) y0)
+            dir (if side (pure/half-gesture dx dy) (pure/gesture dx dy))]
+        (set! (.-current hold) (assoc (.-current hold) :dir dir))
+        (set-dir dir)))))
 
 (defn- when-still!
   "Calls (f) once the mic's spring has come to rest."
@@ -176,11 +196,11 @@
    #(if (or (.isAnimating sx) (.isAnimating sy)) (when-still! sx sy f) (f))))
 
 (defn- moved!
-  "Let go while moving: the mic glides to where the finger is and stays (kept on this device), or
-  glides home into its slot."
-  [^js e {:keys [set-phase set-spot set-free ^js mx ^js my ^js sx ^js sy]} slot]
-  (let [at {:x (.-clientX e) :y (.-clientY e)} w js/innerWidth rw (rail-width)
-        spot (when-not (pure/home? at slot w rw) (pure/clamp-spot at w js/innerHeight rw))
+  "Let go while moving: the mic glides to where the finger is (its button on the screen) and stays
+  (kept on this device), or, covering half its slot or more, glides home into it."
+  [^js e {:keys [set-phase set-spot set-free ^js mx ^js my ^js sx ^js sy]} {:keys [slot from]}]
+  (let [at (on-screen (.-clientX e) (.-clientY e) (:r from))
+        spot (when-not (pure/home? (assoc at :r (:r from)) slot) at)
         to (or spot slot)]
     (set-phase :idle)
     (keep-spot! spot)
@@ -202,13 +222,14 @@
                            (clips/spoken! k dir secs (mic/stop! s))))))))
 
 (defn- release!
-  "Pointer up: a hold long enough is heard and sent (dragged right: added to the message; dragged
-  up: thrown away); a tap is dropped and says to hold; a move ends where the finger is."
+  "Pointer up: a hold long enough is heard and sent (dragged down: now; dragged left: added to the
+  message; dragged right: thrown away); a tap is dropped and says to hold; a move ends where the
+  finger is."
   [^js e {:keys [hold live set-phase] :as parts}]
-  (when-let [{:keys [t0 p dir k rec-at moving slot]} (.-current hold)]
+  (when-let [{:keys [t0 p dir k rec-at moving] :as held} (.-current hold)]
     (set! (.-current hold) nil)
     (if moving
-      (moved! e parts slot)
+      (moved! e parts held)
       (heard! p {:t0 t0 :dir dir :k k :rec-at rec-at} live set-phase))))
 
 (def ^:private icon
@@ -228,9 +249,10 @@
   [{:keys [phase canvas] :as parts}]
   [:div.mic-core
    [:canvas.mic-flower {:ref #(set! (.-current canvas) %) :aria-hidden true
+                        :style {:width flower/size :height flower/size}
                         :width (* flower/size (or js/devicePixelRatio 1)) :height (* flower/size (or js/devicePixelRatio 1))}]
-   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go to send, drag right to add to the message, drag up to cancel"
-                        :data-tip "Hold to talk: let go sends, drag right adds to the message, drag up cancels"
+   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go or drag up to send, drag left to add to the message, drag right to cancel, drag down to send now"
+                        :data-tip "Hold to talk: let go or drag up sends, left adds to the message, right cancels, down sends now"
                         :on-pointer-down #(press! % parts)
                         :on-pointer-move #(drag! % parts)
                         :on-pointer-up #(release! % parts)
