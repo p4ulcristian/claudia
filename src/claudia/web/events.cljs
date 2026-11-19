@@ -773,10 +773,10 @@
     :ws/send [s {:type "deny" :chat c :ask ask-id}]}))
 
 (rf/reg-event-fx
- :ask/allow
- (fn [{:keys [db]} [_ [s c] ask]]
-   {:db (assoc-in db [:ask-state (:id ask)] {:busy true})
-    :secret/read {:server s :chat c :ask ask}}))
+ :ask/sealed
+ ;; Allow with passkey: the card's tap got the value sealed by the key broker (README decision 66).
+ (fn [_ [_ [s c] ask sealed]]
+   {:secret/send {:server s :chat c :ask ask :sealed sealed}}))
 
 (rf/reg-event-fx
  :ask/paste

@@ -8,6 +8,7 @@
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.web.md :as md]
+            [claudia.web.passkey :as passkey]
             [claudia.web.views.pure.asks :as pure]))
 
 (defn- use-esc-peeks!
@@ -128,16 +129,37 @@
             :on-key-down #(when (= "Enter" (.-key %)) (.preventDefault %) (send-paste!))}]
    [:button.primary {:disabled (str/blank? @paste) :on-click send-paste!} "Send sealed"]])
 
-(defn- secret-actions [k ask paste busy]
+(defn- prepare-read!
+  "Fetches the broker's challenge for this ask before any tap (claudia.web.passkey): prepared
+  holds it, or the error."
+  [prepared ask]
+  (reset! prepared nil)
+  (-> (passkey/prepare-approval (passkey/read-ask-purpose ask))
+      (.then #(reset! prepared %))
+      (.catch #(reset! prepared {:error (passkey/problem %)}))))
+
+(defn- allow!
+  "The tap: the passkey opens straight away with the prepared challenge; the sealed value goes on
+  to the chat's server. A fresh challenge is fetched after a failure."
+  [prepared k ask]
+  (let [p @prepared]
+    (rf/dispatch [:ask/state (:id ask) {:busy true}])
+    (-> (passkey/read-sealed! p)
+        (.then #(rf/dispatch [:ask/sealed k ask %]))
+        (.catch #(do (rf/dispatch [:ask/state (:id ask) {:error (passkey/problem %)}])
+                     (prepare-read! prepared ask))))))
+
+(defn- secret-actions [k ask paste busy prepared]
   [:div.actions
    [:button {:disabled busy :on-click #(rf/dispatch [:ask/deny k (:id ask)])} "Deny"]
    (when (nil? @paste)
      [:button {:disabled busy :on-click #(reset! paste "")} "Paste"])
    ;; Allow needs the hub's key broker and a passkey (README decision 66); paste works without.
    (when (:vault @(rf/subscribe [:me]))
-     [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/allow k ask])} "Allow with passkey"])])
+     [:button.primary {:disabled (or busy (not (:challengeId @prepared))) :on-click #(allow! prepared k ask)}
+      (if (:challengeId @prepared) "Allow with passkey" "Getting ready…")])])
 
-(defn- secret-render [paste k ask]
+(defn- secret-render [paste prepared k ask]
   (let [{:keys [busy error sent]} @(rf/subscribe [:ask-state (:id ask)])
         send-paste! (fn []
                       (let [v @paste]
@@ -149,17 +171,28 @@
      [:h3 (or (:reason ask) "Claude needs a secret")]
      (secret-facts ask)
      (when (some? @paste) (paste-row paste send-paste!))
-     (when error [:p.ask-error error])
+     (when-let [e (or error (:error @prepared))] [:p.ask-error e])
      (when (and busy (not sent)) [:p.muted.small "Waiting for your passkey, then 1Password…"])
-     (secret-actions k ask paste busy)]))
+     (secret-actions k ask paste busy prepared)]))
 
-(defn- secret-card [_k _ask]
-  (let [paste (r/atom nil)] ; nil = closed; a string while the paste field is open
+(def ^:private challenge-refresh-ms
+  "A prepared challenge is fetched again before the broker's 5 minutes end."
+  (* 4 60 1000))
+
+(defn- secret-card [_k ask]
+  (let [paste (r/atom nil) ; nil = closed; a string while the paste field is open
+        prepared (r/atom nil) ; the broker's challenge for this ask, fetched before the tap
+        timer (atom nil)]
     (r/create-class
      {:display-name "secret-card"
+      :component-did-mount
+      (fn []
+        (when (:vault @(rf/subscribe [:me]))
+          (prepare-read! prepared ask)
+          (reset! timer (js/setInterval #(prepare-read! prepared ask) challenge-refresh-ms))))
       ;; The pasted text never outlives the card.
-      :component-will-unmount #(reset! paste nil)
-      :reagent-render (fn [k ask] (secret-render paste k ask))})))
+      :component-will-unmount #(do (reset! paste nil) (some-> @timer js/clearInterval))
+      :reagent-render (fn [k ask] (secret-render paste prepared k ask))})))
 
 (defn- permit-actions
   "Deny and Allow: a \"Run as root\" card's go to the server's front (README decision 52), the
