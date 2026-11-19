@@ -17,8 +17,8 @@
   (is (not (rules/vault-ref? "" "op:///GitHub/token"))))
 
 (deftest a-purpose-is-checked
-  (is (= {:kind "read" :ref "op://Claudia/a/b" :pubkey key44 :request "r1"}
-         (rules/purpose "Claudia" {:kind "read" :ref "op://Claudia/a/b" :pubkey key44 :request "r1" :extra 1})))
+  (is (= {:kind "read" :ref "op://Claudia/a/b" :pubkey key44 :request "r1" :chat "home/c1"}
+         (rules/purpose "Claudia" {:kind "read" :ref "op://Claudia/a/b" :pubkey key44 :request "r1" :chat "home/c1" :extra 1})))
   (is (:error (rules/purpose "Claudia" {:kind "read" :ref "op://Claudia/a/b" :pubkey "short" :request "r1"})))
   (is (:error (rules/purpose "Claudia" {:kind "read" :ref "op://Claudia/a/b" :pubkey key44})))
   (is (= {:kind "add-passkey"} (rules/purpose "Claudia" {:kind "add-passkey"})))
@@ -95,3 +95,13 @@
   (is (nil? (rules/grant-changes [{:item "i1" :email "P@x" :on true}])))
   (is (nil? (rules/grant-changes [{:item "i1" :email "p@x" :on "yes"}])))
   (is (= "grants" (:kind (rules/purpose "Claudia" {:kind "grants" :changes [{:item "i" :email "p@x" :on false}]})))))
+
+(deftest one-hour-per-chat-per-key
+  (let [k (rules/standing-key "a@x" "home/c1" "i1")
+        s (rules/add-standing {[:old] 5} k 1000)]
+    (is (= {k (+ 1000 rules/standing-ms)} s))
+    (is (rules/standing? s k 2000))
+    (is (rules/standing? s k (+ 1000 rules/standing-ms)))
+    (is (not (rules/standing? s k (+ 1001 rules/standing-ms))))
+    (is (not (rules/standing? s (rules/standing-key "a@x" "home/c2" "i1") 2000)))
+    (is (not (rules/standing? s (rules/standing-key "a@x" "home/c1" "i2") 2000)))))

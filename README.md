@@ -939,6 +939,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     every key; anyone else only the keys ticked for them, checked before the passkey asks and again
     at the read. Settings → Keys shows admins the vault's keys (titles only) and the people; ticks
     change on the page and Save sends the batch, approved with the admin's passkey.
+    One tap per key per chat for an hour (2026-11-19, the user's call: every key the same, no
+    per-key setting): after a passkey approves a read, that chat may read that key again for an
+    hour without a tap; a different key, or another chat, asks again. The broker keeps these hours
+    in memory only (a restart asks again). A secret card first asks the broker for a read within
+    the hour and falls back to the passkey.
     Next, not built here: the gate's SSH login as `core` by a 5-minute certificate the broker
     signs after a passkey (after a tested `break-glass` user on the gate, decision 55).
 67. Agents keep bookmarks too (2026-11-19, the user's call: "build it"). Every chat on a runner

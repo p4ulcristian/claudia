@@ -33,13 +33,15 @@
 
 (defn read-purpose
   "What approving a secret read is for, from the page's body: {:kind \"read\" :ref :pubkey
-  :request}, or {:error text}."
-  [vault {:keys [ref pubkey request]}]
+  :request :chat}, or {:error text}. chat (\"<server>/<chat id>\") is what the hour of trust
+  after the tap is bound to."
+  [vault {:keys [ref pubkey request chat]}]
   (cond
     (not (vault-ref? vault ref)) {:error (str "Only references in the vault \"" vault "\" are read (op://" vault "/item/field).")}
     (not (pubkey? pubkey)) {:error "pubkey must be 32 bytes as standard base64."}
     (not (and (string? request) (<= 1 (count request) 100))) {:error "request (the ask's id) is needed."}
-    :else {:kind "read" :ref ref :pubkey pubkey :request request}))
+    (not (and (string? chat) (<= 3 (count chat) 200))) {:error "chat (<server>/<chat id>) is needed."}
+    :else {:kind "read" :ref ref :pubkey pubkey :request request :chat chat}))
 
 (defn grant-changes
   "An admin's changes to who may use which key, from the page: [{:item :email :on}] (1 to 200,
@@ -122,3 +124,21 @@
   "An admin may use every key; anyone else only the keys an admin ticked for them."
   [admin? granted-ids item-id]
   (boolean (or admin? (contains? (set granted-ids) item-id))))
+
+(def standing-ms "How long a tap lets one chat use one key again without asking." (* 60 60 1000))
+
+(defn standing-key
+  "What an hour of trust is bound to: the person, the chat and the key (its item id)."
+  [email chat item-id]
+  [email chat item-id])
+
+(defn add-standing
+  "The hours of trust with one more, from now; ended ones dropped."
+  [standing k now]
+  (-> (into {} (remove (fn [[_ until]] (< until now))) standing)
+      (assoc k (+ now standing-ms))))
+
+(defn standing?
+  "Whether the chat may still use the key without a tap."
+  [standing k now]
+  (boolean (some-> (get standing k) (>= now))))

@@ -492,11 +492,12 @@ The hub's calls (signed in, same origin; the hub replaces any `email` in the bod
 | Call | Answer |
 |---|---|
 | `GET /hub/passkeys` | `{ passkeys: [{ id, name, createdAt, usedAt }] }` |
-| `POST /hub/approve/options` `{ kind: "read", ref, pubkey, request }` \| `{ kind: "add-passkey" }` \| `{ kind: "remove-passkey", id }` | `{ challengeId, options }` (WebAuthn request options, JSON); 409 no passkey yet, 400 a bad purpose |
+| `POST /hub/approve/options` `{ kind: "read", ref, pubkey, request, chat }` \| `{ kind: "add-passkey" }` \| `{ kind: "remove-passkey", id }` | `{ challengeId, options }` (WebAuthn request options, JSON); 409 no passkey yet, 400 a bad purpose |
 | `POST /hub/vault/read` `{ challengeId, response }` | `{ sealed }`; 403 the approval is not open, not theirs, for another kind, or the signature fails; 503 no token; 502 1Password's error |
 | `POST /hub/passkeys/register/options` `{ code }` (first passkey) \| `{ challengeId, response }` (an `add-passkey` approval) | `{ registrationId, options }` (WebAuthn creation options) |
 | `POST /hub/passkeys/register` `{ registrationId, response, name }` | `{ passkey }` |
 | `POST /hub/passkeys/remove` `{ challengeId, response }` (a `remove-passkey` approval) | `{ removed }` |
+| `POST /hub/vault/standing` `{ ref, pubkey, request, chat }` | `{ sealed }` without a tap when this chat (`<server>/<chat id>`) read this key with a passkey in the last hour; 404 otherwise (ask for the passkey) |
 | `GET /hub/keys` | the broker's admins: `{ items: [{ id, title }], grants: [{ item, email }], admins }`; 403 others |
 | `POST /hub/keys/grants` `{ challengeId, response }` (a `grants` approval: `{ kind: "grants", changes: [{ item, email, on }] }`, 1 to 200) | `{ grants }`; admins only |
 

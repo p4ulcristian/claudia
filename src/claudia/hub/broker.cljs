@@ -16,6 +16,7 @@
    ["POST" "/hub/passkeys/remove"] "/passkeys/remove"
    ["POST" "/hub/approve/options"] "/approve/options"
    ["POST" "/hub/vault/read"] "/vault/read"
+   ["POST" "/hub/vault/standing"] "/vault/standing"
    ["GET" "/hub/keys"] "/keys/list"
    ["POST" "/hub/keys/grants"] "/keys/grants"})
 

@@ -12,6 +12,9 @@
 ;; Open challenges: id -> {:email :challenge :purpose :expires} (claudia.broker.rules/open-challenge).
 (defonce ^:private pending (atom {}))
 
+;; Hours of trust after a tap: [email chat item-id] -> until (ms). In memory only: a restart asks again.
+(defonce ^:private standing (atom {}))
+
 (defn- fail [status text] (throw (ex-info text {:status status})))
 
 (defn- new-id [] (.toString (crypto/randomBytes 18) "base64url"))
@@ -82,16 +85,34 @@
           (.then (fn [_] (webauthn/authentication-options cfg keys-of)))
           (.then (fn [^js o] {:challengeId (open! email (.-challenge o) p) :options o}))))))
 
+(defn- seal-for! [email {:keys [ref pubkey request]} how]
+  (js/console.log (str "broker: read " ref " for request " request " by " email " (" how ")"))
+  (.then (vault/read-sealed ref pubkey) (fn [sealed] {:sealed sealed})))
+
 (defn read!
   "A secret read the person approved (and may still make): the value sealed to the runner's
-  one-time key."
+  one-time key. The tap also lets that chat use that key for an hour without asking."
   [cfg {:keys [email challengeId response]}]
   (when-not (vault/ready?) (fail 503 "The broker has no 1Password token: it reads no secrets."))
   (-> (approve! cfg email challengeId "read" response)
-      (.then (fn [{:keys [ref] :as p}] (.then (check-use! cfg email ref) (fn [_] p))))
-      (.then (fn [{:keys [ref pubkey request]}]
-               (js/console.log (str "broker: read " ref " for request " request " by " email))
-               (.then (vault/read-sealed ref pubkey) (fn [sealed] {:sealed sealed}))))))
+      (.then (fn [{:keys [ref chat] :as p}]
+               (.then (check-use! cfg email ref)
+                      (fn [item]
+                        (swap! standing rules/add-standing (rules/standing-key email chat (:id item)) (js/Date.now))
+                        (seal-for! email p "passkey")))))))
+
+(defn read-standing!
+  "A read without a tap, when this chat's hour of trust for this key still runs; 404 otherwise
+  (the page then asks for the passkey)."
+  [cfg {:keys [email] :as body}]
+  (when-not (vault/ready?) (fail 503 "The broker has no 1Password token: it reads no secrets."))
+  (let [p (rules/read-purpose (:vault cfg) body)]
+    (when (:error p) (fail 400 (:error p)))
+    (.then (check-use! cfg email (:ref p))
+           (fn [item]
+             (if (rules/standing? @standing (rules/standing-key email (:chat p) (:id item)) (js/Date.now))
+               (seal-for! email p "within the hour")
+               (fail 404 "This chat needs a passkey tap for this key."))))))
 
 (defn- code-hash [code] (.digest (.update (crypto/createHash "sha256") (str code)) "hex"))
 
