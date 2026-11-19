@@ -45,13 +45,28 @@ jobs:
           node-version: 26
           cache: npm
 
+      # The JVM jars shadow-cljs needs (~/.m2) are kept between runs, keyed on shadow-cljs.edn: a
+      # run fetches from Maven Central only when the dependencies change.
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: 25
+          cache: maven
+          cache-dependency-path: shadow-cljs.edn
 
       - name: Install
         run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+
+      # Maven Central drops a download now and then: the jars are fetched on their own first, up to
+      # four times, before anything compiles.
+      - name: JVM dependencies (retried)
+        run: |
+          for i in 1 2 3 4; do
+            npx shadow-cljs classpath > /dev/null && exit 0
+            echo "Maven fetch failed (try $i), again in $((i * 15)) s"
+            sleep $((i * 15))
+          done
+          exit 1
 
       - name: Test
         run: npm test
@@ -71,10 +86,14 @@ jobs:
           cache: npm
 
       # shadow-cljs compiles on the JVM.
+      # The JVM jars shadow-cljs needs (~/.m2) are kept between runs, keyed on shadow-cljs.edn: a
+      # run fetches from Maven Central only when the dependencies change.
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: 25
+          cache: maven
+          cache-dependency-path: shadow-cljs.edn
 
       - name: clj-kondo (pinned, checksum verified)
         run: |
@@ -92,6 +111,17 @@ jobs:
 
       - name: Install
         run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+
+      # Maven Central drops a download now and then: the jars are fetched on their own first, up to
+      # four times, before anything compiles.
+      - name: JVM dependencies (retried)
+        run: |
+          for i in 1 2 3 4; do
+            npx shadow-cljs classpath > /dev/null && exit 0
+            echo "Maven fetch failed (try $i), again in $((i * 15)) s"
+            sleep $((i * 15))
+          done
+          exit 1
 
       - name: Build (host runner front hub broker root sudo web)
         run: |
