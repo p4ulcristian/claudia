@@ -139,7 +139,9 @@ check_and_compile() {
 	npx shadow-cljs compile test >"$home/test-build.log" 2>&1 || { fail "the tests do not compile"; return 1; }
 	node out/test.js >"$home/test.log" 2>&1 &
 	tests=$!
-	{ npx shadow-cljs release host runner front hub broker root sudo web && npm run build:web-files >/dev/null; } ||
+	# package.json's build: the one list of release builds, so this copy (installed by install.sh)
+	# never builds fewer programs than the checkout has (2026-11-19: no out/broker.js).
+	npm run build >"$home/build.log" 2>&1 ||
 		{ kill "$tests" 2>/dev/null; wait "$tests" 2>/dev/null; fail "a release build failed"; return 1; }
 	wait "$tests" || { fail "tests failed: $(grep -m1 -oE '[0-9]+ failures, [0-9]+ errors' "$home/test.log")"; return 1; }
 	npx playwright-core install chromium-headless-shell >"$home/browser.log" 2>&1 || { fail "the smoke test's browser did not install"; return 1; }
