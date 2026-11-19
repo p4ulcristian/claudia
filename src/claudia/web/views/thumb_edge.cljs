@@ -1,11 +1,11 @@
 (ns claudia.web.views.thumb-edge
-  "The right edge of a touch tablet (README decision 40): a big tablet held in two hands is held at
-  its sides partway up, so the right thumb rests on the right edge at middle height. There: Stop
-  (the open chat's running turn) left of the mic and Settings right of it; over them search (the chats), My words (the panel
-  of claudia.web.views.my-words: see, add and remove them) and archive (the open chat, asked first;
-  unarchive for an archived one); under them ‹ (the previous picture), New chat and › (the next
-  picture), left going left and right going right (the rail has no + any more). Each at least
-  12 mm, all see-through at rest.
+  "The right edge of a touch tablet (README decisions 40, 73): a big tablet held in two hands is held
+  at its sides partway up, so the right thumb rests on the right edge at middle height. There a rail
+  on the right wall, one column with the mic in its middle: over it search (the chats), My words
+  (the panel of claudia.web.views.my-words: see, add and remove them), archive (the open chat,
+  asked first; unarchive for an archived one) and Stop (the open chat's running turn); under it
+  Settings, ‹ (the previous picture), New chat and › (the next picture). Each at least 12 mm, all
+  see-through at rest. The mic can be dragged out of the rail (claudia.web.views.mic).
   The composer leaves its own mic out on these screens (claudia.web.views.chat). Stop shows while
   the open chat's turn runs; the ‹ › while the picture is unfolded and has more than one picture;
   the mic wherever the composer shows; My words where the composer shows and the hub has a listen
@@ -64,14 +64,6 @@
   (let [m @(rf/subscribe [:my-words])]
     (boolean (and (composer-shown?) (some? m) (not (:off m))))))
 
-(defn- top-row
-  "Search, My words and archive, over the mic."
-  [oc]
-  [:div.edge-row
-   [search-button]
-   (when (words-shown?) [words-button])
-   (when oc [archive-button (:ck oc)])])
-
 (defn- stop-button
   "Stops the open chat's running turn (as the composer's Stop and Esc)."
   []
@@ -101,22 +93,24 @@
             :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
       [:path {:d cog-path}] [:circle {:cx 12 :cy 12 :r 3}]]]))
 
-(defn- middle-row
-  "Stop, the mic, Settings: an empty slot keeps the mic in the middle."
+(defn- over-mic
+  "Search, My words, archive, Stop: over the mic, ending at it."
   [oc]
   (let [running (when oc (:running @(rf/subscribe [:chat (:ck oc)])))]
-    [:div.edge-row
-     (if running [stop-button] [:span.edge-gap])
-     (if (composer-shown?) [:f> mic/button (if oc (:ck oc) :new)] [:span.edge-gap])
-     [settings-button]]))
+    [:div.edge-over
+     [search-button]
+     (when (words-shown?) [words-button])
+     (when oc [archive-button (:ck oc)])
+     (when running [stop-button])]))
 
-(defn- bottom-row
-  "‹ New chat ›, under the mic: left goes left, right goes right."
+(defn- under-mic
+  "Settings, ‹ New chat ›: under the mic, starting at it."
   [steps? index n]
-  [:div.edge-row
-   (if steps? (step-button "Previous picture" -1 (<= index 0)) [:span.edge-gap])
-   (if @(rf/subscribe [:new-chat-read-only?]) [:span.edge-gap] [new-button])
-   (if steps? (step-button "Next picture" 1 (>= index (dec n))) [:span.edge-gap])])
+  [:div.edge-under
+   [settings-button]
+   (when steps? (step-button "Previous picture" -1 (<= index 0)))
+   (when-not @(rf/subscribe [:new-chat-read-only?]) [new-button])
+   (when steps? (step-button "Next picture" 1 (>= index (dec n))))])
 
 (defn- edge-view []
   (let [oc @(rf/subscribe [:open-chat])
@@ -124,9 +118,9 @@
         n (count pictures)
         steps? (and (not (:folded? @(rf/subscribe [:fold-state]))) (> n 1))]
     [:div.thumb-edge
-     [top-row oc]
-     [middle-row oc]
-     [bottom-row steps? index n]]))
+     [over-mic oc]
+     (if (composer-shown?) [:f> mic/button (if oc (:ck oc) :new) {:rail? true}] [:span.edge-gap])
+     [under-mic steps? index n]]))
 
 (defn edge
   "The edge; mounting it asks the hub whether it has a listen service (for My words)."

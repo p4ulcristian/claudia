@@ -520,7 +520,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
-    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
+    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (since 2026-11-19 one column on a rail on the right wall, decision 73; before, 2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
       circles (no + since 2026-11-17: a new chat starts from the edge's New chat or Alt+N) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
@@ -1012,6 +1012,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     cannot move to another computer); New chat here and Pin stay. Opening the browser again, or
     another chat, starts on the chat's own computer. Instead of: a started chat's computer fixed
     in the browser.
+73. The mic rail and the half flower (2026-11-19, the user's call: "a second sidebar on tablets
+    where the microphone button would be ... it would touch the wall"; "the buttons should make up
+    one line and the microphone button should be in the center"; "drag ... out of the inner and outer
+    circle ... would move the circle towards my finger"; "drag should drop the recording"; "kept
+    per device"; "on mobile it stays the same"). On a touch tablet a rail 88 px wide stands on the
+    right wall with the page beside it, never under it: one column, the mic in its middle at
+    mid-height; over it search, My words, archive, Stop; under it Settings, ‹, New chat, › (the
+    order is to be looked at again). Held on the rail, the flower is half: its petals and the
+    voice's bars only to the left, still centred on the mic, top to bottom cancel, add, send, now,
+    each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
+    px from the press), the clip is dropped and the mic follows the finger, a blue disc saying
+    move; let go, it stays there with its whole flower (its centre kept 128 px inside the screen
+    and off the rail, so the flower fits), its slot in the rail a dashed ring; let go on the rail or
+    within 130 px of the slot, it goes home. Its spot is kept on the device (localStorage, as
+    fractions of the screen, clamped again when the screen turns). The phone keeps its mic in the
+    bottom middle with the whole flower and no move. Instead of: the 3x3 grid floating 18 px from
+    the edge over the page, the mic 128 px in so the whole flower fitted.
 74. A new chat starts in the last chat's place, and the File Browser has no folder section
     (2026-11-19, the user's call: "new chat should start last chat"; "remove the three buttons ...
     I want to remove that section"). Replaces decision 65. New chat (and a group's +) starts on the

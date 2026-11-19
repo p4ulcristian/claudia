@@ -19,26 +19,36 @@
   .cs-fab svg { width: 32px; height: 32px; }
 }
 
-/* iPad: the left edge holds the chats (centred at middle height), the right edge the mic and the
-   picture's ‹ › (claudia.web.views.thumb-edge). */
+/* iPad: the left edge holds the chats (centred at middle height), the right wall the mic rail
+   (claudia.web.views.thumb-edge). */
 @media (pointer: coarse) and (min-width: 680px) {
   .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
   .rail-chat { min-height: 64px; justify-content: center; }
 
-  /* The ‹ mic › row ends 18 px from the right edge: the mic's centre is 128 px in, so the flower
-     (240 px, centred on the mic) shows whole with 8 px to spare. */
-  .thumb-edge { position: fixed; z-index: 35; right: calc(18px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  /* The mic rail (README decision 73): a column on the right wall, the page beside it, the mic in
+     its middle at mid-height; what is over the mic ends at it, what is under starts at it. */
+  :root { --mic-rail-w: 88px; --edge-gap: min(12px, 1.4vh); }
+  .app { padding-right: calc(var(--mic-rail-w) + env(safe-area-inset-right)); }
+  .thumb-edge { position: fixed; z-index: 35; top: 0; bottom: 0; right: 0; box-sizing: border-box;
+    width: calc(var(--mic-rail-w) + env(safe-area-inset-right)); padding: calc(var(--edge-t) + env(safe-area-inset-top)) env(safe-area-inset-right) var(--edge-b) 0;
+    display: flex; flex-direction: column; align-items: center; gap: var(--edge-gap);
+    background: var(--bg2); box-shadow: inset 1.5px 0 0 var(--line); }
+  .edge-over, .edge-under { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: var(--edge-gap); }
+  .edge-over { justify-content: flex-end; }
+  .edge-under { justify-content: flex-start; }
   .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
   .thumb-edge .mic-button svg { width: 30px; height: 30px; }
-  /* At rest the edge mic lets the page show through it; held, it is solid again. */
-  /* Rows of 64 px slots, 14 px apart; an empty slot keeps the mic in the middle column. */
-  .edge-row { display: flex; gap: 14px; justify-content: center; }
-  .edge-gap { width: 64px; height: 64px; }
+  .edge-gap { width: 64px; height: 64px; flex: none; }
+  /* Dragged out of the rail, the mic sits where it was let go (its centre there) and its slot
+     stays as a dashed ring; while dragged it trails the finger a little. */
+  .mic-slot { box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--line); }
+  .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
+  .mic.moving { transition: left 0.12s ease-out, top 0.12s ease-out; }
+  .thumb-edge .mic.moved .mic-clips, .thumb-edge .mic.moved .mic-hint { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
   .edge-icon { font-size: 0; }
   .edge-icon svg { width: 28px; height: 28px; }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
-  .thumb-edge .mic:not(.starting):not(.recording) .mic-button, .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
+  .thumb-edge .mic:not(.starting):not(.recording):not(.moving) .mic-button, .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
   .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
   .thumb-edge .mic-clips, .thumb-edge .mic-hint { left: auto; right: calc(100% + 12px); bottom: auto; top: 50%; transform: translateY(-50%); }
   .edge-step { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; line-height: 1; color: var(--fg);
