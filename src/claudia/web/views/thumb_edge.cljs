@@ -2,7 +2,7 @@
   "The right edge of a touch tablet (README decisions 40, 73): a big tablet held in two hands is held
   at its sides partway up, so the right thumb rests on the right edge at middle height. There a rail
   on the right wall, one column with the mic in its middle: over it search (the chats), My words
-  (the panel of claudia.web.views.my-words: see, add and remove them), archive (the open chat,
+  (its view in the right half, claudia.web.views.my-words: see, add and remove them), archive (the open chat,
   asked first; unarchive for an archived one) and Stop (the open chat's running turn); under it
   Settings, ‹ (the previous picture), New chat and › (the next picture). Each at least 12 mm, all
   see-through at rest. The mic can be dragged out of the rail (claudia.web.views.mic).
