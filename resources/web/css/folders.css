@@ -1,7 +1,9 @@
 /* The Folders modal (claudia.web.views.folders, README decisions 61 to 64): a big card over the
-   page, chalk look; on top the server's bookmarks as cards, left the filter and the tree
-   (react-arborist), right the selected folder or the Trash. Under 680 px wide it fills the window
-   and the two sides stack. */
+   page, chalk look; on top the server's bookmarks as cards, then three panes (README decision 67):
+   left the filter and the tree (react-arborist), in the middle the folder's contents as a grid or a
+   list, right the picked file's preview, the folder, or the Trash. The right pane is quiet: small
+   type, label-value lines, no tiles. Under 1000 px the preview goes under the contents; under
+   680 px wide it fills the window and the panes stack. */
 
 .fd-backdrop { position: fixed; inset: 0; z-index: 44; display: grid; place-items: center; padding: max(3vh, var(--top-safe)) 3vw 3vh; background: rgb(0 0 0 / 0.5); animation: confirm-in 0.12s ease-out; }
 .fd-screen { width: min(1280px, 100%); height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); box-shadow: 0 18px 60px rgb(0 0 0 / 0.5); }
@@ -11,9 +13,9 @@
 .fd-switch { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .fd-close { font: 700 24px/1 var(--hand); color: var(--muted); padding: 2px 10px; border-radius: 8px; }
 .fd-close:hover { color: var(--fg); background: var(--panel2); }
-.fd-body { display: grid; grid-template-columns: minmax(260px, 380px) minmax(0, 1fr); min-height: 0; }
+.fd-body { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(280px, 400px); min-height: 0; }
 .fd-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px; border-right: 1px solid var(--line); }
-.fd-right { min-height: 0; overflow-y: auto; padding: 18px 22px; }
+.fd-right { min-height: 0; overflow-y: auto; padding: 14px 16px; border-left: 1px solid var(--line); }
 .fd-head { font: 700 15px var(--hand); color: var(--muted); margin: 2px 0 4px; }
 .fd-none { margin: 0; font-size: 12.5px; }
 .fd-warn { margin: 4px 0; color: var(--amber); font-size: 12.5px; overflow-wrap: anywhere; }
@@ -51,15 +53,15 @@ ul.fd-warn { padding-left: 18px; }
 .fd-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--chalk); stroke-width: 1.3; }
 .fd-name { overflow: hidden; text-overflow: ellipsis; }
 
-.fd-detail { display: grid; gap: 12px; align-content: start; max-width: 760px; }
-.fd-title { margin: 0; font: 700 28px/1.1 var(--hand); overflow-wrap: anywhere; }
+.fd-detail { display: grid; gap: 10px; align-content: start; }
+.fd-title { margin: 0; font: 700 20px/1.15 var(--hand); overflow-wrap: anywhere; }
 .fd-star { color: var(--amber); }
-.fd-where { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
-.fd-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.fd-tile { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line); }
-.fd-tile-label { font: 700 13px var(--hand); color: var(--muted); }
-.fd-tile-value { font-size: 13.5px; overflow-wrap: anywhere; }
-.fd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-where { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.fd-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 12.5px; }
+.fd-facts dt { color: var(--muted); }
+.fd-facts dd { margin: 0; overflow-wrap: anywhere; }
+.fd-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.fd-right .fd-btn { font-size: 13.5px; padding: 2px 9px; }
 .fd-btn { font: 700 15px var(--hand); padding: 3px 12px; border-radius: 8px; border: 1px solid var(--line); color: var(--fg); }
 .fd-btn:hover, .fd-btn.on { background: var(--panel2); }
 .fd-btn:disabled { opacity: 0.45; cursor: default; background: none; }
@@ -67,7 +69,7 @@ ul.fd-warn { padding-left: 18px; }
 .fd-btn.warn { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, var(--line)); }
 .fd-btn.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 50%, var(--line)); }
 .fd-chats { display: grid; gap: 2px; }
-.fd-chat { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; border-radius: 6px; text-align: left; color: var(--fg); }
+.fd-chat { display: flex; justify-content: space-between; gap: 12px; padding: 3px 6px; border-radius: 6px; text-align: left; color: var(--fg); font-size: 12.5px; }
 .fd-chat:hover { background: var(--panel); }
 .fd-chat-at { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .fd-ask { display: grid; gap: 6px; }
@@ -77,10 +79,63 @@ ul.fd-warn { padding-left: 18px; }
 .fd-trash-text { display: grid; gap: 2px; font-size: 13px; overflow-wrap: anywhere; }
 .fd-trash .fd-btn.danger:last-child { justify-self: start; }
 
+/* the contents pane */
+.fd-mid { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.fd-mid-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.fd-mid-name { font: 700 17px var(--hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-mid-count { margin-right: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.fd-modes { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; }
+.fd-modes button { display: grid; place-items: center; width: 26px; height: 22px; border-radius: 6px; color: var(--muted); }
+.fd-modes button.on { background: var(--panel2); color: var(--fg); }
+.fd-mode-icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.fd-mid-body { min-height: 0; overflow-y: auto; }
+.fd-pad { padding: 12px; margin: 0; }
+.fd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; padding: 10px; align-content: start; min-height: 100%; }
+.fd-gi { display: grid; gap: 5px; justify-items: center; padding: 8px 6px 6px; border-radius: 10px; border: 1px solid transparent; color: var(--fg); min-width: 0; }
+.fd-gi:hover { background: var(--panel); }
+.fd-gi.on, .fd-li.on { background: var(--panel2); border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fd-face, .fd-thumb { width: 72px; height: 60px; border-radius: 6px; }
+.fd-face { display: grid; place-items: center; background: var(--bg2); }
+.fd-face.dir { background: none; }
+.fd-face.dir .fd-icon { width: 46px; height: 46px; stroke-width: 0.9; }
+.fd-thumb { object-fit: cover; background: var(--bg2); }
+.fd-gi-name { max-width: 100%; font-size: 12px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fd .ft, .fd-face .ft, .fd-li-face .ft { min-width: 30px; padding: 0 4px; border-radius: 5px; text-align: center; font: 700 10px/16px var(--sans); color: var(--ft); background: color-mix(in srgb, var(--ft) 12%, transparent); }
+.fd-list { display: grid; align-content: start; padding: 6px; min-height: 100%; }
+.fd-li { display: grid; grid-template-columns: 34px minmax(0, 1fr) 80px 150px; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid transparent; text-align: left; color: var(--fg); font-size: 13px; }
+.fd-li:hover { background: var(--panel); }
+.fd-li-face { display: grid; place-items: center; }
+.fd-li-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-li-size, .fd-li-at { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-li-size { text-align: right; }
+
+/* the preview pane */
+.fd-pv { display: grid; gap: 10px; align-content: start; }
+.fd-pv-head { display: grid; gap: 2px; }
+.fd-pv-name { font: 700 18px/1.2 var(--hand); overflow-wrap: anywhere; }
+.fd-pv-meta { font-size: 11.5px; color: var(--muted); }
+.fd-pv-body { min-width: 0; }
+.fd-pv-img { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 8px; background: repeating-conic-gradient(var(--bg2) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.fd-pv-media { display: block; width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
+.fd-pv-audio { width: 100%; }
+.fd-pv-pdf { display: block; width: 100%; height: 70vh; border: 0; border-radius: 8px; background: #fff; }
+.fd-pv-md { font-size: 13px; }
+.fd-readme { display: grid; gap: 6px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+@media (max-width: 999px) and (min-width: 680px) {
+  .fd-body { grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .fd-left { grid-row: 1 / 3; }
+  .fd-right { grid-column: 2; border-left: 0; border-top: 1px solid var(--line); }
+}
+
 @media (max-width: 679px) {
   .fd-backdrop { padding: 0; }
   .fd-screen { border-radius: 0; border: 0; }
-  .fd-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 55%) minmax(0, 1fr); }
+  .fd-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 30%) minmax(0, 35%) minmax(0, 1fr); }
+  .fd-mid { border-bottom: 1px solid var(--line); }
+  .fd-right { border-left: 0; }
+  .fd-li { grid-template-columns: 34px minmax(0, 1fr) 70px; }
+  .fd-li-at { display: none; }
   .fd-left { border-right: 0; border-bottom: 1px solid var(--line); }
   .fd-right { padding: 14px; }
 }

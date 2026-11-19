@@ -110,6 +110,32 @@
   [folder]
   (swap! sizes (fn [m] (into {} (remove (fn [[k _]] (or (reach/within? folder k) (reach/within? k folder)))) m))))
 
+;; ---- one folder's contents (files too) ----
+
+(defn- stat-entry
+  "Promise of {:name :dir? :mtime :size} for the entry named n of folder, symlinks followed (a
+  broken one is a file of unknown size)."
+  [folder n]
+  (-> (.stat fsp (path/join folder n))
+      (.then (fn [^js st] {:name n :dir? (.isDirectory st) :mtime (js/Math.round (.-mtimeMs st)) :size (.-size st)}))
+      (.catch (fn [_] {:name n :dir? false :mtime nil :size nil}))))
+
+(defn contents!
+  "Promise of folder's contents answer (rules/contents); rejects with the OS error."
+  [folder]
+  (-> (.readdir fsp folder #js {:withFileTypes true})
+      (.then (fn [ds]
+               (let [picked (rules/first-entries (map (fn [^js d] {:name (.-name d) :dir? (.isDirectory d)}) ds))]
+                 (-> (js/Promise.all (into-array (map #(stat-entry folder (:name %)) picked)))
+                     (.then #(rules/contents folder (vec %) (.-length ds)))))))))
+
+(defn file-stat!
+  "Promise of the file at p's {:size} (symlinks followed), nil when p is no file."
+  [p]
+  (-> (.stat fsp p)
+      (.then (fn [^js st] (when (.isFile st) {:size (.-size st)})))
+      (.catch (fn [_] nil))))
+
 ;; ---- repos inside a folder (for the delete dialog) ----
 
 (def ^:private repo-depth 4)

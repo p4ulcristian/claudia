@@ -1,6 +1,6 @@
 (ns claudia.slave.folders.rules
   "The folder browser's rules as plain data (README decisions 63 and 64): which folders the runner
-  never deletes, a folder's listing, the Trash's expiry and total, a folder's chats, the git summary
+  never deletes, a folder's listing, a folder's contents and which files preview, the Trash's expiry and total, a folder's chats, the git summary
   the delete dialog shows, and the errors the OS gives as clear words."
   (:require ["node:path" :as path]
             [clojure.string :as str]
@@ -68,6 +68,58 @@
        (map #(entry-row parent %))
        (sort-by (juxt (comp str/lower-case :name) :name))
        vec))
+
+;; ---- one folder's contents (folders and files, for the contents pane) ----
+
+(def max-contents "The most entries a folder's contents answer holds; the rest are counted." 5000)
+
+(def preview-types
+  "The files the page previews from their bytes, by extension: the content type they are sent with."
+  {"png" "image/png" "jpg" "image/jpeg" "jpeg" "image/jpeg" "gif" "image/gif" "webp" "image/webp"
+   "avif" "image/avif" "svg" "image/svg+xml" "bmp" "image/bmp" "ico" "image/x-icon"
+   "mp4" "video/mp4" "m4v" "video/mp4" "webm" "video/webm" "mov" "video/quicktime"
+   "mp3" "audio/mpeg" "m4a" "audio/mp4" "wav" "audio/wav" "ogg" "audio/ogg" "flac" "audio/flac"
+   "pdf" "application/pdf"})
+
+(defn ext-of "A file name's extension in lower case, \"\" when it has none (a leading dot is not one)." [file-name]
+  (let [i (str/last-index-of file-name ".")]
+    (if (and i (pos? i)) (str/lower-case (subs file-name (inc i))) "")))
+
+(defn preview-type "The content type a file is previewed with, or nil when it is none of preview-types." [file-name]
+  (get preview-types (ext-of file-name)))
+
+(defn kind-of
+  "What a file is to the page: \"image\", \"video\", \"audio\", \"pdf\", or \"file\" (shown as text
+  when it reads as text)."
+  [file-name]
+  (let [t (preview-type file-name)]
+    (cond (nil? t) "file"
+          (= t "application/pdf") "pdf"
+          :else (first (str/split t #"/")))))
+
+(defn content-row
+  "An entry {:name :dir? :mtime :size} inside parent as the contents pane gets it."
+  [parent {entry-name :name :keys [dir? mtime size]}]
+  {:name entry-name :path (path/join parent entry-name) :dir (boolean dir?) :mtime mtime
+   :size (when-not dir? size) :hidden (str/starts-with? entry-name ".")
+   :kind (if dir? "folder" (kind-of entry-name))})
+
+(defn ordered
+  "Entries ({:name :dir?}) folders first, then files, each by name (case folded)."
+  [entries]
+  (vec (sort-by (juxt (complement :dir?) (comp str/lower-case :name) :name) entries)))
+
+(defn first-entries "The entries a contents answer holds: the first max-contents of ordered." [entries]
+  (vec (take max-contents (ordered entries))))
+
+(defn contents
+  "A folder's contents answer: {:path :entries (shown entries, ordered) :more (entries left out past
+  max-contents)}. shown: the first entries ({:name :dir? :mtime :size}) inside parent; total: how
+  many the folder holds."
+  [parent shown total]
+  {:path parent
+   :entries (mapv #(content-row parent %) (ordered shown))
+   :more (max 0 (- total (count shown)))})
 
 ;; ---- size ----
 

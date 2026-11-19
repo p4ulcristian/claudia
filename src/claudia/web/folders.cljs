@@ -82,3 +82,12 @@
   "POST /api/folders/<what> (trash, delete, restore, purge) with body."
   [server what body]
   (api/post-json (api/url server (str "folders/" what) nil) body))
+
+(defn contents! [server p] (api/fetch-json (api/url server "folders/contents" {:path p})))
+
+(defn file-url
+  "The bytes of the file at p, for an image, video, audio or PDF preview (byte ranges allowed)."
+  [server p]
+  (api/url server "folders/file" {:path p}))
+
+(defn file-text! [server p] (api/fetch-json (api/url server "folders/file" {:path p :read 1})))
