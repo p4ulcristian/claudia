@@ -23,12 +23,6 @@
                               {:name "apps" :dir? true :mtime 2} {:name ".git" :dir? true :mtime 1}])))
   (is (= "/x" (:path (rules/entry-row "/" {:name "x" :mtime 0})))))
 
-(deftest du-bytes-reads-the-last-line
-  (is (= 4096 (rules/du-bytes "4096\t/w/app\n" 1)))
-  (is (= 2048 (rules/du-bytes "du: cannot read /w/x\n2\t/w\n" 1024)))
-  (is (nil? (rules/du-bytes "" 1)))
-  (is (nil? (rules/du-bytes nil 1))))
-
 (deftest the-trash-expires-after-a-week
   (let [day (* 24 60 60 1000)
         items [{:id "a" :at 0 :size 10} {:id "b" :at (* 6 day) :size nil} {:id "c" :at day :size 5}]]
@@ -37,27 +31,8 @@
     (is (= [] (rules/expired items (dec (* 7 day)))))
     (is (= {:dir "/d/trash/i" :moved "/d/trash/i/app"} (rules/trash-place "/d" "i" "app")))))
 
-(deftest chats-in-names-the-folders-chats
-  (let [rows [{:id "1" :title "a" :at 1 :folder "/w/app"}
-              {:id "2" :title "b" :at 3 :folder "/w/app/src"}
-              {:id "3" :title "c" :at 2 :folder "/w/apple"}
-              {:id "4" :title "d" :at 4 :folder nil}]]
-    (is (= [{:id "2" :title "b" :at 3} {:id "1" :title "a" :at 1}] (rules/chats-in rows "/w/app" "/w")))
-    (is (= ["4" "2" "3" "1"] (map :id (rules/chats-in rows "/w" "/w"))) "no folder: the work folder")))
-
-(deftest git-summary-says-where-a-repo-stands
-  (let [g (rules/git-summary {:top "/w/app" :current "main"
-                              :tracking {"main" {:upstream "origin/main" :ahead 2 :behind 1}
-                                         "spike" {:upstream "" :ahead 0 :behind 0}
-                                         "old" {:upstream "origin/old" :gone true}}
-                              :dirty {:total 3}})]
-    (is (= {:top "/w/app" :branch "main" :dirty 3 :ahead 2 :behind 1 :noUpstream ["old" "spike"]} g)))
-  (let [clean (rules/git-summary {:top "/r" :current "" :tracking {} :dirty {:total 0}})]
-    (is (= {:top "/r" :branch nil :dirty 0 :ahead 0 :behind 0 :noUpstream []} clean))))
-
 (deftest folder-calls-route-and-are-the-owners-only
   (is (= :list (folders/route "GET" "/api/folders")))
-  (is (= :facts (folders/route "GET" "/api/folders/facts")))
   (testing "Folders never delete (README decision 69): the old trash and delete calls are gone"
     (doseq [u ["/api/folders/trash" "/api/folders/delete" "/api/folders/restore" "/api/folders/purge"]]
       (is (= :not-found (folders/route "POST" u)) u))

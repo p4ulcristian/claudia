@@ -262,19 +262,22 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (def carried-keys
-  "What a new chat takes over from the last chat: the model, effort, prompt profile, speaker and bell
-  (not the colour: each chat gets its own; not the subscription: a new chat runs on its person's last
-  pick, README decision 57; not the folder: a new chat starts with none picked, README decision 65)."
-  [:model :effort :prompt :talk :bell])
+  "What a new chat takes over from the last chat: the model, effort, prompt profile, folder (README
+  decision 74: it starts where the last chat works, on its computer), speaker and bell (not the
+  colour: each chat gets its own; not the subscription: a new chat runs on its person's last pick,
+  README decision 57)."
+  [:model :effort :prompt :folder :talk :bell])
 
 (defn carried-picks
-  "The picks a new chat starts with after the chat k: that chat's settings and switches, else (no
-  chat open) the last new chat's picks, without its colour; never a folder (README decision 65)."
+  "The picks a new chat starts with after the chat k: that chat's settings, switches and folder (its
+  own, else its computer's work folder: README decision 74), else (no chat open) the last new chat's
+  picks, without its colour."
   [db k]
-  (if-let [{:keys [settings]} (when k (get-in db [:chats k]))]
+  (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:talk :bell]))))
+            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:talk :bell])
+                   {:folder (or (not-empty (:folder row)) (not-empty folder) (get-in db [:work-folders (first k)]))})))
     (select-keys (:new-settings db) carried-keys)))
 
 (defn created-db

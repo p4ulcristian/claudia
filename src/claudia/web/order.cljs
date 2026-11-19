@@ -70,11 +70,11 @@
 
 (rf/reg-event-fx
  :order/new-in-group
- ;; A new chat in group gid: it starts with the group's picks (else those of its first chat), never
- ;; a folder (README decision 65), and, once made, goes on top of the group (:order/created).
+ ;; A new chat in group gid: it starts with the group's picks (else those of its first chat, its
+ ;; folder too: README decision 74), and, once made, goes on top of the group (:order/created).
  (fn [{:keys [db]} [_ gid]]
    (let [g (order/find-group (get-in db [:order :items]) gid)
-         picks (or (not-empty (dissoc (:picks g) :server :folder))
+         picks (or (not-empty (dissoc (:picks g) :server))
                    (events/carried-picks db (order/chat-key (first (:chats g)))))]
      (update (events/new-chat db picks (group-server db g)) :db assoc :new-group gid))))
 

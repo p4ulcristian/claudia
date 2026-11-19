@@ -274,9 +274,11 @@
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
             :servers {"s" {:rows {"c" {:talk true :bell false :color "teal"}}}}
             :new-settings {:plan "pro" :color "red" :folder "/old"}}]
-    (is (= {:model "opus" :effort "high" :talk true :bell false}
-           (ev/carried-picks db ["s" "c"])) "from the open chat, never its colour, subscription or folder")
-    (is (= {} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour, subscription or folder")))
+    (is (= {:model "opus" :effort "high" :talk true :bell false :folder "/w/ir"}
+           (ev/carried-picks db ["s" "c"])) "from the open chat, its folder too, never its colour or subscription")
+    (is (= {:talk true :bell false :folder "/w/work"} (ev/carried-picks (-> db (update-in [:chats ["s" "c"]] dissoc :folder) (assoc :work-folders {"s" "/w/work"}) (assoc-in [:chats ["s" "c"] :settings] {})) ["s" "c"]))
+        "a chat without a folder: its computer's work folder")
+    (is (= {:folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour or subscription")))
 
 (deftest a-new-chats-first-message-needs-a-folder
   (let [db {:me {:servers [{:name "s"}]} :new-server "s" :servers {"s" {:status :open}}

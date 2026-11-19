@@ -1,14 +1,11 @@
 (ns claudia.slave.folders.rules
   "The folder browser's rules as plain data (README decisions 63, 64, 68 and 69): a folder's
-  listing, its contents and which files preview, when a leftover Trash item expires, a folder's
-  chats, its git summary, and the errors the OS gives as clear words."
+  listing, its contents and which files preview, when a leftover Trash item expires, and the
+  errors the OS gives as clear words."
   (:require ["node:path" :as path]
-            [clojure.string :as str]
-            [claudia.slave.reach :as reach]))
+            [clojure.string :as str]))
 
 (def keep-ms "How long a leftover Trash item stays (README decision 69)." (* 7 24 60 60 1000))
-
-(def max-chats "The most chats a folder's facts name." 20)
 
 ;; ---- errors ----
 
@@ -95,14 +92,6 @@
 
 ;; ---- size ----
 
-(defn du-bytes
-  "The size `du -s` printed (its last line's first number) in bytes, unit bytes per number; nil when
-  it printed none."
-  [out unit]
-  (when-let [line (last (remove str/blank? (str/split-lines (str out))))]
-    (when-let [[_ n] (re-find #"^\s*(\d+)" line)]
-      (* unit (js/Number n)))))
-
 ;; ---- the Trash ----
 
 (defn expires-at "When a trashed item goes for good." [{:keys [at]}] (+ at keep-ms))
@@ -120,27 +109,5 @@
 
 ;; ---- a folder's chats ----
 
-(defn chats-in
-  "This runner's chats (rows {:id :title :at :folder}) whose folder is folder or inside it (a chat
-  without a folder works in cwd), newest first, at most max-chats: [{:id :title :at}]."
-  [rows folder cwd]
-  (->> rows
-       (filter #(reach/within? folder (path/resolve (or (:folder %) cwd))))
-       (sort-by :at >)
-       (take max-chats)
-       (mapv #(select-keys % [:id :title :at]))))
-
 ;; ---- git ----
 
-(defn git-summary
-  "What a folder's facts say about its repo: {:top :branch (nil when detached) :dirty (files not
-  committed) :ahead :behind (of the current branch's upstream) :noUpstream (local branches without
-  a live upstream, sorted)}. tracking: branch -> {:upstream :gone :ahead :behind}."
-  [{:keys [top current tracking dirty]}]
-  (let [t (get tracking current)]
-    {:top top
-     :branch (not-empty current)
-     :dirty (or (:total dirty) 0)
-     :ahead (or (:ahead t) 0)
-     :behind (or (:behind t) 0)
-     :noUpstream (vec (sort (for [[b {:keys [upstream gone]}] tracking :when (or (str/blank? upstream) gone)] b)))}))

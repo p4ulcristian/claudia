@@ -9,7 +9,7 @@
   (:require [re-frame.core :as rf]
             [claudia.web.api :as api]
             [claudia.web.db :as db]
-            [claudia.web.events :as events]))
+))
 
 ;; ---- the right half: the picture or Files (README decision 70) ----
 
@@ -68,18 +68,6 @@
 
 (rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder k]] (use-folder db folder k)))
 
-(rf/reg-event-fx
- :folders/new-chat
- ;; A new chat on server working in folder, with the picks it would carry otherwise.
- (fn [{:keys [db]} [_ server folder]]
-   (-> (events/new-chat db (assoc (events/carried-picks db (:open db)) :folder folder) server)
-       (update :db dissoc :folders))))
-
-(rf/reg-event-fx
- :folders/open-chat
- (fn [{:keys [db]} [_ k]]
-   {:db (dissoc db :folders) :fx [[:dispatch [:nav/open k]]]}))
-
 ;; ---- each server's work folder (CLAUDIA_CWD, as the listing answers it) ----
 
 (rf/reg-event-fx
@@ -103,8 +91,6 @@
 ;; ---- the runner's calls (promises; a refusal rejects with its error) ----
 
 (defn listing! [server p] (api/fetch-json (api/url server "folders" {:path p})))
-
-(defn facts-url [server p] (api/url server "folders/facts" {:path p}))
 
 (defn missing! [server paths] (api/post-json (api/url server "folders/missing" nil) {:paths paths}))
 
