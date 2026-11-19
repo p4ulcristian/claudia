@@ -15,7 +15,9 @@
    ["POST" "/hub/passkeys/register"] "/passkeys/register"
    ["POST" "/hub/passkeys/remove"] "/passkeys/remove"
    ["POST" "/hub/approve/options"] "/approve/options"
-   ["POST" "/hub/vault/read"] "/vault/read"})
+   ["POST" "/hub/vault/read"] "/vault/read"
+   ["GET" "/hub/keys"] "/keys/list"
+   ["POST" "/hub/keys/grants"] "/keys/grants"})
 
 (defn call?
   "A path the broker answers."

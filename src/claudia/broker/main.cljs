@@ -3,11 +3,13 @@
   hub, the only program holding the 1Password service account's token and the passkeys' public
   keys. It listens on a unix socket only the hub's container reaches (BROKER_SOCKET).
 
-  `node broker.js` serves; `node broker.js enroll <email>` prints a one-time code that lets that
-  person add their first passkey (run on the gate: `docker exec claudia-broker /nodejs/bin/node
+  `node broker.js` serves; `node broker.js admin <email>` makes a broker admin (every key, and who
+  may use which); `node broker.js enroll <email>` prints a one-time code that lets that person add
+  their first passkey (run on the gate: `docker exec claudia-broker /nodejs/bin/node
   /app/broker.js enroll <email>`)."
   (:require ["node:fs" :as fs]
             ["node:http" :as http]
+            [claudia.broker.access :as access]
             [claudia.broker.passkeys :as passkeys]
             [claudia.broker.routes :as routes]
             [claudia.broker.rules :as rules]
@@ -50,7 +52,9 @@
    "/passkeys/register" passkeys/register!
    "/passkeys/remove" passkeys/remove!
    "/approve/options" routes/approve-options
-   "/vault/read" routes/read!})
+   "/vault/read" routes/read!
+   "/keys/list" access/listing
+   "/keys/grants" access/grants!})
 
 (defn- answer! [^js res e]
   (let [status (or (:status (ex-data e)) 500)]
@@ -87,6 +91,14 @@
         (println (str "Code for " email " (30 minutes, once): " (routes/make-code! email)))
         (store/close!))))
 
+(defn- make-admin! [{:keys [data]} email]
+  (if-not (rules/email? email)
+    (do (js/console.error "usage: broker.js admin <email, lower case>") (js/process.exit 2))
+    (do (store/open! data)
+        (store/add-admin! email)
+        (println (str email " is a broker admin: every key, and Settings → Keys."))
+        (store/close!))))
+
 (defn- serve! [cfg]
   (let [missing (problems cfg)]
     (when (seq missing)
@@ -99,6 +111,7 @@
 
 (defn main [& args]
   (let [cfg (settings env)]
-    (if (= "enroll" (first args))
-      (enroll! cfg (second args))
+    (case (first args)
+      "enroll" (enroll! cfg (second args))
+      "admin" (make-admin! cfg (second args))
       (serve! cfg))))

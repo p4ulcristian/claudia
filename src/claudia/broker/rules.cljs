@@ -10,6 +10,11 @@
 
 (def code-tries "Wrong tries before an enrollment code is dropped." 5)
 
+(defn email?
+  "A lower-case email the hub vouched for."
+  [s]
+  (boolean (and (string? s) (re-matches #"^[^\s@,A-Z]+@[^\s@,A-Z]+$" s))))
+
 (defn vault-ref?
   "The reference names a field in the broker's one vault: op://<vault>/<item>/<field>[/…], no
   empty part, no query (op's ?attribute= forms are not needed and not read)."
@@ -36,14 +41,26 @@
     (not (and (string? request) (<= 1 (count request) 100))) {:error "request (the ask's id) is needed."}
     :else {:kind "read" :ref ref :pubkey pubkey :request request}))
 
+(defn grant-changes
+  "An admin's changes to who may use which key, from the page: [{:item :email :on}] (1 to 200,
+  each a key's id, a lower-case email and true or false), or nil when any is malformed."
+  [changes]
+  (when (and (sequential? changes) (<= 1 (count changes) 200)
+             (every? (fn [{:keys [item email on]}]
+                       (and (string? item) (<= 1 (count item) 100) (email? email) (boolean? on)))
+                     changes))
+    (mapv #(select-keys % [:item :email :on]) changes)))
+
 (defn purpose
-  "What an approval is for, from the page's body: a read, adding a passkey, or removing one."
-  [vault {:keys [kind id] :as body}]
+  "What an approval is for, from the page's body: a read, adding or removing a passkey, or an
+  admin's changes to who may use which key."
+  [vault {:keys [kind id changes] :as body}]
   (case kind
     "read" (read-purpose vault body)
+    "grants" (if-let [c (grant-changes changes)] {:kind "grants" :changes c} {:error "changes: 1 to 200 of {item, email, on}."})
     "add-passkey" {:kind "add-passkey"}
     "remove-passkey" (if (and (string? id) (seq id)) {:kind "remove-passkey" :id id} {:error "id (the passkey) is needed."})
-    {:error "kind must be read, add-passkey or remove-passkey."}))
+    {:error "kind must be read, add-passkey, remove-passkey or grants."}))
 
 (defn open-challenge
   "The pending challenges with one more: id -> {:email :challenge :purpose :expires}. Expired ones
@@ -82,13 +99,26 @@
   (let [t (str/trim (str s))]
     (if (seq t) (subs t 0 (min 60 (count t))) "Passkey")))
 
-(defn email?
-  "A lower-case email the hub vouched for."
-  [s]
-  (boolean (and (string? s) (re-matches #"^[^\s@,A-Z]+@[^\s@,A-Z]+$" s))))
 
 (defn integration-version
   "The version named to 1Password: the commit's first 7 characters (1Password allows at most 20),
   or dev."
   [commit]
   (if (seq commit) (subs commit 0 (min 7 (count commit))) "dev"))
+
+(defn ref-item
+  "The item part of a vault reference (its title or id): op://<vault>/<item>/<field> -> item."
+  [vault ref]
+  (when (vault-ref? vault ref)
+    (first (str/split (subs ref (count (str "op://" vault "/"))) #"/"))))
+
+(defn find-item
+  "The vault item a reference names: by id first, else by title; nil when none."
+  [items item]
+  (or (some #(when (= item (:id %)) %) items)
+      (some #(when (= item (:title %)) %) items)))
+
+(defn may-use?
+  "An admin may use every key; anyone else only the keys an admin ticked for them."
+  [admin? granted-ids item-id]
+  (boolean (or admin? (contains? (set granted-ids) item-id))))

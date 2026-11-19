@@ -32,6 +32,16 @@
      code_hash TEXT NOT NULL,
      expires INTEGER NOT NULL,
      tries INTEGER NOT NULL
+   );
+   -- Broker admins (`broker.js admin <email>` on the gate): they may use every key and tick who
+   -- else may use which. Kept here, not taken from the hub, so a hacked hub cannot make anyone
+   -- an admin.
+   CREATE TABLE IF NOT EXISTS admins (email TEXT PRIMARY KEY);
+   -- Who may use which key: a 1Password item id and a person. No row = no access (admins aside).
+   CREATE TABLE IF NOT EXISTS grants (
+     item TEXT NOT NULL,
+     email TEXT NOT NULL,
+     PRIMARY KEY (item, email)
    );")
 
 (defn open!
@@ -108,3 +118,26 @@
 (defn wrong-code! [email] (exec! "UPDATE enroll_codes SET tries = tries + 1 WHERE email = ?" email))
 
 (defn drop-code! [email] (exec! "DELETE FROM enroll_codes WHERE email = ?" email))
+
+(defn admin? [email] (some? (one "SELECT email FROM admins WHERE email = ?" email)))
+
+(defn add-admin! [email] (exec! "INSERT OR IGNORE INTO admins (email) VALUES (?)" email))
+
+(defn admins [] (mapv :email (all "SELECT email FROM admins ORDER BY email")))
+
+(defn grants
+  "Every tick: [{:item :email}]."
+  []
+  (all "SELECT item, email FROM grants ORDER BY item, email"))
+
+(defn granted-items
+  "The item ids a person may use."
+  [email]
+  (mapv :item (all "SELECT item FROM grants WHERE email = ?" email)))
+
+(defn set-grant!
+  "One tick on or off."
+  [{:keys [item email on]}]
+  (if on
+    (exec! "INSERT OR IGNORE INTO grants (item, email) VALUES (?, ?)" item email)
+    (exec! "DELETE FROM grants WHERE item = ? AND email = ?" item email)))

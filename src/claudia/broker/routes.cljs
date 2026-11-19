@@ -46,8 +46,31 @@
 (defn- passkey-of! [email id]
   (or (some #(when (= id (:id %)) %) (store/passkeys-of email)) (fail 404 "No such passkey of yours.")))
 
+(defn check-use!
+  "Promise that resolves when email may use the key ref names (admins: every key; others: the
+  keys ticked for them); rejects 403 otherwise, or 404 when the vault has no such item."
+  [cfg email ref]
+  (.then (vault/items (:vault cfg))
+         (fn [items]
+           (let [item (rules/find-item items (rules/ref-item (:vault cfg) ref))]
+             (cond
+               (nil? item) (fail 404 (str "The vault \"" (:vault cfg) "\" has no item " (rules/ref-item (:vault cfg) ref) "."))
+               (not (rules/may-use? (store/admin? email) (store/granted-items email) (:id item)))
+               (fail 403 (str "You may not use " (:title item) ": an admin ticks it for you in Settings → Keys."))
+               :else item)))))
+
+(defn- allowed-purpose
+  "Promise of purpose once its own rules hold: a read needs the key ticked, grants an admin, a
+  removal one's own passkey."
+  [cfg email p]
+  (case (:kind p)
+    "read" (.then (check-use! cfg email (:ref p)) (fn [_] p))
+    "grants" (if (store/admin? email) (js/Promise.resolve p) (js/Promise.reject (ex-info "Admins only." {:status 403})))
+    "remove-passkey" (do (passkey-of! email (:id p)) (js/Promise.resolve p))
+    (js/Promise.resolve p)))
+
 (defn approve-options
-  "Options to sign one approval: a secret read, adding a passkey, or removing one."
+  "Options to sign one approval: a secret read, adding or removing a passkey, or key access."
   [cfg {:keys [email] :as body}]
   (let [p (rules/purpose (:vault cfg) body)
         keys-of (store/passkeys-of email)]
@@ -55,15 +78,17 @@
       (:error p) (fail 400 (:error p))
       (empty? keys-of) (fail 409 "You have no passkey here yet: add one in Settings first.")
       :else
-      (do (when (= "remove-passkey" (:kind p)) (passkey-of! email (:id p)))
-          (-> (webauthn/authentication-options cfg keys-of)
-              (.then (fn [^js o] {:challengeId (open! email (.-challenge o) p) :options o})))))))
+      (-> (allowed-purpose cfg email p)
+          (.then (fn [_] (webauthn/authentication-options cfg keys-of)))
+          (.then (fn [^js o] {:challengeId (open! email (.-challenge o) p) :options o}))))))
 
 (defn read!
-  "A secret read the person approved: the value sealed to the runner's one-time key."
+  "A secret read the person approved (and may still make): the value sealed to the runner's
+  one-time key."
   [cfg {:keys [email challengeId response]}]
   (when-not (vault/ready?) (fail 503 "The broker has no 1Password token: it reads no secrets."))
   (-> (approve! cfg email challengeId "read" response)
+      (.then (fn [{:keys [ref] :as p}] (.then (check-use! cfg email ref) (fn [_] p))))
       (.then (fn [{:keys [ref pubkey request]}]
                (js/console.log (str "broker: read " ref " for request " request " by " email))
                (.then (vault/read-sealed ref pubkey) (fn [sealed] {:sealed sealed}))))))
