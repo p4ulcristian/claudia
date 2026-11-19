@@ -4,8 +4,10 @@
   on the right wall, one column with the mic in its middle: over it search (the chats), My words
   (its view in the right half, claudia.web.views.my-words: see, add and remove them), archive (the open chat,
   asked first; unarchive for an archived one) and Stop (the open chat's running turn); under it
-  Settings, ‹ (the previous picture), New chat and › (the next picture). Each at least 12 mm, all
-  see-through at rest. The mic can be dragged out of the rail (claudia.web.views.mic).
+  New chat, then ‹ (the previous picture) and › (the next picture). At its bottom the foot the
+  chats' rail had: the update pill, your profile circle (its menu holds Settings) and the version's
+  line, so the chats have the left edge to themselves. Each at least 12 mm, all see-through at rest.
+  The mic can be dragged out of the rail (claudia.web.views.mic).
   The composer leaves its own mic out on these screens (claudia.web.views.chat). Stop shows while
   the open chat's turn runs; the ‹ › while the picture is unfolded and has more than one picture;
   the mic wherever the composer shows; My words where the composer shows and the hub has a listen
@@ -14,7 +16,9 @@
             [re-frame.core :as rf]
             [reagent.core :as r]
             [claudia.web.views.head :as head]
-            [claudia.web.views.mic :as mic]))
+            [claudia.web.views.menu :as menu]
+            [claudia.web.views.mic :as mic]
+            [claudia.web.views.update-pill :as update-pill]))
 
 (defn- step-button [label dir disabled?]
   [:button.edge-step {:type "button" :disabled disabled? :aria-label label :data-tip label
@@ -73,26 +77,6 @@
           :stroke-linejoin "round" :aria-hidden true}
     [:rect {:x 6 :y 6 :width 12 :height 12 :rx 2}]]])
 
-(def ^:private cog-path
-  ;; Lucide's "settings" cog (ISC licence).
-  (str "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73"
-       "l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73"
-       "l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2"
-       "v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73"
-       "l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73"
-       "l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"))
-
-(defn- settings-button
-  "Settings, in the chat column: a tap opens it, a tap while it shows closes it."
-  []
-  (let [open? (= :settings @(rf/subscribe [:right-view]))]
-    [:button.edge-step.edge-icon {:type "button" :aria-label "Settings" :data-tip "Settings"
-                                  :aria-pressed (boolean open?) :class (when open? "on")
-                                  :on-click #(rf/dispatch [:right/toggle :settings])}
-     [:svg {:width 26 :height 26 :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width 2
-            :stroke-linecap "round" :stroke-linejoin "round" :aria-hidden true}
-      [:path {:d cog-path}] [:circle {:cx 12 :cy 12 :r 3}]]]))
-
 (defn- over-mic
   "Search, My words, archive, Stop: over the mic, ending at it."
   [oc]
@@ -103,14 +87,23 @@
      (when oc [archive-button (:ck oc)])
      (when running [stop-button])]))
 
+(defn- foot
+  "The rail's foot: the update pill, your profile circle (whose chats, the menu with Settings) and the
+  version's line, at the bottom, off the chats' rail (README decision 73)."
+  []
+  [:div.edge-foot
+   [update-pill/pill]
+   [:f> menu/button]
+   [update-pill/updated]])
+
 (defn- under-mic
-  "Settings, ‹ New chat ›: under the mic, starting at it."
+  "New chat, then ‹ and ›: under the mic, starting at it; the foot at the bottom."
   [steps? index n]
   [:div.edge-under
-   [settings-button]
-   (when steps? (step-button "Previous picture" -1 (<= index 0)))
    (when-not @(rf/subscribe [:new-chat-read-only?]) [new-button])
-   (when steps? (step-button "Next picture" 1 (>= index (dec n))))])
+   (when steps? (step-button "Previous picture" -1 (<= index 0)))
+   (when steps? (step-button "Next picture" 1 (>= index (dec n))))
+   [foot]])
 
 (defn- edge-view []
   (let [oc @(rf/subscribe [:open-chat])

@@ -49,7 +49,7 @@
 (def move-window-ms
   "How long after the press a drag can still move the mic: later the hold is talk, and a drag only
   picks a petal."
-  2000)
+  500)
 
 (defn moving?
   "Whether a drag of dx, dy px from where the hold started, held-ms after the press, moves the mic."

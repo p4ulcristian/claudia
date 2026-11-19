@@ -1018,15 +1018,18 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     circle ... would move the circle towards my finger"; "drag should drop the recording"; "kept
     per device"; "on mobile it stays the same"). On a touch tablet a rail 88 px wide stands on the
     right wall with the page beside it, never under it: one column, the mic in its middle at
-    mid-height; over it search, My words, archive, Stop; under it Settings, ‹, New chat, › (the
-    order is to be looked at again). Held on the rail, the flower is half: its petals and the
+    mid-height; over it search, My words, archive, Stop; under it New chat, then ‹ and › (since
+    2026-11-19 later: "below the mic should be the plus, the left and right below them"); at its
+    bottom the foot the chats' rail had on the left, the update pill, your profile circle (its menu
+    opening to the left holds Settings, so the rail has no cog) and the version's line ("so the
+    chats have more place"). A desktop keeps them at the chats' rail's foot. Held on the rail, the flower is half: its petals and the
     voice's bars only to the left, still centred on the mic, top to bottom cancel, add, send, now,
     each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
     px from the press), the clip is dropped and the mic follows the finger on a spring (`motion`'s
     useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would have some
     personality"): it trails the finger and overshoots a little, a blue disc saying move. Only in
-    the first 2 s of a hold ("if I talk for already two seconds, then dragging will not be
-    possible"): later the hold is talk and a drag only picks a petal. Let go,
+    the first half second of a hold ("make this half a second"): later the hold is talk and a drag
+    only picks a petal. Let go,
     it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
     within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
     anywhere 44 px from the left wall and the rail and 124 px from the top and the bottom; by the

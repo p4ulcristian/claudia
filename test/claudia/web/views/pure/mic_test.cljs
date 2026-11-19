@@ -61,7 +61,7 @@
 (deftest the-mic-moves-past-the-petals
   (is (not (mic/moving? 100 0 300)))
   (is (mic/moving? -100 -100 300))
-  (is (not (mic/moving? -100 -100 2500)) "after 2 s of talk a drag only picks a petal")
+  (is (not (mic/moving? -100 -100 600)) "after half a second of talk a drag only picks a petal")
   (is (= {:x 44 :y 696} (mic/clamp-spot {:x 10 :y 900} 1180 820 88)) "near the left wall; the flower's room top and bottom")
   (is (= {:x 1048 :y 400} (mic/clamp-spot {:x 1100 :y 400} 1180 820 88)) "kept off the rail")
   (is (mic/home? {:x 1100 :y 100} {:x 1136 :y 410} 1180 88) "let go on the rail")

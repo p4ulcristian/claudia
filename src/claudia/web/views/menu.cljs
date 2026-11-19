@@ -1,6 +1,7 @@
 (ns claudia.web.views.menu
   "The profile menu (README decision 24): your profile circle at the bottom left (the rail's foot;
-  the list's foot on a phone; 2026-11-18, it was a gear) shows whose chats
+  the list's foot on a phone; on a touch tablet the foot of the mic's rail on the right, its menu
+  opening to the left, README decision 73; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
   Settings, where the plans are), Machines, Archived chats, Forms, the Desktop popups switch, More
@@ -124,7 +125,7 @@
                            close!)
     (h/use-effect (fn [] (rf/dispatch [:ops/load-tokens]) js/undefined) [])
     [:div.chat-menu.mn-pop {:ref #(set! (.-current menu) %) :role "menu" :aria-label "Settings"
-                            :style (usage/pop-place (.-current box) true)}
+                            :style (usage/pop-place (.-current box) (if (some-> (.-current box) (.closest ".thumb-edge")) :left true))}
      (menu-items act)]))
 
 (defn button
