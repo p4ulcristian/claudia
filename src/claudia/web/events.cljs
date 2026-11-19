@@ -499,9 +499,11 @@
  :chat/root
  ;; The chat's root switch (README decision 52), on until its owner turns it off: kept by the
  ;; server's front (never the runner), which has the runner show it to every page with the list.
- (fn [{:keys [db]} [_ [s c :as k] on?]]
+ ;; On carries the key broker's grant for the owner's passkey (README decision 79); off needs none.
+ (fn [{:keys [db]} [_ [s c :as k] on? grant]]
    {:db (switches/with-switches db k {:root on?})
-    :api/call {:method "POST" :url (api/url s "root/switch" nil) :body {:chat c :on on?}
+    :api/call {:method "POST" :url (api/url s "root/switch" nil)
+               :body (merge {:chat c :on on?} (when on? (select-keys grant [:grant :signature])))
                :on-fail [:root/switch-failed k (not on?)]}}))
 
 (rf/reg-event-db
@@ -512,11 +514,13 @@
 (rf/reg-event-fx
  :root/answer
  ;; Allow or Deny on a "Run as root" card goes to the server's front, with the command and folder
- ;; the card showed: the front checks them against what it asked (README decision 52).
- (fn [{:keys [db]} [_ [s c] ask allow?]]
+ ;; the card showed: the front checks them against what it asked (README decision 52). Allow
+ ;; carries the key broker's grant for the owner's passkey (decision 79); Deny needs none.
+ (fn [{:keys [db]} [_ [s c] ask allow? grant]]
    {:db (assoc-in db [:ask-state (:id ask)] {:busy true})
     :api/call {:method "POST" :url (api/url s "root/answer" nil)
-               :body {:chat c :ask (:id ask) :allow allow? :argv (:argv ask) :cwd (:cwd ask)}
+               :body (merge {:chat c :ask (:id ask) :allow allow? :argv (:argv ask) :cwd (:cwd ask)}
+                            (when allow? (select-keys grant [:grant :signature])))
                :on-fail [:root/answer-failed (:id ask)]}}))
 
 (rf/reg-event-db
@@ -528,9 +532,10 @@
 
 (rf/reg-event-fx
  :root/confirm
- (fn [{:keys [db]} _]
+ ;; The confirm card's passkey gave grant (claudia.web.views.confirm/root-ask).
+ (fn [{:keys [db]} [_ grant]]
    (cond-> {:db (dissoc db :root-ask)}
-     (:root-ask db) (assoc :fx [[:dispatch [:chat/root (:root-ask db) true]]]))))
+     (:root-ask db) (assoc :fx [[:dispatch [:chat/root (:root-ask db) true grant]]]))))
 
 (rf/reg-event-db :archive/ask (fn [db [_ k]] (assoc db :archive-ask k)))
 (rf/reg-event-db :archive/keep (fn [db _] (dissoc db :archive-ask)))

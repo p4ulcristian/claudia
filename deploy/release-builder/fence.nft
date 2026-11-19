@@ -1,6 +1,6 @@
 # The Claudia release builder (user claudia-release-builder, README decision 29;
 # deploy/release-builder) may reach the internet and servers its own jobs start on loopback,
-# nothing else on this machine or its networks: not loopback services (nREPL, Postgres, EOR,
+# nothing else on this machine or its networks: not loopback services (nREPL, Postgres, Sentinel,
 # Claudia, anything else of the machine's), not the LAN, WireGuard or Tailscale. What it builds is installed
 # on every Claudia machine, so it must not be able to reach them.
 # Loaded by the builder unit itself (ExecStartPre, as root) once its own cgroup exists: an empty

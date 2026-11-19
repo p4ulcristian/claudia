@@ -32,8 +32,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
-   compacts), the model and effort per chat, and the `/` command menu. Edits inside Eye on Rainbow's
-   worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_EOR_URL` are set.
+   compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
+   worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
 
 9. The code is small pure functions (2026-11-03, after a local `keep` shadowing `clojure.core/keep`
    crashed the hub on every start): data in, data out, at most 30 lines each, effects at the edges,
@@ -636,7 +636,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     hops, squashes or turning, the spark never spins; only her sunglasses talk
     (`claudia.web.face.lens`): code rain while chats work (faster when busy), a symbol (! ? z), and
     words typed out in green instead of speech bubbles. A chat's news names the chat ("IRIS DONE ✓",
-    "IR ASKS YOU ?", "EOR FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
+    "IR ASKS YOU ?", "SENTINEL FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
     chat, decision 48). While words are on her lenses she leans out of the rail three times bigger
     so they can be read. Her day (her own clip `:daytime`): COFFEE in the morning, LUNCH, FOCUS, GG
     TODAY, GO TO BED at night. Her brain (moods, events, idle clips: `claudia.web.face.mind`,
@@ -684,7 +684,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (`/etc/claudia/root-no-tap`: restart and status of known services, journalctl, nft list ruleset,
     ss -tlnp; never file writes, unit edits, package installs or shells), or when the chat's root
     switch is on (a red badge on the chat, on until the person turns it off), or when the person taps
-    Allow on the "Run as root" card for that one command (unanswered in 10 minutes = no). The chat's
+    Allow on the "Run as root" card for that one command (unanswered in 10 minutes = no). Since
+    decision 79 turning the switch on and Allow need the owner's passkey. The chat's
     owner may always turn root on or tap Allow. Every root command is logged (decision 59) with the chat and the
     answer. The key ties a command to a chat; processes of one agent user can read each other's
     environment, so the user boundary, not the key, is what stops an escape. Root is the whole
@@ -1111,6 +1112,26 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     dispatched), Statuses read, Administration write (runner registrations) and Secrets read (secret
     names) for this. Instead of: a fine-grained personal
     token on the server's disk, long-lived, acting as the person.
+
+79. Root needs the owner's passkey, through the key broker (2026-11-19, the user's call: "turn it on
+    with the passkey", root stays on until turned off; the broker checks it, not each server).
+    Turning a chat's root switch on and every Allow on a "Run as root" card need a grant the key
+    broker signed. The page asks the server's front for a one-time nonce bound to the profile, the
+    chat, the action (`on` or `allow`) and, for Allow, the card's ask (`POST /api/root/challenge`),
+    then the broker for a passkey challenge bound to that nonce (`kind: "root"`). After the passkey
+    signs (user verification required), the broker signs the grant with its own ed25519 key
+    (`BROKER_DATA/root-grant.pem`, `claudia.broker.grant`): who approved, the nonce, profile, chat,
+    action, ask, 5 minutes. The front checks it with the broker's public key pinned in
+    `/etc/claudia/env` (`FRONT_BROKER_GRANT_KEY`, placed by host apply, decision 54, never by the hub
+    or the automatic update), uses the nonce once, and takes it only when the email is the target
+    profile's email in the server's profiles file. So a stolen login cookie (no passkey) and a
+    hacked hub (no broker key) give no root. Turning root off and Deny need no passkey; the no-tap
+    list (decision 52) still runs without a tap. The challenge is fetched when the card appears and
+    every 4 minutes, so the tap opens the passkey at once (WebKit). What stays open: whoever takes
+    the broker too could sign grants; a chat already switched on stays root until it is turned off;
+    a hacked hub serves the page, so it could show one chat and have the passkey approve another,
+    once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
+    passkey would need host apply on every server), or a passkey per command while the switch is on.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

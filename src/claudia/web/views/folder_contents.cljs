@@ -50,7 +50,7 @@
 (defn- item-props
   "What every item does, in the grid and the list."
   [item {:keys [picked open!] :as ctx}]
-  {:type "button" :class (when (= picked (:path item)) "on") :title (:name item)
+  {:type "button" :class (when (= picked (:path item)) "on") :title (pure/link-title (:name item) (:link item))
    :on-click (fn [e] (.stopPropagation e) (clicked! item ctx))
    :on-key-down #(when (and (:dir item) (= "Enter" (.-key %))) (.preventDefault %) (open! (:path item)))})
 
@@ -59,14 +59,17 @@
         (pure/thumb? item) [:img.fd-thumb {:src (folders/file-url server (:path item)) :alt "" :loading "lazy" :decoding "async"}]
         :else [:span.fd-face [files/ext-tag (:name item)]]))
 
+(defn- link-badge "The symlink mark on an item, nil for others." [item]
+  (when (some? (:link item)) [:span.fd-link-badge pure/link-mark]))
+
 (defn- tile [server item ctx]
   [:button.fd-gi (item-props item ctx)
-   [face server item]
+   [:span.fd-gi-face [face server item] [link-badge item]]
    [:span.fd-gi-name (:name item)]])
 
 (defn- row [item ctx]
   [:button.fd-li (item-props item ctx)
-   [:span.fd-li-face (if (:dir item) pure/folder-icon [files/ext-tag (:name item)])]
+   [:span.fd-li-face (if (:dir item) pure/folder-icon [files/ext-tag (:name item)]) [link-badge item]]
    [:span.fd-li-name (:name item)]
    [:span.fd-li-size (when-not (:dir item) (some-> (:size item) format/bytes-text))]
    [:span.fd-li-at (format/when-text (:mtime item))]])

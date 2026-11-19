@@ -56,7 +56,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | where the Claude long-term tokens are kept (the file itself is no longer written: there is no shared token, README decision 57; the front deletes it and its `.json` note). Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one. Each person's last pick (`PUT /api/claude-token/picks`): `<token file>.picks.json` `{ <profile>: { email, key, name, at } }`; a chat without a pick starts on its profile's entry, and with none it does not start (its message gets an `error` asking to pick one in its header). Runners read them on every session start |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
-| runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_EOR_URL`, `CLAUDIA_EOR_TOKEN_FILE` (default `~/.config/eor/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Eye on Rainbow (`POST <url>/api/worktrees/touches`) |
+| runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_SENTINEL_URL`, `CLAUDIA_SENTINEL_TOKEN_FILE` (default `~/.config/sentinel/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Sentinel (`POST <url>/api/worktrees/touches`) |
 | host | `HOST_SOCKET` | unix socket it listens on |
 
 `hub.json`:
@@ -287,12 +287,12 @@ Answered by the runner (through the front), for the profile's own person only (4
 The whole system is in reach as far as the runner's user may read; EACCES/EPERM answer 403 `{ error: "Permission denied: …" }`,
 a missing folder 404, a path that is no absolute path or no folder 400. Every path is resolved
 (`..`, every symlink followed) before any check. `Entry` = `{ name, path, dir: true, mtime, hidden
-(the name starts with a dot) }`.
+(the name starts with a dot), link? (only on a symlink: its target) }`.
 
 | Call | Answer |
 |---|---|
-| `GET /api/folders?path=<abs>` | `{ path, entries: [Entry], cwd }`: the folders right inside `path` (default "/"; files and symlinks left out), sorted by name (case folded); `path` resolved; `cwd` = `CLAUDIA_CWD` resolved (the tree opens it at first) |
-| `GET /api/folders/contents?path=<abs>` | `{ path, entries: [Item], more }`: everything right inside `path`, folders first, then files, each by name (case folded), at most 5000 (`more` = how many were left out); symlinks followed. `Item` = `{ name, path, dir, mtime, size (bytes; null for a folder or a broken link), hidden, kind ("folder", "image", "video", "audio", "pdf" or "file") }` |
+| `GET /api/folders?path=<abs>` | `{ path, entries: [Entry], cwd }`: the folders right inside `path` (default "/"; files left out; a symlink to a folder is in, with `link` = its target), sorted by name (case folded); `path` with `..` resolved, symlinks kept (a linked folder stays where its link is); `cwd` = `CLAUDIA_CWD` resolved (the tree opens it at first) |
+| `GET /api/folders/contents?path=<abs>` | `{ path, entries: [Item], more }`: everything right inside `path`, folders first, then files, each by name (case folded), at most 5000 (`more` = how many were left out); symlinks followed, `path` kept as walked. `Item` = `{ name, path, dir, mtime, size (bytes; null for a folder or a broken link), hidden, kind ("folder", "image", "video", "audio", "pdf" or "file"), link? (only on a symlink: its target, "" when broken) }` |
 | `GET /api/folders/file?path=<abs>&read=1` | `{ path, text, mtime }` of a text file, or `{ path, error }` when it is over 2 MB, not text (a NUL byte) or unreadable |
 | `GET /api/folders/file?path=<abs>` | the file's bytes, for the kinds `claudia.slave.folders.rules/preview-types` names (images, video, audio, PDF; 415 for any other), with its content type, `x-content-type-options: nosniff`, and except for a PDF `content-security-policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:`; a `Range: bytes=…` header answers 206 with that range (416 when it can't be served); 404 for no file or an empty one |
 | `POST /api/folders/missing` `{ paths }` | `{ missing }`: those of `paths` (at most 200 absolute paths) where no folder sits (gone or not a folder; a folder the runner may not look at counts as there): the bookmarks shown as missing |
@@ -500,11 +500,12 @@ The hub's calls (signed in, same origin; the hub replaces any `email` in the bod
 | Call | Answer |
 |---|---|
 | `GET /hub/passkeys` | `{ passkeys: [{ id, name, createdAt, usedAt }] }` |
-| `POST /hub/approve/options` `{ kind: "read", ref, pubkey, request, chat }` \| `{ kind: "add-passkey" }` \| `{ kind: "remove-passkey", id }` | `{ challengeId, options }` (WebAuthn request options, JSON); 409 no passkey yet, 400 a bad purpose |
+| `POST /hub/approve/options` `{ kind: "read", ref, pubkey, request, chat }` \| `{ kind: "add-passkey" }` \| `{ kind: "remove-passkey", id }` \| `{ kind: "root", nonce, profile, chat, action, ask? }` | `{ challengeId, options }` (WebAuthn request options, JSON); 409 no passkey yet, 400 a bad purpose |
 | `POST /hub/vault/read` `{ challengeId, response }` | `{ sealed }`; 403 the approval is not open, not theirs, for another kind, or the signature fails; 503 no token; 502 1Password's error |
 | `POST /hub/passkeys/register/options` `{ code }` (first passkey) \| `{ challengeId, response }` (an `add-passkey` approval) | `{ registrationId, options }` (WebAuthn creation options) |
 | `POST /hub/passkeys/register` `{ registrationId, response, name }` | `{ passkey }` |
 | `POST /hub/passkeys/remove` `{ challengeId, response }` (a `remove-passkey` approval) | `{ removed }` |
+| `POST /hub/root/grant` `{ challengeId, response }` | `{ grant, signature }` for an approved `kind: "root"` approval (README decision 79): the grant JSON text and its ed25519 signature under the broker's key (`BROKER_DATA/root-grant.pem`, made on first start) |
 | `POST /hub/vault/standing` `{ ref, pubkey, request, chat }` | `{ sealed }` without a tap when this chat (`<server>/<chat id>`) read this key with a passkey in the last hour; 404 otherwise (ask for the passkey) |
 | `GET /hub/keys` | the broker's admins: `{ items: [{ id, title }], grants: [{ item, email }], admins }`; 403 others |
 | `GET /hub/keys/mine` | the keys this person may use (admins: every key; others: the ticked ones), titles sorted: `{ vault, items: [{ title, fields: [{ label, section?, ref }] }] }`, `ref` = `op://<vault>/<item>/[<section>/]<field>` ready for `run_with_secret` (an item, section or field whose title is blank, holds `/` or `?` or has a space at either end is named by its id, and so is an item whose title another item shares, or a field whose title another field of its item shares, without case; a section without a title is left out). No values and no passkey: labels come from 1Password's item reads, mapped to ids and titles at once, and are kept in memory until the item changes. 503 no token; 502 1Password's error |
@@ -527,6 +528,7 @@ user, so it only names chats and shows cards. Settings:
 | root | `ROOT_SOCKET_DIR` | the folder of the agent users' folders (default `/run/claudia-root`). Each folder is named after an agent user (`<profile>-claudia-agent`) and lets in only that user (Ansible: mode 0750, root:<the agent's group>). The helper listens on `<folder>/root.sock` in each (read at start: a new agent user needs a restart), group the folder's, mode 0660; a folder named otherwise, or that others may enter, is skipped and logged |
 | root | `ROOT_NO_TAP` | the no-tap list (default `/etc/claudia/root-no-tap`): one command per line, `#` starts a comment line; read on every command |
 | root | `ROOT_FRONT_SOCKET` | the front's root socket (default `/run/claudia-front/root.sock`) |
+| front | `FRONT_BROKER_GRANT_KEY` | the key broker's root-grant public key (SPKI DER, base64; `broker.js grant-key`), pinned in `/etc/claudia/env` by host apply (README decision 79); unset: root can't be turned on and Allow refuses |
 | front | `FRONT_ROOT_SOCKET` | where the front takes the helper's asks (unset: none): its own, mode 0600 in a 0700 folder of user claudia's, so only root opens it (claudia-front.service: `/run/claudia-front/root.sock`) |
 | front | `FRONT_ROOT_STATE` | the root switches kept across restarts, `{ "<profile>/<chat>": true }` (unset: in memory only; the unit: `/var/lib/claudia-front/root-switches.json`) |
 
@@ -559,18 +561,29 @@ offered; run the command itself"). No socket: "no root helper on this server", e
    /api/root/known { chat }` → 200 `{ chat }`, or 404 `{ error }` when it has no such chat: then the
    front answers 404 `{ error: "No such chat." }` and keeps, settles and shows nothing (a runner that
    does not answer: 502). At start it drops kept switches of profiles that have no runner here.
-4. `POST /api/root/switch { chat, on }` (the owner only, else 403) sets the front's switch, writes
+4. Passkey first (README decision 79): turning root on and Allow carry `{ grant, signature }`, the
+   key broker's signed word that the owner's passkey approved this very tap. The page asks the front
+   `POST /api/root/challenge { chat, action: "on" | "allow", ask? }` (the owner only; ask: the open
+   card's nonce, for allow) → `{ nonce, profile }` (a one-time nonce, 5 minutes), then the broker
+   `POST /hub/approve/options { kind: "root", nonce, profile, chat, action, ask? }`, signs with the
+   passkey and sends `POST /hub/root/grant { challengeId, response }` → `{ grant, signature }`.
+   `grant` is JSON text `{ v: 1, kind: "root", email, nonce, profile, chat, action, ask?, expires }`,
+   `signature` its ed25519 signature (base64url) under the broker's key. The front counts the tap
+   only when the signature verifies under `FRONT_BROKER_GRANT_KEY`, the nonce is one it opened (used
+   once), profile, chat, action and ask match the tap, it has not ended, and `email` is the target
+   profile's email in the profiles file. Else 403 `{ error }`. Turning off and Deny need none.
+5. `POST /api/root/switch { chat, on, grant?, signature? }` (the owner only, else 403) sets the front's switch, writes
    `FRONT_ROOT_STATE`, and has the runner show it (`POST /api/root/shown { chat, root }` → the Row's
    `root`). The runner's `/api/root/*` (known, chat, card, done, shown) decide nothing: an agent that calls
    them can only show cards no one can answer, or a wrong `root` on its own Row.
-5. Helper → shim: `{ refused: why }` and the end, or `{ running: true }`, then `{ out: base64 }` and
+6. Helper → shim: `{ refused: why }` and the end, or `{ running: true }`, then `{ out: base64 }` and
    `{ err: base64 }` (256 KB of bytes a frame at most) as the command writes, last `{ exit: n }` (a
    signal: 128 + its number; a command not found: 127) and the end. The command runs with
    `child_process.spawn(argv[0], argv[1…])`, no shell, in `cwd` when it is a folder (else `/`), with
    root's PATH, HOME, USER, LOGNAME, SHELL, `SUDO_USER=<user>` and the env above only.
-6. Shim → helper after `running`: stdin as `{ in: base64 }` frames, then `{ eof: true }` (frames before
+7. Shim → helper after `running`: stdin as `{ in: base64 }` frames, then `{ eof: true }` (frames before
    `running` are dropped). The shim leaving ends the command (SIGTERM).
-7. A line over 1 MB ends the connection. Every command is one journal line of the helper:
+8. A line over 1 MB ends the connection. Every command is one journal line of the helper:
    `activity { kind: "root", chat (the front's chat id, else "key:<first 8 of the key>" or "no key"),
    profile, agentUser, argv, decision ("no-tap", "switch", "allow", "refused: <why>", "gone before the
    answer"), by?, exit? }` (README decision 59); the front logs each answer and switch change in the

@@ -7,8 +7,10 @@
             ["node:http" :as http]
             ["node:os" :as os]
             ["node:path" :as path]
+            [claudia.node.crypto :as c]
             [claudia.node.http :as io]
             [claudia.shared.protocol :as p]
+            [claudia.shared.root-grant :as rg]
             [claudia.slave.rootfront :as rootfront]
             [claudia.slave.sshfront :as sshfront]))
 
@@ -45,7 +47,10 @@
     [200 {:certificate "ssh-ed25519-cert-v01@openssh.com AAAA cert"}]
     [403 {:error "no"}]))
 
-(def ^:private owner {:own {:profile "paul"} :target {:profile "paul"}})
+(def ^:private owner {:own {:profile "paul"} :target {:profile "paul" :email "paul@x.y"}})
+
+;; The key broker's grant key, pinned for these tests (README decision 79).
+(def ^:private broker-key (c/ed25519-keypair))
 
 (defn- tap!
   "Promise of {:status :body} for a tap on url through the front's handler, on a socket of its own."
@@ -56,6 +61,50 @@
                    (.listen server sock
                             #(done (.then (io/socket-json sock url body 5000)
                                           (fn [a] (.close server) a))))))))
+
+(defn- signed-grant
+  "{:grant :signature} as the broker would sign for nonce, approved by email, under k's private key."
+  [k nonce email]
+  (let [text (p/write-json (rg/grant (rg/purpose {:nonce nonce :profile "paul" :chat "c1" :action "on"}) email (js/Date.now)))]
+    {:grant text :signature (c/ed25519-sign (:private k) text)}))
+
+(defn- signed-on!
+  "Promise of the front's answer to turning root on for c1 with a grant approved by email: the
+  front's nonce first, then the switch carrying the broker's signed grant."
+  [dir profiles email]
+  (aset js/process.env "FRONT_BROKER_GRANT_KEY" (:public broker-key))
+  (.then (tap! dir profiles "/api/root/challenge" {:chat "c1" :action "on"})
+         (fn [{:keys [body]}]
+           (tap! dir profiles "/api/root/switch" (merge {:chat "c1" :on true} (signed-grant broker-key (:nonce body) email))))))
+
+(deftest root-on-needs-the-owners-passkey-grant
+  (async finish
+         (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "front-grant-"))
+               runner-sock (path/join dir "runner.sock")
+               profiles [{:profile "paul" :socket runner-sock :user "paul-claudia-agent"}]]
+           (aset js/process.env "FRONT_ROOT_STATE" (path/join dir "root-switches.json"))
+           (aset js/process.env "FRONT_BROKER_GRANT_KEY" (:public broker-key))
+           (-> (serve! runner-sock (atom []) fake-runner)
+               (.then (fn [^js runner]
+                        (-> (tap! dir profiles "/api/root/switch" {:chat "c1" :on true})
+                            (.then (fn [a]
+                                     (is (= 403 (:status a)) "no grant: refused")
+                                     (signed-on! dir profiles "bob@x.y")))
+                            (.then (fn [a]
+                                     (is (= 403 (:status a)) "another person's passkey: refused")
+                                     (.then (tap! dir profiles "/api/root/challenge" {:chat "c1" :action "on"})
+                                            #(tap! dir profiles "/api/root/switch"
+                                                   (merge {:chat "c1" :on true}
+                                                          (signed-grant (c/ed25519-keypair) (get-in % [:body :nonce]) "paul@x.y"))))))
+                            (.then (fn [a]
+                                     (is (= 403 (:status a)) "signed by another key (a hacked hub): refused")
+                                     (signed-on! dir profiles "paul@x.y")))
+                            (.then (fn [a]
+                                     (is (= {:status 200 :body {:ok true :root true}} a) "the owner's grant: on")
+                                     (js-delete (.-env js/process) "FRONT_ROOT_STATE")
+                                     (js-delete (.-env js/process) "FRONT_BROKER_GRANT_KEY")
+                                     (.close runner)
+                                     (finish))))))))))
 
 (deftest a-tap-on-a-chat-the-runner-lacks-keeps-nothing
   (async finish
@@ -75,7 +124,7 @@
                                      (tap! dir profiles "/api/root/answer" {:chat "elsewhere" :ask "n" :allow true})))
                             (.then (fn [a]
                                      (is (= {:status 404 :body {:error "No such chat."}} a) "an answer too")
-                                     (tap! dir profiles "/api/root/switch" {:chat "c1" :on true})))
+                                     (signed-on! dir profiles "paul@x.y")))
                             (.then (fn [a]
                                      (is (= {:status 200 :body {:ok true :root true}} a))
                                      (is (= {(keyword "paul/c1") true} (p/read-json (fs/readFileSync state "utf8"))))
@@ -83,6 +132,7 @@
                             (.then (fn [a]
                                      (is (= 200 (:status a)))
                                      (js-delete (.-env js/process) "FRONT_ROOT_STATE")
+                                     (js-delete (.-env js/process) "FRONT_BROKER_GRANT_KEY")
                                      (.close runner)
                                      (finish))))))))))
 

@@ -5,7 +5,8 @@
   delete or move anything (README decision 69). The whole system is in reach as far as the runner's
   user may read. Only the profile's own person may call them (the
   front's X-Claudia-Via \"own\"); a view or a write tick gets 403. Every path is resolved (`..`,
-  symlinks) before any check."
+  symlinks) before any check; a listing answers in the path as walked (symlinks kept), so a linked
+  folder sits in the tree where its link is."
   (:require [clojure.string :as str]
             [claudia.node.http :as io]
             [claudia.slave.folders.disk :as disk]
@@ -39,17 +40,24 @@
   (-> (disk/real! p)
       (.then f (fn [^js e] (rules/error-reply (.-code e) (.-message e) p)))))
 
+(defn- with-logical
+  "Promise of (f logical) for the path p with `..` resolved and its symlinks kept (a linked folder
+  stays where the user walked into it), or the OS error's reply."
+  [p f]
+  (-> (disk/logical! p)
+      (.then f (fn [^js e] (rules/error-reply (.-code e) (.-message e) p)))))
+
 (defn- listing
   "One folder's sub-folders (p nil: \"/\"), and the work folder (the tree opens it at first)."
   [p cwd]
-  (with-real (or p "/")
+  (with-logical (or p "/")
     (fn [real]
       (-> (disk/entries! real)
           (.then (fn [es] {:path real :entries (rules/listing real es) :cwd (disk/real-or-nil cwd)}))
           (.catch (fn [^js e] (rules/error-reply (.-code e) (.-message e) real)))))))
 
 (defn- contents [p]
-  (with-real p
+  (with-logical p
     (fn [real] (.catch (disk/contents! real) (fn [^js e] (rules/error-reply (.-code e) (.-message e) real))))))
 
 (defn- file-text

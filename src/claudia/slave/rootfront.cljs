@@ -1,24 +1,29 @@
 (ns claudia.slave.rootfront
-  "The front's side of root (README decision 52). The root helper asks here, on a socket only root
-  can open (FRONT_ROOT_SOCKET); the person's taps arrive here as hub calls (POST /api/root/answer,
-  /api/root/switch), so the proof of a tap lives with user claudia, which no agent user reaches. A
+  "The front's side of root (README decisions 52 and 79). The root helper asks here, on a socket only
+  root can open (FRONT_ROOT_SOCKET); the person's taps arrive here as hub calls (POST /api/root/answer,
+  /api/root/switch, /api/root/challenge), so the proof of a tap lives with user claudia, which no
+  agent user reaches. Turning root on and Allow need the owner's passkey: a grant the key broker
+  signs, checked here with its pinned key, so neither a stolen login nor a hacked hub gives root. A
   runner (the agent user's) only names the chat for a key, says whether a chat is there (a tap on
   one it lacks keeps nothing) and shows the card; it decides nothing."
   (:require ["node:crypto" :as crypto]
             ["node:fs" :as fs]
             ["node:http" :as http]
+            [claudia.node.crypto :as c]
             [claudia.node.env :as env]
             [claudia.node.http :as io]
             [claudia.root.rules :as rules]
             [claudia.shared.activity :as activity]
             [claudia.shared.protocol :as p]
+            [claudia.shared.root-grant :as rg]
             [claudia.slave.rootgate :as gate]))
 
 (def ^:private ask-ms (* 10 60 1000))
 (def ^:private runner-ms 5000)
 
-;; {:switches {"<profile>/<chat>" true} :pending {nonce {:profile :chat :argv :cwd :done}}}
-(defonce ^:private state (atom {:switches {} :pending {}}))
+;; {:switches {"<profile>/<chat>" true} :pending {nonce {:profile :chat :argv :cwd :done}}
+;;  :grants {nonce {:profile :chat :action :ask :expires}}} (grants: open passkey nonces, decision 79)
+(defonce ^:private state (atom {:switches {} :pending {} :grants {}}))
 
 (defn- state-file [] (env/env "FRONT_ROOT_STATE"))
 
@@ -123,15 +128,59 @@
                                        :agent-user (get-in route [:target :user]) :argv argv
                                        :decision decision :by (get-in route [:own :email])})))
 
+;; ---- passkey grants (README decision 79) ----
+
+(defn- tap-of [route chat action ask]
+  {:profile (get-in route [:target :profile]) :chat chat :action action :ask ask})
+
+(defn- take-grant!
+  "The open nonce entry grant g names, taken out (each is used once)."
+  [g]
+  (let [nonce (:nonce g)
+        entry (when (string? nonce) (get-in @state [:grants nonce]))]
+    (when entry (swap! state update :grants dissoc nonce))
+    entry))
+
+(defn- grant-problem
+  "Why the body's {grant signature} does not let this tap (action, ask) through, or nil: the key
+  broker's signature under the pinned key (FRONT_BROKER_GRANT_KEY), the front's own nonce, the same
+  chat and command, and the passkey of the chat's owner (the profiles file's email)."
+  [route {:keys [chat grant signature]} action ask]
+  (let [pinned (env/env "FRONT_BROKER_GRANT_KEY")]
+    (cond
+      (not (seq pinned)) "This server pins no key broker (FRONT_BROKER_GRANT_KEY): root needs a passkey through it."
+      (not (and (string? grant) (string? signature))) "Root needs your passkey: the approval is missing."
+      (not (c/ed25519-valid? pinned grant signature)) "That approval is not signed by the key broker."
+      :else (let [g (try (p/read-json grant) (catch :default _ nil))]
+              (rg/problem g (take-grant! g) (tap-of route chat action ask)
+                          (get-in route [:target :email]) (js/Date.now))))))
+
+(defn- challenge!
+  "A one-time nonce for the passkey approval of root on chat (action \"on\") or of one Allow
+  (\"allow\", ask: the open card's nonce), 5 minutes."
+  [_profiles route {:keys [chat action ask]}]
+  (let [pending (get-in @state [:pending ask])]
+    (cond
+      (not (contains? rg/actions action)) [400 {:error "action must be on or allow."}]
+      (and (= "allow" action) (gate/answer-problem pending {:chat chat :ask ask :allow false} route))
+      [403 {:error (gate/answer-problem pending {:chat chat :ask ask :allow false} route)}]
+      :else (let [nonce (.toString (crypto/randomBytes 16) "hex")
+                  tap (tap-of route chat action (when (= "allow" action) ask))]
+              (swap! state update :grants rg/open-nonce nonce tap (js/Date.now))
+              [200 {:nonce nonce :profile (:profile tap)}]))))
+
 (defn- answer! [profiles route {:keys [ask allow] :as a}]
   (let [pending (get-in @state [:pending ask])]
-    (if-let [why (gate/answer-problem pending a route)]
+    (if-let [why (or (gate/answer-problem pending a route)
+                     (when (true? allow) (grant-problem route a "allow" ask)))]
       [403 {:error why}]
       (do (js/console.log (tap-line route (:chat pending) (if (true? allow) "allowed" "denied") (:argv pending)))
           (settle! profiles ask (true? allow) "The person said no." (get-in route [:own :email]))
           [200 {:ok true}]))))
 
-(defn- switch! [profiles route {:keys [chat on]}]
+(defn- switch-to!
+  "Keeps profile's chat switched on or off (by the owner's email), tells its runner, logs the tap."
+  [profiles route chat on]
   (let [profile (get-in route [:target :profile])
         switches (:switches (swap! state update :switches gate/with-switch profile chat (true? on)
                                    (get-in route [:own :email])))]
@@ -139,6 +188,13 @@
     (js/console.log (tap-line route chat (if (true? on) "switch on" "switch off") nil))
     (to-runner profiles profile "/api/root/shown" {:chat chat :root (true? on)})
     [200 {:ok true :root (true? on)}]))
+
+(defn- switch!
+  "The root switch: on needs the owner's passkey grant; off needs nothing."
+  [profiles route {:keys [chat on] :as body}]
+  (if-let [why (when (true? on) (grant-problem route body "on" nil))]
+    [403 {:error why}]
+    (switch-to! profiles route chat on)))
 
 (defn- tap!
   "Promise of [status body] for the person's tap: the owner's only, on a chat the target profile's
@@ -150,13 +206,15 @@
            #(or (gate/chat-problem %) (act profiles route body)))))
 
 (defn handle
-  "A hub call to /api/root/answer or /api/root/switch (route: the caller's, from the hub's headers)."
+  "A hub call to /api/root/answer, /api/root/switch or /api/root/challenge (route: the caller's,
+  from the hub's headers)."
   [profiles route url ^js req ^js res]
   (-> (io/read-json req 262144)
       (.then (fn [body]
                (case url
                  "/api/root/answer" (tap! profiles route body answer!)
                  "/api/root/switch" (tap! profiles route body switch!)
+                 "/api/root/challenge" (tap! profiles route body challenge!)
                  [404 {:error "Not found."}])))
       (.then (fn [[status body]] (io/send-json res status body)))
       (.catch #(io/send-json res 500 {:error (.-message %)}))))

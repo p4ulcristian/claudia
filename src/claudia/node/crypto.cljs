@@ -26,3 +26,31 @@
   (and (string? a) (string? b)
        (crypto/timingSafeEqual (-> (crypto/createHash "sha256") (.update a) (.digest))
                                (-> (crypto/createHash "sha256") (.update b) (.digest)))))
+
+;; ---- ed25519 (root grants, README decision 79) ----
+
+(defn ed25519-keypair
+  "A new ed25519 key pair: {:private (PKCS#8 PEM) :public (SPKI DER, base64)}."
+  []
+  (let [^js kp (crypto/generateKeyPairSync "ed25519")]
+    {:private (.export (.-privateKey kp) #js {:type "pkcs8" :format "pem"})
+     :public (.toString (.export (.-publicKey kp) #js {:type "spki" :format "der"}) "base64")}))
+
+(defn ed25519-public
+  "The public key (SPKI DER, base64) of a PKCS#8 PEM private key."
+  [private-pem]
+  (.toString (.export (crypto/createPublicKey private-pem) #js {:type "spki" :format "der"}) "base64"))
+
+(defn ed25519-sign
+  "The ed25519 signature (base64url) of text under a PKCS#8 PEM private key."
+  [private-pem text]
+  (.toString (crypto/sign nil (js/Buffer.from (str text) "utf8") private-pem) "base64url"))
+
+(defn ed25519-valid?
+  "Whether signature (base64url) is the ed25519 signature of text under public (SPKI DER, base64);
+  false for any malformed part."
+  [public text signature]
+  (try
+    (let [k (crypto/createPublicKey #js {:key (js/Buffer.from (str public) "base64") :format "der" :type "spki"})]
+      (boolean (crypto/verify nil (js/Buffer.from (str text) "utf8") k (js/Buffer.from (str signature) "base64url"))))
+    (catch :default _ false)))
