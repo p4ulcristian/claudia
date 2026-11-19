@@ -86,3 +86,9 @@
   "A lower-case email the hub vouched for."
   [s]
   (boolean (and (string? s) (re-matches #"^[^\s@,A-Z]+@[^\s@,A-Z]+$" s))))
+
+(defn integration-version
+  "The version named to 1Password: the commit's first 7 characters (1Password allows at most 20),
+  or dev."
+  [commit]
+  (if (seq commit) (subs commit 0 (min 7 (count commit))) "dev"))

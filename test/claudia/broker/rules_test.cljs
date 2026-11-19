@@ -72,3 +72,8 @@
     (is (= "other.example" (:rp-id (main/settings (env-of {"BROKER_ORIGIN" "https://hub.example" "BROKER_RP_ID" "other.example"})))))
     (is (nil? (main/origin-host "not a url")))
     (is (= ["BROKER_SOCKET is not set."] (main/problems {:rp-id "h" :origin "https://h"})))))
+
+(deftest the-version-named-to-1password-is-short
+  (is (= "48908a5" (rules/integration-version "48908a5635dc0a73069e1e6980728a7e505bf116")))
+  (is (= "abc" (rules/integration-version "abc")))
+  (is (= "dev" (rules/integration-version nil))))

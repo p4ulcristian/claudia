@@ -6,6 +6,7 @@
   (:require ["@1password/sdk" :as op]
             ["node:fs" :as fs]
             [clojure.string :as str]
+            [claudia.broker.rules :as rules]
             [claudia.node.sealbox :as sealbox]))
 
 (defonce ^:private client (atom nil))
@@ -17,7 +18,7 @@
   (let [token (try (some-> token-file (fs/readFileSync "utf8") str/trim) (catch :default _ nil))]
     (if (seq token)
       (do (reset! client (-> (op/createClient #js {:auth token :integrationName "Claudia key broker"
-                                                   :integrationVersion (or version "dev")})
+                                                   :integrationVersion (rules/integration-version version)})
                              ;; A token 1Password refuses must not stop the broker: reads then fail.
                              (.catch (fn [e]
                                        (js/console.error (str "broker: 1Password refused the token: " (ex-message e)))
