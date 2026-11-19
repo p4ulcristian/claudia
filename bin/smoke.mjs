@@ -90,10 +90,11 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70)', async () => {
+    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70, 71)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
       const pill = page.locator('.chat-head .folder-pill');
       await pill.locator('.pill-empty', { hasText: 'Pick a folder' }).waitFor({ timeout: waitMs });
+      if (!(await pill.locator('.place-server').count())) throw new Error('the place pill has no computer name (README decision 71)');
       const box = page.getByPlaceholder('Message Claude…');
       await box.fill('Start here please');
       await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });

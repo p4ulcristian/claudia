@@ -1,6 +1,7 @@
 (ns claudia.web.views.folders
   "Files in the right half (README decisions 61 to 64, 68 to 70), in place of the picture while the
-  header's folder pill has it on, on the open chat's server: on top the server's bookmarks as cards (the project's logo as the chats show it,
+  header's place pill has it on, on the open chat's server (a new chat's picked in the top bar's
+  computer toggle, README decision 71): on top the server's bookmarks as cards (the project's logo as the chats show it,
   else a folder; name, path, ★ to unpin, \"missing\" greyed;
   a click opens the tree there, Select uses it for the chat); on the left a filter field and the
   tree from \"/\" with the chat's folder (else the work folder) selected; in the middle what that
@@ -8,8 +9,10 @@
   file's preview, or the folder (claudia.web.views.folder-preview, folder-detail: Use for this
   chat, New chat here, Pin). Nothing here deletes (README decision 69). Only the person's own
   chats: a view has no button for it and never reaches these calls."
-  (:require [re-frame.core :as rf]
+  (:require [clojure.string :as str]
+            [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.web.api :as api]
             [claudia.web.folders :as folders]
             [claudia.web.format :as format]
             [claudia.shared.bookmarks :as bookmarks]
@@ -17,7 +20,8 @@
             [claudia.web.views.folder-contents :as contents]
             [claudia.web.views.folder-preview :as preview]
             [claudia.web.views.folder-tree :as tree]
-            [claudia.web.views.pure.folders :as pure]))
+            [claudia.web.views.pure.folders :as pure]
+            [claudia.web.views.pure.systems :as systems-pure]))
 
 (defn- use-listings
   "The folders of server loaded so far ({:loaded (path -> entries) :cwd :error}) and load! (a path,
@@ -94,9 +98,49 @@
                        :on-paste #(reveal! (.getData (.-clipboardData %) "text"))
                        :on-key-down #(when (= "Enter" (.-key %)) (reveal! text))}]))
 
-(defn- top-bar [{:keys [label hidden? set-hidden]}]
+(defn- use-machine
+  "The computer's newest sample (GET /hub/servers/<server>/system, once), nil until it answers."
+  [server]
+  (let [[sample set-sample] (h/use-state nil)]
+    (h/use-effect
+     (fn []
+       (-> (api/fetch-json (str "/hub/servers/" (js/encodeURIComponent server) "/system"))
+           (.then set-sample)
+           (.catch (fn [_] (set-sample {:error true}))))
+       js/undefined)
+     [server])
+    sample))
+
+(defn- machine-line
+  "The shown computer's system, kernel, processor, memory and uptime in one quiet line."
+  [server]
+  (let [sample (use-machine server)]
+    [:p.fd-machine
+     (cond (nil? sample) "…"
+           (:error sample) "not reached"
+           :else (str/join " · " (systems-pure/machine-lines sample)))]))
+
+(defn- server-toggle
+  "The computers Files can show (README decision 71): a new chat's to pick from, one button each
+  (a pick drops the folder picked on the other); a started chat's computer alone, fixed."
+  [server chat]
+  (let [servers (if chat [] @(rf/subscribe [:server-list]))
+        all @(rf/subscribe [:servers])]
+    (if (> (count servers) 1)
+      [:div.fd-servers {:role "radiogroup" :aria-label "Computer"}
+       (for [{n :name l :label} servers]
+         ^{:key n}
+         [:button.fd-server {:type "button" :role "radio" :aria-checked (= n server)
+                             :class [(when (= n server) "on") (when (= :closed (get-in all [n :status])) "off")]
+                             :on-click #(when-not (= n server) (rf/dispatch [:new/server n]))}
+          l])]
+      [:span.fd-on (str " on " @(rf/subscribe [:server-label server]))])))
+
+(defn- top-bar [{:keys [server chat hidden? set-hidden]}]
   [:header.fd-bar
-   [:h1.fd-heading "Files" [:span.fd-on (str " on " label)]]
+   [:div.fd-where
+    [:div.fd-title-row [:h1.fd-heading "Files"] [server-toggle server chat]]
+    [:f> machine-line server]]
    [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]])
 
 (defn- use-contents
@@ -168,7 +212,7 @@
         label @(rf/subscribe [:server-label server])]
     (use-first-load! load! go! start)
     [:<>
-     [top-bar {:label label :hidden? hidden? :set-hidden set-hidden}]
+     [top-bar {:server server :chat chat :hidden? hidden? :set-hidden set-hidden}]
      [:f> cards server selected go! chat]
      [:f> body {:server server :loaded loaded :cwd cwd :error error :hidden? hidden? :selected selected
                 :set-selected set-selected :picked picked :set-picked set-picked :reveal reveal :set-reveal set-reveal

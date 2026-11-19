@@ -139,7 +139,10 @@ code, pre { font-family: var(--mono); }
 .pill-caret { flex: none; margin-left: -1px; font-size: 10px; color: var(--muted); }
 .pill-empty { font-style: italic; font-weight: 500; color: var(--muted); }
 .head-field:has(.folder-pill) { flex: 0 1 auto; }
-.folder-pill { max-width: 340px; }
+.folder-pill { max-width: 420px; }
+.place { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.place-server { flex: none; font-weight: 600; }
+.place .folder-path, .place .pill-empty { min-width: 0; }
 .folder-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; font: 500 12px var(--mono); }
 /* The server's state: turning arrows while reconnecting, a power sign when it is off. */
 .head-state { flex: none; align-self: center; display: grid; width: 16px; height: 16px; color: var(--amber); }
@@ -191,11 +194,6 @@ code, pre { font-family: var(--mono); }
 .pop-note { padding: 4px 6px; max-width: 260px; color: var(--muted); font-size: 12px; white-space: normal; }
 .head-pop .plan-list { position: static; min-width: 0; padding: 0; border: 0; box-shadow: none; background: none; }
 /* Where the chat works, at the top of the computer popup: the full path, then its computer. */
-.where { display: grid; gap: 8px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px dashed var(--line); min-width: 260px; }
-.where:last-child { padding-bottom: 2px; margin-bottom: 0; border-bottom: 0; }
-.where-path { font: 500 12px/1.4 var(--mono); color: var(--fg); overflow-wrap: anywhere; user-select: all; }
-.where-machine { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
-.where-machine b { font: 700 15px var(--hand); color: var(--fg); }
 /* A phone-wide column: tighter. */
 @container (max-width: 679px) {
   .chat-head { padding: 8px; }

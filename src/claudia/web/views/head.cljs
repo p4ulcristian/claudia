@@ -1,23 +1,21 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel lightly tinted with the chat's colour, three
   rows, the same for a new chat and a started one. Row 1: the title (a click renames it) and the
-  server's state when it is off or unreached. Row 2: five pills of one look: the computer (its
-  popup: where it works), the folder (opens Folders, README decisions 61 to 65), whose Claude
+  server's state when it is off or unreached. Row 2: four pills of one look: where it works, the
+  computer and the folder in one (toggles Files, README decisions 70, 71), whose Claude
   subscription, model · effort, the prompt profile. Row 3: the rings (context, 5-hour, week) on the
   left; on the right the round buttons: colour, bell, speaker, root, archive. A new chat picks all
-  of them here before its first message (they go with `new`); once it has started the computer is
-  fixed and every other pick changes the chat."
+  of them here before its first message (they go with `new`; its computer in Files); once it has
+  started the computer is fixed and every other pick changes the chat."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
-            [claudia.web.api :as api]
             [claudia.web.folders :as folders]
             [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.prompts :as prompts]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.systems :as systems-pure]
             [claudia.web.views.pure.usage :as usage-pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.usage :as usage]))
@@ -59,26 +57,25 @@
     [open #(set-open not) close! box]))
 
 (def ^:private pill-icons
-  "Row 2's icons in place of words: the computer, the folder, Claude's spark (whose Claude plan), a
+  "Row 2's icons in place of words: the folder (where the chat works), Claude's spark (whose Claude plan), a
   sparkle (model · effort), a page (the prompt profile)."
-  {:computer "M3.5 5h17v11h-17zM9 20h6M12 16v4"
-   :folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
+  {:folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
    :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
    :model "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"
    :prompt "M6 3.5h9l3.5 3.5v13.5H6zM15 3.5V7h3.5M9 11h6M9 14.5h6M9 18h4"})
 
 (defn- pill
   "One setting of row 2, every one the same: its icon (pill-icons, named by k), the value and a ▾
-  when it can be changed. fixed? (a started chat's computer): a dashed edge, no ▾. label names it
+  when it can be changed. label names it
   for the tip and screen readers."
-  [{:keys [k label value fixed? open on-click ro class]}]
-  [:button.head-pill {:type "button" :class [class (when fixed? "fixed")] :disabled ro :data-tip label
+  [{:keys [k label value open on-click ro class]}]
+  [:button.head-pill {:type "button" :class class :disabled ro :data-tip label
                       :aria-label label :aria-haspopup "true" :aria-expanded (boolean open) :on-click on-click}
    [:svg.head-ico {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor"
                    :stroke-width 1.7 :stroke-linecap "round" :stroke-linejoin "round"}
     [:path {:d (pill-icons k)}]]
    [:span.pill-val value]
-   (when-not (or fixed? ro) [:span.pill-caret "▾"])])
+   (when-not ro [:span.pill-caret "▾"])])
 
 (defn- use-inside-panel!
   "While open, moves the popup in box (.head-pop) left so it ends inside the header panel (a pill
@@ -173,7 +170,7 @@
 (defn- row-1 [hc]
   [:div.head-row.r1 [:f> head-names hc]])
 
-;; ---- row 2: computer, folder, subscription, model · effort, prompt ----
+;; ---- row 2: place (computer + folder), subscription, model · effort, prompt ----
 
 (defn- plan-limit [label l now]
   [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
@@ -217,19 +214,6 @@
                       :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
                       :on-click #(pick c)}])])
 
-(defn- use-machine
-  "The chat's computer's newest sample (GET /hub/servers/<server>/system, once), nil until it answers."
-  [server]
-  (let [[sample set-sample] (h/use-state nil)]
-    (h/use-effect
-     (fn []
-       (-> (api/fetch-json (str "/hub/servers/" (js/encodeURIComponent server) "/system"))
-           (.then set-sample)
-           (.catch (fn [_] (set-sample {:error true}))))
-       js/undefined)
-     [server])
-    sample))
-
 (defn- shown-folder
   "The folder a chat works in: its own, else (not for a read-only view, whose runner is another
   profile's) its server's work folder once known; nil while unknown."
@@ -239,64 +223,29 @@
         (or @(rf/subscribe [:work-folder server])
             (do (rf/dispatch [:folders/load-work server]) nil)))))
 
-(defn- where-card
-  "Where the chat works: the folder's full path, then its computer: name, system, kernel, processor,
-  memory and uptime."
-  [{:keys [server] :as hc}]
-  (let [sample (use-machine server)
-        label @(rf/subscribe [:server-label server])
-        shown (shown-folder hc)]
-    [:div.where
-     [:div.where-path {:title shown} (or shown "The computer's work folder")]
-     [:div.where-machine
-      [:b label]
-      (cond (nil? sample) [:span.muted "…"]
-            (:error sample) [:span.muted "not reached"]
-            :else (for [line (systems-pure/machine-lines sample)] ^{:key line} [:span line]))]]))
+(defn- place-value
+  "The place pill's value: the computer's name, then the working path (~ for the home, cut at its
+  start so the end shows); a new chat with no folder picked: \"Pick a folder\" (README decisions
+  65, 71)."
+  [{:keys [new? folder server] :as hc}]
+  [:span.place
+   [:b.place-server @(rf/subscribe [:server-label server])]
+   (if (and new? (empty? folder))
+     [:span.pill-empty "Pick a folder"]
+     (let [shown (shown-folder hc)]
+       [:span.folder-path [:bdi (if shown (format/tilde shown) "work folder")]]))])
 
-(defn- server-list
-  "A new chat's computers to pick from (more than one); a pick closes the popup."
-  [server close!]
-  (let [servers @(rf/subscribe [:server-list])
-        all @(rf/subscribe [:servers])]
-    [:div.server-list
-     [:div.plan-title "Run on"]
-     (for [{n :name l :label} servers]
-       ^{:key n}
-       [:button.plan-item {:role "menuitemradio" :aria-checked (= n server) :class (when (= n server) "on")
-                           :on-click (fn [] (rf/dispatch [:new/server n]) (close!))}
-        [:span.plan-name (str l (when (= :closed (get-in all [n :status])) " (off)"))]])]))
-
-(defn- computer-pick
-  "The computer the chat runs on: a click shows where it works (where-card) and, for a new chat with
-  more than one computer, the others to pick; a started chat's computer is fixed (dashed, no ▾)."
-  [{:keys [new? server ro] :as hc}]
-  (let [pick? (and new? (not ro) (> (count @(rf/subscribe [:server-list])) 1))]
-    [:f> popped {:k :computer :label "Computer" :value @(rf/subscribe [:server-label server]) :fixed? (not pick?)}
-     (fn [close!]
-       [:div.head-pop
-        [:f> where-card hc]
-        (when pick? [server-list server close!])])]))
-
-(defn- folder-value
-  "The folder pill's value: the working path (~ for the home, cut at its start so the end shows);
-  a new chat with none picked: \"Pick a folder\" (README decision 65)."
-  [{:keys [new? folder] :as hc}]
-  (if (and new? (empty? folder))
-    [:span.pill-empty "Pick a folder"]
-    (let [shown (shown-folder hc)]
-      [:span.folder-path [:bdi (if shown (format/tilde shown) "work folder")]])))
-
-(defn- folder-pick
-  "The folder the chat works in; a click toggles the right half between the picture and Files, the
-  folder browser on this chat's server with its folder selected (README decision 70). Lit while
-  Files shows."
-  [{:keys [new? ro folder] :as hc}]
+(defn- place-pick
+  "Where the chat works, the computer and the folder in one pill (README decision 71); a click
+  toggles the right half between the picture and Files, the folder browser on this computer with
+  the folder selected, where a new chat also picks its computer. Lit while Files shows."
+  [{:keys [new? ro folder server] :as hc}]
   (let [shown (when-not (and new? (empty? folder)) (shown-folder hc))
-        files? (= :files @(rf/subscribe [:right-view]))]
+        files? (= :files @(rf/subscribe [:right-view]))
+        label (str @(rf/subscribe [:server-label server]) (when shown (str ": " shown)))]
     [:div.head-field
-     [pill {:k :folder :label (str "Folder" (when shown (str ": " shown)) (if files? " · hide Files" " · show Files"))
-            :value (folder-value hc) :ro ro :open files? :class (str "folder-pill" (when files? " on"))
+     [pill {:k :folder :label (str label (if files? " · hide Files" " · show Files"))
+            :value (place-value hc) :ro ro :open files? :class (str "folder-pill place-pill" (when files? " on"))
             :on-click #(rf/dispatch [:right/toggle-files])}]]))
 
 (defn- model-pick
@@ -315,8 +264,7 @@
 
 (defn- row-2 [hc]
   [:div.head-row.r2
-   [:f> computer-pick hc]
-   [folder-pick hc]
+   [place-pick hc]
    [:f> account-pick hc]
    [:f> model-pick hc]
    [:f> prompt-pick hc]])
