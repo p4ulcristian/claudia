@@ -114,9 +114,9 @@
 (defn- prepare-read!
   "Fetches the broker's challenge for this ask before any tap (claudia.web.passkey): prepared
   holds it, or the error."
-  [prepared ask]
+  [prepared k ask]
   (reset! prepared nil)
-  (-> (passkey/prepare-approval (passkey/read-ask-purpose ask))
+  (-> (passkey/prepare-approval (passkey/read-ask-purpose ask k))
       (.then #(reset! prepared %))
       (.catch #(reset! prepared {:error (passkey/problem %)}))))
 
@@ -129,7 +129,15 @@
     (-> (passkey/read-sealed! p)
         (.then #(rf/dispatch [:ask/sealed k ask %]))
         (.catch #(do (rf/dispatch [:ask/state (:id ask) {:error (passkey/problem %)}])
-                     (prepare-read! prepared ask))))))
+                     (prepare-read! prepared k ask))))))
+
+(defn- start-read!
+  "A secret card appears: within this chat's hour for this key the value comes without a tap;
+  otherwise the passkey challenge is fetched for the tap."
+  [prepared k ask]
+  (-> (passkey/read-standing ask k)
+      (.then #(rf/dispatch [:ask/sealed k ask %]))
+      (.catch #(prepare-read! prepared k ask))))
 
 (defn- secret-actions [k ask paste busy prepared]
   [:div.actions
@@ -161,7 +169,7 @@
   "A prepared challenge is fetched again before the broker's 5 minutes end."
   (* 4 60 1000))
 
-(defn- secret-card [_k ask]
+(defn- secret-card [k ask]
   (let [paste (r/atom nil) ; nil = closed; a string while the paste field is open
         prepared (r/atom nil) ; the broker's challenge for this ask, fetched before the tap
         timer (atom nil)]
@@ -170,8 +178,8 @@
       :component-did-mount
       (fn []
         (when (:vault @(rf/subscribe [:me]))
-          (prepare-read! prepared ask)
-          (reset! timer (js/setInterval #(prepare-read! prepared ask) challenge-refresh-ms))))
+          (start-read! prepared k ask)
+          (reset! timer (js/setInterval #(prepare-read! prepared k ask) challenge-refresh-ms))))
       ;; The pasted text never outlives the card.
       :component-will-unmount #(do (reset! paste nil) (some-> @timer js/clearInterval))
       :reagent-render (fn [k ask] (secret-render paste prepared k ask))})))

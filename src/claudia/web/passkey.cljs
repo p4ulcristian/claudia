@@ -24,10 +24,21 @@
   (.then (wa/startAuthentication #js {:optionsJSON (clj->js options)})
          (fn [r] {:challengeId challengeId :response (js->clj r)})))
 
+(defn chat-id
+  "The chat an hour of trust is bound to, from the page's [server chat] pair."
+  [[server chat]]
+  (str server "/" chat))
+
 (defn read-ask-purpose
-  "The approval a secret ask needs."
-  [ask]
-  {:kind "read" :ref (:ref ask) :pubkey (:pubkey ask) :request (:id ask)})
+  "The approval a secret ask needs, in chat k ([server chat])."
+  [ask k]
+  {:kind "read" :ref (:ref ask) :pubkey (:pubkey ask) :request (:id ask) :chat (chat-id k)})
+
+(defn read-standing
+  "Promise of the value sealed to the ask's key when chat k's hour of trust for this key still
+  runs (no tap); rejects with status 404 when it needs a passkey."
+  [ask k]
+  (.then (api/post-json "/hub/vault/standing" (dissoc (read-ask-purpose ask k) :kind)) #(:sealed %)))
 
 (defn read-sealed!
   "Call from the tap itself: the passkey approves the prepared read; promise of the value sealed by

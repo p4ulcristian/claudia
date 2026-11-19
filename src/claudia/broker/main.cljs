@@ -53,6 +53,7 @@
    "/passkeys/remove" passkeys/remove!
    "/approve/options" routes/approve-options
    "/vault/read" routes/read!
+   "/vault/standing" routes/read-standing!
    "/keys/list" access/listing
    "/keys/grants" access/grants!})
 
