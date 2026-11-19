@@ -32,7 +32,6 @@
   (is (= :no-chat (runner/request-op "GET" "/api/chats/x/state" "x" "state" false)))
   (is (= :picture-png (runner/request-op "GET" "/api/chats/x/picture.png" "x" "picture.png" true)))
   (is (= :me (runner/request-op "GET" "/api/me" nil nil false)))
-  (is (= :secret-read (runner/request-op "POST" "/api/secret/read" nil nil false)))
   (is (nil? (runner/request-op "POST" "/api/chats/x/send" "x" "send" true))))
 
 (deftest api-routes-calls

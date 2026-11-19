@@ -1,6 +1,7 @@
 # Only what the hub's image is put together from.
 *
 !out/hub.js
+!out/broker.js
 !out/web
 !version.json
 !node_modules/ws
@@ -16,3 +17,32 @@
 !node_modules/tweetnacl
 !node_modules/ecc-jsbn
 !node_modules/bcrypt-pbkdf
+# The key broker's packages (README decision 66)
+!node_modules/@1password/sdk
+!node_modules/@1password/sdk-core
+!node_modules/libsodium-wrappers
+!node_modules/libsodium
+!node_modules/@simplewebauthn/server
+!node_modules/@hexagon/base64
+!node_modules/@levischuck/tiny-cbor
+!node_modules/@peculiar/asn1-android
+!node_modules/@peculiar/asn1-schema
+!node_modules/@peculiar/utils
+!node_modules/tslib
+!node_modules/asn1js
+!node_modules/pvtsutils
+!node_modules/pvutils
+!node_modules/@peculiar/asn1-ecc
+!node_modules/@peculiar/asn1-x509
+!node_modules/@peculiar/asn1-rsa
+!node_modules/@peculiar/asn1-x509-post-quantum
+!node_modules/@peculiar/asn1-asym-key
+!node_modules/@peculiar/asn1-pkcs8
+!node_modules/@peculiar/x509
+!node_modules/@peculiar/asn1-cms
+!node_modules/@peculiar/asn1-x509-attr
+!node_modules/@peculiar/asn1-csr
+!node_modules/@peculiar/asn1-pkcs9
+!node_modules/@peculiar/asn1-pfx
+!node_modules/tsyringe
+!node_modules/reflect-metadata

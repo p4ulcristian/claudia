@@ -1,4 +1,4 @@
-;; Seven builds from one source tree: the master (hub), the slave's three processes (front, runner,
+;; Eight builds from one source tree: the master (hub) and its key broker (broker, README decision 66), the slave's three processes (front, runner,
 ;; host), the root helper and its sudo shim (root, sudo; README decision 52) and the page (web), plus
 ;; the tests (test/, every namespace ending in -test, run on Node).
 ;; Node builds run on plain Node (node:sqlite needs 22.13+).
@@ -10,6 +10,7 @@
   :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
+  :broker {:target :node-script :main claudia.broker.main/main  :output-to "out/broker.js"}
   :root   {:target :node-script :main claudia.root.main/main    :output-to "out/root.js"}
   :sudo   {:target :node-script :main claudia.root.sudo/main    :output-to "out/sudo.js"}
   :test   {:target :node-test :output-to "out/test.js" :ns-regexp "-test$"}

@@ -2,7 +2,7 @@
   "What Claude asks the person (web/panels.tsx of the TypeScript Claudia): its questions fill the
   window as a modal, so they have room to be read; Esc or \"See picture\" hides it and the pill at the
   bottom brings it back. Keys: 1-9 pick an option of the first question still without one, Enter
-  answers. The secret card (1Password) sits in the same modal."
+  answers. The secret card (1Password through the key broker, approved with a passkey) sits in the same modal."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -116,8 +116,7 @@
 (defn- secret-facts [ask]
   [:dl.secret-facts
    [:dt "Item"] [:dd [:code (:ref ask)]]
-   (when (:account ask) [:<> [:dt "1Password"] [:dd (:account ask)]])
-   (when (:vault ask) [:<> [:dt "Unlocks on"] [:dd @(rf/subscribe [:server-label (:vault ask)])]])
+   [:dt "From"] [:dd "1Password, through the key broker"]
    (when (:expires ask)
      [:<> [:dt "Until"] [:dd (.toLocaleTimeString (js/Date. (:expires ask)) js/undefined #js {:hour "2-digit" :minute "2-digit"})]])])
 
@@ -134,8 +133,9 @@
    [:button {:disabled busy :on-click #(rf/dispatch [:ask/deny k (:id ask)])} "Deny"]
    (when (nil? @paste)
      [:button {:disabled busy :on-click #(reset! paste "")} "Paste"])
-   (when (:vault ask)
-     [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/allow k ask])} "Allow"])])
+   ;; Allow needs the hub's key broker and a passkey (README decision 66); paste works without.
+   (when (:vault @(rf/subscribe [:me]))
+     [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/allow k ask])} "Allow with passkey"])])
 
 (defn- secret-render [paste k ask]
   (let [{:keys [busy error sent]} @(rf/subscribe [:ask-state (:id ask)])
@@ -150,7 +150,7 @@
      (secret-facts ask)
      (when (some? @paste) (paste-row paste send-paste!))
      (when error [:p.ask-error error])
-     (when (and busy (not sent)) [:p.muted.small "Waiting for 1Password on the vault server…"])
+     (when (and busy (not sent)) [:p.muted.small "Waiting for your passkey, then 1Password…"])
      (secret-actions k ask paste busy)]))
 
 (defn- secret-card [_k _ask]

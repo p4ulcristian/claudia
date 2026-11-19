@@ -2,10 +2,11 @@
   "The list's title menu (whose chats, which servers) and Settings, a popup (README decision 58)
   opened from the settings menu (claudia.web.views.menu: its plan card and More settings) and the
   thumb edge's cog: centred, a sheet from the bottom on a phone. It holds only the hub's Claude
-  tokens (save, remove; no default, README decision 57) and the person's GitHub, plus a one-line
-  Admin link for admins (People and Servers have no other way in)."
+  tokens (save, remove; no default, README decision 57), the person's GitHub and, with a key broker,
+  their passkeys (README decision 66), plus a one-line Admin link for admins (People and Servers have no other way in)."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
+            [claudia.web.views.passkeys :as passkeys]
             [re-frame.core :as rf]
             [reagent.core :as r]
             [reagent.hooks :as h]
@@ -271,7 +272,7 @@
 (defn- settings-body []
   (if @(rf/subscribe [:viewing-other?])
     [:p.small "Settings are your own: switch to My chats to change them."]
-    [:<> [claude-subscription] [github-section]]))
+    [:<> [claude-subscription] [github-section] [passkeys/passkeys-section]]))
 
 (defn- settings-card
   "Settings as a popup (README decision 58): centred, a sheet from the bottom on a phone; Escape, a
@@ -293,7 +294,7 @@
       [:f> settings-card])))
 
 (defn settings-popup
-  "Settings (README decision 58): the Claude subscriptions and GitHub, over the whole window while
+  "Settings (README decision 58): the Claude subscriptions, GitHub and passkeys, over the whole window while
   open (the menu's plan card and More settings, the thumb edge's cog)."
   []
   (when (:settings? @(rf/subscribe [:list-mode]))

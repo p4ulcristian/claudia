@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chat with Claude on the left; Claude explains on the right, in a picture it draws.",
   "scripts": {
-    "build": "shadow-cljs release host runner front hub root sudo web && npm run build:web-files",
+    "build": "shadow-cljs release host runner front hub broker root sudo web && npm run build:web-files",
     "build:web-files": "node -e \"const fs=require('fs');if(!fs.existsSync('resources/web/index.html')){console.error('resources/web/index.html is missing: the page has nothing to load');process.exit(1)}fs.cpSync('resources/web','out/web',{recursive:true})\" && node bin/shiki-langs.mjs",
     "watch": "shadow-cljs watch web",
     "test": "shadow-cljs compile test && node out/test.js",
@@ -12,7 +12,9 @@
     "smoke": "node bin/smoke.mjs"
   },
   "dependencies": {
+    "@1password/sdk": "0.5.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.326",
+    "@simplewebauthn/server": "14.1.0",
     "diff": "9.0.0",
     "jose": "6.2.17",
     "libsodium-wrappers": "0.8.4",
@@ -43,6 +45,7 @@
     "@codemirror/view": "6.43.15",
     "@jitl/quickjs-singlefile-cjs-release-sync": "^0.32.0",
     "@lezer/highlight": "1.2.5",
+    "@simplewebauthn/browser": "14.0.0",
     "dompurify": "^3.4.17",
     "elkjs": "0.12.1",
     "highlight.js": "11.12.0",
