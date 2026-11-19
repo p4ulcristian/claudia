@@ -128,6 +128,9 @@
   (is (= "i1" (rules/ref-part "a/b" "i1" true)))
   (is (= "i1" (rules/ref-part " pad" "i1" true)))
   (is (= "i1" (rules/ref-part "" "i1" true)))
+  (is (= "i1" (rules/ref-part "private key" "i1" true)) "1Password takes no space in a reference")
+  (is (= "i1" (rules/ref-part "break-glass (servers)" "i1" true)) "nor brackets")
+  (is (= "break-glass_2.key" (rules/ref-part "break-glass_2.key" "i1" true)))
   (let [all [{:id "i1" :title "GitHub"} {:id "i2" :title "Hetzner"} {:id "i3" :title "hetzner"}]
         usable [{:id "i1" :title "GitHub"} {:id "i2" :title "Hetzner"}]
         labels {"i1" {:fields [{:id "username" :title "username" :value "me"}

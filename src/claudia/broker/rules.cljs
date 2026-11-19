@@ -159,10 +159,11 @@
    :sections (mapv #(select-keys % [:id :title]) sections)})
 
 (defn- plain-part?
-  "A title that can stand as one part of a reference: not blank, no slash or question mark, no space
-  at either end."
+  "A title that can stand as one part of a reference: only letters, digits, _, . and - (the only
+  characters 1Password's SDK takes in a secret reference; a title with a space or a bracket, like
+  \"private key\", goes by its id)."
   [s]
-  (boolean (and (string? s) (not (str/blank? s)) (= s (str/trim s)) (not (re-find #"[/?]" s)))))
+  (boolean (and (string? s) (re-matches #"[A-Za-z0-9_.-]+" s))))
 
 (defn ref-part
   "A reference's part for something with a title and an id: the title when it is plain and unique
