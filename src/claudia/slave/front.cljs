@@ -122,7 +122,7 @@
   (decision 53): :front (the person's root tap, answered here), :refuse (a runner's root and SSH
   certificate routes are the front's own, never passed on), or nil."
   [method url]
-  (cond (and (= "POST" method) (#{"/api/root/answer" "/api/root/switch"} url)) :front
+  (cond (and (= "POST" method) (#{"/api/root/answer" "/api/root/switch" "/api/root/challenge"} url)) :front
         (str/starts-with? url "/api/root/") :refuse
         (str/starts-with? url "/api/ssh/") :refuse))
 

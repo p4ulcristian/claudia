@@ -48,6 +48,21 @@
       (.then #(api/post-json "/hub/vault/read" %))
       (.then #(:sealed %))))
 
+(defn prepare-root
+  "Promise of {:challengeId :options} for root on chat k ([server chat]): action \"on\" (the root
+  switch) or \"allow\" (one \"Run as root\" card, ask its nonce). The server's front makes a one-time
+  nonce, the broker a challenge bound to it (README decision 79); fetch before the tap."
+  [[s c] action ask]
+  (-> (api/post-json (api/url s "root/challenge" nil) {:chat c :action action :ask ask})
+      (.then (fn [{:keys [nonce profile]}]
+               (prepare-approval {:kind "root" :nonce nonce :profile profile :chat c :action action :ask ask})))))
+
+(defn root-grant!
+  "Call from the tap itself: the passkey approves the prepared root; promise of the broker's
+  {:grant :signature}, which the front checks."
+  [prepared]
+  (.then (sign! prepared) #(api/post-json "/hub/root/grant" %)))
+
 (defn listing
   "Promise of the person's passkeys [{:id :name :createdAt :usedAt}]."
   []

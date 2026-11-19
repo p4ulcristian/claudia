@@ -14,6 +14,9 @@ all:
     claudia_build_dir: /path/to/claudia
     # The hub's address; the front fetches the agent users' SSH certificates there (decision 53).
     claudia_hub_url: https://hub.example
+    # The key broker's root-grant public key (decision 79): on the gate, `docker exec claudia-broker
+    # /nodejs/bin/node /app/broker.js grant-key`. Turning root on and Allow need a grant it signed.
+    claudia_broker_grant_key: "MCowBQYDK2VwAyEA...placeholder..."
   children:
     claudia_servers:
       hosts:

@@ -6,10 +6,12 @@
   `node broker.js` serves; `node broker.js admin <email>` makes a broker admin (every key, and who
   may use which); `node broker.js enroll <email>` prints a one-time code that lets that person add
   their first passkey (run on the gate: `docker exec claudia-broker /nodejs/bin/node
-  /app/broker.js enroll <email>`)."
+  /app/broker.js enroll <email>`); `node broker.js grant-key` prints the public key of the root
+  grants (README decision 79), which every server pins as FRONT_BROKER_GRANT_KEY."
   (:require ["node:fs" :as fs]
             ["node:http" :as http]
             [claudia.broker.access :as access]
+            [claudia.broker.grant :as grant]
             [claudia.broker.passkeys :as passkeys]
             [claudia.broker.routes :as routes]
             [claudia.broker.rules :as rules]
@@ -54,6 +56,7 @@
    "/approve/options" routes/approve-options
    "/vault/read" routes/read!
    "/vault/standing" routes/read-standing!
+   "/root/grant" routes/root-grant!
    "/keys/list" access/listing
    "/keys/grants" access/grants!})
 
@@ -100,12 +103,16 @@
         (println (str email " is a broker admin: every key, and Settings → Keys."))
         (store/close!))))
 
+(defn- print-grant-key! [{:keys [data]}]
+  (println (str "FRONT_BROKER_GRANT_KEY=" (grant/public-key! data))))
+
 (defn- serve! [cfg]
   (let [missing (problems cfg)]
     (when (seq missing)
       (js/console.error (str "broker: " (apply str (interpose " " missing))))
       (js/process.exit 1))
     (store/open! (:data cfg))
+    (grant/private-key! (:data cfg))
     (when-let [p (:problem (vault/start! (:token-file cfg) (:commit cfg)))]
       (js/console.warn (str "broker: " p)))
     (.then sealbox/ready #(listen! cfg))))
@@ -115,4 +122,5 @@
     (case (first args)
       "enroll" (enroll! cfg (second args))
       "admin" (make-admin! cfg (second args))
+      "grant-key" (print-grant-key! cfg)
       (serve! cfg))))

@@ -1,8 +1,11 @@
 ---
 # The front's link to the hub (README decision 53): it fetches the agent users' one-hour SSH
 # certificates with the server's hub key, so it needs the hub's address and this server's name as
-# the hub knows it. Two lines in /etc/claudia/env (the rest of that file stays as written by hand).
-- name: Set the front's hub address and server name in /etc/claudia/env
+# the hub knows it. It also pins the key broker's root-grant key (README decision 79): turning root
+# on and Allow count only with a grant that key signed. Three lines in /etc/claudia/env (the rest of
+# that file stays as written by hand); placed by a person, so neither the hub nor the automatic
+# update can swap the key.
+- name: Set the front's hub address, server name and broker grant key in /etc/claudia/env
   ansible.builtin.lineinfile:
     path: /etc/claudia/env
     regexp: "^{{ item.key }}="
@@ -10,4 +13,5 @@
   loop:
     - { key: CLAUDIA_HUB_URL, value: "{{ claudia_hub_url }}" }
     - { key: CLAUDIA_SERVER_NAME, value: "{{ claudia_server_name }}" }
+    - { key: FRONT_BROKER_GRANT_KEY, value: "{{ claudia_broker_grant_key }}" }
   notify: Restart the front

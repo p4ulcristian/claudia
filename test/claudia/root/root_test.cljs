@@ -150,6 +150,7 @@
 (deftest the-front-keeps-root-calls-to-itself
   (is (= :front (front/root-call "POST" "/api/root/answer")))
   (is (= :front (front/root-call "POST" "/api/root/switch")))
+  (is (= :front (front/root-call "POST" "/api/root/challenge")) "the passkey nonce (README decision 79)")
   (is (= :refuse (front/root-call "GET" "/api/root/switch")))
   (is (= :refuse (front/root-call "POST" "/api/root/card")) "a runner's root route is never passed on")
   (is (= :refuse (front/root-call "POST" "/api/root/chat")))

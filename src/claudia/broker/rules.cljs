@@ -2,7 +2,8 @@
   "The key broker's decisions as plain data in, data out (README decision 66): which 1Password
   references it reads, what an approval is for, when a challenge or an enrollment code still holds,
   and what a passkey looks like to the page. No I/O here."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.shared.root-grant :as root-grant]))
 
 (def challenge-ms "How long a passkey challenge stays open (the person taps within this)." (* 5 60 1000))
 
@@ -54,15 +55,16 @@
     (mapv #(select-keys % [:item :email :on]) changes)))
 
 (defn purpose
-  "What an approval is for, from the page's body: a read, adding or removing a passkey, or an
-  admin's changes to who may use which key."
+  "What an approval is for, from the page's body: a read, adding or removing a passkey, an admin's
+  changes to who may use which key, or root for one chat (README decision 79)."
   [vault {:keys [kind id changes] :as body}]
   (case kind
     "read" (read-purpose vault body)
     "grants" (if-let [c (grant-changes changes)] {:kind "grants" :changes c} {:error "changes: 1 to 200 of {item, email, on}."})
     "add-passkey" {:kind "add-passkey"}
     "remove-passkey" (if (and (string? id) (seq id)) {:kind "remove-passkey" :id id} {:error "id (the passkey) is needed."})
-    {:error "kind must be read, add-passkey, remove-passkey or grants."}))
+    "root" (root-grant/purpose body)
+    {:error "kind must be read, add-passkey, remove-passkey, grants or root."}))
 
 (defn open-challenge
   "The pending challenges with one more: id -> {:email :challenge :purpose :expires}. Expired ones
@@ -73,7 +75,7 @@
 
 (defn take-challenge
   "[entry pending-without-it]: the entry when it is this person's, still open and for kind
-  (\"read\", \"add-passkey\", \"remove-passkey\" or \"register\"); entry nil otherwise. A challenge is
+  (\"read\", \"add-passkey\", \"remove-passkey\", \"grants\", \"root\" or \"register\"); entry nil otherwise. A challenge is
   used once: it leaves pending whether it matched or not."
   [pending id email kind now]
   (let [e (get pending id)]

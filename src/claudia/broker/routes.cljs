@@ -4,6 +4,7 @@
   trusts that email only to pick whose passkeys may sign: nothing is read, added or removed without
   a fresh passkey signature (or, for a person's first passkey, a code made on the gate)."
   (:require ["node:crypto" :as crypto]
+            [claudia.broker.grant :as grant]
             [claudia.broker.rules :as rules]
             [claudia.broker.store :as store]
             [claudia.broker.vault :as vault]
@@ -113,6 +114,16 @@
              (if (rules/standing? @standing (rules/standing-key email (:chat p) (:id item)) (js/Date.now))
                (seal-for! email p "within the hour")
                (fail 404 "This chat needs a passkey tap for this key."))))))
+
+(defn root-grant!
+  "Root for one chat the person approved with a passkey (README decision 79): the grant signed
+  with the broker's key, for the server's front to check. The broker knows no profiles: the front
+  checks that the email is the chat's owner."
+  [cfg {:keys [email challengeId response]}]
+  (.then (approve! cfg email challengeId "root" response)
+         (fn [{:keys [profile chat action] :as p}]
+           (js/console.log (str "broker: root " action " for " profile "/" chat " by " email))
+           (grant/signed (:data cfg) p email (js/Date.now)))))
 
 (defn- code-hash [code] (.digest (.update (crypto/createHash "sha256") (str code)) "hex"))
 

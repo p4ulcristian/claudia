@@ -9,7 +9,8 @@
             [reagent.hooks :as h]
             [claudia.web.md :as md]
             [claudia.web.passkey :as passkey]
-            [claudia.web.views.pure.asks :as pure]))
+            [claudia.web.views.pure.asks :as pure]
+            [claudia.web.views.root-pass :as root-pass]))
 
 (defn- card-key!
   "A key on the card: Enter answers (not in a text box with text), 1-9 pick an option of the first
@@ -184,15 +185,28 @@
       :component-will-unmount #(do (reset! paste nil) (some-> @timer js/clearInterval))
       :reagent-render (fn [k ask] (secret-render paste prepared k ask))})))
 
+(defn- root-actions
+  "A \"Run as root\" card's Deny and Allow, to the server's front (README decision 52); Allow
+  needs the owner's passkey (decision 79), whose challenge st holds."
+  [k ask busy st]
+  (let [{:keys [error] :as pass} @st]
+    [:<>
+     (when error [:p.ask-error error])
+     [:div.actions
+      [:button {:disabled busy :on-click #(rf/dispatch [:root/answer k ask false])} "Deny"]
+      [:button.primary {:disabled (or busy (not (root-pass/ready? pass)))
+                        :on-click #(root-pass/tap! st k "allow" (:id ask) (fn [g] (rf/dispatch [:root/answer k ask true g])))}
+       (if (:prepared pass) "Allow with passkey" "Getting ready…")]]]))
+
 (defn- permit-actions
-  "Deny and Allow: a \"Run as root\" card's go to the server's front (README decision 52), the
-  others' to the runner."
+  "Deny and Allow: a \"Run as root\" card's go to the server's front with a passkey, the others'
+  to the runner."
   [k ask busy]
-  (let [root? (:root ask)]
+  (if (:root ask)
+    ^{:key (:id ask)} [root-pass/holder k "allow" (:id ask) (fn [st] [root-actions k ask busy st])]
     [:div.actions
-     [:button {:disabled busy :on-click #(rf/dispatch (if root? [:root/answer k ask false] [:ask/deny k (:id ask)]))} "Deny"]
-     [:button.primary {:disabled busy :on-click #(rf/dispatch (if root? [:root/answer k ask true] [:ask/answer k (:id ask) {}]))}
-      "Allow"]]))
+     [:button {:disabled busy :on-click #(rf/dispatch [:ask/deny k (:id ask)])} "Deny"]
+     [:button.primary {:disabled busy :on-click #(rf/dispatch [:ask/answer k (:id ask) {}])} "Allow"]]))
 
 (defn- permit-card
   "A tool waiting for the person's OK (ExitPlanMode: the plan to approve; a root command), as the
