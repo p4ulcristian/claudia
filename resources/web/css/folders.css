@@ -1,5 +1,5 @@
-/* Files in the right half (claudia.web.views.folders, README decisions 61 to 64, 68 to 70), in place
-   of the picture, chalk look; on top the server's bookmarks as cards, then three panes: left the
+/* Files in the right half (claudia.web.views.folders, README decisions 61 to 64, 68 to 71), in place
+   of the picture, chalk look; the top bar names the computer (a new chat's toggle of computers); on top the server's bookmarks as cards, then three panes: left the
    filter and the tree (react-arborist), in the middle the folder's contents as a grid or a list,
    right the picked file's preview or the folder. The right pane is quiet: small type, label-value
    lines, no tiles. Sized by the right half (.right is a size container): under 1000 px the preview
@@ -8,7 +8,15 @@
 .fd-files { flex: 1; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; color: var(--fg); }
 .fd-bar { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
 .fd-on { font: 15px var(--sans); color: var(--muted); }
-.fd-heading { margin: 0 auto 0 0; font: 700 22px/1 var(--hand); color: var(--accent); }
+.fd-where { display: grid; gap: 4px; margin-right: auto; min-width: 0; }
+.fd-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.fd-heading { margin: 0; font: 700 22px/1 var(--hand); color: var(--accent); }
+.fd-servers { display: flex; flex-wrap: wrap; gap: 4px; }
+.fd-server { font: 700 15px var(--hand); padding: 2px 11px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.fd-server:hover { color: var(--fg); border-color: var(--accent); }
+.fd-server.on { color: var(--fg); background: var(--panel2); border-color: var(--accent); }
+.fd-server.off { opacity: 0.55; }
+.fd-machine { margin: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fd-switch { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .fd-body { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(280px, 400px); min-height: 0; }
 .fd-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px; border-right: 1px solid var(--line); }

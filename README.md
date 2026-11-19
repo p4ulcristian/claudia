@@ -267,19 +267,16 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     2026-11-19, the user's approved layout): one panel lightly tinted with the chat's colour (its
     background 7% of the colour, its edge 45%), the same for a new chat and a started one. Row 1:
     the title (a click renames it) and the server's state only while it is off, offline or
-    reconnecting; nothing else. Row 2: five pills, one component and one look (rounded, a 1 px line,
-    a 16 px icon in the muted colour before the value, ▾ after it when it can be changed; a fixed
-    value, a started chat's computer, has a dashed edge and no ▾), wrapping on a narrow column:
-    the computer (its popup: where the chat works, the folder's full path and its computer: name,
-    system, kernel and architecture, processor and cores, memory, uptime, `host` in the system
-    sample; for a new chat with more than one computer the others to pick); the folder (the folder
-    icon and the chat's real working path in mono, `~` for the home, cut at its start so the end
-    stays visible; a started chat without a folder shows its server's work folder, `CLAUDIA_CWD` as
-    `GET /api/folders` answers it; a new chat with none picked says "Pick a folder", decision 65; a
-    click opens the Folders modal, decisions 61 to 64); whose Claude subscription (decision 16;
-    only when tokens are saved); model · effort in one pill ("Opus 5.5 · high"; its popup lists the
-    models and the efforts, no native selects); the prompt profile (decision 60). All five popups
-    share one style. Row 3: on the left the rings (the context for a started chat, a click
+    reconnecting; nothing else. Row 2: four pills, one component and one look (rounded, a 1 px line,
+    a 16 px icon in the muted colour before the value, ▾ after it when it can be changed),
+    wrapping on a narrow column: where the chat works, the computer and the folder in one pill
+    (decision 71: the folder icon, the computer's name, then the chat's real working path in mono,
+    `~` for the home, cut at its start so the end stays visible; a started chat without a folder
+    shows its server's work folder, `CLAUDIA_CWD` as `GET /api/folders` answers it; a new chat with
+    none picked says "Pick a folder", decision 65; a click toggles Files, decision 70); whose
+    Claude subscription (decision 16; only when tokens are saved); model · effort in one pill
+    ("Opus 5.5 · high"; its popup lists the models and the efforts, no native selects); the
+    prompt profile (decision 60). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
     compacting it; the plan's 5-hour; its week), each an 18 px ring followed by its percent, its
     tip naming it; on the right round 30 px buttons with tips: the colour (a filled dot in the
     chat's colour; a click opens the palette), the bell (a chime, popup and push when it finishes
@@ -988,6 +985,19 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     modal; Select sends it and the picture comes back. A read-only view shows the picture only.
     On a phone, Files brings the right half up. Instead of: the Folders modal over the page, or a
     Picture | Files switch in the right half's bar.
+
+71. The computer and the folder are one pill, and Files picks the computer (2026-11-19, the user's
+    call: "project and server pair needs to be one; both should open the file browser; the file
+    browser should have a server toggle"). Row 2's computer pill and folder pill became one place
+    pill, "destiny ~/Work/claudia", and a click toggles Files (decision 70); the computer popup is
+    gone. Files' top bar names its computer and, under it, one quiet line of that computer's
+    facts (system, kernel, processor, memory, uptime, from `GET /hub/servers/<server>/system`). For
+    a new chat with more than one computer the name is a toggle of the person's computers (an off
+    one dimmed): a pick makes it the new chat's computer, drops the folder picked on the one before,
+    and starts the browser again there with that computer's own bookmarks (decision 61). A started
+    chat's computer stays fixed. So a new chat's first message without a folder (decision 65)
+    opens Files, where the person picks the computer and the folder, and Select sends it. Instead
+    of: a computer pill with its own popup beside the folder pill.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
