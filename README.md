@@ -1133,6 +1133,40 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
+80. A new Agent SDK takes each new session, with no host restart (2026-11-20, the user's call). The
+    host loaded the SDK once at its start, and `deploy/update.sh` never restarts hosts (a restart
+    stops every turn and background job), so servers ran an old SDK until a restart by hand, while
+    a new SDK comes about daily. Now each session loads its SDK when it starts (`op: "start"`,
+    `claudia.slave.host-sdk`): the version in the release's `node_modules`, the release being the
+    folder the host was started from by path, so after an update it is the new one. It is imported
+    by absolute path with `?v=<version>` (Node keeps one module per URL), with the zod beside it. A
+    running session keeps the module it started with; the host keeps every loaded one in memory and
+    itself never restarts for an SDK. Where the files live: a release folder is deleted two updates
+    later (`<release>.old`, `/srv/claudia.old`), and that was not made safe by proof (a session's
+    Claude Code binary keeps running from a deleted file on Linux and macOS, but a fallback reloads
+    from the files and the SDK finds its binary by path), so the files stay instead. The host loads
+    from a store beside the release, `<release>.sdk/<version>/node_modules` (`deploy/sdk-store.sh`,
+    run by update.sh on single-user Linux and Mac and by the shared server's install.sh before the
+    runners restart): the release's node_modules as hard links (Linux), APFS clones (Mac) or a
+    copy. A version leaves the store only when it is not one of the three stored last and no
+    process's command line names its folder (each session's Claude Code binary runs from there). A
+    developer's checkout has no store: its own node_modules, which `npm ci` replaces under running
+    sessions as before. Idle chats move: the host says each session's SDK version and the version a
+    new session gets (`sessions`, PROTOCOL.md), and the runner closes a session that is older when
+    its chat is between turns, not settling and has no background task running (at a runner
+    connect, which every update brings, a turn's end, and once its background work settled); an
+    open chat resumes at once on the new SDK, a passive one with its next message, from its `.jsonl`
+    as always. Never mid-turn or with work running. Failures: an SDK that fails to load, or whose
+    query fails before its first message, falls back to the version the host started with (else the
+    newest other loaded one); the messages sent so far go to the fallback, the runner shows the
+    error in the chat (`{ ev: "sdk", error }`), and new sessions skip that version until another is
+    installed (the top `sdk` is then the fallback, so idle chats are not closed over and over).
+    This code itself reaches a host only with one restart by hand, like any host change; on a
+    single-user Linux server the update that brings it still runs the old update.sh, so its store
+    fills from the next update on (until then sessions load the release's own node_modules).
+    Instead of: restarting idle hosts after an update (background jobs would stop), or a host per
+    SDK version (a runner would talk to several).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -1180,7 +1214,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   list (waiting up to 40 s for a pushed one), its tree from the API (each server asks GitHub about a commit once and keeps the answer: without a token it gets 60 calls an hour), and install that tree's build:
   fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
-  front and the runners restart, never the hosts. No call fails while they do (2026-11-16): the
+  front and the runners restart, never the hosts (a new Agent SDK takes their next sessions, decision 80). No call fails while they do (2026-11-16): the
   hub tries a front that refuses it again every 0.3 s for up to 15 s, and a front a runner whose
   socket refuses or is missing, for any call without a body (GET, HEAD, a WebSocket handshake), so
   a restart makes a call wait a moment instead of failing; a front that is off or asleep times out

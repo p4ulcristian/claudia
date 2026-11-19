@@ -22,7 +22,9 @@
 # deploy/release-signers on GitHub's main), else from GitHub's release tree-<tree> (stage.yml: its
 # cosign signature must be stage.yml's on main, keyless). The tarball must say the tree it was asked for. Then fetch every staged tree the poke named (the newest two are kept).
 # The front and the runners restart (chats keep going in the hosts); the hosts never restart here:
-# their new code waits for a restart by hand. Nothing published yet is not an error: the next poke
+# their new code waits for a restart by hand. A new Agent SDK needs none: the release's SDK is kept
+# in <release>.sdk (deploy/sdk-store.sh) and each session the hosts start loads the newest (README
+# decision 80). Nothing published yet is not an error: the next poke
 # installs it. Only forward, with one exception: a poke's "rollback <commit>" (the hub found that
 # release broken in people's pages, README decision 35) puts the release kept before it back, once,
 # and that commit is never installed again.
@@ -243,8 +245,13 @@ get() {
 	return $rc
 }
 
-# restart_programs: the front and the runners start again on what $dest holds now; the hosts keep running.
+# restart_programs: the release's Agent SDK goes into the store the hosts load sessions from
+# (deploy/sdk-store.sh; shared: its install.sh does it), then the front and the runners start again
+# on what $dest holds now; the hosts keep running (their next sessions take the new SDK).
 restart_programs() {
+	if [ $mode = user ]; then
+		bash "$dest/deploy/sdk-store.sh" "$dest" || echo "the Agent SDK store was not updated: sessions load the release's own copy" >&2
+	fi
 	if [ $mode = shared ]; then
 		systemctl restart claudia-front.service
 		sed 's/#.*//' /etc/claudia/profiles | awk 'NF { print $1 }' | while read -r p; do
@@ -299,7 +306,7 @@ install_main() {
 		mv "$dest.new" "$dest"
 		restart_programs
 	fi
-	echo "Claudia is at ${want:0:7}; host code changes wait for a host restart by hand"
+	echo "Claudia is at ${want:0:7}; new sessions take its Agent SDK, host code changes wait for a host restart by hand"
 	have=$want
 }
 

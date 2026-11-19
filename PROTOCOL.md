@@ -22,7 +22,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 - **runner** (per profile): chats, pictures, questions, secrets, the SQLite store. Restarting it
   keeps running chats (the host holds them).
 - **host** (per profile): owns each chat's Agent SDK `query`. Knows nothing about Claudia; every tool
-  call, hook and permission ask goes to the runner as an rpc.
+  call, hook and permission ask goes to the runner as an rpc. Each session loads the newest installed
+  Agent SDK when it starts (README decision 80), so an SDK update needs no host restart.
 
 ## Settings (environment; never committed)
 
@@ -608,16 +609,28 @@ images: `[{ media_type, data }]`, image blocks before the text),
 `[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
-`{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
-on every runner connect so it can take running chats back), `{ ev: "cancel", rpc, id }` (the SDK
+`{ ev: "ended", id, error? }`, `{ ev: "sessions", sdk, list: [{ id, busy, sdk }] }` (answer to `list`,
+and sent on every runner connect so it can take running chats back; each session's `sdk` is the
+Agent SDK version it runs on, null while it loads; the top `sdk` is the version a session started
+now would run on: the installed release's, or its fallback when that one failed),
+`{ ev: "sdk", id, sdk, error? }` (the session's query started on Agent SDK `sdk`; sent at every
+start and again when it falls back; `error`: why not the installed one: it failed to load, or its
+query failed before its first message, README decision 80), `{ ev: "cancel", rpc, id }` (the SDK
 aborted that rpc: its ask goes).
+
+The runner closes a live chat's session (`close`) to move it to the newest SDK when the chat is
+between turns, not settling, has no background task running, and its session's `sdk` is older than
+the top `sdk` (`claudia.slave.sdk-version/move-to-newest?`): at a runner connect, a turn's end and
+once its background work has settled. An open chat resumes at once; a passive one with its next
+message.
 
 rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool result (`{ content, isError? }`);
 `hook` `{ event, index, input }` → value = the hook's output; `canUseTool` `{ name, input, toolUseID, title?, description? }`
 → value = a permission result (`{ behavior: "allow", updatedInput }` or `{ behavior: "deny", message }`).
 Only the newest runner connection is listened to. Right after `sessions` on a connect, the host sends
 every rpc still unanswered again (a runner that restarted asks the person again); the runner sends
-nothing before that first `sessions`.
+nothing before that first `sessions`. Messages sent while a session's SDK loads wait in the host;
+a `control` call then waits until its query runs.
 
 ## Code forms and templates (`claudia.slave.codeforms`)
 
