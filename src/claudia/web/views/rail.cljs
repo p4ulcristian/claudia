@@ -200,7 +200,8 @@
         m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
            :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? true}
         box (h/use-ref nil)
-        pulled (use-pull! box)]
+        pulled (use-pull! box)
+        edge? (hooks/use-media reach/touch-tablet)]
     (use-centre-open! box open)
     (sidebar/scroll-open-into-view! [(str open) (count rows)])
     (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
@@ -210,10 +211,9 @@
       (pull-mark pulled)
       [:div.rail-dots {:ref #(set! (.-current box) %)
                        :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
-       (rail-top (hooks/use-media reach/touch-tablet))
+       (rail-top edge?)
        (map-indexed #(entry-view m %1 %2) entries)]]
-     [update-pill/pill]
-     ;; Your profile circle (whose chats, the menu), on the iPad too; there Settings is also on the
-     ;; right edge, beside the mic (thumb_edge.cljs).
-     [:f> menu/button]
-     [update-pill/updated]]))
+     ;; The update pill, your profile circle (whose chats, the menu) and the version; on a touch
+     ;; tablet they stand at the foot of the mic's rail instead (thumb_edge.cljs, README decision 73).
+     (when-not edge?
+       [:<> [update-pill/pill] [:f> menu/button] [update-pill/updated]])]))

@@ -36,6 +36,11 @@
   .edge-over, .edge-under { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: var(--edge-gap); }
   .edge-over { justify-content: flex-end; }
   .edge-under { justify-content: flex-start; }
+  /* The foot (the update pill, your profile circle, the version) at the rail's bottom: the mic stays
+     in the middle. */
+  .edge-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
+  .edge-foot .mn-gear { margin: 4px auto; }
+  .thumb-edge .up-panel { left: auto; right: calc(var(--mic-rail-w) + 8px + env(safe-area-inset-right)); }
   .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
   .thumb-edge .mic-button svg { width: 30px; height: 30px; }
   .edge-gap { width: 64px; height: 64px; flex: none; }

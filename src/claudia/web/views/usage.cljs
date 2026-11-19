@@ -23,12 +23,15 @@
      [:span.mr-num (str percent "%")]]))
 
 (defn pop-place
-  "Where the popup opens by the rings in box: below them (the list's header) or beside them (the rail)."
+  "Where the popup opens by the rings in box: below them (the list's header) or beside them (the
+  rail; beside is :left for a box on the right wall's rail: it opens to the box's left)."
   [^js box beside?]
-  (let [rc (.getBoundingClientRect box)]
-    (if beside?
-      {:left (+ (.-right rc) 8) :bottom (max 6 (- js/innerHeight (.-bottom rc)))}
-      {:left (max 6 (.-left rc)) :top (+ (.-bottom rc) 6)})))
+  (let [rc (.getBoundingClientRect box)
+        bottom (max 6 (- js/innerHeight (.-bottom rc)))]
+    (cond
+      (= beside? :left) {:right (+ (- js/innerWidth (.-left rc)) 8) :bottom bottom}
+      beside? {:left (+ (.-right rc) 8) :bottom bottom}
+      :else {:left (max 6 (.-left rc)) :top (+ (.-bottom rc) 6)})))
 
 (defn context-ring
   "The open chat's context use; a click compacts it (not while a turn runs)."

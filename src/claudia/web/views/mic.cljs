@@ -8,7 +8,7 @@
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
   On the tablet's rail (README decision 73) the flower is half, to the left, and the mic moves: a
-  drag past the petals (pure/move-px) in the first 2 s (pure/move-window-ms) drops the clip and the
+  drag past the petals (pure/move-px) in the first half second (pure/move-window-ms) drops the clip and the
   mic follows the finger on a spring
   (motion's useSpring: it trails and overshoots a little); let go, it glides there and stays (its
   spot kept on this device), or let go on the rail or at its slot it glides home. Parked by a wall,
