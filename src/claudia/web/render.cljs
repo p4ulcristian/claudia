@@ -26,16 +26,8 @@
   [:section.video-stage
    [scene3d/scene3d-form data "video" {:fill true :video {:seconds seconds} :on-video on-video}]])
 
-(defn- tint!
-  "The board in the chat's colour (none: the default)."
-  [color]
-  (let [el js/document.documentElement]
-    (when-let [v (sidebar/chat-color-var color)]
-      (.setAttribute el "data-chat" color)
-      (.setProperty (.-style el) "--hue" v))))
-
 (defn- video! [root data-json clips-json color]
-  (tint! color)
+  (sidebar/tint-window! color)
   (js/Promise.
    (fn [done]
      (rdc/render root [video-stage (protocol/read-json data-json)
@@ -49,7 +41,7 @@
     (set! (.-__draw js/window)
           (fn [scene-json color]
             (set! (.-__drawn js/window) false)
-            (tint! color)
+            (sidebar/tint-window! color)
             (rdc/render root [stage (protocol/read-json scene-json)])
             ;; Two frames: React has committed and the layout effects (graph layout) have started.
             (js/requestAnimationFrame

@@ -22,12 +22,12 @@
   [:span.rail-stack
    (for [[i {:keys [color] :as rw}] (map-indexed vector (take 3 rows))]
      ^{:key (order/ref-of rw)}
-     [:i {:style {"--chat" (sidebar/chat-color-var color) "--i" i}}])])
+     [:i {:style (assoc (sidebar/chat-colour-style color) "--i" i)}])])
 
 (defn- card-chat [{:keys [open viewing?]} {:keys [server id title color] :as rw}]
   (let [k [server id]]
     [:button.group-card-chat {:type "button" :class (when (= k open) "on")
-                              :style {"--chat" (sidebar/chat-color-var color)}
+                              :style (sidebar/chat-colour-style color)
                               :on-click #(do (sidebar/pick! k (= k open) %) (close!))}
      [dot/chat-dot rw (and (not viewing?) (:unseen rw) (not= k open))]
      [:span.group-card-title title]]))

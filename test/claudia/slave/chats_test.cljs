@@ -6,7 +6,9 @@
             [claudia.slave.chats.titles :as titles]
             [claudia.slave.chats.turns :as turns]
             [claudia.slave.chats.view :as view]
-            [claudia.slave.tools :as tools]))
+            [claudia.slave.tools :as tools]
+            [clojure.string :as str]
+            ["node:fs" :as fs]))
 
 ;; Titles -----------------------------------------------------------------------------------------
 
@@ -36,16 +38,25 @@
 ;; The chat list -----------------------------------------------------------------------------------
 
 (deftest a-new-chat-takes-the-most-different-colour
-  (is (= (first colours/chat-colours) (colours/most-different [] nil)) "nothing worn: the first")
+  (is (= (first colours/solid-colours) (colours/most-different [] nil)) "nothing worn: the first")
   (let [picked (colours/most-different [{:id 1 :color "cherry"}] nil)]
     (is (not= "cherry" picked))
-    (is (= picked (apply max-key #(colours/apart % "cherry") (remove #{"cherry"} colours/chat-colours)))))
-  (is (= (first colours/chat-colours) (colours/most-different [{:id 1 :color "cherry"}] 1)) "except itself")
-  (let [all (map-indexed (fn [i c] {:id i :color c :started i}) colours/chat-colours)
+    (is (= picked (apply max-key #(colours/apart % "cherry") (remove #{"cherry"} colours/solid-colours)))))
+  (is (= (first colours/solid-colours) (colours/most-different [{:id 1 :color "cherry"}] 1)) "except itself")
+  (let [all (map-indexed (fn [i c] {:id i :color c :started i}) colours/solid-colours)
         picked (colours/most-different all nil)]
-    (is (not= (last colours/chat-colours) picked) "every one worn once: never the last started")
-    (is (= picked (apply max-key #(colours/apart % (last colours/chat-colours)) (butlast colours/chat-colours)))
+    (is (not= (last colours/solid-colours) picked) "every one worn once: never the last started")
+    (is (= picked (apply max-key #(colours/apart % (last colours/solid-colours)) (butlast colours/solid-colours)))
         "every one worn once: the furthest from the last started")))
+
+(deftest a-new-chat-is-solid-and-avoids-a-gradients-crayons
+  (let [picks (map #(colours/most-different [{:id 1 :color % :started 1}] nil) colours/gradient-colours)]
+    (is (every? (set colours/solid-colours) picks) "never a gradient")
+    (is (every? (fn [[g picked]] (not-any? #{picked} (colours/crayons g))) (map vector colours/gradient-colours picks))
+        "never a crayon of the gradient started last"))
+  (is (= {"plum" 1 "cherry" 1} (colours/worn [{:id 1 :color "berry"}] nil)) "a gradient wears both its crayons")
+  (is (= #{"plum" "cherry"} (colours/last-crayons [{:id 1 :color "berry" :started 1}] nil)))
+  (is (= #{} (colours/last-crayons [{:id 1 :color "ash" :started 1}] nil))))
 
 (deftest a-new-chat-never-repeats-the-last-colour
   (is (not= "cherry" (colours/most-different [{:id 1 :color "cherry" :archived true :started 5}] nil))
@@ -71,8 +82,39 @@
   (is (= :fresh (colours/recolour {:color "neon"})))
   (is (nil? (colours/recolour {:color "jade"})))
   (is (nil? (colours/recolour {:color "ash" :prev-color "jade"})))
-  (is (= 20 (count colours/chat-colours)))
+  (is (nil? (colours/recolour {:color "dusk"})) "a gradient is a chat colour")
+  (is (= 20 (count colours/solid-colours)))
   (is (every? colours/chat-colour? (vals colours/renamed))))
+
+(deftest gradients-are-made-of-crayons
+  (is (= (into colours/solid-colours colours/gradient-colours) colours/chat-colours))
+  (is (every? colours/chat-colour? colours/gradient-colours))
+  (is (not-any? (set colours/solid-colours) colours/gradient-colours) "no name taken twice")
+  (is (not-any? (set (keys colours/renamed)) colours/gradient-colours) "no old name taken")
+  (is (every? #(= 2 (count (filter (set colours/solid-colours) (colours/crayons %)))) colours/gradient-colours))
+  (is (= '("cherry") (colours/crayons "cherry")))
+  (is (= '("plum" "cherry") (colours/crayons "berry")))
+  (is (empty? (colours/crayons "ash")))
+  (is (empty? (colours/crayons nil)))
+  (is (= "#e5383b" (colours/hex-of "cherry")))
+  (is (= "#ce3d70" (colours/hex-of "berry")))
+  (is (nil? (colours/hex-of "ash"))))
+
+(deftest the-page-has-every-chat-colour
+  (let [css (fs/readFileSync "resources/web/css/claudia.css" "utf8")]
+    (doseq [c colours/chat-colours]
+      (is (str/includes? css (str "--c-" c ": " (colours/hex-of c) ";")) c))
+    (doseq [g colours/gradient-colours
+            :let [[a b] (colours/crayons g)]]
+      (is (str/includes? css (str "--g-" g ": linear-gradient(135deg, var(--c-" a "), var(--c-" b "));")) g))))
+
+(deftest a-gradients-stand-in-lies-between-its-crayons
+  (doseq [g colours/gradient-colours
+          :let [[a b] (colours/crayons g)]]
+    (is (< (colours/apart g a) (colours/apart a b)) g)
+    (is (< (colours/apart g b) (colours/apart a b)) g))
+  (is (< 0.1 (apply min (for [x colours/gradient-colours y colours/gradient-colours :when (not= x y)] (colours/apart x y))))
+      "no two gradients have look-alike middles"))
 
 (deftest row-of-a-chat
   (let [r {:id "c" :title "T" :ended 100 :seen 50 :preview "p" :last-turn "u1" :reply "ok"}]

@@ -26,6 +26,18 @@
 
 (def chat-color-var words/colour-var)
 
+(def chat-colour-style words/colour-style)
+
+(defn tint-window!
+  "The whole window in chat colour color (claudia.css \":root[data-chat]\", a gradient's
+  \":root[data-gradient]\"): sets the root's attributes and properties words/root-look names,
+  removes the ones it leaves nil."
+  [color]
+  (let [root js/document.documentElement
+        {:keys [attrs props]} (words/root-look color)]
+    (doseq [[k v] attrs] (if v (.setAttribute root k v) (.removeAttribute root k)))
+    (doseq [[k v] props] (if v (.setProperty (.-style root) k v) (.removeProperty (.-style root) k)))))
+
 (defn ago
   "How long ago: now, 5m, 3h, 2d, then the date (Oct 3)."
   [t]
@@ -72,7 +84,7 @@
         elsewhere? (contains? @(rf/subscribe [:open-elsewhere]) k)]
     [:button.chat-row.cs-row {:class [(when active? "active") (when off "off") (when done? "unseen") (when elsewhere? "elsewhere")
                                       (when passive? "passive") (when first-passive? "first")]
-                              :style {"--chat" (chat-color-var color)}
+                              :style (chat-colour-style color)
                               :on-click (or on-click #(pick! k active? %))
                               :on-context-menu #(chatmenu/open-at! k %)}
      [dot/chat-dot row done?]
@@ -108,7 +120,7 @@
 
 (defn- found-chat [r f {:keys [multi? ro-servers search-text tag-archived?]}]
   (let [k [(:server r) (:id r)]]
-    [:div.found {:style {"--chat" (chat-color-var (:color r))}}
+    [:div.found {:style (chat-colour-style (:color r))}
      [row-view r {:multi? multi? :read-only? (contains? ro-servers (:server r)) :line2? false :project? true
                   :tag (when (and tag-archived? (:archived r)) "archived")
                   :title-view (if (:title f) [marked-title (:title r) search-text] (:title r))

@@ -23,18 +23,14 @@
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
-  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\"); Claudia's own
-  chat wears her green gradient instead (\":root[data-claudia]\", README decision 50)."
+  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\", a gradient's
+  \":root[data-gradient]\"); Claudia's own chat wears her green gradient instead
+  (\":root[data-claudia]\", README decision 50)."
   [color claudia?]
   (h/use-effect
    (fn []
-     (let [root js/document.documentElement
-           v (sidebar/chat-color-var color)]
-       (if v
-         (do (.setAttribute root "data-chat" color)
-             (.setProperty (.-style root) "--hue" v))
-         (do (.removeAttribute root "data-chat")
-             (.removeProperty (.-style root) "--hue")))
+     (let [root js/document.documentElement]
+       (sidebar/tint-window! color)
        (if claudia? (.setAttribute root "data-claudia" "") (.removeAttribute root "data-claudia")))
      nil)
    [color claudia?]))

@@ -50,7 +50,7 @@
 (def ^:private archive-grace-ms 10000)
 (def ^:private secret-ms (* 10 60 1000))
 
-(def chat-colors colours/chat-colours)
+(def chat-colors "Every colour a chat may be given by hand: the solids and the gradients." colours/chat-colours)
 
 ;; id -> what lives only while the runner runs:
 ;;   :live (the host holds a session) :running :stopping :scene :since (when the running turn began)
@@ -76,8 +76,8 @@
 
 (defn least-used-colour
   "A new chat's colour: among the ones the other chats in the list (not archived, not this one)
-  wear least, the most different from the rest (README decision 26); never ash, which is only
-  picked by hand. Every chat has one: there is no default look (README decision 25)."
+  wear least, the most different from the rest (README decision 26); always a solid one, never a
+  gradient or ash, which are only picked by hand (README decision 80). Every chat has one: there is no default look (README decision 25)."
   ([] (least-used-colour nil))
   ([except]
    (colours/most-different (store/chats) except)))

@@ -326,7 +326,8 @@ body.chat-dragging .order-item { touch-action: none; }
 .rail-group { width: 100%; }
 .rail-stack { width: 34px; height: 34px; flex: none; position: relative; display: block; zoom: 0.8; }
 .rail-stack i { position: absolute; width: 26px; height: 26px; border-radius: 50%; left: calc(var(--i) * 4px); top: calc(var(--i) * 4px);
-  background: color-mix(in srgb, var(--chat, var(--grey)) 30%, var(--bg2)); border: 2px solid var(--chat, var(--grey)); }
+  --tint: color-mix(in srgb, var(--chat, var(--grey)) 30%, var(--bg2)); border: 2px solid transparent;
+  background: linear-gradient(var(--tint), var(--tint)) padding-box, var(--chat-fill, var(--chat, var(--grey))) border-box; }
 .rail-group.on .rail-stack i, .rail-group.chosen .rail-stack i { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--chat, var(--grey)) 55%, transparent); }
 .group-card { position: fixed; left: calc(var(--rail-w) + env(safe-area-inset-left) + 6px); z-index: 70; width: 280px; max-width: calc(100vw - var(--rail-w) - 20px);
   padding: 8px; display: grid; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); }

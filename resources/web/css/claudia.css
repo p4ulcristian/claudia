@@ -15,6 +15,18 @@
   --c-sunflower: #ffd23f; --c-olive: #9a9a3a; --c-kiwi: #9bd63a; --c-forest: #3f9e4d; --c-mint: #7fe0b2;
   --c-jade: #2fbf8a; --c-aqua: #5ce1f0; --c-sky: #6fc0ff; --c-ocean: #2f7fd8; --c-sapphire: #4a5cf0;
   --c-periwinkle: #8f9cff; --c-grape: #9b5de5; --c-plum: #b0478f; --c-magenta: #f15bb5; --c-bubblegum: #ff9ecd;
+  /* The gradient chat colours (claudia.shared.colours gradients; README decision 80): --c- is each one's
+     stand-in, halfway between its crayons (the theme is mixed from it), --g- its gradient (its circles). */
+  --c-berry: #ce3d70; --c-ember: #ff8800; --c-sunset: #ff6a6e; --c-citrus: #d4d425;
+  --c-meadow: #62cd6d; --c-lagoon: #20b3e8; --c-dusk: #ad57e5; --c-candy: #d299f1;
+  --g-berry: linear-gradient(135deg, var(--c-plum), var(--c-cherry));
+  --g-ember: linear-gradient(135deg, var(--c-cherry), var(--c-sunflower));
+  --g-sunset: linear-gradient(135deg, var(--c-tangerine), var(--c-magenta));
+  --g-citrus: linear-gradient(135deg, var(--c-sunflower), var(--c-kiwi));
+  --g-meadow: linear-gradient(135deg, var(--c-kiwi), var(--c-jade));
+  --g-lagoon: linear-gradient(135deg, var(--c-aqua), var(--c-ocean));
+  --g-dusk: linear-gradient(135deg, var(--c-sapphire), var(--c-magenta));
+  --g-candy: linear-gradient(135deg, var(--c-bubblegum), var(--c-periwinkle));
   /* Named colours the code forms use for files, lanes and namespaces (not chat colours). */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
@@ -40,6 +52,14 @@
   /* coloured chalk: the chat's hue, chalky */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
 }
+
+/* A gradient chat (README decision 80): the theme above, mixed from its stand-in colour, and the whole
+   window one gradient between its two crayons (--hue-a top left, --hue-b bottom right), each as dark as
+   a solid chat's background so the text keeps its contrast. The rail, the list and the picture are
+   see-through over it, as in Claudia's own chat. */
+:root[data-gradient] { --board: transparent; }
+:root[data-gradient] body { background: linear-gradient(135deg, color-mix(in oklch, var(--hue-a) 20%, #343434), color-mix(in oklch, var(--hue-b) 20%, #2a2a2a)); }
+:root[data-gradient] .rail, :root[data-gradient] .sidebar { background: color-mix(in srgb, var(--bg2) 55%, transparent); }
 
 /* Claudia's own chat (README decision 50): her own green theme, whatever colour her row has, and the
    whole window one gradient from deep green to near black, with a few faint columns of code falling
@@ -179,6 +199,8 @@ code, pre { font-family: var(--mono); }
 
 /* Chat colour: the palette, opened from row 3's colour button. */
 .palette { display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 2px; }
+/* The gradients start a row of their own, under a faint line (README decision 80). */
+.swatch-break { grid-column: 1 / -1; height: 0; border-top: 1px dashed var(--line); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
@@ -548,13 +570,13 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 /* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
   background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
 .rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
-.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
+.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat-fill, var(--chat, var(--grey))); opacity: 0.8; }
 /* The chat's project: a small chalk tag at the circle's bottom right. */
 .project-tag { position: absolute; right: -12px; bottom: -7px; padding: 0 4px; font: 700 10.5px/15px var(--sans); color: var(--tag, var(--muted)); letter-spacing: 0.02em; isolation: isolate; pointer-events: none;
   border-radius: 8px; background: var(--bg2); --ring: var(--chalk-r8-15); --ink: color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); }
 /* With a logo: the logo fills the circle. */
 .rail-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; pointer-events: none; }
-.letter-tag { position: absolute; right: -7px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 2px var(--bg2); font: 700 10.5px/1 var(--sans); color: var(--on-hue); pointer-events: none; }
+.letter-tag { position: absolute; right: -7px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--chat-fill, var(--chat, var(--grey))); box-shadow: 0 0 0 2px var(--bg2); font: 700 10.5px/1 var(--sans); color: var(--on-hue); pointer-events: none; }
 /* Agents still working: small chalk moons around the chat's circle. */
 .moons { position: absolute; inset: 0; pointer-events: none; }
 /* A chalk dot with a ring of the rail's colour round it, 2px of room for its rough edge. */
@@ -597,6 +619,9 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .divider::before, .edge-line::before, .f-arrow::before { inset: -2px; }
 /* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
+/* A chat's circle is chalked in what fills its colour: a gradient chat's gradient (--chat-fill,
+   README decision 80). Without the masks (Firefox) the plain outline keeps the one colour. */
+@supports (-webkit-mask-box-image: none) { .rail-dot::before { background: var(--chat-fill, var(--ink)); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
 .rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .rbar-chip, .act-pill {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
