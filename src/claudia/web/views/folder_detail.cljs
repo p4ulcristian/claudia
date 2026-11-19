@@ -42,20 +42,21 @@
         [:span.fd-chat-title (or (not-empty title) "Chat")]
         [:span.fd-chat-at (format/when-text at)]])]))
 
-(defn- buttons [{:keys [server p bookmarked?]}]
+(defn- buttons [{:keys [server p bookmarked? chat]}]
   [:div.fd-actions
-   [:button.fd-btn.primary {:on-click #(rf/dispatch [:folders/use p])} "Use for this chat"]
+   [:button.fd-btn.primary {:on-click #(rf/dispatch [:folders/use p chat])} "Use for this chat"]
    [:button.fd-btn {:on-click #(rf/dispatch [:folders/new-chat server p])} "New chat here"]
    [:button.fd-btn {:on-click #(rf/dispatch [:bookmarks/toggle server p])} (if bookmarked? "Unpin" "Pin")]])
 
 (defn panel
-  "The folder p on server. bookmarked?: ★ and Unpin."
-  [{:keys [server p bookmarked? label]}]
+  "The folder p on server. bookmarked?: ★ and Unpin; chat: the chat Use for this chat works on
+  ([server chat]; nil: the new chat)."
+  [{:keys [server p bookmarked? label chat]}]
   (let [[facts error] (use-facts server p)]
     [:div.fd-detail
      [:h2.fd-title (pure/base-name p) (when bookmarked? [:span.fd-star {:title "Bookmarked"} " ★"])]
      [:div.fd-where.mono (str (format/tilde p) " · " label)]
      (when error [:p.fd-warn error])
      [facts-list facts]
-     [buttons {:server server :p p :bookmarked? bookmarked?}]
+     [buttons {:server server :p p :bookmarked? bookmarked? :chat chat}]
      [chat-list server (:chats facts)]]))

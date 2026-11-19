@@ -1,18 +1,17 @@
 (ns claudia.web.views.folders
-  "The Folders modal (README decisions 61 to 64), over the page, opened from a chat's header on that
-  chat's server: on top the server's bookmarks as cards (the project's logo as the chats show it,
+  "Files in the right half (README decisions 61 to 64, 68 to 70), in place of the picture while the
+  header's folder pill has it on, on the open chat's server: on top the server's bookmarks as cards (the project's logo as the chats show it,
   else a folder; name, path, ★ to unpin, \"missing\" greyed;
   a click opens the tree there, Select uses it for the chat); on the left a filter field and the
   tree from \"/\" with the chat's folder (else the work folder) selected; in the middle what that
   folder holds, as a grid or a list (claudia.web.views.folder-contents); on the right the picked
   file's preview, or the folder (claudia.web.views.folder-preview, folder-detail: Use for this
-  chat, New chat here, Pin). Nothing here deletes (README decision 69). Only the person's own chats: a view has no
-  button for it and never reaches these calls."
+  chat, New chat here, Pin). Nothing here deletes (README decision 69). Only the person's own
+  chats: a view has no button for it and never reaches these calls."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.folders :as folders]
             [claudia.web.format :as format]
-            [claudia.web.hooks :as hooks]
             [claudia.shared.bookmarks :as bookmarks]
             [claudia.web.views.dot :as dot]
             [claudia.web.views.folder-contents :as contents]
@@ -64,7 +63,7 @@
 (defn- card
   "One bookmark as a card: a click opens the tree there (on: it is the selected folder), ★ unpins,
   Select uses it for the chat."
-  [server {:keys [folder label missing]} on? go!]
+  [server {:keys [folder label missing]} on? go! chat]
   [:div.fd-card {:class [(when missing "missing") (when on? "on")] :title folder
                  :on-click #(when-not missing (go! folder))}
    [:button.fd-card-star {:type "button" :aria-label "Unpin" :title "Unpin"
@@ -74,17 +73,17 @@
    [:span.fd-card-path.mono [:bdi (format/tilde folder)]]
    (if missing
      [:span.fd-missing "missing"]
-     [:button.fd-btn.primary.fd-card-use {:type "button" :on-click (fn [e] (.stopPropagation e) (rf/dispatch [:folders/use folder]))}
+     [:button.fd-btn.primary.fd-card-use {:type "button" :on-click (fn [e] (.stopPropagation e) (rf/dispatch [:folders/use folder chat]))}
       "Select"])])
 
-(defn- cards [server selected go!]
+(defn- cards [server selected go! chat]
   (let [rows (bookmarks/on-server @(rf/subscribe [:bookmarks]) server)
         missing (use-missing server rows)]
     [:div.fd-cards
      (if (empty? rows)
        [:p.muted.fd-none "No bookmarks on this server yet: ☆ on a folder's row pins it here."]
        (for [b (pure/bookmark-rows rows server missing)]
-         ^{:key (:folder b)} [card server b (= selected (:folder b)) go!]))]))
+         ^{:key (:folder b)} [card server b (= selected (:folder b)) go! chat]))]))
 
 (defn- filter-field
   "Filters the loaded folders by name; a pasted or typed absolute path (Enter) is revealed."
@@ -97,9 +96,8 @@
 
 (defn- top-bar [{:keys [label hidden? set-hidden]}]
   [:header.fd-bar
-   [:h1.fd-heading "Folders" [:span.fd-on (str " on " label)]]
-   [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]
-   [:button.fd-close {:aria-label "Close Folders" :title "Close (Escape)" :on-click #(rf/dispatch [:folders/open nil])} "×"]])
+   [:h1.fd-heading "Files" [:span.fd-on (str " on " label)]]
+   [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]])
 
 (defn- use-contents
   "What folder p of server holds ({:entries :more :error}, nil while asked)."
@@ -117,11 +115,11 @@
      [server p])
     answer))
 
-(defn- right-side [{:keys [server selected item readme label]}]
+(defn- right-side [{:keys [server selected item readme label chat]}]
   (let [items @(rf/subscribe [:bookmarks])
         shown (or (:path item) selected)]
     (if selected
-      [preview/pane {:server server :item item :folder selected :readme readme :label label
+      [preview/pane {:server server :item item :folder selected :readme readme :label label :chat chat
                      :bookmarked? (bookmarks/bookmarked? items server shown)}]
       [:p.muted.fd-detail "Pick a folder."])))
 
@@ -159,8 +157,8 @@
 
 (defn- browser
   "The server's bookmark cards and the three panes. start: the folder selected first (nil: the work
-  folder)."
-  [{:keys [server start]}]
+  folder); chat: the chat Select works on ([server chat]; nil: the new chat)."
+  [{:keys [server start chat]}]
   (let [[{:keys [loaded cwd error]} load!] (use-listings server)
         [selected set-selected] (h/use-state nil)
         [picked set-picked] (h/use-state nil)
@@ -171,26 +169,14 @@
     (use-first-load! load! go! start)
     [:<>
      [top-bar {:label label :hidden? hidden? :set-hidden set-hidden}]
-     [:f> cards server selected go!]
+     [:f> cards server selected go! chat]
      [:f> body {:server server :loaded loaded :cwd cwd :error error :hidden? hidden? :selected selected
                 :set-selected set-selected :picked picked :set-picked set-picked :reveal reveal :set-reveal set-reveal
-                :load! load! :go! go! :label label}]]))
+                :load! load! :go! go! :label label :chat chat}]]))
 
-(defn- close-on-escape
-  "Escape closes the modal (before the shell's Escape, which would stop the open chat's turn),
-  unless a dialog is open: the dialog takes it."
-  [^js e]
-  (when (and (= "Escape" (.-key e)) (not (js/document.querySelector ".confirm-backdrop")))
-    (.preventDefault e)
-    (rf/dispatch [:folders/open nil])))
-
-(defn- modal-view [{:keys [server folder]}]
-  (hooks/use-key close-on-escape true [])
-  [:div.fd-backdrop {:on-click #(rf/dispatch [:folders/open nil])}
-   [:div.fd-screen {:role "dialog" :aria-modal true :aria-label "Folders" :on-click #(.stopPropagation %)}
-    ^{:key server} [:f> browser {:server server :start folder}]]])
-
-(defn screen
-  "The Folders modal while it is open ({:server :folder :chat} from the header)."
-  []
-  (when-let [opts @(rf/subscribe [:folders])] [:f> modal-view opts]))
+(defn pane
+  "Files for the open chat (claudia.web.folders/chat-place: {:server :folder :ck}), the browser
+  started again when the chat or its server changes."
+  [{:keys [server folder ck]}]
+  [:div.fd-files
+   ^{:key (str server "|" ck)} [:f> browser {:server server :start folder :chat ck}]])

@@ -281,8 +281,8 @@
 (deftest a-new-chats-first-message-needs-a-folder
   (let [db {:me {:servers [{:name "s"}]} :new-server "s" :servers {"s" {:status :open}}
             :drafts {:new "hello"} :new-settings {}}]
-    (is (= {:server "s" :folder nil :chat nil :send? true} (get-in (ev/send-for db :new "hello") [:db :folders]))
-        "no folder: Folders opens, nothing sent")
+    (is (= [[:dispatch [:folders/open {:chat nil :send? true}]]] (:fx (ev/send-for db :new "hello")))
+        "no folder: Files opens in the right half, nothing sent")
     (is (nil? (:ws/send (ev/send-for db :new "hello"))))
     (is (= "new" (get-in (ev/send-for (assoc-in db [:new-settings :folder] "/w/app") :new "hello") [:ws/send 1 :type]))
         "with a folder it goes")))

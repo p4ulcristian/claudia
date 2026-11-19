@@ -62,11 +62,11 @@
 
 (defn pane
   "The right pane. opts: :item (the picked item, nil for none), :folder (the tree's folder), :readme
-  (its README item, or nil), and folder-detail's :server :label :bookmarked?."
+  (its README item, or nil), and folder-detail's :server :label :bookmarked? :chat."
   [{:keys [server item folder readme] :as opts}]
   (if (and item (not (:dir item)))
     ^{:key (:path item)} [:f> file-view {:server server :item item}]
     [:<>
      ^{:key (or (:path item) folder)}
-     [:f> detail/panel (assoc (select-keys opts [:server :label :bookmarked?]) :p (or (:path item) folder))]
+     [:f> detail/panel (assoc (select-keys opts [:server :label :bookmarked? :chat]) :p (or (:path item) folder))]
      (when (and (nil? item) readme) ^{:key (:path readme)} [:f> readme-view {:server server :item readme}])]))

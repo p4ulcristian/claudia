@@ -976,6 +976,19 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     trashed, when the runner's hourly purge removes them; then the Trash is empty for good.
     Instead of: a file manager's select-and-Delete with a Trash.
 
+70. Files lives in the right half, toggled from the header (2026-11-19, the user's call: "Files is
+    so good that I want it instead of the picture, with a toggle; the button stays where it is").
+    The folder pill in a chat's header (row 2) no longer opens a modal: a click switches the right
+    half between the picture and Files, and the pill is lit while Files shows. Files is the same
+    browser as before (bookmark cards, tree, contents as grid or list, preview), on the open
+    chat's server with its folder (else the work folder) selected, started again when another chat
+    opens; Select works on the open chat. The bar under the right half stays in both. The choice is
+    kept in the page's storage. The chat menu's Folders… is now Files…: it opens that chat with
+    Files. A new chat's first message without a folder (decision 65) opens Files instead of the
+    modal; Select sends it and the picture comes back. A read-only view shows the picture only.
+    On a phone, Files brings the right half up. Instead of: the Folders modal over the page, or a
+    Picture | Files switch in the right half's bar.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

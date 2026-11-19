@@ -1,38 +1,72 @@
 (ns claudia.web.folders
-  "The Folders modal's place in the page (README decisions 61 to 64): opened from the folder pill in
-  a chat's header (row 2) or the chat menu's Folders…, on that chat's server with its folder selected, over the page until
-  Escape or ×. Select (a bookmark card's, or Use for this chat) sets the chat's folder and closes
-  it: a new chat's folder pick, or a started chat moved there. A new chat started there, or a chat
-  opened there, closes it too. The fetches of the runner's /api/folders… calls (PROTOCOL.md,
-  \"Runner HTTP: folders\")."
+  "Files in the right half (README decisions 61 to 64, 68 to 70): the folder pill in a chat's header
+  (row 2) toggles the right half between the picture and Files, the folder browser of the open
+  chat's server with its folder selected; the chat menu's Folders… opens that chat and its Files.
+  Select (a bookmark card's, or Use for this chat) sets the chat's folder: a new chat's folder pick,
+  or a started chat moved there. A new chat's first message without a folder opens Files and waits
+  (README decision 65): Select then sends it and the picture comes back. The fetches of the runner's
+  /api/folders… calls (PROTOCOL.md, \"Runner HTTP: folders\")."
   (:require [re-frame.core :as rf]
             [claudia.web.api :as api]
+            [claudia.web.db :as db]
             [claudia.web.events :as events]))
+
+;; ---- the right half: the picture or Files (README decision 70) ----
+
+(def ^:private view-key "claudia.rightView")
+
+(defn right-view "What the right half shows from what the page stored: :files, else :picture." [stored]
+  (if (= stored "files") :files :picture))
+
+(defn- stored-view [] (right-view (try (js/localStorage.getItem view-key) (catch :default _ nil))))
+
+(rf/reg-sub :right-view (fn [db] (or (:right-view db) (stored-view))))
+
+(rf/reg-fx :folders/store-view (fn [v] (try (js/localStorage.setItem view-key (name v)) (catch :default _ nil))))
+
+(defn show-view
+  "The effects that make the right half show v (:picture or :files); Files loads the bookmarks again
+  (an agent may have changed them, README decision 67) and, on a phone, brings the right half up."
+  [db v phone?]
+  (cond-> {:db (cond-> (assoc db :right-view v) (= v :files) (dissoc :world?)) :folders/store-view v}
+    (= v :files) (assoc :bookmarks/get nil)
+    (and (= v :files) phone?) (assoc-in [:db :screen] :picture)))
+
+(rf/reg-event-fx :right/view (fn [{:keys [db]} [_ v]] (show-view db v (db/phone?))))
+
+(rf/reg-event-fx
+ :right/toggle-files
+ (fn [{:keys [db]} _]
+   (show-view db (if (= :files (or (:right-view db) (stored-view))) :picture :files) (db/phone?))))
 
 (rf/reg-event-fx
  :folders/open
- ;; {:server :folder (the chat's, nil: the work folder) :chat ([server chat] of a started chat, nil
- ;; for a new one) :send? (opened on a held first message)}, or nil to close. Opening loads the
- ;; bookmarks again: an agent may have changed them (README decision 67).
- (fn [{:keys [db]} [_ opts]]
-   (if opts
-     {:db (-> db (assoc :folders opts) (dissoc :world?)) :bookmarks/get nil}
-     {:db (dissoc db :folders)})))
+ ;; Files for chat k ([server chat]; nil: the new chat), opened on a held first message when send?.
+ ;; Another chat than the open one is opened first.
+ (fn [{:keys [db]} [_ {k :chat send? :send?}]]
+   (cond-> (show-view (cond-> db send? (assoc :folders {:send? true})) :files (db/phone?))
+     (and k (not= k (:open db))) (assoc :fx [[:dispatch [:nav/open k]]]))))
 
-(rf/reg-sub :folders (fn [db] (:folders db)))
+(defn chat-place
+  "Where a chat works, the same for a new chat (oc nil or not started) and a started one: {:new?
+  :ck (nil for a new chat) :server :folder (nil: the server's work folder)}."
+  [{:keys [ck state row pending?] :as oc} new-server new-settings]
+  (let [new? (not (and oc (or row (seq (:messages state)) pending?)))]
+    {:new? new? :ck (when-not new? ck)
+     :server (if new? new-server (:server oc))
+     :folder (if new? (:folder new-settings) (or (:folder row) (:folder state)))}))
 
 (defn use-folder
-  "What Select does with folder for the chat the modal was opened for ({:chat :send?} of db's
-  :folders): a started chat moves there, a new chat's folder pick becomes it, and when the modal
-  opened on a held first message (send?, README decision 65) the draft goes. The effects; the modal
-  closes."
-  [db folder]
-  (let [{k :chat send? :send?} (:folders db)]
-    {:db (dissoc db :folders)
+  "What Select does with folder for chat k (nil: the new chat): a started chat moves there, a new
+  chat's folder pick becomes it, and when Files opened on a held first message (db's :folders
+  :send?, README decision 65) the draft goes and the picture comes back. The effects."
+  [db folder k]
+  (let [send? (and (not k) (get-in db [:folders :send?]))]
+    {:db (cond-> (dissoc db :folders) send? (assoc :right-view :picture))
      :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
-           (and send? (not k)) (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}))
+           send? (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}))
 
-(rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder]] (use-folder db folder)))
+(rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder k]] (use-folder db folder k)))
 
 (rf/reg-event-fx
  :folders/new-chat

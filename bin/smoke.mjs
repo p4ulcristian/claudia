@@ -90,7 +90,7 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Folders and keeps the draft, a bookmark\'s Select picks the folder and sends (README decisions 61 to 65)', async () => {
+    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
       const pill = page.locator('.chat-head .folder-pill');
       await pill.locator('.pill-empty', { hasText: 'Pick a folder' }).waitFor({ timeout: waitMs });
@@ -102,7 +102,7 @@ async function visit(browser, hubUrl, screen) {
       await row('claude').click({ timeout: waitMs });
       await row('claude').locator('.fd-pin').click({ timeout: waitMs });
       await page.locator('.fd-card', { hasText: 'claude' }).getByRole('button', { name: 'Select' }).click({ timeout: waitMs });
-      await page.locator('.fd-screen').waitFor({ state: 'detached', timeout: waitMs });
+      await page.locator('.fd-files').waitFor({ state: 'detached', timeout: waitMs });
       await until('the new chat goes with the picked folder', () => seen.sent.some((f) => f.type === 'new' && /\/claude$/.test(f.folder ?? '') && f.text === 'Start here please'));
       // The smoke stack has no Claude token: the runner's answer to that `new` is this error, expected here.
       const noToken = (p) => /No Claude subscription for this chat yet/.test(p);
