@@ -21,6 +21,7 @@
             [claudia.web.claudia-chat]
             [claudia.web.extras]
             [claudia.web.fx]
+            [claudia.web.gaze :as gaze]
             [claudia.web.md :as md]
             [claudia.web.pictures :as pictures]
             [claudia.web.render :as render]
@@ -64,6 +65,7 @@
   (tabs/start!)
   (voice-back/start!)
   (native/start!)
+  (gaze/install!)
   (mount!))
 
 (defn- script-tag-modules!
