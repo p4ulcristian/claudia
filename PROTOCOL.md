@@ -386,7 +386,7 @@ The `chat` frame also carries `agents`, `changes` (the chat's newest 500), `sett
 `commands` and `context`.
 
 `Agent` (a subagent or a background shell; an agent's own shells and agents are part of it, counted in
-`children`): `{ id, kind: "agent" | "shell", name, status: "running" | "completed" | "failed" | "stopped",
+`children`, while it runs: one that outlives it, still running or ending after it, is an Agent of its own): `{ id, kind: "agent" | "shell", name, status: "running" | "completed" | "failed" | "stopped",
 start, end, tools, tokens, step (what it is on: "Edit src/x.cljs", "$ npm test"), task (id to stop it,
 while it runs), type, background, model, active, children, progress: { done, total, label } | null }`,
 running ones first. `progress` is the last `##progress <done>/<total> <label>` line of a shell's output
@@ -608,8 +608,10 @@ images: `[{ media_type, data }]`, image blocks before the text),
 `[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
-`{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
-on every runner connect so it can take running chats back), `{ ev: "cancel", rpc, id }` (the SDK
+`{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy, background }] }` (answer to `list`, and sent
+on every runner connect so it can take running chats back; `background` = the session's last
+`background_tasks_changed` list as is, null before its first: a runner that restarted ends the saved
+tasks missing from it), `{ ev: "cancel", rpc, id }` (the SDK
 aborted that rpc: its ask goes).
 
 rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool result (`{ content, isError? }`);

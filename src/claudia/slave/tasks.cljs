@@ -25,26 +25,50 @@
 
 (defn shell? [t] (boolean (re-find #"(?i)bash|shell" (str (:type t)))))
 
-(defn- top-of
-  "The task a task belongs to: an agent's own shells and agents are part of it."
+(defn- part-of?
+  "Whether task t is part of up, the agent that started it: while up runs, and after, unless t
+  outlived it (still runs, or ended after up ended). Claude Code keeps a subagent's background shells
+  and agents running after the subagent finished; such a one stands on its own."
+  [t up]
+  (or (= "running" (:status up))
+      (and (not= "running" (:status t))
+           (<= (or (:end t) 0) (or (:end up) js/Number.MAX_SAFE_INTEGER)))))
+
+(defn top-of
+  "The task a task belongs to (by-id: the chat's tasks by id): the agent it is part of, up the chain.
+  A running task's top always runs."
   [t by-id]
   (loop [at t n 0]
-    (if-let [up (and (< n 20) (:parent at) (get by-id (:parent at)))]
-      (recur up (inc n))
-      at)))
+    (let [up (and (< n 20) (:parent at) (get by-id (:parent at)))]
+      (if (and up (part-of? at up))
+        (recur up (inc n))
+        at))))
 
 (defn- counted
   "The tasks shown: not housekeeping, not a foreground shell (part of a tool call of the turn)."
   [m]
   (remove #(or (:ambient %) (and (shell? %) (not (:background %)))) (vals m)))
 
+(defn- by-id-of [shown] (into {} (map (juxt :id identity)) shown))
+
+(defn tops
+  "The rows of a chat's task map: every shown task that is part of no other one. The page's list, the
+  rail's count and its clock all read these, so the rail says \"working\" only while a row runs."
+  [m]
+  (let [shown (counted m)
+        by-id (by-id-of shown)]
+    (filter #(= % (top-of % by-id)) shown)))
+
+(defn running-tops
+  "The running rows of a chat's task map."
+  [m]
+  (filter #(= "running" (:status %)) (tops m)))
+
 (defn oldest-running
   "When the longest-running top among tasks (a chat's task map) started (ms), or nil when none
   runs: the rail's agent clock (README decision 46)."
   [m]
-  (let [by-id (into {} (map (juxt :id identity)) (counted m))
-        tops (into #{} (comp (filter #(= "running" (:status %))) (map #(top-of % by-id))) (vals by-id))]
-    (some->> (seq (keep :start tops)) (apply min))))
+  (some->> (seq (keep :start (running-tops m))) (apply min)))
 
 (defn agents-since
   "When chat's longest-running agent started (ms), or nil."
@@ -54,10 +78,7 @@
 (defn working
   "How many tops still run (the rail's \"agents working\" count)."
   [chat]
-  (let [m (get @tasks chat)
-        by-id (into {} (map (juxt :id identity)) (counted m))]
-    (count (into #{} (comp (filter #(= "running" (:status %))) (map #(:id (top-of % by-id))))
-                 (vals by-id)))))
+  (count (running-tops (get @tasks chat))))
 
 ;; Saving --------------------------------------------------------------------------------------
 
@@ -372,10 +393,10 @@
 (defn agents
   "The chat's agents and background shells for the page (Agent in PROTOCOL.md), running first."
   [_cwd chat _folder]
-  (let [shown (counted (get @tasks chat))
-        by-id (into {} (map (juxt :id identity)) shown)
-        tops (filter #(= % (top-of % by-id)) shown)]
-    (->> tops
+  (let [m (get @tasks chat)
+        shown (counted m)
+        by-id (by-id-of shown)]
+    (->> (tops m)
          (map #(agent-row % (call-of chat %) by-id shown))
          (sort-by agent-order)
          vec)))
@@ -547,10 +568,17 @@
   []
   (for [[chat m] @tasks :when (some #(= "running" (:status %)) (vals m))] chat))
 
+(defn part-of-agent?
+  "Whether task id of a chat's task map m is part of an agent (its notice is that agent's), not a
+  row of its own: started by Claude in the chat itself, or it outlived the agent that started it."
+  [m id]
+  (let [t (get m id)]
+    (boolean (and t (not= (:id t) (:id (top-of t m)))))))
+
 (defn child?
-  "A task some agent of the chat started (not Claude in the chat itself)."
+  "A task that is part of one of the chat's agents (not a row of its own)."
   [chat id]
-  (some? (get-in @tasks [chat id :parent])))
+  (part-of-agent? (get @tasks chat) id))
 
 (defn background?
   "A task Claude put in the background (its end comes as a notice)."

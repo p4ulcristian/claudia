@@ -34,6 +34,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
+   An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
+   background shell running after the subagent finished, so one that outlives its agent is a chip of
+   its own (2026-11-20: a finished fork hid its running shell while the rail said "1 agent"). The
+   chips, the list and the rail's count and clock read the same rows (`claudia.slave.tasks/tops`).
 
 9. The code is small pure functions (2026-11-03, after a local `keep` shadowing `clojure.core/keep`
    crashed the hub on every start): data in, data out, at most 30 lines each, effects at the edges,
