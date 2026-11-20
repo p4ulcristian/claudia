@@ -90,6 +90,22 @@
   [items gid f]
   (mapv #(if (= gid (:group %)) (f %) %) items))
 
+(defn take-out
+  "items with chat cref taken out of its group to the top level, just after the group (a group left
+  with no chats goes); items as they were when cref is in no group."
+  [items cref]
+  (if-let [g (first (filter #(and (:group %) (some #{cref} (:chats %))) items))]
+    (let [its (without items cref)
+          after (if (find-group its (:group g)) (:group g) nil)
+          i (if after (inc (index-of its #(= after (:group %)))) (or (index-of items #(= (:group g) (:group %))) 0))]
+      (insert-at its i {:chat cref}))
+    items))
+
+(defn ungroup
+  "items with group gid gone and its chats in its place, in its order."
+  [items gid]
+  (into [] (mapcat #(if (= gid (:group %)) (mapv (fn [c] {:chat c}) (:chats %)) [%])) items))
+
 (defn group-of "The group holding chat cref, or nil." [items cref]
   (first (filter #(and (:group %) (some #{cref} (:chats %))) items)))
 

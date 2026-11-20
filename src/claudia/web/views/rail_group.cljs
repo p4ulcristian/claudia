@@ -31,15 +31,31 @@
      ^{:key (order/ref-of rw)}
      [:i {:style (assoc (sidebar/chat-colour-style color) "--i" i)}])])
 
-(defn- card-chat [gid {:keys [open viewing? multi? rows elsewhere]} {:keys [server id title color] :as rw}]
-  (let [k [server id] cref (order/ref-of rw)]
+(defn- take-out-button
+  "The chat's button that takes it out of the group, to just after the group on the rail."
+  [cref title]
+  [:button.group-card-out {:type "button" :title (str "Take " title " out of the group")
+                           :aria-label (str "Take " title " out of the group")
+                           :on-click #(rf/dispatch [:order/change (fn [items] (order/take-out items cref))])}
+   "↥"])
+
+(defn- card-chat-button [{:keys [open viewing? multi?]} {:keys [server id title color] :as rw}]
+  (let [k [server id]]
     [:button.group-card-chat {:type "button" :class (when (= k open) "on")
-                              :data-ref cref :data-in-group gid
                               :style (sidebar/chat-colour-style color)
-                              :on-pointer-down #(drag/press! % cref (tearoff/tear-fn k open rows elsewhere))
                               :on-click #(do (sidebar/pick! k (= k open) %) (close!))}
      [dot/chat-dot rw (and (not viewing?) (:unseen rw) (not= k open)) false (when multi? [rail-card/server-badge server])]
      [:span.group-card-title title]]))
+
+(defn- card-chat
+  "A chat in the card: the row a drag lifts (its reference on it), the chat's button and, for the
+  person's own chats, the button that takes it out of the group."
+  [gid {:keys [open rows elsewhere viewing?] :as m} {:keys [server id] :as rw}]
+  (let [k [server id] cref (order/ref-of rw)]
+    [:div.group-card-row {:data-ref cref :data-in-group gid
+                          :on-pointer-down #(drag/press! % cref (tearoff/tear-fn k open rows elsewhere))}
+     [card-chat-button m rw]
+     (when-not viewing? [take-out-button cref (:title rw)])]))
 
 (defn- card-head
   "The card's head: the group's name (double-click renames; a new group asks at once) and its +."
@@ -48,6 +64,7 @@
    (if (= gid @(rf/subscribe [:renaming-group]))
      [groups/name-input gid group-name]
      [:span.group-card-name {:on-double-click #(rf/dispatch [:order/renaming gid])} group-name])
+   [groups/ungroup-button gid group-name close!]
    [:button.group-add {:type "button" :title (str "New chat in " group-name) :aria-label (str "New chat in " group-name)
                        :on-click #(do (rf/dispatch [:order/new-in-group gid]) (close!))} "+"]])
 

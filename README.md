@@ -506,6 +506,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
     and the archived list show the chats found as before; another person's chats (a view) keep the
     plain order. Instead of: the order the chats were started in, or moving a chat up on each message.
+    Ungrouping by a button (2026-11-20, the user: "a button to ungroup any of them and all of them,
+    an icon"): every chat in a group's chooser card has a ↥ that takes it out to just after the
+    group, the chat menu has "Take out of group" for a chat in one (list, rail, card), and a group's
+    header (the list's and the card's) has an ungroup icon that puts its chats where it was, in its
+    order (`claudia.shared.order/take-out`, `ungroup`). A group left with no chats goes.
 39. Every block is a form (2026-11-16): a block is `{ id, name, width, form, data }`; the graph and
     Claude's own HTML page are the forms `graph` and `html`, beside the predefined ones. The draw
     call has only `title`, `clear`, `blocks` and `removeBlocks`; every block updates by the same
