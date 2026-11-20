@@ -8,7 +8,8 @@
   decision 73) the flower is half (side :left): its petals and bars only to the left of the mic, top
   to bottom cancel, add, send, now. A mic that moves (:movable) has a ring round the petals, all the
   way round, saying move: the finger in it keeps recording, and while the mic follows the finger the
-  ring alone shows, lit, round a blue disc saying move."
+  ring shows lit, round the voice's bars and the red recording disc (its clock, and send: what
+  letting go does); the petals go."
   (:require [claudia.web.views.pure.mic :as pure]))
 
 (def size "The canvas, CSS px (square, centred on the button): the move ring fits." 300)
@@ -110,19 +111,23 @@
     (.fillRect g bar-r -1.5 (+ 3 (* level bar-len)) 3)
     (.restore g)))
 
+(defn- recording?
+  "Whether the microphone records now: recording, or moved once it woke (a move keeps recording)."
+  [{:keys [phase live]}]
+  (or (= phase :recording) (and (= phase :moving) (some? live))))
+
 (defn- disc-text
-  "The disc's two lines: above the mic icon, under it."
-  [{:keys [phase secs way]}]
-  (case phase
-    :recording [(pure/clock-text (* 1000 secs)) (get words way)]
-    :moving ["" "move"]
+  "The disc's two lines: above the mic icon, under it. Moving, letting go sends."
+  [{:keys [phase secs way] :as state}]
+  (if (recording? state)
+    [(pure/clock-text (* 1000 secs)) (get words (if (= phase :moving) :send way))]
     ["…" "waking"]))
 
-(defn- disc! [^js g ^js el {:keys [phase] :as state}]
+(defn- disc! [^js g ^js el state]
   (let [[above under] (disc-text state)]
     (.beginPath g)
     (.arc g 0 0 disc-r 0 (* 2 js/Math.PI))
-    (set! (.-fillStyle g) (css el (case phase :recording "--red" :moving "--blue" "--amber")))
+    (set! (.-fillStyle g) (css el (if (recording? state) "--red" "--amber")))
     (.fill g)
     (set! (.-fillStyle g) "#fff")
     (set! (.-textAlign g) "center")
@@ -177,7 +182,7 @@
 
 (defn draw!
   "One frame: the move ring (a mic that moves), the petals, the ground inside them, the bars, the
-  disc (while moving: the ring lit and the disc). state: {:phase (:starting :recording :moving)
+  disc (while moving: the ring lit, the bars all the way round and the disc still recording). state: {:phase (:starting :recording :moving)
   :levels (one 0-1 per bar) :secs :way :side (nil: whole; :left: half) :movable}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
@@ -186,7 +191,9 @@
     (.setTransform g dpr 0 0 dpr 0 0)
     (.translate g (/ size 2) (/ size 2))
     (when (:movable state) (ring! g canvas (= :moving (:phase state))))
-    (when-not (= :moving (:phase state)) (flower! g canvas state))
+    (if (= :moving (:phase state))
+      (bars! g canvas (:levels state) nil)
+      (flower! g canvas state))
     (disc! g canvas state)))
 
 (defn wipe! [^js canvas]
