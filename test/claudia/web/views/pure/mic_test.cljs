@@ -133,3 +133,11 @@
 (deftest a-resting-finger-may-tremble-a-little
   (is (true? (mic/still? {:x 100 :y 100} 105 103)))
   (is (false? (mic/still? {:x 100 :y 100} 110 100))))
+
+(deftest a-clip-pill-says-where-it-goes-and-how-it-stands
+  (is (= "↑" (mic/way-mark :send)))
+  (is (= "+" (mic/way-mark :add)))
+  (is (= "⏵" (mic/way-mark :now)))
+  (is (= "Clip 1, 4 s, send: heard, waits its turn" (mic/clip-label {:n 0 :secs 4 :dir :send :state :heard} 0)))
+  (is (= "Clip 3, 6 s, add: didn't come through" (mic/clip-label {:n 2 :secs 6 :dir :add :state :failed} 0)))
+  (is (re-find #"^Clip 2, 2 s, now: hearing " (mic/clip-label {:n 1 :secs 2 :dir :now :state :hearing :t0 0} 3000))))

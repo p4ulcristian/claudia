@@ -1,9 +1,9 @@
 (ns claudia.shared.colours
   "The chat colours, one list for the runner and the page: a crayon box of 20 solid colours picked so
   no two look alike, both as the crayon and as the whole window tinted with it (measured in OKLab;
-  README decision 26), and 8 gradients, each between two of the crayons (README decision 80). A new
-  chat takes the solid colour most different from the ones the other chats wear, never one the chat
-  started last wears. The hex values here are the same as claudia.css's --c-<name>.")
+  README decision 26), and 16 gradients, each between two of the crayons (README decision 80). Each
+  has a short name to show and say (\"Red here.\", README decision 21). No two open chats wear one
+  colour while a free one is left: a new chat takes a free one, a solid while there is one. The hex values here are the same as claudia.css's --c-<name>.")
 
 (def hexes
   "Each solid chat colour's crayon, in hue order (passive ash aside, which is only picked by hand)."
@@ -19,12 +19,35 @@
   the hue circle), which tints the window's theme and paints whatever takes one colour."
   (array-map "berry" {:from "plum" :to "cherry" :hex "#ce3d70"}
              "ember" {:from "cherry" :to "sunflower" :hex "#ff8800"}
+             "rust" {:from "chocolate" :to "gold" :hex "#be8437"}
              "sunset" {:from "tangerine" :to "magenta" :hex "#ff6a6e"}
              "citrus" {:from "sunflower" :to "kiwi" :hex "#d4d425"}
+             "moss" {:from "olive" :to "forest" :hex "#769c3b"}
              "meadow" {:from "kiwi" :to "jade" :hex "#62cd6d"}
+             "spring" {:from "sunflower" :to "aqua" :hex "#8eea9d"}
+             "tide" {:from "mint" :to "sky" :hex "#4dd6e1"}
+             "reef" {:from "forest" :to "ocean" :hex "#009ca6"}
              "lagoon" {:from "aqua" :to "ocean" :hex "#20b3e8"}
+             "storm" {:from "ocean" :to "grape" :hex "#6b70e8"}
              "dusk" {:from "sapphire" :to "magenta" :hex "#ad57e5"}
+             "orchid" {:from "plum" :to "bubblegum" :hex "#d872ad"}
+             "coral" {:from "peach" :to "bubblegum" :hex "#ffaea9"}
              "candy" {:from "bubblegum" :to "periwinkle" :hex "#d299f1"}))
+
+(def names
+  "Each colour's short name, the one shown and said (its id stays the stored value)."
+  {"cherry" "Red" "chocolate" "Brown" "peach" "Peach" "tangerine" "Orange" "gold" "Gold"
+   "sunflower" "Yellow" "olive" "Olive" "kiwi" "Lime" "forest" "Green" "mint" "Mint" "jade" "Jade"
+   "aqua" "Aqua" "sky" "Sky" "ocean" "Blue" "sapphire" "Indigo" "periwinkle" "Lilac" "grape" "Purple"
+   "plum" "Plum" "magenta" "Pink" "bubblegum" "Rose"
+   "berry" "Berry" "coral" "Coral" "ember" "Ember" "rust" "Rust" "sunset" "Sunset" "citrus" "Citrus"
+   "moss" "Moss" "meadow" "Meadow" "spring" "Spring" "tide" "Tide" "reef" "Teal" "lagoon" "Lagoon"
+   "storm" "Storm" "dusk" "Dusk" "orchid" "Orchid" "candy" "Candy" "ash" "Grey"})
+
+(defn name-of
+  "A colour's short name (Red, Lagoon, Grey for ash), or nil for anything else."
+  [c]
+  (get names c))
 
 (def solid-colours "The solid colours, in hue order: the crayons." (vec (keys hexes)))
 
@@ -126,10 +149,14 @@
         counted (vals (into {} (map (juxt :id identity)) (concat shown (recent chats except))))]
     (frequencies (mapcat #(when (not= except (:id %)) (crayons (:color %))) counted))))
 
-(defn most-different
-  "A new chat's colour, always a solid one: never a crayon the chat started last wears; among the
-  others worn least, the one furthest from every crayon worn more and from the last chat's (the
-  first in hue order when nothing is worn)."
+(defn taken
+  "The colours the chats in the list (not archived; never except) wear: no other chat takes them."
+  [chats except]
+  (set (keep #(when (and (not (:archived %)) (not= except (:id %))) (:color %)) chats)))
+
+(defn- crowded-pick
+  "Every colour is taken: the solid worn least, never a crayon the chat started last wears, the
+  furthest from every crayon worn more (README decision 26)."
   [chats except]
   (let [used (worn chats except)
         last-cs (last-crayons chats except)
@@ -139,3 +166,43 @@
         score (fn [c] (if (seq far-from) (apply min (map #(apart c %) far-from)) 0))]
     (reduce (fn [best c] (if (> (score c) (score best)) c best))
             (filter #(= least (get used % 0)) open))))
+
+(defn- recent-avoid
+  "What the recently started chats (archived too) wear: their colours and their crayons, so new
+  chats walk through the box instead of going back to a colour just used."
+  [chats except]
+  (set (mapcat #(cons (:color %) (crayons (:color %))) (recent chats except))))
+
+(defn- free-pool
+  "The colours to choose from: free solids not recently worn, else free gradients not recently
+  worn, else any free solid, else any free gradient; empty when every colour is taken."
+  [taken-cs avoid]
+  (let [free (remove taken-cs chat-colours)
+        fresh (remove avoid free)
+        pools [(filter hexes fresh) (filter gradient? fresh) (filter hexes free) (filter gradient? free)]]
+    (or (first (filter seq pools)) ())))
+
+(defn most-different
+  "A new chat's colour: one no chat in the list wears (taken), a solid while one is free, none the
+  recently started chats wear while another is free; among those the furthest from every colour
+  worn and recently worn (the first in hue order when nothing is). With every colour taken:
+  crowded-pick."
+  [chats except]
+  (let [taken-cs (taken chats except)
+        avoid (recent-avoid chats except)
+        pool (free-pool taken-cs avoid)
+        far-from (filter hex-of (into taken-cs avoid))
+        score (fn [c] (if (seq far-from) (apply min (map #(apart c %) far-from)) 0))]
+    (if (seq pool)
+      (reduce (fn [best c] (if (> (score c) (score best)) c best)) pool)
+      (crowded-pick chats except))))
+
+(defn duplicates
+  "The chats (open, oldest first kept) that wear a colour an older open chat already wears, newest
+  last: [{:id …}…]. Ash (passive) may be worn by many."
+  [chats]
+  (let [open (sort-by started (remove :archived chats))]
+    (second (reduce (fn [[seen out] ch]
+                      (let [c (:color ch)]
+                        (if (and (chat-colour? c) (seen c)) [seen (conj out ch)] [(conj seen c) out])))
+                    [#{} []] open))))

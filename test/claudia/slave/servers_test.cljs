@@ -54,13 +54,15 @@
   (is (nil? (api/route "GET" ["api" "nothing"] false))))
 
 (deftest api-chat-state-and-updates
-  (is (= {:color "ash" :prev_color "red"} (chats/chat-update {:color "ash"} {:color "red"} ["red"] (fn [] "new"))))
-  (is (= {:color "red" :prev_color nil} (chats/chat-update {:color "wake"} {:prev-color "red"} [] (fn [] "new"))))
-  (is (= {:color "new" :prev_color nil :archived true} (chats/chat-update {:color "wake" :archived true} {} [] (fn [] "new"))))
-  (is (= {:color "blue"} (chats/chat-update {:color "blue"} {} ["blue"] (fn [] "new"))))
-  (is (= {:color "dusk"} (chats/chat-update {:color "dusk"} {} chats/chat-colors (fn [] "new"))) "a gradient may be picked")
-  (is (= {} (chats/chat-update {:color "neon"} {} chats/chat-colors (fn [] "new"))) "an unknown name changes nothing")
-  (is (= {:color "ash" :prev_color "dusk"} (chats/chat-update {:color "ash"} {:color "dusk"} chats/chat-colors (fn [] "new")))
+  (is (= {:color "ash" :prev_color "red"} (chats/chat-update {:color "ash"} {:color "red"} ["red"] (fn [] "new") #{})))
+  (is (= {:color "red" :prev_color nil} (chats/chat-update {:color "wake"} {:prev-color "red"} [] (fn [] "new") #{})))
+  (is (= {:color "new" :prev_color nil} (chats/chat-update {:color "wake"} {:prev-color "red"} [] (fn [] "new") #{"red"}))
+      "waking to a colour another open chat wears: a fresh one")
+  (is (= {:color "new" :prev_color nil :archived true} (chats/chat-update {:color "wake" :archived true} {} [] (fn [] "new") #{})))
+  (is (= {:color "blue"} (chats/chat-update {:color "blue"} {} ["blue"] (fn [] "new") #{})))
+  (is (= {:color "dusk"} (chats/chat-update {:color "dusk"} {} chats/chat-colors (fn [] "new") #{})) "a gradient may be picked")
+  (is (= {} (chats/chat-update {:color "neon"} {} chats/chat-colors (fn [] "new") #{})) "an unknown name changes nothing")
+  (is (= {:color "ash" :prev_color "dusk"} (chats/chat-update {:color "ash"} {:color "dusk"} chats/chat-colors (fn [] "new") #{}))
       "ash remembers a gradient"))
 
 (deftest api-finds-images-in-lines

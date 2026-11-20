@@ -318,8 +318,36 @@
     (is (= {:chats {}} (:db fx)) "no ask card is added")))
 
 (deftest a-speak-frame-is-a-reply-to-read
-  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "It works."}
-         (ev/speak-item "s" {:chat "c" :id "t1" :voice "nora" :text "**It works.**"})))
-  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Which one?"}
-         (ev/speak-item "s" {:chat "c" :id "ask-a" :voice "otto" :ask {:questions [{:question "Which one?"}]}})))
-  (is (nil? (ev/speak-item "s" {:chat "c" :id "t2" :voice "nora" :text "  "})) "nothing to say"))
+  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "Red here. It works."}
+         (ev/speak-item "s" {:chat "c" :id "t1" :voice "nora" :text "**It works.**"} "cherry")))
+  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Lagoon here. Which one?"}
+         (ev/speak-item "s" {:chat "c" :id "ask-a" :voice "otto" :ask {:questions [{:question "Which one?"}]}} "lagoon")))
+  (is (= "It works." (:text (ev/speak-item "s" {:chat "c" :id "t3" :voice "nora" :text "It works."} nil))) "no colour: no name")
+  (is (nil? (ev/speak-item "s" {:chat "c" :id "t2" :voice "nora" :text "  "} "cherry")) "nothing to say"))
+
+(def ^:private two-servers
+  {:me {:servers [{:name "a"} {:name "b"}]}
+   :servers {"a" {:status :open :rows {"1" {:id "1" :color "cherry" :started 1}
+                                       "2" {:id "2" :color "ocean" :started 2}
+                                       "3" {:id "3" :color "ocean" :started 9 :archived true}}}
+             "b" {:status :open :rows {"4" {:id "4" :color "cherry" :started 5}}}}})
+
+(deftest no-two-open-chats-wear-one-colour
+  (let [plan (ev/recolour-plan (ev/all-rows two-servers))]
+    (is (= [["b" "4"]] (map first plan)) "the newer of the two red chats, on another server")
+    (is (not (#{"cherry" "ocean"} (second (first plan)))) "it gets a free colour"))
+  (is (ev/lists-complete? two-servers))
+  (is (not (ev/lists-complete? (assoc-in two-servers [:servers "b" :status] :closed))) "a list still missing: wait")
+  (is (not (ev/lists-complete? (assoc two-servers :view "peter"))) "someone else's chats: never"))
+
+(deftest a-new-chat-takes-a-free-colour-from-every-server
+  (let [c (get-in (ev/with-fresh-colour two-servers) [:new-settings :color])]
+    (is (not (#{"cherry" "ocean"} c))))
+  (is (= "jade" (get-in (ev/with-fresh-colour (assoc two-servers :new-settings {:color "jade"})) [:new-settings :color]))
+      "a free colour picked stays")
+  (is (not= "ocean" (get-in (ev/with-fresh-colour (assoc two-servers :new-settings {:color "ocean"})) [:new-settings :color]))
+      "a colour an open chat wears is picked again"))
+
+(deftest a-chat-back-from-the-archive-keeps-its-colour-unless-taken
+  (is (some? (ev/back-colour two-servers ["a" "3"])) "ocean is worn by an open chat")
+  (is (nil? (ev/back-colour (assoc-in two-servers [:servers "a" :rows "3" :color] "jade") ["a" "3"]))))

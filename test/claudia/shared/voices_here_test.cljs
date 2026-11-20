@@ -1,5 +1,6 @@
 (ns claudia.shared.voices-here-test
   (:require [cljs.test :refer [deftest is]]
+            [claudia.shared.colours :as colours]
             [claudia.shared.order :as order]
             [claudia.shared.protocol :as p]
             [claudia.shared.voices :as voices]
@@ -32,3 +33,26 @@
   (is (= {:voice "nora"} (order/clean-picks {:talk true})) "a speaker on before voices: the first voice")
   (is (= {:voice ""} (order/clean-picks {:talk true :voice ""})))
   (is (= {} (order/clean-picks nil))))
+
+(deftest every-colour-has-a-short-name
+  (is (every? colours/name-of (conj colours/chat-colours "ash")))
+  (is (= 36 (count colours/chat-colours)))
+  (is (apply distinct? (map colours/name-of colours/chat-colours)) "no two colours sound the same")
+  (is (= "Red" (colours/name-of "cherry")))
+  (is (nil? (colours/name-of "neon"))))
+
+(deftest a-new-chat-takes-a-colour-no-open-chat-wears
+  (let [chats (map-indexed (fn [i c] {:id (str i) :color c :started i}) (take 19 colours/solid-colours))
+        last-solid (last colours/solid-colours)]
+    (is (= last-solid (colours/most-different chats nil)) "the one free solid")
+    (is (colours/gradient? (colours/most-different (conj chats {:id "x" :color last-solid :started 30}) nil))
+        "no solid free: a gradient")
+    (is (= #{"cherry"} (colours/taken [{:id "a" :color "cherry"} {:id "b" :color "ocean" :archived true}] nil)))
+    (is (= [{:id "b" :color "cherry" :started 2}]
+           (colours/duplicates [{:id "a" :color "cherry" :started 1} {:id "b" :color "cherry" :started 2}
+                                {:id "c" :color "ash" :started 3} {:id "d" :color "ash" :started 4}]))
+        "the newer wears it twice; grey may be many")))
+
+(deftest every-colour-taken-still-gives-one
+  (let [chats (map-indexed (fn [i c] {:id (str i) :color c :started i}) colours/chat-colours)]
+    (is (colours/chat-colour? (colours/most-different chats nil)))))
