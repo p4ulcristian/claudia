@@ -9,6 +9,7 @@
 (rf/reg-sub :me (fn [db] (:me db)))
 (rf/reg-sub :me-error (fn [db] (:me-error db)))
 (rf/reg-sub :servers (fn [db] (:servers db)))
+(rf/reg-sub :taken-colours (fn [db [_ k]] (events/taken-by-others db k)))   ; k nil: the new chat
 (rf/reg-sub :open (fn [db] (:open db)))
 (rf/reg-sub :screen (fn [db] (:screen db)))
 (rf/reg-sub :turn-since (fn [db [_ k]] (get-in db [:turn-since k])))

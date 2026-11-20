@@ -10,6 +10,7 @@
   started the computer is fixed and every other pick changes the chat."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.shared.colours :as colours-pure]
             [claudia.web.alerts :as alerts]
             [claudia.web.folders :as folders]
             [claudia.web.format :as format]
@@ -207,19 +208,25 @@
        [:div.head-pop
         [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))]])]))
 
-(defn- swatch [c color pick]
-  [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
-                   :style {:background (words/colour-fill c)}
-                   :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
-                   :on-click #(pick c)}])
+(defn- swatch [c color pick taken]
+  (let [off? (and (taken c) (not= c color))
+        n (colours-pure/name-of c)]
+    [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive") (when off? "taken")]
+                     :style {:background (words/colour-fill c)} :disabled off? :aria-label n
+                     :data-tip (cond (= c "ash") "Grey: passive, sinks to the bottom of the rail"
+                                     off? (str n ": another chat wears it")
+                                     :else n)
+                     :on-click #(pick c)}]))
 
 (defn- palette
-  "The solid colours and ash, then the gradients on rows of their own (README decision 80)."
-  [color pick]
-  [:div.palette {:role "menu"}
-   (for [c colours] ^{:key c} [swatch c color pick])
-   [:span.swatch-break]
-   (for [c words/gradient-colours] ^{:key c} [swatch c color pick])])
+  "The solid colours and ash, then the gradients on rows of their own (README decision 80); the ones
+  another open chat wears struck through (decision 26). k: the chat ([server id]; nil: the new one)."
+  [k color pick]
+  (let [taken @(rf/subscribe [:taken-colours k])]
+    [:div.palette {:role "menu"}
+     (for [c colours] ^{:key c} [swatch c color pick taken])
+     [:span.swatch-break]
+     (for [c words/gradient-colours] ^{:key c} [swatch c color pick taken])]))
 
 (defn- shown-folder
   "The folder a chat works in: its own, else (not for a read-only view, whose runner is another
@@ -317,7 +324,7 @@
       [:span.colour-dot {:class (when (= color "ash") "passive") :style {:background (words/colour-fill color)}}]]
      (when open
        [:div.head-pop.colour-pop
-        (palette color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!)))])]))
+        [palette (when-not new? ck) color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!))]])]))
 
 (defn- actions
   "Row 3's buttons on the right, all round: colour, bell, root (its owner, a started chat),

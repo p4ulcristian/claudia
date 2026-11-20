@@ -247,25 +247,52 @@
 
 (defmethod on-frame :default [db _ _] {:db db})
 
+(defn all-rows
+  "Every chat row of every server the person's lists came from, each with its :server."
+  [db]
+  (for [[s {:keys [rows]}] (:servers db), r (vals rows)] (assoc r :server s)))
+
 (defn fresh-colour
-  "A new chat's colour: the most different from what that server's chats (rows) wear, never the
-  colour of the chat started last."
+  "A new chat's colour: one no open chat on any server wears (README decision 26), the most
+  different from those worn, never the colour of the chat started last while another is free."
   [rows]
   (colours/most-different rows nil))
 
 (defn with-fresh-colour
-  "db with a colour for the new chat on its new server, unless it has one (picked by hand or before)."
+  "db with a colour for the new chat, unless it has one no open chat wears (picked by hand, or picked
+  before another server's list came)."
   [db]
-  (cond-> db
-    (not (get-in db [:new-settings :color]))
-    (assoc-in [:new-settings :color] (fresh-colour (vals (get-in db [:servers (default-server db) :rows]))))))
+  (let [rows (all-rows db)
+        c (get-in db [:new-settings :color])]
+    (cond-> db
+      (or (not c) ((colours/taken rows nil) c))
+      (assoc-in [:new-settings :color] (fresh-colour rows)))))
+
+(defn recolour-plan
+  "The open chats that wear a colour an older open chat wears, each with a free colour: [[k colour]…],
+  picked one after the other so no two get the same."
+  [rows]
+  (first (reduce (fn [[plan rs] {:keys [id server]}]
+                   (let [c (colours/most-different rs id)]
+                     [(conj plan [[server id] c]) (map #(if (and (= id (:id %)) (= server (:server %))) (assoc % :color c) %) rs)]))
+                 [[] rows]
+                 (colours/duplicates rows))))
+
+(defn lists-complete?
+  "Every server of the person's own sent its list and is connected (not another person's view)."
+  [db]
+  (and (not (viewing-other? db))
+       (every? (fn [s] (let [e (get-in db [:servers s])] (and (:rows e) (= :open (:status e))))) (server-names db))))
 
 (defmethod on-frame "chats" [db server {:keys [chats]}]
-  ;; The new chat on screen takes its colour once its server's list is here (until then it has none).
-  {:db (cond-> (assoc-in db [:servers server :rows]
-                         (into {} (map (juxt :id identity)) (sidebar-pure/with-clock-times chats (js/Date.now))))
-         (and (nil? (:open db)) (= server (default-server db))) with-fresh-colour)
-   :fx [[:dispatch [:chat/check-seen]]]})
+  ;; The new chat on screen takes a free colour once a list is here; two open chats in one colour get
+  ;; a free one for the newer once every list is here (README decision 26).
+  (let [db' (cond-> (assoc-in db [:servers server :rows]
+                              (into {} (map (juxt :id identity)) (sidebar-pure/with-clock-times chats (js/Date.now))))
+              (nil? (:open db)) with-fresh-colour)
+        plan (when (lists-complete? db') (recolour-plan (all-rows db')))]
+    {:db db'
+     :fx (into [[:dispatch [:chat/check-seen]]] (for [[k c] plan] [:dispatch [:ops/color k c]]))}))
 
 (defn chat-of-frame
   "A chat's state from its `chat` frame, loaded."
@@ -375,14 +402,15 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (defn speak-item
-  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text}, or
-  nil when nothing in it can be said."
-  [server {:keys [chat id voice text ask]}]
+  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text}, the
+  chat's colour said first (\"Red here.\": colour, its id), or nil when nothing in it can be said."
+  [server {:keys [chat id voice text ask]} colour]
   (when-let [said (talk/speakable (if ask (talk/ask-text ask) text))]
-    {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said}))
+    {:id (str server "/" chat "/" id) :k [server chat] :voice voice
+     :text (if-let [n (colours/name-of colour)] (str n " here. " said) said)}))
 
 (defmethod on-frame "speak" [db server f]
-  (if-let [item (speak-item server f)]
+  (if-let [item (speak-item server f (get-in db [:servers server :rows (:chat f) :color]))]
     {:db db :fx [[:speech/say item]]}
     {:db db}))
 
@@ -756,14 +784,33 @@
  (fn [_ [_ [s c] folder]]
    {:ws/send [s {:type "folder" :chat c :folder (str/trim (str folder))}]}))
 
+(defn taken-by-others
+  "The colours open chats other than k ([server id]; nil: the new chat) wear on every server: its
+  palette shows them struck through (README decision 26)."
+  [db [s c]]
+  (colours/taken (remove #(and (= s (:server %)) (= c (:id %))) (all-rows db)) nil))
+
+(defn back-colour
+  "The colour a chat coming back from the archive needs (k: [server id]): a free one when an open
+  chat wears its own (README decision 26), else nil."
+  [db [s c]]
+  (let [rows (all-rows db)
+        mine (get-in db [:servers s :rows c :color])
+        others (remove #(and (= s (:server %)) (= c (:id %))) rows)]
+    (when ((colours/taken others nil) mine)
+      (colours/most-different others nil))))
+
 (rf/reg-event-fx
  :chat/archive
- ;; Archiving the open chat moves on to the next one in the list (or a new chat).
+ ;; Archiving the open chat moves on to the next one in the list (or a new chat); one coming back
+ ;; whose colour an open chat wears takes a free one.
  (fn [{:keys [db]} [_ [s c :as k] archived]]
-   (let [following (next-open (:servers db) k)]
+   (let [following (next-open (:servers db) k)
+         recolour (when-not archived (back-colour db k))]
      (cond-> {:ws/send [s {:type "archive" :chat c :archived archived}]}
        (and archived (= k (:open db)))
-       (assoc :fx [(if following [:dispatch [:nav/open following]] [:dispatch [:nav/new]])])))))
+       (assoc :fx [(if following [:dispatch [:nav/open following]] [:dispatch [:nav/new]])])
+       recolour (assoc :fx [[:dispatch [:ops/color k recolour]]])))))
 
 (defn- visible? [] (= "visible" js/document.visibilityState))
 
