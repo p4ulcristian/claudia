@@ -1,5 +1,5 @@
 (ns claudia.web.views.tearoff
-  "A chat torn out of the rail (README decision 80): dragged with a mouse and let go outside the rail
+  "A chat torn out of the rail (README decision 81): dragged with a mouse and let go outside the rail
   (over the page or outside the window; claudia.web.views.chat-drag decides), the chat opens in a new
   window of its own (its address, /c/<server>/<chat>), as big as this one. When it was the chat open
   here, this window moves on to a chat no other window shows (or a new chat). The windows know each

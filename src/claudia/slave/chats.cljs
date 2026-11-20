@@ -136,7 +136,7 @@
 
 (defn- row-model
   "The model picked for a chat (a live session takes it at once), else the one its session runs
-  with, else nil (the server's default): for the rail's cards (README decision 80)."
+  with, else nil (the server's default): for the rail's cards (README decision 81)."
   [id]
   (or (not-empty (:model (settings id))) (not-empty (:model (st id)))))
 
@@ -723,7 +723,7 @@
       (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
       (when (contains? m :effort) (quiet (hostlink/control! id "applyFlagSettings" {:effortLevel (:effort s)}))))
     (emit! id {:type "settings" :settings s :model (:model (st id)) :effort (:effort-now (st id))})
-    ;; The list's rows name the model (README decision 80).
+    ;; The list's rows name the model (README decision 81).
     (when (not= (:model before) (:model s)) (changed!))))
 
 (defn set-flags!

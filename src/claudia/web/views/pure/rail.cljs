@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.rail
-  "The rail as plain data (README decision 80): its width and when its circles become cards, each
+  "The rail as plain data (README decision 81): its width and when its circles become cards, each
   server's short mark, and what a card and a group say."
   (:require [clojure.string :as str]
             [claudia.web.views.pure.sidebar :as sidebar]

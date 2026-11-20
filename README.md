@@ -493,7 +493,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     with its name (double-click renames), how many chats, and a + that starts a chat in it with the
     group's picks (the last ones a chat in it started with); that chat goes on top of the group. On
     the rail a group is a stack of its chats' colours; pressed, a chooser card opens beside the rail
-    with each chat's full title and the +. Since decision 80 the rail drags the same way. The order
+    with each chat's full title and the +. Since decision 81 the rail drags the same way. The order
     is kept on the hub per person (`GET`/`PUT
     /hub/chat-order`, the whole list each time, `claudia.shared.order`), so every device shows the
     same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
@@ -1134,7 +1134,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
-80. The rail widens into cards, shows each chat's server, and orders and groups by dragging
+81. The rail widens into cards, shows each chat's server, and orders and groups by dragging
     (2026-11-20, the user's call: the server only in the hover text never shows on a touch screen;
     "rows must not move vertically when switching"; drag-to-group on the rail as in the list). Three
     parts:

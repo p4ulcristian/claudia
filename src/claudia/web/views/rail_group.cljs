@@ -1,5 +1,5 @@
 (ns claudia.web.views.rail-group
-  "A group on the rail (README decisions 38 and 80): a stack of its chats' colours with the group's
+  "A group on the rail (README decisions 38 and 81): a stack of its chats' colours with the group's
   name and its most pressing state under it, or as a card beside it on the wide rail; pressed, a
   chooser card opens beside the rail with every chat of the group (its circle, its server's mark and
   its full title) and a + for a new chat in the group. A press outside or Escape closes the card;
@@ -99,5 +99,5 @@
                                     :on-click #(open-card! gid %)}
       [stack rows]
       [group-body (:name g) rows cards?]]
-     ;; Open when pressed, and while a new group's name is typed (README decision 80).
+     ;; Open when pressed, and while a new group's name is typed (README decision 81).
      (when (or (= gid (:gid @card)) (= gid @(rf/subscribe [:renaming-group]))) [:f> card-view g rows m])]))

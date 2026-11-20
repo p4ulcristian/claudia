@@ -90,7 +90,7 @@
   "row: a list row with :server. done?: finished since you looked (never in a read-only view, never
   the open chat). plain?: the rail's circle (README decision 46): no badges, only the ticking
   dotted ring while the chat works; its line under the name says the rest. badge: drawn on the
-  circle too (the server's mark, README decision 80)."
+  circle too (the server's mark, README decision 81)."
   [{:keys [server folder waiting running agents runningSince agentsSince root]} done? & [plain? badge]]
   (let [agents (or agents 0)
         state (cond waiting :waiting running :thinking done? :done)]

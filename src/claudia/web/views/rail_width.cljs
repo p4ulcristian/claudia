@@ -1,5 +1,5 @@
 (ns claudia.web.views.rail-width
-  "The rail's width (README decision 80): its right edge is dragged (a mouse or a finger) and the
+  "The rail's width (README decision 81): its right edge is dragged (a mouse or a finger) and the
   rail follows; let go, it snaps to the circles or to a card width (claudia.web.views.pure.rail/snap)
   and the width is kept on this device (localStorage). The window keeps the page its room: a kept
   width that does not fit shows at the widest that does."

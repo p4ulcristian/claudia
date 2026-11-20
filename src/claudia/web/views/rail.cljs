@@ -13,7 +13,7 @@
   40). Its right edge drags it wider, and from 170 px on each circle becomes a card as tall as its
   row (claudia.web.views.rail-width, rail-card); with more than one server every circle carries its
   server's mark; a chat dragged on the rail moves in the order or into a group, and out of it tears
-  into a window of its own (claudia.web.views.chat-drag; README decision 80)."
+  into a window of its own (claudia.web.views.chat-drag; README decision 81)."
   (:require [claudia.web.search-open :as search-open]
             [clojure.string :as str]
             [re-frame.core :as rf]

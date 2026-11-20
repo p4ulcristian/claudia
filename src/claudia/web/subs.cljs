@@ -56,7 +56,7 @@
 
 (rf/reg-sub
  :server-marks
- ;; Every server's short mark, unique among them (README decision 80).
+ ;; Every server's short mark, unique among them (README decision 81).
  :<- [:all-server-list]
  (fn [servers] (rail-pure/server-marks servers)))
 

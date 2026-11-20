@@ -125,7 +125,7 @@
 (defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia? phone?] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar")
                      (when narrow? "narrow") (when ro "read-only") (when (rail-width/resizing?) "rail-resizing")]
-             ;; The rail's width, dragged and kept per device (README decision 80); a phone has no rail.
+             ;; The rail's width, dragged and kept per device (README decision 81); a phone has no rail.
              :style (when-not phone? {"--rail-w" (str (rail-width/width) "px")})
              :data-screen (name screen)}
    (when claudia? [:f> claudia-rain/rain])

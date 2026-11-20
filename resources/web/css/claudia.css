@@ -872,7 +872,7 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .speak-here { animation: none; } }
 
 
-/* ---------- The wide rail (README decision 80) ----------
+/* ---------- The wide rail (README decision 81) ----------
    Its right edge is dragged wider; past 170 px the circles become cards. Every row (a chat, a group,
    the chat being started) is --rail-row-h tall on the narrow rail and on the cards, so no row moves up
    or down when the rail switches. */

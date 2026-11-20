@@ -1,5 +1,5 @@
 (ns claudia.web.views.chat-drag
-  "Dragging chats in the list and on the rail (README decisions 38 and 80): a finger holds a chat for
+  "Dragging chats in the list and on the rail (README decisions 38 and 81): a finger holds a chat for
   350 ms (a mouse just moves it 6 px) and it lifts; it follows the pointer, and where it is let go
   decides: on the upper or lower third of a chat, before or after it (inside its group when it is in
   one); on the middle of a chat, the two become a group (a chat already in a group: after it, in that

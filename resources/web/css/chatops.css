@@ -351,7 +351,7 @@ body.chat-dragging .order-item { touch-action: none; }
 .wp-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .wp-panel p { margin: 0; }
 
-/* Dragging on the rail (README decision 80): the copy is the rail's own row; a line in the gap
+/* Dragging on the rail (README decision 81): the copy is the rail's own row; a line in the gap
    before or after a chat, a ring round a circle (a new group) or a stack (into the group); dragged
    out of the rail with a mouse, the copy says it opens in a window of its own. */
 .rail .drag-ghost.rail-chat { height: var(--rail-row-h); border-radius: 14px; margin: 0; }

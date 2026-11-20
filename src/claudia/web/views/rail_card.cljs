@@ -1,5 +1,5 @@
 (ns claudia.web.views.rail-card
-  "What a chat and a group say beside their circle on the wide rail (README decision 80), each card
+  "What a chat and a group say beside their circle on the wide rail (README decision 81), each card
   as tall as a circle's row: the title on one line; the server (with more than one), the project or
   folder and the model; the last reply's line or what it works on; its state (running, waiting for
   answer, done, failed, stopped, new) and how long. And the server's mark on a circle (with more
