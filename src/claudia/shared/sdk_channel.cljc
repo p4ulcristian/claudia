@@ -55,15 +55,24 @@
   (boolean (and (version? latest) (version? pinned) (not (older? latest pinned))
                 (or (not (version? published)) (older? published latest)))))
 
-(def platforms
-  "What the channel builds, as releases ship node_modules today: linux-x64 (npm puts the glibc and
-  the musl binary in, as for a release) and darwin-arm64 (a Mac)."
-  ["linux-x64" "darwin-arm64"])
+(def builds
+  "Every platform the channel builds, the one place that says it: its name, how npm ci installs its
+  node_modules (npm-flags), and the packages taken out after verification (left-out): the musl
+  Claude Code binary, which npm puts in on any Linux (the lockfile names no libc) though every
+  Claudia server is glibc Linux or a Mac."
+  [{:platform "linux-x64" :uname ["Linux" "x86_64"] :npm-flags []
+    :left-out ["@anthropic-ai/claude-agent-sdk-linux-x64-musl"]}
+   {:platform "darwin-arm64" :uname ["Darwin" "arm64"] :npm-flags ["--os=darwin" "--cpu=arm64"]
+    :left-out []}])
+
+(def platforms "The platforms' names, in build order." (mapv :platform builds))
+
+(defn build-of "The build of platform p, nil when none." [p] (some #(when (= p (:platform %)) %) builds))
 
 (defn platform
   "The channel's platform for a machine (uname -s, uname -m), nil when none is built for it."
   [os arch]
-  (get {["Linux" "x86_64"] "linux-x64" ["Darwin" "arm64"] "darwin-arm64"} [os arch]))
+  (some #(when (= [os arch] (:uname %)) (:platform %)) builds))
 
 (defn tarball
   "The file of version v for platform p."

@@ -14,8 +14,9 @@
 #    below main's pin.
 # 2. What: main's package.json and package-lock.json with only the SDK moved to that version (npm
 #    install --package-lock-only: its own dependencies follow, the rest stays as main pins), then per
-#    platform a clean `npm ci --omit=dev`, exactly as deploy/bundle.sh makes a release's
-#    node_modules (a Mac's with --os=darwin --cpu=arm64).
+#    platform a clean `npm ci --omit=dev`, as deploy/bundle.sh makes a release's node_modules (a
+#    Mac's with --os=darwin --cpu=arm64), except that linux-x64 leaves the musl binary out (every
+#    Claudia server is glibc Linux or a Mac); the platforms live in claudia.shared.sdk-channel/builds.
 # 3. Verified: the SDK's and the platform package's integrity in the lockfile is the registry's
 #    dist.integrity, npm ci checks every tarball against the lockfile, and `npm audit signatures`
 #    checks the registry's signature of every package installed (and provenance where published).
@@ -111,15 +112,17 @@ integrity_ok() {
 	[ -n "$want" ] && [ "$want" = "$got" ] || { log "$2@$3: the lockfile's integrity is not the registry's"; return 1; }
 }
 
-# pack <version> <platform>: that platform's node_modules installed, verified, packed and signed.
+# pack <version> <platform>: that platform's node_modules installed (npm ci's flags from out/sdk.js),
+# verified, its left-out packages taken out (the musl binary: no Claudia server uses musl), packed
+# and signed.
 pack() {
-	local v=$1 p=$2 d=$work/$2 flags=() file
+	local v=$1 p=$2 d=$work/$2 file out
 	mkdir -p "$d" "$work/out"
 	cp "$work/lock/package.json" "$work/lock/package-lock.json" "$d/"
-	[ "$p" = darwin-arm64 ] && flags=(--os=darwin --cpu=arm64)
-	(cd "$d" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund ${flags[@]+"${flags[@]}"} >&2)
+	(cd "$d" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund $(node "$work/sdk.js" npm-flags "$p") >&2)
 	integrity_ok "$d" "$pkg" "$v" && integrity_ok "$d" "$pkg-$p" "$v" || return 1
 	(cd "$d" && npm audit signatures >&2) || { log "$v ($p): npm audit signatures failed"; return 1; }
+	for out in $(node "$work/sdk.js" left-out "$p"); do rm -rf "${d:?}/node_modules/$out"; done
 	test -x "$d/node_modules/$pkg-$p/claude" || { log "$v ($p): no Claude Code binary"; return 1; }
 	echo "$v" >"$d/sdk.txt"
 	file=$work/out/$(node "$work/sdk.js" tarball "$v" "$p")

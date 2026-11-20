@@ -47,7 +47,11 @@
   (is (= "darwin-arm64" (c/platform "Darwin" "arm64")))
   (is (nil? (c/platform "Linux" "aarch64")))
   (is (nil? (c/platform "Darwin" "x86_64")))
-  (is (= "claudia-sdk-0.3.330-linux-x64.tar.gz" (c/tarball "0.3.330" "linux-x64"))))
+  (is (= "claudia-sdk-0.3.330-linux-x64.tar.gz" (c/tarball "0.3.330" "linux-x64")))
+  (testing "a Mac's node_modules are npm's for darwin-arm64; Linux leaves the musl binary out"
+    (is (= ["--os=darwin" "--cpu=arm64"] (:npm-flags (c/build-of "darwin-arm64"))))
+    (is (= ["@anthropic-ai/claude-agent-sdk-linux-x64-musl"] (:left-out (c/build-of "linux-x64"))))
+    (is (nil? (c/build-of "win32-x64")))))
 
 (deftest the-hub-keeps-only-channel-files
   (is (c/file-name? "claudia-sdk-0.3.330-linux-x64.tar.gz"))
@@ -113,4 +117,7 @@
   (is (= "claudia-sdk-0.3.330-linux-x64.tar.gz" (cli/answer ["tarball" "0.3.330" "linux-x64"])))
   (is (nil? (cli/answer ["tarball" "0.3.330" "../x"])))
   (is (= "linux-x64\ndarwin-arm64" (cli/answer ["platforms"])))
+  (is (= "--os=darwin\n--cpu=arm64" (cli/answer ["npm-flags" "darwin-arm64"])))
+  (is (= "" (cli/answer ["npm-flags" "linux-x64"])) "none: an empty answer, still a yes")
+  (is (= "@anthropic-ai/claude-agent-sdk-linux-x64-musl" (cli/answer ["left-out" "linux-x64"])))
   (is (nil? (cli/answer ["nope"]))))

@@ -1179,13 +1179,16 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     not below what main's package-lock pins (`claudia.shared.sdk-channel/publish?`, run from main's
     own signed build: `out/sdk.js`), it takes main's package.json and package-lock.json, moves only
     the SDK to that version (`npm install --package-lock-only`: the SDK's own dependencies follow,
-    the rest stays as main pins), and per platform installs a clean `npm ci --omit=dev` exactly as
-    `deploy/bundle.sh` makes a release's node_modules: linux-x64 (npm puts the glibc and the musl
-    binary in, as in every release) and darwin-arm64. Verified before it is packed: the SDK's and
-    the platform package's integrity in the lockfile is the registry's `dist.integrity`, npm ci
-    checks every tarball against the lockfile, and `npm audit signatures` checks the registry's
-    signature of every installed package (and the provenance attestations of those that publish
-    them; the SDK publishes none today). Each platform's node_modules and `sdk.txt` become
+    the rest stays as main pins), and per platform installs a clean `npm ci --omit=dev` as
+    `deploy/bundle.sh` makes a release's node_modules: linux-x64 and darwin-arm64
+    (`claudia.shared.sdk-channel/builds`, the one list: names, npm's flags, what is left out).
+    Verified before it is packed: the SDK's and the platform package's integrity in the lockfile is
+    the registry's `dist.integrity`, npm ci checks every tarball against the lockfile, and `npm
+    audit signatures` checks the registry's signature of every installed package (and the
+    provenance attestations of those that publish them; the SDK publishes none today). Then
+    linux-x64 leaves out the musl Claude Code binary, which npm puts in on any Linux (the lockfile
+    names no libc): every Claudia server is glibc Linux or a Mac (checked 2026-11-20); the linux-x64
+    tarball is 195 MB without it, 359 MB with it (0.3.329). A release's own node_modules still carry it. Each platform's node_modules and `sdk.txt` become
     `claudia-sdk-<version>-<platform>.tar.gz`, signed with the builder's key like every release
     file, and go to the hub; `POST /hub/releases/sdk` then keeps the version (`sdk.json`, the newest
     5 with their files) and pokes every server (`sdk <version>`). On each server `deploy/update.sh`
