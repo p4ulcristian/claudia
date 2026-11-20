@@ -268,6 +268,10 @@ code, pre { font-family: var(--mono); }
 /* A message sent while Claude works, waiting below the chat until Claude takes it in. */
 .msg.user.queued { opacity: 0.6; }
 .queued-tag { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.queued-row { display: inline-flex; align-items: center; gap: 2px; }
+/* Its ×: a 32 px target for a finger, the glyph small. */
+.unqueue { display: inline-grid; place-items: center; min-width: 32px; min-height: 32px; margin: -8px -8px -8px 0; font-size: 17px; line-height: 1; color: var(--muted); border-radius: 50%; }
+.unqueue:hover { color: var(--red); background: var(--panel); }
 .found-flash { animation: found-flash 1.8s ease-out; border-radius: 10px; }
 
 .md > :first-child { margin-top: 0; }

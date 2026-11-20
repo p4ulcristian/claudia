@@ -79,15 +79,26 @@
                         :on-click #(rf/dispatch [:chat/view-turn ck (when-not viewing? id)])}
       (pure/turn-links picture? files)])])
 
-(defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? files forkable? queued?] :as marks}]
+(defn- queued-tag
+  "Under a queued message: the tag, and its × when it can be taken back (README decision 83)."
+  [ck id removable?]
+  [:span.queued-row
+   [:span.queued-tag "queued"]
+   (when removable?
+     [:button.unqueue {:title "Take this message back" :aria-label "Take this message back"
+                       :on-click #(rf/dispatch [:chat/unqueue ck id])}
+      "×"])])
+
+(defn- user-msg [ck {:keys [id text images merged]} {:keys [viewing? picture? files forkable? queued? removable?] :as marks}]
   (let [[server chat] ck]
     [:div.msg.user {:data-at id :class [(when viewing? "viewing") (when queued? "queued")]
                     :title (when queued? "Claude reads this at its next step")}
      [:div.bubble
       (when (and images (pos? images)) [attach/sent-images server chat id images])
       [user-text server chat text]]
-     (when queued? [:span.queued-tag "queued"])
-     [voice-back/listen-back id]
+     (when queued? [queued-tag ck id removable?])
+     ;; A message Claude Code took in with other queued sends (merged) keeps each send's voice.
+     (for [m (concat merged [id])] ^{:key m} [voice-back/listen-back m])
      (when (and (not queued?) (or picture? (pos? files) forkable?))
        (msg-links ck id marks))]))
 
@@ -268,12 +279,13 @@
    " · " [:f> elapsed (or since (js/Date.now))]])
 
 (defn- feed-tail
-  "Below the feed: what is sent and not taken in yet, Stopped, the error."
-  [ck state outbox queued running]
+  "Below the feed: what is sent and not taken in yet (a message the runner has can be taken back,
+  not by a read-only viewer), Stopped, the error."
+  [ck state outbox queued running read-only?]
   [:<>
    (for [[i t] (map-indexed vector outbox)]
      ^{:key (str "out" i)} [user-msg ck {:id (str "out" i) :text t} {:queued? true}])
-   (for [m queued] ^{:key (:id m)} [user-msg ck m {:queued? true}])
+   (for [m queued] ^{:key (:id m)} [user-msg ck m {:queued? true :removable? (not read-only?)}])
    (when (:stopped state) (when-not running [:div.muted.small "Stopped."]))
    (when-let [err (:error state)]
      [error-line ck err])])
@@ -291,7 +303,7 @@
      (for [[i b] (map-indexed vector blocks)]
        (feed-row ck i b marks))
      (when running (working-line state since))
-     (feed-tail ck state outbox queued running)
+     (feed-tail ck state outbox queued running (:read-only? marks))
      [asks/in-chat ck (:asks state)]]))
 
 (defn- messages-view [{:keys [ck state] :as oc}]

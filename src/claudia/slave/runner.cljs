@@ -106,8 +106,8 @@
 
 (defn- wake-with!
   "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
-  now: a running turn is stopped and the message goes once it has ended. msg-id: the message's id
-  as the page made it (or nil)."
+  now: the message and every message queued before it go in at once, the running turn stopped for
+  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil)."
   [chat text images now msg-id]
   (if (chats/moving? chat)
     (chats/moving-error! chat)
@@ -155,6 +155,7 @@
       (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
+(defmethod on-chat-frame "unqueue" [_ f chat] (when-let [m (msg-id f)] (chats/unqueue! chat m)))
 (defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
 (defmethod on-chat-frame "secret" [c f chat] (chats/secret! chat (:ask f) (:sealed f) (:profile c)))
 (defmethod on-chat-frame "deny" [c f chat] (chats/deny! chat (:ask f) (:profile c)))

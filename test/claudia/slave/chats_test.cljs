@@ -153,6 +153,18 @@
     (is (= "live" (:text (second (view/chat-msgs hist s))))))
   (is (= {"b" 2} (view/unsaved-after {"a" 1 "b" 2} #{"a"}))))
 
+(deftest a-merged-message-stands-for-every-send-in-it
+  (let [merged {:id "s3" :role "user" :text "one\ntwo\nthree" :merged ["s1" "s2"]}
+        hist [{:id "u0" :role "user"} merged]
+        sent #(hash-map :id % :role "user" :text %)
+        s {:turn [(sent "s1") (sent "s2") (sent "s3") {:id "a:0" :role "assistant" :text "ok"}]
+           :unsaved {"s1" (sent "s1") "s2" (sent "s2") "s3" (sent "s3") "s4" (assoc (sent "s4") :queued true)}}]
+    (is (= #{"u0" "s1" "s2" "s3"} (view/known-ids hist)))
+    (is (= {"s4" (assoc (sent "s4") :queued true)} (view/unsaved-after (:unsaved s) (view/known-ids hist)))
+        "the sends the file took in as one are no longer kept aside")
+    (is (= ["u0" "s3" "a:0" "s4"] (map :id (view/chat-msgs hist s))) "shown once, not again at the end")
+    (is (= merged (second (view/chat-msgs hist s))) "the live send does not replace the merged text")))
+
 ;; Turns -------------------------------------------------------------------------------------------
 
 (deftest turn-outcome-says-how-it-ended
@@ -180,11 +192,34 @@
     (is (= {:id "u" :role "user" :text "hi" :at 7 :images 1 :queued true} msg))
     (is (= {:turn [:old] :turn-id "u" :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg)) "queued: the turn goes on"))
   (let [msg (turns/sent-msg "u" "hi" nil false 7)]
-    (is (= {:turn [] :turn-id "u" :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg))))
+    (is (= {:turn [] :turn-id "u" :unsaved {"u" msg} :begun false} (turns/with-sent {:turn [:old]} msg))))
   (testing "taken in or dropped"
     (let [s {:turn [{:id "u"} {:id "a"}] :unsaved {"u" {:id "u" :queued true}}}]
       (is (= {:turn [{:id "a"} {:id "u"}] :unsaved {"u" {:id "u"}}} (turns/taken-in s {:id "u"})))
       (is (= {:turn [{:id "a"}] :unsaved {}} (turns/dropped s "u"))))))
+
+(deftest a-sent-message-starts-a-turn-not-begun
+  (is (false? (:begun (turns/with-sent {:begun true} (turns/sent-msg "u" "hi" nil false 1)))))
+  (is (true? (:begun (turns/with-sent {:begun true} (turns/sent-msg "u" "hi" nil true 1)))) "queued: the turn goes on"))
+
+(deftest settled-ends-what-waited-on-a-message
+  (is (= {:unqueue #{"b"}} (turns/settled {:unqueue #{"a" "b"} :now {:msg "a" :queued true}} "a")))
+  (is (= {:now {:msg "b"}} (turns/settled {:now {:msg "b"}} "a")) "another message's now press waits on")
+  (is (= {} (turns/settled {} "a")))
+  (is (= #{"cancelled" "discarded" "refused"} turns/dropped-phases)))
+
+(deftest now-stops-once-queued-and-begun
+  (let [s {:running true :begun true :now {:msg "n" :queued true}}]
+    (is (true? (turns/now-stop? s)))
+    (is (false? (turns/now-stop? (assoc-in s [:now :queued] false))) "not in Claude Code's queue yet")
+    (is (false? (turns/now-stop? (assoc s :begun false))) "the turn has not begun")
+    (is (false? (turns/now-stop? (assoc s :running false))) "no turn runs")
+    (is (false? (turns/now-stop? (dissoc s :now))) "no now press")))
+
+(deftest unqueue-error-names-an-old-host
+  (is (= "Removing a queued message needs this server's session host restarted: it runs older code."
+         (turns/unqueue-error "no control method cancelAsyncMessage")))
+  (is (= "The queued message could not be removed: control timed out" (turns/unqueue-error "control timed out"))))
 
 (deftest context-of-reads-the-count
   (is (= {:used 10 :max 100 :percent 10 :model "m"}

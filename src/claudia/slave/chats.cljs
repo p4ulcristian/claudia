@@ -54,7 +54,9 @@
 
 ;; id -> what lives only while the runner runs:
 ;;   :live (the host holds a session) :running :stopping :scene :since (when the running turn began)
-;;   :after-stop [[text images]] (sent with now while a turn ran: they go in once it has ended)
+;;   :now {:msg :queued} (a message sent with now: the running turn stops once Claude Code has
+;;   queued it and the turn has begun) :begun (the running turn was heard starting)
+;;   :unqueue #{uuid} (queued messages the person removed: asked again once Claude Code queues them)
 ;;   :asks {ask id -> {:ask (as the page gets it) :resolve :input :keys :secret :timer :at :rpc}}
 ;;   :turn (this turn's Msgs, by arrival) :partial (the assistant text being streamed)
 ;;   :mid (the API message streaming) :stream-counts :final-counts (API message id -> text blocks)
@@ -852,28 +854,70 @@
 
 ;; SDK messages -----------------------------------------------------------------------------------
 
+(defn- drop-sent!
+  "The sent message sent-id never runs: it leaves the chat."
+  [id sent-id]
+  (when (get-in (st id) [:unsaved sent-id])
+    (swap-chat! id turns/dropped sent-id)
+    (emit! id {:type "msg" :msg {:id sent-id :role "user" :gone true}})))
+
 (defn- take-in!
-  "Claude Code took a message sent mid-turn in (started) or dropped it (cancelled)."
+  "Claude Code took a message sent mid-turn in (started) or dropped it (turns/dropped-phases)."
   [id sent-id phase]
   (when-let [m (get-in (st id) [:unsaved sent-id])]
     (when (:queued m)
-      (case phase
-        "started" (let [m (dissoc m :queued)]
-                    (swap-chat! id turns/taken-in m)
-                    (emit! id {:type "msg" :msg m}))
-        "cancelled" (do (swap-chat! id turns/dropped sent-id)
-                        (emit! id {:type "msg" :msg {:id sent-id :role "user" :gone true}}))
-        nil))))
+      (cond
+        (= "started" phase) (let [m (dissoc m :queued)]
+                              (swap-chat! id turns/taken-in m)
+                              (emit! id {:type "msg" :msg m}))
+        (turns/dropped-phases phase) (drop-sent! id sent-id)))))
 
-(declare send-text!)
+(declare stop! stop-turn!)
 
-(defn- send-waiting!
-  "The turn ended: the messages sent with now (send-after-stop!) go in, in the order they came."
+(defn- stop-for-now!
+  "A now press stops the running turn once turns/now-stop? says so; what is queued then (the now
+  message last) goes in the next turn."
   [id]
-  (let [waiting (:after-stop (st id))]
-    (swap-chat! id dissoc :after-stop)
-    (doseq [[text images msg-id] waiting]
-      (send-text! id text images msg-id))))
+  (when (turns/now-stop? (st id))
+    (swap-chat! id dissoc :now)
+    (stop! id)))
+
+(defn- begun!
+  "The running turn was heard starting (its init, or Claude writing)."
+  [id]
+  (when-not (:begun (st id))
+    (swap-chat! id assoc :begun true)
+    (stop-for-now! id)))
+
+(defn- cancel-queued!
+  "Asks Claude Code to drop the queued message sent-id (Query.cancelAsyncMessage): true = dropped;
+  false = not in its queue (taken in already, or not arrived: asked again once it is queued)."
+  [id sent-id]
+  (-> (hostlink/control! id "cancelAsyncMessage" sent-id)
+      (.then (fn [cancelled]
+               ;; Dropped, even if a turn's end marked it taken in meanwhile.
+               (when (true? cancelled)
+                 (swap-chat! id turns/settled sent-id)
+                 (drop-sent! id sent-id))))
+      (.catch (fn [e] (emit! id {:type "error" :text (turns/unqueue-error (text/error-text e))})))))
+
+(defn- queued-at-cli!
+  "Claude Code put the sent message in its queue: a now press waiting on it may stop the turn, and a
+  removal asked before it arrived is asked again."
+  [id sent-id]
+  (when (= sent-id (get-in (st id) [:now :msg]))
+    (swap-chat! id assoc-in [:now :queued] true)
+    (stop-for-now! id))
+  (when (contains? (:unqueue (st id)) sent-id)
+    (cancel-queued! id sent-id)))
+
+(defn- on-lifecycle!
+  "Claude Code's word on a sent message (command_lifecycle): queued, taken in, done or dropped."
+  [id sent-id phase]
+  (if (= "queued" phase)
+    (queued-at-cli! id sent-id)
+    (do (swap-chat! id turns/settled sent-id)
+        (take-in! id sent-id phase))))
 
 (defn- turn-end! [id m]
   (let [stopped (boolean (:stopping (st id)))
@@ -887,8 +931,7 @@
     ;; A turn that ended took in everything sent during it (a send not taken in starts the next).
     (doseq [[sent-id msg] (:unsaved (st id)) :when (:queued msg)] (take-in! id sent-id "started"))
     (set-running! id false)
-    (swap-chat! id assoc :stopping false)
-    (send-waiting! id)
+    (swap-chat! id #(-> % (assoc :stopping false :begun false) (dissoc :now :unqueue)))
     (changed!)
     (read-context! id)
     (refresh-title! id)
@@ -942,6 +985,7 @@
   "A turn is starting (init comes ahead of its messages): a settling chat waits for it."
   [id m]
   (when (:settling (st id)) (settle! id settle-init-ms))
+  (begun! id)
   (swap-chat! id assoc :model (:model m) :commands (vec (:slash_commands m)))
   (emit! id {:type "settings" :settings (settings id) :model (:model m)
              :commands (vec (:slash_commands m))})
@@ -976,14 +1020,15 @@
   (activity/note-sdk! id m)
   (let [top (nil? (:parent_tool_use_id m))]
     ;; A turn Claude starts by itself (after a background task) is running too.
-    (when (and top (#{"stream_event" "assistant"} (:type m)) (not (:running (st id))))
-      (set-running! id true))
+    (when (and top (#{"stream_event" "assistant"} (:type m)))
+      (when-not (:running (st id)) (set-running! id true))
+      (begun! id))
     (case (:type m)
       "stream_event" (when top (on-stream id (:event m)))
       "assistant" (when top (on-assistant! id m))
       "user" (when top (on-user! id m))
       "result" (turn-end! id m)
-      "command_lifecycle" (take-in! id (:command_uuid m) (:state m))
+      "command_lifecycle" (on-lifecycle! id (:command_uuid m) (:state m))
       "system" (on-system-msg! id m)
       "rate_limit_event" (do (try (meta/note-limits! (session-limits-key id) (:rate_limit_info m))
                                   (catch :default _ nil))
@@ -1008,7 +1053,7 @@
     (tasks/load! cid true)
     (when (some? background) (tasks/on-system! cid {:subtype "background_tasks_changed" :tasks background}))
     (swap-chat! cid assoc :live true :account (:account kept))
-    (when busy (swap-chat! cid assoc :since (or (:since (st cid)) (js/Date.now))))
+    (when busy (swap-chat! cid assoc :since (or (:since (st cid)) (js/Date.now)) :begun true))
     (set-running! cid (boolean busy))
     (when-not was
       (when (not= (:tools kept) (tools-version)) (swap-tools! cid))
@@ -1137,8 +1182,6 @@
   (doseq [r (store/chats) :when (and (view/keeps-session? r) (not (:live (st (:id r)))))]
     (open-session! (:id r))))
 
-(declare stop!)
-
 (defn- force-out!
   "The archived chat's interrupted turn never ended: its Claude Code process is closed anyway."
   [id]
@@ -1148,12 +1191,12 @@
     (swap-chat! id assoc :stopping false)))
 
 (defn- archive-stop!
-  "Archiving ends everything at once: the running turn is stopped (messages waiting for it are
-  dropped), then its agents, background shells and Claude Code process (archive-out!)."
+  "Archiving ends everything at once: the running turn is stopped with the messages queued for it
+  dropped, then its agents, background shells and Claude Code process (archive-out!)."
   [id]
-  (swap-chat! id dissoc :after-stop)
+  (swap-chat! id dissoc :now)
   (if (:running (st id))
-    (do (stop! id)
+    (do (stop-turn! id true)
         (js/setTimeout #(force-out! id) archive-grace-ms))
     (arm-idle! id)))
 
@@ -1236,20 +1279,33 @@
     id))
 
 (defn send-after-stop!
-  "A message sent with now: while a turn runs, the turn stops and the message waits for its end
-  (sent into a stopping turn, Claude Code could drop it with the turn); with none running it goes
-  at once. msg-id: the message's id as the page made it (or nil)."
+  "A message sent with now (README decision 83): while a turn runs it is queued behind the messages
+  queued before it, and once Claude Code has it in its queue the turn stops (stop-for-now!); every
+  queued message then goes in the next turn, in order. With no turn running it goes at once.
+  msg-id: the message's id as the page made it (or nil)."
   [id message images msg-id]
-  (if (:running (st id))
-    (do (swap-chat! id update :after-stop (fnil conj []) [message images msg-id])
-        (stop! id))
+  (let [msg-id (or msg-id (str (random-uuid)))]
+    (when (:running (st id)) (swap-chat! id assoc :now {:msg msg-id :queued false}))
     (send-text! id message images msg-id)))
 
-(defn stop! [id]
+(defn unqueue!
+  "The person removed a queued message (its ×): Claude Code drops it unless it took it in already;
+  one not in its queue yet is dropped once it gets there (queued-at-cli!)."
+  [id sent-id]
+  (when (get-in (st id) [:unsaved sent-id :queued])
+    (swap-chat! id update :unqueue (fnil conj #{}) sent-id)
+    (cancel-queued! id sent-id)))
+
+(defn- stop-turn!
+  "Interrupts the running turn. cancel-queued?: Claude Code also drops every message still queued
+  (else those run in the next turn)."
+  [id cancel-queued?]
   (drop-asks! id true "The user stopped the turn.")
   (when (:running (st id))
     (swap-chat! id assoc :stopping true))
-  (hostlink/send! {:op "interrupt" :id id}))
+  (hostlink/send! (cond-> {:op "interrupt" :id id} cancel-queued? (assoc :cancelQueued true))))
+
+(defn stop! [id] (stop-turn! id false))
 
 (defn with-pending-note
   "A chat's messages with the server move's note (pending: its kv value, nil: none) at the end, the
@@ -1262,7 +1318,7 @@
   "The chat frame from the session file's history: sent messages it holds now are no longer kept
   aside."
   [id r hist]
-  (swap-chat! id update :unsaved view/unsaved-after (set (map :id hist)))
+  (swap-chat! id update :unsaved view/unsaved-after (view/known-ids hist))
   (let [s (st id)]
     (tasks/load! id (boolean (:live s)))
     {:type "chat" :chat id :title (:title r) :folder (:folder r)

@@ -232,6 +232,27 @@
                (or (string? (.-prompt a)) (array? (.-prompt a))))
       (if (and (string? (.-source_uuid a)) (seq (.-source_uuid a))) (.-source_uuid a) (.-uuid e)))))
 
+(defn merged-sends
+  "Several messages queued during a turn are taken in at once as ONE user entry, their texts joined
+  by line breaks: its uuid is the last send's id and mergedSendUuids holds the earlier ones'
+  (Claude Code 2.1.326). Those earlier ids, or nil for any other entry."
+  [^js e]
+  (let [ids (when (and e (= "user" (.-type e))) (.-mergedSendUuids e))]
+    (when (array? ids)
+      (not-empty (filterv #(and (string? %) (seq %)) ids)))))
+
+(defn merged-by-uuid
+  "The session file's merged entries: entry uuid -> the earlier sends' ids (merged-sends)."
+  [entries]
+  (into {} (keep (fn [^js e] (when-let [ids (merged-sends e)] (when (string? (.-uuid e)) [(.-uuid e) ids]))))
+        entries))
+
+(defn with-merged
+  "A chat's Msgs with each merged user message marked with the earlier sends it stands for
+  (:merged), so those sends count as in the file and the message shows once."
+  [msgs merged]
+  (mapv #(if-let [ids (and (= "user" (:role %)) (get merged (:id %)))] (assoc % :merged ids) %) msgs))
+
 ;; Earlier chains ---------------------------------------------------------------------------------
 
 (defn- jget [o k] (when o (unchecked-get o k)))
@@ -389,9 +410,11 @@
 (defn session-msgs
   "The chat's Msgs, oldest first, from the SDK's messages (data) and the session file's entries (JS)."
   [msgs entries folder]
-  (:out (reduce (partial add-msg folder (entry-times entries))
-                {:out [] :tools {} :asked {} :counts {}}
-                (filter #(nil? (:parent_tool_use_id %)) (with-earlier-chains msgs entries)))))
+  (with-merged
+    (:out (reduce (partial add-msg folder (entry-times entries))
+                  {:out [] :tools {} :asked {} :counts {}}
+                  (filter #(nil? (:parent_tool_use_id %)) (with-earlier-chains msgs entries))))
+    (merged-by-uuid entries)))
 
 (defn load
   "Promise of the chat's Msgs, oldest first."
