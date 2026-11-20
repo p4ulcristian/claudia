@@ -2,7 +2,8 @@
   "What a screenshot of the picture waits for: claudia.slave.render shoots once
   window.__scene3dLoading is 0. A 3D scene holds it from the moment its module starts loading
   (module), then from its start until its first build (the scene), and while its models and code
-  load. Holds and releases always come in pairs.")
+  load. The editor form and the graph form hold it while their modules load (claudia.web.editor,
+  claudia.web.views.graph). Holds and releases always come in pairs.")
 
 (defonce ^:private module-held (atom false))
 

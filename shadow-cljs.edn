@@ -1,14 +1,22 @@
-;; Eight builds from one source tree: the master (hub) and its key broker (broker, README decision 66), the slave's three processes (front, runner,
-;; host), the root helper and its sudo shim (root, sudo; README decision 52) and the page (web), plus
+;; Nine builds from one source tree: the master (hub) and its key broker (broker, README decision 66), the slave's three processes (front, runner,
+;; host), the root helper and its sudo shim (root, sudo; README decision 52), the page (web) and the
+;; Agent SDK channel's decisions for the shell scripts (sdk, README decision 87), plus
 ;; the tests (test/, every namespace ending in -test, run on Node).
 ;; Node builds run on plain Node (node:sqlite needs 22.13+).
 {:source-paths ["src" "test"]
  :dependencies [[reagent/reagent "2.0.1"]
                 [re-frame/re-frame "1.4.7"]]
  :builds
- {:host   {:target :node-script :main claudia.slave.host/main   :output-to "out/host.js"}
-  :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"}
+ {;; The host imports each session's Agent SDK by path, the runner the one its model probe uses
+  ;; (claudia.slave.sdk-load, README decision 86): native import(), which Closure would rewrite in
+  ;; the code.
+  :host   {:target :node-script :main claudia.slave.host/main   :output-to "out/host.js"
+           :prepend "var claudia_import = function (url) { return import(url); };\n"}
+  :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"
+           :prepend "var claudia_import = function (url) { return import(url); };\n"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
+  ;; The Agent SDK channel's decisions for deploy/update.sh and the release builder (README decision 87).
+  :sdk    {:target :node-script :main claudia.slave.sdk-cli/main :output-to "out/sdk.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
   :broker {:target :node-script :main claudia.broker.main/main  :output-to "out/broker.js"}
   :root   {:target :node-script :main claudia.root.main/main    :output-to "out/root.js"}
@@ -21,8 +29,10 @@
            ;; A dev build loads its files as script tags, not eval (the page's policy forbids eval).
            :devtools {:loader-mode :script}
            ;; Big libraries load on first use: three.js and the 3D view (claudia.web.scene3d), Shiki
-           ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs) and Vega
-           ;; (claudia.web.chart). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
+           ;; (claudia.web.shiki; its grammars are files of their own, bin/shiki-langs.mjs), Vega
+           ;; (claudia.web.chart), CodeMirror and the editor form (claudia.web.editor), ELK for the
+           ;; graph form's layout (claudia.web.views.graph) and libsodium for sealing a pasted secret
+           ;; (claudia.web.secret). Nothing comes from a CDN (claudia.shared.csp). The prepend is the
            ;; native import() shadow.esm/dynamic-import calls (Closure would rewrite one in the code).
            ;; health first (README decision 35): the page's word on whether this release works, so
            ;; it runs, and reports, even when the rest of the page's code breaks on load.
@@ -32,6 +42,9 @@
                      :scene3d {:entries [claudia.web.scene3d.view] :depends-on #{:main}}
                      :shiki {:entries [claudia.web.shiki.lib] :depends-on #{:main}}
                      :chart {:entries [claudia.web.chart] :depends-on #{:main}}
+                     :editor {:entries [claudia.web.editor.view] :depends-on #{:main}}
+                     :elk {:entries [claudia.web.graph.elk] :depends-on #{:main}}
+                     :secret {:entries [claudia.web.secret.sodium] :depends-on #{:main}}
                      ;; The 3D world (claudia.web.world): on the 3D module, which already holds three.js.
                      :world {:entries [claudia.web.world.view] :depends-on #{:scene3d}}}
            ;; libsodium's and QuickJS's Node paths (fs, crypto) are never taken in a browser.

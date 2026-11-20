@@ -1,7 +1,8 @@
-(ns claudia.web.views.editor
+(ns claudia.web.editor.view
   "The editor form: code Claude and the user both edit, in CodeMirror 6. The user's typing is saved
   into the picture as they type (code_edit); Send hands their edits to Claude as one message
-  (code_send). Writable only on the open chat's own live picture."
+  (code_send). Writable only on the open chat's own live picture. Its own module (:editor), loaded
+  the first time an editor is shown (claudia.web.editor)."
   (:require ["@codemirror/state" :refer [Annotation Compartment EditorState]]
             ["@codemirror/view" :refer [EditorView keymap lineNumbers highlightActiveLine highlightActiveLineGutter drawSelection]]
             ["@codemirror/commands" :refer [defaultKeymap history historyKeymap indentWithTab]]
@@ -97,7 +98,6 @@
 ;; A change that came from the picture (Claude's code, another page's typing), not from these keys.
 (def ^:private remote (.define Annotation))
 (def ^:private save-ms 300)
-
 
 (defn file-list [v] (if (sequential? v) (filterv #(string? (:id %)) v) []))
 (defn shown [f] (or (:edit f) (:code f) ""))

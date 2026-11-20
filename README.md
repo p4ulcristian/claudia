@@ -1337,6 +1337,92 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/shared/sentinel_key.cljc`, `src/claudia/slave/worktree.cljs`,
     `src/claudia/web/views/settings.cljs`.
 
+86. A new Agent SDK takes each new session, with no host restart (2026-11-20, the user's call). The
+    host loaded the SDK once at its start, and `deploy/update.sh` never restarts hosts (a restart
+    stops every turn and background job), so servers ran an old SDK until a restart by hand, while
+    a new SDK comes about daily. Now each session loads its SDK when it starts (`op: "start"`,
+    `claudia.slave.sdk-load`): the version in the release's `node_modules`, the release being the
+    folder the host was started from by path, so after an update it is the new one. It is imported
+    by absolute path with `?v=<version>` (Node keeps one module per URL), with the zod beside it. A
+    running session keeps the module it started with; the host keeps every loaded one in memory and
+    itself never restarts for an SDK. Where the files live: a release folder is deleted two updates
+    later (`<release>.old`, `/srv/claudia.old`), and that was not made safe by proof (a session's
+    Claude Code binary keeps running from a deleted file on Linux and macOS, but a fallback reloads
+    from the files and the SDK finds its binary by path), so the files stay instead. The host loads
+    from a store beside the release, `<release>.sdk/<version>/node_modules` (`deploy/sdk-store.sh`,
+    run by update.sh on single-user Linux and Mac and by the shared server's install.sh before the
+    runners restart): the release's node_modules as hard links (`cp -al`, on Linux and on macOS
+    alike: a Mac's store copy had the release's inodes, 2026-11-20), else APFS clones, else a copy.
+    A version leaves the store only when it is not one of the three stored last and no
+    process's command line names its folder (each session's Claude Code binary runs from there). A
+    developer's checkout has no store: its own node_modules, which `npm ci` replaces under running
+    sessions as before. Idle chats move: the host says each session's SDK version and the version a
+    new session gets (`sessions`, PROTOCOL.md), and the runner closes a session that is older when
+    its chat is between turns, not settling and has no background task running (at a runner
+    connect, which every update brings, a turn's end, and once its background work settled); an
+    open chat resumes at once on the new SDK, a passive one with its next message, from its `.jsonl`
+    as always. Never mid-turn or with work running. Failures: an SDK that fails to load, or whose
+    query fails before its first message, falls back to the version the host started with (else the
+    newest other loaded one); the messages sent so far go to the fallback, the runner shows the
+    error in the chat (`{ ev: "sdk", error }`), and new sessions skip that version until another is
+    installed (the top `sdk` is then the fallback, so idle chats are not closed over and over).
+    The model picker follows too: the runner's probe of models and slash commands loads the version
+    the host names for new sessions (the installed one before the host has answered), with the
+    same code (`claudia.slave.sdk-load`), and probes again whenever that version changes.
+    This code itself reaches a host only with one restart by hand, like any host change; on a
+    single-user Linux server the update that brings it still runs the old update.sh, so its store
+    fills from the next update on (until then sessions load the release's own node_modules).
+    Instead of: restarting idle hosts after an update (background jobs would stop), or a host per
+    SDK version (a runner would talk to several).
+
+87. Claudia keeps every server on the newest Agent SDK herself (2026-11-20, the user's call). With
+    decision 86 a new SDK took new sessions with no restart, but still reached servers only through
+    a merge to main (a Renovate PR, about one SDK release a day), and the user holds every merge.
+    Now the release builder (decision 29) looks at npm every 5 minutes
+    (`deploy/release-builder/sdk-channel.sh`, run by builder.sh between rounds): when npm's latest
+    dist-tag of `@anthropic-ai/claude-agent-sdk` is newer than the newest the hub has from it and
+    not below what main's package-lock pins (`claudia.shared.sdk-channel/publish?`, run from main's
+    own signed build: `out/sdk.js`), it takes main's package.json and package-lock.json, moves only
+    the SDK to that version (`npm install --package-lock-only`: the SDK's own dependencies follow,
+    the rest stays as main pins), and per platform installs a clean `npm ci --omit=dev` as
+    `deploy/bundle.sh` makes a release's node_modules: linux-x64 and darwin-arm64
+    (`claudia.shared.sdk-channel/builds`, the one list: names, npm's flags, what is left out).
+    Verified before it is packed: the SDK's and the platform package's integrity in the lockfile is
+    the registry's `dist.integrity`, npm ci checks every tarball against the lockfile, and `npm
+    audit signatures` checks the registry's signature of every installed package (and the
+    provenance attestations of those that publish them; the SDK publishes none today). Then
+    linux-x64 leaves out the musl Claude Code binary, which npm puts in on any Linux (the lockfile
+    names no libc): every Claudia server is glibc Linux or a Mac (checked 2026-11-20); the linux-x64
+    tarball is 195 MB without it, 359 MB with it (0.3.329). A release's own node_modules still carry it. Each platform's node_modules and `sdk.txt` become
+    `claudia-sdk-<version>-<platform>.tar.gz`, signed with the builder's key like every release
+    file, and go to the hub; `POST /hub/releases/sdk` then keeps the version (`sdk.json`, the newest
+    5 with their files) and pokes every server (`sdk <version>`). On each server `deploy/update.sh`
+    (single-user Linux, `--shared` and a Mac alike), first on every run (a poke or the hourly timer),
+    asks the hub (`GET /hub/releases/sdk`: versions only, so the hub can hold one back but never
+    change one), and when this release's `out/sdk.js` says to store it (not marked broken, not
+    stored yet, not older than the release's own) fetches its platform's tarball, checks the
+    signature exactly as for a release file (`deploy/release-signers` on GitHub's main) and the
+    version inside, and moves it into the SDK store (`deploy/sdk-store.sh <release>
+    <node_modules>`: `<release>.sdk/<version>`, the same retention: the three stored last that are
+    not marked, and any version a process runs from). Nothing restarts: a new session now takes the
+    newest installed version not marked broken, the release's own or a store copy
+    (`claudia.shared.sdk-channel/usable-newest`; decision 86 took the release's own), read each
+    time; the host looks at the store every 10 s and tells the runner when that changed (`{ ev:
+    "sdk-newest" }`), so the model probe moves and idle chats move as in decision 86. The front
+    says the version a new session gets (`sdk` in `/api/me` and `/api/version`), shown beside the
+    commit under the gear. Rolling back: Settings, Release builder, Roll back (asked first) sends
+    `POST /hub/admin/sdk-rollback`; every server is poked with `sdk-rollback <version>` (and the
+    hub's answer lists it), marks it in `<release>.sdk/broken`, and its new sessions skip it (the
+    next newest installed one), idle chats on it move off it, and it is never stored again; the next
+    npm version moves everyone forward, like decision 35. A release that pins a newer SDK than the
+    channel's still wins (newest wins). What it needs once: the builder's `install.sh` run again
+    (it installs `sdk-channel.sh`), a release with `out/sdk.js` on each server (until then update.sh
+    says the channel is not there), and one host restart by hand for this host code (decision 86).
+    Instead of: merging each Renovate PR (the user holds merges), each server installing from npm
+    itself (every server would trust npm directly and need its tooling; the builder already is the
+    one machine whose signature servers trust), or a separate signing key for the channel (one key,
+    one list of signers).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -1384,7 +1470,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
   list (waiting up to 40 s for a pushed one), its tree from the API (each server asks GitHub about a commit once and keeps the answer: without a token it gets 60 calls an hour), and install that tree's build:
   fetched ahead, so a merge of an up-to-date PR only swaps folders and restarts (seconds); else
   downloaded when stage.yml has published it for main's own check (minutes). Only forward; the
-  front and the runners restart, never the hosts. No call fails while they do (2026-11-16): the
+  front and the runners restart, never the hosts (a new Agent SDK takes their next sessions, decision 86; a newer one from npm comes with no merge, decision 87). No call fails while they do (2026-11-16): the
   hub tries a front that refuses it again every 0.3 s for up to 15 s, and a front a runner whose
   socket refuses or is missing, for any call without a body (GET, HEAD, a WebSocket handshake), so
   a restart makes a call wait a moment instead of failing; a front that is off or asleep times out
@@ -1419,7 +1505,7 @@ Claude Code cuts long tool descriptions, so the forms' data is also in the syste
 
 ```
 npm ci
-npx shadow-cljs release host runner front hub broker root sudo web
+npx shadow-cljs release host runner front hub broker root sudo web sdk
 ```
 
 ## Back from the TypeScript Claudia (2026-11-03)

@@ -10,13 +10,13 @@
             [claudia.web.views.calls :as calls]
             [claudia.web.views.clojure :as clojure]
             [claudia.web.views.code :as code]
-            [claudia.web.views.editor :as editor]
             [claudia.web.views.files :as files]
             [claudia.web.views.flow :as flow]
             [claudia.web.views.forms :as base-forms]
             [claudia.web.views.frame :as frame]
             [claudia.web.views.git :as git]
             [claudia.web.views.graph :as graph]
+            [claudia.web.editor :as editor]
             [claudia.web.scene3d :as scene3d]))
 
 ;; ---- which renderer ----
@@ -32,7 +32,7 @@
     "git" [:div.form-view.form-git [:f> git/git-form data ctx]]
     "clojure" [:div.form-view.form-clojure [:f> clojure/clojure-form data ctx]]
     "calls" [:div.form-view.form-calls [:f> calls/calls-form data ctx]]
-    "editor" [:div.form-view.form-editor [:f> editor/editor-form data ctx]]
+    "editor" [:div.form-view.form-editor [editor/editor-form data ctx]]
     "flow" [:div.form-view.form-flow [:f> flow/flow-form data]]
     ;; "code" was a form of its own until 2026-10-22: pictures saved before still show theirs.
     "code" [:div.form-view.form-code [:f> code/code-view data]]

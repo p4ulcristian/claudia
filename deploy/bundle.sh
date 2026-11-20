@@ -2,7 +2,7 @@
 # Packs a built checkout into Claudia's release files (README decision 29), the same wherever it
 # runs: the PR check (.github/workflows/check.yml) and the release builder
 # (deploy/release-builder/builder.sh). Run from the checkout's root after
-# `npx shadow-cljs release host runner front hub broker root sudo web && npm run build:web-files`:
+# `npx shadow-cljs release host runner front hub broker root sudo web sdk && npm run build:web-files`:
 #
 #   deploy/bundle.sh [--no-deps]
 #

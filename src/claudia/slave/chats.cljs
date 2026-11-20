@@ -31,6 +31,7 @@
             [claudia.slave.pictures :as pictures]
             [claudia.slave.projects :as projects]
             [claudia.slave.scene :as scene]
+            [claudia.slave.sdk-version :as sdk-version]
             [claudia.slave.secret :as secret]
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.sentinel-key :as sentinel-key]
@@ -65,7 +66,13 @@
 ;;   :turn-id (the last sent message's uuid: the turn's name in the picture history, kept for turns
 ;;   Claude starts itself) :unsaved {uuid -> Msg} (sent, not in the session file yet)
 ;;   :settling :settle (timer) :stale (restart after this turn: other tools or instructions)
+;;   :sdk (the Agent SDK version its session runs on, as the host said)
 (defonce state (atom {}))
+
+;; The Agent SDK version a session started now runs on, as the host said (README decision 86).
+(defonce newest-sdk (atom nil))
+;; The versions new sessions skip, as the host said: rolled back or failed (README decision 87).
+(defonce skipped-sdks (atom #{}))
 
 ;; Set by the runner: where events go.
 (defonce out (atom {:emit (fn [_ _]) :changed (fn [])}))
@@ -168,7 +175,7 @@
 
 (declare arm-idle! turn-id! restart-if-stale! send-text!)
 
-(declare stop-task! close-session!)
+(declare stop-task! close-session! move-to-newest-sdk!)
 
 (defn- archived? [id] (boolean (:archived (store/chat id))))
 
@@ -220,6 +227,7 @@
         (store/update! id {:ended (js/Date.now)})))
     (arm-idle! id)
     (restart-if-stale! id)
+    (move-to-newest-sdk! id)
     (changed!)))
 
 (defn- settle! [id wait]
@@ -239,7 +247,9 @@
                 (not running) (assoc :stopped (boolean (:stopping (st id))))))
     (changed!))
   (arm-idle! id)
-  (when-not running (restart-if-stale! id)))
+  (when-not running
+    (restart-if-stale! id)
+    (move-to-newest-sdk! id)))
 
 ;; Asks -------------------------------------------------------------------------------------------
 
@@ -664,7 +674,7 @@
   "A turn ended or Claude Code reported a rate-limit change: read the exact numbers again soon."
   [ms]
   (some-> @probe-timer js/clearTimeout)
-  (reset! probe-timer (js/setTimeout #(try (meta/probe! cwd (run-env)) (catch :default _ nil)) ms)))
+  (reset! probe-timer (js/setTimeout #(try (meta/probe! cwd (run-env) @newest-sdk) (catch :default _ nil)) ms)))
 
 (defonce ^:private agent-timers (atom {}))
 
@@ -778,7 +788,7 @@
 
 (defn- close-session! [id]
   (hostlink/send! {:op "close" :id id})
-  (swap-chat! id assoc :live false :stale false :plan-changed false :plan-continue false)
+  (swap-chat! id assoc :live false :sdk nil :stale false :plan-changed false :plan-continue false)
   (tasks/session-gone! id))
 
 (defn- restart-if-stale!
@@ -849,7 +859,7 @@
                       (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))))
                   2000)
   (refresh-titles!)
-  (try (meta/probe! cwd (run-env))
+  (try (meta/probe! cwd (run-env) @newest-sdk)
        (catch :default e (js/console.error "meta:" (text/error-text e))))
   (watch-token!))
 
@@ -1037,7 +1047,7 @@
       nil)))
 
 (defn- ended! [id error]
-  (swap-chat! id assoc :live false :partial nil :reply-sends 0)
+  (swap-chat! id assoc :live false :sdk nil :partial nil :reply-sends 0)
   (tasks/session-gone! id)
   (drop-asks! id false nil)
   (when error (emit! id {:type "error" :text error}))
@@ -1046,14 +1056,15 @@
 (defn- session-held!
   "The host holds the chat's session (busy: its turn runs; background: its live background set as the
   host last heard it, nil before the first, which ends the saved tasks that finished while this
-  runner was away). After a runner start: the runner's tools or instructions changed since this
-  session started (an update): the new tools now, the instructions after its turn."
-  [cid {:keys [busy background]}]
+  runner was away; sdk: the Agent SDK version it runs on). After a runner start: the runner's tools
+  or instructions changed since this session started (an update): the new tools now, the
+  instructions after its turn."
+  [cid {:keys [busy background sdk]}]
   (let [was (:live (st cid))
         kept (store/kv cid "session")]
     (tasks/load! cid true)
     (when (some? background) (tasks/on-system! cid {:subtype "background_tasks_changed" :tasks background}))
-    (swap-chat! cid assoc :live true :account (:account kept))
+    (swap-chat! cid assoc :live true :account (:account kept) :sdk sdk)
     (when busy (swap-chat! cid assoc :since (or (:since (st cid)) (js/Date.now)) :begun true))
     (set-running! cid (boolean busy))
     (when-not was
@@ -1062,21 +1073,61 @@
         (swap-chat! cid assoc :stale true)
         (restart-if-stale! cid)))))
 
-(declare open-sessions!)
+(declare open-sessions! session-follows-row!)
+
+(defn- move-to-newest-sdk!
+  "A chat between turns with no background work whose session runs an older Agent SDK than a new
+  session would (README decision 86): its session closes, so an open chat resumes on the newest at
+  once and a passive one with its next message. Never mid-turn or with work running."
+  [id]
+  (let [s (st id)]
+    (when (sdk-version/move-to-newest? {:live (:live s) :running (:running s) :settling (:settling s)
+                                        :background (tasks/running-any? id)
+                                        :sdk (:sdk s) :newest @newest-sdk :broken @skipped-sdks})
+      (println (str "[" (subs id 0 8) "] Agent SDK " (:sdk s) " -> " @newest-sdk ": session closed"))
+      (close-session! id)
+      (session-follows-row! id))))
+
+(defn- sdk-reported!
+  "The host said which Agent SDK the chat's session started on; error: why not the newest (it
+  failed to load or start, so the session fell back), shown in the chat."
+  [id {:keys [sdk error]}]
+  (swap-chat! id assoc :sdk sdk)
+  (when error
+    (js/console.error (str "[" (subs id 0 8) "] " error "; running on Agent SDK " sdk))
+    (emit! id {:type "error" :text (str error ". This chat runs on Agent SDK " sdk ".")})))
+
+(defn- newest-said!
+  "The host named the Agent SDK new sessions start on (newest) and the ones they skip (broken):
+  another newest one, the models and commands are read again from it (the model picker follows)."
+  [newest broken]
+  (reset! skipped-sdks (set broken))
+  (when (not= newest (first (reset-vals! newest-sdk newest))) (probe-soon! 0)))
+
+(defn- on-newest-sdk!
+  "The SDK store changed with no restart (README decision 87): an idle chat on an older or skipped
+  Agent SDK moves to the newest."
+  [{newest :sdk broken :broken}]
+  (newest-said! newest broken)
+  (doseq [id (keys @state)] (move-to-newest-sdk! id)))
 
 (defn- on-sessions!
   "The sessions the host holds: those it no longer holds (it restarted) have ended. Then every open
-  chat without one gets its session back."
-  [sessions]
+  chat without one gets its session back, and an idle one on an older Agent SDK moves to the newest."
+  [{sessions :list newest :sdk broken :broken}]
+  (newest-said! newest broken)
   (let [live (into {} (map (juxt :id identity)) sessions)]
     (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
       (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))
+    ;; (an idle one moves inside, as its turn's end is noted: set-running!)
     (doseq [[cid held] live] (session-held! cid held))
     (open-sessions!)))
 
 (defn on-host-event [{:keys [ev id] :as e}]
   (case ev
-    "sessions" (on-sessions! (:list e))
+    "sessions" (on-sessions! e)
+    "sdk-newest" (on-newest-sdk! e)
+    "sdk" (sdk-reported! id e)
     "msg" (on-sdk id (:msg e))
     "rpc" (on-rpc e)
     "cancel" (rpc-cancelled! (:rpc e))

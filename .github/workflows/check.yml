@@ -123,9 +123,9 @@ jobs:
           done
           exit 1
 
-      - name: Build (host runner front hub broker root sudo web)
+      - name: Build (host runner front hub broker root sudo web sdk)
         run: |
-          npx shadow-cljs release host runner front hub broker root sudo web
+          npx shadow-cljs release host runner front hub broker root sudo web sdk
           npm run build:web-files
 
       - name: Hub image has every package hub.js loads (bin/hub-image-deps.mjs)
