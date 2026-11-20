@@ -1049,10 +1049,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the ring at any time while holding keeps the recording going (2026-11-20 later, the user's
     call; before: the clip was dropped) and the mic follows the finger on a spring
     (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
-    have some personality"): it trails the finger and overshoots a little, the ring lit round the
-    voice's bars and the red recording disc with its clock and "send" (2026-11-20 later, the user:
-    "it doesn't show the recording anymore, so it's confusing"; before: a blue disc saying move). Let go, the clip is heard and sent as when let go in place, and the mic
-    glides there and stays, its slot in the rail a dashed ring. It may
+    have some personality"): it trails the finger and overshoots a little, the whole flower still
+    there and recording (petals, bars, the red disc with its clock), the ring lit round it
+    (2026-11-20 later, the user: "it doesn't show the recording anymore" and "the petals disappear
+    while moving ... I could choose again to cancel"; before: a blue disc saying move). When the
+    finger rests (pure/settle-ms, 350 ms, within 8 px) the mic is put down under it and the hold
+    chooses again from there: a petal, letting go in place sends, the ring moves on. Let go while
+    still moving, the clip is heard and sent as when let go in place, and the mic glides there and
+    stays, its slot in the rail a dashed ring. It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
     let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the
