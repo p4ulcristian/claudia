@@ -174,27 +174,12 @@
                                                    (some #(when (= step (:id %)) %) (:turn (get @chats/state id))))
                                   (fn [t] {:text t}))))))))
 
-(defn chat-update
-  "What a chat menu PATCH changes in the chat's row (row: the chat as stored now): archived, a colour
-  of the palette, ash (passive: grey, remembering the colour it had) or wake (the colour it had, else
-  (fresh), a new one)."
-  [{:keys [archived color]} row palette fresh]
-  (cond-> {}
-    (boolean? archived) (assoc :archived archived)
-    (and (string? color) (some #{color} palette)) (assoc :color color)
-    (= color "ash") (assoc :color "ash" :prev_color (let [c (:color row)] (if (= c "ash") (:prev-color row) c)))
-    (= color "wake") (assoc :color (or (:prev-color row) (fresh)) :prev_color nil)))
-
 (defn- patch-chat [req id]
   (.then (io/read-json req max-body)
-         (fn [{:keys [title] :as b}]
+         (fn [b]
            (if-not (known? id)
              {:error "no such chat" :status 404}
-             (do (when (string? title) (chats/rename! id title))
-                 (store/update! id (chat-update b (store/chat id) chats/chat-colors #(chats/least-used-colour id)))
-                 (chats/session-follows-row! id)
-                 (changed!)
-                 {:ok true})))))
+             (do (chats/edit! id b) {:ok true})))))
 
 ;; ---- the other calls ----
 

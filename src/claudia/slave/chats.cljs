@@ -19,6 +19,7 @@
             [claudia.slave.chats.titles :as titles]
             [claudia.slave.chats.turns :as turns]
             [claudia.slave.chats.view :as view]
+            [claudia.shared.chat-edit :as chat-edit]
             [claudia.shared.colours :as colours]
             [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.claudia :as claudia]
@@ -139,6 +140,28 @@
       (changed!)
       (-> (sdk/renameSession id t #js {:dir cwd})
           (.catch (fn [e] (js/console.error (str "[" (subs id 0 8) "] rename: " (text/error-text e)))))))))
+
+(defn chat-update
+  "What a chat menu PATCH (or an agent's edit) changes in the chat's row (row: the chat as stored
+  now): archived, a colour of the palette, ash (passive: grey, remembering the colour it had) or wake
+  (the colour it had, else (fresh), a new one)."
+  [{:keys [archived color]} row palette fresh]
+  (cond-> {}
+    (boolean? archived) (assoc :archived archived)
+    (and (string? color) (some #{color} palette)) (assoc :color color)
+    (= color "ash") (assoc :color "ash" :prev_color (let [c (:color row)] (if (= c "ash") (:prev-color row) c)))
+    (= color "wake") (assoc :color (or (:prev-color row) (fresh)) :prev_color nil)))
+
+(declare session-follows-row!)
+
+(defn edit!
+  "Chat id's title, colour and archived changed as b ({:title :color :archived}, each optional): the
+  chat menu's PATCH and the agent's rename_chat and set_chat_colour."
+  [id {:keys [title] :as b}]
+  (when (string? title) (rename! id title))
+  (store/update! id (chat-update b (store/chat id) chat-colors #(least-used-colour id)))
+  (session-follows-row! id)
+  (changed!))
 
 ;; The chat list ----------------------------------------------------------------------------------
 
@@ -510,6 +533,17 @@
 
 (declare ask!)
 
+(defn- edit-own-chat
+  "rename_chat and set_chat_colour: the chat the call runs in changed by change ({:title} or
+  {:color}, claudia.shared.chat-edit), or the refusal of {:error}."
+  [id {:keys [error] :as change}]
+  (if error
+    (answers/refusal error)
+    (do (edit! id change)
+        (answers/text-result (if (:title change)
+                               (str "This chat's title is now: " (:title change))
+                               (str "This chat's colour is now " (:color change) "."))))))
+
 (defn- claudia-call
   "Her tool call (claudia.slave.claudia): to the hub; stop_chat first asks the person (it cannot be
   undone)."
@@ -533,6 +567,8 @@
     ["workspace" "list_secrets"] (secrets-list/ask! id)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
+    ["workspace" "rename_chat"] (edit-own-chat id (chat-edit/title-change args))
+    ["workspace" "set_chat_colour"] (edit-own-chat id (chat-edit/colour-change args))
     ["workspace" "list_bookmarks"] (bookmark-call id nil)
     ["workspace" "bookmark_folder"] (bookmark-call id args)
     (if (and (= server "claudia") (claudia/her? id))
@@ -1073,7 +1109,7 @@
         (swap-chat! cid assoc :stale true)
         (restart-if-stale! cid)))))
 
-(declare open-sessions! session-follows-row!)
+(declare open-sessions!)
 
 (defn- move-to-newest-sdk!
   "A chat between turns with no background work whose session runs an older Agent SDK than a new

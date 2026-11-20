@@ -626,7 +626,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 48. Claudia's own chat (2026-11-18, the user's picks one by one): her face at the rail's top opens a
     chat with Claudia herself, one per profile, kept out of every chat list. She manages the
     person's chats (the user calls them agents) on every server they have a profile on: lists,
-    starts, writes to, archives and stops them, only when asked, never on her own. Archiving can be
+    starts, writes to, archives and stops them (and since decision 88 renames, recolours, groups
+    and orders them), only when asked, never on her own. Archiving can be
     undone, so she archives without asking; stopping a running turn cannot, so `stop_chat` asks the
     person first (a permit ask). She runs nothing in the background: her session runs with
     `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and without Monitor, ScheduleWakeup, CronCreate,
@@ -1422,6 +1423,34 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     itself (every server would trust npm directly and need its tooling; the builder already is the
     one machine whose signature servers trust), or a separate signing key for the channel (one key,
     one list of signers).
+
+88. Agents rename and recolour chats themselves, and Claudia's own chat cleans up all of them
+    (2026-11-20, the user's calls: the user should not have to tidy chats by hand; "rename_chat" and
+    "set_chat_colour" as two tools). Two parts:
+    - Every chat's agent has two workspace tools that act only on the chat it runs in:
+      `rename_chat { title }` (1-200 characters, trimmed) and `set_chat_colour { color }` (a solid,
+      a gradient or ash). Their descriptions say they change only this chat's title or colour in the
+      list, nothing else; the prompt says to use them when the user asks, or `rename_chat` to give
+      the chat a telling title. The runner knows which chat a tool call comes from, so there is no
+      chat id to pass or to get wrong; it makes the same change as the chat menu's `PATCH
+      /api/chats/:id` (`claudia.slave.chats/edit!`), and a title or colour outside those bounds is
+      refused, not cut (`claudia.shared.chat-edit`).
+    - Only Claudia's own chat (decision 48) acts on every chat of its person on every server.
+      `list_chats` now also gives each chat's reference (`<server>/<id>`), colour, folder, last
+      activity and start, and the person's chat order and groups (decision 38). The new
+      `organize_chats { steps }` (at most 200) does, in turn: `edit` (one chat's title, colour,
+      archived; a `PATCH /api/chats/:id` on that chat's server as the person, through the hub's
+      call to that front), `new_group`, `rename_group`, `delete_group` (its chats stay where it
+      was) and `move` (a chat into a group or to the top level, or a group, before a named item).
+      The hub checks every step (`claudia.hub.organize`): a chat must be in the person's own list
+      from every server, so another person's chat is refused; the order steps run on the person's
+      list on the hub (the chats not placed yet first settled as the page shows them, as a drag
+      does), which is kept once; pages see it at their next 20 s refresh. Each step answers ok, a
+      new group's id, or what was wrong; one wrong step does not stop the others. Her prompt says:
+      her own chat first, others only for a cleanup the person asked for.
+    Instead of: one `edit_this_chat { title?, color? }` (the user's later call: two plain tools),
+    every chat able to change other chats (decision 18), or a hub op per change (one call per
+    cleanup, with each step's result).
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

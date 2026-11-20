@@ -66,3 +66,25 @@
 (deftest ungroup-puts-the-chats-where-the-group-was
   (is (= [{:chat "s/a"} {:chat "s/b"} {:chat "s/c"} {:chat "s/d"}] (o/ungroup grouped "g")))
   (is (= grouped (o/ungroup grouped "nope"))))
+
+(def ^:private with-group
+  [{:chat "s/a"} {:group "g1" :name "G" :chats ["s/b" "s/c"] :folded false :picks {}} {:chat "s/d"}])
+
+(defn- keys-of [items] (mapv #(or (:group %) (:chat %)) items))
+
+(deftest a-group-moves-whole
+  (is (= ["g1" "s/a" "s/d"] (keys-of (o/place-group with-group "g1" "s/a"))))
+  (is (= ["s/a" "s/d" "g1"] (keys-of (o/place-group with-group "g1" nil))))
+  (is (= with-group (o/place-group with-group "nope" nil)) "no such group: as it was")
+  (is (o/top-key? with-group "g1"))
+  (is (not (o/top-key? with-group "s/b")) "a chat in a group is not a top-level key"))
+
+(deftest a-new-group-sits-where-its-first-chat-was
+  (is (= [{:chat "s/a"} {:group "g2" :name "N" :chats ["s/b" "s/c"] :folded false :picks {}} {:chat "s/d"}]
+         (o/new-group with-group ["s/b" "s/c"] "g2" "N"))
+      "the old group left empty goes; the new one takes its place")
+  (is (= [{:chat "s/a"} {:group "g1" :name "G" :chats ["s/c"] :folded false :picks {}}
+          {:group "g2" :name "N" :chats ["s/d" "s/b"] :folded false :picks {}}]
+         (o/new-group with-group ["s/d" "s/b"] "g2" "N"))
+      "its chats are taken out of where they were")
+  (is (= "s/x" (first (:chats (first (o/new-group with-group ["s/x"] "g3" "X"))))) "a chat not placed: at the top"))

@@ -96,4 +96,5 @@
   (is (nil? (hclaudia/caller-problem "destiny" "a@b" true true)))
   (is (= "/api/chat-ops/stop" (hclaudia/op-target "stop")))
   (is (nil? (hclaudia/op-target "delete")))
-  (is (= {:server "box" :id "c" :title "T"} (hclaudia/row-of "box" {:id "c" :title "T" :scene "big"}))))
+  (is (= {:server "box" :id "c" :ref "box/c" :title "T" :color "jade" :at 5}
+         (hclaudia/row-of "box" {:id "c" :title "T" :scene "big" :color "jade" :at 5}))))

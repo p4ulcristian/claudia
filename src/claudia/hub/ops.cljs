@@ -7,6 +7,7 @@
   (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.bookmarks :as hub-bookmarks]
+            [claudia.hub.chat-order :as chat-order]
             [claudia.hub.listen :as listen]
             [claudia.hub.listen-words :as listen-words]
             [claudia.hub.narrate :as narrate]
@@ -25,8 +26,6 @@
             [claudia.hub.releases :as releases]
             [claudia.hub.presence :as presence]
             [claudia.shared.agent-user :as agent-user]
-            [claudia.shared.order :as order]
-            [claudia.shared.protocol :as protocol]
             [claudia.shared.views :as views]
             [claudia.hub.push :as push]
             [claudia.hub.seal :as seal]
@@ -341,20 +340,12 @@
           (do (presence/beat! email page (true? (:active b)))
               (io/no-content res)))))))
 
-(defn- order-of
-  "A person's chat order as the page gets it: {:items :at} ({:items [] :at 0} before any)."
-  [email]
-  (if-let [{:keys [items at]} (store/chat-order email)]
-    {:items (order/clean-items (protocol/read-json items)) :at at}
-    {:items [] :at 0}))
-
 (defn- save-order
   "PUT /hub/chat-order {items}: the person's whole list, kept as far as it is well formed."
   [req res email _]
   (with-body req
     (fn [b]
-      (store/save-chat-order! email (protocol/write-json (order/clean-items (:items b))))
-      (io/send-json res 200 (order-of email)))))
+      (io/send-json res 200 (chat-order/save! email (:items b))))))
 
 (defn- save-bookmarks
   "PUT /hub/bookmarks {items}: the person's whole list, kept as far as it is well formed."
@@ -399,7 +390,7 @@
    :report-live (fn [req res email _] (report-live req res email))
    :end-live end-live
    :presence beat
-   :order (fn [_ res email _] (io/send-json res 200 (order-of email)))
+   :order (fn [_ res email _] (io/send-json res 200 (chat-order/of email)))
    :save-order save-order
    :bookmarks (fn [_ res email _] (io/send-json res 200 (hub-bookmarks/of email)))
    :save-bookmarks save-bookmarks

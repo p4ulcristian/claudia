@@ -3,7 +3,8 @@
   descriptions and input schemas, as plain JSON Schema for the host). Word for word as the
   TypeScript Claudia's src/prompt.ts and src/forms.ts; this version adds the Secrets section and
   run_with_secret."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.shared.chat-edit :as chat-edit]))
 
 (def system-append
   (str/trim "
@@ -49,7 +50,10 @@ When a command needs a password or token, never ask the user to paste it into th
 A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists.
 
 ## Images in the chat
-To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load."))
+To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load.
+
+## This chat's title and colour
+mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspace__set_chat_colour its colour; both touch only the chat you run in. Use them when the user asks, or rename_chat to give the chat a telling title."))
 
 (def reply-limit
   "The most characters a turn's final reply may have in the chat (the system prompt names it too)."
@@ -197,6 +201,11 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
    :show_video {:description "Show a video file in the chat (mp4, m4v, webm or mov, up to 1 GB): a screen recording, a rendered clip. The user plays it under your steps; you don't see it (show a frame with show_image when you need to look). The file is copied and kept with the chat."
                 :inputSchema (obj ["path"] (array-map :path (s "The video file (absolute, ~/…, or relative to the working folder)")
                                                       :caption (s "A few words about it")))}
+   :rename_chat {:description "Rename this chat: changes only the title this chat (the one you run in) shows in the list and its header. Nothing else changes, and no other chat. Use it when the user asks, or to give the chat a telling title."
+                 :inputSchema (obj ["title"] {:title (s "The new title, at most 200 characters")})}
+   :set_chat_colour {:description "Recolour this chat: changes only the colour this chat (the one you run in) wears in the list and its window. Nothing else changes, and no other chat. Use it when the user asks."
+                     :inputSchema (obj ["color"] {:color {:type "string" :enum chat-edit/colours
+                                                          :description "The new colour (ash: passive grey)"}})}
    :set_folder {:description "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                 :inputSchema (obj ["path"] {:path (s "The project's root folder")})}
    :list_secrets {:description "List the 1Password keys you may use in this chat, by name, with the exact op://Claudia/<item>/<field> references to pass to run_with_secret. No values are shown and nothing needs the user's approval. Call it before run_with_secret instead of guessing a reference."
@@ -217,4 +226,4 @@ To send the user an image, call mcp__workspace__show_image with the file's path;
 (def allowed-tools
   ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
    "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"
-   "mcp__workspace__list_secrets"])
+   "mcp__workspace__list_secrets" "mcp__workspace__rename_chat" "mcp__workspace__set_chat_colour"])
