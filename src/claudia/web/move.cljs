@@ -1,5 +1,5 @@
 (ns claudia.web.move
-  "Moving a chat to another server (README decision 80), the page's part: the chat menu's Move to
+  "Moving a chat to another server (README decision 82), the page's part: the chat menu's Move to
   server… opens a confirm card (claudia.web.views.confirm/move-ask) with the person's other servers
   and the folder there; Move asks the hub (POST /hub/chat-move) and opens the chat where it went."
   (:require [re-frame.core :as rf]

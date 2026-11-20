@@ -62,7 +62,7 @@
              :on-change #(rf/dispatch [:move/set :folder (.. % -target -value)])}]]])
 
 (defn move-ask
-  "Asked before a chat moves to another server (README decision 80): where to, and what stays."
+  "Asked before a chat moves to another server (README decision 82): where to, and what stays."
   []
   (when-let [{[s _] :k :keys [title to busy error] :as m} @(rf/subscribe [:move-ask])]
     [card {:title "Move this chat to another server?" :yes (if busy "Moving…" "Move")

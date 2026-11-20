@@ -1133,7 +1133,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
-80. A chat moves to another server (2026-11-20, the user's design). The chat menu's Move to
+82. A chat moves to another server (2026-11-20, the user's design). The chat menu's Move to
     server… (only on the person's own chats, not on a view or a write tick, not on Claudia's own
     chat, and only with another server where they have a profile) opens the confirm card: the
     server it goes to, the folder there (the chat's folder from the home folder, `~/…`, so it lands

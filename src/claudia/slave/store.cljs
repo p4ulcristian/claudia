@@ -337,7 +337,7 @@
 
 (defn drop-trash! [id] (.run (stmt "DELETE FROM trash WHERE id = ?") id))
 
-;; A chat's rows for a move to another server (README decision 80; claudia.slave.move) -------------
+;; A chat's rows for a move to another server (README decision 82; claudia.slave.move) -------------
 
 (def chat-columns "Every column of chats, as keywords named like the columns." columns)
 

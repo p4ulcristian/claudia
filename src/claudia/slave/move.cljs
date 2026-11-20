@@ -1,5 +1,5 @@
 (ns claudia.slave.move
-  "Moving a chat to another server (README decision 80): the runner's half. The hub drives it, as
+  "Moving a chat to another server (README decision 82): the runner's half. The hub drives it, as
   the chat's own person (X-Claudia-Via own; the hub refuses these paths from a page), on the source
   and the target runner through their fronts:
 

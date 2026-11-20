@@ -1031,7 +1031,7 @@
   []
   (doseq [id (keys @state)] (drop-asks! id false nil)))
 
-;; Moving to another server (README decision 80; claudia.slave.move) ------------------------------
+;; Moving to another server (README decision 82; claudia.slave.move) ------------------------------
 
 (defn moving?
   "Whether the chat is held for a move to another server: nothing is sent into it, its Claude Code
@@ -1157,7 +1157,7 @@
 (def pending-note-id "The id of the shown server move note before it goes with a message." "moved-pending")
 
 (defn- take-server-note!
-  "The server move's note (README decision 80; claudia.slave.move), said once: [text with it in its
+  "The server move's note (README decision 82; claudia.slave.move), said once: [text with it in its
   tag, the note or nil]. A copy of the chat left behind is no longer one once it is written to."
   [id text]
   (store/kv! id "movedTo" nil)

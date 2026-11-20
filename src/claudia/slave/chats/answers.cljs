@@ -57,7 +57,7 @@
 
 (defn server-moved-note
   "What Claude hears with its next message after the person moved the chat from server `from` to
-  server `to` (README decision 80), the same words the chat shows the person: folder (nil: none) is
+  server `to` (README decision 82), the same words the chat shows the person: folder (nil: none) is
   where it works on `to`, work the runner's working folder there. Back where Claude last worked
   (moved away and back before it heard of it): only where it works."
   [from to folder work]

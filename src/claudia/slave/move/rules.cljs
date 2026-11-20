@@ -1,5 +1,5 @@
 (ns claudia.slave.move.rules
-  "Moving a chat to another server (README decision 80), the runner's pure parts: what a chat's copy
+  "Moving a chat to another server (README decision 82), the runner's pure parts: what a chat's copy
   carries (its row, kv values, pictures, file changes and session files, as lines of JSON), where a
   copied file goes on the target, and the target's row for it."
   (:require ["node:path" :as path]

@@ -84,7 +84,7 @@
 (defn strip-reminders [s]
   (str/trim (str/replace (str s) #"<system-reminder>[\s\S]*?</system-reminder>" "")))
 
-;; A server move's note (README decision 80) goes to Claude inside <claudia-moved> with the next
+;; A server move's note (README decision 82) goes to Claude inside <claudia-moved> with the next
 ;; message, and the chat shows the same words as a note of their own (not hidden like a reminder).
 (def ^:private moved-re #"<claudia-moved>([\s\S]*?)</claudia-moved>")
 

@@ -1,5 +1,5 @@
 (ns claudia.hub.move
-  "Moving a chat to another server (README decision 80): POST /hub/chat-move {chat, from, to,
+  "Moving a chat to another server (README decision 82): POST /hub/chat-move {chat, from, to,
   folder?} from the page, for the signed-in person's own chats, between two servers where they have
   a profile. The hub drives both runners through their fronts as that person (claudia.slave.move):
   the target says where the chat will work; the source holds the chat; the copy streams from the

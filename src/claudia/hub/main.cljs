@@ -109,7 +109,7 @@
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     ;; A service's app token (README decision 78): the hub's own, never a page's.
     (#{"/api/github" "/api/github/token" "/api/github/service-token"} rest-path) {:status 404 :error "not found"}
-    ;; A chat moving to another server (README decision 80): the hub drives both runners, never a page.
+    ;; A chat moving to another server (README decision 82): the hub drives both runners, never a page.
     (str/starts-with? rest-path "/api/chat-move/") {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).

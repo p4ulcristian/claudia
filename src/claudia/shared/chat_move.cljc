@@ -1,5 +1,5 @@
 (ns claudia.shared.chat-move
-  "Moving a chat to another server (README decision 80), the rules the hub and the runners share,
+  "Moving a chat to another server (README decision 82), the rules the hub and the runners share,
   on plain data: what a move asks for, which files of a session a copy may hold, and whether the
   copy on the target is the chat on the source (the check)."
   (:require [clojure.string :as str]))
