@@ -45,11 +45,6 @@
   [s]
   (str (str/upper-case (subs s 0 1)) (subs s 1)))
 
-(defn initial
-  "A server's mark: the first letter of its label, upper case."
-  [label]
-  (str/upper-case (subs (str label) 0 1)))
-
 (defn clip
   "Long paths keep their end, where the file and project names are."
   [p limit]

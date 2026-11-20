@@ -500,7 +500,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     with its name (double-click renames), how many chats, and a + that starts a chat in it with the
     group's picks (the last ones a chat in it started with); that chat goes on top of the group. On
     the rail a group is a stack of its chats' colours; pressed, a chooser card opens beside the rail
-    with each chat's full title and the +. The order is kept on the hub per person (`GET`/`PUT
+    with each chat's full title and the +. Since decision 81 the rail drags the same way. The order
+    is kept on the hub per person (`GET`/`PUT
     /hub/chat-order`, the whole list each time, `claudia.shared.order`), so every device shows the
     same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
     and the archived list show the chats found as before; another person's chats (a view) keep the
@@ -1167,6 +1168,47 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Instead of: gradients in the random pick (two-colour distance has no meaning in the box's
     measure), or a gradient theme mixed from both hues per surface (text over a changing tint).
     Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/views/pure/words.cljs`,
+    `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
+
+81. The rail widens into cards, shows each chat's server, and orders and groups by dragging
+    (2026-11-20, the user's call: the server only in the hover text never shows on a touch screen;
+    "rows must not move vertically when switching"; drag-to-group on the rail as in the list). Three
+    parts:
+    - The server's mark: with more than one server, every circle on the rail (and every chat in a
+      group's chooser card) carries its server's short mark at its bottom right, light on the rail's
+      dark and ringed in the chat's colour, so it reads on every chat colour; a chat's root # moves
+      to the circle's bottom left. A mark is the label's first letter, else its words' initials,
+      else its first two to four letters, unique among the person's servers (Smoke and Second: Sm,
+      Se); the list's and the header's server marks use the same ones
+      (`claudia.web.views.pure.rail/server-marks`).
+    - Wide rail with cards: the rail's right edge is dragged wider (a mouse or a finger) and the rail
+      follows. From 170 px on, each circle becomes a card: the circle at the left, beside it the
+      title on one line; the server (with more than one), the project or folder and the model; the
+      last reply's line or what it works on; its state in words (running, waiting for answer, done,
+      failed, stopped, new) with the running clock or how long ago. Let go, the rail snaps to the
+      circles (88 px, under 170) or the nearest card width (260 or 340 px) that leaves the page 600
+      px; the width is kept on the device (localStorage) and a window too small for it shows the
+      widest that fits. Every row (a chat, a group, the chat being started) is the same height
+      (`--rail-row-h`) on the circles and on the cards, so no row moves up or down when the rail
+      switches. A group is a card too: its stack, its name, how many chats, their titles, its most
+      pressing state; on the circles its line under the name says how many ask, else how many run,
+      else how many chats. The runner's rows name the model (`model`, PROTOCOL.md): the one picked
+      for the chat, else the one its session runs with, else the server's default.
+    - Dragging on the rail: the list's dragging (decision 38, `claudia.web.views.chat-drag`) works
+      on the rail's circles and cards and on the chats of a group's chooser card: the upper or lower
+      third of a chat places before or after it, its middle makes a group, a group's stack takes it
+      into the group (its edges: before or after the group), a chat in a group's card goes before or
+      after it in that group (never a group in a group: the list's own middle drop on a grouped chat
+      used to put it in two groups). Dragged with a mouse and let go outside the rail (over the page
+      or outside the window), the chat tears out into a window of its own, as before (the copy under
+      the pointer says New window); a finger never tears out (a tablet shows one window). The tear
+      opens the window in the drag's own pointer events instead of the browser's drag and drop, so
+      one drag does both; a blocked popup leaves the chat where it was.
+    Instead of: the server only in the hover text, a fixed 88 px rail, and a rail drag that could
+    only tear out. Files: `src/claudia/web/views/pure/rail.cljs`, `src/claudia/web/views/rail.cljs`,
+    `src/claudia/web/views/rail_card.cljs`, `src/claudia/web/views/rail_width.cljs`,
+    `src/claudia/web/views/rail_group.cljs`, `src/claudia/web/views/chat_drag.cljs`,
+    `src/claudia/web/views/tearoff.cljs`, `src/claudia/slave/chats.cljs`,
     `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)

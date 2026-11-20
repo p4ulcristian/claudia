@@ -351,3 +351,21 @@ body.chat-dragging .order-item { touch-action: none; }
 .wp-head { display: flex; align-items: center; gap: 10px; }
 .wp-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .wp-panel p { margin: 0; }
+
+/* Dragging on the rail (README decision 81): the copy is the rail's own row; a line in the gap
+   before or after a chat, a ring round a circle (a new group) or a stack (into the group); dragged
+   out of the rail with a mouse, the copy says it opens in a window of its own. */
+.rail .drag-ghost.rail-chat { height: var(--rail-row-h); border-radius: 14px; margin: 0; }
+.drag-ghost.group-card-chat { border-radius: 9px; }
+.group-card-chat { position: relative; touch-action: pan-y; }
+.rail-dots .drop-before::before { top: -7px; }
+.rail-dots .drop-after::after { bottom: -7px; }
+.group-card .drop-before::before { top: -2px; }
+.group-card .drop-after::after { bottom: -2px; }
+.rail-chat.drop-onto .rail-dot, .rail-group.drop-into .rail-stack { outline: 2.5px dashed var(--accent); outline-offset: 4px; border-radius: 50%; }
+.rail.cards .rail-chat.drop-onto, .rail.cards .rail-group.drop-into { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.rail.cards .rail-chat.drop-onto .rail-dot, .rail.cards .rail-group.drop-into .rail-stack { outline: 0; }
+body.chat-tearing { cursor: copy; }
+body.chat-tearing .drag-ghost { outline: 2px dashed var(--accent); outline-offset: 2px; }
+body.chat-tearing .drag-ghost::after { content: "\2197 New window"; position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); white-space: nowrap;
+  padding: 2px 8px; border-radius: 8px; background: var(--accent); color: var(--on-hue); font: 700 11px/1.4 var(--sans); }

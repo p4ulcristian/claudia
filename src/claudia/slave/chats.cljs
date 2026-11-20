@@ -132,6 +132,14 @@
 
 ;; The chat list ----------------------------------------------------------------------------------
 
+(declare settings)
+
+(defn- row-model
+  "The model picked for a chat (a live session takes it at once), else the one its session runs
+  with, else nil (the server's default): for the rail's cards (README decision 81)."
+  [id]
+  (or (not-empty (:model (settings id))) (not-empty (:model (st id)))))
+
 (defn- working? [id] (or (boolean (:running (st id))) (pos? (tasks/working id))))
 
 (defn rows
@@ -145,6 +153,7 @@
                           :project (projects/root-name (:folder %) cwd))
              ;; The longest-running agent's clock (README decision 46), as ago like runningFor.
              (tasks/agents-since (:id %)) (assoc :agentsFor (- t (tasks/agents-since (:id %))))
+             (row-model (:id %)) (assoc :model (row-model (:id %)))
              (claudia/her? (:id %)) (assoc :claudia true))
           (store/chats))))
 
@@ -549,7 +558,6 @@
                            (store/update! id {:folder root})
                            (changed!)))))))))
 
-(declare settings)
 
 (defn- note-effort!
   "The effort the session's turn runs with (a hook's input says it): the page shows it next to the
@@ -714,7 +722,9 @@
     (when (:live (st id))
       (when (contains? m :model) (quiet (apply hostlink/control! id "setModel" (if (:model s) [(:model s)] []))))
       (when (contains? m :effort) (quiet (hostlink/control! id "applyFlagSettings" {:effortLevel (:effort s)}))))
-    (emit! id {:type "settings" :settings s :model (:model (st id)) :effort (:effort-now (st id))})))
+    (emit! id {:type "settings" :settings s :model (:model (st id)) :effort (:effort-now (st id))})
+    ;; The list's rows name the model (README decision 81).
+    (when (not= (:model before) (:model s)) (changed!))))
 
 (defn set-flags!
   "Turns the chat's speaker and/or bell on or off (m: {:talk :bell}, those set); the list tells

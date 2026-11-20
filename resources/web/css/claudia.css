@@ -896,3 +896,51 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 @keyframes speak-here { 50% { opacity: 0.55; } }
 @media (prefers-reduced-motion: reduce) { .speak-here { animation: none; } }
 
+
+/* ---------- The wide rail (README decision 81) ----------
+   Its right edge is dragged wider; past 170 px the circles become cards. Every row (a chat, a group,
+   the chat being started) is --rail-row-h tall on the narrow rail and on the cards, so no row moves up
+   or down when the rail switches. */
+.app { transition: grid-template-columns 0.2s ease-out; }
+.app.rail-resizing { transition: none; cursor: col-resize; -webkit-user-select: none; user-select: none; }
+.rail { --rail-row-h: 89px; }
+.rail-dots .rail-chat { height: var(--rail-row-h); box-sizing: border-box; touch-action: pan-y; }
+body.chat-dragging .rail-chat { touch-action: none; }
+.rail-edge { position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -8px; width: 16px; z-index: 4; cursor: col-resize; touch-action: none; }
+@media (pointer: coarse) { .rail-edge { right: -12px; width: 24px; } }
+.rail-edge::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - 2px); width: 4px; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity 0.15s; }
+@media (hover: hover) { .rail-edge:hover::after { opacity: 0.6; } }
+.app.rail-resizing .rail-edge::after { opacity: 0.9; }
+/* The cards: the circle on the left, at the row's middle; four lines beside it. */
+.rail.cards .rail-dots { align-items: stretch; }
+/* .rail, not .rail-dots: the dragged copy sits in the rail and keeps the card's look. */
+.rail.cards .rail-chat { flex-direction: row; align-items: center; gap: 10px; padding: 0 10px 0 12px; margin: 0 6px; border-radius: 14px; text-align: left; }
+.rail.cards .rail-group-wrap > .rail-group { width: calc(100% - 12px); }
+/* The stack as wide as a circle, so a group's card lines up with the chats' cards. */
+.rail.cards .rail-group .rail-stack { zoom: 1.25; }
+.rail.cards .rail-chat.on { background: color-mix(in srgb, var(--chat, var(--grey)) 13%, transparent); }
+@media (hover: hover) { .rail.cards .rail-chat:not(.on):hover { background: color-mix(in srgb, var(--chat, var(--grey)) 7%, transparent); } }
+.rail.cards .rail-check { top: calc(50% - 21px); left: 12px; margin-left: 0; }
+.rail.cards .rail-chat.passive.first::before { left: 12px; right: 12px; }
+.rail-card { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+.rail-card > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-title { font: 650 13.5px/1.25 var(--sans); color: var(--fg); }
+.rc-meta, .rc-line, .rc-foot { font: 500 11.5px/1.3 var(--sans); color: var(--muted); }
+.rc-line { color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.rc-line:is(.working, .agents) { color: var(--green); }
+.rc-line.waiting { color: var(--amber); }
+.rc-foot { display: flex; gap: 7px; align-items: baseline; }
+.rc-state { font-weight: 700; }
+.rc-state.is-running { color: var(--green); }
+.rc-state.is-waiting { color: var(--amber); }
+.rc-state.is-failed { color: var(--red); }
+.rc-state.is-done.unseen { color: var(--fg); }
+.rc-when { font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on) .rail-card { opacity: 0.8; }
+/* The server's mark (with more than one server): bottom right of the circle, light on the rail's
+   dark, ringed in the chat's colour, so it reads on every chat colour; the root # moves to the left. */
+.server-badge { position: absolute; right: -6px; bottom: -4px; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; z-index: 3;
+  display: grid; place-items: center; border-radius: 7px; font: 700 9px/1 var(--sans); letter-spacing: 0; color: var(--fg);
+  background: var(--bg2); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--chat, var(--line)) 80%, var(--bg2)); pointer-events: none; }
+.rail-dot:has(> .server-badge) > .root-badge { right: auto; left: -7px; }
+.group-card .server-badge { zoom: 1.25; }

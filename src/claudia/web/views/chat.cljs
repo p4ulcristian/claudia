@@ -23,7 +23,6 @@
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.pure.reach :as reach]
-            [claudia.web.views.pure.words :as words]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
 
@@ -32,7 +31,7 @@
         status @(rf/subscribe [:server-status server])]
     [:span.server-mark {:class (when (= :closed status) "off") :title (if (= :closed status) (str label " is off") label)
                         :aria-label label}
-     (words/initial label)]))
+     @(rf/subscribe [:server-mark server])]))
 
 ;; ---- the picture of a turn, from its user message ----
 
