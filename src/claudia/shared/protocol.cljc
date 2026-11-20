@@ -21,7 +21,7 @@
     "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send"
     ;; The person's keys for list_secrets (README decision 77), answering a keys_ask.
     "keys"
-    ;; A queued message taken back with its × (README decision 84).
+    ;; A queued message taken back with its × (README decision 83).
     "unqueue"})
 
 (def runner->page

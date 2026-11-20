@@ -624,7 +624,7 @@
 (defn send-for
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.
   now: it and every message queued before it go in at once, the running turn stopped for them
-  (README decision 84)."
+  (README decision 83)."
   [db k typed & [now]]
   (let [chat (when (vector? k) (second k))
         server (if chat (first k) (default-server db))
@@ -722,7 +722,7 @@
 
 (rf/reg-event-fx
  :chat/unqueue
- ;; A queued message's ×: the runner asks Claude Code to drop it (README decision 84).
+ ;; A queued message's ×: the runner asks Claude Code to drop it (README decision 83).
  (fn [_ [_ [s c] msg-id]]
    {:ws/send [s {:type "unqueue" :chat c :msg msg-id}]}))
 

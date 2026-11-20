@@ -1133,7 +1133,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
-84. Queued messages: shown once, taken back with ×, sent with now (2026-11-20, the user's call:
+83. Queued messages: shown once, taken back with ×, sent with now (2026-11-20, the user's call:
     "sending with now sends all queued messages now, together with the new one, in order").
     Merged: Claude Code takes messages queued during a turn in together as ONE user entry, their
     texts joined by line breaks, its uuid the last send's and `mergedSendUuids` the earlier ones'

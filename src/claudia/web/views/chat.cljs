@@ -81,7 +81,7 @@
       (pure/turn-links picture? files)])])
 
 (defn- queued-tag
-  "Under a queued message: the tag, and its × when it can be taken back (README decision 84)."
+  "Under a queued message: the tag, and its × when it can be taken back (README decision 83)."
   [ck id removable?]
   [:span.queued-row
    [:span.queued-tag "queued"]

@@ -1211,7 +1211,7 @@
     id))
 
 (defn send-after-stop!
-  "A message sent with now (README decision 84): while a turn runs it is queued behind the messages
+  "A message sent with now (README decision 83): while a turn runs it is queued behind the messages
   queued before it, and once Claude Code has it in its queue the turn stops (stop-for-now!); every
   queued message then goes in the next turn, in order. With no turn running it goes at once.
   msg-id: the message's id as the page made it (or nil)."
