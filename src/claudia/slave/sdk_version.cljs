@@ -1,38 +1,8 @@
 (ns claudia.slave.sdk-version
-  "Which Agent SDK a chat's session runs on (README decision 80): the versions compared, the one a
-  new session starts on, the one it falls back to, where its files are, and whether an idle chat
-  moves to the newest. Pure: data in, data out."
-  (:require [clojure.string :as str]))
-
-(defn- parts
-  "A version (\"0.3.326\", \"1.0.0-beta.2\") as [numbers pre-release]: the numbers of its core, and
-  its pre-release text or nil."
-  [v]
-  (let [[core pre] (str/split (str v) #"-" 2)]
-    [(mapv #(let [n (js/parseInt % 10)] (if (js/isNaN n) 0 n)) (str/split core #"\.")) pre]))
-
-(defn- pad [nums n] (into nums (repeat (- n (count nums)) 0)))
-
-(defn compare-versions
-  "Negative when a is older than b, 0 when the same, positive when newer. Numbers compare as numbers
-  (0.3.99 is older than 0.3.326); a pre-release is older than its release."
-  [a b]
-  (let [[na pa] (parts a)
-        [nb pb] (parts b)
-        n (max (count na) (count nb))
-        c (compare (pad na n) (pad nb n))]
-    (cond (not (zero? c)) c
-          (= pa pb) 0
-          (nil? pa) 1
-          (nil? pb) -1
-          :else (compare pa pb))))
-
-(defn older? [a b] (neg? (compare-versions a b)))
-
-(defn newest
-  "The newest of versions (nil when there are none)."
-  [versions]
-  (reduce (fn [best v] (if (or (nil? best) (older? best v)) v best)) nil versions))
+  "Which Agent SDK a chat's session runs on (README decision 80): the one a new session starts on,
+  the one it falls back to, where its files are, and whether an idle chat moves to the newest
+  (versions compare by claudia.shared.sdk-channel). Pure: data in, data out."
+  (:require [claudia.shared.sdk-channel :refer [newest older?]]))
 
 (defn fallback
   "The version a session falls back to when failed did not load or start: the one the host started
@@ -66,7 +36,9 @@
 (defn move-to-newest?
   "Whether a chat's session closes now to move to the newest SDK: it is live, between turns, not
   settling (a background task just ended: Claude may start a turn of its own), with no background
-  task running, and its SDK is older than the one new sessions start on (newest)."
-  [{:keys [live running settling background sdk] latest :newest}]
+  task running, and its SDK is older than the one new sessions start on (newest), or is one new
+  sessions skip (broken: rolled back or failed, README decision 81) and not that one."
+  [{:keys [live running settling background sdk broken] latest :newest}]
   (boolean (and live (not running) (not settling) (not background)
-                (string? sdk) (string? latest) (older? sdk latest))))
+                (string? sdk) (string? latest)
+                (or (older? sdk latest) (and (contains? (set broken) sdk) (not= sdk latest))))))

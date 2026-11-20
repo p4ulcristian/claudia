@@ -13,7 +13,8 @@
 # The poke's lines: `main <commit>` (main was pushed to it: GitHub's API names it a few seconds
 # later, so this waits up to 40 s for git to name it), `stage <tree>` (a build of that git tree was published
 # ahead of a merge: fetch it now), `check <time>` (look at main), `releases <url>` (where the hub
-# keeps the release builder's files: remembered for the runs without a poke).
+# keeps the release builder's files: remembered for the runs without a poke), `sdk <version>` (the
+# release builder published that Agent SDK) and `sdk-rollback <version>` (an admin rolled it back).
 #
 # Steps: ask GitHub for main's newest commit and its git tree; if that commit is not the installed
 # one (commit.txt) and is ahead of it, install the build of that tree: the one fetched ahead
@@ -28,6 +29,9 @@
 # installs it. Only forward, with one exception: a poke's "rollback <commit>" (the hub found that
 # release broken in people's pages, README decision 35) puts the release kept before it back, once,
 # and that commit is never installed again.
+# The Agent SDK channel (README decision 81), first on every run: the newest Agent SDK the release
+# builder published goes into the SDK store (deploy/sdk-store.sh) from this platform's signed
+# tarball, and new sessions take it; nothing restarts for it (sdk_channel).
 set -euo pipefail
 repo=${CLAUDIA_REPO:-p4ulcristian/claudia}
 branch=main
@@ -53,6 +57,9 @@ pushed=$(grep -oE '^main [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 ||
 stages=$(grep -oE '^stage [0-9a-f]{40}$' <<<"$lines" | cut -d' ' -f2 | sort -u | tr '\n' ' ' || true)
 # The hub found the release of this commit broken in people's pages (README decision 35).
 rollback=$(grep -oE '^rollback [0-9a-f]{40}$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
+# The Agent SDK channel's word (README decision 81): published, and rolled back (plain versions only).
+sdk_told=$(grep -oE '^sdk [0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$' <<<"$lines" | cut -d' ' -f2 | tr '\n' ' ' || true)
+sdk_rollbacks=$(grep -oE '^sdk-rollback [0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$' <<<"$lines" | cut -d' ' -f2 | tr '\n' ' ' || true)
 told_releases=$(grep -oE '^releases https://[A-Za-z0-9.-]+(:[0-9]+)?/hub/releases/files$' <<<"$lines" | tail -1 | cut -d' ' -f2 || true)
 
 for t in curl tar node cosign ssh-keygen; do command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
@@ -221,6 +228,67 @@ main_now() {
 	curl -fsS --max-time 20 "https://github.com/$repo.git/info/refs?service=git-upload-pack" |
 		grep -aoE "[0-9a-f]{40} refs/heads/$branch\$" | cut -d' ' -f1 || true
 }
+
+# sdk_mark <version> <store>: a rolled-back Agent SDK marked in the store's broken file: new sessions
+# skip it, and it is never stored again.
+sdk_mark() {
+	grep -qxF "$1" "$2/broken" 2>/dev/null && return 0
+	echo "$1" >>"$2/broken"
+	echo "Agent SDK $1 was rolled back: new sessions skip it"
+}
+
+# sdk_fetch <version> <platform>: that version's tarball from the hub, its signature checked as a
+# release file's (from_hub: deploy/release-signers), its version checked, then moved into the store
+# (deploy/sdk-store.sh). 1 when it is not there or not right.
+sdk_fetch() {
+	local v=$1 name d rc=0 said
+	name=$(node "$dest/out/sdk.js" tarball "$v" "$2") || return 1
+	d=$(mktemp -d "$work/sdk.XXXXXX")
+	from_hub "$name" "$d" || rc=$?
+	case $rc in
+	0) ;;
+	1) echo "Agent SDK $v: $name is not on the hub"; rm -rf "$d"; return 1 ;;
+	*) echo "Agent SDK $v: $name does not carry the builder's signature: not stored" >&2; rm -rf "$d"; return 1 ;;
+	esac
+	said=$(node -p 'require(process.argv[1]).version' "$d/node_modules/@anthropic-ai/claude-agent-sdk/package.json" 2>/dev/null || true)
+	if [ "$(cat "$d/sdk.txt" 2>/dev/null)" != "$v" ] || [ "$said" != "$v" ]; then
+		echo "Agent SDK $v: $name holds another version: not stored" >&2
+		rm -rf "$d"
+		return 1
+	fi
+	# Written by this user only, readable by every profile's host (shared: root's files).
+	chmod -R go-w,a+rX "$d"
+	bash "$dest/deploy/sdk-store.sh" "$dest" "$d/node_modules" || { rm -rf "$d"; return 1; }
+	rm -rf "$d"
+	echo "Agent SDK $v stored: new sessions take it; nothing restarted"
+}
+
+# sdk_channel: the Agent SDK channel (README decision 81). The hub names the newest published
+# version and the rolled-back ones (GET <hub>/hub/releases/sdk; a poke's `sdk` and `sdk-rollback`
+# lines say the same at once); rolled-back ones are marked in the store, and a version this
+# release's out/sdk.js says to store (not marked, not stored yet, not older than the release's own)
+# is fetched for this platform. The hosts see the store change by themselves (within 10 s) and the
+# runners follow them: nothing restarts. A failure here never stops the rest of the update.
+sdk_channel() {
+	local cli=$dest/out/sdk.js store platform said newest broken v
+	[ -f "$cli" ] || { echo "this release has no Agent SDK channel (out/sdk.js)"; return 0; }
+	[ -n "$releases_url" ] || return 0
+	store=$(cd "$dest" && pwd).sdk
+	rm -rf "$work"/sdk.*
+	said=$(curl -fsS --max-time 20 "${releases_url%/files}/sdk" 2>/dev/null || true)
+	newest=$(if [ -n "$said" ]; then json 'v.newest||""' <<<"$said"; fi || true)
+	broken=$(if [ -n "$said" ]; then json '(v.broken||[]).join(" ")' <<<"$said"; fi || true)
+	mkdir -p "$store"
+	for v in $sdk_rollbacks $broken; do
+		if node "$cli" version "$v"; then sdk_mark "$v" "$store"; fi
+	done
+	platform=$(node "$cli" platform "$os" "$(uname -m)") || { echo "no Agent SDK channel for $os $(uname -m)"; return 0; }
+	for v in $(printf '%s\n' $sdk_told $newest | awk 'NF && !seen[$0]++'); do
+		if node "$cli" install "$v" "$dest"; then sdk_fetch "$v" "$platform" || true; fi
+	done
+}
+sdk_channel || echo "the Agent SDK channel step failed: the next run tries again" >&2
+
 want=$(main_now)
 # A push the hub passed on: wait for git to name it (a later push wins).
 for _ in $(seq 20); do

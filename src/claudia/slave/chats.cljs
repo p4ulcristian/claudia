@@ -68,6 +68,8 @@
 
 ;; The Agent SDK version a session started now runs on, as the host said (README decision 80).
 (defonce newest-sdk (atom nil))
+;; The versions new sessions skip, as the host said: rolled back or failed (README decision 81).
+(defonce skipped-sdks (atom #{}))
 
 ;; Set by the runner: where events go.
 (defonce out (atom {:emit (fn [_ _]) :changed (fn [])}))
@@ -1022,7 +1024,7 @@
   (let [s (st id)]
     (when (sdk-version/move-to-newest? {:live (:live s) :running (:running s) :settling (:settling s)
                                         :background (tasks/running-any? id)
-                                        :sdk (:sdk s) :newest @newest-sdk})
+                                        :sdk (:sdk s) :newest @newest-sdk :broken @skipped-sdks})
       (println (str "[" (subs id 0 8) "] Agent SDK " (:sdk s) " -> " @newest-sdk ": session closed"))
       (close-session! id)
       (session-follows-row! id))))
@@ -1036,13 +1038,25 @@
     (js/console.error (str "[" (subs id 0 8) "] " error "; running on Agent SDK " sdk))
     (emit! id {:type "error" :text (str error ". This chat runs on Agent SDK " sdk ".")})))
 
+(defn- newest-said!
+  "The host named the Agent SDK new sessions start on (newest) and the ones they skip (broken):
+  another newest one, the models and commands are read again from it (the model picker follows)."
+  [newest broken]
+  (reset! skipped-sdks (set broken))
+  (when (not= newest (first (reset-vals! newest-sdk newest))) (probe-soon! 0)))
+
+(defn- on-newest-sdk!
+  "The SDK store changed with no restart (README decision 81): an idle chat on an older or skipped
+  Agent SDK moves to the newest."
+  [{newest :sdk broken :broken}]
+  (newest-said! newest broken)
+  (doseq [id (keys @state)] (move-to-newest-sdk! id)))
+
 (defn- on-sessions!
   "The sessions the host holds: those it no longer holds (it restarted) have ended. Then every open
-  chat without one gets its session back, and an idle one on an older Agent SDK moves to the newest.
-  Another newest SDK: the models and commands are read again from it."
-  [{sessions :list newest :sdk}]
-  ;; The model picker follows the SDK new sessions get.
-  (when (not= newest (first (reset-vals! newest-sdk newest))) (probe-soon! 0))
+  chat without one gets its session back, and an idle one on an older Agent SDK moves to the newest."
+  [{sessions :list newest :sdk broken :broken}]
+  (newest-said! newest broken)
   (let [live (into {} (map (juxt :id identity)) sessions)]
     (doseq [[cid s] @state :when (and (:live s) (not (contains? live cid)))]
       (ended! cid "The session host restarted; this chat's work stopped. Send a message to carry on."))
@@ -1053,6 +1067,7 @@
 (defn on-host-event [{:keys [ev id] :as e}]
   (case ev
     "sessions" (on-sessions! e)
+    "sdk-newest" (on-newest-sdk! e)
     "sdk" (sdk-reported! id e)
     "msg" (on-sdk id (:msg e))
     "rpc" (on-rpc e)

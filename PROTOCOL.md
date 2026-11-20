@@ -23,7 +23,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
   keeps running chats (the host holds them).
 - **host** (per profile): owns each chat's Agent SDK `query`. Knows nothing about Claudia; every tool
   call, hook and permission ask goes to the runner as an rpc. Each session loads the newest installed
-  Agent SDK when it starts (README decision 80), so an SDK update needs no host restart.
+  Agent SDK when it starts (README decision 80; the release's own or a newer one the SDK channel
+  stored, decision 81), so an SDK update needs no host restart.
 
 ## Settings (environment; never committed)
 
@@ -169,12 +170,15 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `PUT /hub/admin/access` `{ email, server, granted }` | admin | a tick on or off |
 | `PUT /hub/admin/writers` `{ email, owner, granted }` | admin | a write tick on or off: `email` may write to `owner`'s chats on every server where `owner` has a profile |
 | `POST /hub/admin/builder` `{ key }` | admin | makes the machine whose `deploy/release-builder/install.sh` printed `claudia-builder:<host>:<secret>` the release builder (the one before stops counting); answers like `GET /hub/admin` (its `builder`: `{ host, pairedAt, seenAt }` or null); 400 not a builder key |
+| `POST /hub/admin/sdk-rollback` `{ version }` | admin | rolls that published Agent SDK back on every server (README decision 81): kept in `sdk.json`, every front poked with `{ sdkRollback: version, releases }`; answers like `GET /hub/admin` (its `sdk`: as `GET /hub/releases/sdk`); 400 not a published version, or rolled back already |
 | `POST /hub/admin/pair` `{ key, address?, name?, label? }` | admin | pairs a server from `deploy/pair.sh`'s key `claudia-pair:<host>:<secret>`; `address` (host:port of its front) is required for a new server; a known name keeps its address unless given |
 | `POST /hub/enroll` `{ secret }` | no login | 200 `{ name, key }` once (the server's hub key), 404 before its pairing key is pasted or after it was fetched |
 | `GET /hub/releases/wanted` | the release builder (`Authorization: Bearer <secret>`) | 200 `{ builds: [{ key: "main" \| "pr-<n>", commit, kind: "main" \| "pr", at }] }`, newest first; held up to 25 s while empty. 401 not the builder |
-| `PUT /hub/releases/files/<file>` | the release builder | the file's bytes (up to 400 MB) into `HUB_RELEASES` (default `<data>/releases`): 200 `{ ok, size }`. `<file>`: `claudia-code-<tree>.tar.gz`, `claudia-deps-<lockfile hash>.tar.gz`, `claudia-deps-<lockfile hash>-darwin-arm64.tar.gz`, or one of them + `.sig` (ssh-keygen -Y, namespace `claudia-release`) |
+| `PUT /hub/releases/files/<file>` | the release builder | the file's bytes (up to 400 MB) into `HUB_RELEASES` (default `<data>/releases`): 200 `{ ok, size }`. `<file>`: `claudia-code-<tree>.tar.gz`, `claudia-deps-<lockfile hash>.tar.gz`, `claudia-deps-<lockfile hash>-darwin-arm64.tar.gz`, `claudia-sdk-<version>-<linux-x64\|darwin-arm64>.tar.gz` (the Agent SDK channel, README decision 81: `./node_modules` and `./sdk.txt`), or one of them + `.sig` (ssh-keygen -Y, namespace `claudia-release`) |
 | `GET`/`HEAD /hub/releases/files/<file>` | no login | the file (immutable), 404 when not here |
 | `POST /hub/releases/progress` `{ commit, tree?, state: pending\|success\|failure, description }` | the release builder | the step it just set as the commit status `builder`, for the update pill: 200 |
+| `POST /hub/releases/sdk` `{ version }` | the release builder | 200 once both platforms' `claudia-sdk-<version>-…tar.gz` are here with their signatures: the version goes into `<HUB_RELEASES>/sdk.json` (the newest 5 kept, older files dropped) and every front is poked with `{ sdk: version, releases }` (README decision 81); 400 not a plain version, 409 names what is missing. Answers like `GET /hub/releases/sdk` |
+| `GET /hub/releases/sdk` | no login | `{ newest, broken: [version], published: [{ version, at }] }`: the newest published Agent SDK not rolled back (null: none), the rolled-back ones, newest first. Names versions only: every file is signed |
 | `POST /hub/releases/ready` `{ commit, tree, deps }` | the release builder | 200 once the tree's code and both platforms' node_modules are here with their signatures: the commit leaves the queue, every front is poked with `{ stage: tree, releases }` and the gate gets `stage <tree>`; 409 names what is missing |
 | `POST /hub/github` | no login, HMAC (`X-Hub-Signature-256`) | 202; push to `refs/heads/main` pokes every front with `{ main: commit }`, adds `update <commit> <tree>` to `HUB_UPDATE_REQUEST` and asks the release builder for it; a pull request from this repository opened, pushed to or reopened asks the builder for its head (closed: dropped); a successful `stage.yml` run (title `stage <tree>`) pokes every front with `{ stage: tree }` and adds `stage <tree>`; anything else ignored (202). 401 bad signature, 503 no secret |
 | `POST /hub/push/devices` `{ token (hex), env: development\|production, topic (bundle id), key (base64 of 32 bytes), liveStartToken? }` | person | `{ ok, push }` |
@@ -226,9 +230,9 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 
 | Call | Answer |
 |---|---|
-| `GET /api/me` | `{ server, profile, profiles, writable, viewing, readOnly, version, commit }`, answered by the front: `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `writable` = the other profiles here the caller may write to, `viewing` = the other profile looked at or null, `readOnly` = that view is read only |
-| `GET /api/version` | the front, the hub only: `{ commit (7 characters), version }`, what this machine runs (the update pill follows each machine with it) |
-| `POST /api/update-check` `{ rollback?, main?, stage?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER` (`rollback <commit>`: back one release from that commit, README decision 35; `main <commit>`, `stage <tree>`, else `check <time>`), after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
+| `GET /api/me` | `{ server, profile, profiles, writable, viewing, readOnly, version, commit, sdk }`, answered by the front (`sdk`: the Agent SDK version a session started now runs on here, README decision 81; shown beside the commit): `profile` = the caller's own, `profiles` = every profile on this server (the page's "<person>'s chats"), `writable` = the other profiles here the caller may write to, `viewing` = the other profile looked at or null, `readOnly` = that view is read only |
+| `GET /api/version` | the front, the hub only: `{ commit (7 characters), version, sdk }`, what this machine runs (the update pill follows each machine with it; `sdk` as in `/api/me`) |
+| `POST /api/update-check` `{ rollback?, sdkRollback?, main?, stage?, sdk?, releases? }` | answered by the front, no caller needed (only the hub reaches it): adds a line to `CLAUDIA_UPDATE_TRIGGER`, the first that applies of: `rollback <commit>` (back one release from that commit, README decision 35), `sdk-rollback <version>` (new sessions skip that Agent SDK, decision 81), `stage <tree>`, `main <commit>`, `sdk <version>` (the release builder published that Agent SDK: store it, decision 81), else `check <time>`; versions are plain (`<n>.<n>.<n>`); after `releases <url>` when `releases` is the hub's `https://…/hub/releases/files`, 202; 501 when unset |
 | `GET /api/claude-token/picks` | the front, the hub only: `{ picks: [{ email, key, name, at }] }`, each person's pick kept here (by email), never a token |
 | `GET /api/claude-token/saved` | the front, the hub only: `{ tokens: [{ key, name, at }] }`, the saved tokens kept here, never a token |
 | `PUT /api/claude-token/saved` `{ tokens: [{ key, name, at, token }] }` | the front, the hub only: the whole set, written over the one kept here (a token no longer in it is deleted); answers like GET; 400 when one is not a key (`[a-z0-9-]{1,24}`), a name, a time and a Claude token |
@@ -609,11 +613,15 @@ images: `[{ media_type, data }]`, image blocks before the text),
 `[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
-`{ ev: "ended", id, error? }`, `{ ev: "sessions", sdk, list: [{ id, busy, sdk }] }` (answer to `list`,
+`{ ev: "ended", id, error? }`, `{ ev: "sessions", sdk, broken, list: [{ id, busy, sdk }] }` (answer to `list`,
 and sent on every runner connect so it can take running chats back; each session's `sdk` is the
 Agent SDK version it runs on, null while it loads; the top `sdk` is the version a session started
-now would run on: the installed release's, or its fallback when that one failed; the runner's
-probe of models and slash commands runs on it too, again whenever it changes),
+now would run on: the newest installed one not marked broken (the release's own or a store copy,
+README decision 81), or its fallback when that one failed; `broken`: the versions new sessions
+skip, rolled back or failed here; the runner's probe of models and slash commands runs on the top
+`sdk` too, again whenever it changes), `{ ev: "sdk-newest", sdk, broken }` (the top `sdk` or
+`broken` changed without a restart: the host looks at the SDK store every 10 s, so a version
+`deploy/update.sh` stores or marks counts at once; README decision 81),
 `{ ev: "sdk", id, sdk, error? }` (the session's query started on Agent SDK `sdk`; sent at every
 start and again when it falls back; `error`: why not the installed one: it failed to load, or its
 query failed before its first message, README decision 80), `{ ev: "cancel", rpc, id }` (the SDK
@@ -621,8 +629,8 @@ aborted that rpc: its ask goes).
 
 The runner closes a live chat's session (`close`) to move it to the newest SDK when the chat is
 between turns, not settling, has no background task running, and its session's `sdk` is older than
-the top `sdk` (`claudia.slave.sdk-version/move-to-newest?`): at a runner connect, a turn's end and
-once its background work has settled. An open chat resumes at once; a passive one with its next
+the top `sdk` or is in `broken` (`claudia.slave.sdk-version/move-to-newest?`): at a runner connect,
+an `sdk-newest`, a turn's end and once its background work has settled. An open chat resumes at once; a passive one with its next
 message.
 
 rpc `args` by kind: `mcp` `{ server, tool, args }` → value = an MCP tool result (`{ content, isError? }`);

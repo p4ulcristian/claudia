@@ -3,18 +3,16 @@
   it when it starts, so an SDK update needs no host restart) and for the runner's probe of models
   and commands (the same version as new sessions). Loaded modules stay in memory (a running session
   keeps the one it started with); a version that failed falls back."
-  (:require ["node:fs" :as fs]
-            ["node:module" :as module]
+  (:require ["node:module" :as module]
             ["node:path" :as path]
             ["node:url" :as url]
+            [claudia.shared.sdk-channel :as channel]
+            [claudia.slave.sdk-store :as sdk-store]
             [claudia.slave.sdk-version :as sdk-version]))
 
-(def ^:private package "@anthropic-ai/claude-agent-sdk")
-
 (def release
-  "The release folder the program was started from (<release>/out/host.js or runner.js): the path,
-  not where it pointed then, so after an update it names the new release."
-  (path/resolve (path/dirname (aget js/process.argv 1)) ".."))
+  "The release folder the program was started from (sdk-store/program-release)."
+  (sdk-store/program-release))
 
 ;; version -> {:version :sdk (the module) :z (zod beside it) :dir}
 (defonce loaded (atom {}))
@@ -23,35 +21,16 @@
 ;; The version loaded when the program started: the first fallback.
 (defonce start (atom nil))
 
-(defn- version-at
-  "The SDK version in package folder dir, nil when it has none."
-  [dir]
-  (try (.-version (js/JSON.parse (fs/readFileSync (path/join dir "package.json") "utf8")))
-       (catch :default _ nil)))
-
-(defn- release-package
-  "The release's own SDK package folder, as Node resolves it from out/host.js."
-  []
-  (path/dirname (.resolve (module/createRequire (path/join release "out" "host.js")) package)))
-
-(defn- found
-  "{:version v :dir} of version v's package: its store copy, else the release's own (own: that
-  folder), nil when neither holds v."
-  [v own]
-  (let [stored (sdk-version/stored-package release v)
-        dir (sdk-version/package-dir v [[stored (version-at stored)] [own (version-at own)]])]
-    (when dir {:version v :dir dir})))
-
 (defn installed
-  "The newest installed SDK: {:version :dir} of the release's package (its store copy when the store
-  has it), nil when none is found."
+  "The SDK a new session starts on: {:version :dir} of the newest installed one not marked broken
+  (sdk-store/installed: the release's own or a store copy), nil when none is found."
   []
-  (try
-    (let [own (release-package)]
-      (found (version-at own) own))
-    (catch :default e
-      (js/console.error "Agent SDK: none in" release (.-message e))
-      nil)))
+  (sdk-store/installed release))
+
+(defn skipped
+  "The versions new sessions skip: marked broken in the store (rolled back) or failed here."
+  []
+  (into (sdk-store/marks release) (keys @broken)))
 
 (defn- import! [file v]
   ;; The version in the URL: a git checkout's one path holds another version after npm ci, and
@@ -64,7 +43,7 @@
   (if-let [m (get @loaded version)]
     (js/Promise.resolve m)
     (let [req (module/createRequire (path/join dir "package.json"))
-          main (.resolve req package)]
+          main (.resolve req channel/package)]
       (-> (import! main version)
           (.then (fn [sdk]
                    (let [m {:version version :sdk sdk :z (req "zod") :dir dir}]
@@ -113,7 +92,7 @@
   when v is unknown, not installed here or fails to load, of load!."
   [v]
   (if-let [d (and v (not (contains? @broken v))
-                  (found v (try (release-package) (catch :default _ nil))))]
+                  (sdk-store/found release v (sdk-store/own-package release)))]
     (.catch (load-dir! d) (fn [e] (failed! v (str (or (.-message e) e))) (load!)))
     (load!)))
 

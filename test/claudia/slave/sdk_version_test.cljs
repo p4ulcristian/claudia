@@ -3,21 +3,6 @@
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.slave.sdk-version :as v]))
 
-(deftest versions-compare-as-numbers
-  (is (v/older? "0.3.99" "0.3.326"))
-  (is (v/older? "0.3.326" "0.4.0"))
-  (is (zero? (v/compare-versions "0.3.326" "0.3.326")))
-  (is (not (v/older? "1.0.0" "0.9.999")))
-  (testing "a pre-release is older than its release"
-    (is (v/older? "1.0.0-beta.2" "1.0.0"))
-    (is (v/older? "1.0.0-beta.1" "1.0.0-beta.2")))
-  (testing "a missing part counts as 0"
-    (is (zero? (v/compare-versions "1.2" "1.2.0")))))
-
-(deftest the-newest-of-several
-  (is (= "0.3.326" (v/newest ["0.3.99" "0.3.326" "0.3.300"])))
-  (is (nil? (v/newest []))))
-
 (deftest a-failed-version-falls-back
   (testing "to the one the host started with"
     (is (= "0.3.325" (v/fallback "0.3.327" "0.3.325" ["0.3.325" "0.3.326" "0.3.327"]))))
@@ -62,4 +47,8 @@
     (is (false? (v/move-to-newest? (assoc idle-old :live false)))))
   (testing "not when a version is unknown"
     (is (false? (v/move-to-newest? (assoc idle-old :sdk nil))))
-    (is (false? (v/move-to-newest? (assoc idle-old :newest nil))))))
+    (is (false? (v/move-to-newest? (assoc idle-old :newest nil)))))
+  (testing "a session on a version new sessions skip (rolled back) moves, even to an older one"
+    (is (true? (v/move-to-newest? (assoc idle-old :sdk "0.3.328" :broken #{"0.3.328"}))))
+    (is (false? (v/move-to-newest? (assoc idle-old :sdk "0.3.327" :broken #{"0.3.327"}))))
+    (is (false? (v/move-to-newest? (assoc idle-old :sdk "0.3.328" :broken #{"0.3.328"} :running true))))))

@@ -81,7 +81,9 @@
         me @(rf/subscribe [:server-me server])
         label @(rf/subscribe [:server-label server])]
     (when me
-      [:div.mn-foot "Claudia " [:span.mono (or (:commit me) (str "v" (:version me)))] (when server (str " · " label))])))
+      [:div.mn-foot "Claudia " [:span.mono (or (:commit me) (str "v" (:version me)))]
+       (when (:sdk me) [:<> " · SDK " [:span.mono (:sdk me)]])
+       (when server (str " · " label))])))
 
 (defn- whose
   "Whose chats show: yours, or another person's (read only); a pick reconnects every server."

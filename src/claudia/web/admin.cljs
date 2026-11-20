@@ -147,14 +147,38 @@
     [field :input.mono.key b :key {:placeholder "claudia-builder:…" :spell-check false :auto-complete "off"}]
     [:button {:disabled (str/blank? (:key @b))} (if (:host builder) "Replace" "Pair")]]])
 
+(defn sdk-line
+  "What the Release builder section says about the Agent SDK channel (README decision 81)."
+  [{:keys [newest broken published]}]
+  (let [at (some #(when (= newest (:version %)) (:at %)) published)]
+    (str (if newest
+           (str "Agent SDK " newest ", published " (format/when-text at))
+           "Agent SDK: none published yet; servers run their release's.")
+         (when (seq broken) (str " Rolled back: " (str/join ", " broken) ".")))))
+
+(defn- sdk-channel
+  "The channel's newest Agent SDK and a Roll back (asked first): every server's new sessions skip it."
+  [_]
+  (let [asking (r/atom false)]
+    (fn [{:keys [newest] :as sdk}]
+      [:p.muted.small (sdk-line sdk) " "
+       (when newest
+         (if @asking
+           [:<>
+            [:button.danger {:on-click #(do (reset! asking false) (call! "POST" "/hub/admin/sdk-rollback" {:version newest}))}
+             (str "Roll back " newest)]
+            [:button {:on-click #(reset! asking false)} "Keep"]]
+           [:button {:title "Every server's new sessions skip this Agent SDK" :on-click #(reset! asking true)} "Roll back"]))])))
+
 (defn- servers-page [_]
   (let [pair (r/atom {:key "" :address "" :name "" :label ""})
         b (r/atom {:key ""})]
-    (fn [{:keys [servers builder]}]
+    (fn [{:keys [servers builder sdk]}]
       [:<>
        [servers-table servers]
        [pair-form pair]
-       [builder-form b builder]])))
+       [builder-form b builder]
+       (when sdk [sdk-channel sdk])])))
 
 ;; A form's inputs are emptied once its call succeeded (the atom travels in the event).
 (rf/reg-event-fx

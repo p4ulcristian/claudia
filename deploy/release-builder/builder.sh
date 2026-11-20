@@ -3,7 +3,8 @@
 # claudia-release-builder.service. It asks the hub what to build (GET /hub/releases/wanted, held up
 # to 25 s), builds each commit from GitHub, signs every file with its own key and brings the files
 # to the hub, then says the tree is ready (the hub tells servers and the gate). Main's newest
-# commit is also looked at on every round, so a webhook the hub missed still gets built.
+# commit is also looked at on every round, so a webhook the hub missed still gets built. Every 5
+# minutes between rounds, sdk-channel.sh publishes a newer Agent SDK from npm (README decision 81).
 #
 # Its home holds everything: tools/ (Node, a JDK: install.sh), repo/ (a clone of the repository),
 # signing-key (ed25519, its public half in deploy/release-signers on main), token (the secret of
@@ -189,10 +190,16 @@ main_if_new() {
 trap stop_server EXIT
 [ -d "$home/repo/.git" ] || git clone -q "https://github.com/$repo.git" "$home/repo"
 touch "$home/done" "$home/failed"
+# The Agent SDK channel (README decision 81): npm is looked at every 5 minutes, between builds.
+sdk_due=0
 while true; do
 	for f in done failed; do tail -n 200 "$home/$f" >"$home/$f.new" && mv "$home/$f.new" "$home/$f"; done
 	commits=$( { main_if_new; wanted || sleep 10; } | awk 'NF && !seen[$0]++')
 	for c in $commits; do
 		build "$c" || { log "build of ${c:0:7} failed"; echo "$c" >>"$home/failed"; }
 	done
+	if [ -x "$home/sdk-channel.sh" ] && [ "$(date +%s)" -ge "$sdk_due" ]; then
+		sdk_due=$(($(date +%s) + 300))
+		"$home/sdk-channel.sh" || log "the Agent SDK channel failed: tried again in 5 minutes"
+	fi
 done

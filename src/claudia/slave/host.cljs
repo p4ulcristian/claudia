@@ -7,6 +7,7 @@
   when it starts (claudia.slave.sdk-load, README decision 80), so an SDK update needs no restart."
   (:require ["node:net" :as net]
             ["node:fs" :as fs]
+            [clojure.string :as str]
             [claudia.slave.sdk-load :as sdk-load]
             [claudia.slave.lines :as lines]))
 
@@ -247,14 +248,38 @@
   (-> (.setMcpServers q #js {})
       (.then (fn [off] (.then (.setMcpServers q (mcp-servers id module defs)) (fn [on] #js {:off off :on on}))))))
 
-(defn- sessions-event
-  "The sessions the host holds (each with the SDK version it runs on) and the version a session
-  started now would run on (sdk)."
+(defn- newest-sdk
+  "The version a session started now would run on and the versions new sessions skip (sorted)."
   []
-  #js {:ev "sessions"
-       :sdk (sdk-load/pick)
-       :list (into-array (for [[id {:keys [busy run]}] @sessions]
-                           #js {:id id :busy @busy :sdk (:sdk @run)}))})
+  [(sdk-load/pick) (vec (sort (sdk-load/skipped)))])
+
+;; The newest-sdk the runner was last told: a change is sent to it (watch-newest!).
+(defonce ^:private told (atom nil))
+
+(defn- sessions-event
+  "The sessions the host holds (each with the SDK version it runs on), the version a session
+  started now would run on (sdk) and the versions new sessions skip (broken)."
+  []
+  (let [[v skip :as now] (newest-sdk)]
+    (reset! told now)
+    #js {:ev "sessions"
+         :sdk v
+         :broken (clj->js skip)
+         :list (into-array (for [[id {:keys [busy run]}] @sessions]
+                             #js {:id id :busy @busy :sdk (:sdk @run)}))}))
+
+(def ^:private watch-ms
+  "How often the SDK store is looked at: a version the update puts in or marks broken (README
+  decision 81) reaches the runner within this, with no restart."
+  10000)
+
+(defn- watch-newest!
+  "Tells the runner when the version new sessions start on, or the ones they skip, changed."
+  []
+  (let [[v skip :as now] (newest-sdk)]
+    (when (and @runner (not= now (first (reset-vals! told now))))
+      (println "Agent SDK for new sessions:" v (if (seq skip) (str "(skipped: " (str/join " " skip) ")") ""))
+      (send! #js {:ev "sdk-newest" :sdk v :broken (clj->js skip)}))))
 
 (defn- user-message
   "A send op as the SDK's user message for session id: images (photos, video frames) go before the text."
@@ -331,6 +356,7 @@
     ;; Listens once the SDK loaded at start is in (or failed): the first fallback of every session.
     (.then (sdk-load/load-start!)
            (fn []
+             (js/setInterval watch-newest! watch-ms)
              (.listen server socket-path
                       (fn []
                         (fs/chmodSync socket-path (js/parseInt "600" 8))

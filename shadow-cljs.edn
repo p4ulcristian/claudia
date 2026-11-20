@@ -14,6 +14,8 @@
   :runner {:target :node-script :main claudia.slave.runner/main :output-to "out/runner.js"
            :prepend "var claudia_import = function (url) { return import(url); };\n"}
   :front  {:target :node-script :main claudia.slave.front/main  :output-to "out/front.js"}
+  ;; The Agent SDK channel's decisions for deploy/update.sh and the release builder (README decision 81).
+  :sdk    {:target :node-script :main claudia.slave.sdk-cli/main :output-to "out/sdk.js"}
   :hub    {:target :node-script :main claudia.hub.main/main     :output-to "out/hub.js"}
   :broker {:target :node-script :main claudia.broker.main/main  :output-to "out/broker.js"}
   :root   {:target :node-script :main claudia.root.main/main    :output-to "out/root.js"}

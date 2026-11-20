@@ -68,7 +68,8 @@
      :people (store/people)
      :access (store/access)
      :writers (store/writers)
-     :builder (releases/builder-state)}))
+     :builder (releases/builder-state)
+     :sdk (releases/sdk-state)}))
 
 (defn- changed!
   "After a change to the servers or the grid: pushes follow at once; the answer is the new state."
@@ -95,6 +96,7 @@
       (and (= pathname "/hub/admin/writers") (= method "PUT")) [:set-writer]
       (and (= pathname "/hub/admin/pair") (= method "POST")) [:pair]
       (and (= pathname "/hub/admin/builder") (= method "POST")) [:pair-builder]
+      (and (= pathname "/hub/admin/sdk-rollback") (= method "POST")) [:sdk-rollback]
       :else nil)))
 
 (defn server-entry
@@ -238,6 +240,10 @@
    :pair pair
    :pair-builder (fn [req res _]
                    (with-body req (fn [b] (let [[status body] (releases/pair! (field (:key b) 200))]
+                                            (if (= 200 status) (io/send-json res 200 (admin-state)) (io/send-json res status body))))))
+   ;; Every server's new sessions skip that Agent SDK (README decision 81).
+   :sdk-rollback (fn [req res _]
+                   (with-body req (fn [b] (let [[status body] (releases/sdk-roll-back! (field (:version b) 20))]
                                             (if (= 200 status) (io/send-json res 200 (admin-state)) (io/send-json res status body))))))})
 
 (defn- admin-call [^js req ^js res pathname]
