@@ -1,107 +1,146 @@
 (ns claudia.web.views.zoom
-  "An image big over the whole window, zoomable: two fingers pinch, a double tap (or double click)
-  zooms in there and back, the wheel or a trackpad pinch zooms at the pointer, and one finger or
-  the mouse drags it while zoomed. A tap on the fitted image, the × or Escape closes it. The zoom
-  lives in refs and goes straight onto the image's style (no render per move); the maths is
-  claudia.web.views.pure.zoom."
-  (:require [claudia.web.views.pure.zoom :as z]
-            ["react-dom" :as react-dom]
-            [reagent.core :as r]
+  "The viewer's photo (README decision 84), fitted and centred in its stage, zoomable: two fingers
+  pinch, a double tap (or double click) zooms in there and back, the wheel, a trackpad pinch (ctrl
+  wheel; Safari's gesture events) zoom at the pointer, and one finger or the mouse pans it while
+  zoomed, never off the stage. Unzoomed, one finger drags it: sideways to the next or previous
+  photo, down to close. A tap beside it closes. The page itself never zooms (touch-action none, and
+  claudia.web.viewport stops iOS's own pinch). The zoom lives in refs and goes straight onto the
+  image's style (no render per move); the maths is claudia.web.views.pure.zoom, the swipe
+  claudia.web.views.pure.viewer."
+  (:require [claudia.web.views.pure.viewer :as pv]
+            [claudia.web.views.pure.zoom :as z]
             [reagent.hooks :as h]))
 
 (def ^:private double-ms 300)
 (def ^:private tap-slop 8)
+(def ^:private settle-ms 200)
 
-(defn- from-centre "The event's point in px from the window's centre." [^js e]
-  [(- (.-clientX e) (/ js/innerWidth 2)) (- (.-clientY e) (/ js/innerHeight 2))])
+(defn- from-centre
+  "The event's point in px from the stage's centre (where the photo's centre sits)."
+  [{:keys [stage]} ^js e]
+  (let [r (.getBoundingClientRect ^js (.-current stage))]
+    [(- (.-clientX e) (.-left r) (/ (.-width r) 2)) (- (.-clientY e) (.-top r) (/ (.-height r) 2))]))
+
+(defn- size-of [^js el] [(.-offsetWidth el) (.-offsetHeight el)])
+
+(defn- show!
+  "css onto the photo's transform (eased when settle?), and whether it is zoomed onto the box."
+  [{:keys [img box]} css zoomed? settle?]
+  (when-let [^js el (.-current img)]
+    (set! (.. el -style -transition) (if settle? (str "transform " settle-ms "ms ease-out") ""))
+    (set! (.. el -style -transform) css))
+  (some-> ^js (.-current box) .-classList (.toggle "zoomed" zoomed?)))
 
 (defn- put!
-  "Sets the zoom, kept over the window, on the ref and the image."
-  [{:keys [zoom img box]} next-z]
-  (when-let [^js el (.-current img)]
-    (let [kept (z/kept-in next-z [(.-offsetWidth el) (.-offsetHeight el)] [js/innerWidth js/innerHeight])]
-      (set! (.-current zoom) kept)
-      (set! (.. el -style -transform) (z/transform kept))
-      (some-> ^js (.-current box) .-classList (.toggle "zoomed" (> (:k kept) 1))))))
-
-(defn- down! [{:keys [pointers gesture timer]} ^js e]
-  (.setPointerCapture (.-currentTarget e) (.-pointerId e))
-  (js/clearTimeout (.-current timer))
-  (.set (.-current pointers) (.-pointerId e) (from-centre e))
-  (set! (.-current gesture)
-        (if (= 1 (.-size (.-current pointers))) {:start (from-centre e) :moved false} {:moved true})))
+  "Sets the zoom, kept over the stage, on the ref and the photo."
+  ([refs next-z] (put! refs next-z false))
+  ([{:keys [zoom img stage] :as refs} next-z settle?]
+   (when-let [^js el (.-current img)]
+     (let [kept (z/kept-in next-z (size-of el) (size-of (.-current stage)))]
+       (set! (.-current zoom) kept)
+       (show! refs (z/transform kept) (> (:k kept) 1) settle?)))))
 
 (defn- far? [[x1 y1] [x2 y2]] (> (js/Math.hypot (- x2 x1) (- y2 y1)) tap-slop))
+
+(defn- down! [{:keys [pointers gesture img] :as refs} ^js e]
+  (when (zero? (.-button e))
+    (.setPointerCapture (.-currentTarget e) (.-pointerId e))
+    (let [^js ps (.-current pointers) pt (from-centre refs e)]
+      (.set ps (.-pointerId e) pt)
+      (set! (.-current gesture)
+            (if (= 1 (.-size ps))
+              {:start pt :on-photo (identical? (.-target e) (.-current img))}
+              (assoc (.-current gesture) :moved true :pinch true))))))
+
+(defn- dragged! [{:keys [props] :as refs} [sx sy] [x y]]
+  (let [[ox oy] (pv/drag-offset (- x sx) (- y sy) (:n (.-current props)))]
+    (show! refs (str "translate(" ox "px, " oy "px)") false false)))
 
 (defn- move! [{:keys [pointers gesture zoom] :as refs} ^js e]
   (let [^js ps (.-current pointers) id (.-pointerId e)]
     (when-let [before (.get ps id)]
       (let [olds (vec (.values ps))
-            now (from-centre e)]
+            now (from-centre refs e)
+            g (cond-> (.-current gesture) (some-> (:start (.-current gesture)) (far? now)) (assoc :moved true))]
         (.set ps id now)
+        (set! (.-current gesture) g)
         (cond
           (= 2 (count olds)) (put! refs (z/pinched (.-current zoom) olds (vec (.values ps))))
           (> (:k (.-current zoom)) 1) (put! refs (z/moved (.-current zoom) (- (first now) (first before))
-                                                          (- (second now) (second before)))))
-        (when (some-> (:start (.-current gesture)) (far? now))
-          (set! (.-current gesture) {:moved true}))))))
+                                                          (- (second now) (second before))))
+          (and (:moved g) (not (:pinch g))) (dragged! refs (:start g) now))))))
 
-(defn- tap!
-  "A tap: the second one soon after, near the first, zooms; a lone one on the fitted image closes."
-  [{:keys [last-tap timer zoom close] :as refs} pt]
+(defn- tapped!
+  "A tap: a second one soon after near the first zooms in or out there; a lone one beside the
+  unzoomed photo closes."
+  [{:keys [last-tap zoom props] :as refs} [x y :as pt] on-photo?]
   (let [t (js/performance.now) {:keys [at where]} (.-current last-tap)]
-    (if (and at (< (- t at) double-ms) (not (far? where pt)))
-      (do (set! (.-current last-tap) nil)
-          (put! refs (z/double-tapped (.-current zoom) (first pt) (second pt))))
-      (do (set! (.-current last-tap) {:at t :where pt})
-          (when (= 1 (:k (.-current zoom)))
-            (set! (.-current timer) (js/setTimeout close double-ms)))))))
+    (cond (and at (< (- t at) double-ms) (not (far? where pt)))
+          (do (set! (.-current last-tap) nil) (put! refs (z/double-tapped (.-current zoom) x y) true))
+          (or on-photo? (> (:k (.-current zoom)) 1)) (set! (.-current last-tap) {:at t :where pt})
+          :else ((:on-backdrop (.-current props))))))
 
-(defn- up! [{:keys [pointers gesture] :as refs} ^js e]
+(defn- let-go!
+  "An unzoomed drag let go: the next or previous photo, closed, or back in place."
+  [{:keys [stage props] :as refs} [sx sy] [x y]]
+  (let [{:keys [n on-swipe]} (.-current props)
+        outcome (pv/swipe-outcome (- x sx) (- y sy) (first (size-of (.-current stage))) n)]
+    (when-not (and outcome (on-swipe outcome))
+      (put! refs z/none true))))
+
+(defn- up! [{:keys [pointers gesture zoom] :as refs} ^js e]
+  (let [^js ps (.-current pointers) g (.-current gesture)]
+    (when (and (.delete ps (.-pointerId e)) (zero? (.-size ps)))
+      (cond (not (:moved g)) (tapped! refs (from-centre refs e) (:on-photo g))
+            (and (not (:pinch g)) (= 1 (:k (.-current zoom)))) (let-go! refs (:start g) (from-centre refs e))))))
+
+(defn- cancelled!
+  "The browser took a pointer back: forgotten, and an unzoomed photo goes back in place."
+  [{:keys [pointers gesture zoom] :as refs} ^js e]
   (let [^js ps (.-current pointers)]
-    (when (.delete ps (.-pointerId e))
-      (when (and (zero? (.-size ps)) (not (:moved (.-current gesture))))
-        (tap! refs (from-centre e))))))
+    (when (and (.delete ps (.-pointerId e)) (zero? (.-size ps)))
+      (set! (.-current gesture) {})
+      (when (= 1 (:k (.-current zoom))) (put! refs z/none true)))))
 
-(defn- use-wheel!
-  "The wheel and a trackpad pinch zoom at the pointer (a listener that may prevent the page's scroll)."
-  [{:keys [box zoom] :as refs}]
+(defn- use-listeners!
+  "Listeners React can't add as needed: the wheel (it must prevent the page's scroll) and Safari's
+  trackpad pinch (gesture events, only while no finger is down: an iPad's touch pinch sends them too,
+  and the pointers handle that)."
+  [{:keys [box zoom pointers] :as refs}]
   (h/use-effect
    (fn []
      (let [^js el (.-current box)
-           f (fn [^js e]
-               (.preventDefault e)
-               (let [[x y] (from-centre e)]
-                 (put! refs (z/zoom-at (.-current zoom) (z/wheel-factor (.-deltaY e) (.-ctrlKey e)) x y))))]
-       (.addEventListener el "wheel" f #js {:passive false})
-       #(.removeEventListener el "wheel" f)))
+           scale (atom 1)
+           zoom-by (fn [^js e f] (let [[x y] (from-centre refs e)] (put! refs (z/zoom-at (.-current zoom) f x y))))
+           ls {"wheel" (fn [^js e] (.preventDefault e) (zoom-by e (z/wheel-factor (.-deltaY e) (.-ctrlKey e))))
+               "gesturestart" (fn [^js e] (.preventDefault e) (reset! scale 1))
+               "gesturechange" (fn [^js e]
+                                 (.preventDefault e)
+                                 (when (zero? (.-size ^js (.-current pointers)))
+                                   (zoom-by e (/ (.-scale e) @scale))
+                                   (reset! scale (.-scale e))))}]
+       (doseq [[t f] ls] (.addEventListener el t f #js {:passive false}))
+       #(doseq [[t f] ls] (.removeEventListener el t f))))
    []))
 
-(defn- use-escape! [close]
-  (h/use-effect
-   (fn []
-     (let [k (fn [e] (when (= "Escape" (.-key e)) (.stopImmediatePropagation e) (close)))]
-       (js/window.addEventListener "keydown" k true)
-       #(js/window.removeEventListener "keydown" k true)))
-   []))
+(defn- use-refs [props]
+  (let [p (h/use-ref props)]
+    (set! (.-current p) props)
+    {:zoom (h/use-ref z/none) :pointers (h/use-ref (js/Map.)) :gesture (h/use-ref {})
+     :last-tap (h/use-ref nil) :box (h/use-ref nil) :stage (h/use-ref nil) :img (h/use-ref nil)
+     :props p}))
 
-(defn- overlay [src {:keys [box img close timer] :as refs}]
-  [:div.img-big {:ref #(set! (.-current box) %) :role "dialog" :aria-label "Image" :data-no-swipe true
-                 :on-pointer-down #(down! refs %) :on-pointer-move #(move! refs %)
-                 :on-pointer-up #(up! refs %) :on-pointer-cancel #(up! refs %)}
-   [:img {:ref #(set! (.-current img) %) :src src :alt "" :draggable false}]
-   [:button.img-big-close {:type "button" :aria-label "Close"
-                           :on-pointer-down #(.stopPropagation %)
-                           :on-click (fn [e] (.stopPropagation e) (js/clearTimeout (.-current timer)) (close))}
-    "×"]])
+(defn- set-ref [r] #(set! (.-current r) %))
 
-(defn image-big
-  "src big over the whole window, zoomable; close is called to close it."
-  [src close]
-  (let [refs {:zoom (h/use-ref z/none) :pointers (h/use-ref (js/Map.)) :gesture (h/use-ref {})
-              :last-tap (h/use-ref nil) :timer (h/use-ref nil) :box (h/use-ref nil) :img (h/use-ref nil)
-              :close close}]
-    (use-escape! close)
-    (use-wheel! refs)
-    (h/use-effect (fn [] #(js/clearTimeout (.-current (:timer refs)))) [])
-    (react-dom/createPortal (r/as-element (overlay src refs)) js/document.body)))
+(defn photo
+  "The photo item ({:src :alt}) on the whole window. props: :n (how many items the viewer holds),
+  :on-swipe (called with :next, :prev or :close; true when it did something, else the photo goes back
+  in place), :on-backdrop (a tap beside the unzoomed photo)."
+  [{:keys [src alt]} props]
+  (let [{:keys [box stage img] :as refs} (use-refs props)]
+    (use-listeners! refs)
+    [:div.viewer-touch {:ref (set-ref box)
+                        :on-pointer-down #(down! refs %) :on-pointer-move #(move! refs %)
+                        :on-pointer-up #(up! refs %) :on-pointer-cancel #(cancelled! refs %)}
+     [:div.viewer-stage {:ref (set-ref stage)}
+      [:img.viewer-media {:ref (set-ref img) :src src :alt (or alt "") :draggable false}]]]))

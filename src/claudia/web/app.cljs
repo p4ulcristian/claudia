@@ -2,6 +2,7 @@
   (:require [re-frame.core :as rf]
             [claudia.web.admin]
             [claudia.web.alerts :as alerts]
+            [claudia.web.back :as back]
             [claudia.web.swipe :as swipe]
             [claudia.web.tip :as tip]
             [claudia.web.copy-pill :as copy-pill]
@@ -53,7 +54,7 @@
   (md/install-copy!)
   (pictures/install-keys!)
   (speech/start!)
-  (js/window.addEventListener "popstate" #(rf/dispatch [:nav/popstate]))
+  (js/window.addEventListener "popstate" #(when-not (back/took-pop? %) (rf/dispatch [:nav/popstate])))
   (ws/install! #(rf/dispatch [:chat/check-seen]))
   (rf/dispatch-sync [:init])
   (presence/start!)
