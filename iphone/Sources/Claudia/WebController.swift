@@ -9,6 +9,8 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
     static let background = UIColor(red: 0x2c / 255.0, green: 0x38 / 255.0, blue: 0x33 / 255.0, alpha: 1)
 
     private let webView: WKWebView
+    /// The gaze pointer's eyes (ARKit); it sends its readings into this web view.
+    private let gaze: GazeTracker
     private let first: URL?
     private let failure = UIView()
     private let failureText = UILabel()
@@ -21,7 +23,12 @@ final class WebController: UIViewController, WKNavigationDelegate, WKUIDelegate 
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(NativeMic(), contentWorld: .page,
                                                              name: NativeMic.name)
+        let gaze = GazeTracker()
+        config.userContentController.addScriptMessageHandler(gaze, contentWorld: .page,
+                                                             name: GazeTracker.name)
         webView = WKWebView(frame: .zero, configuration: config)
+        gaze.webView = webView
+        self.gaze = gaze
         #if DEBUG
         // Debug builds only (the Simulator test build): Safari's Web Inspector and Appium can reach
         // the page. TestFlight builds are release builds and stay closed.

@@ -36,11 +36,9 @@
   (is (= :error (first (sentinel-key/put-plan {:key "ghp_nope"}))))
   (is (= :error (first (sentinel-key/put-plan {:key 5})))))
 
-(deftest a-worktree-report-signs-in-with-the-key-before-the-old-token
-  (is (= {"authorization" (str "Bearer " a-key)} (worktree/auth-headers a-key "old")))
-  (is (= {"x-sentinel-token" "old"} (worktree/auth-headers nil "old")))
-  (is (nil? (worktree/auth-headers nil nil)))
-  (is (nil? (worktree/auth-headers nil ""))))
+(deftest a-worktree-report-signs-in-with-the-key
+  (is (= {"authorization" (str "Bearer " a-key)} (worktree/auth-headers a-key)))
+  (is (nil? (worktree/auth-headers nil))))
 
 (deftest the-key-file-is-written-for-this-user-only-and-removed
   (let [home (fs/mkdtempSync (path/join (os/tmpdir) "sentinel-key-"))

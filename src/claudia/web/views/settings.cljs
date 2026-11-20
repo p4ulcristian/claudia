@@ -7,6 +7,7 @@
   their passkeys (README decision 66), plus a one-line Admin link for admins (People and Servers have no other way in)."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
+            [claudia.web.gaze :as gaze]
             [claudia.web.views.keys :as key-access]
             [claudia.web.views.passkeys :as passkeys]
             [re-frame.core :as rf]
@@ -300,7 +301,8 @@
 (defn- settings-body []
   (if @(rf/subscribe [:viewing-other?])
     [:p.small "Settings are your own: switch to My chats to change them."]
-    [:<> [claude-subscription] [github-section] [sentinel-section] [passkeys/passkeys-section] [key-access/keys-section]]))
+    [:<> [claude-subscription] [github-section] [sentinel-section] [passkeys/passkeys-section] [key-access/keys-section]
+     [gaze/settings-section]]))
 
 (defn pane
   "Settings in the right half (README decisions 58 and 75): the Claude subscriptions, GitHub and
