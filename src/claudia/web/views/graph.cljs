@@ -2,15 +2,20 @@
   "A graph block: laid out by ELK (layered), drawn as SVG in chalk. Three layouts are tried (left to
   right, top to bottom, top to bottom with groups stacked) and the one that fits the pane best is
   kept; it changes only when another fits clearly better, so the picture doesn't jump. Nodes and
-  arrows move to their new places with CSS transitions; new ones pop in."
-  (:require ["elkjs/lib/elk.bundled.js" :as ELK]
-            [clojure.string :as str]
+  arrows move to their new places with CSS transitions; new ones pop in. ELK loads the first time a
+  graph is laid out (the :elk module, claudia.web.graph.elk)."
+  (:require [clojure.string :as str]
+            [reagent.core :as r]
             [reagent.hooks :as h]
+            [shadow.lazy :as lazy]
             [claudia.web.chalk :as chalk]
             [claudia.web.hooks :as hooks]
+            [claudia.web.shot-wait :as shot-wait]
             [claudia.web.views.pure.graph :as pure]))
 
-(defonce ^:private elk (ELK.))
+(def ^:private lazy-elk (lazy/loadable claudia.web.graph.elk/layout))
+
+(defonce ^:private elk-loaded (r/atom nil)) ; nil, :loading, :ready or the error's text
 
 (def ^:private colors ["green" "red" "amber" "blue" "grey" "violet"])
 (def ^:private font "700 15px Kalam, cursive")
@@ -28,11 +33,23 @@
 (defn- note-w [s] (text-w s note-font))
 (defn- group-w [s] (text-w s group-font))
 
+(defn- load-elk!
+  "A promise of ELK's layout function, the :elk module loaded first; a screenshot waits for it."
+  []
+  (if (lazy/ready? lazy-elk)
+    (js/Promise.resolve @lazy-elk)
+    (do (reset! elk-loaded :loading)
+        (shot-wait/hold!)
+        (-> (js/Promise.resolve (lazy/load lazy-elk)) ; a native promise (shadow.lazy gives a goog Deferred)
+            (.then (fn [f] (reset! elk-loaded :ready) f))
+            (.catch (fn [e] (reset! elk-loaded (str (or (.-message e) e))) (throw e)))
+            (.finally shot-wait/release!)))))
+
 (defn- layout
-  "A promise of the laid-out graph for one variant (:right :down :down-stacked)."
-  [{:keys [nodes] :as g} variant]
+  "A promise of the laid-out graph for one variant (:right :down :down-stacked); elk-layout: ELK's."
+  [elk-layout {:keys [nodes] :as g} variant]
   (let [sizes (into {} (map (juxt :id #(pure/node-size % text-w note-w))) nodes)]
-    (-> (.layout elk (clj->js (pure/elk-graph g variant sizes group-w note-w)))
+    (-> (elk-layout (clj->js (pure/elk-graph g variant sizes group-w note-w)))
         (.then #(pure/laid-out (js->clj % :keywordize-keys true) variant sizes g)))))
 
 (def ^:private variants [:right :down :down-stacked])
@@ -137,7 +154,8 @@
   [g {:keys [box kept] :as memory} set-laid gone]
   (let [[aw ah] (avail-size (.-current box))]
     (-> (.-ready js/document.fonts)
-        (.then #(js/Promise.all (clj->js (map (fn [v] (layout g v)) variants))))
+        (.then load-elk!)
+        (.then (fn [elk-layout] (js/Promise.all (clj->js (map (fn [v] (layout elk-layout g v)) variants)))))
         (.then (fn [all]
                  (when-not @gone
                    (let [all (vec all)
@@ -243,6 +261,14 @@
                      :style {:transform (str "translate(" (:x view) "px, " (:y view) "px) scale(" (:k view) ")")}}
     (drawing props)]])
 
+(defn- elk-note
+  "Before the first layout: while the :elk module loads, or why it did not."
+  []
+  (let [ok @elk-loaded]
+    (cond
+      (= ok :loading) [:p.f-note "Loading the graph…"]
+      (string? ok) [:p.f-note (str "The graph did not load: " ok)])))
+
 (defn graph-view
   "Render with [:f> graph-view block changed seq]: changed = ids (nodes, arrows) the last draw
   changed, seq = that draw's number (a changed node rings once per draw)."
@@ -266,6 +292,6 @@
      (use-width-steps! box set-width)
      (use-layout! block width memory set-laid)
      (if-not laid
-       [:div.diagram {:ref #(set! (.-current box) %)}]
+       [:div.diagram {:ref #(set! (.-current box) %)} [elk-note]]
        (diagram {:box box :layer layer :view view :set-view set-view :laid laid :uid uid
                  :fresh-ids (.-current fresh) :changed (set changed) :seq-no seq-no})))))

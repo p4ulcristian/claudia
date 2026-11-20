@@ -1,6 +1,6 @@
-(ns claudia.web.views.editor-test
+(ns claudia.web.editor.view-test
   (:require [cljs.test :refer [deftest is testing]]
-            [claudia.web.views.editor :as editor]))
+            [claudia.web.editor.view :as editor]))
 
 (deftest files-and-text
   (is (= [{:id "a"}] (editor/file-list [{:id "a"} {:id 3} {}])))
