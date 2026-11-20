@@ -89,19 +89,22 @@
 (defn chat-dot
   "row: a list row with :server. done?: finished since you looked (never in a read-only view, never
   the open chat). plain?: the rail's circle (README decision 46): no badges, only the ticking
-  dotted ring while the chat works; its line under the name says the rest."
-  [{:keys [server folder waiting running agents runningSince agentsSince root]} done? & [plain?]]
+  dotted ring while the chat works; its line under the name says the rest. badge: drawn on the
+  circle too (the server's mark, README decision 80)."
+  [{:keys [server folder waiting running agents runningSince agentsSince root]} done? & [plain? badge]]
   (let [agents (or agents 0)
         state (cond waiting :waiting running :thinking done? :done)]
     (if plain?
       [:span.rail-dot
        [project-face server folder]
        (when (or running (pos? agents)) [:f> work-ring (if (and running runningSince) runningSince agentsSince)])
-       (when root root-badge)]
+       (when root root-badge)
+       badge]
       [:span.rail-dot
        [project-face server folder]
        (if (and (not waiting) (not running) (pos? agents))
          [agents/agents-ring agents]
          [state-badge state])
        [moons (if running agents 0)]
-       (when root root-badge)])))
+       (when root root-badge)
+       badge])))

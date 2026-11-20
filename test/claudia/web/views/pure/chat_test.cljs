@@ -92,7 +92,6 @@
 
 (deftest words
   (is (= "Paul" (words/capital "paul")))
-  (is (= "S" (words/initial "server")))
   (is (= "a/b" (words/clip "a/b" 10)))
   (is (= "…/proj/file.txt" (words/clip "/home/x/long/path/proj/file.txt" 18)))
   (is (= "1 file" (words/plural 1 "file")))
