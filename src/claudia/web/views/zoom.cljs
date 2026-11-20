@@ -1,5 +1,5 @@
 (ns claudia.web.views.zoom
-  "The viewer's photo (README decision 81), fitted and centred in its stage, zoomable: two fingers
+  "The viewer's photo (README decision 84), fitted and centred in its stage, zoomable: two fingers
   pinch, a double tap (or double click) zooms in there and back, the wheel, a trackpad pinch (ctrl
   wheel; Safari's gesture events) zoom at the pointer, and one finger or the mouse pans it while
   zoomed, never off the stage. Unzoomed, one finger drags it: sideways to the next or previous

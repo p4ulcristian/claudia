@@ -1,5 +1,5 @@
 (ns claudia.web.back
-  "Layers the browser's back closes (the media viewer, README decision 81): opening one adds a
+  "Layers the browser's back closes (the media viewer, README decision 84): opening one adds a
   history entry at the same address, so back (the button, iOS's edge swipe, Android's back) closes
   the layer instead of leaving the chat or the app. Closing it from the page (×, Esc, a tap) takes
   its entry away again, and the popstate that brings is swallowed. Every popstate listener of the

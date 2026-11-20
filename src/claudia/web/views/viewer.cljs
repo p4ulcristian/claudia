@@ -1,5 +1,5 @@
 (ns claudia.web.views.viewer
-  "Photos and videos big over the whole window (README decision 81), the one viewer for every
+  "Photos and videos big over the whole window (README decision 84), the one viewer for every
   preview: a message's photos, a photo or video Claude showed, the composer's photos, the files
   form's and the Folders preview's images, the 3D scene's video. Dark backdrop, the item centred
   and fitted inside the safe areas; a bar on top with the item's title, its place (2 / 5), Save

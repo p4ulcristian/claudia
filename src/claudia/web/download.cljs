@@ -1,5 +1,5 @@
 (ns claudia.web.download
-  "Saving a file: the picture's snapshot, and a photo or video from the viewer (README decision 81).
+  "Saving a file: the picture's snapshot, and a photo or video from the viewer (README decision 84).
   On an iPhone or iPad (Safari, the home-screen web app and the iPhone app alike) a download goes
   nowhere the person can find (a web-app window shows no downloads of its own, the app's web view
   takes none), so there the file goes to the share sheet (navigator.share with the file), which

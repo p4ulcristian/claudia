@@ -1,5 +1,5 @@
 (ns claudia.web.views.media-save
-  "The viewer's Save button (README decision 81): the photo or video is fetched as a file (the same
+  "The viewer's Save button (README decision 84): the photo or video is fetched as a file (the same
   address and login cookie its img or video uses) and handed to claudia.web.download/hand-over!:
   the share sheet on an iPhone or iPad (Save Image, Save Video, Save to Files), a download
   elsewhere. The share sheet opens only right after a tap, so on those devices a photo is fetched

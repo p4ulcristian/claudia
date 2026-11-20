@@ -266,7 +266,7 @@ a.file-chip:hover { border-color: var(--accent); }
 .msg.shown img + img { margin-top: 6px; }
 .sent-thumb { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .sent-thumb img { display: block; max-width: min(220px, 100%); max-height: 220px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
-/* Photos and videos big over the window (views/viewer.cljs, README decision 81). The item sits in
+/* Photos and videos big over the window (views/viewer.cljs, README decision 84). The item sits in
    .viewer-stage, inside the safe areas and under the bar; the zoom is a transform on it. */
 .viewer { position: fixed; inset: 0; z-index: 90; background: rgb(0 0 0 / 0.92); color: #fff; animation: confirm-in 0.12s ease-out;
   touch-action: none; overscroll-behavior: contain; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

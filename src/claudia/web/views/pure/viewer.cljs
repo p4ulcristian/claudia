@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.viewer
-  "The media viewer's decisions, as data (claudia.web.views.viewer, README decision 81): which item
+  "The media viewer's decisions, as data (claudia.web.views.viewer, README decision 84): which item
   comes next, what a one-finger drag on an unzoomed photo does when it is let go, how the photo
   follows that finger, and the file a step showed.")
 
