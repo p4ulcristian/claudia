@@ -2,7 +2,8 @@
   "The list's title menu (whose chats, which servers) and Settings, a popup (README decision 58)
   opened from the settings menu (claudia.web.views.menu: its plan card and More settings) and the
   thumb edge's cog: centred, a sheet from the bottom on a phone. It holds only the hub's Claude
-  tokens (save, remove; no default, README decision 57), the person's GitHub and, with a key broker,
+  tokens (save, remove; no default, README decision 57), the person's GitHub, their Sentinel key
+  (README decision 85) and, with a key broker,
   their passkeys (README decision 66), plus a one-line Admin link for admins (People and Servers have no other way in)."
   (:require [clojure.string :as str]
             [claudia.web.format :as format]
@@ -190,6 +191,48 @@
 
 (rf/reg-event-fx :ops/put-now (fn [_ [_ m]] {:ops/put m}))
 
+;; ---- Sentinel (README decision 85) ----
+
+(defn- save-sentinel-key! [k _ done]
+  (rf/dispatch [:ops/put-now {:url "/hub/sentinel-key" :method "PUT" :body {:key k}
+                              :on-done (fn [ok err] (when ok (rf/dispatch [:ops/sentinel-key ok])) (done err))}]))
+
+(defn- remove-sentinel-key! []
+  (when (js/confirm "Remove your Sentinel key from the hub and every server?")
+    (rf/dispatch [:ops/put-now {:url "/hub/sentinel-key" :method "DELETE"
+                                :on-done (fn [ok _] (when ok (rf/dispatch [:ops/sentinel-key ok])))}])))
+
+(defn- sentinel-servers
+  "Each of the person's servers: has the key, or not (yet)."
+  [{:keys [servers]}]
+  (when (seq servers)
+    [:p.small.token-servers
+     (for [{server-name :name :keys [label ok error]} servers]
+       ^{:key server-name}
+       [:span {:class (if ok "on" "off") :title (str label (if ok ": has it" (str ": " (or error "not given it yet"))))}
+        label " " (if ok "\u2713" "\u2026")])]))
+
+(defn- sentinel-key-set [{:keys [hint] :as v}]
+  [:<>
+   [:p.small "Saved: " [:code (str hint "\u2026")] ". Every chat on your servers may use it. "
+    [:button.linkish {:type "button" :on-click remove-sentinel-key!} "Remove"]]
+   [sentinel-servers v]])
+
+(defn- sentinel-section
+  "The person's Sentinel API key, kept by the hub and handed to their profile on every server."
+  []
+  (let [{:keys [on hint] :as v} @(rf/subscribe [:sentinel-key])]
+    [:section.st-section
+     [:h3 "Sentinel " [:span.muted.small "yours, on every server"]]
+     (cond
+       (nil? v) [:p.small "Checking\u2026"]
+       (not on) [:p.small "This hub keeps no keys (no key set)."]
+       :else [:<>
+              (when hint [sentinel-key-set v])
+              [:p.small "Make a key on Sentinel's API keys page; read+write lets chats start worktrees and previews."]
+              [token-form {:placeholder (if hint "Replace with a new key" "Sentinel key (snt_\u2026)")
+                           :save save-sentinel-key!}]])]))
+
 (defn- remove-token! [token-name]
   (when (js/confirm (str "Remove " token-name "'s token from the hub?"))
     (rf/dispatch [:ops/put-now {:url (str "/hub/claude-tokens/" (js/encodeURIComponent token-name))
@@ -257,7 +300,7 @@
 (defn- settings-body []
   (if @(rf/subscribe [:viewing-other?])
     [:p.small "Settings are your own: switch to My chats to change them."]
-    [:<> [claude-subscription] [github-section] [passkeys/passkeys-section] [key-access/keys-section]]))
+    [:<> [claude-subscription] [github-section] [sentinel-section] [passkeys/passkeys-section] [key-access/keys-section]]))
 
 (defn pane
   "Settings in the right half (README decisions 58 and 75): the Claude subscriptions, GitHub and

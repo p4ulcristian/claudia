@@ -1306,6 +1306,25 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     in the app's web view), a zoom-only image overlay and the video playing only in place, and the
     3D scene's own player.
 
+85. Sentinel is one key per person, kept by the hub (2026-11-20): Claudia is just a client of
+    Sentinel's API. A person makes a key on Sentinel's API keys page (`snt_` and 43 base64url
+    characters; read+write lets chats start worktrees and previews) and pastes it once in Settings,
+    beside GitHub. The hub keeps it sealed in its store (under `HUB_TOKEN_KEY_FILE`, as the GitHub
+    login of decision 23) and hands it to the person's profile on every server they may use
+    (`PUT /api/sentinel-key` through the front, as them): at once after a save, and every minute for a
+    server that missed it, the same moments as the GitHub login. The runner keeps it in
+    `~/.config/sentinel/key` (0600, that Linux user's only) and starts every chat with `SENTINEL_KEY`
+    and `SENTINEL_URL`; worktree reports send it as `Authorization: Bearer` (the old shared
+    `x-sentinel-token` only where no key is there yet). The page sees only the key's first 8
+    characters; a removed key is remembered as removed, so a server that was off drops it later.
+    Nobody approves a use: chats run unattended (at night, in the background), and the key's own
+    scope on Sentinel is the limit. The hub refuses `/api/sentinel-key` from a page. Instead of: one
+    shared token on every server acting as nobody in particular, a key per chat asked through the
+    key broker (decision 66) with a passkey for each use, or Claudia calling Sentinel on the chats'
+    behalf. Files: `src/claudia/hub/sentinel_key.cljs`, `src/claudia/slave/sentinel_key.cljs`,
+    `src/claudia/shared/sentinel_key.cljc`, `src/claudia/slave/worktree.cljs`,
+    `src/claudia/web/views/settings.cljs`.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

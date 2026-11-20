@@ -51,6 +51,15 @@
          "CLAUDE_CODE_OAUTH_TOKEN" t
          "PATH" (str bin-dir ":" (.-PATH env))))
 
+(defn with-sentinel
+  "A chat's environment (env, a map) with the person's Sentinel key (k, README decision 85) as
+  SENTINEL_KEY and Sentinel's address (url) as SENTINEL_URL, each only when there is one; a
+  SENTINEL_KEY the runner itself had never passes on."
+  [env k url]
+  (cond-> (dissoc env "SENTINEL_KEY")
+    k (assoc "SENTINEL_KEY" k)
+    url (assoc "SENTINEL_URL" url)))
+
 (defn start-spec
   "What the host starts (resume? true: resumes) a chat's Claude Code with. prompt: the system
   prompt's addition; allowed: the allowed tools; edit-tools: the edit tools' matcher; worktrees?:

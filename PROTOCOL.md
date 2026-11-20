@@ -56,7 +56,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | runner | `CLAUDIA_CWD` | where chats run (default `~/Work`) |
 | runner, front | `CLAUDIA_TOKEN_FILE` | where the Claude long-term tokens are kept (the file itself is no longer written: there is no shared token, README decision 57; the front deletes it and its `.json` note). Every saved token (`PUT /api/claude-token/saved`): `<token file>.d/<key>` each, their names in `<token file>.saved.json` `{ tokens: [{ key, name, at }] }`; a chat with a pick (`settings.plan`) starts on that one. Each person's last pick (`PUT /api/claude-token/picks`): `<token file>.picks.json` `{ <profile>: { email, key, name, at } }`; a chat without a pick starts on its profile's entry, and with none it does not start (its message gets an `error` asking to pick one in its header). Runners read them on every session start |
 | runner | `CLAUDIA_FORMS` | opt-in forms this runner has, comma separated (`git,clojure,calls`); the others are always on |
-| runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_SENTINEL_URL`, `CLAUDIA_SENTINEL_TOKEN_FILE` (default `~/.config/sentinel/token`), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Sentinel (`POST <url>/api/worktrees/touches`) |
+| runner | `CLAUDIA_WORKTREES_DIR`, `CLAUDIA_SENTINEL_URL`, the person's Sentinel key `~/.config/sentinel/key` (written by `PUT /api/sentinel-key`), `CLAUDIA_SENTINEL_TOKEN_FILE` (default `~/.config/sentinel/token`, being retired), `CLAUDIA_CHAT_URL` (`{chat}` = the chat's id) | where set: chats' edits and commands inside those worktrees are reported to Sentinel (`POST <url>/api/worktrees/touches`), with `Authorization: Bearer <key>` when the key file is there, else (the transition) with `x-sentinel-token` from the token file |
+| runner | `CLAUDIA_SENTINEL_URL`, `~/.config/sentinel/key` | every chat starts with `SENTINEL_KEY` (the key file, read at the chat's start, when there is one) and `SENTINEL_URL` (`CLAUDIA_SENTINEL_URL`, when set) in its environment (README decision 85) |
 | host | `HOST_SOCKET` | unix socket it listens on |
 
 `hub.json`:
@@ -149,7 +150,7 @@ has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db
 imported only into an empty store (a broken file then stops the hub) and never read again.
 `/s/<server>/api/chat-move/…` is refused (404): only the hub moves a chat (README decision 82).
 `/s/<server>/api/update-check`, `/s/<server>/api/claude-token/picks`,
-`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github`, `/s/<server>/api/github/token` and `/s/<server>/api/github/service-token` are refused (404): only
+`/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github`, `/s/<server>/api/github/token`, `/s/<server>/api/github/service-token` and `/s/<server>/api/sentinel-key` are refused (404): only
 the hub makes those calls on a front.
 
 ## Hub operations
@@ -202,6 +203,9 @@ people: [{ email, name, admin }], access: [{ email, server }], pairing: { availa
 | `DELETE /hub/claude-tokens/:name` | person | the same shape; chats on it go to their owner's pick |
 | `GET /hub/github-login` | person | `{ on, login, savedAt, servers: [{ name, label, ok, login, error }] }`: the caller's GitHub login kept by the hub (never the token) and what each of their servers' gh is logged in as |
 | `PUT /hub/github-login` `{ token }` | person | the same shape: checked with GitHub, sealed and kept, handed to each of their servers (`PUT /api/github` as them); 400 not a token or refused by GitHub, 503 when the hub keeps no tokens |
+| `GET /hub/sentinel-key` | person | `{ on, hint, savedAt, servers: [{ name, label, ok, error }] }`: the caller's Sentinel API key kept by the hub (README decision 85; `hint` = its first 8 characters, never the key; null when none or removed) and whether each of their servers has it |
+| `PUT /hub/sentinel-key` `{ key }` | person | the same shape: `key` must match `^snt_[A-Za-z0-9_-]{43}$` (whitespace dropped); sealed and kept, handed to each of their servers (`PUT /api/sentinel-key` as them, at once and every minute for a server that missed it); 400 not a key, 503 when the hub keeps no tokens |
+| `DELETE /hub/sentinel-key` | person | the same shape: the key dropped and remembered as removed, so each of their servers deletes its copy (`PUT /api/sentinel-key` `{ key: "" }`), also one that was off; 503 when the hub keeps no tokens |
 
 Claude tokens (README decisions 10, 16 and 57): every saved one on every server, and no shared
 default: each person's last pick (`claude_token_picks`; never picked: the saved token whose key is
@@ -281,6 +285,8 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
+| `GET /api/sentinel-key` | `{ hint, fingerprint }` of the Sentinel key in `~/.config/sentinel/key` (`hint`: its first 8 characters; `fingerprint`: the first 16 hex of its SHA-256, so the hub tells whether it has the kept one), both null when there is none; never the key (the hub's call, as the person; refused from a page and from a view) |
+| `PUT /api/sentinel-key` `{ key }` | the same shape: a Sentinel key (`^snt_[A-Za-z0-9_-]{43}$`) written to `~/.config/sentinel/key` (mode 0600, through `key.new` and a rename); no key or an empty one deletes the file; 400 `{ error }` not a key (the hub's call: README decision 85) |
 
 ## Runner HTTP: moving a chat (`/api/chat-move/…`; README decision 82)
 
