@@ -1316,8 +1316,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (`PUT /api/sentinel-key` through the front, as them): at once after a save, and every minute for a
     server that missed it, the same moments as the GitHub login. The runner keeps it in
     `~/.config/sentinel/key` (0600, that Linux user's only) and starts every chat with `SENTINEL_KEY`
-    and `SENTINEL_URL`; worktree reports send it as `Authorization: Bearer` (the old shared
-    `x-sentinel-token` only where no key is there yet). The page sees only the key's first 8
+    and `SENTINEL_URL`; worktree reports send it as `Authorization: Bearer` (the old
+    `x-sentinel-token` is gone since 2026-11-20). The page sees only the key's first 8
     characters; a removed key is remembered as removed, so a server that was off drops it later.
     Nobody approves a use: chats run unattended (at night, in the background), and the key's own
     scope on Sentinel is the limit. The hub refuses `/api/sentinel-key` from a page. Instead of: one
