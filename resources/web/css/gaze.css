@@ -1,0 +1,14 @@
+/* The gaze pointer (claudia.web.gaze): a layer over the whole page that taps pass through. The
+   ring, trail and calibration dot sit at the layer's top-left and are moved by transform. */
+.gaze-layer { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
+.gaze-ring, .gaze-trail, .gaze-dot { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; will-change: transform; }
+.gaze-ring { width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 2.5px solid var(--amber);
+  background: radial-gradient(circle, color-mix(in srgb, var(--amber) 22%, transparent) 0 30%, transparent 70%);
+  transition: opacity .2s; }
+.gaze-trail { width: 10px; height: 10px; margin: -5px 0 0 -5px; background: var(--amber); }
+.gaze-dot { width: 28px; height: 28px; margin: -14px 0 0 -14px; background: var(--accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent); transition: transform .35s ease, scale .1s linear; }
+.gaze-hint { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); opacity: 0; padding: 8px 14px;
+  border-radius: 12px; background: var(--panel); color: var(--fg); font-family: var(--hand); font-size: 18px; }
+.block.gazed { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 70%, transparent), 0 0 0 6px color-mix(in srgb, var(--blue) 18%, transparent); transition: box-shadow .2s; }
+.st-gaze-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
