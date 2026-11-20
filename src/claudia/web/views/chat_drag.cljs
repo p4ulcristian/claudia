@@ -156,11 +156,20 @@
         (and far? touch?) (do (js/clearTimeout timer) (reset! drag nil))   ; a scroll, not a drag
         far? (do (lift! row) (over! e))))))
 
+(defn- swallow-ending-click!
+  "The click a drag ends with does not open the chat. A touch drag ends with no click (nor does a
+  mouse drag whose row the drop re-rendered away), so the next press takes the swallower away: it
+  never eats a later press's click (a group's stack pressed after a drag stayed shut)."
+  []
+  (letfn [(off! [] (js/window.removeEventListener "click" swallow! true)
+            (js/window.removeEventListener "pointerdown" off! true))
+          (swallow! [^js e] (.stopPropagation e) (.preventDefault e) (off!))]
+    (js/window.addEventListener "click" swallow! true)
+    (js/window.addEventListener "pointerdown" off! true)))
+
 (defn- on-up [^js e]
   (when @drag
-    (when (finish!)
-      ;; The click a drag ends with does not open the chat.
-      (js/window.addEventListener "click" #(do (.stopPropagation %) (.preventDefault %)) #js {:capture true :once true}))
+    (when (finish!) (swallow-ending-click!))
     (.preventDefault e)))
 
 (defonce ^:private listening
