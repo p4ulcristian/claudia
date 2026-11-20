@@ -47,7 +47,12 @@ async function answers(url) {
   try { return (await fetch(url, { headers: { 'X-Auth-Request-Email': email } })).status < 500; } catch { return false; }
 }
 
-// The chat as Claude Code keeps it: one question and its reply, in the session file the runner reads.
+// The chat as Claude Code keeps it: one question and its reply, in the session file the runner reads,
+// and its title as a rename leaves it (a custom-title line). The title must be the session's own: at
+// its start the runner sets every chat's title from its session (claudia.slave.chats/refresh-titles!,
+// an async read of the session list), and seedRow's row goes in while that read runs. A session
+// without a custom title is titled by its first prompt, so the chat was "Smoke chat" or the question
+// by which came first (under load the question: 15 failed builder runs on 2026-11-20).
 function seedSession(claudeDir, cwd) {
   const dir = join(claudeDir, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
   mkdirSync(dir, { recursive: true });
@@ -61,6 +66,7 @@ function seedSession(claudeDir, cwd) {
       message: { id: 'msg_smoke_1', type: 'message', role: 'assistant', model: 'claude-smoke',
                  content: [{ type: 'text', text: reply }], stop_reason: 'end_turn',
                  usage: { input_tokens: 1, output_tokens: 1 } } },
+    { type: 'custom-title', sessionId: chatId, customTitle: title },
   ];
   writeFileSync(join(dir, `${chatId}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
