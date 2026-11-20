@@ -3,7 +3,7 @@
   open on click, a file opens in place as code. Marks point files out; git status shows as a
   letter; sketched (planned) files are labelled as not on disk."
   (:require [clojure.string :as str]
-            [claudia.web.views.zoom :as zoom]
+            [claudia.web.views.viewer :as viewer]
             [reagent.hooks :as h]
             [claudia.web.api :as api]
             [claudia.web.views.code :as code]))
@@ -198,7 +198,7 @@
   ^{:key (str "f" p)}
   [:div.f-tree-file {:style {"--depth" depth}}
    (cond
-     (:image f) [:div.f-image {:on-double-click #(set-big (:image f)) :title "Double-click to see it big"}
+     (:image f) [:button.f-image {:type "button" :on-click #(set-big {:src (:image f) :name p}) :title "See it big"}
                  [:img {:src (:image f) :alt p}]]
      (:error f) [:p.f-note (:error f)]
      (nil? (:text f)) [:p.f-note "…"]
@@ -402,7 +402,8 @@
          (if (and (:live pl) (not (:chat ctx)))
            [[:p.f-note (not-readable-note root (:opened0 pl) data)]]
            (map #(row-view % ctx) rows)))
-   (when big [:f> zoom/image-big big #(set-big nil)])])
+   (when big [:f> viewer/viewer {:items [(assoc big :kind :image :save true :title (:name big))]
+                                 :on-close #(set-big nil)}])])
 
 (defn files-form
   "ctx: {:server :chat} of the picture's chat (nil in the gallery)."

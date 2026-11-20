@@ -2,12 +2,9 @@
   "The 3D scene's video, made in the background: the film button asks the hub for a video of the
   scene as shown (POST /hub/videos; the page may close at once). The runner makes it and keeps it
   with the chat; this asks the runner (GET /api/chats/:id/videos?block=) every few seconds what
-  there is: while one is made, how far it is; when done, a button that plays it here, in a player
-  with Download (a web-app window shows no downloads of its own), and a desktop popup (when turned
-  on)."
-  (:require ["react-dom" :as react-dom]
-            [reagent.core :as r]
-            [reagent.hooks :as h]
+  there is: while one is made, how far it is; when done, a button that plays it here, in the
+  viewer with Save, and a desktop popup (when turned on)."
+  (:require [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.shared.text :as text]
             [claudia.web.alerts :as alerts]
@@ -15,7 +12,8 @@
             [claudia.web.format :as fmt]
             [claudia.web.hooks :as hooks]
             [claudia.web.scene3d.icons :refer [icon]]
-            [claudia.web.scene3d.video :as video]))
+            [claudia.web.scene3d.video :as video]
+            [claudia.web.views.viewer :as viewer]))
 
 (def ^:private poll-ms 3000)
 
@@ -53,35 +51,17 @@
                    :on-click #(start! props set-asked set-nonce)}
    [icon :film]])
 
-(defn- player-bar [props v note set-note close]
-  [:div.s3-player-bar
-   [:b (or (not-empty (:title props)) "3D scene")]
-   [:span.f-note (str (fmt/duration (:seconds v)) (when (:size v) (str " · " (files/size-label (:size v)))))]
-   [:a.f-tool {:href (file-url props v) :download (text/file-name (:title props) "scene" "mp4")
-               :on-click #(set-note "Download started: it is in the folder your browser saves files to")}
-    [icon :download] " Download"]
-   (when note [:span.f-note note])
-   [:button.f-tool {:title "Close (Esc)" :aria-label "Close" :on-click close} [icon :close]]])
-
 (defn- player
-  "The video playing over the window, with Download; Esc or a click beside it closes it. It is put
-  in the page's body (or the element in full screen): inside the picture pane, a container, a
-  fixed box is placed in the pane, not the window, and fell out of sight."
+  "The video in the viewer (claudia.web.views.viewer: over the window, with Save; a web-app window
+  shows no downloads of its own, so an iPhone or iPad saves through the share sheet), named after
+  the scene."
   [props v close]
-  (let [[note set-note] (h/use-state nil)]
-    (h/use-effect (fn []
-                    (let [f #(when (= "Escape" (.-key %)) (close))]
-                      (js/addEventListener "keydown" f)
-                      #(js/removeEventListener "keydown" f)))
-                  [])
-    (react-dom/createPortal
-     (r/as-element
-      [:div.s3-player {:role "dialog" :aria-label "Video"
-                       :on-click #(when (identical? (.-target %) (.-currentTarget %)) (close))}
-       [:div.s3-player-box
-        [:video {:src (file-url props v) :controls true :auto-play true :plays-inline true}]
-        [player-bar props v note set-note close]]])
-     (or js/document.fullscreenElement js/document.body))))
+  [:f> viewer/viewer
+   {:items [{:src (file-url props v) :kind :video :save true
+             :name (text/file-name (:title props) "scene" "mp4")
+             :title (or (not-empty (:title props)) "3D scene")
+             :note (str (fmt/duration (:seconds v)) (when (:size v) (str " · " (files/size-label (:size v)))))}]
+    :on-close close}])
 
 (defn- watch-button [v fresh open]
   [:button.f-tool {:class (when fresh "s3-video-new")
@@ -118,4 +98,4 @@
      (when (and asked (not= asked "Starting the video…")) [:span.f-note asked])
      (when failed [:span.f-note.s3-video-failed {:title (:error failed)} "Video failed"])
      (when done [watch-button done (= fresh (:id done)) #(do (set-fresh nil) (set-playing done))])
-     (when playing [:f> player props playing #(set-playing nil)])]))
+     (when playing [player props playing #(set-playing nil)])]))

@@ -3,12 +3,13 @@
   drop zone over the whole window, pasting files, and in the messages the file chips (download) and
   the images a message sent or a show_image step showed."
   (:require [re-frame.core :as rf]
-            [claudia.web.views.zoom :as zoom]
             [reagent.core :as r]
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.chatops :as ops]
-            [claudia.web.views.pure.attach :as pure]))
+            [claudia.web.views.pure.attach :as pure]
+            [claudia.web.views.pure.viewer :as pv]
+            [claudia.web.views.viewer :as viewer]))
 
 (defn- clip-icon []
   [:svg.ic {:viewBox "0 0 24 24" :aria-hidden true}
@@ -52,15 +53,30 @@
      [:button {:type "button" :title "Remove" :aria-label (str "Remove " file-name)
                :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]]))
 
+(defn- thumb-items
+  "The composer's photos as viewer items (a video's frames for a video): seen big, not saved (they
+  are the person's own files)."
+  [{:keys [url video images]}]
+  (if video
+    (mapv (fn [{:keys [media_type data]}] {:src (str "data:" media_type ";base64," data) :kind :image}) images)
+    [{:src url :kind :image}]))
+
+(defn- thumb [draft-key {:keys [id url video images]} on-open]
+  [:div.thumb
+   [:button.thumb-open {:type "button" :title "See it big" :on-click on-open} [:img {:src url :alt ""}]]
+   (when video [:span.thumb-video (str "▶ " (js/Math.round video) " s · " (count images) " frames")])
+   [:button.thumb-remove {:title "Remove" :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]])
+
+(defn- thumbs-view [draft-key media reading?]
+  (let [[big set-big] (h/use-state nil)]
+    [:div.thumbs
+     (for [m media]
+       ^{:key (:id m)} [thumb draft-key m #(set-big {:items (thumb-items m)})])
+     (when reading? [:div.thumb.reading {:aria-label "Reading the file…"}])
+     (when big [:f> viewer/viewer (assoc big :at 0 :on-close #(set-big nil))])]))
+
 (defn- thumbs [draft-key media reading?]
-  [:div.thumbs
-   (for [{:keys [id url video images]} media]
-     ^{:key id}
-     [:div.thumb
-      [:img {:src url :alt ""}]
-      (when video [:span.thumb-video (str "▶ " (js/Math.round video) " s · " (count images) " frames")])
-      [:button {:title "Remove" :on-click #(rf/dispatch [:ops/unattach draft-key id])} "×"]])
-   (when reading? [:div.thumb.reading {:aria-label "Reading the file…"}])])
+  [:f> thumbs-view draft-key media reading?])
 
 (defn chips
   "What the composer holds: files as chips (sent to the chat's server at once, the share sent as a
@@ -144,41 +160,63 @@
                     :on-error #(when (< @tries 6) (js/setTimeout (fn [] (swap! tries inc)) 1200))}
                    attrs)])))
 
+(defn- sent-items
+  "A message's n photos as viewer items, saved as photo-1, photo-2, …"
+  [src n]
+  (mapv (fn [i] {:src (src i) :kind :image :save true :name (str "photo-" (inc i))}) (range n)))
+
 (defn- sent-images-view [server chat msg-id n]
   (let [view @(rf/subscribe [:view])
-        [big set-big] (h/use-state nil)
+        [at set-at] (h/use-state nil)
         src #(ops/api-url server (str "chats/" chat "/sent/" msg-id "/" %) view)]
     [:div.sent-media
      (for [i (range n)]
        ^{:key i}
-       [:button.sent-thumb {:title "Photo" :on-click #(set-big (src i))} [retrying-img (src i) {}]])
-     (when big [:f> zoom/image-big big #(set-big nil)])]))
+       [:button.sent-thumb {:title "Photo" :on-click #(set-at i)} [retrying-img (src i) {}]])
+     (when at [:f> viewer/viewer {:items (sent-items src n) :at at :on-close #(set-at nil)}])]))
 
 (defn sent-images
-  "The photos (and video frames) a message sent, small; a click shows one big."
+  "The photos (and video frames) a message sent, small; a click shows them big."
   [server chat msg-id n]
   [:f> sent-images-view server chat msg-id n])
 
-(defn- shown-image-view [server chat step-id]
+(defn- shown-item
+  "What a show_image or show_video step showed, as a viewer item named after its file."
+  [src {:keys [video detail]}]
+  (let [file (pv/path-in detail)]
+    {:src src :kind (if video :video :image) :save true
+     :name (or file (if video "video" "image"))
+     :title (some-> file (.replace (js/RegExp. "^.*/") ""))}))
+
+(defn- shown-src [server chat tool view]
+  (ops/api-url server (str "chats/" chat "/shown/" (:id tool)) view))
+
+(defn- shown-image-view [server chat tool]
   (let [view @(rf/subscribe [:view])
-        [big set-big] (h/use-state nil)
-        src (ops/api-url server (str "chats/" chat "/shown/" step-id) view)]
+        [big set-big] (h/use-state false)
+        src (shown-src server chat tool view)]
     [:<>
-     [retrying-img src {:on-click #(set-big src)}]
-     (when big [:f> zoom/image-big big #(set-big nil)])]))
+     [retrying-img src {:on-click #(set-big true)}]
+     (when big [:f> viewer/viewer {:items [(shown-item src tool)] :on-close #(set-big false)}])]))
 
 (defn shown-image
-  "A picture Claude showed in the chat (show_image); a click shows it big."
-  [server chat step-id]
-  [:f> shown-image-view server chat step-id])
+  "A picture Claude showed in the chat (show_image, tool its step); a click shows it big."
+  [server chat tool]
+  [:f> shown-image-view server chat tool])
 
-(defn- shown-video-view [server chat step-id]
-  (let [view @(rf/subscribe [:view])]
-    [:video.shown-video {:src (ops/api-url server (str "chats/" chat "/shown/" step-id) view)
-                         :controls true :plays-inline true :preload "metadata"}]))
+(defn- shown-video-view [server chat tool]
+  (let [view @(rf/subscribe [:view])
+        [big set-big] (h/use-state false)
+        src (shown-src server chat tool view)]
+    [:<>
+     [:button.shown-video-tile {:type "button" :title "Play it big" :on-click #(set-big true)}
+      ;; #t: Safari draws the first frame only when asked for a time.
+      [:video {:src (str src "#t=0.1") :muted true :plays-inline true :preload "metadata" :aria-hidden true}]
+      [:span.shown-video-play {:aria-hidden true} "▶"]]
+     (when big [:f> viewer/viewer {:items [(shown-item src tool)] :on-close #(set-big false)}])]))
 
 (defn shown-video
-  "A video Claude showed in the chat (show_video), played in place; the player's own full screen
-  shows it big."
-  [server chat step-id]
-  [:f> shown-video-view server chat step-id])
+  "A video Claude showed in the chat (show_video, tool its step): its first frame; a click plays it
+  big."
+  [server chat tool]
+  [:f> shown-video-view server chat tool])
