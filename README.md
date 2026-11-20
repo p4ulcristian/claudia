@@ -1147,8 +1147,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     from the files and the SDK finds its binary by path), so the files stay instead. The host loads
     from a store beside the release, `<release>.sdk/<version>/node_modules` (`deploy/sdk-store.sh`,
     run by update.sh on single-user Linux and Mac and by the shared server's install.sh before the
-    runners restart): the release's node_modules as hard links (Linux), APFS clones (Mac) or a
-    copy. A version leaves the store only when it is not one of the three stored last and no
+    runners restart): the release's node_modules as hard links (`cp -al`, on Linux and on macOS
+    alike: a Mac's store copy had the release's inodes, 2026-11-20), else APFS clones, else a copy.
+    A version leaves the store only when it is not one of the three stored last and no
     process's command line names its folder (each session's Claude Code binary runs from there). A
     developer's checkout has no store: its own node_modules, which `npm ci` replaces under running
     sessions as before. Idle chats move: the host says each session's SDK version and the version a

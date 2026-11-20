@@ -8,8 +8,8 @@
 # there (claudia.slave.sdk-load), and keeps running on it while later releases come. A release's own
 # folder is deleted two updates later (<release>.old, /srv/claudia.old), so the SDK a session started
 # from must live elsewhere: here. <release>.sdk/<version>/node_modules is the release's node_modules
-# as hard links (Linux), APFS clones (macOS: cp -c) or a plain copy, so it costs no space where the
-# file system allows. With a node_modules folder (a channel tarball's, verified by deploy/update.sh),
+# as hard links (cp -al: Linux, and macOS, whose cp takes -l too), else APFS clones (cp -c), else a
+# plain copy, so it costs no space where the file system allows. With a node_modules folder (a channel tarball's, verified by deploy/update.sh),
 # that folder is moved in instead, under the version its Agent SDK package says; a new session takes
 # the newest stored version not marked broken (<release>.sdk/broken, one version per line), with no
 # restart. Then old versions go: the three stored last that are not marked stay, and any other one

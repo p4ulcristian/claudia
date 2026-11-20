@@ -160,8 +160,9 @@ from_release() {
 	fetch "https://github.com/$repo/releases/download/tree-$1" "$2" "$stage_identity" "$3"
 }
 
-# copy_deps <from> <to>: a folder copied as hard links (Linux), else as APFS clones (macOS: cp -c),
-# else as plain copies; a failed try leaves nothing behind for the next.
+# copy_deps <from> <to>: a folder copied as hard links (cp -al: Linux, and macOS, whose cp takes -l
+# too: seen 2026-11-20), else as APFS clones (cp -c), else as plain copies; a failed try leaves
+# nothing behind for the next.
 copy_deps() {
 	cp -al "$1" "$2" 2>/dev/null && return 0
 	rm -rf "$2"
