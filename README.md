@@ -1041,10 +1041,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     each a quarter of the left half; in place or to the right sends. Round the petals a ring
     (124 to 148 px from the mic's centre, all the way round) says move (2026-11-20, the user's call;
     before: an unseen flick past 130 px in the first half second of a hold): the finger reaching
-    the ring at any time while holding drops the clip and the mic follows the finger on a spring
+    the ring at any time while holding keeps the recording going (2026-11-20 later, the user's
+    call; before: the clip was dropped) and the mic follows the finger on a spring
     (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
     have some personality"): it trails the finger and overshoots a little, the ring lit round a blue
-    disc saying move. Let go, it glides there and stays, its slot in the rail a dashed ring. It may
+    disc saying move. Let go, the clip is heard and sent as when let go in place, and the mic
+    glides there and stays, its slot in the rail a dashed ring. It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
     let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the

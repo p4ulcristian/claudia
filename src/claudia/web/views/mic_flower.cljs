@@ -7,7 +7,7 @@
   letting go in place sends too. The petal the finger is over lights. On the tablet's rail (README
   decision 73) the flower is half (side :left): its petals and bars only to the left of the mic, top
   to bottom cancel, add, send, now. A mic that moves (:movable) has a ring round the petals, all the
-  way round, saying move: the finger in it drops the clip, and while the mic follows the finger the
+  way round, saying move: the finger in it keeps recording, and while the mic follows the finger the
   ring alone shows, lit, round a blue disc saying move."
   (:require [claudia.web.views.pure.mic :as pure]))
 
