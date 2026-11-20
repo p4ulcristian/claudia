@@ -56,3 +56,35 @@
   (fetch-json u {:method "POST" :headers {"content-type" (or (not-empty (.-type blob)) "application/octet-stream")
                                           "accept" "application/json"}
                  :body blob}))
+
+(defn share-of
+  "How far got bytes of total are, 0 to 99 (100 only once the whole body is in; a compressed body
+  can run past its content-length), or nil when the total is unknown."
+  [got total]
+  (when (pos? total) (min 99 (js/Math.floor (/ (* 100 got) total)))))
+
+(defn- read-body
+  "Promise of the response's body as a Blob of its type, on-share called with share-of as it comes."
+  [^js r on-share]
+  (let [total (js/Number (or (.get (.-headers r) "content-length") 0))
+        ^js reader (when (and (pos? total) (.-body r)) (.getReader (.-body r)))
+        kind #js {:type (or (.get (.-headers r) "content-type") "")}]
+    (if-not reader
+      (.blob r)
+      ((fn more [parts got]
+         (.then (.read reader)
+                (fn [^js piece]
+                  (if (.-done piece)
+                    (js/Blob. (into-array parts) kind)
+                    (let [got2 (+ got (.. piece -value -length))]
+                      (on-share (share-of got2 total))
+                      (more (conj parts (.-value piece)) got2))))))
+       [] 0))))
+
+(defn fetch-blob
+  "Promise of what u holds as a Blob (same origin: the login cookie goes along, as for an img's src);
+  on-share gets how far it is (share-of) while a big one comes. Rejects with the HTTP status."
+  [u on-share]
+  (.then (js/fetch u #js {:credentials "same-origin"})
+         (fn [^js r]
+           (if (.-ok r) (read-body r on-share) (throw (js/Error. (str "HTTP " (.-status r))))))))

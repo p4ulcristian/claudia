@@ -15,6 +15,18 @@
   --c-sunflower: #ffd23f; --c-olive: #9a9a3a; --c-kiwi: #9bd63a; --c-forest: #3f9e4d; --c-mint: #7fe0b2;
   --c-jade: #2fbf8a; --c-aqua: #5ce1f0; --c-sky: #6fc0ff; --c-ocean: #2f7fd8; --c-sapphire: #4a5cf0;
   --c-periwinkle: #8f9cff; --c-grape: #9b5de5; --c-plum: #b0478f; --c-magenta: #f15bb5; --c-bubblegum: #ff9ecd;
+  /* The gradient chat colours (claudia.shared.colours gradients; README decision 80): --c- is each one's
+     stand-in, halfway between its crayons (the theme is mixed from it), --g- its gradient (its circles). */
+  --c-berry: #ce3d70; --c-ember: #ff8800; --c-sunset: #ff6a6e; --c-citrus: #d4d425;
+  --c-meadow: #62cd6d; --c-lagoon: #20b3e8; --c-dusk: #ad57e5; --c-candy: #d299f1;
+  --g-berry: linear-gradient(135deg, var(--c-plum), var(--c-cherry));
+  --g-ember: linear-gradient(135deg, var(--c-cherry), var(--c-sunflower));
+  --g-sunset: linear-gradient(135deg, var(--c-tangerine), var(--c-magenta));
+  --g-citrus: linear-gradient(135deg, var(--c-sunflower), var(--c-kiwi));
+  --g-meadow: linear-gradient(135deg, var(--c-kiwi), var(--c-jade));
+  --g-lagoon: linear-gradient(135deg, var(--c-aqua), var(--c-ocean));
+  --g-dusk: linear-gradient(135deg, var(--c-sapphire), var(--c-magenta));
+  --g-candy: linear-gradient(135deg, var(--c-bubblegum), var(--c-periwinkle));
   /* Named colours the code forms use for files, lanes and namespaces (not chat colours). */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
@@ -40,6 +52,14 @@
   /* coloured chalk: the chat's hue, chalky */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
 }
+
+/* A gradient chat (README decision 80): the theme above, mixed from its stand-in colour, and the whole
+   window one gradient between its two crayons (--hue-a top left, --hue-b bottom right), each as dark as
+   a solid chat's background so the text keeps its contrast. The rail, the list and the picture are
+   see-through over it, as in Claudia's own chat. */
+:root[data-gradient] { --board: transparent; }
+:root[data-gradient] body { background: linear-gradient(135deg, color-mix(in oklch, var(--hue-a) 20%, #343434), color-mix(in oklch, var(--hue-b) 20%, #2a2a2a)); }
+:root[data-gradient] .rail, :root[data-gradient] .sidebar { background: color-mix(in srgb, var(--bg2) 55%, transparent); }
 
 /* Claudia's own chat (README decision 50): her own green theme, whatever colour her row has, and the
    whole window one gradient from deep green to near black, with a few faint columns of code falling
@@ -179,6 +199,8 @@ code, pre { font-family: var(--mono); }
 
 /* Chat colour: the palette, opened from row 3's colour button. */
 .palette { display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 2px; }
+/* The gradients start a row of their own, under a faint line (README decision 80). */
+.swatch-break { grid-column: 1 / -1; height: 0; border-top: 1px dashed var(--line); }
 .swatch { width: 26px; height: 26px; border-radius: 50%; }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
@@ -246,6 +268,10 @@ code, pre { font-family: var(--mono); }
 /* A message sent while Claude works, waiting below the chat until Claude takes it in. */
 .msg.user.queued { opacity: 0.6; }
 .queued-tag { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+.queued-row { display: inline-flex; align-items: center; gap: 2px; }
+/* Its ×: a 32 px target for a finger, the glyph small. */
+.unqueue { display: inline-grid; place-items: center; min-width: 32px; min-height: 32px; margin: -8px -8px -8px 0; font-size: 17px; line-height: 1; color: var(--muted); border-radius: 50%; }
+.unqueue:hover { color: var(--red); background: var(--panel); }
 .found-flash { animation: found-flash 1.8s ease-out; border-radius: 10px; }
 
 .md > :first-child { margin-top: 0; }
@@ -349,9 +375,9 @@ code, pre { font-family: var(--mono); }
 .talk-row > .input-row { flex: 1; min-width: 0; }
 .mic { flex: none; position: relative; }
 .mic-core { position: relative; width: 56px; height: 56px; }
-/* While the mic is held: the flower (views/mic_flower.cljs), 240 px round the button, over everything
+/* While the mic is held: the flower (views/mic_flower.cljs, its size set there), round the button, over everything
    near it so it shows past the finger; the button itself goes clear so the disc shows through. */
-.mic-flower { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; transform: translate(-50%, -50%); pointer-events: none; z-index: 30; }
+.mic-flower { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 30; }
 /* While the flower is open, the rail's chalk line (a masked layer painted over the flower) steps back. */
 body:has(.mic.starting, .mic.recording, .mic.moving) .rail::after { visibility: hidden; }
 /* Nor does a mouse's hover tip cover the petals while the mic is held. */
@@ -548,13 +574,13 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 /* Under the title, on the hub: the chat's server, its full name in a chalk badge; struck through while the server is off. */
   background: var(--bg2); --ring: var(--chalk-r6-15); --ink: var(--chalk); }
 .rail-tag { font: 700 10px/1 var(--sans); color: var(--chat, var(--muted)); letter-spacing: 0.02em; }
-.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat, var(--grey)); opacity: 0.8; }
+.rail-blank { width: 6px; height: 6px; border-radius: 50%; background: var(--chat-fill, var(--chat, var(--grey))); opacity: 0.8; }
 /* The chat's project: a small chalk tag at the circle's bottom right. */
 .project-tag { position: absolute; right: -12px; bottom: -7px; padding: 0 4px; font: 700 10.5px/15px var(--sans); color: var(--tag, var(--muted)); letter-spacing: 0.02em; isolation: isolate; pointer-events: none;
   border-radius: 8px; background: var(--bg2); --ring: var(--chalk-r8-15); --ink: color-mix(in srgb, var(--tag, var(--line)) 70%, transparent); }
 /* With a logo: the logo fills the circle. */
 .rail-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 5px; pointer-events: none; }
-.letter-tag { position: absolute; right: -7px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--chat, var(--grey)); box-shadow: 0 0 0 2px var(--bg2); font: 700 10.5px/1 var(--sans); color: var(--on-hue); pointer-events: none; }
+.letter-tag { position: absolute; right: -7px; bottom: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--chat-fill, var(--chat, var(--grey))); box-shadow: 0 0 0 2px var(--bg2); font: 700 10.5px/1 var(--sans); color: var(--on-hue); pointer-events: none; }
 /* Agents still working: small chalk moons around the chat's circle. */
 .moons { position: absolute; inset: 0; pointer-events: none; }
 /* A chalk dot with a ring of the rail's colour round it, 2px of room for its rough edge. */
@@ -597,6 +623,9 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .divider::before, .edge-line::before, .f-arrow::before { inset: -2px; }
 /* Without nine-slice masks (Firefox): plain outlines and lines, no chalk. */
 @supports not (-webkit-mask-box-image: none) { :root { --chalk-inset: 0; --chalk-edge: 1.5px; --chalk-fill: transparent; --chalk-clip: inset(2px); } }
+/* A chat's circle is chalked in what fills its colour: a gradient chat's gradient (--chat-fill,
+   README decision 80). Without the masks (Firefox) the plain outline keeps the one colour. */
+@supports (-webkit-mask-box-image: none) { .rail-dot::before { background: var(--chat-fill, var(--ink)); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
 .rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .rbar-chip, .act-pill {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
@@ -871,3 +900,51 @@ html.claudia-full-open, html.claudia-full-open body { overflow: hidden; }
 @keyframes speak-here { 50% { opacity: 0.55; } }
 @media (prefers-reduced-motion: reduce) { .speak-here { animation: none; } }
 
+
+/* ---------- The wide rail (README decision 81) ----------
+   Its right edge is dragged wider; past 170 px the circles become cards. Every row (a chat, a group,
+   the chat being started) is --rail-row-h tall on the narrow rail and on the cards, so no row moves up
+   or down when the rail switches. */
+.app { transition: grid-template-columns 0.2s ease-out; }
+.app.rail-resizing { transition: none; cursor: col-resize; -webkit-user-select: none; user-select: none; }
+.rail { --rail-row-h: 89px; }
+.rail-dots .rail-chat { height: var(--rail-row-h); box-sizing: border-box; touch-action: pan-y; }
+body.chat-dragging .rail-chat { touch-action: none; }
+.rail-edge { position: absolute; top: var(--top-safe); bottom: env(safe-area-inset-bottom); right: -8px; width: 16px; z-index: 4; cursor: col-resize; touch-action: none; }
+@media (pointer: coarse) { .rail-edge { right: -12px; width: 24px; } }
+.rail-edge::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - 2px); width: 4px; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity 0.15s; }
+@media (hover: hover) { .rail-edge:hover::after { opacity: 0.6; } }
+.app.rail-resizing .rail-edge::after { opacity: 0.9; }
+/* The cards: the circle on the left, at the row's middle; four lines beside it. */
+.rail.cards .rail-dots { align-items: stretch; }
+/* .rail, not .rail-dots: the dragged copy sits in the rail and keeps the card's look. */
+.rail.cards .rail-chat { flex-direction: row; align-items: center; gap: 10px; padding: 0 10px 0 12px; margin: 0 6px; border-radius: 14px; text-align: left; }
+.rail.cards .rail-group-wrap > .rail-group { width: calc(100% - 12px); }
+/* The stack as wide as a circle, so a group's card lines up with the chats' cards. */
+.rail.cards .rail-group .rail-stack { zoom: 1.25; }
+.rail.cards .rail-chat.on { background: color-mix(in srgb, var(--chat, var(--grey)) 13%, transparent); }
+@media (hover: hover) { .rail.cards .rail-chat:not(.on):hover { background: color-mix(in srgb, var(--chat, var(--grey)) 7%, transparent); } }
+.rail.cards .rail-check { top: calc(50% - 21px); left: 12px; margin-left: 0; }
+.rail.cards .rail-chat.passive.first::before { left: 12px; right: 12px; }
+.rail-card { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+.rail-card > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-title { font: 650 13.5px/1.25 var(--sans); color: var(--fg); }
+.rc-meta, .rc-line, .rc-foot { font: 500 11.5px/1.3 var(--sans); color: var(--muted); }
+.rc-line { color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.rc-line:is(.working, .agents) { color: var(--green); }
+.rc-line.waiting { color: var(--amber); }
+.rc-foot { display: flex; gap: 7px; align-items: baseline; }
+.rc-state { font-weight: 700; }
+.rc-state.is-running { color: var(--green); }
+.rc-state.is-waiting { color: var(--amber); }
+.rc-state.is-failed { color: var(--red); }
+.rc-state.is-done.unseen { color: var(--fg); }
+.rc-when { font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.rail-dots:has(.rail-chat.on) .rail-chat:not(.on) .rail-card { opacity: 0.8; }
+/* The server's mark (with more than one server): bottom right of the circle, light on the rail's
+   dark, ringed in the chat's colour, so it reads on every chat colour; the root # moves to the left. */
+.server-badge { position: absolute; right: -6px; bottom: -4px; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; z-index: 3;
+  display: grid; place-items: center; border-radius: 7px; font: 700 9px/1 var(--sans); letter-spacing: 0; color: var(--fg);
+  background: var(--bg2); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--chat, var(--line)) 80%, var(--bg2)); pointer-events: none; }
+.rail-dot:has(> .server-badge) > .root-badge { right: auto; left: -7px; }
+.group-card .server-badge { zoom: 1.25; }

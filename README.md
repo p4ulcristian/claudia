@@ -34,6 +34,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
    (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
+   An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
+   background shell running after the subagent finished, so one that outlives its agent is a chip of
+   its own (2026-11-20: a finished fork hid its running shell while the rail said "1 agent"). The
+   chips, the list and the rail's count and clock read the same rows (`claudia.slave.tasks/tops`).
 
 9. The code is small pure functions (2026-11-03, after a local `keep` shadowing `clojure.core/keep`
    crashed the hub on every start): data in, data out, at most 30 lines each, effects at the edges,
@@ -195,11 +199,13 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it cannot start before the press), or the microphone open whenever the composer shows.
     The flower (2026-11-16, after the 56 px button vanished under the finger and two voice
     messages went out swapped): held, the mic opens a 240 px flower round itself, always centred on
-    the mic (320 px until 2026-11-17: on the iPad's edge it ran off the screen): a 72 px disc,
+    the mic (320 px until 2026-11-17: on the iPad's edge it ran off the screen; a 300 px canvas
+    since 2026-11-20 so the move ring of decision 73 fits): a 72 px disc,
     amber while waking and red while recording, the time spoken in it; round the disc the 48 bars
     that follow the voice (back 2026-11-16: the bars, not a breathing disc, show the voice). Four
-    petals open outside the bars: left sends, up throws the clip away, right adds the words to the message,
-    down sends now (the running turn stops first, 2026-11-17); letting go in place sends too. Each clip let go waits in a list over
+    petals open outside the bars: up sends, right throws the clip away, down sends now (the running
+    turn stops first, 2026-11-17), left adds the words to the message; letting go in place sends
+    too (2026-11-20, the user's call; before: left sent, up threw away, right added). Each clip let go waits in a list over
     the composer with its own hearing clock, and the words go out in the order they were spoken
     (a 15 s clip takes longer to hear than a 4 s one after it). The mic can be held again meanwhile.
     Files: `src/claudia/web/views/mic_flower.cljs`.
@@ -356,6 +362,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     cherry). The page picks a new chat's colour once its server's list is here, not before. A runner moves its chats over on start: each old
     colour becomes its crayon (red→cherry, teal→mint, pink→bubblegum, …; an ash chat's remembered
     colour too). The old names stay as CSS variables only for the code forms' own lanes and files.
+    The gradients beside the box: decision 80.
     Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,
     picked at random. Files: `src/claudia/shared/colours.cljc`, `resources/web/css/claudia.css`.
 
@@ -493,7 +500,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     with its name (double-click renames), how many chats, and a + that starts a chat in it with the
     group's picks (the last ones a chat in it started with); that chat goes on top of the group. On
     the rail a group is a stack of its chats' colours; pressed, a chooser card opens beside the rail
-    with each chat's full title and the +. The order is kept on the hub per person (`GET`/`PUT
+    with each chat's full title and the +. Since decision 81 the rail drags the same way. The order
+    is kept on the hub per person (`GET`/`PUT
     /hub/chat-order`, the whole list each time, `claudia.shared.order`), so every device shows the
     same; a page asks again every 20 s and when it comes back to the front. Searching, a project chip
     and the archived list show the chats found as before; another person's chats (a view) keep the
@@ -1030,18 +1038,23 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     opening to the left holds Settings, so the rail has no cog) and the version's line ("so the
     chats have more place"). A desktop keeps them at the chats' rail's foot. Held on the rail, the flower is half: its petals and the
     voice's bars only to the left, still centred on the mic, top to bottom cancel, add, send, now,
-    each a quarter of the left half; in place or to the right sends. Dragged past the petals (130
-    px from the press), the clip is dropped and the mic follows the finger on a spring (`motion`'s
-    useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would have some
-    personality"): it trails the finger and overshoots a little, a blue disc saying move. Only in
-    the first half second of a hold ("make this half a second"): later the hold is talk and a drag
-    only picks a petal. Let go,
-    it glides there and stays, its slot in the rail a dashed ring; only let go on the rail itself or
-    within 40 px of the slot does it glide home ("it jumps too easy back on its place"). It may sit
-    anywhere 124 px from the walls and the rail, and out of the rail its flower is whole, four ways
-    ("when it's not in sidebar, it should already be in flower with the four sides").
+    each a quarter of the left half; in place or to the right sends. Round the petals a ring
+    (124 to 148 px from the mic's centre, all the way round) says move (2026-11-20, the user's call;
+    before: an unseen flick past 130 px in the first half second of a hold): the finger reaching
+    the ring at any time while holding drops the clip and the mic follows the finger on a spring
+    (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
+    have some personality"): it trails the finger and overshoots a little, the ring lit round a blue
+    disc saying move. Let go, it glides there and stays, its slot in the rail a dashed ring. It may
+    sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
+    from the walls and the rail so the whole flower fitted). It glides home only when the button
+    let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the
+    slot or anywhere on the rail, and "it jumps too easy back on its place" before that). Out of
+    the rail its flower is whole, four ways ("when it's not in sidebar, it should already be in
+    flower with the four sides"); on the rail, half. Near an edge the flower stays centred on the
+    mic and is cut off by the screen: a petal or part of the ring past the edge cannot be reached,
+    letting go in place still sends, and the mic can be moved away through the ring's other side.
     Its spot is kept on the device (localStorage, as fractions of the screen, clamped again when
-    the screen turns). The phone keeps its mic in the bottom middle with the whole flower and no
+    the screen turns so the button stays on it). The phone keeps its mic in the bottom middle with the whole flower and no
     move. Instead of: the 3x3 grid floating 18 px from
     the edge over the page, the mic 128 px in so the whole flower fitted.
 74. A new chat starts in the last chat's place, and the File Browser has no folder section
@@ -1133,6 +1146,166 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
+80. Gradient chat colours beside the solid ones (2026-11-20, the user's call: "next to the solid
+    colours, add gradient colours too, for extra"). Eight gradients, each between two crayons of the
+    box (decision 26), top left to bottom right: berry (plum→cherry), ember (cherry→sunflower),
+    sunset (tangerine→magenta), citrus (sunflower→kiwi), meadow (kiwi→jade), lagoon (aqua→ocean),
+    dusk (sapphire→magenta), candy (bubblegum→periwinkle); picked so their middles are at least 0.1
+    apart in OKLab (the closest, ember and sunset, 0.114). A gradient chat's window background runs between its two crayons, each as dark as a
+    solid chat's background, with the rail, the list and the picture see-through over it (as in
+    Claudia's own chat, decision 50). Its circle (rail, list, group stack, swatch, header dot) is
+    chalked in the gradient (`--g-<name>`). The theme (chalk, accent, text, panels, lines) is mixed
+    from one stand-in colour, the gradient's middle in OKLCH (`--c-<name>`), the same way a solid
+    colour mixes it, so text keeps a solid chat's contrast; the stand-in also paints the robot in
+    the world and the tints. The bell rings its first crayon's note. Both palettes (the header's
+    colour button, the chat menu) show the 20 solids (and ash), then the gradients on rows of their
+    own. A chat's colour is still one name, so old rows stay valid and every server's
+    `chat-colour?` (the runner's PATCH, a new chat's picked colour, the crayon-box move on start)
+    takes the new names; the hub passes colours through untouched. A new chat (and a fork, a woken
+    chat without a remembered colour) still gets a solid colour only: `most-different` scores
+    colours by OKLab distance between single colours, and a gradient is picked by hand, like ash.
+    A gradient chat counts as wearing both its crayons, so a new chat after it never takes either.
+    Instead of: gradients in the random pick (two-colour distance has no meaning in the box's
+    measure), or a gradient theme mixed from both hues per surface (text over a changing tint).
+    Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/views/pure/words.cljs`,
+    `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
+
+81. The rail widens into cards, shows each chat's server, and orders and groups by dragging
+    (2026-11-20, the user's call: the server only in the hover text never shows on a touch screen;
+    "rows must not move vertically when switching"; drag-to-group on the rail as in the list). Three
+    parts:
+    - The server's mark: with more than one server, every circle on the rail (and every chat in a
+      group's chooser card) carries its server's short mark at its bottom right, light on the rail's
+      dark and ringed in the chat's colour, so it reads on every chat colour; a chat's root # moves
+      to the circle's bottom left. A mark is the label's first letter, else its words' initials,
+      else its first two to four letters, unique among the person's servers (Smoke and Second: Sm,
+      Se); the list's and the header's server marks use the same ones
+      (`claudia.web.views.pure.rail/server-marks`).
+    - Wide rail with cards: the rail's right edge is dragged wider (a mouse or a finger) and the rail
+      follows. From 170 px on, each circle becomes a card: the circle at the left, beside it the
+      title on one line; the server (with more than one), the project or folder and the model; the
+      last reply's line or what it works on; its state in words (running, waiting for answer, done,
+      failed, stopped, new) with the running clock or how long ago. Let go, the rail snaps to the
+      circles (88 px, under 170) or the nearest card width (260 or 340 px) that leaves the page 600
+      px; the width is kept on the device (localStorage) and a window too small for it shows the
+      widest that fits. Every row (a chat, a group, the chat being started) is the same height
+      (`--rail-row-h`) on the circles and on the cards, so no row moves up or down when the rail
+      switches. A group is a card too: its stack, its name, how many chats, their titles, its most
+      pressing state; on the circles its line under the name says how many ask, else how many run,
+      else how many chats. The runner's rows name the model (`model`, PROTOCOL.md): the one picked
+      for the chat, else the one its session runs with, else the server's default.
+    - Dragging on the rail: the list's dragging (decision 38, `claudia.web.views.chat-drag`) works
+      on the rail's circles and cards and on the chats of a group's chooser card: the upper or lower
+      third of a chat places before or after it, its middle makes a group, a group's stack takes it
+      into the group (its edges: before or after the group), a chat in a group's card goes before or
+      after it in that group (never a group in a group: the list's own middle drop on a grouped chat
+      used to put it in two groups). Dragged with a mouse and let go outside the rail (over the page
+      or outside the window), the chat tears out into a window of its own, as before (the copy under
+      the pointer says New window); a finger never tears out (a tablet shows one window). The tear
+      opens the window in the drag's own pointer events instead of the browser's drag and drop, so
+      one drag does both; a blocked popup leaves the chat where it was.
+    Instead of: the server only in the hover text, a fixed 88 px rail, and a rail drag that could
+    only tear out. Files: `src/claudia/web/views/pure/rail.cljs`, `src/claudia/web/views/rail.cljs`,
+    `src/claudia/web/views/rail_card.cljs`, `src/claudia/web/views/rail_width.cljs`,
+    `src/claudia/web/views/rail_group.cljs`, `src/claudia/web/views/chat_drag.cljs`,
+    `src/claudia/web/views/tearoff.cljs`, `src/claudia/slave/chats.cljs`,
+    `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
+
+82. A chat moves to another server (2026-11-20, the user's design). The chat menu's Move to
+    server… (only on the person's own chats, not on a view or a write tick, not on Claudia's own
+    chat, and only with another server where they have a profile) opens the confirm card: the
+    server it goes to, the folder there (the chat's folder from the home folder, `~/…`, so it lands
+    in the same place by default; empty: that server's work folder), and what stays: the working
+    folder's files, running helpers and background work. The hub (`POST /hub/chat-move`,
+    `claudia.hub.move`) drives both runners through their fronts as the person, over the hub's own
+    channel (no new port): the target says the folder is there; the source holds the chat (its
+    Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
+    source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
+    talk and bell), its settings, context, last turn and agents' list, its pictures and file
+    changes, and Claude Code's session file with everything under `<id>/` (subagents, tool
+    results), placed in the target runner's own project folder (its working folder's slug). The
+    target reads its copy back and the hub checks it against the source: the same number of
+    messages, the same last message, every file's size and SHA-256, as many pictures and file
+    changes. Only then does the target take the chat in and the source archive its own, marked as
+    moved (never deleted; a move back replaces that copy unless it was written to since), with its
+    root switch turned off: the switch is the source front's, and a moved chat starts with root off
+    and a new chat key. Any failure stops the move: the target drops its copy, the source keeps the
+    chat, and the card shows why. A chat that works (a turn, agents or background shells) or waits
+    on a question is refused, never stopped: stopping would end work the person did not ask to end.
+    Claude hears of the move with the next message: "This chat moved from the server A to the server
+    B. Its folder is now X on B … Paths and files in the earlier history are A's: the working
+    folder's files, running helpers and background work stayed on A." (moved away and back before
+    it heard of it: only where it works now). Unlike a folder move's reminder, the chat shows these
+    exact words: as a note at the end of the chat until the next message, then as a note right
+    before that message (`<claudia-moved>` in the message Claude gets, read back from the session
+    file). Uploads, 3D videos and agents' shell output stay on the source too. Instead of: a new
+    chat on the target with a summary (Claude would lose the conversation), copying by SSH between
+    the servers (the agent users' certificates are Claude's, not the person's, and would open a
+    path between servers), the hub keeping the copy (the gate's memory), or a hidden reminder (the
+    person could not see what Claude was told).
+
+83. Queued messages: shown once, taken back with ×, sent with now (2026-11-20, the user's call:
+    "sending with now sends all queued messages now, together with the new one, in order").
+    Merged: Claude Code takes messages queued during a turn in together as ONE user entry, their
+    texts joined by line breaks, its uuid the last send's and `mergedSendUuids` the earlier ones'
+    (Claude Code 2.1.326). The runner counts every id an entry stands for as in the session file,
+    so those sends leave the sent-but-unsaved list (they stayed there and were shown again at the
+    chat's end on every load), and the page shows the entry once with each send's voice
+    (`Msg.merged`, PROTOCOL.md). Take back: a queued message has a × beside its tag (not for a
+    read-only viewer); the runner asks Claude Code to drop it (the Agent SDK's
+    `cancel_async_message` control request, `Query.cancelAsyncMessage` in the session host), and
+    it leaves the chat when Claude Code says it dropped it. One Claude Code has taken in already
+    stays (the × goes when it shows as taken in); one not in Claude Code's queue yet (still on its
+    way) is dropped once Claude Code reports it queued. The session host learns the call only
+    when it restarts (hosts never restart in an update): until then the × answers that the host
+    needs a restart. Now: a message sent with now goes into Claude Code's queue behind the
+    messages queued before it; once Claude Code reports it queued and the running turn has begun
+    (its init, or Claude writing), the runner stops the turn with a plain interrupt, and Claude
+    Code runs every message still queued in the next turn, in order, as one (the interrupt's
+    `still_queued`). If the running turn takes the message in before the stop (between two tool
+    calls), the turn is not stopped: it is answering it. While helpers run, now is a plain send
+    (a stop would stop them too, decision of 2026-11-17): it queues behind the others and Claude
+    Code takes them all in together at its next step. Archiving a running chat stops it with
+    `cancel_queued` (the messages queued, a now message among them, are dropped and leave the
+    chat), so nothing it queued runs after the archive. A message Claude Code drops for good
+    (`command_lifecycle` cancelled, discarded or refused while queued) leaves the chat. What is
+    not covered: a stop that crosses a running turn taking the now message in at that moment
+    leaves that message seen by Claude but unanswered (Claude Code's own fix for it,
+    `requeue_if_interrupted_within_ms`, is internal). Instead of: holding queued messages in
+    Claudia until Claude Code is about to take them (Claude Code takes messages in between tool
+    calls, which Claudia cannot see coming; the SDK's own removal makes holding unneeded); stopping
+    the turn first and sending the now message after its end (the queued ones ran first in a turn
+    of their own and the now message queued behind it, as before); stopping with `cancel_queued`
+    and sending everything again (Claude Code skips a user message whose uuid it has seen, and new
+    ids would lose each message's voice and images).
+
+84. One media viewer for every photo and video, with Save that works on an iPad (2026-11-20, the
+    user's call: "fix image previews and video previews, so I can download them on my iPad, they
+    show up nice on iPad, with an X, centred and zoomable"). A message's photos, a photo or video
+    Claude showed, the composer's photos (a video's frames), the files form's and the Folders
+    preview's images and the 3D scene's video all open in `claudia.web.views.viewer`: over the
+    whole window (put in the body, or the element in full screen), dark backdrop, the item centred
+    and fitted inside the safe areas, a bar on top (title, 2 / 5, Save, a 48 px ×; its left edge
+    clear of the iPad window buttons). A photo pinches, double-taps, wheel- and trackpad-zooms
+    (Safari's gesture events too), pans while zoomed and never leaves the stage (zoom 1 to 8x); one
+    finger on an unzoomed photo swipes to the next or previous one (also the on-screen arrows and
+    the arrow keys) or drags down to close. A video plays inline with the player's own controls,
+    no zoom (it would fight the controls); in the chat it shows as its first frame with a play
+    button. It closes on ×, Esc, a tap beside the item and back: opening adds a history entry at
+    the same address (`claudia.web.back`), so the back button or iOS's edge swipe closes it and
+    never leaves the chat; every popstate listener asks `back/took-pop?` first. Save fetches the
+    file as the img or video does (same address, the login cookie) and, on an iPhone or iPad
+    (Safari, the home-screen web app and the iPhone app's web view alike, which show or take no
+    downloads), hands it to the share sheet (`navigator.share({files})`: Save Image or Save Video
+    to Photos, Save to Files); elsewhere it downloads. The share sheet opens only right after a
+    tap, so a photo is fetched as soon as it shows and the tap hands it over at once; a video is
+    fetched on the first tap with its progress on the button, and if iOS finds that tap too long
+    ago the button says to tap again. Files are named after the shown file (its path's last part),
+    photo-1, photo-2 for a message's photos, the scene's title for its video, with the extension of
+    the type the server sent. Instead of: `<a download>` (does nothing in a home-screen web app or
+    in the app's web view), a zoom-only image overlay and the video playing only in place, and the
+    3D scene's own player.
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)
@@ -1192,7 +1365,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 ## The 3D scene, the phone and alerts (2026-11-03, ported from the TypeScript Claudia's decisions 26 and 29)
 
-- The scene3d form: parts (box, sphere, cylinder, cone, pyramid, torus, capsule, plane, ring, extrude, lathe, tube, rod, group, person) in a three.js view the person turns, zooms and pans; arrows (flowing dashes), labels, a legend, a click on a part opens its facts with Explain (asks Claude in the chat). Diagram look by default (flat colour bands, chalk outlines), a realistic one with materials and shadows. Labels are callouts, as in an atlas: never on the model, in a column on each side of it (clear of the legend, the subtitles and the bar), each with a thin line to a dot on its part; a label whose dot is hidden behind something solid is not shown, and one that does not fit is left out. Without a story every label shows; in a story, the step's focus, else what the step brings in, else (an overview step) every label, and always the part under the pointer. A story steps through it (show, hide, focus, camera, poses) with subtitles and, once turned on, a narrator voice from the hub (`/hub/narrate`, `HUB_TTS_URL`), in the story's `language` (an ISO 639 code: the voice service gets it, and a described `voice` is cloned from a reference clip spoken in that language, so Hungarian lines get a Hungarian accent; a language the hub has no reference sentence in is spoken by the service's default voice). A `script` runs in QuickJS (WebAssembly; no window, no network) for parts made by code and motion every frame; solid parts that pass through each other glow red and are counted. The film button in the bar makes the story's video in the background (the page may close at once): the page sends the scene as shown to the hub (`POST /hub/videos`), the hub hands it to the person's runner and, when it has a voice, says the lines and brings the clips (always: the page's voice switch is for listening now); the runner's own headless page plays the story on a stepped clock (every frame 1/30 s after the last, however slow drawing is), paints each frame with its labels, legend and subtitles, and ffmpeg makes them an H.264 MP4 with the voice as AAC, kept with the chat (`RUNNER_DATA/videos`). The bar shows how far it is, then a button that plays it over the page with Download (a web-app window shows no downloads of its own; the file is named after the scene), on any device and after a reload, and a desktop popup when popups are on. A scene without a story gets 15 s. Needs ffmpeg on the server (`CLAUDIA_FFMPEG`, else `ffmpeg` on the PATH). Real human anatomy: a part `{shape: "anatomy", ref, side?, system?}` becomes the structures it names (bones, muscles, nerves, ligaments, muscles' origin and insertion patches; by English or Latin name, id, region, compartment or nerve territory), each loaded as its own small model from [claudia-anatomy](https://github.com/p4ulcristian/claudia-anatomy) (Z-Anatomy, CC BY-SA 4.0); the hub (`/anatomy/<version>/…`, kept in `HUB_DATA/anatomy`) and the runner's render page (kept in `~/.cache/claudia/anatomy`) fetch each file once from the pinned version (`claudia.shared.anatomy`). One 3D scene per picture. It stays a general tool: small generic primitives, nothing topic-specific. three.js, QuickJS and the view are their own module (`out/web/js/scene3d.js`), loaded on first use. Files: `src/claudia/web/scene3d/` (engine, view, person, poses, story, ink, overlap, vm, voice, clock, maker, frames, paint, videos, icons, callouts, anatomy; pure maths, data, labels, bar, video, structures), `src/claudia/slave/video.cljs`, `src/claudia/hub/videos.cljs`, `src/claudia/hub/narrate.cljs`.
+- The scene3d form: parts (box, sphere, cylinder, cone, pyramid, torus, capsule, plane, ring, extrude, lathe, tube, rod, group, person) in a three.js view the person turns, zooms and pans; arrows (flowing dashes), labels, a legend, a click on a part opens its facts with Explain (asks Claude in the chat). Diagram look by default (flat colour bands, chalk outlines), a realistic one with materials and shadows. Labels are callouts, as in an atlas: never on the model, in a column on each side of it (clear of the legend, the subtitles and the bar), each with a thin line to a dot on its part; a label whose dot is hidden behind something solid is not shown, and one that does not fit is left out. Without a story every label shows; in a story, the step's focus, else what the step brings in, else (an overview step) every label, and always the part under the pointer. A story steps through it (show, hide, focus, camera, poses) with subtitles and, once turned on, a narrator voice from the hub (`/hub/narrate`, `HUB_TTS_URL`), in the story's `language` (an ISO 639 code: the voice service gets it, and a described `voice` is cloned from a reference clip spoken in that language, so Hungarian lines get a Hungarian accent; a language the hub has no reference sentence in is spoken by the service's default voice). A `script` runs in QuickJS (WebAssembly; no window, no network) for parts made by code and motion every frame; solid parts that pass through each other glow red and are counted. The film button in the bar makes the story's video in the background (the page may close at once): the page sends the scene as shown to the hub (`POST /hub/videos`), the hub hands it to the person's runner and, when it has a voice, says the lines and brings the clips (always: the page's voice switch is for listening now); the runner's own headless page plays the story on a stepped clock (every frame 1/30 s after the last, however slow drawing is), paints each frame with its labels, legend and subtitles, and ffmpeg makes them an H.264 MP4 with the voice as AAC, kept with the chat (`RUNNER_DATA/videos`). The bar shows how far it is, then a button that plays it in the media viewer with Save (decision 84: the share sheet on an iPhone or iPad, a download elsewhere; the file is named after the scene), on any device and after a reload, and a desktop popup when popups are on. A scene without a story gets 15 s. Needs ffmpeg on the server (`CLAUDIA_FFMPEG`, else `ffmpeg` on the PATH). Real human anatomy: a part `{shape: "anatomy", ref, side?, system?}` becomes the structures it names (bones, muscles, nerves, ligaments, muscles' origin and insertion patches; by English or Latin name, id, region, compartment or nerve territory), each loaded as its own small model from [claudia-anatomy](https://github.com/p4ulcristian/claudia-anatomy) (Z-Anatomy, CC BY-SA 4.0); the hub (`/anatomy/<version>/…`, kept in `HUB_DATA/anatomy`) and the runner's render page (kept in `~/.cache/claudia/anatomy`) fetch each file once from the pinned version (`claudia.shared.anatomy`). One 3D scene per picture. It stays a general tool: small generic primitives, nothing topic-specific. three.js, QuickJS and the view are their own module (`out/web/js/scene3d.js`), loaded on first use. Files: `src/claudia/web/scene3d/` (engine, view, person, poses, story, ink, overlap, vm, voice, clock, maker, frames, paint, videos, icons, callouts, anatomy; pure maths, data, labels, bar, video, structures), `src/claudia/slave/video.cljs`, `src/claudia/hub/videos.cljs`, `src/claudia/hub/narrate.cljs`.
 - People: a `person` part is a rigged CC0 MakeHuman body (`resources/web/person/person.glb`, about 400 KB, made by the TypeScript Claudia's `tools/person/make-person.py`), posed live: named poses measured from the body (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit, sit_floor, kneel, squat, bend, lie) and any target overridden; arms and legs are exact two-bone chains, hands, feet and the gaze can target a part; parts can ride on a joint (`parent: "anna.handR"`).
 - Phone: the list, the chat and the picture are screens, each sliding over the one before; sideways swipes follow the finger (`src/claudia/web/swipe.cljs`): on the chat right goes to the list and left pulls the picture in, on the list left brings the open chat back, on the picture and on Settings right goes back; past 40% or flicked it completes, else springs back; never in fields, on what scrolls sideways itself (code, tables, graphs, the 3D view), with two fingers or on a mostly vertical move. A Home Screen web app (`resources/web/app-icon/`: manifest and icons; standalone safe areas, 100lvh).
 - The chalk hover tip (a clipped chat title, or any `data-tip`), the logo mark in Settings and the favicon.

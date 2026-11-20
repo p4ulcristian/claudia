@@ -2,6 +2,7 @@
   (:require [re-frame.core :as rf]
             [claudia.web.events :as events]
             [claudia.web.views.pure.dictated :as dictated]
+            [claudia.web.views.pure.rail :as rail-pure]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.pure.switches :as switches]))
 
@@ -52,6 +53,17 @@
  :<- [:me]
  (fn [me [_ server]]
    (or (:label (first (filter #(= server (:name %)) (concat (:servers me) (:viewServers me))))) server)))
+
+(rf/reg-sub
+ :server-marks
+ ;; Every server's short mark, unique among them (README decision 81).
+ :<- [:all-server-list]
+ (fn [servers] (rail-pure/server-marks servers)))
+
+(rf/reg-sub
+ :server-mark
+ :<- [:server-marks]
+ (fn [marks [_ server]] (get marks server "?")))
 
 (rf/reg-sub :archived-mode? (fn [db] (boolean (:archived? db))))
 (rf/reg-sub :hidden-server-set (fn [db] (set (:hidden-servers db))))

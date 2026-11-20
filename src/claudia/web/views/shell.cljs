@@ -14,6 +14,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.rail :as rail]
+            [claudia.web.views.rail-width :as rail-width]
             [claudia.web.views.picture :as picture]
             [claudia.web.views.pure.shell :as pure]
             [claudia.web.views.sidebar :as sidebar]
@@ -23,18 +24,14 @@
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
-  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\"); Claudia's own
-  chat wears her green gradient instead (\":root[data-claudia]\", README decision 50)."
+  "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\", a gradient's
+  \":root[data-gradient]\"); Claudia's own chat wears her green gradient instead
+  (\":root[data-claudia]\", README decision 50)."
   [color claudia?]
   (h/use-effect
    (fn []
-     (let [root js/document.documentElement
-           v (sidebar/chat-color-var color)]
-       (if v
-         (do (.setAttribute root "data-chat" color)
-             (.setProperty (.-style root) "--hue" v))
-         (do (.removeAttribute root "data-chat")
-             (.removeProperty (.-style root) "--hue")))
+     (let [root js/document.documentElement]
+       (sidebar/tint-window! color)
        (if claudia? (.setAttribute root "data-claudia" "") (.removeAttribute root "data-claudia")))
      nil)
    [color claudia?]))
@@ -121,13 +118,16 @@
       [:f> rail/rail])]
    (split-view m)])
 
-(defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia?] :as m}]
+(defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia? phone?] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar")
-                     (when narrow? "narrow") (when ro "read-only")]
+                     (when narrow? "narrow") (when ro "read-only") (when (rail-width/resizing?) "rail-resizing")]
+             ;; The rail's width, dragged and kept per device (README decision 81); a phone has no rail.
+             :style (when-not phone? {"--rail-w" (str (rail-width/width) "px")})
              :data-screen (name screen)}
    (when claudia? [:f> claudia-rain/rain])
    [confirm/archive-ask]
    [confirm/root-ask]
+   [confirm/move-ask]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})

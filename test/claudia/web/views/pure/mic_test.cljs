@@ -33,18 +33,20 @@
   (is (= [0.6 0.8] (mic/eased [0 1] [1 0])))
   (is (= [0.6] (mic/eased nil [1]))))
 
-(deftest a-drag-right-adds-anything-else-sends
-  (is (= :send (mic/gesture 0 0)))
-  (is (= :send (mic/gesture -120 0)) "dragged left")
-  (is (= :now (mic/gesture 0 80)) "dragged down: send now")
+(deftest petals-up-send-right-cancel-down-now-left-add
+  (is (= :send (mic/gesture 0 0)) "let go in place")
+  (is (= :send (mic/gesture 0 (- mic/drag-px))) "up")
+  (is (= :send (mic/gesture 30 -90)) "more up than right")
+  (is (= :send (mic/gesture 0 (- 1 mic/drag-px))) "not far enough up: still in place")
+  (is (= :cancel (mic/gesture mic/drag-px 0)) "right")
+  (is (= :cancel (mic/gesture 200 -60)) "more right than up")
+  (is (= :send (mic/gesture (dec mic/drag-px) 0)) "not far enough right")
+  (is (= :now (mic/gesture 0 80)) "down")
+  (is (= :now (mic/gesture -30 90)) "more down than left")
   (is (= :send (mic/gesture 0 (dec mic/drag-px))) "not far enough down")
-  (is (= :add (mic/gesture 90 60)) "more right than down")
-  (is (= :send (mic/gesture (dec mic/drag-px) 0)))
-  (is (= :add (mic/gesture mic/drag-px 0)))
-  (is (= :add (mic/gesture 200 -60)) "more right than up")
-  (is (= :cancel (mic/gesture 0 (- mic/drag-px))))
-  (is (= :cancel (mic/gesture 30 -90)) "more up than right")
-  (is (= :send (mic/gesture 0 (- 1 mic/drag-px))) "not far enough up"))
+  (is (= :add (mic/gesture (- mic/drag-px) 0)) "left")
+  (is (= :add (mic/gesture -90 60)) "more left than down")
+  (is (= :send (mic/gesture (- 1 mic/drag-px) 0)) "not far enough left"))
 
 (deftest the-half-flower-reads-the-left-half
   (is (= :send (mic/half-gesture 0 0)) "in place")
@@ -56,20 +58,38 @@
   (is (= :now (mic/half-gesture -30 80)) "down, a little left")
   (is (= :send (mic/half-gesture -30 0)) "not far enough"))
 
-(deftest the-mic-moves-past-the-petals
-  (is (not (mic/moving? 100 0 300)))
-  (is (mic/moving? -100 -100 300))
-  (is (not (mic/moving? -100 -100 600)) "after half a second of talk a drag only picks a petal")
-  (is (= {:x 124 :y 696} (mic/clamp-spot {:x 10 :y 900} 1180 820 88)) "the whole flower's room from the walls")
-  (is (= {:x 968 :y 400} (mic/clamp-spot {:x 1100 :y 400} 1180 820 88)) "and from the rail")
-  (is (mic/home? {:x 1100 :y 100} {:x 1136 :y 410} 1180 88) "let go on the rail")
-  (is (mic/home? {:x 1110 :y 430} {:x 1136 :y 410} 1180 88) "at its slot")
-  (is (not (mic/home? {:x 1060 :y 430} {:x 1136 :y 410} 1180 88)) "just beside the rail it stays")
-  (is (not (mic/home? {:x 600 :y 400} {:x 1136 :y 410} 1180 88)))
+(deftest the-move-ring-starts-past-the-petals
+  (is (not (mic/in-ring? 100 0)) "on a petal")
+  (is (not (mic/in-ring? 87 87)) "123 px out, between the petals")
+  (is (mic/in-ring? 0 (- mic/ring-in)) "the ring's inner edge")
+  (is (mic/in-ring? -100 -100) "141 px out, in the ring")
+  (is (mic/in-ring? 400 0) "past the ring"))
+
+(deftest a-moved-button-stays-on-the-screen
+  (is (= {:x 32 :y 788} (mic/clamp-spot {:x 10 :y 900} 1180 820 32)) "only the button's radius from the walls")
+  (is (= {:x 1148 :y 400} (mic/clamp-spot {:x 1170 :y 400} 1180 820 32)) "over the rail too")
+  (is (= {:x 600 :y 400} (mic/clamp-spot {:x 600 :y 400} 1180 820 32)))
+  (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820 32)))
+  (is (= {:x 788 :y 1148} (mic/stored->spot {:fx 0.99 :fy 0.99} 820 1180 32)) "turned: clamped again")
+  (is (nil? (mic/stored->spot {} 1180 820 32))))
+
+(deftest circles-overlap
+  (is (= 0 (mic/overlap-area 64 32 32)) "touching")
+  (is (< (js/Math.abs (- (mic/overlap-area 0 32 32) (* js/Math.PI 1024))) 1e-9) "one on the other")
+  (is (< (js/Math.abs (- (mic/overlap-area 5 10 30) (* js/Math.PI 100))) 1e-9) "the small one inside")
+  (is (< (js/Math.abs (- (mic/overlap-area 1 1 1) (- (/ (* 2 js/Math.PI) 3) (/ (js/Math.sqrt 3) 2)))) 1e-9)
+      "two unit circles a radius apart"))
+
+(deftest home-only-when-it-covers-half-its-slot
+  (let [slot {:x 1136 :y 410 :r 32}]
+    (is (mic/home? {:x 1136 :y 410 :r 32} slot) "on it")
+    (is (mic/home? {:x 1112 :y 410 :r 32} slot) "24 px off: over half")
+    (is (not (mic/home? {:x 1108 :y 410 :r 32} slot)) "28 px off: under half")
+    (is (not (mic/home? {:x 1136 :y 100 :r 32} slot)) "elsewhere on the rail it stays")
+    (is (not (mic/home? {:x 600 :y 400 :r 32} slot)))
+    (is (not (mic/home? {:x 600 :y 400 :r 32} nil)) "no slot"))
   (is (= :left (mic/flower-side 1136 1180 88)) "in the rail: half, to the left")
-  (is (nil? (mic/flower-side 968 1180 88)) "out of the rail: whole")
-  (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820 88)))
-  (is (nil? (mic/stored->spot {} 1180 820 88))))
+  (is (nil? (mic/flower-side 968 1180 88)) "out of the rail: whole"))
 
 (deftest heard-clips-go-out-in-spoken-order
   (let [l0 {:next 0 :held {}}

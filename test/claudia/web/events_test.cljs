@@ -48,6 +48,14 @@
   (is (= ["a"] (ev/drop-echo ["a"] "x")))
   (is (= ["b"] (ev/drop-echoes ["a" "b"] [{:role "user" :text "a"} {:role "assistant" :text "b"}]))))
 
+(deftest drop-echo-takes-a-merged-run
+  (testing "messages Claude Code took in as one echo as their texts joined by line breaks"
+    (is (= ["z"] (ev/drop-echo ["one" "two" "three" "z"] "one\ntwo\nthree")))
+    (is (= ["x"] (ev/drop-echo ["x" "one" "two"] "one\n\n\ntwo ")) "blank lines a reminder left")
+    (is (= ["one" "x"] (ev/drop-echo ["one" "x"] "one\ntwo")) "no run: nothing taken"))
+  (is (= [1 3] (ev/echo-run ["a" "b" "c"] "b\nc")))
+  (is (= "a\nb" (ev/echo-text "  a \n\n b  "))))
+
 (def ^:private db
   {:me {:servers [{:name "one"} {:name "two"}]}
    :new-server "two"})

@@ -79,23 +79,35 @@
       (assoc t i msg)
       (conj (if (> (count t) 400) (subvec t 1) t) msg))))
 
+(defn known-ids
+  "Every sent id the session file's messages (hist) stand for: each message's id and, for a message
+  Claude Code took in as one with other queued sends, theirs (:merged)."
+  [hist]
+  (into #{} (mapcat #(cons (:id %) (:merged %))) hist))
+
 (defn unsaved-after
   "The sent messages still kept aside once the session file holds the ids in known."
   [unsaved known]
   (into {} (remove (fn [[k]] (known k))) unsaved))
+
+(defn- laid-over
+  "A file message with this turn's live Msg of the same id laid over it (by-id); a merged message
+  stays the file's: the live one holds only one of its sends."
+  [by-id m]
+  (if (:merged m) m (get by-id (:id m) m)))
 
 (defn chat-msgs
   "A chat's messages: the session file's (hist) with this turn's live Msgs laid over them, then the
   turn's Msgs and the sent messages the file doesn't hold yet; the streaming text in its place.
   s: the chat's live state."
   [hist s]
-  (let [known (set (map :id hist))
+  (let [known (known-ids hist)
         turn (:turn s)
         streaming (:partial s)
         by-id (into {} (map (juxt :id identity)) turn)
         notes (set (keep #(when (= "note" (:role %)) (:text %)) hist))
         in-turn (set (map :id turn))
-        msgs (-> (mapv #(get by-id (:id %) %) hist)
+        msgs (-> (mapv #(laid-over by-id %) hist)
                  (into (remove #(or (known (:id %)) (and (= "note" (:role %)) (notes (:text %))))) turn)
                  (into (remove #(or (known (:id %)) (in-turn (:id %)))) (vals (:unsaved s))))]
     (if streaming (mapv #(if (= (:id %) (:id streaming)) streaming %) msgs) msgs)))

@@ -14,16 +14,18 @@
   40)
 
 (defn gesture
-  "What letting go does after a drag of dx, dy px (y down) from where the hold started: :cancel
-  (the clip is thrown away) drag-px or more up and more up than sideways, :now (the running turn
-  stops and the words go at once) drag-px or more down and more down than sideways, :add (the text
-  joins the message) drag-px or more right, else :send (in place or dragged left)."
+  "What letting go does after a drag of dx, dy px (y down) from where the hold started: :send
+  drag-px or more up and more up than sideways, :now (the running turn stops and the words go at
+  once) drag-px or more down and more down than sideways, :cancel (the clip is thrown away) drag-px
+  or more right, :add (the text joins the message) drag-px or more left, else (in place) :send."
   [dx dy]
-  (cond
-    (and (<= dy (- drag-px)) (> (js/Math.abs dy) (js/Math.abs dx))) :cancel
-    (and (>= dy drag-px) (> (js/Math.abs dy) (js/Math.abs dx))) :now
-    (>= dx drag-px) :add
-    :else :send))
+  (let [vertical? (> (js/Math.abs dy) (js/Math.abs dx))]
+    (cond
+      (and vertical? (<= dy (- drag-px))) :send
+      (and vertical? (>= dy drag-px)) :now
+      (>= dx drag-px) :cancel
+      (<= dx (- drag-px)) :add
+      :else :send)))
 
 (defn half-gesture
   "The half flower's way (README decision 73: the mic in its rail on the right wall, its petals only
@@ -38,43 +40,41 @@
             (>= a 135) :send
             :else :now))))
 
-(def move-px
-  "How far the finger goes from where the hold started for the mic to follow it (past the petals,
-  116 px out, and a finger's width more): the clip is dropped and the mic moves."
-  130)
-
-(def move-window-ms
-  "How long after the press a drag can still move the mic: later the hold is talk, and a drag only
-  picks a petal."
-  500)
-
-(defn moving?
-  "Whether a drag of dx, dy px from where the hold started, held-ms after the press, moves the mic."
-  [dx dy held-ms]
-  (and (< held-ms move-window-ms) (> (js/Math.hypot dx dy) move-px)))
-
-(def flower-room
-  "How far a moved mic's centre stays from every edge of the screen and from the rail: its whole
-  flower fits, the petals reaching 116 px out."
+(def ring-in
+  "The move ring's inner edge, px from the mic's centre: just outside the petals (116 px out). A
+  finger that reaches it while holding a mic that moves drops the clip and the mic follows it."
   124)
 
-(def home-px
-  "How near its slot a mic let go goes back into the rail."
-  40)
+(def ring-out "The move ring's outer edge, px from the mic's centre." 148)
+
+(defn in-ring?
+  "Whether a finger dx, dy px from the mic's centre is in the move ring or past it."
+  [dx dy]
+  (>= (js/Math.hypot dx dy) ring-in))
 
 (defn clamp-spot
-  "A moved mic's centre {:x :y}: flower-room from the walls of a w x h screen and from the rail (its
-  right rail-w px), so the whole flower opens there."
-  [{:keys [x y]} w h rail-w]
-  {:x (-> x (max flower-room) (min (- w rail-w flower-room)))
-   :y (-> y (max flower-room) (min (- h flower-room)))})
+  "A moved mic's centre {:x :y} on a w x h screen, so its button (radius r) stays wholly on it."
+  [{:keys [x y]} w h r]
+  {:x (-> x (max r) (min (- w r)))
+   :y (-> y (max r) (min (- h r)))})
+
+(defn overlap-area
+  "The area two circles of radii r1, r2 whose centres are d apart have in common."
+  [d r1 r2]
+  (cond
+    (>= d (+ r1 r2)) 0
+    (<= d (js/Math.abs (- r1 r2))) (* js/Math.PI (js/Math.pow (min r1 r2) 2))
+    :else (let [part (fn [ra rb] (* ra ra (js/Math.acos (/ (+ (* d d) (* ra ra) (- (* rb rb))) (* 2 d ra)))))]
+            (- (+ (part r1 r2) (part r2 r1))
+               (* 0.5 (js/Math.sqrt (* (+ (- d) r1 r2) (+ d r1 (- r2)) (+ d (- r1) r2) (+ d r1 r2))))))))
 
 (defn home?
-  "Whether a mic let go at {:x :y} goes back into the rail: let go on the rail itself (x past w -
-  rail-w), or within home-px of its slot {:x :y}."
-  [{:keys [x y]} slot w rail-w]
-  (or (> x (- w rail-w))
-      (and (some? slot) (< (js/Math.hypot (- x (:x slot)) (- y (:y slot))) home-px))))
+  "Whether a mic let go as button {:x :y :r} goes back into the rail: it covers half or more of its
+  slot {:x :y :r}'s area."
+  [button slot]
+  (and (some? slot)
+       (>= (overlap-area (js/Math.hypot (- (:x button) (:x slot)) (- (:y button) (:y slot))) (:r button) (:r slot))
+           (* 0.5 js/Math.PI (:r slot) (:r slot)))))
 
 (defn flower-side
   "Which flower a mic at x opens on a w-wide screen whose right rail-w px are the rail: in the rail
@@ -85,9 +85,12 @@
 (defn spot->stored "A spot as fractions of the screen, kept per device." [{:keys [x y]} w h]
   {:fx (/ x w) :fy (/ y h)})
 
-(defn stored->spot "A kept spot on a w x h screen, clamped (the screen may have turned)." [{:keys [fx fy]} w h rail-w]
+(defn stored->spot
+  "A kept spot on a w x h screen, clamped so a button of radius r stays on it (the screen may have
+  turned)."
+  [{:keys [fx fy]} w h r]
   (when (and (number? fx) (number? fy))
-    (clamp-spot {:x (* fx w) :y (* fy h)} w h rail-w)))
+    (clamp-spot {:x (* fx w) :y (* fy h)} w h r)))
 
 (defn clock-text
   "A recording's time in ms with its milliseconds, so the start shows at once: \"0.000\",

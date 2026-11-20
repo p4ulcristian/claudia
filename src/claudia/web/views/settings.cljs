@@ -43,7 +43,7 @@
                             :disabled (or (not inv) (and on (= 1 (count ticked))))
                             :on-click #(rf/dispatch [:ops/tick-server server-name])}
       [:span.cs-tick.box {:aria-hidden true} (when on "✓")]
-      [:span.server-mark {:aria-hidden true} (words/initial label)]
+      [:span.server-mark {:aria-hidden true} @(rf/subscribe [:server-mark server-name])]
       [:span.cs-menu-label label]
       (when-not inv [:span.cs-menu-note.warn (str "no " (words/capital view) " here")])])])
 

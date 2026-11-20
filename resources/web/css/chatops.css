@@ -239,7 +239,8 @@ svg.logo { flex: none; color: var(--fg); }
 .thumbs { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .thumb { position: relative; }
 .thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
-.thumb button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--panel2); border: 1px solid var(--line); font-size: 13px; line-height: 1; }
+.thumb-open { display: block; cursor: zoom-in; }
+.thumb-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--panel2); border: 1px solid var(--line); font-size: 13px; line-height: 1; }
 /* Attached files: a chip each, in the composer and the sent message. */
 .file-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .bubble .file-chips { margin: 6px 0 0; }
@@ -263,16 +264,45 @@ a.file-chip:hover { border-color: var(--accent); }
 .sent-media { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .msg.shown img { display: block; max-width: 100%; max-height: 360px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
 .msg.shown img + img { margin-top: 6px; }
-.msg.shown video.shown-video { display: block; width: 100%; max-width: 640px; max-height: 420px; border-radius: 8px; border: 1px solid var(--line); background: #000; }
 .sent-thumb { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .sent-thumb img { display: block; max-width: min(220px, 100%); max-height: 220px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
-/* A picture shown big over the page, zoomable (views/zoom.cljs): the zoom is a transform on the img. */
-.img-big { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 3vh 3vw; background: rgb(0 0 0 / 0.82); cursor: zoom-in; animation: confirm-in 0.12s ease-out; touch-action: none; overscroll-behavior: contain; user-select: none; -webkit-user-select: none; }
-.img-big.zoomed { cursor: grab; }
-.img-big.zoomed:active { cursor: grabbing; }
-.img-big img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6); transform-origin: center; will-change: transform; -webkit-user-drag: none; -webkit-touch-callout: none;
-  background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
-.img-big-close { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 14px; z-index: 91; width: 44px; height: 44px; border-radius: 50%; background: rgb(0 0 0 / 0.55); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+/* Photos and videos big over the window (views/viewer.cljs, README decision 84). The item sits in
+   .viewer-stage, inside the safe areas and under the bar; the zoom is a transform on it. */
+.viewer { position: fixed; inset: 0; z-index: 90; background: rgb(0 0 0 / 0.92); color: #fff; animation: confirm-in 0.12s ease-out;
+  touch-action: none; overscroll-behavior: contain; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.viewer-touch { position: absolute; inset: 0; }
+.viewer-touch.zoomed { cursor: grab; }
+.viewer-touch.zoomed:active { cursor: grabbing; }
+.viewer-stage { position: absolute; display: flex; align-items: center; justify-content: center; pointer-events: none;
+  top: calc(env(safe-area-inset-top, 0px) + 72px); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  left: calc(env(safe-area-inset-left, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); }
+.viewer-media { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: auto; border-radius: 6px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.6);
+  transform-origin: center; will-change: transform; -webkit-user-drag: none; -webkit-touch-callout: none; animation: confirm-in 0.15s ease-out; }
+img.viewer-media { cursor: zoom-in; background: repeating-conic-gradient(rgb(255 255 255 / 0.06) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
+.viewer-touch.zoomed img.viewer-media { cursor: inherit; }
+video.viewer-media { width: 100%; height: 100%; background: transparent; box-shadow: none; }
+.viewer-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 10px; pointer-events: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) calc(env(safe-area-inset-right, 0px) + 12px) 12px
+           calc(max(env(safe-area-inset-left, 0px), var(--window-buttons-width, 0px)) + 14px);
+  background: linear-gradient(rgb(0 0 0 / 0.65), rgb(0 0 0 / 0)); }
+.viewer-bar > * { pointer-events: auto; }
+.viewer-head { display: grid; gap: 1px; margin-right: auto; min-width: 0; }
+.viewer-title { font: 700 17px/1.2 var(--hand, var(--sans)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.viewer-sub, .viewer-note { font-size: 13px; color: rgb(255 255 255 / 0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.viewer-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 48px; height: 48px; padding: 0 16px;
+  border-radius: 24px; border: 1px solid rgb(255 255 255 / 0.28); background: rgb(24 24 24 / 0.78); color: #fff; font: 600 15px var(--sans); }
+.viewer-btn:disabled { opacity: 0.7; cursor: progress; }
+.viewer-btn:hover:not(:disabled) { background: rgb(60 60 60 / 0.9); }
+.viewer-close { width: 48px; padding: 0; font-size: 30px; line-height: 1; }
+.viewer-ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.viewer-nav { position: absolute; top: 50%; z-index: 2; width: 52px; height: 52px; padding: 0; margin-top: -26px; font-size: 34px; line-height: 1; }
+.viewer-prev { left: calc(env(safe-area-inset-left, 0px) + 12px); }
+.viewer-next { right: calc(env(safe-area-inset-right, 0px) + 12px); }
+/* A video Claude showed: its first frame with a play button; a tap plays it in the viewer. */
+.shown-video-tile { position: relative; display: block; width: 100%; max-width: 640px; overflow: hidden; border-radius: 8px; border: 1px solid var(--line); background: #000; }
+.shown-video-tile video { display: block; width: 100%; max-height: 420px; pointer-events: none; }
+.shown-video-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+  display: grid; place-items: center; padding-left: 4px; box-sizing: border-box; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 26px; }
 
 /* Code sent from an editor block, in the user's bubble. */
 .code-sent { margin-top: 4px; }
@@ -326,7 +356,8 @@ body.chat-dragging .order-item { touch-action: none; }
 .rail-group { width: 100%; }
 .rail-stack { width: 34px; height: 34px; flex: none; position: relative; display: block; zoom: 0.8; }
 .rail-stack i { position: absolute; width: 26px; height: 26px; border-radius: 50%; left: calc(var(--i) * 4px); top: calc(var(--i) * 4px);
-  background: color-mix(in srgb, var(--chat, var(--grey)) 30%, var(--bg2)); border: 2px solid var(--chat, var(--grey)); }
+  --tint: color-mix(in srgb, var(--chat, var(--grey)) 30%, var(--bg2)); border: 2px solid transparent;
+  background: linear-gradient(var(--tint), var(--tint)) padding-box, var(--chat-fill, var(--chat, var(--grey))) border-box; }
 .rail-group.on .rail-stack i, .rail-group.chosen .rail-stack i { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--chat, var(--grey)) 55%, transparent); }
 .group-card { position: fixed; left: calc(var(--rail-w) + env(safe-area-inset-left) + 6px); z-index: 70; width: 280px; max-width: calc(100vw - var(--rail-w) - 20px);
   padding: 8px; display: grid; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); }
@@ -350,3 +381,21 @@ body.chat-dragging .order-item { touch-action: none; }
 .wp-head { display: flex; align-items: center; gap: 10px; }
 .wp-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .wp-panel p { margin: 0; }
+
+/* Dragging on the rail (README decision 81): the copy is the rail's own row; a line in the gap
+   before or after a chat, a ring round a circle (a new group) or a stack (into the group); dragged
+   out of the rail with a mouse, the copy says it opens in a window of its own. */
+.rail .drag-ghost.rail-chat { height: var(--rail-row-h); border-radius: 14px; margin: 0; }
+.drag-ghost.group-card-chat { border-radius: 9px; }
+.group-card-chat { position: relative; touch-action: pan-y; }
+.rail-dots .drop-before::before { top: -7px; }
+.rail-dots .drop-after::after { bottom: -7px; }
+.group-card .drop-before::before { top: -2px; }
+.group-card .drop-after::after { bottom: -2px; }
+.rail-chat.drop-onto .rail-dot, .rail-group.drop-into .rail-stack { outline: 2.5px dashed var(--accent); outline-offset: 4px; border-radius: 50%; }
+.rail.cards .rail-chat.drop-onto, .rail.cards .rail-group.drop-into { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.rail.cards .rail-chat.drop-onto .rail-dot, .rail.cards .rail-group.drop-into .rail-stack { outline: 0; }
+body.chat-tearing { cursor: copy; }
+body.chat-tearing .drag-ghost { outline: 2px dashed var(--accent); outline-offset: 2px; }
+body.chat-tearing .drag-ghost::after { content: "\2197 New window"; position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); white-space: nowrap;
+  padding: 2px 8px; border-radius: 8px; background: var(--accent); color: var(--on-hue); font: 700 11px/1.4 var(--sans); }

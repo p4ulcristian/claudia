@@ -14,7 +14,8 @@
   (or (.. js/process -env -HOST_SOCKET)
       (str (or (.. js/process -env -XDG_RUNTIME_DIR) "/tmp") "/claudia-host.sock")))
 
-;; id -> {:q query :push fn :end fn :busy atom :closed atom}
+;; id -> {:q query :push fn :end fn :busy atom :closed atom :background atom}; background: the
+;; session's last background_tasks_changed list (the whole live set), nil until it sent one.
 (defonce sessions (atom {}))
 ;; rpc number -> {:id chat :ev the rpc event (sent again to a new runner) :resolve :reject}
 (defonce waiting (atom {}))
@@ -109,7 +110,7 @@
 
 (defn- pump
   "Streams the query's messages to the runner until it ends by itself or is closed."
-  [id {:keys [^js q busy closed]}]
+  [id {:keys [^js q busy closed background]}]
   (letfn [(finish [error]
             (when-not @closed
               (swap! sessions dissoc id)
@@ -124,6 +125,8 @@
                              (case (.-type m)
                                ("stream_event" "assistant") (reset! busy true)
                                "result" (reset! busy false)
+                               "system" (when (= "background_tasks_changed" (.-subtype m))
+                                          (reset! background (.-tasks m)))
                                nil)
                              (send! #js {:ev "msg" :id id :msg m})
                              (step)))))
@@ -146,12 +149,16 @@
         s (assoc box
                  :q (sdk/query #js {:prompt iterable :options options})
                  :busy (atom false)
-                 :closed (atom false))]
+                 :closed (atom false)
+                 :background (atom nil))]
     (swap! sessions assoc id s)
     (pump id s)))
 
 (def ^:private control-methods
-  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels" "setMcp"})
+  ;; cancelAsyncMessage: drops a queued user message by its uuid (the SDK's cancel_async_message
+  ;; control request); answers whether it was still in Claude Code's queue.
+  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels" "setMcp"
+    "cancelAsyncMessage"})
 
 (defn- set-mcp
   "Replaces a live session's tools with the runner's new ones: a server under the same name is kept
@@ -160,8 +167,12 @@
   (-> (.setMcpServers q #js {})
       (.then (fn [off] (.then (.setMcpServers q (mcp-servers id defs)) (fn [on] #js {:off off :on on}))))))
 
-(defn- session-list []
-  (into-array (for [[id {:keys [busy]}] @sessions] #js {:id id :busy @busy})))
+(defn- session-list
+  "The sessions held: each one's id, whether its turn runs, and its live background set as last
+  heard (null before the first), so a runner that restarted ends what finished while it was away."
+  []
+  (into-array (for [[id {:keys [busy background]}] @sessions]
+                #js {:id id :busy @busy :background @background})))
 
 (defn- user-message
   "A send op as the SDK's user message for session id: images (photos, video frames) go before the text."
@@ -209,7 +220,9 @@
       "send" (when s
                (reset! (:busy s) true)
                ((:push s) (user-message id msg)))
-      "interrupt" (when s (-> (.interrupt ^js (:q s)) (.catch (fn [_]))))
+      ;; cancelQueued: Claude Code also drops the user messages still queued (else they run next).
+      "interrupt" (when s (-> (.interrupt ^js (:q s) (when (.-cancelQueued msg) #js {:cancelQueued true}))
+                              (.catch (fn [_]))))
       "close" (close! id)
       "reply" (reply! msg)
       "list" (send! #js {:ev "sessions" :list (session-list)})

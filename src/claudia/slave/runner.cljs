@@ -31,6 +31,7 @@
             [claudia.slave.ssh-cert :as ssh-cert]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.folders :as folders]
+            [claudia.slave.move :as move]
             [claudia.slave.folders.trash :as folders-trash]
             [claudia.slave.store :as store]))
 
@@ -105,15 +106,17 @@
 
 (defn- wake-with!
   "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
-  now: a running turn is stopped and the message goes once it has ended. msg-id: the message's id
-  as the page made it (or nil)."
+  now: the message and every message queued before it go in at once, the running turn stopped for
+  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil)."
   [chat text images now msg-id]
-  (store/update! chat {:archived false})
-  (chats/wake! chat)
-  (if now
-    (chats/send-after-stop! chat text images msg-id)
-    (chats/send-text! chat text images msg-id))
-  (chats-changed))
+  (if (chats/moving? chat)
+    (chats/moving-error! chat)
+    (do (store/update! chat {:archived false})
+        (chats/wake! chat)
+        (if now
+          (chats/send-after-stop! chat text images msg-id)
+          (chats/send-text! chat text images msg-id))
+        (chats-changed))))
 
 (defn msg-id
   "A send's or new chat's `msg`: the id the page made for the message (a uuid), else nil."
@@ -152,6 +155,7 @@
       (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
+(defmethod on-chat-frame "unqueue" [_ f chat] (when-let [m (msg-id f)] (chats/unqueue! chat m)))
 (defmethod on-chat-frame "answer" [_ f chat] (chats/answer! chat (:ask f) (:answers f)))
 (defmethod on-chat-frame "secret" [c f chat] (chats/secret! chat (:ask f) (:sealed f) (:profile c)))
 (defmethod on-chat-frame "deny" [c f chat] (chats/deny! chat (:ask f) (:profile c)))
@@ -307,6 +311,7 @@
       :ssh (ssh-cert/call req res (subs url (count "/api/ssh/")))
       nil (cond
             (chat-ops/handle req res (chat-ops-fns who)) nil
+            (move/handle req res url who) nil
             (video/handle req res url who) nil
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd
                                                :tools-changed! chats/prefs-changed!}) nil
@@ -361,6 +366,7 @@
   (uploads/set-root! data-dir)
   (video/set-root! data-dir)
   (shown/set-root! data-dir)
+  (move/set-root! data-dir)
   (search/open! data-dir)
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))

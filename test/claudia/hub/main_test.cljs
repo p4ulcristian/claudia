@@ -26,6 +26,10 @@
   (is (not (main/safe-rest? "/api/a%2Fb")))
   (is (not (main/safe-rest? "/api/%E0"))))
 
+(deftest path-problem-keeps-chat-moves-the-hubs
+  (is (= {:status 404 :error "not found"} (main/path-problem "/api/chat-move/export" false nil nil)))
+  (is (= {:status 404 :error "not found"} (main/path-problem "/api/chat-move/commit" false nil nil))))
+
 (deftest path-problem-checks-what-passes
   (is (nil? (main/path-problem "/api/chats" false nil nil)))
   (is (nil? (main/path-problem "/ws" true "paul" nil)))

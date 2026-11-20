@@ -9,6 +9,7 @@
             [claudia.web.format :as format]
             [claudia.web.md :as md]
             [claudia.web.views.code :as code]
+            [claudia.web.views.viewer :as viewer]
             [claudia.web.views.pure.folders :as pure]))
 
 (defn- use-text
@@ -33,10 +34,11 @@
         (= way :markdown) [:div.md.fd-pv-md {:dangerouslySetInnerHTML (r/unsafe-html (md/html (:text answer)))}]
         :else [:f> code/code-view {:file (:name item) :code (:text answer) :whole true}]))
 
-(defn- body [server item way answer]
+(defn- body [server item way answer open]
   (let [src (folders/file-url server (:path item))]
     (case way
-      :image [:img.fd-pv-img {:src src :alt (:name item)}]
+      :image [:button.fd-pv-open {:type "button" :title "See it big" :on-click open}
+              [:img.fd-pv-img {:src src :alt (:name item)}]]
       :video [:video.fd-pv-media {:src src :controls true :preload "metadata"}]
       :audio [:audio.fd-pv-audio {:src src :controls true :preload "metadata"}]
       :pdf [:iframe.fd-pv-pdf {:src src :title (:name item)}]
@@ -45,12 +47,19 @@
 
 (defn- file-view [{:keys [server item]}]
   (let [way (pure/preview-way item)
-        answer (use-text server (when (#{:markdown :text} way) (:path item)))]
+        answer (use-text server (when (#{:markdown :text} way) (:path item)))
+        [big set-big] (h/use-state false)]
     [:div.fd-pv
      [:header.fd-pv-head
       [:span.fd-pv-name (:name item)]
-      [:span.fd-pv-meta (str (some-> (:size item) format/bytes-text) " · " (format/when-text (:mtime item)))]]
-     [:div.fd-pv-body (body server item way answer)]]))
+      [:span.fd-pv-meta (str (some-> (:size item) format/bytes-text) " · " (format/when-text (:mtime item)))]
+      (when (#{:image :video} way)
+        [:button.fd-pv-big {:type "button" :title "See it big, and save it" :on-click #(set-big true)} "See it big"])]
+     [:div.fd-pv-body (body server item way answer #(set-big true))]
+     (when big
+       [:f> viewer/viewer {:items [{:src (folders/file-url server (:path item)) :kind way :save true
+                                    :name (:name item) :title (:name item)}]
+                           :on-close #(set-big false)}])]))
 
 (defn- readme-view [{:keys [server item]}]
   (let [answer (use-text server (:path item))]

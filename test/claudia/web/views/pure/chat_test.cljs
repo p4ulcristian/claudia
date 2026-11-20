@@ -33,7 +33,29 @@
   (is (nil? (words/colour-var "teal")))
   (is (= "var(--c-ash)" (words/colour-var "ash")))
   (is (nil? (words/colour-var "url(x)")))
-  (is (nil? (words/colour-var nil))))
+  (is (nil? (words/colour-var nil)))
+  (is (= "var(--c-dusk)" (words/colour-var "dusk")) "a gradient's stand-in"))
+
+(deftest a-gradient-fills-with-its-gradient
+  (is (= "var(--g-dusk)" (words/colour-fill "dusk")))
+  (is (= "var(--c-mint)" (words/colour-fill "mint")))
+  (is (= "var(--c-ash)" (words/colour-fill "ash")))
+  (is (nil? (words/colour-fill "neon")))
+  (is (= {"--chat" "var(--c-dusk)" "--chat-fill" "var(--g-dusk)"} (words/colour-style "dusk")))
+  (is (= {"--chat" "var(--c-mint)" "--chat-fill" "var(--c-mint)"} (words/colour-style "mint")))
+  (is (= {"--chat" nil "--chat-fill" nil} (words/colour-style nil))))
+
+(deftest the-window-wears-the-open-chats-colour
+  (is (= {:attrs {"data-chat" "mint" "data-gradient" nil}
+          :props {"--hue" "var(--c-mint)" "--hue-a" nil "--hue-b" nil}}
+         (words/root-look "mint")))
+  (is (= {:attrs {"data-chat" "dusk" "data-gradient" ""}
+          :props {"--hue" "var(--c-dusk)" "--hue-a" "var(--c-sapphire)" "--hue-b" "var(--c-magenta)"}}
+         (words/root-look "dusk")))
+  (is (= {:attrs {"data-chat" nil "data-gradient" nil}
+          :props {"--hue" nil "--hue-a" nil "--hue-b" nil}}
+         (words/root-look nil))
+      "no colour: every name removed"))
 
 (deftest new-title-only-when-new
   (is (= "B" (chat/new-title "  B " "A")))
@@ -92,7 +114,6 @@
 
 (deftest words
   (is (= "Paul" (words/capital "paul")))
-  (is (= "S" (words/initial "server")))
   (is (= "a/b" (words/clip "a/b" 10)))
   (is (= "…/proj/file.txt" (words/clip "/home/x/long/path/proj/file.txt" 18)))
   (is (= "1 file" (words/plural 1 "file")))

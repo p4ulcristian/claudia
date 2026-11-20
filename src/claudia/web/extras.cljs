@@ -5,6 +5,7 @@
   change] -> {:before :after}) and :slash-pick; each chat's state gets :agents :changes :settings
   :model :commands :context."
   (:require [re-frame.core :as rf]
+            [claudia.web.back :as back]
             [claudia.web.db :as db]
             [claudia.web.events :as events]))
 
@@ -66,7 +67,7 @@
        (update db :agent-view dissoc k)))))
 
 (defonce ^:private popstate-listener
-  (js/window.addEventListener "popstate" #(rf/dispatch [:agents/popstate])))
+  (js/window.addEventListener "popstate" #(when-not (back/took-pop? %) (rf/dispatch [:agents/popstate]))))
 
 (rf/reg-event-fx
  :agents/fetch

@@ -85,10 +85,10 @@
 
 (defn with-sent
   "The chat's live state with a sent Msg: the turn's name, kept aside until the session file has
-  it; a message sent between turns starts a new turn."
+  it; a message sent between turns starts a new turn, not begun until Claude Code says so."
   [s msg]
   (cond-> (-> s (assoc :turn-id (:id msg)) (assoc-in [:unsaved (:id msg)] msg))
-    (not (:queued msg)) (assoc :turn [])))
+    (not (:queued msg)) (assoc :turn [] :begun false)))
 
 (defn taken-in
   "The chat's live state once Claude Code took a queued message in: no longer queued, at the end
@@ -104,6 +104,33 @@
   (-> s
       (update :unsaved dissoc sent-id)
       (update :turn (fn [t] (vec (remove #(= sent-id (:id %)) t))))))
+
+(def dropped-phases
+  "command_lifecycle states that end a queued message without it running: removed (cancelled),
+  the session ended with it queued (discarded), or the session would not take it (refused)."
+  #{"cancelled" "discarded" "refused"})
+
+(defn settled
+  "The chat's live state once Claude Code took the sent message sent-id in or dropped it: a now
+  press waiting on it and a removal asked for it are done."
+  [s sent-id]
+  (cond-> s
+    (:unqueue s) (update :unqueue disj sent-id)
+    (= sent-id (get-in s [:now :msg])) (dissoc :now)))
+
+(defn now-stop?
+  "Whether a now press stops the running turn at this point: its message is in Claude Code's queue
+  (behind the ones queued before it) and the turn has begun (a stop before the session's first turn
+  has begun would make that turn start stopped, with every queued message in it)."
+  [s]
+  (boolean (and (:running s) (:begun s) (get-in s [:now :queued]))))
+
+(defn unqueue-error
+  "What the person reads when removing a queued message failed with the error text e."
+  [e]
+  (if (str/includes? (str e) "no control method")
+    "Removing a queued message needs this server's session host restarted: it runs older code."
+    (str "The queued message could not be removed: " e)))
 
 (defn context-of
   "getContextUsage's answer as the chat's context use, or nil when it holds no count."

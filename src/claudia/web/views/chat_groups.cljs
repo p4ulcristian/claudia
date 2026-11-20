@@ -14,7 +14,10 @@
     (rf/dispatch [:order/change #(order/update-group % gid (fn [g] (assoc g :name (if (seq n) n "Group"))))])
     (rf/dispatch [:order/renaming nil])))
 
-(defn- name-input [gid current]
+(defn name-input
+  "The group's name typed in place (Enter, Escape or leaving it keeps it; empty: \"Group\"); the list's
+  header and the rail's chooser card use it."
+  [gid current]
   (let [text (r/atom (if (= current "New group") "" current))]
     (fn [_ _]
       [:input.group-name-input {:value @text :auto-focus true :placeholder "Group name" :spell-check false

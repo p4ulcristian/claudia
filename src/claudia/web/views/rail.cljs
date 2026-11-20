@@ -10,7 +10,10 @@
   reloads the page (claudia.web.updates keeps what is typed). A new chat has its circle at the top
   at once, before its first message (fresh-dot). On a touch tablet the circles sit centred at middle
   height, under the left thumb, and opening a chat scrolls its circle to the middle (README decision
-  40)."
+  40). Its right edge drags it wider, and from 170 px on each circle becomes a card as tall as its
+  row (claudia.web.views.rail-width, rail-card); with more than one server every circle carries its
+  server's mark; a chat dragged on the rail moves in the order or into a group, and out of it tears
+  into a window of its own (claudia.web.views.chat-drag; README decision 81)."
   (:require [claudia.web.search-open :as search-open]
             [clojure.string :as str]
             [re-frame.core :as rf]
@@ -26,6 +29,9 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.menu :as menu]
             [claudia.web.views.tearoff :as tearoff]
+            [claudia.web.views.chat-drag :as drag]
+            [claudia.web.views.rail-card :as rail-card]
+            [claudia.web.views.rail-width :as rail-width]
             [claudia.web.views.update-pill :as update-pill]
             [claudia.web.views.logotools :as logotools]
             [claudia.web.views.rail-group :as rail-group]))
@@ -77,6 +83,8 @@
         move! (fn [n] (reset! d n) (set-d n))]
     {"touchstart" (fn [^js e] (reset! start (when (<= (.-scrollTop el) 0) (.. e -touches (item 0) -clientY))))
      "touchmove" (fn [^js e]
+                   ;; A held chat being dragged is no pull (claudia.web.views.chat-drag).
+                   (when (drag/dragging?) (reset! start nil) (move! 0))
                    (when-let [y0 @start]
                      (let [n (pull/distance (- (.. e -touches (item 0) -clientY) y0))]
                        (when (pos? n) (.preventDefault e))
@@ -120,43 +128,60 @@
   [:svg.rail-check {:viewBox "0 0 42 42" :aria-hidden true}
    [:path {:d "M11 22 L18 29 L32 13"}]])
 
-(defn- rail-chat
-  "A chat's circle with its title (its server in the hover text on the hub; the chat's header
-  shows it under the title); dragged out of the window, the chat opens in a window of its own."
-  [{:keys [rows i open multi? viewing? projects elsewhere ordered?]} {:keys [server id title color off folder] :as r}]
-  (let [k [server id]
+(defn- chat-classes
+  "A chat's classes on the rail: open, its server off, open in another tab, passive (and the chalk
+  line before the passive ones only where they sit last: a search)."
+  [{:keys [rows i open elsewhere ordered?]} {:keys [off] :as r}]
+  (let [k [(:server r) (:id r)]
         steps-back? #(sidebar-pure/passive? % elsewhere open)
-        passive? (steps-back? r)
-        project (:name (get projects [server folder]))
-        label @(rf/subscribe [:server-label server])
-        elsewhere? (contains? elsewhere k)]
-    [:button.rail-chat (merge (tearoff/drag-props k #(tearoff/move-on! k open rows elsewhere))
-                              {:data-slide (str server "/" id)
-                        :class [(when (= k open) "on") (when off "off") (when elsewhere? "elsewhere")
-                                (when passive? "passive")
-                                ;; The chalk line before the passive ones only where they sit last (a search).
-                                (when (and passive? (not ordered?) (not (some-> (get rows (dec i)) steps-back?))) "first")
-                                (when (and passive? (not ordered?) (= i (dec (count rows)))) "last")]
-                        :style {"--chat" (sidebar/chat-color-var color)}
-                        :data-tip (str title (when project (str " · " project))
-                                       (when multi? (str " · " label (when off " is off")))
-                                       (when elsewhere? " · open in another tab"))
-                        :data-tip-color (sidebar/chat-color-var color)
+        passive? (steps-back? r)]
+    [(when (= k open) "on") (when off "off") (when (contains? elsewhere k) "elsewhere")
+     (when passive? "passive")
+     (when (and passive? (not ordered?) (not (some-> (get rows (dec i)) steps-back?))) "first")
+     (when (and passive? (not ordered?) (= i (dec (count rows)))) "last")]))
+
+(defn- tip
+  "The hover text of a circle: its title, project, server (with more than one) and whether another
+  tab has it; none on cards, which say it all."
+  [{:keys [multi? projects elsewhere cards?]} {:keys [server id title off folder]}]
+  (when-not cards?
+    (str title (some->> (:name (get projects [server folder])) (str " \u00b7 "))
+         (when multi? (str " \u00b7 " @(rf/subscribe [:server-label server]) (when off " is off")))
+         (when (contains? elsewhere [server id]) " \u00b7 open in another tab"))))
+
+(defn- chat-body
+  "Beside or under the circle: a card (the wide rail), else the title and the status line."
+  [{:keys [cards? multi?]} r unseen?]
+  (if cards?
+    [:f> rail-card/chat-text r multi? unseen?]
+    [:<> [:span.rail-name (:title r)] [:f> status r unseen?]]))
+
+(defn- rail-chat
+  "A chat's circle with its title, or its card: a click opens it, the context menu has its actions,
+  a drag moves it in the order or into a group, and a mouse dragging it out of the rail tears it
+  into a window of its own (claudia.web.views.chat-drag)."
+  [{:keys [rows open multi? viewing? elsewhere] :as m} {:keys [server id title color] :as r}]
+  (let [k [server id] cref (order/ref-of r)
+        unseen? (and (not viewing?) (:unseen r) (not= k open))]
+    [:button.rail-chat {:data-slide cref :data-ref cref :data-top true
+                        :class (chat-classes m r)
+                        :style (sidebar/chat-colour-style color)
+                        :data-tip (tip m r) :data-tip-color (sidebar/chat-color-var color)
                         :aria-label title
+                        :on-pointer-down #(drag/press! % cref (tearoff/tear-fn k open rows elsewhere))
                         :on-click #(sidebar/pick! k (= k open) %)
-                        :on-context-menu #(chatmenu/open-at! k %)})
-     [dot/chat-dot r (and (not viewing?) (:unseen r) (not= k open)) true]
-     (when (sidebar-pure/done-mark? r (and (not viewing?) (:unseen r) (not= k open))) done-check)
-     [:span.rail-name title]
-     [:f> status r (and (not viewing?) (:unseen r) (not= k open))]]))
+                        :on-context-menu #(chatmenu/open-at! k %)}
+     [dot/chat-dot r unseen? true (when multi? [rail-card/server-badge server])]
+     (when (sidebar-pure/done-mark? r unseen?) done-check)
+     [chat-body m r unseen?]]))
 
 (defn- fresh-dot
   "The chat being started, at the top at once (README decision 31): the open one, in its colour,
   until the list has it; it goes when another chat is opened before anything was sent."
-  [{:keys [title color] :as fresh}]
-  [:div.rail-chat.on.fresh {:style {"--chat" (sidebar/chat-color-var color)} :data-tip title :aria-label title}
-   [dot/chat-dot fresh false]
-   [:span.rail-name title]])
+  [{:keys [title color server] :as fresh} {:keys [cards? multi?]}]
+  [:div.rail-chat.on.fresh {:style (sidebar/chat-colour-style color) :data-tip (when-not cards? title) :aria-label title}
+   [dot/chat-dot fresh false true (when (and multi? server) [rail-card/server-badge server])]
+   (if cards? [rail-card/fresh-text fresh multi?] [:span.rail-name title])])
 
 (defn- rail-acts
   "Search and New chat, side by side (a mouse's way to both; the iPad's edge has its own)."
@@ -172,11 +197,11 @@
 (defn- rail-top
   "Search and New chat where the screen has no right-edge column (the iPad's edge has both), and
   the chat being started. A new chat also starts from Alt+N."
-  [edge?]
+  [edge? m]
   (let [fresh @(rf/subscribe [:fresh-chat])]
     [:<>
      (when-not edge? [rail-acts])
-     (when fresh [fresh-dot fresh])]))
+     (when fresh [fresh-dot fresh m])]))
 
 (defn- rail-head
   "Claudia's face, no frame round her so her animations show whole (a click opens the chat her
@@ -192,28 +217,35 @@
     ^{:key (str "group/" (:group (:group e)))} [rail-group/rail-group e m]
     ^{:key (str (:server row) "/" (:id row))} [rail-chat (assoc m :i i) row]))
 
+(defn- rail-state
+  "What every entry on the rail needs: the chats in order (a group's in it), the open one, the
+  servers, whose chats, the projects, the tabs, and whether the rail shows cards."
+  [entries]
+  {:rows (vec (mapcat #(or (:rows %) [(:row %)]) entries)) :open @(rf/subscribe [:open])
+   :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
+   :projects @(rf/subscribe [:projects]) :elsewhere @(rf/subscribe [:open-elsewhere]) :ordered? true
+   :cards? (rail-width/cards?)})
+
 (defn rail []
-  (let [open @(rf/subscribe [:open])
-        elsewhere @(rf/subscribe [:open-elsewhere])
-        entries @(rf/subscribe [:arranged])
-        rows (vec (mapcat #(or (:rows %) [(:row %)]) entries))
-        m {:rows rows :open open :multi? @(rf/subscribe [:multi-server?]) :viewing? @(rf/subscribe [:viewing-other?])
-           :projects @(rf/subscribe [:projects]) :elsewhere elsewhere :ordered? true}
+  (let [entries @(rf/subscribe [:arranged])
+        {:keys [rows open cards?] :as m} (rail-state entries)
         box (h/use-ref nil)
         pulled (use-pull! box)
         edge? (hooks/use-media reach/touch-tablet)]
     (use-centre-open! box open)
     (sidebar/scroll-open-into-view! [(str open) (count rows)])
     (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
-    [:nav.rail {:aria-label "Chats"}
+    ;; The rail is its chats' drag home: let go outside it, a chat tears out (claudia.web.views.chat-drag).
+    [:nav.rail {:aria-label "Chats" :class (when cards? "cards") :data-drag-home true}
      [rail-head]
      [:div.rail-scroll
       (pull-mark pulled)
       [:div.rail-dots {:ref #(set! (.-current box) %)
                        :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
-       (rail-top edge?)
+       (rail-top edge? m)
        (map-indexed #(entry-view m %1 %2) entries)]]
      ;; The update pill, your profile circle (whose chats, the menu) and the version; on a touch
      ;; tablet they stand at the foot of the mic's rail instead (thumb_edge.cljs, README decision 73).
      (when-not edge?
-       [:<> [update-pill/pill] [:f> menu/button] [update-pill/updated]])]))
+       [:<> [update-pill/pill] [:f> menu/button] [update-pill/updated]])
+     [rail-width/edge]]))

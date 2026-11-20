@@ -230,6 +230,8 @@
 .confirm-yes:hover { filter: brightness(1.1); }
 .confirm-yes:disabled { opacity: 0.5; cursor: default; filter: none; }
 .confirm-error { color: var(--red); }
+.confirm-field { display: grid; gap: 4px; color: var(--muted); font-size: 13px; }
+.confirm-field select, .confirm-field input { font: inherit; font-size: 16px; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
 @keyframes confirm-in { from { opacity: 0; } }
 @keyframes confirm-pop { from { opacity: 0; transform: scale(0.94) translateY(6px); } }
 .g-entry.deleted { opacity: 0.45; }
@@ -248,8 +250,8 @@
 .f-kinds .f-kind.on { background: color-mix(in srgb, currentColor 14%, transparent); }
 .f-planned { flex: none; font: 700 11.5px var(--hand); color: var(--amber); border: 1.2px dashed var(--amber); border-radius: 6px; padding: 0 5px; line-height: 15px; }
 .f-tree-row:has(.f-planned) .nm { font-style: italic; }
-/* Images in the files form: a fixed-height preview on a checkerboard; double-click shows it big. */
-.f-image { height: 220px; display: grid; place-items: center; border-radius: 10px; cursor: zoom-in; border: 1.5px solid var(--line);
+/* Images in the files form: a fixed-height preview on a checkerboard; a click shows it big (views/viewer.cljs). */
+.f-image { width: 100%; height: 220px; display: grid; place-items: center; border-radius: 10px; cursor: zoom-in; border: 1.5px solid var(--line);
   background: repeating-conic-gradient(color-mix(in srgb, var(--fg) 7%, transparent) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
 .f-image img { max-width: 100%; max-height: 210px; object-fit: contain; }
 .f-tree-row .f-lines-n { flex: none; font: 11px var(--mono); color: color-mix(in srgb, var(--muted) 70%, transparent); }

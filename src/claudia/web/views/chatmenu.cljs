@@ -1,14 +1,13 @@
 (ns claudia.web.views.chatmenu
-  "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (16 colours, or
-  passive ash, which remembers the colour it had), rename, fork, Files… (opens the chat with Files
-  in the right half: pick its folder), archive."
+  "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (the 20 solid
+  colours and, under them, the 8 gradients; or passive ash, which remembers the colour it had),
+  rename, fork, Files… (opens the chat with Files in the right half: pick its folder), Move to
+  server… (README decision 82), archive."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.views.pure.menu :as pure]
             [claudia.web.views.pure.words :as words]))
-
-(def colours words/chat-colours)
 
 (defn open-at!
   "The menu for chat k at the mouse (or under an element)."
@@ -49,12 +48,19 @@
 
 (defn- inside-of [box] (fn [t] (some-> (.-current box) (.contains t))))
 
-(defn- swatches [k color act]
+(defn- swatch-row [cs k color act]
+  (for [c cs]
+    ^{:key c}
+    [:button.swatch {:class (when (= c color) "on") :style {:background (words/colour-fill c)}
+                     :title c :aria-label c :on-click (act #(rf/dispatch [:ops/color k c]))}]))
+
+(defn- swatches
+  "The solid colours, then the gradients on rows of their own (README decision 80)."
+  [k color act]
   [:div.cm-swatches
-   (for [c colours]
-     ^{:key c}
-     [:button.swatch {:class (when (= c color) "on") :style {:background (str "var(--c-" c ")")}
-                      :title c :aria-label c :on-click (act #(rf/dispatch [:ops/color k c]))}])])
+   (swatch-row words/solid-colours k color act)
+   [:span.swatch-break]
+   (swatch-row words/gradient-colours k color act)])
 
 (defn- rename-input [k title close set-renaming]
   [:input.cm-rename {:auto-focus true :default-value title
@@ -83,6 +89,10 @@
    [:button.cm-item {:role "menuitem" :title "Open this chat with Files in the right half (README decision 70)"
                      :on-click (act #(rf/dispatch [:folders/open {:chat k}]))}
     "Files…"]
+   (when @(rf/subscribe [:can-move? k])
+     [:button.cm-item {:role "menuitem" :title "Move this chat to another of your servers (README decision 82)"
+                       :on-click (act #(rf/dispatch [:move/ask k]))}
+      "Move to server…"])
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 
