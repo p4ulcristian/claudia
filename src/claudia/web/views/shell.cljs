@@ -13,6 +13,7 @@
             [claudia.web.views.chat :as chat]
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
+            [claudia.web.views.login :as login]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.rail-width :as rail-width]
             [claudia.web.views.picture :as picture]
@@ -132,7 +133,8 @@
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [admin/dialog]
-   [:f> world/overlay]])
+   [:f> world/overlay]
+   [login/cover]])
 
 (defn app []
   (let [screen @(rf/subscribe [:screen])

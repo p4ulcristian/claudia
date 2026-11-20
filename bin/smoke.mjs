@@ -119,6 +119,14 @@ async function visit(browser, hubUrl, screen) {
       () => seen.health.length > 0).then(() => {
         if (seen.health.length !== 1 || seen.health[0].ok !== true) throw new Error(`it said ${JSON.stringify(seen.health)}`);
       }));
+    await step('a lost login covers the whole app: the gate\'s redirect to sign in, seen by the login check on the page\'s return to the front', async () => {
+      await page.route('**/hub/**', (r) => r.fulfill({ status: 302, headers: { location: 'https://sign-in.invalid/' } }));
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await page.locator('.login-cover').getByRole('button', { name: 'Log in again' }).waitFor({ timeout: waitMs });
+      const top = await page.evaluate(() => document.elementFromPoint(innerWidth / 2, 5)?.closest('.login-cover') != null);
+      if (!top) throw new Error('the cover is not on top of the app');
+      await page.unroute('**/hub/**');
+    });
     say(`${screen.name}: list, chat and messages fine (${seen.sent.length} frames sent, ${seen.heard.length} heard)`);
   } finally {
     await ctx.close();

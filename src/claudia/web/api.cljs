@@ -3,7 +3,8 @@
   re-frame (each form polls what it shows while it is on screen), and the fetches re-frame's effects
   make."
   (:require [clojure.string :as str]
-            [claudia.shared.protocol :as protocol]))
+            [claudia.shared.protocol :as protocol]
+            [claudia.web.login :as login]))
 
 (defn url
   "/s/<server>/api/<path>?<query> (query: a map; nil values left out)."
@@ -12,18 +13,42 @@
        (let [q (for [[k v] query :when (some? v)] (str (name k) "=" (js/encodeURIComponent (str v))))]
          (when (seq q) (str "?" (str/join "&" q))))))
 
+(def unreachable
+  "The words for a fetch that got no answer at all (the browser's own are \"Load failed\" or
+  \"Failed to fetch\", which say nothing)."
+  "No connection to Claudia. Check the network and try again.")
+
+(def logged-out "The words for a fetch the gate refused: the login is gone." "You're logged out.")
+
+(defn- read-answer [^js r]
+  (.then (.text r)
+         (fn [t]
+           {:status (.-status r)
+            :ok (.-ok r)
+            :body (when-not (str/blank? t) (try (protocol/read-json t) (catch :default _ nil)))})))
+
+(defn- let-in
+  "The answer r, unless it is the gate's redirect to sign in: then the page hears the login is gone
+  and the promise rejects with logged-out."
+  [^js r]
+  (when (login/redirected? (.-type r))
+    (login/lost!)
+    (throw (ex-info logged-out {:status 401 :logged-out true})))
+  r)
+
+(defn- unanswered [e]
+  (throw (if (instance? js/TypeError e) (ex-info unreachable {:status 0} e) e)))
+
 (defn fetch-answer
   "Promise of {:status :ok :body} (the body as data with keyword keys, nil when empty or not JSON).
-  Same origin, so the gate's login cookie goes along."
+  Same origin, so the gate's login cookie goes along. No redirect is followed: one means the gate
+  wants a sign-in (claudia.web.login), and the promise rejects with logged-out; no answer at all
+  rejects with unreachable."
   ([u] (fetch-answer u {}))
   ([u opts]
-   (-> (js/fetch u (clj->js (merge {:credentials "same-origin" :headers {"accept" "application/json"}} opts)))
-       (.then (fn [^js r]
-                (.then (.text r)
-                       (fn [t]
-                         {:status (.-status r)
-                          :ok (.-ok r)
-                          :body (when-not (str/blank? t) (try (protocol/read-json t) (catch :default _ nil)))})))))))
+   (-> (js/fetch u (clj->js (merge {:credentials "same-origin" :redirect "manual"
+                                    :headers {"accept" "application/json"}} opts)))
+       (.then #(read-answer (let-in %)) unanswered))))
 
 (defn fetch-json
   "Promise of the JSON answer (keyword keys); rejects with the server's error, its :status in ex-data."
@@ -85,6 +110,8 @@
   "Promise of what u holds as a Blob (same origin: the login cookie goes along, as for an img's src);
   on-share gets how far it is (share-of) while a big one comes. Rejects with the HTTP status."
   [u on-share]
-  (.then (js/fetch u #js {:credentials "same-origin"})
-         (fn [^js r]
-           (if (.-ok r) (read-body r on-share) (throw (js/Error. (str "HTTP " (.-status r))))))))
+  (.then (js/fetch u #js {:credentials "same-origin" :redirect "manual"})
+         (fn [^js answer]
+           (let [^js r (let-in answer)]
+             (if (.-ok r) (read-body r on-share) (throw (js/Error. (str "HTTP " (.-status r)))))))
+         unanswered))
