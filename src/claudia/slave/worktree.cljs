@@ -1,13 +1,10 @@
 (ns claudia.slave.worktree
   "Tells Sentinel when a chat works inside one of its worktrees: an edit, a git command or any
   other command (a PostToolUse hook). Only where it is configured: CLAUDIA_WORKTREES_DIR (the
-  worktrees' folder) and CLAUDIA_SENTINEL_URL must be there, and a way to sign in: the person's
-  Sentinel key (~/.config/sentinel/key, sent as Authorization: Bearer, README decision 85) or, while
-  the old token is retired and only when there is no key, the token file (CLAUDIA_SENTINEL_TOKEN_FILE,
-  default ~/.config/sentinel/token, sent as x-sentinel-token); elsewhere nothing is sent. CLAUDIA_CHAT_URL, when set,
+  worktrees' folder), CLAUDIA_SENTINEL_URL and the person's Sentinel key (~/.config/sentinel/key,
+  sent as Authorization: Bearer, README decision 85) must all be there; elsewhere nothing is sent. CLAUDIA_CHAT_URL, when set,
   makes the chat's link: its {chat} is replaced by the chat's id. The link is a log, not an owner: a chat may hop between worktrees."
   (:require ["node:fs" :as fs]
-            ["node:os" :as os]
             ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
@@ -16,7 +13,6 @@
 (def ^:private env (.-env js/process))
 (def ^:private dir (some-> (.-CLAUDIA_WORKTREES_DIR env) not-empty path/resolve))
 (def ^:private sentinel (sentinel-key/url))
-(def ^:private token-file (or (.-CLAUDIA_SENTINEL_TOKEN_FILE env) (path/join (os/homedir) ".config" "sentinel" "token")))
 (def ^:private same-again-ms 30000)
 
 (defn- inside? [p]
@@ -40,17 +36,11 @@
         {:kind "edit" :path f}))))
 
 (defn auth-headers
-  "How a report signs in: with the person's Sentinel key k when there is one, else with the old
-  token t (the transition); nil with neither."
-  [k t]
-  (cond
-    k {"authorization" (str "Bearer " k)}
-    (seq t) {"x-sentinel-token" t}
-    :else nil))
+  "How a report signs in: with the person's Sentinel key k; nil without one."
+  [k]
+  (when k {"authorization" (str "Bearer " k)}))
 
-(defn- old-token [] (try (not-empty (str/trim (fs/readFileSync token-file "utf8"))) (catch :default _ nil)))
-
-(defn- sign-in [] (let [k (sentinel-key/read-key)] (auth-headers k (when-not k (old-token)))))
+(defn- sign-in [] (auth-headers (sentinel-key/read-key)))
 
 (defonce ^:private last-sent (atom {}))
 
