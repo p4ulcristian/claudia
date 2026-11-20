@@ -1,15 +1,19 @@
 (ns claudia.web.gaze
-  "The gaze pointer (2026-11-20): in the iPhone/iPad app on a Face ID device, a chalk ring shows
-  where you look, with a short fading trail, and the picture's block under it glows. The app
-  (GazeTracker.swift) reads the eyes with ARKit and calls window.claudiaGaze(reading) about 30
-  times a second; the page calibrates (9 dots, one model per screen turn, kept in localStorage)
-  and draws (claudia.web.gaze.math does the arithmetic). Switched in Settings or with Alt+G; the
+  "The head pointer (2026-11-20; eyes first, but they jump and drift): in the iPhone/iPad app on a
+  Face ID device, a chalk ring shows where your head points, with a short fading trail, and the
+  picture's block under it glows. The app
+  (GazeTracker.swift) reads the face with ARKit and calls window.claudiaGaze(reading) about 30
+  times a second; the page learns the map from five dots you point at (bad ones asked again, one
+  model per screen turn, kept in localStorage), smooths it, takes every tap as pointing at that
+  spot (drift fades) and draws (claudia.web.gaze.math does the arithmetic). Switched in Settings or with Alt+G; the
   layer is plain DOM over the page, outside React, moved every frame; taps pass through it."
   (:require [reagent.core :as r]
             [claudia.web.gaze.math :as m]))
 
 (def ^:private handler-name "claudiaGaze")
-(def ^:private models-key "gazeModels")
+(def ^:private models-key
+  "Where the models live; a new name when calibration changes, so old models are not reused."
+  "headModels")
 (def ^:private on-key "gazeOn")
 (def ^:private trail-n 4)
 (def ^:private trail-ms 90)
@@ -56,7 +60,6 @@
       (let [root (el "gaze-layer")
             parts {:root root :ring (el "gaze-ring") :dot (el "gaze-dot") :hint (el "gaze-hint")
                    :trail (vec (repeatedly trail-n #(el "gaze-trail")))}]
-        (set! (.-textContent (:hint parts)) "Follow the dot with your eyes. Keep your head still.")
         (doseq [e (concat [(:ring parts) (:dot parts) (:hint parts)] (:trail parts))] (.appendChild root e))
         (js/document.body.appendChild root)
         (reset! els parts))))
@@ -94,7 +97,12 @@
     (set! (.. hint -style -opacity) "0")
     (when-not lost? (glow! at))))
 
-(defn- draw-dot! [{:keys [ring dot hint] trail-els :trail} {:keys [at p]}]
+(def ^:private hints
+  {false "Point your nose at the dot."
+   true "A few dots again."})
+
+(defn- draw-dot! [{:keys [ring dot hint] trail-els :trail} {:keys [at p again?]}]
+  (set! (.-textContent hint) (hints (boolean again?)))
   (place! ring [0 0] 0)
   (doseq [e trail-els] (place! e [0 0] 0))
   (place! dot at 1)
@@ -171,12 +179,19 @@
     (and (.-altKey e) (= "KeyG" (.-code e))) (do (.preventDefault e) (toggle!))
     (and (= "Escape" (.-key e)) (= :calibrating (:phase @status))) (do (.preventDefault e) (stop!))))
 
+(defn- on-tap
+  "A tap while tracking: you point where you tap, so it corrects the pointer (claudia.web.gaze.math/tapped)."
+  [^js e]
+  (when (= :tracking (:phase @gaze))
+    (swap! gaze m/tapped [(/ (.-clientX e) js/innerWidth) (/ (.-clientY e) js/innerHeight)])))
+
 (defn install!
   "Takes the app's readings and Alt+G; switches back on when it was on at the last visit."
   []
   (when (here?)
     (set! (.-claudiaGaze js/window) reading!)
     (js/window.addEventListener "keydown" on-key-down true)
+    (js/window.addEventListener "pointerdown" on-tap #js {:capture true :passive true})
     (when (= "1" (stored on-key)) (start!))))
 
 ;; ---- settings ----
@@ -184,20 +199,20 @@
 (defn- status-line [{:keys [on? phase quality error]}]
   (cond error (str "Could not start: " error)
         (not on?) "Off."
-        (= phase :calibrating) "Calibrating: follow the dot."
-        (= phase :failed) "Calibration saw too little of your eyes. Try again in better light."
-        (= phase :tracking) (str "On." (when quality (str " Calibration error: about "
+        (= phase :calibrating) "Setting up: point your nose at each dot."
+        (= phase :failed) "Setup saw too little of your face. Try again facing the iPad."
+        (= phase :tracking) (str "On. Tap anywhere to re-centre." (when quality (str " Setup error: about "
                                                          (js/Math.round (* 100 quality)) "% of the screen.")))
         :else "Starting…"))
 
 (defn settings-section
-  "Settings' gaze pointer section: only in the app on a device that can track the eyes."
+  "Settings' head pointer section: only in the app on a device that can track the face."
   []
   (when (here?)
     (let [s @status]
       [:section.st-section.st-gaze
-       [:h3 "Gaze pointer " [:span.muted.small "Face ID camera · Alt+G"]]
+       [:h3 "Head pointer " [:span.muted.small "Face ID camera · Alt+G"]]
        [:p.small (status-line s)]
        [:div.st-gaze-buttons
         [:button {:type "button" :on-click toggle!} (if (:on? s) "Turn off" "Turn on")]
-        [:button {:type "button" :on-click recalibrate!} "Calibrate again"]]])))
+        [:button {:type "button" :on-click recalibrate!} "Set up again"]]])))
