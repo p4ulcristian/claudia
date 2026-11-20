@@ -61,9 +61,9 @@
 (def rest-px "How far a resting finger may still drift (a finger trembles)." 8)
 
 (defn still?
-  "Whether the finger at x y is still where it rested (rest {:x :y}), within rest-px."
-  [rest x y]
-  (< (js/Math.hypot (- x (:x rest)) (- y (:y rest))) rest-px))
+  "Whether the finger at x y is still where it rested (at {:x :y}), within rest-px."
+  [at x y]
+  (< (js/Math.hypot (- x (:x at)) (- y (:y at))) rest-px))
 
 (defn clamp-spot
   "A moved mic's centre {:x :y} on a w x h screen, so its button (radius r) stays wholly on it."

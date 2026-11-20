@@ -184,10 +184,10 @@
   "The finger rested while moving: the mic is put down under it, still recording, and the hold
   chooses again from there: the petals round it, letting go in place sends, the ring moves on."
   [{:keys [hold live set-phase set-dir] :as parts}]
-  (when-let [{:keys [rest rail?] :as held} (.-current hold)]
+  (when-let [{:keys [rested rail?] :as held} (.-current hold)]
     (when (:moving held)
-      (let [to (park! (:x rest) (:y rest) parts held)]
-        (set! (.-current hold) (assoc held :moving false :timer nil :x0 (:x rest) :y0 (:y rest)
+      (let [to (park! (:x rested) (:y rested) parts held)]
+        (set! (.-current hold) (assoc held :moving false :timer nil :x0 (:x rested) :y0 (:y rested)
                                       :from to :dir :send :side (side-at rail? to)))
         (set-dir :send)
         (set-phase (if (.-current live) :recording :starting))))))
@@ -196,10 +196,10 @@
   "While moving: each time the finger leaves where it rested, the rest clock starts again; when it
   runs out (pure/settle-ms), the mic settles."
   [^js e {:keys [hold] :as parts}]
-  (let [x (.-clientX e) y (.-clientY e) {:keys [rest timer]} (.-current hold)]
-    (when-not (and rest (pure/still? rest x y))
+  (let [x (.-clientX e) y (.-clientY e) {:keys [rested timer]} (.-current hold)]
+    (when-not (and rested (pure/still? rested x y))
       (some-> timer js/clearTimeout)
-      (set! (.-current hold) (assoc (.-current hold) :rest {:x x :y y}
+      (set! (.-current hold) (assoc (.-current hold) :rested {:x x :y y}
                                     :timer (js/setTimeout #(settle! parts) pure/settle-ms))))))
 
 (defn- drag!
