@@ -55,6 +55,20 @@
     (str "The person took this chat out of its project folder. It works in " work
          " again until you call set_folder with a project.")))
 
+(defn server-moved-note
+  "What Claude hears with its next message after the person moved the chat from server `from` to
+  server `to` (README decision 80), the same words the chat shows the person: folder (nil: none) is
+  where it works on `to`, work the runner's working folder there. Back where Claude last worked
+  (moved away and back before it heard of it): only where it works."
+  [from to folder work]
+  (if (= from to)
+    (moved-note folder work)
+    (str "This chat moved from the server " from " to the server " to ". "
+         (if folder
+           (str "Its folder is now " folder " on " to ": run commands there (cd " folder " && …) and call set_folder with it before you work.")
+           (str "It has no project folder on " to ": it works in " work " until you call set_folder with a project."))
+         " Paths and files in the earlier history are " from "'s: the working folder's files, running helpers and background work stayed on " from ".")))
+
 (defn folder-answer
   "set_folder's answer (src/chat.ts folderTool): the folder, its CLAUDE.md (nil: none) and its git
   status (nil: not a repository; the first 40 lines)."

@@ -84,6 +84,32 @@
 (defn strip-reminders [s]
   (str/trim (str/replace (str s) #"<system-reminder>[\s\S]*?</system-reminder>" "")))
 
+;; A server move's note (README decision 80) goes to Claude inside <claudia-moved> with the next
+;; message, and the chat shows the same words as a note of their own (not hidden like a reminder).
+(def ^:private moved-re #"<claudia-moved>([\s\S]*?)</claudia-moved>")
+
+(defn with-moved-note
+  "The text Claude gets: text, then the move's note in its tag."
+  [text note]
+  (str text "\n\n<claudia-moved>" note "</claudia-moved>"))
+
+(defn moved-notes
+  "The move notes a user text carries, in order."
+  [s]
+  (mapv #(str/trim (second %)) (re-seq moved-re (str s))))
+
+(defn strip-moved
+  "The user text without its move notes."
+  [s]
+  (str/trim (str/replace (str s) moved-re "")))
+
+(defn moved-note-msgs
+  "The notes a user entry (uuid) carries as the chat shows them: one note Msg each, ids
+  <uuid>:moved (then :moved1 …), ahead of what the user wrote."
+  [entry-id s at]
+  (vec (map-indexed (fn [i note] {:id (str entry-id ":moved" (when (pos? i) i)) :role "note" :text note :at at})
+                    (moved-notes s))))
+
 (defn task-notice
   "Claude Code stores \"background task finished\" notices as user messages: their summary, or nil."
   [text]
@@ -304,14 +330,15 @@
 (defn- text-user-msgs
   "A user entry whose content is text: a task notice, a slash command, or what the user wrote."
   [m content at]
-  (let [text (strip-reminders content)
+  (let [text (strip-moved (strip-reminders content))
         notice (task-notice text)
         cmd (when-not notice (command-msg text))]
-    (cond
-      notice [{:id (:uuid m) :role "note" :text notice :at at}]
-      cmd (mapv #(-> % (dissoc :out) (assoc :id (if (:out %) (str (:uuid m) ":out") (:uuid m)) :at at)) cmd)
-      (seq text) [{:id (:uuid m) :role "user" :text text :at at}]
-      :else [])))
+    (into (moved-note-msgs (:uuid m) (strip-reminders content) at)
+          (cond
+            notice [{:id (:uuid m) :role "note" :text notice :at at}]
+            cmd (mapv #(-> % (dissoc :out) (assoc :id (if (:out %) (str (:uuid m) ":out") (:uuid m)) :at at)) cmd)
+            (seq text) [{:id (:uuid m) :role "user" :text text :at at}]
+            :else []))))
 
 (defn- add-tool-result
   "A tool_result block: its step gets the result; an AskUserQuestion's answer becomes the user's message."
@@ -325,10 +352,15 @@
       (and i (:is_error b)) (assoc-in [:out i :error] true)
       (seq answer) (update :out conj {:id (str "answer-" (:tool_use_id b)) :role "user" :text answer :at at}))))
 
+(defn- blocks-text
+  "A user entry's text blocks as one text, reminders left out (move notes kept)."
+  [content]
+  (str/join "\n" (filter seq (keep #(when (= "text" (:type %)) (strip-reminders (:text %))) content))))
+
 (defn- blocks-user-msg
   "A user entry's text and image blocks as one Msg (a task notice as a note), or nil."
   [m content at]
-  (let [text (str/join "\n" (filter seq (keep #(when (= "text" (:type %)) (strip-reminders (:text %))) content)))
+  (let [text (strip-moved (blocks-text content))
         images (count (filter #(= "image" (:type %)) content))
         notice (task-notice text)]
     (cond
@@ -340,7 +372,8 @@
 (defn- add-user-blocks [acc m content at]
   (let [acc (reduce #(if (= "tool_result" (:type %2)) (add-tool-result %1 %2 at) %1) acc content)
         msg (blocks-user-msg m content at)]
-    (cond-> acc msg (update :out conj msg))))
+    (cond-> (update acc :out into (moved-note-msgs (:uuid m) (blocks-text content) at))
+      msg (update :out conj msg))))
 
 (defn- add-msg [folder times acc m]
   (let [at (get times (:uuid m) 0)

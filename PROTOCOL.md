@@ -135,6 +135,7 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 | `GET /hub/listen/words` | `{ words: [string] }`: the caller's own words for the listen service (`GET <HUB_LISTEN_URL>/v1/vocabulary/<email>`). 501 without a listen service, 502 when it fails |
 | `PUT /hub/listen/words` `{ words: [string] }` | the caller's list replaced (`PUT <HUB_LISTEN_URL>/v1/vocabulary/<email>`); the hub trims each word, drops blanks and repeats (case ignored): `{ words }` as the service keeps them. The speaker is always the signed-in caller, never a name in the request. 400 not a list of strings, a word over 60 characters or over 500 words; 501, 502 as GET |
 | `POST /hub/videos` `{ server, chat, block, title, data }` | a 3D scene's video (`data`: the scene3d form's data as shown): handed to the caller's runner on that server (`POST /api/chats/:id/videos`, as the caller), answered at once `202 { id }`; then, when a voice is set up and the story has lines (the page's voice switch does not count: a video is watched later), the lines are said (as `POST /hub/narrate` would) and brought to the runner (`PUT …/videos/:id/voice`). 400 without chat, block or data; 403 no access to the server |
+| `POST /hub/chat-move` `{ chat, from, to, folder? }` | the person's own chat moved from server `from` to server `to`, both servers where they have a profile (README decision 80): `folder` (absolute, `~/…` or relative to `to`'s working folder; blank or none: no project folder) must be a folder there. The hub drives both runners as the person (Runner HTTP: moving a chat, below), streams the copy from one to the other without keeping it, and checks the target's read-back against the source (`claudia.shared.chat-move/check-problem`: same message count, same last message, every file's size and SHA-256, as many pictures and file changes). `200 { ok, server, chat, folder }` once the chat is on `to` and archived on `from` (its root switch there turned off); `409 { error }` when it did not move (the source keeps the chat as it was, the target drops its copy); `400` for a bad request or a server not the person's |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
 | `GET /hub/servers/:name/system` | that server's newest `Sample` (from its front's `GET /api/system`, 4 s); 502 `{ error }` when the front is not reached or fails; 403 when not in the person's list |
 | `GET /hub/gate/system` | admins: the gate's own `Sample` (the hub reads its machine itself); 403 for others |
@@ -146,6 +147,7 @@ files are served without either check (they hold no data). The hub listens on `H
 (default `127.0.0.1`) and `HUB_PORT` (default `4590`); `HUB_WEB` defaults to `out/web`; `HUB_CONFIG`
 has no default. The servers and people live in the hub's store (`HUB_DATA/hub.db`); `hub.json` is
 imported only into an empty store (a broken file then stops the hub) and never read again.
+`/s/<server>/api/chat-move/…` is refused (404): only the hub moves a chat (README decision 80).
 `/s/<server>/api/update-check`, `/s/<server>/api/claude-token/picks`,
 `/s/<server>/api/claude-token/saved`, `/s/<server>/api/claude-token/limits`, `/s/<server>/api/system`, `/s/<server>/api/github`, `/s/<server>/api/github/token` and `/s/<server>/api/github/service-token` are refused (404): only
 the hub makes those calls on a front.
@@ -279,6 +281,31 @@ its questions or reads how it stands: that is the page's socket only (README dec
 | `GET /api/github` | `{ user: { login, name } \| null }`: this profile's gh login (the hub's call, as the person; refused from a page) |
 | `PUT /api/github` `{ token }` | `{ user }`: `gh auth login` with it, git's credential helper and commit name set (the hub's call: README decision 23) |
 | `GET /api/github/token` | `{ token }` gh holds for github.com, 404 `{ error }` when none: the hub takes a login made before into its keeping, once (refused from a page) |
+
+## Runner HTTP: moving a chat (`/api/chat-move/…`; README decision 80)
+
+The hub's calls only (it refuses them from a page), as the chat's own person: the runner answers 403
+to any caller whose `X-Claudia-Via` is not `own` (a view or a write tick moves nothing). `chat` is a
+chat id (a lower-case uuid).
+
+| Call | Runner | Answer |
+|---|---|---|
+| `POST /api/chat-move/check` `{ chat, folder }` | target | `{ folder }` (resolved; null: none); 404 no folder there; 409 a chat with that id is here (unless it is the copy an earlier move away left behind: archived, `movedTo` kept, not written to since) |
+| `POST /api/chat-move/hold` `{ chat }` | source | `{ check }` once the chat is held (15 minutes at most: messages to it are refused with an `error` frame, its Claude Code closes and does not start); 409 when it works (a turn, agents or background shells), waits on an ask, is Claudia's own chat, is held already, or has no session file. A move never stops anything |
+| `GET /api/chat-move/export?chat=` | source | the copy of a held chat, `application/x-ndjson`: `{ type: "chat", id, row (every column of chats), kv ({ key: JSON text } of settings, context, turn, tasks), pending (its own move note not said yet, or null) }`, then `{ type: "picture", turn, scene (JSON text), at }` and `{ type: "change", turn, path, before, after, added, removed, status, skipped, at }` each, then the session's files (`<id>.jsonl` and everything under `<id>/`, paths relative to its Claude Code project folder) as `{ type: "file", path, data (base64, 768 KB a line) }`, then `{ type: "end" }`; 409 when not held |
+| `POST /api/chat-move/import?chat=` (the copy) | target | `{ check }`: the copy kept in `RUNNER_DATA/moves/<chat>` (15 minutes at most; gone on a restart), read back from the disk. 400 for a broken copy (a line over 8 MB, a record of another chat, a file path outside the chat's files, no `end`) |
+| `POST /api/chat-move/commit` `{ chat, folder, from, to }` | target | `{ ok, folder }`: the files placed in this runner's own project folder (Claude Code's folder for `CLAUDIA_CWD`, its own slug), the rows in (the row in `folder`, not archived, root off, a new chat key; the kv values; pictures; changes) and the move's note kept (`serverMove`); a copy left behind here before gives way |
+| `POST /api/chat-move/drop` `{ chat }` | target | `{ ok }`: the copy kept aside goes |
+| `POST /api/chat-move/release` `{ chat, to? }` | source | `{ ok }`; with `to` (only while held): the chat archived and marked `movedTo { server, at }`; without: the move given up, the chat as before |
+
+`check` = `{ messages, last, files: [{ path, size, sha256 }], pictures, changes }`: the session file's
+user and assistant entries with a uuid (how many, the last one's uuid), every file of the session,
+and the chat's pictures and file changes.
+
+The move's note goes to Claude with the next message, after the text, as `<claudia-moved>…</claudia-moved>`;
+the chat shows the same words as a `note` Msg (id `<message id>:moved`, from the session file too),
+and before that message as the note `moved-pending` at the end of the `chat` frame's messages (a
+`msg` with `gone: true` removes it once the message goes).
 
 ## Runner HTTP: folders (`/api/folders…`; README decisions 61 to 64, 68, 69)
 

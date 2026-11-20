@@ -336,3 +336,62 @@
   (mapv trash-item-row (.all (stmt "SELECT * FROM trash ORDER BY at DESC"))))
 
 (defn drop-trash! [id] (.run (stmt "DELETE FROM trash WHERE id = ?") id))
+
+;; A chat's rows for a move to another server (README decision 80; claudia.slave.move) -------------
+
+(def chat-columns "Every column of chats, as keywords named like the columns." columns)
+
+(defn- plain-row
+  "A row object as a map of its columns (keywords named like them)."
+  [^js r]
+  (into {} (for [k (js/Object.keys r)] [(keyword k) (aget r k)])))
+
+(defn export-rows
+  "Chat id's own rows: {:row (every column) :kv [[key json-text]] :pictures [{:turn :scene (JSON
+  text) :at}] :changes [{:turn :path :before :after :added :removed :status :skipped :at}]}, or nil."
+  [id]
+  (when-let [^js r (.get (stmt "SELECT * FROM chats WHERE id = ?") id)]
+    {:row (plain-row r)
+     :kv (mapv (fn [^js x] [(.-key x) (.-value x)]) (.all (stmt "SELECT key, value FROM kv WHERE chat = ?") id))
+     :pictures (mapv plain-row (.all (stmt "SELECT turn, scene, at FROM pictures WHERE chat = ? ORDER BY at, rowid") id))
+     :changes (mapv plain-row (.all (stmt "SELECT turn, path, before, after, added, removed, status, skipped, at
+                                           FROM changes WHERE chat = ? ORDER BY id") id))}))
+
+(defn- drop-chat-rows!
+  "Every row of chat id: the chat, its kv values, pictures and file changes."
+  [id]
+  (doseq [t ["chats WHERE id = ?" "kv WHERE chat = ?" "pictures WHERE chat = ?" "changes WHERE chat = ?"]]
+    (.run (stmt (str "DELETE FROM " t)) id)))
+
+(defn- insert-row!
+  "One chats row from m (keys: only columns of chats, the caller's whitelist)."
+  [m]
+  (let [ks (filter (set columns) (keys m))
+        ^js st (stmt (str "INSERT INTO chats (" (str/join ", " (map name ks)) ") VALUES ("
+                          (str/join ", " (repeat (count ks) "?")) ")"))]
+    (.apply (.-run st) st (into-array (map #(get m %) ks)))))
+
+(defn- insert-copied!
+  "A copied chat's kv values ({key json-text}), pictures and changes."
+  [id kvs pics chs]
+  (doseq [[k v] kvs] (.run (stmt "INSERT INTO kv (chat, key, value) VALUES (?, ?, ?)") id k v))
+  (doseq [{turn :turn s :scene at :at} pics]
+    (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?) ON CONFLICT (chat, turn) DO NOTHING")
+          id turn s at))
+  (doseq [{:keys [turn path before after added removed status skipped at]} chs]
+    (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          id turn path before after (or added 0) (or removed 0) status skipped (or at 0))))
+
+(defn import-chat!
+  "A moved chat's rows, in one transaction: whatever rows its id had here (the copy left behind by an
+  earlier move away) give way to row (columns of chats), kv ({key json-text}), pictures, changes."
+  [{r :row kvs :kv pics :pictures chs :changes}]
+  (let [id (:id r)]
+    (.exec ^js @db "BEGIN")
+    (try
+      (drop-chat-rows! id)
+      (insert-row! r)
+      (insert-copied! id kvs pics chs)
+      (.exec ^js @db "COMMIT")
+      (catch :default e (.exec ^js @db "ROLLBACK") (throw e)))))

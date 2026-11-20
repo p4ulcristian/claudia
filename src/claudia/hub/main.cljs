@@ -16,6 +16,7 @@
             [claudia.hub.health :as health]
             [claudia.hub.ops :as ops]
             [claudia.hub.hub-key :as hub-key]
+            [claudia.hub.move :as move]
             [claudia.hub.pass :as pass]
             [claudia.hub.pictures :as pictures]
             [claudia.hub.push :as push]
@@ -108,6 +109,8 @@
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     ;; A service's app token (README decision 78): the hub's own, never a page's.
     (#{"/api/github" "/api/github/token" "/api/github/service-token"} rest-path) {:status 404 :error "not found"}
+    ;; A chat moving to another server (README decision 80): the hub drives both runners, never a page.
+    (str/starts-with? rest-path "/api/chat-move/") {:status 404 :error "not found"}
     error {:status 400 :error error}
     ;; A secret is only ever read for the caller's own profile (PROTOCOL.md, Secrets).
     (and view (str/starts-with? rest-path "/api/secret/")) {:status 403 :error "a view reads no secrets"}
@@ -180,6 +183,10 @@
   [^js res]
   (io/send-json res (if @stopping? 503 200) {:alive (not @stopping?) :commit (health/commit)}))
 
+(def ^:private person-calls
+  "The hub's calls a signed-in person makes that answer for themselves (req res person email)."
+  {"/hub/videos" videos/call "/hub/health" health/call "/hub/chat-move" move/call})
+
 (defn- hub-api [^js req ^js res pathname]
   (let [[_ server-name what] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/(state|system)$" pathname)
         email (caller req)
@@ -204,8 +211,7 @@
       (and (cross-site? req) (not (and (= "GET" (.-method req)) (github-app/return-path? pathname))))
       (io/send-json res 403 {:error "cross-site request"})
       (not person) (io/send-json res 403 {:error "you have no access to Claudia here"})
-      (= pathname "/hub/videos") (videos/call req res person email)
-      (= pathname "/hub/health") (health/call req res person email)
+      (person-calls pathname) ((person-calls pathname) req res person email)
       (broker/call? pathname) (broker/call req res pathname email)
       (not own?) (ops/call req res pathname email admin?)
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))

@@ -128,6 +128,7 @@
    (when claudia? [:f> claudia-rain/rain])
    [confirm/archive-ask]
    [confirm/root-ask]
+   [confirm/move-ask]
    (when-not world? (chats-view m))
    (when (and (:edge? m) (not world?)) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})

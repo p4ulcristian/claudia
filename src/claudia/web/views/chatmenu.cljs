@@ -1,7 +1,7 @@
 (ns claudia.web.views.chatmenu
   "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (16 colours, or
   passive ash, which remembers the colour it had), rename, fork, Files… (opens the chat with Files
-  in the right half: pick its folder), archive."
+  in the right half: pick its folder), Move to server… (README decision 80), archive."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -83,6 +83,10 @@
    [:button.cm-item {:role "menuitem" :title "Open this chat with Files in the right half (README decision 70)"
                      :on-click (act #(rf/dispatch [:folders/open {:chat k}]))}
     "Files…"]
+   (when @(rf/subscribe [:can-move? k])
+     [:button.cm-item {:role "menuitem" :title "Move this chat to another of your servers (README decision 80)"
+                       :on-click (act #(rf/dispatch [:move/ask k]))}
+      "Move to server…"])
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 
