@@ -19,6 +19,8 @@
      stand-in, halfway between its crayons (the theme is mixed from it), --g- its gradient (its circles). */
   --c-berry: #ce3d70; --c-ember: #ff8800; --c-sunset: #ff6a6e; --c-citrus: #d4d425;
   --c-meadow: #62cd6d; --c-lagoon: #20b3e8; --c-dusk: #ad57e5; --c-candy: #d299f1;
+  --c-coral: #ffaea9; --c-rust: #be8437; --c-moss: #769c3b; --c-spring: #8eea9d;
+  --c-tide: #4dd6e1; --c-reef: #009ca6; --c-storm: #6b70e8; --c-orchid: #d872ad;
   --g-berry: linear-gradient(135deg, var(--c-plum), var(--c-cherry));
   --g-ember: linear-gradient(135deg, var(--c-cherry), var(--c-sunflower));
   --g-sunset: linear-gradient(135deg, var(--c-tangerine), var(--c-magenta));
@@ -27,6 +29,14 @@
   --g-lagoon: linear-gradient(135deg, var(--c-aqua), var(--c-ocean));
   --g-dusk: linear-gradient(135deg, var(--c-sapphire), var(--c-magenta));
   --g-candy: linear-gradient(135deg, var(--c-bubblegum), var(--c-periwinkle));
+  --g-coral: linear-gradient(135deg, var(--c-peach), var(--c-bubblegum));
+  --g-rust: linear-gradient(135deg, var(--c-chocolate), var(--c-gold));
+  --g-moss: linear-gradient(135deg, var(--c-olive), var(--c-forest));
+  --g-spring: linear-gradient(135deg, var(--c-sunflower), var(--c-aqua));
+  --g-tide: linear-gradient(135deg, var(--c-mint), var(--c-sky));
+  --g-reef: linear-gradient(135deg, var(--c-forest), var(--c-ocean));
+  --g-storm: linear-gradient(135deg, var(--c-ocean), var(--c-grape));
+  --g-orchid: linear-gradient(135deg, var(--c-plum), var(--c-bubblegum));
   /* Named colours the code forms use for files, lanes and namespaces (not chat colours). */
   --c-burgundy: #b8405e; --c-red: #e8474a; --c-orange: #f39a4a; --c-amber: #f2b53c; --c-yellow: #e8d84a;
   --c-lime: #a8d64a; --c-green: #4cc68d; --c-teal: #3fc1b0; --c-cyan: #45c8e0;
@@ -205,6 +215,10 @@ code, pre { font-family: var(--mono); }
 .swatch:hover { transform: scale(1.12); }
 .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .swatch.passive { opacity: 0.85; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.12); }
+/* A colour another open chat wears (README decision 26): shown, struck through, not pickable. */
+.swatch.taken { opacity: 0.3; cursor: not-allowed; background-blend-mode: normal; position: relative; }
+.swatch.taken::after { content: ""; position: absolute; inset: 11px -2px; border-top: 2px solid var(--fg); transform: rotate(-45deg); }
+.swatch.taken:hover { transform: none; }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .plan-pick { position: relative; }
 /* The one popup style of the header's pills and the colour button. */

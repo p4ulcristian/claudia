@@ -265,7 +265,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     one page its person touched last (`here`: a touch, click or key tells every server, at most
     every 15 s, and a socket that opens says how long ago, so a restarted runner still knows), so
     not every open device talks at once. That page reads the replies one at a time in arrival
-    order, each once, each in its chat's voice, a Hungarian reply in Hungarian
+    order, each once, each in its chat's voice, its colour's short name first ("Red here.",
+    decision 89), a Hungarian reply in Hungarian
     (`pure/talk.cljs`'s line and `language-of`), without code, tables, links or Markdown marks
     ("There's code in the chat." instead). While a reply is read the mic is that chat (decision
     73): the chat's colour, bars that move, its name and voice over it. A tap on it stops that
@@ -374,7 +375,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     cherry). The page picks a new chat's colour once its server's list is here, not before. A runner moves its chats over on start: each old
     colour becomes its crayon (red→cherry, teal→mint, pink→bubblegum, …; an ash chat's remembered
     colour too). The old names stay as CSS variables only for the code forms' own lanes and files.
-    The gradients beside the box: decision 80.
+    The gradients beside the box: decision 80. One colour per open chat and the short names: decision 89.
     Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,
     picked at random. Files: `src/claudia/shared/colours.cljc`, `resources/web/css/claudia.css`.
 
@@ -1186,8 +1187,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     colour button, the chat menu) show the 20 solids (and ash), then the gradients on rows of their
     own. A chat's colour is still one name, so old rows stay valid and every server's
     `chat-colour?` (the runner's PATCH, a new chat's picked colour, the crayon-box move on start)
-    takes the new names; the hub passes colours through untouched. A new chat (and a fork, a woken
-    chat without a remembered colour) still gets a solid colour only: `most-different` scores
+    takes the new names; the hub passes colours through untouched. (Since decision 89: 16
+    gradients, and a new chat takes a gradient once every solid is worn by an open chat.) Before
+    that a new chat (and a fork, a woken chat without a remembered colour) got a solid colour only: `most-different` scores
     colours by OKLab distance between single colours, and a gradient is picked by hand, like ash.
     A gradient chat counts as wearing both its crayons, so a new chat after it never takes either.
     Instead of: gradients in the random pick (two-colour distance has no meaning in the box's
@@ -1548,6 +1550,35 @@ Claude Code cuts long tool descriptions, so the forms' data is also in the syste
 npm ci
 npx shadow-cljs release host runner front hub broker root sudo web sdk
 ```
+
+89. One colour, one chat, and every colour has a short name it says (2026-11-20, the user's call:
+    "one color cannot be used more times", "it should say its color first, like red here", "we do
+    need short names"). No two open (not archived) chats wear one colour while one is free, across
+    every server of the person: a new chat takes a free colour (`colours/most-different`: a solid
+    while one is free, else a gradient; none the 5 chats started last wear, nor their crayons, while
+    another is free; the furthest in OKLab from every colour worn), the page picking from every
+    server's list and picking again when a list that arrives later wears it; both palettes show the
+    colours another open chat wears struck through and not pickable; a chat back from the archive,
+    or woken from grey, whose colour an open chat wears takes a free one; and once every list is in,
+    two open chats in one colour (from before) give the newer one a free colour (`recolour-plan`,
+    the same on every device, so two pages agree). A runner alone (a chat made over HTTP, a fork, a
+    wake) sees only its own server's chats. Every colour may be worn again once all are taken
+    (decision 26's least-worn pick). Ash (grey, passive) may be worn by many. For room, 8 more
+    gradients (decision 80), 36 colours in all: coral (peach→bubblegum), rust (chocolate→gold),
+    moss (olive→forest), spring (sunflower→aqua), tide (mint→sky), reef (forest→ocean), storm
+    (ocean→grape), orchid (plum→bubblegum), their middles still at least 0.1 apart in OKLab (the
+    closest now tide and lagoon, 0.108; the first picks Frost jade→periwinkle and Coral peach→cherry
+    looked like lagoon and ember). Every colour has a short name, shown in the palettes' tips and
+    said by its voice before each reply ("Red here. …", decision 21): Red, Brown, Peach, Orange,
+    Gold, Yellow, Olive, Lime, Green, Mint, Jade, Aqua, Sky, Blue, Indigo, Lilac, Purple, Plum, Pink,
+    Rose; Berry, Coral, Ember, Rust, Sunset, Citrus, Moss, Meadow, Spring, Tide, Teal, Lagoon, Storm,
+    Dusk, Orchid, Candy; Grey for ash (`colours/names`). The stored ids stay (cherry, ocean, reef …),
+    so no row moves; reef shows as Teal because `teal` is an old colour a runner turns into mint.
+    Instead of: renaming the ids (every row and picture moved), a chat saying its long crayon name
+    ("Periwinkle here"), or many chats in one colour once more than 20 were open.
+    Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/events.cljs`,
+    `src/claudia/web/views/head.cljs`, `src/claudia/web/views/chatmenu.cljs`,
+    `src/claudia/slave/chats.cljs`, `resources/web/css/claudia.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

@@ -111,11 +111,14 @@
     (store/update! (:id r) (if (= :fresh change) {:color (least-used-colour (:id r))} change))))
 
 (defn wake!
-  "Writing to a passive (ash) chat makes it active again: the colour it had, else a fresh one."
+  "Writing to a passive (ash) chat makes it active again: the colour it had while no other open chat
+  here wears it, else a fresh one."
   [id]
-  (let [r (store/chat id)]
+  (let [r (store/chat id)
+        prev (:prev-color r)]
     (when (= "ash" (:color r))
-      (store/update! id {:color (or (:prev-color r) (least-used-colour id) nil) :prev_color nil}))))
+      (store/update! id {:color (if (and prev (not ((colours/taken (store/chats) id) prev))) prev (least-used-colour id))
+                         :prev_color nil}))))
 
 (defn refresh-title!
   "The chat's title read again from its session (after a turn, a rename). Promise."
@@ -152,13 +155,13 @@
 (defn chat-update
   "What a chat menu PATCH (or an agent's edit) changes in the chat's row (row: the chat as stored
   now): archived, a colour of the palette, ash (passive: grey, remembering the colour it had) or wake
-  (the colour it had, else (fresh), a new one)."
-  [{:keys [archived color]} row palette fresh]
+  (the colour it had unless another open chat wears it now (taken: a set), else (fresh), a new one)."
+  [{:keys [archived color]} row palette fresh taken]
   (cond-> {}
     (boolean? archived) (assoc :archived archived)
     (and (string? color) (some #{color} palette)) (assoc :color color)
     (= color "ash") (assoc :color "ash" :prev_color (let [c (:color row)] (if (= c "ash") (:prev-color row) c)))
-    (= color "wake") (assoc :color (or (:prev-color row) (fresh)) :prev_color nil)))
+    (= color "wake") (assoc :color (or (some-> (:prev-color row) (#(when-not (taken %) %))) (fresh)) :prev_color nil)))
 
 (declare session-follows-row!)
 
@@ -167,7 +170,7 @@
   chat menu's PATCH and the agent's rename_chat and set_chat_colour."
   [id {:keys [title] :as b}]
   (when (string? title) (rename! id title))
-  (store/update! id (chat-update b (store/chat id) chat-colors #(least-used-colour id)))
+  (store/update! id (chat-update b (store/chat id) chat-colors #(least-used-colour id) (colours/taken (store/chats) id)))
   (session-follows-row! id)
   (changed!))
 

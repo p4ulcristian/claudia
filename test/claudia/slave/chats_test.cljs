@@ -45,9 +45,9 @@
   (is (= (first colours/solid-colours) (colours/most-different [{:id 1 :color "cherry"}] 1)) "except itself")
   (let [all (map-indexed (fn [i c] {:id i :color c :started i}) colours/solid-colours)
         picked (colours/most-different all nil)]
-    (is (not= (last colours/solid-colours) picked) "every one worn once: never the last started")
-    (is (= picked (apply max-key #(colours/apart % (last colours/solid-colours)) (butlast colours/solid-colours)))
-        "every one worn once: the furthest from the last started")))
+    (is (colours/gradient? picked) "every solid worn by an open chat: a gradient (README decision 26)")
+    (is (not-any? (set (mapcat #(colours/crayons (:color %)) (colours/recent all nil))) (colours/crayons picked))
+        "none of the recently started chats' crayons while another is free")))
 
 (deftest a-new-chat-is-solid-and-avoids-a-gradients-crayons
   (let [picks (map #(colours/most-different [{:id 1 :color % :started 1}] nil) colours/gradient-colours)]

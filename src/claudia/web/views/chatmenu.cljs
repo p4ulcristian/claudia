@@ -3,7 +3,8 @@
   colours and, under them, the 8 gradients; or passive ash, which remembers the colour it had),
   rename, fork, Files… (opens the chat with Files in the right half: pick its folder), Take out of
   group (when it sits in one), Move to server… (README decision 82), archive."
-  (:require [claudia.shared.order :as order]
+  (:require [claudia.shared.colours :as colours]
+            [claudia.shared.order :as order]
             [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -49,19 +50,23 @@
 
 (defn- inside-of [box] (fn [t] (some-> (.-current box) (.contains t))))
 
-(defn- swatch-row [cs k color act]
-  (for [c cs]
+(defn- swatch-row [cs k color act taken]
+  (for [c cs
+        :let [off? (and (taken c) (not= c color)) n (colours/name-of c)]]
     ^{:key c}
-    [:button.swatch {:class (when (= c color) "on") :style {:background (words/colour-fill c)}
-                     :title c :aria-label c :on-click (act #(rf/dispatch [:ops/color k c]))}]))
+    [:button.swatch {:class [(when (= c color) "on") (when off? "taken")] :style {:background (words/colour-fill c)}
+                     :disabled off? :title (if off? (str n ": another chat wears it") n) :aria-label n
+                     :on-click (act #(rf/dispatch [:ops/color k c]))}]))
 
 (defn- swatches
-  "The solid colours, then the gradients on rows of their own (README decision 80)."
+  "The solid colours, then the gradients on rows of their own (README decision 80); the ones another
+  open chat wears struck through (decision 26)."
   [k color act]
-  [:div.cm-swatches
-   (swatch-row words/solid-colours k color act)
-   [:span.swatch-break]
-   (swatch-row words/gradient-colours k color act)])
+  (let [taken @(rf/subscribe [:taken-colours k])]
+    [:div.cm-swatches
+     (swatch-row words/solid-colours k color act taken)
+     [:span.swatch-break]
+     (swatch-row words/gradient-colours k color act taken)]))
 
 (defn- rename-input [k title close set-renaming]
   [:input.cm-rename {:auto-focus true :default-value title
