@@ -1044,8 +1044,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the ring at any time while holding keeps the recording going (2026-11-20 later, the user's
     call; before: the clip was dropped) and the mic follows the finger on a spring
     (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
-    have some personality"): it trails the finger and overshoots a little, the ring lit round a blue
-    disc saying move. Let go, the clip is heard and sent as when let go in place, and the mic
+    have some personality"): it trails the finger and overshoots a little, the ring lit round the
+    voice's bars and the red recording disc with its clock and "send" (2026-11-20 later, the user:
+    "it doesn't show the recording anymore, so it's confusing"; before: a blue disc saying move). Let go, the clip is heard and sent as when let go in place, and the mic
     glides there and stays, its slot in the rail a dashed ring. It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
@@ -1316,8 +1317,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     (`PUT /api/sentinel-key` through the front, as them): at once after a save, and every minute for a
     server that missed it, the same moments as the GitHub login. The runner keeps it in
     `~/.config/sentinel/key` (0600, that Linux user's only) and starts every chat with `SENTINEL_KEY`
-    and `SENTINEL_URL`; worktree reports send it as `Authorization: Bearer` (the old shared
-    `x-sentinel-token` only where no key is there yet). The page sees only the key's first 8
+    and `SENTINEL_URL`; worktree reports send it as `Authorization: Bearer` (the old
+    `x-sentinel-token` is gone since 2026-11-20). The page sees only the key's first 8
     characters; a removed key is remembered as removed, so a server that was off drops it later.
     Nobody approves a use: chats run unattended (at night, in the background), and the key's own
     scope on Sentinel is the limit. The hub refuses `/api/sentinel-key` from a page. Instead of: one
