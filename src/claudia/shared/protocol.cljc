@@ -22,7 +22,9 @@
     ;; The person's keys for list_secrets (README decision 77), answering a keys_ask.
     "keys"
     ;; A queued message taken back with its × (README decision 83).
-    "unqueue"})
+    "unqueue"
+    ;; The person touched this page (README decision 21): replies are read aloud only there.
+    "here"})
 
 (def runner->page
   #{"chats" "chat" "created" "claudia" "msg" "delta" "scene" "turn" "ask" "asked" "error"
@@ -30,11 +32,29 @@
     ;; The working line's note (Thinking, Retrying…, Compacting); no note: plain working.
     "status"
     ;; list_secrets wants the person's keys: the page fetches them and answers with keys.
-    "keys_ask"})
+    "keys_ask"
+    ;; A reply or question of a chat with a voice, to read aloud (README decision 21).
+    "speak"})
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."
-  #{"hello" "open" "close" "agent" "agent_git" "diff" "picture" "older"})
+  #{"hello" "here" "open" "close" "agent" "agent_git" "diff" "picture" "older"})
+
+(def ^:private max-here-ago
+  "How long ago a page may say it was touched: a day (older or broken: never)."
+  (* 24 60 60 1000))
+
+(defn touched-at
+  "When a `here` frame says its page was touched (now: this clock, ago: ms before, sent by the page;
+  0 when missing or out of range, so it never wins)."
+  [now ago]
+  (if (and (number? ago) (<= 0 ago max-here-ago)) (- now ago) 0))
+
+(defn last-touched
+  "Of the pages cs, the one touched last (touched: its time), or nil when none was touched."
+  [cs touched]
+  (let [c (when (seq cs) (apply max-key touched cs))]
+    (when (and c (pos? (touched c))) c)))
 
 (def forms
   "The forms the draw tool offers in this version."

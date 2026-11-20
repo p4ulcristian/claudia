@@ -226,3 +226,9 @@
   (flush! server))
 
 (rf/reg-fx :ws/hello hello!)
+
+(defn send-live!
+  "Sends a frame on every socket that is open and has said hello (nothing waits for the others)."
+  [frame]
+  (doseq [server (keys @sockets) :when (live-sock server)]
+    (send! server frame)))

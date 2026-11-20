@@ -34,6 +34,7 @@
 (rf/reg-fx :store (fn [[k v]] (db/store! k v)))
 (rf/reg-fx :speech/say speech/say!)
 (rf/reg-fx :speech/stop (fn [_] (speech/stop!)))
+(rf/reg-fx :speech/drop speech/drop-chat!)
 
 ;; ---- HTTP (same origin; the gate's login cookie goes along) ----
 

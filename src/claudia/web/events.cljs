@@ -6,6 +6,7 @@
             [claudia.web.api :as api]
             [claudia.web.db :as db]
             [claudia.web.fx :as fx]
+            [claudia.web.here :as here]
             [claudia.web.updates :as updates]
             [claudia.web.views.pure.agents :as agents-pure]
             [claudia.web.views.pure.chat :as chat-pure]
@@ -202,9 +203,11 @@
 
 (defn hello-frames
   "The frames a socket to server that just opened sends, in order (plain frames: they all go on that
-  one socket): hello, and after a reconnect the open chat's open again (full state, live events)."
-  [[s c] server]
+  one socket): hello, when this page was touched (here, nil: never; README decision 21), and after
+  a reconnect the open chat's open again (full state, live events)."
+  [[s c] server here]
   (cond-> [{:type "hello"}]
+    here (conj here)
     (and (= s server) c) (conj {:type "open" :chat c})))
 
 (defn opened-fx
@@ -214,7 +217,7 @@
   [db server now]
   (let [entry (with-status (get-in db [:servers server]) :open now)]
     {:db (assoc-in db [:servers server] entry)
-     :ws/hello [server (hello-frames (:open db) server)]
+     :ws/hello [server (hello-frames (:open db) server (here/frame))]
      :fx (cond-> [[:dispatch [:version/check]]]
            (:back entry) (conj [:dispatch-later {:ms back-shown-ms :dispatch [:ws/back-shown server]}]))}))
 
@@ -285,7 +288,7 @@
   decision 74: it starts where the last chat works, on its computer), speaker and bell (not the
   colour: each chat gets its own; not the subscription: a new chat runs on its person's last pick,
   README decision 57)."
-  [:model :effort :prompt :folder :talk :bell])
+  [:model :effort :prompt :folder :voice :bell])
 
 (defn carried-picks
   "The picks a new chat starts with after the chat k: that chat's settings, switches and folder (its
@@ -295,7 +298,7 @@
   (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:talk :bell])
+            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:voice :bell])
                    {:folder (or (not-empty (:folder row)) (not-empty folder) (get-in db [:work-folders (first k)]))})))
     (select-keys (:new-settings db) carried-keys)))
 
@@ -322,7 +325,7 @@
   colour, speaker and bell, those set."
   [new-settings]
   (into {} (filter (comp some? val))
-        (update (select-keys new-settings [:model :effort :plan :prompt :folder :color :talk :bell]) :folder not-empty)))
+        (update (select-keys new-settings [:model :effort :plan :prompt :folder :color :voice :bell]) :folder not-empty)))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text group picks]} (get-in db [:pending-new id])]
@@ -364,21 +367,24 @@
     (not running) (-> (dissoc :note)
                       (update :messages (fn [ms] (mapv #(dissoc % :streaming) ms))))))
 
-(defn turn-speech
-  "What a turn's end says in talking mode: the final reply, only for the chat on screen and a turn
-  that ended by itself (nil otherwise)."
-  [db k running stopped]
-  (when (and (not running) (not stopped) (talk/speaks? db k))
-    (some-> (talk/turn-reply (get-in db [:chats k :messages])) talk/speakable)))
-
 (defmethod on-frame "turn" [db server {:keys [chat running stopped]}]
-  (let [k [server chat]
-        said (turn-speech db k running stopped)]
+  (let [k [server chat]]
     {:db (-> db
              (update-in [:chats k] chat-after-turn running stopped)
              (update-in [:turn-since k] running-since running (js/Date.now)))
-     :fx (cond-> [[:dispatch [:chat/check-seen]]]
-           said (conj [:speech/say said]))}))
+     :fx [[:dispatch [:chat/check-seen]]]}))
+
+(defn speak-item
+  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text}, or
+  nil when nothing in it can be said."
+  [server {:keys [chat id voice text ask]}]
+  (when-let [said (talk/speakable (if ask (talk/ask-text ask) text))]
+    {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said}))
+
+(defmethod on-frame "speak" [db server f]
+  (if-let [item (speak-item server f)]
+    {:db db :fx [[:speech/say item]]}
+    {:db db}))
 
 (defn remove-ask
   "The asks without the one with this id."
@@ -386,10 +392,7 @@
   (vec (remove #(= (:id %) id) asks)))
 
 (defmethod on-frame "ask" [db server {:keys [chat ask]}]
-  (let [k [server chat]
-        said (when (talk/speaks? db k) (some-> (talk/ask-text ask) talk/speakable))]
-    (cond-> {:db (update-in db [:chats k :asks] #(conj (remove-ask % (:id ask)) ask))}
-      said (assoc :fx [[:speech/say said]]))))
+  {:db (update-in db [:chats [server chat] :asks] #(conj (remove-ask % (:id ask)) ask))})
 
 (defmethod on-frame "keys_ask" [db server {:keys [chat ask]}]
   ;; list_secrets (README decision 77): answered at once with this person's keys, no card.
@@ -487,12 +490,17 @@
 
 (rf/reg-event-fx
  :chat/switches
- ;; The chat's speaker and/or bell on or off (m: {:talk :bell}, those set), kept with the chat; k nil:
- ;; the new chat's picks, which go with `new`. The speaker off is silence at once.
+ ;; The chat's voice and/or bell (m: {:voice :bell}, those set), kept with the chat; k nil: the new
+ ;; chat's picks, which go with `new`. A voice turned Off is that chat's silence at once.
  (fn [{:keys [db]} [_ [s c :as k] m]]
    (cond-> {:db (switches/with-switches db k m)}
      k (assoc :ws/send [s (merge {:type "settings" :chat c} m)])
-     (false? (:talk m)) (assoc :fx [[:speech/stop]]))))
+     (and k (= "" (:voice m))) (assoc :fx [[:speech/drop k]]))))
+
+(rf/reg-event-db
+ :speech/now
+ ;; The reply being read aloud ({:id :k :voice}, nil: none): the mic shows its chat.
+ (fn [db [_ item]] (if item (assoc db :speaking item) (dissoc db :speaking))))
 
 (rf/reg-event-db
  :mic/failed

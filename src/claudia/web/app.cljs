@@ -13,6 +13,7 @@
             [claudia.web.bookmarks :as bookmarks]
             [claudia.web.right :as right]
             [claudia.web.folders]
+            [claudia.web.here :as here]
             [claudia.web.presence :as presence]
             [claudia.web.tabs :as tabs]
             [reagent.dom.client :as rdc]
@@ -60,6 +61,7 @@
   (ws/install! #(rf/dispatch [:chat/check-seen]))
   (rf/dispatch-sync [:init])
   (presence/start!)
+  (here/start!)
   (order/start!)
   (bookmarks/start!)
   (right/start!)

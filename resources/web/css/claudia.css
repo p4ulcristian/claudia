@@ -255,9 +255,14 @@ code, pre { font-family: var(--mono); }
 /* fork link: shown on hover where there is a pointer that hovers */
 @media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
 .msg.claude { padding: 0 2px; }
-/* Talking mode (views/talk.cljs): the header's speaker, a reply's play button. */
-.talk-toggle svg, .sound-toggle svg { width: 19px; height: 19px; }
-.talk-toggle.on, .sound-toggle.on { color: var(--accent); }
+/* The chats' voices (views/talk.cljs, README decision 21): the voice pill's popup, a reply's play button. */
+.sound-toggle svg { width: 19px; height: 19px; }
+.sound-toggle.on { color: var(--accent); }
+.head-pop.voice-pop { width: 320px; }
+.voice-opt { display: flex; align-items: flex-start; gap: 4px; }
+.voice-hear { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); }
+.voice-hear:hover { background: var(--bg); color: var(--fg); }
+.voice-hear svg { width: 14px; height: 14px; }
 .root-toggle svg { width: 19px; height: 19px; }
 .root-toggle.on { color: var(--red); }
 .say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
@@ -400,6 +405,21 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: transform 0.15s var(--ease), background 0.15s; }
 .mic-button svg { width: 26px; height: 26px; }
 
+/* A reply read aloud (README decision 21): the mic wears the speaking chat's colour, its bars move, and
+   its name and voice sit over it. A tap stops that reply; a hold talks. */
+.mic.speaking .mic-button { background: var(--m); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--m) 30%, transparent); }
+.mic-speak-bars { display: flex; align-items: center; gap: 3px; height: 26px; }
+.mic-speak-bars i { width: 4px; height: 100%; border-radius: 2px; background: currentColor; animation: mic-speak 0.9s ease-in-out infinite; }
+.mic-speak-bars i:nth-child(2) { animation-delay: -0.6s; }
+.mic-speak-bars i:nth-child(3) { animation-delay: -0.3s; }
+.mic-speak-bars i:nth-child(4) { animation-delay: -0.75s; }
+.mic-speak-bars i:nth-child(5) { animation-delay: -0.45s; }
+@keyframes mic-speak { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .mic-speak-bars i { animation: none; transform: scaleY(0.6); } }
+.mic-speaker { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5; display: grid; max-width: 200px; padding: 4px 10px; border-radius: 8px;
+  background: var(--panel2); box-shadow: inset 0 0 0 1.5px var(--chat, var(--line)); font-size: 12px; white-space: nowrap; pointer-events: none; }
+.mic-speaker b { overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-weight: 600; }
+.mic-speaker small { color: var(--muted); }
 .mic-hint { position: absolute; left: 0; bottom: 66px; z-index: 5; white-space: nowrap; padding: 4px 10px; border-radius: 7px; background: var(--panel2); color: var(--fg); font-size: 13px; }
 .input-row .attach { flex: none; }
 .input-row .primary, .input-row .stop { flex: none; padding: 6px 14px; font-size: 13px; border-radius: 7px; }

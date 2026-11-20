@@ -1,10 +1,11 @@
 (ns claudia.web.views.head
   "The chat's header (README decision 22): one panel lightly tinted with the chat's colour, three
   rows, the same for a new chat and a started one. Row 1: the title (a click renames it) and the
-  server's state when it is off or unreached. Row 2: four pills of one look: where it works, the
+  server's state when it is off or unreached. Row 2: five pills of one look: where it works, the
   computer and the folder in one (toggles Files, README decisions 70, 71), whose Claude
-  subscription, model · effort, the prompt profile. Row 3: the rings (context, 5-hour, week) on the
-  left; on the right the round buttons: colour, bell, speaker, root, archive. A new chat picks all
+  subscription, model · effort, the prompt profile, the voice that reads its replies (README
+  decision 21). Row 3: the rings (context, 5-hour, week) on the left; on the right the round
+  buttons: colour, bell, root, archive. A new chat picks all
   of them here before its first message (they go with `new`; its computer in Files); once it has
   started the computer is fixed and every other pick changes the chat."
   (:require [re-frame.core :as rf]
@@ -58,11 +59,12 @@
 
 (def ^:private pill-icons
   "Row 2's icons in place of words: the folder (where the chat works), Claude's spark (whose Claude plan), a
-  sparkle (model · effort), a page (the prompt profile)."
+  sparkle (model · effort), a page (the prompt profile), a speaker (the voice)."
   {:folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
    :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
    :model "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"
-   :prompt "M6 3.5h9l3.5 3.5v13.5H6zM15 3.5V7h3.5M9 11h6M9 14.5h6M9 18h4"})
+   :prompt "M6 3.5h9l3.5 3.5v13.5H6zM15 3.5V7h3.5M9 11h6M9 14.5h6M9 18h4"
+   :voice "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"})
 
 (defn- pill
   "One setting of row 2, every one the same: its icon (pill-icons, named by k), the value and a ▾
@@ -267,12 +269,24 @@
     [:f> popped {:k :prompt :label "Prompt profile" :value (or picked "built-in") :ro ro}
      (fn [close!] [prompts/pick-pop server settings put! close!])]))
 
+(defn- voice-pick
+  "The voice that reads the chat's replies aloud, Off by default (README decision 21); only when
+  the hub has a voice."
+  [{:keys [new? ck ro]}]
+  (let [k (when-not new? ck)
+        picked @(rf/subscribe [:voice k])]
+    (when (talk/use-voice?)
+      [:f> popped {:k :voice :label "Voice" :value (talk/voice-name picked) :ro ro
+                   :class (when (seq picked) "on")}
+       (fn [close!] [talk/voice-pop k picked close!])])))
+
 (defn- row-2 [hc]
   [:div.head-row.r2
    [place-pick hc]
    [:f> account-pick hc]
    [:f> model-pick hc]
-   [:f> prompt-pick hc]])
+   [:f> prompt-pick hc]
+   [:f> voice-pick hc]])
 
 ;; ---- row 3: rings, actions ----
 
@@ -306,7 +320,7 @@
         (palette color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!)))])]))
 
 (defn- actions
-  "Row 3's buttons on the right, all round: colour, bell, speaker, root (its owner, a started chat),
+  "Row 3's buttons on the right, all round: colour, bell, root (its owner, a started chat),
   archive (a started chat). A chat only looked at has none."
   [{:keys [ck row ro new? settings] :as hc}]
   (let [k (when-not new? ck)]
@@ -314,7 +328,6 @@
       [:span.head-acts
        [:f> colour-button hc]
        [alerts/bell-button k (if new? (:color settings) (:color row))]
-       [talk/toggle k]
        (when (and row @(rf/subscribe [:owner?])) [root-button ck])
        (when row (archive-button ck row))])))
 

@@ -32,6 +32,24 @@
     (is (= {:chart "x1"} (store/forms-seen "a")) "opening again changes nothing")
     (fs/rmSync dir #js {:recursive true :force true})))
 
+;; Voices came (README decision 21): a chat with its speaker on speaks in the first voice.
+
+(deftest a-speaker-on-becomes-the-first-voice
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-store-"))]
+    (store/open! dir)
+    (let [old (DatabaseSync. (path/join dir "claudia.db"))]
+      ;; As a runner before voices left it: no voice column, the speaker in talk.
+      (.exec old "ALTER TABLE chats DROP COLUMN voice;
+                  INSERT INTO chats (id, created, at, talk) VALUES ('on', 1, 1, 1), ('off', 1, 1, 0);")
+      (.close old))
+    (store/open! dir)
+    (is (= "nora" (:voice (store/chat "on"))))
+    (is (= "" (:voice (store/chat "off"))))
+    (store/update! "on" {:voice ""})
+    (store/open! dir)
+    (is (= "" (:voice (store/chat "on"))) "only once: Off stays Off")
+    (fs/rmSync dir #js {:recursive true :force true})))
+
 ;; Saved pictures rewritten once (README decision 39).
 
 (defn- old-store!

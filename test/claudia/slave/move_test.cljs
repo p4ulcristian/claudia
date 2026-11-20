@@ -113,7 +113,7 @@
 (defn- fill! [dir]
   (store/open! dir)
   (store/add! {:id id :title "T" :folder "/old" :color "gold" :at 5})
-  (store/update! id {:root true :chat_key "k" :talk true})
+  (store/update! id {:root true :chat_key "k" :voice "otto"})
   (store/save-scene! id {:title "pic" :blocks []})
   (store/kv! id "settings" {:model "opus"})
   (store/kv! id "session" {:account "a"})
@@ -130,7 +130,7 @@
                          :kv (update-keys (rules/kv-of (:kv out)) name)
                          :pictures (:pictures out) :changes (:changes out)})
     (let [r (store/chat id)]
-      (is (= ["T" "/new" "gold" false false nil true] ((juxt :title :folder :color :archived :root :chat-key :talk) r))))
+      (is (= ["T" "/new" "gold" false false nil "otto"] ((juxt :title :folder :color :archived :root :chat-key :voice) r))))
     (is (= {:title "pic" :blocks []} (store/scene id)))
     (is (= {:model "opus"} (store/kv id "settings")))
     (is (nil? (store/kv id "session")) "the session's versions stay behind")
