@@ -7,6 +7,7 @@
             [claudia.web.tip :as tip]
             [claudia.web.copy-pill :as copy-pill]
             [claudia.web.selection :as selection]
+            [claudia.web.login :as login]
             [claudia.web.native :as native]
             [claudia.web.order :as order]
             [claudia.web.bookmarks :as bookmarks]
@@ -65,6 +66,7 @@
   (tabs/start!)
   (voice-back/start!)
   (native/start!)
+  (login/start!)
   (gaze/install!)
   (mount!))
 
