@@ -44,11 +44,30 @@
     (update-in msgs [i :text] str text)
     (conj (or msgs []) {:id id :role "assistant" :text text :streaming true})))
 
-(defn drop-echo
-  "The runner echoed a user message: take the oldest matching text off the outbox."
+(defn echo-text
+  "A sent text as compared with its echo: trimmed, the blank around each line break gone (a reminder
+  the runner took out of a merged message leaves blank lines)."
+  [t]
+  (str/replace (str/trim (or t "")) #"\s*\n\s*" "\n"))
+
+(defn echo-run
+  "[start end) of the oldest run of outbox texts whose echo is text: one text, or several in a row
+  joined by line breaks (Claude Code takes messages queued together in as one); nil when none."
   [outbox text]
-  (let [i (first (keep-indexed (fn [i t] (when (= (str/trim t) (str/trim (or text ""))) i)) outbox))]
-    (if i (without-index outbox i) outbox)))
+  (let [want (echo-text text)
+        n (count outbox)]
+    (first (for [i (range n)
+                 j (range (inc i) (inc n))
+                 :when (= want (echo-text (str/join "\n" (subvec outbox i j))))]
+             [i j]))))
+
+(defn drop-echo
+  "The runner echoed a user message: take the oldest matching text (or run of texts) off the outbox."
+  [outbox text]
+  (let [outbox (vec outbox)]
+    (if-let [[i j] (echo-run outbox text)]
+      (into (subvec outbox 0 i) (subvec outbox j))
+      outbox)))
 
 (defn drop-echoes
   "The outbox without the texts a chat's user messages echoed."
@@ -604,7 +623,8 @@
 
 (defn send-for
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.
-  now: the chat's running turn stops first and the message goes as soon as it has ended."
+  now: it and every message queued before it go in at once, the running turn stopped for them
+  (README decision 84)."
   [db k typed & [now]]
   (let [chat (when (vector? k) (second k))
         server (if chat (first k) (default-server db))
@@ -699,6 +719,12 @@
  :chat/stop
  (fn [{:keys [db]} _]
    (on-open-chat db (fn [s c] {:ws/send [s {:type "stop" :chat c}]}))))
+
+(rf/reg-event-fx
+ :chat/unqueue
+ ;; A queued message's ×: the runner asks Claude Code to drop it (README decision 84).
+ (fn [_ [_ [s c] msg-id]]
+   {:ws/send [s {:type "unqueue" :chat c :msg msg-id}]}))
 
 (rf/reg-event-fx
  :chat/rename

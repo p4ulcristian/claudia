@@ -87,3 +87,31 @@
         out (history/session-msgs msgs [] nil)]
     (is (= ["q1" "answer-q1"] (map :id out)))
     (is (= "Red" (:text (last out))))))
+
+;; The shape of a real entry (Claude Code 2.1.326) for three messages queued during one turn and
+;; taken in at once: one user entry, its uuid the last send's, the earlier two in mergedSendUuids.
+;; Text and ids made up.
+(def merged-entry
+  #js {:parentUuid "p0" :isSidechain false :promptId "prompt-1" :type "user"
+       :message #js {:role "user" :content "first\nsecond\nthird"}
+       :uuid "send-3" :timestamp "1970-01-01T00:00:02.000Z" :promptSource "sdk"
+       :turnPosition #js {:promptIndex 0 :turnIndex 11}
+       :mergedSendUuids #js ["send-1" "send-2"] :turnAttributionKey "send-3"})
+
+(deftest merged-sends-reads-the-other-ids
+  (is (= ["send-1" "send-2"] (history/merged-sends merged-entry)))
+  (is (nil? (history/merged-sends #js {:type "user" :uuid "u"})) "no merge")
+  (is (nil? (history/merged-sends #js {:type "user" :mergedSendUuids #js []})) "an empty list")
+  (is (nil? (history/merged-sends #js {:type "assistant" :mergedSendUuids #js ["x"]})) "only user entries")
+  (is (= ["b"] (history/merged-sends #js {:type "user" :mergedSendUuids #js ["" nil "b"]})) "blank ids left out")
+  (is (= {"send-3" ["send-1" "send-2"]}
+         (history/merged-by-uuid [merged-entry #js {:type "user" :uuid "u"}]))))
+
+(deftest session-msgs-marks-a-merged-message
+  (let [msgs [{:type "user" :uuid "send-3" :message {:role "user" :content "first\nsecond\nthird"}}
+              {:type "assistant" :uuid "a1" :message {:id "m1" :content [{:type "text" :text "ok"}]}}]
+        out (history/session-msgs msgs [merged-entry] nil)]
+    (is (= {:id "send-3" :role "user" :text "first\nsecond\nthird" :at 2000 :merged ["send-1" "send-2"]}
+           (first out)))
+    (is (nil? (:merged (second out))) "only the user message"))
+  (is (= [{:id "x" :role "assistant"}] (history/with-merged [{:id "x" :role "assistant"}] {"x" ["y"]}))))

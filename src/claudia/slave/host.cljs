@@ -151,7 +151,10 @@
     (pump id s)))
 
 (def ^:private control-methods
-  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels" "setMcp"})
+  ;; cancelAsyncMessage: drops a queued user message by its uuid (the SDK's cancel_async_message
+  ;; control request); answers whether it was still in Claude Code's queue.
+  #{"stopTask" "setModel" "applyFlagSettings" "getContextUsage" "supportedCommands" "supportedModels" "setMcp"
+    "cancelAsyncMessage"})
 
 (defn- set-mcp
   "Replaces a live session's tools with the runner's new ones: a server under the same name is kept
@@ -209,7 +212,9 @@
       "send" (when s
                (reset! (:busy s) true)
                ((:push s) (user-message id msg)))
-      "interrupt" (when s (-> (.interrupt ^js (:q s)) (.catch (fn [_]))))
+      ;; cancelQueued: Claude Code also drops the user messages still queued (else they run next).
+      "interrupt" (when s (-> (.interrupt ^js (:q s) (when (.-cancelQueued msg) #js {:cancelQueued true}))
+                              (.catch (fn [_]))))
       "close" (close! id)
       "reply" (reply! msg)
       "list" (send! #js {:ev "sessions" :list (session-list)})

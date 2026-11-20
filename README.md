@@ -1133,6 +1133,41 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
 
+84. Queued messages: shown once, taken back with ×, sent with now (2026-11-20, the user's call:
+    "sending with now sends all queued messages now, together with the new one, in order").
+    Merged: Claude Code takes messages queued during a turn in together as ONE user entry, their
+    texts joined by line breaks, its uuid the last send's and `mergedSendUuids` the earlier ones'
+    (Claude Code 2.1.326). The runner counts every id an entry stands for as in the session file,
+    so those sends leave the sent-but-unsaved list (they stayed there and were shown again at the
+    chat's end on every load), and the page shows the entry once with each send's voice
+    (`Msg.merged`, PROTOCOL.md). Take back: a queued message has a × beside its tag (not for a
+    read-only viewer); the runner asks Claude Code to drop it (the Agent SDK's
+    `cancel_async_message` control request, `Query.cancelAsyncMessage` in the session host), and
+    it leaves the chat when Claude Code says it dropped it. One Claude Code has taken in already
+    stays (the × goes when it shows as taken in); one not in Claude Code's queue yet (still on its
+    way) is dropped once Claude Code reports it queued. The session host learns the call only
+    when it restarts (hosts never restart in an update): until then the × answers that the host
+    needs a restart. Now: a message sent with now goes into Claude Code's queue behind the
+    messages queued before it; once Claude Code reports it queued and the running turn has begun
+    (its init, or Claude writing), the runner stops the turn with a plain interrupt, and Claude
+    Code runs every message still queued in the next turn, in order, as one (the interrupt's
+    `still_queued`). If the running turn takes the message in before the stop (between two tool
+    calls), the turn is not stopped: it is answering it. While helpers run, now is a plain send
+    (a stop would stop them too, decision of 2026-11-17): it queues behind the others and Claude
+    Code takes them all in together at its next step. Archiving a running chat stops it with
+    `cancel_queued` (the messages queued, a now message among them, are dropped and leave the
+    chat), so nothing it queued runs after the archive. A message Claude Code drops for good
+    (`command_lifecycle` cancelled, discarded or refused while queued) leaves the chat. What is
+    not covered: a stop that crosses a running turn taking the now message in at that moment
+    leaves that message seen by Claude but unanswered (Claude Code's own fix for it,
+    `requeue_if_interrupted_within_ms`, is internal). Instead of: holding queued messages in
+    Claudia until Claude Code is about to take them (Claude Code takes messages in between tool
+    calls, which Claudia cannot see coming; the SDK's own removal makes holding unneeded); stopping
+    the turn first and sending the now message after its end (the queued ones ran first in a turn
+    of their own and the now message queued behind it, as before); stopping with `cancel_queued`
+    and sending everything again (Claude Code skips a user message whose uuid it has seen, and new
+    ids would lose each message's voice and images).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

@@ -319,10 +319,11 @@ Page → runner:
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `prompt?`, `color?`, `talk?`, `bell?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its speaker and bell as picked (else speaker off, bell on); runner answers `created { chat, id }` then events |
-| `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: the running turn is stopped and the message goes once it has ended). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one); the page ties its own data to the message by it (a dictated message's sound) |
+| `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: it is queued behind the messages queued before it, then the running turn is stopped and Claude Code runs all of them in the next turn, in order, README decision 84). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one); the page ties its own data to the message by it (a dictated message's sound) |
 | `claudia` | | Claudia's own chat (README decision 48): the runner that has her (its `meta` frame says `claudia: true`) makes or finds it and answers `claudia { chat }`; elsewhere an `error` |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
+| `unqueue` | `chat`, `msg` (a queued message's id) | takes a queued message back (README decision 84): Claude Code drops it from its queue and `msg` with `gone: true` follows; one it took in already stays (its `msg` without `queued` follows); `error` when the session host cannot do it |
 | `answer` | `chat`, `ask`, `answers` (`{ "<question>": "<label>" }`) | answers an AskUserQuestion; on a `permit` ask (`answers` `{}`) it is the OK |
 | `secret` | `chat`, `ask`, `sealed` | the sealed secret for a `run_with_secret` ask |
 | `deny` | `chat`, `ask` | refuses a secret or permit ask |
@@ -348,7 +349,7 @@ Runner → page:
 | `chat` | `chat`, `title`, `folder`, `messages: [Msg]` (the newest 120), `more` (bool: older ones exist), `scene: Scene`, `running`, `asks: [Ask]` |
 | `older` | `chat`, `before`, `messages: [Msg]` (up to 120 before `before`), `more` |
 | `created` | `chat`, `id` (the page's uuid, to match) |
-| `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`; `gone: true`: a queued message Claude Code dropped) |
+| `msg` | `chat`, `msg: Msg` (a new or replaced message, by `msg.id`; `gone: true`: a queued message Claude Code dropped, or the person took back with `unqueue`) |
 | `delta` | `chat`, `id`, `text` (streamed text appended to message `id`) |
 | `scene` | `chat`, `scene: Scene` (the whole picture; it is small), `changed` (ids the draw changed: blocks, `block:item` (a graph's nodes and arrows `block:from->to` too), `block:part`), `turn` (the picture's turn) |
 | `status` | `chat`, `running`, `note?` (`Thinking`, `Retrying…`, `Compacting`; none: plain working) |
@@ -404,7 +405,9 @@ folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
 A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`) and
 `queued: true` while Claude Code hasn't taken it in (sent during a turn; the `msg` without it, or
-the turn's end, says it was); a `show_image` step has `image: true` and a `show_video` step `video: true`
+the turn's end, says it was), and `merged?` (ids of the earlier sends Claude Code took in together
+with it as this one message, their texts joined by line breaks; the message's own id is the last
+send's, README decision 84); a `show_image` step has `image: true` and a `show_video` step `video: true`
 (both from `GET /api/chats/:chat/shown/<id>`).
 An assistant message has `aside: true` when it was the turn's final reply and went over the chat's
 limit (`claudia.slave.tools/reply-limit` characters): the Stop hook handed it back to Claude to
@@ -602,10 +605,11 @@ query options without callbacks, `mcp` = the tool list (`{ server: { tool: { des
 (JSON Schema) } } }`), `hooks` = `{ <HookEvent>: [{ matcher? }] }`;
 `{ op: "send", id, text, uuid?, images? }` (uuid: the user message's id, kept in the session file;
 images: `[{ media_type, data }]`, image blocks before the text),
-`{ op: "interrupt", id }`, `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`,
+`{ op: "interrupt", id, cancelQueued? }` (true: the user messages still queued are dropped too; else they run in the next turn), `{ op: "close", id }`, `{ op: "reply", rpc, value | error }`, `{ op: "list" }`,
 `{ op: "control", id, req, method, args }` (a call on the chat's query: `stopTask`, `setModel`,
-`applyFlagSettings`, `getContextUsage`, `supportedCommands`, `supportedModels`, and `setMcp` with
-`[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
+`applyFlagSettings`, `getContextUsage`, `supportedCommands`, `supportedModels`, `cancelAsyncMessage`
+with `[uuid]` (a queued user message dropped; value: whether it was still in Claude Code's queue),
+and `setMcp` with `[mcp]`: the session's tools replaced), answered by `{ ev: "control", req, value | error }`.
 
 Host → runner: `{ ev: "msg", id, msg }` (an SDK message as is), `{ ev: "rpc", rpc, id, kind: "mcp" | "hook" | "canUseTool", args }`,
 `{ ev: "ended", id, error? }`, `{ ev: "sessions", list: [{ id, busy }] }` (answer to `list`, and sent
