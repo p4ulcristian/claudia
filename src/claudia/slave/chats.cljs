@@ -1043,6 +1043,41 @@
   []
   (doseq [id (keys @state)] (drop-asks! id false nil)))
 
+;; Moving to another server (README decision 82; claudia.slave.move) ------------------------------
+
+(defn moving?
+  "Whether the chat is held for a move to another server: nothing is sent into it, its Claude Code
+  does not start."
+  [id]
+  (> (or (:moving (st id)) 0) (js/Date.now)))
+
+(defn moving-error!
+  "Tells the page a message did not go: the chat is moving."
+  [id]
+  (emit! id {:type "error" :text "This chat is moving to another server: write to it there once it has moved."}))
+
+(defn move-problem
+  "Why chat id cannot move now, or nil. A move never stops anything: work running and questions
+  open are the person's to end first."
+  [id]
+  (cond (claudia/her? id) "Claudia's own chat stays on its server."
+        (moving? id) "This chat is moving already."
+        (working? id) "This chat is working (a turn, agents or background shells): stop them or let them finish, then move it."
+        (seq (:asks (st id))) "This chat waits on a question or an OK: answer it first, then move it."
+        :else nil))
+
+(defn hold!
+  "Holds the chat for a move until `until` (ms): its Claude Code closes, so its session file stays
+  as it is while it is copied."
+  [id until]
+  (when (:live (st id)) (close-session! id))
+  (swap-chat! id assoc :moving until))
+
+(defn unhold!
+  "The move is over (done or given up): the chat takes messages again and follows its row."
+  [id]
+  (swap-chat! id dissoc :moving))
+
 ;; Page actions -----------------------------------------------------------------------------------
 
 (defn- start-spec [id resume? child-env]
@@ -1090,7 +1125,7 @@
   (-> (sdk/getSessionInfo id #js {:dir cwd})
       (.catch (fn [_] nil))
       (.then (fn [info]
-               (when (and info (not (:live (st id))) (view/keeps-session? (store/chat id)))
+               (when (and info (not (:live (st id))) (not (moving? id)) (view/keeps-session? (store/chat id)))
                  (let [t (token-of id)]
                    (start-session! id true t (session/account-of t))))))
       ;; No token for it (README decision 57): it stays closed; its next message says so.
@@ -1131,17 +1166,36 @@
         (archived? id) (archive-stop! id)
         :else (arm-idle! id)))
 
+(def pending-note-id "The id of the shown server move note before it goes with a message." "moved-pending")
+
+(defn- take-server-note!
+  "The server move's note (README decision 82; claudia.slave.move), said once: [text with it in its
+  tag, the note or nil]. A copy of the chat left behind is no longer one once it is written to."
+  [id text]
+  (store/kv! id "movedTo" nil)
+  (if-let [{note :text} (store/kv id "serverMove")]
+    (do (store/kv! id "serverMove" nil) [(history/with-moved-note text note) note])
+    [text nil]))
+
+(defn- show-server-note!
+  "The note that goes with message msg, shown as Claude gets it, in place of the pending one."
+  [id msg note]
+  (emit! id {:type "msg" :msg {:id pending-note-id :role "note" :gone true}})
+  (note-msg! id {:id (str (:id msg) ":moved") :role "note" :text note :at (:at msg)}))
+
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
   msg-id: the id the page made for it (nil: one is made here)."
   [id message images msg-id was-live?]
-  (let [msg (turns/sent-msg (or msg-id (str (random-uuid))) message images (boolean (:running (st id))) (js/Date.now))]
+  (let [msg (turns/sent-msg (or msg-id (str (random-uuid))) message images (boolean (:running (st id))) (js/Date.now))
+        ;; The forms news and a folder move's note go as reminders the chat doesn't show (the forms
+        ;; only to a session that ran with the old tools); a server move's note shows.
+        [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id message was-live?)))]
     (swap-chat! id turns/with-sent msg)
     (store/kv! id "turn" (:id msg))
+    (when note (show-server-note! id msg note))
     (note-msg! id msg)
-    ;; The forms news goes with this message, as a reminder the chat doesn't show (only to a
-    ;; session that ran with the old tools).
-    (hostlink/send! (cond-> {:op "send" :id id :text (take-moved-note! id (codeforms/take-note! id message was-live?)) :uuid (:id msg)}
+    (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
                       (seq images) (assoc :images images)))
     (set-running! id true)))
 
@@ -1150,12 +1204,14 @@
   msg-id: the message's id as the page made it (nil: one is made). Sent while a turn runs, it is
   queued until Claude takes it in."
   [id message & [images msg-id]]
-  (-> (js/Promise.resolve)
-      (.then (fn []
-               (let [live? (boolean (:live (st id)))]
-                 (.then (ensure-session! id) (fn [] live?)))))
-      (.then #(send-now! id message images msg-id %))
-      (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)})))))
+  (if (moving? id)
+    (js/Promise.resolve (moving-error! id))
+    (-> (js/Promise.resolve)
+        (.then (fn []
+                 (let [live? (boolean (:live (st id)))]
+                   (.then (ensure-session! id) (fn [] live?)))))
+        (.then #(send-now! id message images msg-id %))
+        (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
 
 (defn new-chat-colour
   "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."
@@ -1195,6 +1251,13 @@
     (swap-chat! id assoc :stopping true))
   (hostlink/send! {:op "interrupt" :id id}))
 
+(defn with-pending-note
+  "A chat's messages with the server move's note (pending: its kv value, nil: none) at the end, the
+  words Claude gets with the next message."
+  [msgs pending]
+  (cond-> msgs
+    (:text pending) (conj {:id pending-note-id :role "note" :text (:text pending) :at (or (:at pending) 0)})))
+
 (defn- chat-frame
   "The chat frame from the session file's history: sent messages it holds now are no longer kept
   aside."
@@ -1210,7 +1273,7 @@
      :effort (:effort-now s)
      :commands (:commands s)
      :context (or (:context s) (store/kv id "context"))
-     :messages (view/chat-msgs hist s)
+     :messages (with-pending-note (view/chat-msgs hist s) (store/kv id "serverMove"))
      :scene (current-scene id)
      :running (boolean (:running s))
      :since (:since s)

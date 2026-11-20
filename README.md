@@ -1211,6 +1211,39 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/web/views/tearoff.cljs`, `src/claudia/slave/chats.cljs`,
     `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
 
+82. A chat moves to another server (2026-11-20, the user's design). The chat menu's Move to
+    server… (only on the person's own chats, not on a view or a write tick, not on Claudia's own
+    chat, and only with another server where they have a profile) opens the confirm card: the
+    server it goes to, the folder there (the chat's folder from the home folder, `~/…`, so it lands
+    in the same place by default; empty: that server's work folder), and what stays: the working
+    folder's files, running helpers and background work. The hub (`POST /hub/chat-move`,
+    `claudia.hub.move`) drives both runners through their fronts as the person, over the hub's own
+    channel (no new port): the target says the folder is there; the source holds the chat (its
+    Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
+    source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
+    talk and bell), its settings, context, last turn and agents' list, its pictures and file
+    changes, and Claude Code's session file with everything under `<id>/` (subagents, tool
+    results), placed in the target runner's own project folder (its working folder's slug). The
+    target reads its copy back and the hub checks it against the source: the same number of
+    messages, the same last message, every file's size and SHA-256, as many pictures and file
+    changes. Only then does the target take the chat in and the source archive its own, marked as
+    moved (never deleted; a move back replaces that copy unless it was written to since), with its
+    root switch turned off: the switch is the source front's, and a moved chat starts with root off
+    and a new chat key. Any failure stops the move: the target drops its copy, the source keeps the
+    chat, and the card shows why. A chat that works (a turn, agents or background shells) or waits
+    on a question is refused, never stopped: stopping would end work the person did not ask to end.
+    Claude hears of the move with the next message: "This chat moved from the server A to the server
+    B. Its folder is now X on B … Paths and files in the earlier history are A's: the working
+    folder's files, running helpers and background work stayed on A." (moved away and back before
+    it heard of it: only where it works now). Unlike a folder move's reminder, the chat shows these
+    exact words: as a note at the end of the chat until the next message, then as a note right
+    before that message (`<claudia-moved>` in the message Claude gets, read back from the session
+    file). Uploads, 3D videos and agents' shell output stay on the source too. Instead of: a new
+    chat on the target with a summary (Claude would lose the conversation), copying by SSH between
+    the servers (the agent users' certificates are Claude's, not the person's, and would open a
+    path between servers), the hub keeping the copy (the gate's memory), or a hidden reminder (the
+    person could not see what Claude was told).
+
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 
 - **Servers and access**: the hub's own SQLite store (`HUB_DATA/hub.db`, `src/claudia/hub/store.cljs`)

@@ -39,3 +39,46 @@
   "Promise of [status body-map] of a hub-only call on a server's front (see call-as)."
   [server method path body ms]
   (call-as server nil method path body ms))
+
+(defn- answer-of
+  "Promise of [status body-map] once res (an answer) has ended."
+  [^js res]
+  (js/Promise. (fn [done]
+                 (let [chunks #js []]
+                   (.on res "data" #(.push chunks %))
+                   (.on res "end" #(done [(.-statusCode res) (answer-body chunks)]))
+                   (.on res "error" #(done [0 {:error (.-message %)}]))))))
+
+(defn- pipe-on!
+  "The source's answer (src, 200) streamed as the body of a POST to path on server `to` as email;
+  done gets the target's [status body]. Returns the target's request."
+  [^js src to email path ms done]
+  (let [^js up (http/request (request-options to "POST" path nil ms email)
+                             #(.then (answer-of %) done))]
+    (.setHeader up "content-type" "application/x-ndjson")
+    (.on up "error" #(do (.destroy src) (done [0 {:error (str (:name to) ": " (.-message %))}])))
+    (.on src "error" #(.destroy up (js/Error. (str "the copy broke off: " (.-message %)))))
+    (.pipe src up)
+    up))
+
+(defn pipe-as
+  "Promise of [status body-map] of streaming a GET of from-path on server `from` into a POST to
+  to-path on server `to`, both for the person email; the hub keeps none of it (a chat moved to
+  another server, claudia.hub.move). The source answering other than 200: its [status body]; no
+  end within ms: [0 {:error}]."
+  [from from-path to to-path email ms]
+  (js/Promise.
+   (fn [done]
+     (let [timer (atom nil)
+           up (atom nil)
+           finish (fn [v] (some-> @timer js/clearTimeout) (done v))
+           ^js down (http/request (request-options from "GET" from-path nil ms email)
+                                  (fn [^js src]
+                                    (if (= 200 (.-statusCode src))
+                                      (reset! up (pipe-on! src to email to-path ms finish))
+                                      (.then (answer-of src) finish))))]
+       (reset! timer (js/setTimeout #(do (some-> ^js @up .destroy) (.destroy down)
+                                         (done [0 {:error (str "no end in " (/ ms 1000) " s")}]))
+                                    ms))
+       (.on down "error" #(finish [0 {:error (str (:name from) ": " (.-message %))}]))
+       (.end down)))))
