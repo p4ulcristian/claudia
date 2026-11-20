@@ -42,7 +42,8 @@
 
 (def ring-in
   "The move ring's inner edge, px from the mic's centre: just outside the petals (116 px out). A
-  finger that reaches it while holding a mic that moves drops the clip and the mic follows it."
+  finger that reaches it while holding a mic that moves keeps recording and the mic follows it;
+  let go, the clip is sent as when let go in place."
   124)
 
 (def ring-out "The move ring's outer edge, px from the mic's centre." 148)

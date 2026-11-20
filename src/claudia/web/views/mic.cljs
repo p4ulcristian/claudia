@@ -10,9 +10,10 @@
   where the browser can record and the hub has a listen service.
   On the tablet's rail (README decision 73) the flower is half, to the left, and the mic moves: a
   ring round the petals says move, and the finger reaching it (pure/in-ring?) at any time while
-  holding drops the clip and the mic follows the finger on a spring (motion's useSpring: it trails
-  and overshoots a little), its button kept on the screen; let go, it glides there and stays (its
-  spot kept on this device), or, covering half its slot or more (pure/home?), it glides home. Out
+  holding keeps the recording going while the mic follows the finger on a spring (motion's useSpring: it trails
+  and overshoots a little), its button kept on the screen; let go, the clip is heard and sent as
+  when let go in place, and the mic glides there and stays (its spot kept on this device), or,
+  covering half its slot or more (pure/home?), it glides home. Out
   of the rail its flower is whole, four ways."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
@@ -143,9 +144,9 @@
           (.then (fn [s]
                    (set! (.-current live) s)
                    (set-mic s)
-                   (when (and (.-current hold) (not (:moving (.-current hold))))
+                   (when (.-current hold)
                      (set! (.-current hold) (assoc (.-current hold) :rec-at (js/performance.now)))
-                     (set-phase :recording))))
+                     (when-not (:moving (.-current hold)) (set-phase :recording)))))
           (.catch #(start-failed! set-phase %))))))
 
 (defn- jump!
@@ -154,15 +155,14 @@
   (.jump mx x) (.jump my y) (.jump sx x) (.jump sy y))
 
 (defn- start-move!
-  "The finger reached the move ring: the clip is dropped and the mic, out of its place, starts
+  "The finger reached the move ring: the recording goes on and the mic, out of its place, starts
   following the finger from where it sat."
-  [{:keys [hold live set-phase set-free] :as parts}]
-  (let [{:keys [p from]} (.-current hold)]
-    (set! (.-current hold) (assoc (.-current hold) :moving true))
+  [{:keys [hold set-phase set-free] :as parts}]
+  (let [{:keys [from]} (.-current hold)]
+    (set! (.-current hold) (assoc (.-current hold) :moving true :dir :send))
     (jump! parts from)
     (set-free true)
-    (set-phase :moving)
-    (.then p (fn [s] (set! (.-current live) nil) (mic/discard! s)))))
+    (set-phase :moving)))
 
 (defn- on-screen
   "Where a moved mic's button goes for a finger at x y: there, kept wholly on the screen."
@@ -198,11 +198,10 @@
 (defn- moved!
   "Let go while moving: the mic glides to where the finger is (its button on the screen) and stays
   (kept on this device), or, covering half its slot or more, glides home into it."
-  [^js e {:keys [set-phase set-spot set-free ^js mx ^js my ^js sx ^js sy]} {:keys [slot from]}]
+  [^js e {:keys [set-spot set-free ^js mx ^js my ^js sx ^js sy]} {:keys [slot from]}]
   (let [at (on-screen (.-clientX e) (.-clientY e) (:r from))
         spot (when-not (pure/home? (assoc at :r (:r from)) slot) at)
         to (or spot slot)]
-    (set-phase :idle)
     (keep-spot! spot)
     (set-spot spot)
     (.set mx (:x to)) (.set my (:y to))
@@ -224,13 +223,12 @@
 (defn- release!
   "Pointer up: a hold long enough is heard and sent (dragged down: now; dragged left: added to the
   message; dragged right: thrown away); a tap is dropped and says to hold; a move ends where the
-  finger is."
+  finger is, and its clip is heard and sent as when let go in place."
   [^js e {:keys [hold live set-phase] :as parts}]
   (when-let [{:keys [t0 p dir k rec-at moving] :as held} (.-current hold)]
     (set! (.-current hold) nil)
-    (if moving
-      (moved! e parts held)
-      (heard! p {:t0 t0 :dir dir :k k :rec-at rec-at} live set-phase))))
+    (when moving (moved! e parts held))
+    (heard! p {:t0 t0 :dir (if moving :send dir) :k k :rec-at rec-at} live set-phase)))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
