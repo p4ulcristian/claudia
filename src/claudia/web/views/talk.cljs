@@ -1,61 +1,61 @@
 (ns claudia.web.views.talk
-  "Talking mode's controls (README decision 21): the speaker in the chat's header turns it on
-  and off for that chat (kept with the chat); while it is on, each of the chat's replies has a small
-  play button; the guard silences the voice when the open chat changes. Shown only when the hub has
-  a voice."
-  (:require [claudia.web.speech :as speech]
+  "The chats' voices (README decision 21): the voice pill's popup in the chat's header (Off or a
+  named voice, each with a sample to hear; kept with the chat) and each reply's play button while
+  the chat has a voice. Shown only when the hub has a voice."
+  (:require [claudia.shared.voices :as voices]
+            [claudia.web.speech :as speech]
             [claudia.web.views.pure.talk :as pure]
             [claudia.web.voice :as voice]
             [re-frame.core :as rf]
             [reagent.hooks :as h]))
 
-(defn- use-voice?
+(defn use-voice?
   "Whether the hub has a voice (false until known)."
   []
   (let [[ok set-ok] (h/use-state false)]
     (h/use-effect (fn [] (.then (voice/available?) set-ok) nil) [])
     ok))
 
-(def ^:private head-path
-  "A person speaking, seen from the side: the head and shoulders."
-  "M8 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6")
+(defn voice-name
+  "The pill's value for a voice id: its name, or Off."
+  [id]
+  (or (:name (voices/by-id id)) "Off"))
 
-(defn- speaker [on?]
-  [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
-         :stroke-linecap "round" :stroke-linejoin "round"}
-   [:path {:d head-path}]
-   (if on?
-     [:path {:d "M15.5 6a4.5 4.5 0 0 1 0 5.5M18.5 3.5a8 8 0 0 1 0 10.5"}]
-     [:path {:d "M16 6l5 5M21 6l-5 5"}])])
+(def ^:private sample "Hi, this is how I sound when I read your chat's replies.")
 
-(defn- toggle-view [k]
-  (let [on? @(rf/subscribe [:talk? k])]
-    (when (use-voice?)
-      [:button.icon.talk-toggle {:type "button" :aria-pressed on? :class (when on? "on")
-                                 :aria-label "Talking mode"
-                                 :data-tip (if on? "Talking mode on: this chat's replies are read aloud" "Talking mode off for this chat")
-                                 :on-click (fn [] (when-not on? (speech/unlock!)) (rf/dispatch [:chat/switches k {:talk (not on?)}]))}
-       [speaker on?]])))
+(defn- hear! [{:keys [id]}]
+  (speech/unlock!)
+  (speech/say-now! {:id (str "sample-" id "-" (js/Date.now)) :k nil :voice id :text sample}))
 
-(defn toggle
-  "The header's talking mode switch for the chat k ([server id]; nil: the new chat)."
-  [k]
-  [:f> toggle-view k])
+(defn- option [label line sel? pick!]
+  [:button.prompt-opt {:type "button" :class (when sel? "sel") :on-click pick!}
+   [:span.dot] [:span [:span.nm label] (when (seq line) [:small line])]])
+
+(defn- voice-row [v picked choose!]
+  [:div.voice-opt
+   [option (:name v) (:description v) (= picked (:id v)) #(choose! (:id v))]
+   [:button.voice-hear {:type "button" :aria-label (str "Hear " (:name v)) :data-tip (str "Hear " (:name v))
+                        :on-click #(hear! v)}
+    [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M8 5v14l11-7z" :fill "currentColor"}]]]])
+
+(defn voice-pop
+  "The voice pill's popup for chat k (nil: the new chat): Off, then every voice with its sample. A
+  pick closes it."
+  [k picked close!]
+  (let [choose! (fn [id] (close!) (speech/unlock!) (rf/dispatch [:chat/switches k {:voice id}]))]
+    [:div.head-pop.voice-pop {:role "dialog" :aria-label "Voice"}
+     [:div.prompt-sec "Reads this chat's replies"]
+     [option "Off" "this chat stays silent" (= "" picked) #(choose! "")]
+     (for [v voices/all]
+       ^{:key (:id v)} [voice-row v picked choose!])]))
 
 (defn say-button
-  "A reply's play button while the chat k's speaker is on."
+  "A reply's play button while the chat k has a voice: reads it now, in that voice."
   [k text]
-  (when @(rf/subscribe [:talk? k])
-    (when-let [said (pure/speakable text)]
-      [:button.say-reply {:type "button" :aria-label "Read aloud" :data-tip "Read aloud"
-                          :on-click (fn [] (speech/unlock!) (speech/say! said))}
-       [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M8 5v14l11-7z" :fill "currentColor"}]]])))
-
-(defn- guard-view [k]
-  (h/use-effect (fn [] #(speech/stop!)) [k])
-  nil)
-
-(defn guard
-  "Silences the voice when the chat on screen changes (k: the open chat as a string)."
-  [k]
-  [:f> guard-view k])
+  (let [v @(rf/subscribe [:voice k])]
+    (when (seq v)
+      (when-let [said (pure/speakable text)]
+        [:button.say-reply {:type "button" :aria-label "Read aloud" :data-tip "Read aloud"
+                            :on-click (fn [] (speech/unlock!)
+                                        (speech/say-now! {:id (str "again-" (hash said)) :k k :voice v :text said}))}
+         [:svg {:viewBox "0 0 24 24" :aria-hidden true} [:path {:d "M8 5v14l11-7z" :fill "currentColor"}]]]))))

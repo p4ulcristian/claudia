@@ -18,7 +18,8 @@
 (rf/reg-sub :draft (fn [db [_ k]] (get-in db [:drafts k] "")))
 ;; The dictated piece in draft k whose clean and raw words differ (the composer's chip), or nil.
 (rf/reg-sub :dictated-swap (fn [db [_ k]] (dictated/swappable (get-in db [:dictated k]) (get-in db [:drafts k]))))
-(rf/reg-sub :talk? (fn [db [_ k]] (switches/talk-on? db k)))   ; k nil: the new chat
+(rf/reg-sub :voice (fn [db [_ k]] (switches/voice-of db k)))   ; k nil: the new chat
+(rf/reg-sub :speaking (fn [db _] (:speaking db)))
 (rf/reg-sub :bell? (fn [db [_ k]] (switches/bell-on? db k)))
 (rf/reg-sub :root? (fn [db [_ k]] (switches/root-on? db k)))
 (rf/reg-sub :owner? (fn [db _] (not (events/viewing-other? db))))   ; the person's own chats, not a view

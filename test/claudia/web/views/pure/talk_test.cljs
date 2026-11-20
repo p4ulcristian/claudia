@@ -2,12 +2,6 @@
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.talk :as talk]))
 
-(deftest the-turn-ends-with-claudes-last-message
-  (is (= "Done." (talk/turn-reply [{:role "user" :text "go"} {:role "assistant" :text "Looking."}
-                                   {:role "note" :text "x"} {:role "assistant" :text " Done. "}])))
-  (is (nil? (talk/turn-reply [{:role "assistant" :text "old"} {:role "user" :text "new"}])))
-  (is (nil? (talk/turn-reply []))))
-
 (deftest asks-are-their-questions
   (is (= "Which one? Now?" (talk/ask-text {:questions [{:question "Which one?"} {:question " Now? "}]})))
   (is (nil? (talk/ask-text {:questions []}))))
@@ -22,12 +16,41 @@
   (is (nil? (talk/speakable " ")))
   (is (= "Done" (talk/speakable "## Done"))))
 
-(defn- db-with [open talk]
-  {:open open :servers {"s" {:rows {"c" {:id "c" :talk talk} "d" {:id "d" :talk true}}}}})
+(def a {:id "t1" :k ["s" "c"] :voice "nora" :text "One."})
+(def b {:id "t2" :k ["s" "d"] :voice "otto" :text "Two."})
+(def c {:id "t3" :k ["s" "c"] :voice "nora" :text "Three."})
 
-(deftest only-the-open-chat-speaks-and-only-with-its-speaker-on
-  (is (talk/speaks? (db-with ["s" "c"] true) ["s" "c"]))
-  (is (not (talk/speaks? (db-with ["s" "d"] true) ["s" "c"])))
-  (is (not (talk/speaks? (db-with ["s" "c"] false) ["s" "c"])))
-  (is (not (talk/speaks? (db-with ["s" "c"] nil) ["s" "c"])) "a Row without talk: off")
-  (is (not (talk/speaks? (db-with nil true) nil)) "the new chat says nothing"))
+(deftest replies-wait-in-line-and-are-read-once
+  (let [st (-> talk/empty-line (talk/with-item a) (talk/with-item b) (talk/with-item a))]
+    (is (= [a b] (:queue st)) "the same reply twice waits once")
+    (let [st1 (talk/next-up st)]
+      (is (= a (:current st1)))
+      (is (= [b] (:queue st1)))
+      (is (= st1 (talk/next-up st1)) "one at a time")
+      (is (= st1 (talk/with-item st1 a)) "a reply being read is not queued again")
+      (let [st2 (-> st1 talk/without-current talk/next-up talk/without-current)]
+        (is (= b (:current (talk/next-up (talk/without-current st1)))))
+        (is (= st2 (talk/with-item st2 a)) "a reply read is not read again")))))
+
+(deftest holding-the-mic-drops-only-the-reply-being-read
+  (let [st (-> talk/empty-line (talk/with-item a) (talk/with-item b) talk/next-up (talk/held true))]
+    (is (nil? (:current st)))
+    (is (= [b] (:queue st)) "the others still come")
+    (is (= st (talk/next-up st)) "nothing is read while the mic is held")
+    (is (= b (:current (talk/next-up (talk/held st false)))))))
+
+(deftest a-chat-turned-off-leaves-the-line
+  (let [st (-> talk/empty-line (talk/with-item a) (talk/with-item b) (talk/with-item c) talk/next-up)]
+    (is (= {:queue [b] :current nil} (select-keys (talk/without-chat st ["s" "c"]) [:queue :current])))
+    (is (= a (:current (talk/without-chat st ["s" "d"]))))))
+
+(deftest the-play-button-reads-next-even-when-read
+  (let [st (-> talk/empty-line (talk/with-item a) (talk/with-item b) talk/next-up talk/without-current)]
+    (is (= [a b] (:queue (talk/with-item-first st a))))
+    (is (= [b a] (:queue (talk/with-item-first (talk/with-item-first st a) b))) "no reply twice")))
+
+(deftest hungarian-replies-are-read-in-hungarian
+  (is (= "hu" (talk/language-of "Kész, működik.")))
+  (is (= "hu" (talk/language-of "Ez van, és nem kell semmi.")))
+  (is (nil? (talk/language-of "Done, the tests pass.")))
+  (is (nil? (talk/language-of nil))))

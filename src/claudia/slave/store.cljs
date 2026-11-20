@@ -6,6 +6,7 @@
             ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.shared.voices :as voices]
             [claudia.slave.upgrade :as upgrade]))
 
 (defonce ^:private db (atom nil))
@@ -17,11 +18,12 @@
   ;; How the last turn ended (the TypeScript Claudia's last_turns, for the hub's pushes and badge):
   ;; last_turn = the result's uuid, stopped / failed, reply = the start of Claude's reply (only when
   ;; it succeeded); ended is that turn's time, moved to when the work it left running settled.
-  ;; talk = the chat's speaker (talking mode) is on; bell = it chimes and pushes when it finishes or waits.
+  ;; voice = the chat's voice (claudia.shared.voices; "" = Off; the old talk column, its speaker on,
+  ;; is read once into it); bell = it chimes and pushes when it finishes or waits.
   ;; chat_key = the random key its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it); root =
   ;; its root switch is on (README decision 52).
   [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
-   :last_turn :stopped :failed :reply :talk :bell :chat_key :root])
+   :last_turn :stopped :failed :reply :voice :bell :chat_key :root])
 
 (def ^:private schema
   "The tables, made when missing."
@@ -100,12 +102,19 @@
    ["talk" "talk INTEGER NOT NULL DEFAULT 0"]
    ["bell" "bell INTEGER NOT NULL DEFAULT 1"]
    ["chat_key" "chat_key TEXT"]
-   ["root" "root INTEGER NOT NULL DEFAULT 0"]])
+   ["root" "root INTEGER NOT NULL DEFAULT 0"]
+   ["voice" "voice TEXT NOT NULL DEFAULT ''"]])
+
+(defn- talk->voice!
+  "Voices came (README decision 21, 2026-11-20): a chat whose speaker was on speaks in the first voice."
+  [^js d]
+  (.run (.prepare d "UPDATE chats SET voice = ? WHERE talk = 1 AND voice = ''") voices/default-id))
 
 (defn- add-missing-columns! [^js d]
   (let [have (set (map #(.-name ^js %) (.all (.prepare d "PRAGMA table_info(chats)"))))]
     (doseq [[c sql] added-columns :when (not (have c))]
-      (.exec d (str "ALTER TABLE chats ADD COLUMN " sql)))))
+      (.exec d (str "ALTER TABLE chats ADD COLUMN " sql)))
+    (when-not (have "voice") (talk->voice! d))))
 
 (defn- drop-chat-settings!
   "The per-chat form row is gone (2026-11-09): chat_settings' only kept value, the forms a chat's
@@ -169,7 +178,7 @@
      :stopped (= 1 (.-stopped r))
      :failed (= 1 (.-failed r))
      :reply (or (.-reply r) "")
-     :talk (= 1 (.-talk r))
+     :voice (voices/voice-id (.-voice r))
      :bell (not= 0 (.-bell r))
      :chat-key (.-chat_key r)
      :root (= 1 (.-root r))}))

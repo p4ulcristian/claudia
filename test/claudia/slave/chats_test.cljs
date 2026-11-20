@@ -124,9 +124,9 @@
         (is (= {:id "u1" :ago 300 :stopped nil :failed nil :reply "ok"} (:lastTurn row)))
         (is (= "p" (:preview row)))
         (is (nil? (:runningFor row)))))
-    (testing "speaker off and bell on unless the chat says otherwise"
-      (is (= [false true] ((juxt :talk :bell) (view/row r {} 0 400))))
-      (is (= [true false] ((juxt :talk :bell) (view/row (assoc r :talk true :bell false) {} 0 400)))))
+    (testing "voice Off and bell on unless the chat says otherwise"
+      (is (= ["" true] ((juxt :voice :bell) (view/row r {} 0 400))))
+      (is (= ["nora" false] ((juxt :voice :bell) (view/row (assoc r :voice "nora" :bell false) {} 0 400)))))
     (testing "work still running is not done yet"
       (is (false? (:unseen (view/row r {} 1 400)))))
     (testing "an open ask is the preview and goes to the hub"
@@ -257,8 +257,9 @@
 
 (deftest flags-of-takes-only-the-switches-named
   (is (= {} (session/flags-of {:model "m"})))
-  (is (= {:talk true} (session/flags-of {:talk 1 :model "m"})))
-  (is (= {:talk false :bell false} (session/flags-of {:talk nil :bell false}))))
+  (is (= {:voice "nora"} (session/flags-of {:voice "nora" :model "m"})))
+  (is (= {:voice "" :bell false} (session/flags-of {:voice "nobody" :bell false})) "an unknown voice is Off")
+  (is (= {} (session/flags-of {:talk true})) "the old speaker switch is not a voice"))
 
 (deftest session-names-and-spec
   (is (re-matches #"token-[0-9a-f]{8}" (session/account-of "t")))

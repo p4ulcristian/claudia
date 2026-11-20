@@ -4,7 +4,8 @@
   group {:group id :name :chats [\"server/id\"…] :folded bool :picks {…}}. Chats not in the list yet
   (new ones) come first, the newest first; then the list as arranged. Moving a chat never happens by
   itself: only the person's drag changes the order."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.shared.voices :as voices]))
 
 (defn ref-of "A chat row's reference in the list." [{:keys [server id]}] (str server "/" id))
 
@@ -135,6 +136,15 @@
 (defn group-of "The group holding chat cref, or nil." [items cref]
   (first (filter #(and (:group %) (some #{cref} (:chats %))) items)))
 
+(defn clean-picks
+  "A group's picks kept: its plan, model, effort, folder, server, voice and bell. A speaker switched
+  on before voices came (:talk true) is the first voice."
+  [picks]
+  (if (map? picks)
+    (cond-> (select-keys picks [:plan :model :effort :folder :server :voice :bell])
+      (and (true? (:talk picks)) (not (contains? picks :voice))) (assoc :voice voices/default-id))
+    {}))
+
 (defn clean-items
   "A list from the hub or a page, kept only as far as it is well formed: chats and groups with a
   name, refs that look like server/id, at most 500 items and 500 chats a group."
@@ -148,6 +158,6 @@
                               :name (str/trim (subs (:name it) 0 (min 60 (count (:name it)))))
                               :chats (vec (take 500 (filter ref? (:chats it))))
                               :folded (true? (:folded it))
-                              :picks (if (map? (:picks it)) (select-keys (:picks it) [:plan :model :effort :folder :server :talk :bell]) {})}
+                              :picks (clean-picks (:picks it))}
                              :else nil))
                          items)))))

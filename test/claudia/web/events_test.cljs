@@ -13,8 +13,8 @@
     (is (false? (:back (ev/with-status down :open 1100))) "a blip"))
   (is (= {:status :open :back false} (ev/with-status {:status :connecting} :open 5)) "the first open"))
 
-(deftest new-picks-carry-the-speaker-and-bell
-  (is (= {:talk false :bell true :color "jade"} (ev/new-picks {:talk false :bell true :color "jade" :model nil}))))
+(deftest new-picks-carry-the-voice-and-bell
+  (is (= {:voice "otto" :bell true :color "jade"} (ev/new-picks {:voice "otto" :bell true :color "jade" :model nil}))))
 
 (deftest an-error-goes-only-while-it-is-the-one-shown
   (let [db {:error "s: boom" :error-from "s" :chats {["s" "c"] {:error "bad" :title "t"}}}]
@@ -91,10 +91,13 @@
     (is (= "draft" (get-in d [:drafts :new])))))
 
 (deftest hello-frames-reopen-the-open-chat
-  (is (= [{:type "hello"} {:type "open" :chat "c"}] (ev/hello-frames ["s" "c"] "s")))
-  (is (= [{:type "hello"}] (ev/hello-frames ["s" "c"] "t")))
-  (is (= [{:type "hello"}] (ev/hello-frames nil "s")))
-  (is (= [{:type "hello"}] (ev/hello-frames ["s" nil] "s")) "a new chat not made yet: nothing to open"))
+  (is (= [{:type "hello"} {:type "open" :chat "c"}] (ev/hello-frames ["s" "c"] "s" nil)))
+  (is (= [{:type "hello"}] (ev/hello-frames ["s" "c"] "t" nil)))
+  (is (= [{:type "hello"}] (ev/hello-frames nil "s" nil)))
+  (is (= [{:type "hello"}] (ev/hello-frames ["s" nil] "s" nil)) "a new chat not made yet: nothing to open")
+  (is (= [{:type "hello"} {:type "here" :ago 5} {:type "open" :chat "c"}]
+         (ev/hello-frames ["s" "c"] "s" {:type "here" :ago 5}))
+      "a touched page says when, before the chat opens"))
 
 (deftest an-opened-socket-says-hello-on-itself
   (let [start {:open ["s" "c"] :servers {"s" {:status :connecting}}}
@@ -280,11 +283,11 @@
 
 (deftest a-new-chat-carries-the-last-chats-picks
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}
-            :servers {"s" {:rows {"c" {:talk true :bell false :color "teal"}}}}
+            :servers {"s" {:rows {"c" {:voice "nora" :bell false :color "teal"}}}}
             :new-settings {:plan "pro" :color "red" :folder "/old"}}]
-    (is (= {:model "opus" :effort "high" :talk true :bell false :folder "/w/ir"}
+    (is (= {:model "opus" :effort "high" :voice "nora" :bell false :folder "/w/ir"}
            (ev/carried-picks db ["s" "c"])) "from the open chat, its folder too, never its colour or subscription")
-    (is (= {:talk true :bell false :folder "/w/work"} (ev/carried-picks (-> db (update-in [:chats ["s" "c"]] dissoc :folder) (assoc :work-folders {"s" "/w/work"}) (assoc-in [:chats ["s" "c"] :settings] {})) ["s" "c"]))
+    (is (= {:voice "nora" :bell false :folder "/w/work"} (ev/carried-picks (-> db (update-in [:chats ["s" "c"]] dissoc :folder) (assoc :work-folders {"s" "/w/work"}) (assoc-in [:chats ["s" "c"] :settings] {})) ["s" "c"]))
         "a chat without a folder: its computer's work folder")
     (is (= {:folder "/old"} (ev/carried-picks db nil)) "no chat open: the last new chat's, without colour or subscription")))
 
@@ -313,3 +316,10 @@
   (let [fx (ev/on-frame {:chats {}} "s" {:type "keys_ask" :chat "c" :ask "a"})]
     (is (= {:server "s" :chat "c" :ask "a"} (:keys/answer fx)))
     (is (= {:chats {}} (:db fx)) "no ask card is added")))
+
+(deftest a-speak-frame-is-a-reply-to-read
+  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "It works."}
+         (ev/speak-item "s" {:chat "c" :id "t1" :voice "nora" :text "**It works.**"})))
+  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Which one?"}
+         (ev/speak-item "s" {:chat "c" :id "ask-a" :voice "otto" :ask {:questions [{:question "Which one?"}]}})))
+  (is (nil? (ev/speak-item "s" {:chat "c" :id "t2" :voice "nora" :text "  "})) "nothing to say"))

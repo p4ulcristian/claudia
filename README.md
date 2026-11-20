@@ -250,30 +250,42 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `src/claudia/hub/listen_words.cljs`, `src/claudia/web/words.cljs`,
     `src/claudia/web/views/my_words.cljs`, `src/claudia/web/views/pure/dictated.cljs`.
 
-21. Talking mode (2026-11-13): a person speaking (the icon) in the chat's header (row 1, decision 22) turns it on and off for that
-    chat (since 2026-11-14 kept with the chat, the Row's `talk`, the same on every device; before: one
-    switch per device for whichever chat was open). Beside it the chat's bell (the Row's `bell`): on,
-    the chat chimes, pops up and pushes to the phones when it finishes or waits; off, it does none of
-    them (the phone's badge still counts it). A new chat starts with the speaker off and the bell on
-    (its header's picks go with `new`); a chat only looked at (another profile's) shows neither. It only ever speaks what arrives while the person
-    watches: the final reply of a turn that ended by itself (not the working messages, not a
-    stopped turn) and Claude's questions, in the chat on screen, with the page in front; read by
-    the hub's voice (`/hub/narrate`, the 3D narrator's), without code, tables, links or Markdown
-    marks ("There's code in the chat." instead). It never listens: answers go through the mic.
-    Silence at once, with nothing said late, when it is turned off, the open chat changes, the mic
-    is held or the page goes to the background; a new reply cuts off the one before. Turning it
-    on reads nothing back, and a chat with replies the person missed stays silent: while it is on,
-    each reply has a play button to hear it. Instead of: reading the last unheard reply on
-    arriving at a chat (every switch could start talking), or a hands-free conversation (the mic
-    opening by itself). Files: `src/claudia/web/speech.cljs`, `src/claudia/web/views/talk.cljs`,
-    `src/claudia/web/views/pure/talk.cljs`; `src/claudia/web/voice.cljs` is the one fetch of the
-    hub's voice (the 3D narrator uses it too).
+21. Chats' voices (2026-11-20, the user's design; before: talking mode, 2026-11-13, a speaker
+    switch per chat that read only the open chat's replies, in one voice, a new reply cutting off
+    the one before). Every chat has a voice, Off by default: the voice pill (row 2 of its header,
+    decision 22) picks Off or one of six named voices (`claudia.shared.voices`: a name and a
+    description; the hub makes ONE reference clip per description and clones every line from it,
+    `/hub/narrate`, so a voice is always the same person), each with a sample to hear. Beside it the
+    chat's bell (the Row's `bell`): on, the chat chimes, pops up and pushes to the phones when it
+    finishes or waits; off, it does none of them (the phone's badge still counts it). A new chat
+    takes the last chat's voice and bell (its header's picks go with `new`); a chat only looked at
+    (another profile's) shows neither. Chats whose speaker was on got the first voice (Nora).
+    Every chat with a voice speaks, open or not: when its turn ends by itself (not stopped, not
+    failed) the runner sends `speak` with the whole final reply (or a new ask's questions) to the
+    one page its person touched last (`here`: a touch, click or key tells every server, at most
+    every 15 s, and a socket that opens says how long ago, so a restarted runner still knows), so
+    not every open device talks at once. That page reads the replies one at a time in arrival
+    order, each once, each in its chat's voice, a Hungarian reply in Hungarian
+    (`pure/talk.cljs`'s line and `language-of`), without code, tables, links or Markdown marks
+    ("There's code in the chat." instead). While a reply is read the mic is that chat (decision
+    73): the chat's colour, bars that move, its name and voice over it. A tap on it stops that
+    one reply and the next one comes; a hold stops it and records into the open chat as always
+    (talking to the chat that speaks instead is for later); nothing is read while the mic is held,
+    and what arrives meanwhile waits and comes after it is let go. A voice turned Off drops that
+    chat's waiting replies; the page going to the background drops them all (nothing is said
+    late). It never listens: answers go through the mic. A reply's play button (while the chat has
+    a voice) reads it at once. Instead of: a separate speaker button by the mic (the mic already
+    sits under the thumb, and the person talking must silence the tablet anyway), every device
+    talking at once, cutting a reply off with the next. Files: `src/claudia/shared/voices.cljc`,
+    `src/claudia/web/speech.cljs`, `src/claudia/web/here.cljs`, `src/claudia/web/views/talk.cljs`,
+    `src/claudia/web/views/pure/talk.cljs`, `src/claudia/web/views/mic.cljs`; `src/claudia/web/voice.cljs`
+    is the one fetch of the hub's voice (the 3D narrator uses it too).
 
 22. The chat's header holds every setting (2026-11-14; three rows by who, settings and usage since
     2026-11-19, the user's approved layout): one panel lightly tinted with the chat's colour (its
     background 7% of the colour, its edge 45%), the same for a new chat and a started one. Row 1:
     the title (a click renames it) and the server's state only while it is off, offline or
-    reconnecting; nothing else. Row 2: four pills, one component and one look (rounded, a 1 px line,
+    reconnecting; nothing else. Row 2: five pills, one component and one look (rounded, a 1 px line,
     a 16 px icon in the muted colour before the value, ▾ after it when it can be changed),
     wrapping on a narrow column: where the chat works, the computer and the folder in one pill
     (decision 71: the folder icon, the computer's name, then the chat's real working path in mono,
@@ -282,11 +294,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     none picked says "Pick a folder", decision 65; a click toggles Files, decision 70); whose
     Claude subscription (decision 16; only when tokens are saved); model · effort in one pill
     ("Opus 5.5 · high"; its popup lists the models and the efforts, no native selects); the
-    prompt profile (decision 60). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
+    prompt profile (decision 60); the voice (Off or a name, decision 21). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
     compacting it; the plan's 5-hour; its week), each an 18 px ring followed by its percent, its
     tip naming it; on the right round 30 px buttons with tips: the colour (a filled dot in the
     chat's colour; a click opens the palette), the bell (a chime, popup and push when it finishes
-    or waits), the speaker (talking mode, decision 21), root (its owner, a started chat, decision
+    or waits), root (its owner, a started chat, decision
     52) and Archive (a started chat). A read-only view has no buttons and its pills change
     nothing. A new chat picks them before its first message, and they go with the `new` frame, so
     the first

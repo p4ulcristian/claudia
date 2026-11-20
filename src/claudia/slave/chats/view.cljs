@@ -51,8 +51,8 @@
         working (or (boolean (:running s)) (pos? agents))
         ended (or (:ended r) 0)]
     {:id (:id r) :title (:title r) :folder (:folder r) :color (:color r)
-     ;; The chat's speaker and bell (README decision 21), its root switch (decision 52): kept with the chat.
-     :talk (boolean (:talk r))
+     ;; The chat's voice ("" = Off) and bell (README decision 21), its root switch (decision 52): kept with the chat.
+     :voice (or (:voice r) "")
      :bell (not (false? (:bell r)))
      :root (boolean (:root r))
      :running (boolean (:running s))

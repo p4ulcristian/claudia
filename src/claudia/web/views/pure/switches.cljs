@@ -1,17 +1,18 @@
 (ns claudia.web.views.pure.switches
-  "A chat's speaker and bell (README decision 21), kept with the chat: its Row's `talk` and `bell`
+  "A chat's voice and bell (README decision 21), kept with the chat: its Row's `voice` and `bell`
   for a started chat (k = [server id]), the new chat's picks (`:new-settings`) for k nil. The
-  speaker starts off and the bell on: a Row from a runner that sends neither reads that way.")
+  voice starts Off (\"\") and the bell on: a Row from a runner that sends neither reads that way."
+  (:require [claudia.shared.voices :as voices]))
 
 (defn- row-of [db [server id]] (get-in db [:servers server :rows id]))
 
 (defn- switch-of [db k field]
   (get (if k (row-of db k) (:new-settings db)) field))
 
-(defn talk-on?
-  "Whether the chat's speaker is on (k nil: the new chat's pick)."
+(defn voice-of
+  "The chat's voice id, \"\" when Off (k nil: the new chat's pick)."
   [db k]
-  (true? (switch-of db k :talk)))
+  (voices/voice-id (switch-of db k :voice)))
 
 (defn bell-on?
   "Whether the chat's bell is on (k nil: the new chat's pick)."
@@ -29,7 +30,7 @@
   (boolean (and k (true? (:root (row-of db k))))))
 
 (defn with-switches
-  "db with the chat's switches m ({:talk :bell}, those set) laid over: its Row, or the new chat's picks."
+  "db with the chat's switches m ({:voice :bell}, those set) laid over: its Row, or the new chat's picks."
   [db [server id :as k] m]
   (if k
     (update-in db [:servers server :rows id] merge m)

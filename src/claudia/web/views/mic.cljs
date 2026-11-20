@@ -14,9 +14,13 @@
   and overshoots a little), its button kept on the screen; let go, the clip is heard and sent as
   when let go in place, and the mic glides there and stays (its spot kept on this device), or,
   covering half its slot or more (pure/home?), it glides home. Out
-  of the rail its flower is whole, four ways."
+  of the rail its flower is whole, four ways.
+  While a chat's reply is read aloud (README decision 21) the mic is that chat: its colour, its
+  name and voice, bars that move. A tap then stops that one reply (the next one comes); a hold
+  stops it and records as always. Nothing is read while the mic is held."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
+            [claudia.shared.voices :as voices]
             [claudia.web.mic :as mic]
             [claudia.web.speech :as speech]
             [claudia.web.views.mic-clips :as clips]
@@ -129,12 +133,14 @@
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
-    (speech/stop!)   ; it never talks over you
-    (let [t0 (js/performance.now) warm (mic/warm?)
+    (let [reading (speech/reading?)
+          t0 (js/performance.now) warm (mic/warm?)
           p (.then (mic/start!) #(started! t0 warm %))]
+      (speech/hold!)   ; it never talks over you
       ;; The composer as it is at the press: the one the person spoke into, even when another chat
       ;; is open by the time the words are heard.
       (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p :k draft-key
+                              :reading reading
                               :rail? rail? :side (side-at rail? (circle (.-currentTarget e)))
                               :slot (when rail? (slot-circle (.-currentTarget e) spot)) :from (circle (.-currentTarget e))})
       (set-dir :send)
@@ -242,14 +248,15 @@
   (park! (.-clientX e) (.-clientY e) parts held))
 
 (defn- heard!
-  "A hold let go in place or on a petal: a tap says to hold, cancel drops the clip, else it is heard."
-  [p {:keys [t0 dir k rec-at]} live set-phase]
+  "A hold let go in place or on a petal: a tap says to hold (while a reply was read, it only stopped
+  that reply), cancel drops the clip, else it is heard."
+  [p {:keys [t0 dir k rec-at reading]} live set-phase]
   (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)
         secs (js/Math.round (/ (- (js/performance.now) (or rec-at t0)) 1000))]
     (.then p (fn [s]
                (set! (.-current live) nil)
                (cond
-                 tap? (do (mic/discard! s) (set-phase :tap))
+                 tap? (do (mic/discard! s) (set-phase (if reading :idle :tap)))
                  (= dir :cancel) (do (mic/discard! s) (set-phase :idle))
                  :else (do (set-phase :idle)
                            (clips/spoken! k dir secs (mic/stop! s))))))))
@@ -259,11 +266,12 @@
   message; dragged right: thrown away); a tap is dropped and says to hold; a move ends where the
   finger is, and its clip is heard and sent as when let go in place."
   [^js e {:keys [hold live set-phase] :as parts}]
-  (when-let [{:keys [t0 p dir k rec-at moving timer] :as held} (.-current hold)]
+  (when-let [{:keys [t0 p dir k rec-at moving timer reading] :as held} (.-current hold)]
     (some-> timer js/clearTimeout)
     (set! (.-current hold) nil)
     (when moving (moved! e parts held))
-    (heard! p {:t0 t0 :dir (if moving :send dir) :k k :rec-at rec-at} live set-phase)))
+    (heard! p {:t0 t0 :dir (if moving :send dir) :k k :rec-at rec-at :reading reading} live set-phase)
+    (speech/let-go!)))
 
 (def ^:private icon
   [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
@@ -277,29 +285,52 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
+(def ^:private speaker-bars
+  "The bars on a mic that reads a reply aloud (they move by CSS)."
+  [:span.mic-speak-bars {:aria-hidden true} [:i] [:i] [:i] [:i] [:i]])
+
+(defn- speaker-label
+  "Under a mic that reads a reply aloud: whose reply, in which voice."
+  [{:keys [title voice]}]
+  [:span.mic-speaker [:b title] (when voice [:small voice])])
+
 (defn- core
-  "The button with its bars, and the hint after a tap."
-  [{:keys [phase canvas] :as parts}]
+  "The button with its bars (a reply being read: its chat's bars and name), and the hint after a tap."
+  [{:keys [phase canvas speaker] :as parts}]
   [:div.mic-core
    [:canvas.mic-flower {:ref #(set! (.-current canvas) %) :aria-hidden true
                         :style {:width flower/size :height flower/size}
                         :width (* flower/size (or js/devicePixelRatio 1)) :height (* flower/size (or js/devicePixelRatio 1))}]
-   [:button.mic-button {:type "button" :aria-label "Hold to talk; let go or drag up to send, drag left to add to the message, drag right to cancel, drag down to send now"
+   [:button.mic-button {:type "button" :aria-label (if speaker
+                                                     (str (:title speaker) " is speaking: tap to stop this reply, hold to talk")
+                                                     "Hold to talk; let go or drag up to send, drag left to add to the message, drag right to cancel, drag down to send now")
                         :data-tip "Hold to talk: let go or drag up sends, left adds to the message, right cancels, down sends now"
                         :on-pointer-down #(press! % parts)
                         :on-pointer-move #(drag! % parts)
                         :on-pointer-up #(release! % parts)
                         :on-pointer-cancel #(release! % parts)
                         :on-context-menu #(.preventDefault %)}
-    icon]
+    (if speaker speaker-bars icon)]
+   (when speaker [speaker-label speaker])
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
+
+(defn- row-of [[server chat]] (get-in @(rf/subscribe [:servers]) [server :rows chat]))
 
 (defn- colour-of
   "The colour of the chat the mic speaks into (draft-key: [server chat] or :new), as a CSS var."
   [draft-key]
   (words/colour-var (if (vector? draft-key)
-                      (get-in @(rf/subscribe [:servers]) [(first draft-key) :rows (second draft-key) :color])
+                      (:color (row-of draft-key))
                       (:color @(rf/subscribe [:new-settings])))))
+
+(defn- speaker-of
+  "The reply being read aloud (speaking: {:k :voice}, nil: none) as the mic shows it: its chat's
+  title and colour, the voice's name; nil while the mic is held."
+  [speaking phase]
+  (when (and speaking (= :idle phase))
+    (let [row (some-> (:k speaking) row-of)]
+      {:title (or (not-empty (:title row)) "Claudia") :colour (some-> (:color row) words/colour-var)
+       :voice (some-> (:voice speaking) voices/by-id :name)})))
 
 (defn- speak-here
   "While recording in the app: a glow on the screen edge nearest the microphone iOS records from,
@@ -315,15 +346,16 @@
   "The mic; free (out of its place in the rail) it is drawn at its spring's point, its slot kept as a
   dashed ring so the column stays as it is. A motion div always, and keyed, so the button stays the
   same element when it frees: it keeps the finger."
-  [{:keys [phase draft-key mic free sx sy] :as parts}]
-  [:<>
-   (when free ^{:key "slot"} [:span.edge-gap.mic-slot {:aria-hidden true}])
-   ^{:key "mic"}
-   [:> (.-div motion) {:class (str "mic " (name phase) (when free " moved"))
-                       :style (cond-> {"--chat" (colour-of draft-key)} free (assoc :left sx :top sy))}
-    [clips/clip-list]
-    (core parts)
-    (when (= phase :recording) [speak-here mic])]])
+  [{:keys [phase draft-key mic free sx sy speaking] :as parts}]
+  (let [speaker (speaker-of speaking phase)]
+    [:<>
+     (when free ^{:key "slot"} [:span.edge-gap.mic-slot {:aria-hidden true}])
+     ^{:key "mic"}
+     [:> (.-div motion) {:class (str "mic " (name phase) (when free " moved") (when speaker " speaking"))
+                         :style (cond-> {"--chat" (or (:colour speaker) (colour-of draft-key))} free (assoc :left sx :top sy))}
+      [clips/clip-list]
+      (core (assoc parts :speaker speaker))
+      (when (= phase :recording) [speak-here mic])]]))
 
 (def ^:private spring
   "The mic's follow: a little slack and one soft overshoot, a follower with a will of its own."
@@ -375,4 +407,5 @@
       (view (merge follow
                    {:phase phase :dir dir :canvas canvas :hold hold :live live :mic mic
                     :set-phase set-phase :set-dir set-dir :set-mic set-mic :draft-key draft-key
-                    :rail? rail? :spot spot :set-spot set-spot :free free :set-free set-free})))))
+                    :rail? rail? :spot spot :set-spot set-spot :free free :set-free set-free
+                    :speaking @(rf/subscribe [:speaking])})))))

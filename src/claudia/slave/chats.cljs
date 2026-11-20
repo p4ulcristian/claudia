@@ -76,12 +76,20 @@
 (defonce skipped-sdks (atom #{}))
 
 ;; Set by the runner: where events go.
-(defonce out (atom {:emit (fn [_ _]) :changed (fn [])}))
+(defonce out (atom {:emit (fn [_ _]) :changed (fn []) :speak (fn [_])}))
 
 (defn- st [id] (get @state id))
 (defn- swap-chat! [id f & args] (swap! state update id #(apply f (or % {}) args)))
 (defn- emit! [id frame] ((:emit @out) id (assoc frame :chat id)))
 (defn- changed! [] ((:changed @out)))
+
+(defn- speak!
+  "What a chat with a voice says aloud (README decision 21): frame m ({:id and :text or :ask}) with
+  the chat and its voice, to the page its person touched last; nothing for a chat without one."
+  [id m]
+  (let [voice (:voice (store/chat id))]
+    (when (seq voice)
+      ((:speak @out) (assoc m :type "speak" :chat id :voice voice)))))
 
 ;; Colours and titles -----------------------------------------------------------------------------
 
@@ -279,6 +287,7 @@
 (defn- add-ask! [id entry]
   (swap-chat! id assoc-in [:asks (get-in entry [:ask :id])] (assoc entry :at (js/Date.now)))
   (emit! id {:type "ask" :ask (:ask entry)})
+  (speak! id {:id (str "ask-" (get-in entry [:ask :id])) :ask (:ask entry)})
   (changed!))
 
 (defn- take-ask!
@@ -776,7 +785,7 @@
     (when (not= (:model before) (:model s)) (changed!))))
 
 (defn set-flags!
-  "Turns the chat's speaker and/or bell on or off (m: {:talk :bell}, those set); the list tells
+  "Sets the chat's voice and/or bell (m: {:voice :bell}, those set); the list tells
   every page and the hub."
   [id m]
   (when-let [flags (not-empty (session/flags-of m))]
@@ -972,6 +981,7 @@
     ;; How it ended, for the hub's pushes and badge: the result's uuid (one id per turn), when, how,
     ;; and the reply's start.
     (store/update! id row)
+    (when-not (or error stopped) (speak! id {:id (:last_turn row) :text (str (:result m))}))
     (drop-asks! id true "The turn ended.")
     (swap-chat! id assoc :partial nil :stream-counts {} :final-counts {} :reply-sends 0)
     (when (and error (not stopped)) (emit! id {:type "error" :text error}))
@@ -1357,7 +1367,7 @@
   [message folder images picks msg-id]
   (let [id (str (random-uuid))
         ;; A new chat stays on its person's last pick unless one was picked: a later pick in another chat moves it not.
-        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current profile))) (dissoc picks :color :talk :bell) (map :key (tokens/saved)))]
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current profile))) (dissoc picks :color :voice :bell) (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (new-chat-colour (:color picks))})

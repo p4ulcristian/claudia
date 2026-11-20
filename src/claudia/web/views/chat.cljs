@@ -454,7 +454,6 @@
         ro @(rf/subscribe [:read-only?])]
     [:section.left
      ^{:key (str (:ck oc))} [head/header oc]
-     [talk/guard (str (:ck oc))]
      (when error [error-line nil error])
      (pane-body oc me me-error)
      ;; Background work (agents, long commands) sits right above the composer.

@@ -63,6 +63,13 @@
     (doseq [c cs] (send! c frame))
     (count cs)))
 
+(defn- speak-to!
+  "A chat's reply to read aloud goes to the one page its person touched last (README decision 21):
+  not every open device talks at once."
+  [frame]
+  (when-let [c (p/last-touched (answering-pages) #(deref (:here %)))]
+    (send! c frame)))
+
 (defn- chats-changed []
   (let [frame {:type "chats" :chats (chats/rows)}]
     (doseq [c @conns :when @(:hello c)] (send! c frame))))
@@ -87,6 +94,7 @@
     (not (contains? p/page->runner frame-type)) :unknown
     (and read-only (not (contains? p/read-only-ok frame-type))) :read-only
     (= frame-type "hello") :hello
+    (= frame-type "here") :here
     (= frame-type "new") :new
     (= frame-type "claudia") :claudia
     (not chat-known) :no-chat
@@ -169,7 +177,7 @@
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
 (defmethod on-chat-frame "settings" [_ f chat]
-  (chats/set-flags! chat (select-keys f [:talk :bell]))
+  (chats/set-flags! chat (select-keys f [:voice :bell]))
   (when (some #(contains? f %) [:model :effort :plan :prompt])
     (chats/set-settings! chat (select-keys f [:model :effort :plan :prompt]))))
 
@@ -200,11 +208,12 @@
   (case (frame-gate frame-type (:read-only c) (known? chat))
     :unknown (send! c {:type "error" :text (str "Unknown frame " frame-type ".")})
     :read-only (send! c {:type "error" :chat chat :text "Read only."})
+    :here (reset! (:here c) (p/touched-at (js/Date.now) (:ago f)))
     :hello (do (reset! (:hello c) true)
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame profile)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :talk :bell])
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell])
                                    (msg-id f))]
            (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)
@@ -321,7 +330,7 @@
             :else (io/send-json res 404 {:error "Not found."})))))
 
 (defn- on-socket [^js ws ^js req]
-  (let [c (merge (caller req) {:ws ws :hello (atom false) :open (atom #{})})]
+  (let [c (merge (caller req) {:ws ws :hello (atom false) :open (atom #{}) :here (atom 0)})]
     (swap! conns conj c)
     (.on ws "message" (fn [data]
                         (try (on-frame c (p/read-json (str data)))
@@ -370,7 +379,7 @@
   (search/open! data-dir)
   ;; The search index catches up with every chat in the background, newest first.
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
-  (reset! chats/out {:emit emit :changed chats-changed})
+  (reset! chats/out {:emit emit :changed chats-changed :speak speak-to!})
   (reset! secrets-list/send-pages! send-pages!)
   (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame profile)]
