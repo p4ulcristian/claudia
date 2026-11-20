@@ -3,7 +3,7 @@
   Servers and Access pages (/hub/admin…), a joining server (/hub/enroll), phones and their Live
   Activities (/hub/push/…), desktop presence (/hub/presence), each person's chat order and bookmarked
   folders (/hub/chat-order, /hub/bookmarks), what their right half shows (/hub/right-view), Claude tokens (/hub/claude-token…),
-  each person's GitHub login (/hub/github-login), speech to text and each person's words for it
+  each person's GitHub login (/hub/github-login) and Sentinel key (/hub/sentinel-key), speech to text and each person's words for it
   (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.bookmarks :as hub-bookmarks]
@@ -18,6 +18,7 @@
             [claudia.hub.github :as github]
             [claudia.hub.github-app :as github-app]
             [claudia.hub.github-login :as github-login]
+            [claudia.hub.sentinel-key :as sentinel-key]
             [claudia.hub.live :as live]
             [claudia.hub.pairing :as pairing]
             [claudia.hub.progress :as progress]
@@ -451,6 +452,20 @@
                    (fn [[status body]] (io/send-json res status body)))
       (fail res 405 "GET or PUT"))))
 
+;; Sentinel keys (claudia.hub.sentinel-key) ------------------------------------------------------
+
+(defn- sentinel-key-call
+  "GET /hub/sentinel-key (the caller's key hint and their servers); PUT /hub/sentinel-key {key};
+  DELETE /hub/sentinel-key."
+  [^js req ^js res email]
+  (let [person {:email email}
+        answer (fn [[status body]] (io/send-json res status body))]
+    (case (.-method req)
+      "GET" (io/send-json res 200 (sentinel-key/state person))
+      "PUT" (.then (with-body req #(sentinel-key/save! person (:key %))) answer)
+      "DELETE" (.then (sentinel-key/remove! person) answer)
+      (fail res 405 "GET, PUT or DELETE"))))
+
 ;; Entry points -----------------------------------------------------------------------------------
 
 (defn open-call?
@@ -492,6 +507,13 @@
         (not= "PUT" (.-method req)) (fail res 405 "PUT only")
         :else (pictures/put! req res (.get (.-searchParams (js/URL. (.-url req) "http://hub")) "email"))))
 
+(defn- gate-system-call
+  "GET /hub/gate/system: the gate's own numbers, for admins."
+  [^js req ^js res admin?]
+  (cond (not admin?) (fail res 403 "admins only")
+        (not= "GET" (.-method req)) (fail res 405 "GET only")
+        :else (systems/gate-sample res)))
+
 (defn call
   "A signed-in caller's /hub/… call other than /hub/me and server state: admin? decides the admin
   pages. Answers 404 for anything else."
@@ -510,13 +532,11 @@
                  (= pathname "/hub/listen") (listen/call req res email)
                  (= pathname "/hub/listen/words") (listen-words/call req res email)
                  (= pathname "/hub/listen/log") (listen/log req res email)
-                 (= pathname "/hub/gate/system")
-                 (cond (not admin?) (fail res 403 "admins only")
-                       (not= "GET" (.-method req)) (fail res 405 "GET only")
-                       :else (systems/gate-sample res))
+                 (= pathname "/hub/gate/system") (gate-system-call req res admin?)
                  (str/starts-with? pathname "/hub/claude-token")
                  (token-call req res pathname email)
                  (= pathname "/hub/github-login") (github-login-call req res email)
+                 (= pathname "/hub/sentinel-key") (sentinel-key-call req res email)
                  (str/starts-with? pathname "/hub/github/") (github-app/call req res pathname email)
                  :else (fail res 404 "not found"))))
       (.catch (fn [e]

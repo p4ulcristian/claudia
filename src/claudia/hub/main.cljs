@@ -29,6 +29,7 @@
             [claudia.hub.github-login :as github-login]
             [claudia.hub.progress :as progress]
             [claudia.hub.releases :as releases]
+            [claudia.hub.sentinel-key :as sentinel-key]
             [claudia.hub.ssh-ca :as ssh-ca]
             [claudia.hub.tokens :as tokens]
             [claudia.hub.web :as web]))
@@ -108,7 +109,8 @@
     (#{"/api/update-check" "/api/claude-token/picks" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     ;; A service's app token (README decision 78): the hub's own, never a page's.
-    (#{"/api/github" "/api/github/token" "/api/github/service-token"} rest-path) {:status 404 :error "not found"}
+    ;; A person's Sentinel key (README decision 85): the hub hands it out, never a page.
+    (#{"/api/github" "/api/github/token" "/api/github/service-token" "/api/sentinel-key"} rest-path) {:status 404 :error "not found"}
     ;; A chat moving to another server (README decision 82): the hub drives both runners, never a page.
     (str/starts-with? rest-path "/api/chat-move/") {:status 404 :error "not found"}
     error {:status 400 :error error}
@@ -277,6 +279,7 @@
   (push/start!)
   (tokens/start!)
   (github-login/start!)
+  (sentinel-key/start!)
   (github-app/start!)
   (github-services/start!))
 

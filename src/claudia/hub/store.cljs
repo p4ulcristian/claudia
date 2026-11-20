@@ -136,6 +136,16 @@
      came_from TEXT NOT NULL,
      saved_at INTEGER NOT NULL
    );
+   -- A person's Sentinel API key (claudia.hub.sentinel-key, README decision 85): sealed with the
+   -- key in HUB_TOKEN_KEY_FILE, its hint (first 8 characters) and fingerprint, and when it was saved.
+   -- sealed null: the person removed it, so their servers drop theirs; no row: never set here.
+   CREATE TABLE IF NOT EXISTS sentinel_keys (
+     email TEXT PRIMARY KEY,
+     sealed TEXT,
+     hint TEXT,
+     fingerprint TEXT,
+     saved_at INTEGER NOT NULL
+   );
    -- A person's connection to the GitHub App: their login, the refresh token (months) and the user
    -- token (hours) sealed, and when each runs out (null: GitHub gave one that does not expire).
    CREATE TABLE IF NOT EXISTS github_users (
@@ -495,6 +505,25 @@
          ON CONFLICT (email) DO UPDATE SET login = excluded.login, sealed = excluded.sealed,
            came_from = excluded.came_from, saved_at = excluded.saved_at"
          email login sealed came-from (now)))
+
+;; Sentinel keys ----------------------------------------------------------------------------------
+
+(defn sentinel-key
+  "A person's Sentinel key without the sealed key: {:hint :fingerprint :saved-at :removed}, or nil
+  when they never set one here."
+  [email]
+  (when-let [r (one "SELECT sealed IS NULL AS removed, hint, fingerprint, saved_at FROM sentinel_keys WHERE email = ?" email)]
+    {:hint (:hint r) :fingerprint (:fingerprint r) :saved-at (:saved_at r) :removed (= 1 (:removed r))}))
+
+(defn sentinel-key-sealed [email] (:sealed (one "SELECT sealed FROM sentinel_keys WHERE email = ?" email)))
+
+(defn save-sentinel-key!
+  "Keeps a person's sealed key (sealed, hint and fingerprint nil: removed)."
+  [email sealed key-hint fingerprint]
+  (exec! "INSERT INTO sentinel_keys (email, sealed, hint, fingerprint, saved_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (email) DO UPDATE SET sealed = excluded.sealed, hint = excluded.hint,
+           fingerprint = excluded.fingerprint, saved_at = excluded.saved_at"
+         email sealed key-hint fingerprint (now)))
 
 ;; The release builder ---------------------------------------------------------------------------
 

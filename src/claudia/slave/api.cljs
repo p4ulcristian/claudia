@@ -16,6 +16,7 @@
             [claudia.slave.projects :as projects]
             [claudia.slave.reach :as reach]
             [claudia.slave.search :as search]
+            [claudia.slave.sentinel-key :as sentinel-key]
             [claudia.slave.shown :as shown]
             [claudia.slave.store :as store]
             [claudia.slave.tokens :as tokens]
@@ -246,6 +247,8 @@
    ["GET" ["api" "github"] 2] :github
    ["PUT" ["api" "github"] 2] :set-github
    ["GET" ["api" "github"] 3] :github-token
+   ["GET" ["api" "sentinel-key"] 2] :sentinel-key
+   ["PUT" ["api" "sentinel-key"] 2] :set-sentinel-key
    ["POST" ["api" "sessions"] 4] :adopt})
 
 (def ^:private chat-routes
@@ -264,7 +267,7 @@
   profile's own business), an operation keyword, or nil when it is none of these."
   [method parts read-only]
   (cond
-    (and read-only (or (not= "GET" method) (#{"github"} (second parts)))) :read-only
+    (and read-only (or (not= "GET" method) (#{"github" "sentinel-key"} (second parts)))) :read-only
     :else (or (get api-routes [method (vec (take 2 parts)) (count parts)])
               (when (and (= ["api" "chats"] (vec (take 2 parts))) (>= (count parts) 3))
                 (get chat-routes [method (nth parts 3 nil)])))))
@@ -287,6 +290,8 @@
       :github (reply (.then (tokens/github-user) (fn [u] {:user u})))
       :set-github (reply (.then (io/read-json req max-body) #(tokens/set-github-token! (:token %))))
       :github-token (if (= "token" (nth parts 2)) (reply (tokens/github-token)) (io/send-json res 404 {:error "not found"}))
+      :sentinel-key (io/send-json res 200 (sentinel-key/state))
+      :set-sentinel-key (reply (.then (io/read-json req max-body) sentinel-key/put!))
       :adopt (reply (adopt (nth parts 2)))
       :upload (uploads/save! req res id (.get q "name"))
       :download (uploads/serve! res id a)

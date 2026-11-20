@@ -264,7 +264,8 @@
    (when (and server (not (events/viewing-other? db)))
      {:db (assoc db :settings-server server)
       :fx [[:dispatch [:ops/load-tokens]]
-           [:dispatch [:ops/load-github]]]})))
+           [:dispatch [:ops/load-github]]
+           [:dispatch [:ops/load-sentinel-key]]]})))
 
 ;; The hub's Claude tokens (claudia.hub.tokens): the one in use on every server, the saved names,
 ;; what each of the person's servers runs on now.
@@ -297,6 +298,17 @@
 
 (rf/reg-event-db :ops/github-login (fn [db [_ g]] (assoc db :github-login g)))
 (rf/reg-sub :github-login (fn [db] (:github-login db)))
+
+;; The person's Sentinel key, kept by the hub (claudia.hub.sentinel-key): its hint and whether each
+;; of their servers has it.
+(rf/reg-event-fx
+ :ops/load-sentinel-key
+ (fn [{:keys [db]} _]
+   (when-not (events/viewing-other? db)
+     {:fx [[:api/call {:url "/hub/sentinel-key" :on-ok [:ops/sentinel-key]}]]})))
+
+(rf/reg-event-db :ops/sentinel-key (fn [db [_ v]] (assoc db :sentinel-key v)))
+(rf/reg-sub :sentinel-key (fn [db] (:sentinel-key db)))
 
 ;; The hub's GitHub App (claudia.hub.github-app): the app, the person's connection, where it is
 ;; installed, which servers have the person's current token.

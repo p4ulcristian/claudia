@@ -61,7 +61,7 @@
    :projects {}            ; [server folder] -> {:name :logo}
    :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
-   :tokens nil :github-login nil
+   :tokens nil :github-login nil :sentinel-key nil
    ;; a new chat's picks, kept from the last chat (events/carried-picks) across reloads; its colour
    ;; comes with the chat list (events/with-fresh-colour)
    :new-settings (let [v (stored "claudia.newPicks" nil)]

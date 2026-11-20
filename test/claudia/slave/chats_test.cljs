@@ -273,6 +273,12 @@
     (is (not (contains? (:options spec) :effort)))
     (is (= "Edit|Bash" (get-in spec [:hooks :PostToolUse 0 :matcher])))))
 
+(deftest a-chat-gets-the-persons-sentinel-key-when-there-is-one
+  (is (= {"A" "1" "SENTINEL_KEY" "k" "SENTINEL_URL" "u"} (session/with-sentinel {"A" "1"} "k" "u")))
+  (is (= {"A" "1"} (session/with-sentinel {"A" "1" "SENTINEL_KEY" "runner's"} nil nil))
+      "no key file: the runner's own never passes on")
+  (is (= {"SENTINEL_URL" "u"} (session/with-sentinel {} nil "u"))))
+
 (deftest a-chats-settings-take-a-saved-plan-only
   (let [s {:model nil :effort nil :plan "paul"}]
     (is (= {:model "m" :effort nil :plan "paul"} (session/settings-with s {:model "m"} ["paul" "peter"])))

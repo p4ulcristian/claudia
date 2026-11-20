@@ -33,6 +33,7 @@
             [claudia.slave.scene :as scene]
             [claudia.slave.secret :as secret]
             [claudia.slave.secrets-list :as secrets-list]
+            [claudia.slave.sentinel-key :as sentinel-key]
             [claudia.slave.shown :as shown]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
@@ -1131,7 +1132,8 @@
     (session/start-spec {:cwd cwd :id id :resume? resume?
                          ;; The chat's key ties its sudo commands to it (README decision 52); her
                          ;; chat runs nothing in the background (README decision 48).
-                         :env (cond-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                         :env (cond-> (-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                                          (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
                                 her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
                          :prompt (full-prompt id)
                          :allowed (cond-> tools/allowed-tools (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
