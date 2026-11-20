@@ -362,6 +362,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     cherry). The page picks a new chat's colour once its server's list is here, not before. A runner moves its chats over on start: each old
     colour becomes its crayon (red→cherry, teal→mint, pink→bubblegum, …; an ash chat's remembered
     colour too). The old names stay as CSS variables only for the code forms' own lanes and files.
+    The gradients beside the box: decision 80.
     Instead of: 17 colours where neighbours (indigo, violet, blue) looked alike as a window tint,
     picked at random. Files: `src/claudia/shared/colours.cljc`, `resources/web/css/claudia.css`.
 
@@ -1143,6 +1144,30 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     a hacked hub serves the page, so it could show one chat and have the passkey approve another,
     once per tap (as decision 66). Instead of: each server checking the passkey itself (every new
     passkey would need host apply on every server), or a passkey per command while the switch is on.
+
+80. Gradient chat colours beside the solid ones (2026-11-20, the user's call: "next to the solid
+    colours, add gradient colours too, for extra"). Eight gradients, each between two crayons of the
+    box (decision 26), top left to bottom right: berry (plum→cherry), ember (cherry→sunflower),
+    sunset (tangerine→magenta), citrus (sunflower→kiwi), meadow (kiwi→jade), lagoon (aqua→ocean),
+    dusk (sapphire→magenta), candy (bubblegum→periwinkle); picked so their middles are at least 0.1
+    apart in OKLab (the closest, ember and sunset, 0.114). A gradient chat's window background runs between its two crayons, each as dark as a
+    solid chat's background, with the rail, the list and the picture see-through over it (as in
+    Claudia's own chat, decision 50). Its circle (rail, list, group stack, swatch, header dot) is
+    chalked in the gradient (`--g-<name>`). The theme (chalk, accent, text, panels, lines) is mixed
+    from one stand-in colour, the gradient's middle in OKLCH (`--c-<name>`), the same way a solid
+    colour mixes it, so text keeps a solid chat's contrast; the stand-in also paints the robot in
+    the world and the tints. The bell rings its first crayon's note. Both palettes (the header's
+    colour button, the chat menu) show the 20 solids (and ash), then the gradients on rows of their
+    own. A chat's colour is still one name, so old rows stay valid and every server's
+    `chat-colour?` (the runner's PATCH, a new chat's picked colour, the crayon-box move on start)
+    takes the new names; the hub passes colours through untouched. A new chat (and a fork, a woken
+    chat without a remembered colour) still gets a solid colour only: `most-different` scores
+    colours by OKLab distance between single colours, and a gradient is picked by hand, like ash.
+    A gradient chat counts as wearing both its crayons, so a new chat after it never takes either.
+    Instead of: gradients in the random pick (two-colour distance has no meaning in the box's
+    measure), or a gradient theme mixed from both hues per surface (text over a changing tint).
+    Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/views/pure/words.cljs`,
+    `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
 
 ## Hub operations (2026-11-03, ported from the TypeScript Claudia's decisions 22, 23, 24, 27)
 

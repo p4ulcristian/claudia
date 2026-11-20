@@ -205,14 +205,19 @@
        [:div.head-pop
         [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))]])]))
 
-(defn- palette [color pick]
+(defn- swatch [c color pick]
+  [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
+                   :style {:background (words/colour-fill c)}
+                   :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
+                   :on-click #(pick c)}])
+
+(defn- palette
+  "The solid colours and ash, then the gradients on rows of their own (README decision 80)."
+  [color pick]
   [:div.palette {:role "menu"}
-   (for [c colours]
-     ^{:key c}
-     [:button.swatch {:class [(when (= c color) "on") (when (= c "ash") "passive")]
-                      :style {:background (str "var(--c-" c ")")}
-                      :title (if (= c "ash") "Passive: sinks to the bottom of the rail" c) :aria-label c
-                      :on-click #(pick c)}])])
+   (for [c colours] ^{:key c} [swatch c color pick])
+   [:span.swatch-break]
+   (for [c words/gradient-colours] ^{:key c} [swatch c color pick])])
 
 (defn- shown-folder
   "The folder a chat works in: its own, else (not for a read-only view, whose runner is another
@@ -295,7 +300,7 @@
     [:div.head-act {:ref #(set! (.-current box) %)}
      [:button.icon.colour-btn {:type "button" :aria-haspopup "true" :aria-expanded open :aria-label "Colour"
                                :data-tip "This chat's colour" :on-click toggle!}
-      [:span.colour-dot {:class (when (= color "ash") "passive") :style {:background (str "var(--c-" color ")")}}]]
+      [:span.colour-dot {:class (when (= color "ash") "passive") :style {:background (words/colour-fill color)}}]]
      (when open
        [:div.head-pop.colour-pop
         (palette color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!)))])]))
@@ -354,7 +359,7 @@
   (let [hc (head-context oc ro)]
     (use-tokens!)
     [:header.chat-head
-     [:div.head-panel {:style {"--chat" (words/colour-var (if (:new? hc) (get-in hc [:settings :color]) (get-in hc [:row :color])))}}
+     [:div.head-panel {:style (words/colour-style (if (:new? hc) (get-in hc [:settings :color]) (get-in hc [:row :color])))}
       (row-1 hc)
       (row-2 hc)
       [:f> row-3 hc]]]))

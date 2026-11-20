@@ -137,7 +137,7 @@
                                 ;; The chalk line before the passive ones only where they sit last (a search).
                                 (when (and passive? (not ordered?) (not (some-> (get rows (dec i)) steps-back?))) "first")
                                 (when (and passive? (not ordered?) (= i (dec (count rows)))) "last")]
-                        :style {"--chat" (sidebar/chat-color-var color)}
+                        :style (sidebar/chat-colour-style color)
                         :data-tip (str title (when project (str " · " project))
                                        (when multi? (str " · " label (when off " is off")))
                                        (when elsewhere? " · open in another tab"))
@@ -154,7 +154,7 @@
   "The chat being started, at the top at once (README decision 31): the open one, in its colour,
   until the list has it; it goes when another chat is opened before anything was sent."
   [{:keys [title color] :as fresh}]
-  [:div.rail-chat.on.fresh {:style {"--chat" (sidebar/chat-color-var color)} :data-tip title :aria-label title}
+  [:div.rail-chat.on.fresh {:style (sidebar/chat-colour-style color) :data-tip title :aria-label title}
    [dot/chat-dot fresh false]
    [:span.rail-name title]])
 

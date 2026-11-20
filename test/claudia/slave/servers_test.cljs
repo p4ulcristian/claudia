@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [claudia.slave.api :as api]
             [claudia.slave.changes :as changes]
+            [claudia.slave.chats :as chats]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.tools :as tools]
@@ -52,7 +53,11 @@
   (is (= {:color "ash" :prev_color "red"} (api/chat-update {:color "ash"} {:color "red"} ["red"] (fn [] "new"))))
   (is (= {:color "red" :prev_color nil} (api/chat-update {:color "wake"} {:prev-color "red"} [] (fn [] "new"))))
   (is (= {:color "new" :prev_color nil :archived true} (api/chat-update {:color "wake" :archived true} {} [] (fn [] "new"))))
-  (is (= {:color "blue"} (api/chat-update {:color "blue"} {} ["blue"] (fn [] "new")))))
+  (is (= {:color "blue"} (api/chat-update {:color "blue"} {} ["blue"] (fn [] "new"))))
+  (is (= {:color "dusk"} (api/chat-update {:color "dusk"} {} chats/chat-colors (fn [] "new"))) "a gradient may be picked")
+  (is (= {} (api/chat-update {:color "neon"} {} chats/chat-colors (fn [] "new"))) "an unknown name changes nothing")
+  (is (= {:color "ash" :prev_color "dusk"} (api/chat-update {:color "ash"} {:color "dusk"} chats/chat-colors (fn [] "new")))
+      "ash remembers a gradient"))
 
 (deftest api-finds-images-in-lines
   (let [img #js {:type "image" :source #js {:media_type "image/png" :data "x"}}

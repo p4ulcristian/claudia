@@ -19,14 +19,17 @@
             [claudia.web.rowdiff :as rowdiff]
             [claudia.web.views.pure.switches :as switches]))
 
-;; The chat colours in hue order (claudia.css --c-*): neighbouring colours get neighbouring notes.
-(def ^:private colours (conj colours/chat-colours "ash"))
+;; The solid chat colours in hue order (claudia.css --c-*): neighbouring colours get neighbouring
+;; notes; a gradient rings its first crayon's note.
+(def ^:private colours (conj colours/solid-colours "ash"))
 
 ;; A major pentatonic from C4 up: any two notes sound fine together. Index 0 = no colour.
 (def ^:private steps [0 2 4 7 9])
 (defn- midi [i] (+ 60 (* 12 (quot i (count steps))) (steps (mod i (count steps)))))
 (defn- hz [m] (* 440 (js/Math.pow 2 (/ (- m 69) 12))))
-(defn- note-of [color] (midi (if-let [i (first (keep-indexed #(when (= %2 color) %1) colours))] (inc i) 0)))
+(defn- note-of [color]
+  (let [c (or (first (colours/crayons color)) color)]
+    (midi (if-let [i (first (keep-indexed #(when (= %2 c) %1) colours))] (inc i) 0))))
 
 (defonce ^:private ctx (atom nil))
 (defn- audio [] (or @ctx (reset! ctx (js/AudioContext.))))
