@@ -8,8 +8,8 @@
   decision 73) the flower is half (side :left): its petals and bars only to the left of the mic, top
   to bottom cancel, add, send, now. A mic that moves (:movable) has a ring round the petals, all the
   way round, saying move: the finger in it keeps recording, and while the mic follows the finger the
-  ring shows lit, round the voice's bars and the red recording disc (its clock, and send: what
-  letting go does); the petals go."
+  ring shows lit round the whole flower, still recording; when the finger rests, the mic is put
+  down under it and the petals choose again from there."
   (:require [claudia.web.views.pure.mic :as pure]))
 
 (def size "The canvas, CSS px (square, centred on the button): the move ring fits." 300)
@@ -182,7 +182,7 @@
 
 (defn draw!
   "One frame: the move ring (a mic that moves), the petals, the ground inside them, the bars, the
-  disc (while moving: the ring lit, the bars all the way round and the disc still recording). state: {:phase (:starting :recording :moving)
+  disc (while moving too: the ring lit, the petals and the disc still recording). state: {:phase (:starting :recording :moving)
   :levels (one 0-1 per bar) :secs :way :side (nil: whole; :left: half) :movable}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
@@ -191,9 +191,7 @@
     (.setTransform g dpr 0 0 dpr 0 0)
     (.translate g (/ size 2) (/ size 2))
     (when (:movable state) (ring! g canvas (= :moving (:phase state))))
-    (if (= :moving (:phase state))
-      (bars! g canvas (:levels state) nil)
-      (flower! g canvas state))
+    (flower! g canvas state)
     (disc! g canvas state)))
 
 (defn wipe! [^js canvas]

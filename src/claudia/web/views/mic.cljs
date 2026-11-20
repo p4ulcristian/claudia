@@ -170,10 +170,37 @@
   (pure/clamp-spot {:x x :y y} js/innerWidth js/innerHeight r))
 
 (defn- follow!
-  "The mic, moving, pulled towards the finger (its button kept on the screen)."
+  "The mic, moving, pulled towards the finger (its button kept on the screen); its flower whole out
+  of the rail, half in it."
   [^js e {:keys [hold ^js mx ^js my]}]
-  (let [{:keys [x y]} (on-screen (.-clientX e) (.-clientY e) (:r (:from (.-current hold))))]
+  (let [{:keys [rail? from]} (.-current hold)
+        {:keys [x y] :as at} (on-screen (.-clientX e) (.-clientY e) (:r from))]
+    (set! (.-current hold) (assoc (.-current hold) :side (side-at rail? at)))
     (.set mx x) (.set my y)))
+
+(declare park!)
+
+(defn- settle!
+  "The finger rested while moving: the mic is put down under it, still recording, and the hold
+  chooses again from there: the petals round it, letting go in place sends, the ring moves on."
+  [{:keys [hold live set-phase set-dir] :as parts}]
+  (when-let [{:keys [rest rail?] :as held} (.-current hold)]
+    (when (:moving held)
+      (let [to (park! (:x rest) (:y rest) parts held)]
+        (set! (.-current hold) (assoc held :moving false :timer nil :x0 (:x rest) :y0 (:y rest)
+                                      :from to :dir :send :side (side-at rail? to)))
+        (set-dir :send)
+        (set-phase (if (.-current live) :recording :starting))))))
+
+(defn- watch-rest!
+  "While moving: each time the finger leaves where it rested, the rest clock starts again; when it
+  runs out (pure/settle-ms), the mic settles."
+  [^js e {:keys [hold] :as parts}]
+  (let [x (.-clientX e) y (.-clientY e) {:keys [rest timer]} (.-current hold)]
+    (when-not (and rest (pure/still? rest x y))
+      (some-> timer js/clearTimeout)
+      (set! (.-current hold) (assoc (.-current hold) :rest {:x x :y y}
+                                    :timer (js/setTimeout #(settle! parts) pure/settle-ms))))))
 
 (defn- drag!
   "Pointer move while held: where the finger went chooses what letting go does (pure/gesture, on
@@ -183,7 +210,7 @@
     (when (and rail? (not moving) (pure/in-ring? (- (.-clientX e) (:x from)) (- (.-clientY e) (:y from))))
       (start-move! parts))
     (if (:moving (.-current hold))
-      (follow! e parts)
+      (do (follow! e parts) (watch-rest! e parts))
       (let [dx (- (.-clientX e) x0) dy (- (.-clientY e) y0)
             dir (if side (pure/half-gesture dx dy) (pure/gesture dx dy))]
         (set! (.-current hold) (assoc (.-current hold) :dir dir))
@@ -195,17 +222,24 @@
   (js/requestAnimationFrame
    #(if (or (.isAnimating sx) (.isAnimating sy)) (when-still! sx sy f) (f))))
 
-(defn- moved!
-  "Let go while moving: the mic glides to where the finger is (its button on the screen) and stays
-  (kept on this device), or, covering half its slot or more, glides home into it."
-  [^js e {:keys [set-spot set-free ^js mx ^js my ^js sx ^js sy]} {:keys [slot from]}]
-  (let [at (on-screen (.-clientX e) (.-clientY e) (:r from))
+(defn- park!
+  "The mic put down for a finger at x y: it glides there (its button on the screen) and stays (kept
+  on this device), or, covering half its slot or more, glides home into it. -> where it goes
+  {:x :y :r}."
+  [x y {:keys [set-spot set-free ^js mx ^js my ^js sx ^js sy]} {:keys [slot from]}]
+  (let [at (on-screen x y (:r from))
         spot (when-not (pure/home? (assoc at :r (:r from)) slot) at)
         to (or spot slot)]
     (keep-spot! spot)
     (set-spot spot)
     (.set mx (:x to)) (.set my (:y to))
-    (when-not spot (when-still! sx sy #(set-free false)))))
+    (when-not spot (when-still! sx sy #(set-free false)))
+    (assoc to :r (:r from))))
+
+(defn- moved!
+  "Let go while moving: the mic is put down where the finger is (park!)."
+  [^js e parts held]
+  (park! (.-clientX e) (.-clientY e) parts held))
 
 (defn- heard!
   "A hold let go in place or on a petal: a tap says to hold, cancel drops the clip, else it is heard."
@@ -225,7 +259,8 @@
   message; dragged right: thrown away); a tap is dropped and says to hold; a move ends where the
   finger is, and its clip is heard and sent as when let go in place."
   [^js e {:keys [hold live set-phase] :as parts}]
-  (when-let [{:keys [t0 p dir k rec-at moving] :as held} (.-current hold)]
+  (when-let [{:keys [t0 p dir k rec-at moving timer] :as held} (.-current hold)]
+    (some-> timer js/clearTimeout)
     (set! (.-current hold) nil)
     (when moving (moved! e parts held))
     (heard! p {:t0 t0 :dir (if moving :send dir) :k k :rec-at rec-at} live set-phase)))

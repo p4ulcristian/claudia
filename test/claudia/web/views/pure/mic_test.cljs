@@ -129,3 +129,7 @@
   (is (= 90 (mic/turn-angle nil 90 0)))
   (is (= 0 (mic/turn-angle nil nil 0)))
   (is (= 0 (mic/turn-angle nil nil nil))))
+
+(deftest a-resting-finger-may-tremble-a-little
+  (is (true? (mic/still? {:x 100 :y 100} 105 103)))
+  (is (false? (mic/still? {:x 100 :y 100} 110 100))))
