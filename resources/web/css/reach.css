@@ -9,7 +9,7 @@
   .talk-row > .mic { align-self: center; }
   .talk-row .mic-core, .talk-row .mic-button { width: 72px; height: 72px; }
   .talk-row .mic-button svg { width: 32px; height: 32px; }
-  .talk-row .mic-clips { left: 50%; transform: translateX(-50%); }
+  .talk-row .mic-clips { left: 50%; transform: translateX(-50%); align-items: center; }
   .talk-row .mic-hint { left: 50%; transform: translateX(-50%); bottom: 82px; }
   /* Typing: while the on-screen keyboard is up (claudia.web.viewport sets data-keyboard) the hands
      are on it, so the mic gives its row back (the clips still being heard stay). */
@@ -54,6 +54,8 @@
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
   .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button, .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
   .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
+  .thumb-edge .mic-clips { align-items: flex-end; }
+  .thumb-edge .mic.moved .mic-clips { align-items: center; }
   .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 12px); bottom: auto; top: 50%; transform: translateY(-50%); }
   .thumb-edge .mic.moved .mic-speaker { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
 

@@ -1,7 +1,8 @@
 (ns claudia.web.views.pure.mic
   "The composer's mic, as data: what heard text does to the draft, how long a hold has to be, what
   a drag while holding chooses, and the bars drawn round the button from the voice's spectrum."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.web.views.pure.update-pill :as clock]))
 
 (def bar-count "Bars round the button." 48)
 
@@ -207,3 +208,22 @@
   (let [a (or native window-orientation screen-angle 0)]
     (mod a 360)))
 
+
+;; ---- a clip's pill (views/mic_clips.cljs) ----
+
+(def ^:private ways "Where a clip's words go: its mark and its word." {:add ["+" "add"] :now ["⏵" "now"]})
+
+(defn way-mark "The mark for where a clip's words go (dir :send, :add or :now)." [dir] (first (get ways dir ["↑" "send"])))
+
+(defn- status-text
+  "A clip's state in words."
+  [{:keys [state t0]} now]
+  (case state
+    :failed "didn't come through"
+    :heard "heard, waits its turn"
+    (str "hearing " (clock/clock-text (- now t0)))))
+
+(defn clip-label
+  "Clip c ({:n :secs :dir :state :t0}) in words, for its tip and screen readers, at now."
+  [{:keys [n secs dir] :as c} now]
+  (str "Clip " (inc n) ", " secs " s, " (second (get ways dir ["↑" "send"])) ": " (status-text c now)))

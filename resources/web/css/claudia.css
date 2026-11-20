@@ -389,15 +389,19 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .rail::after { visibility: 
 body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; }
 .mic.starting .mic-button, .mic.recording .mic-button, .mic.moving .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
 /* The clips being heard, over the composer, in spoken order, each with its loading clock. */
-.mic-clips { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 6; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; width: min(340px, 80vw); pointer-events: none; }
-.mic-clip { display: flex; justify-content: space-between; gap: 10px; padding: 6px 11px; border-radius: 10px; background: var(--panel2); box-shadow: 0 4px 14px rgb(0 0 0 / 0.35), inset 0 0 0 1.5px var(--line); font-size: 13px; }
-.mic-clip b { font-family: var(--mono); color: var(--amber); white-space: nowrap; }
-.mic-clip.heard b { color: var(--green); }
-.mic-clip.failed { pointer-events: auto; flex-wrap: wrap; box-shadow: 0 4px 14px rgb(0 0 0 / 0.35), inset 0 0 0 1.5px var(--red); }
-.mic-clip b.fail { color: var(--red); }
-.mic-clip-acts { display: flex; gap: 8px; width: 100%; justify-content: flex-end; }
-.mic-clip-acts button { padding: 4px 10px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--bg2); color: var(--fg); font-size: 13px; }
-.mic-clip-acts button:first-child { border-color: var(--accent); color: var(--accent); }
+.mic-clips { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 6; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; pointer-events: none; }
+/* One small pill per clip: a ring (amber while heard, green once heard), its length, where it goes. */
+.mic-clip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px; background: var(--panel2);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.3), inset 0 0 0 1.5px var(--line); font: 12px var(--mono); color: var(--fg); white-space: nowrap; }
+.mic-clip-ring { width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--amber); border-right-color: transparent; animation: mic-clip-spin 0.9s linear infinite; }
+.mic-clip.heard .mic-clip-ring { border-color: var(--green); animation: none; }
+@keyframes mic-clip-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mic-clip-ring { animation: none; } }
+.mic-clip-way { color: var(--muted); }
+.mic-clip.failed { pointer-events: auto; padding-right: 4px; box-shadow: 0 3px 10px rgb(0 0 0 / 0.3), inset 0 0 0 1.5px var(--red); }
+.mic-clip-fail { width: 14px; text-align: center; font-style: normal; font-weight: 700; color: var(--red); }
+.mic-clip-act { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--bg2); color: var(--fg); font-size: 12px; }
+.mic-clip-act:first-of-type { border-color: var(--accent); color: var(--accent); }
 .mic-button { position: relative; z-index: 4; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   /* In the open chat's colour (--chat on .mic), violet without one. */
   --m: var(--chat, var(--violet));

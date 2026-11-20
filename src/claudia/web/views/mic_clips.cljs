@@ -9,7 +9,6 @@
             [claudia.web.hooks :as hooks]
             [claudia.web.mic :as mic]
             [claudia.web.views.pure.mic :as pure]
-            [claudia.web.views.pure.update-pill :as clock]
             [re-frame.core :as rf]
             [reagent.core :as r]))
 
@@ -94,22 +93,20 @@
   ;; The clips kept from before a reload come back, failed, in their order.
   (.then (store/kept) (fn [clips] (doseq [c clips] (add-row! (place!) c :failed)))))
 
-;; ---- the list ----
+;; ---- the list: one small pill per clip ----
 
-(defn- status [{:keys [state t0]} now]
-  (case state
-    :failed [:b.fail "didn't come through"]
-    :heard [:b.done "heard, waits its turn"]
-    [:b (str "hearing " (clock/clock-text (- now t0)))]))
+(defn- clip-acts [n]
+  [:<>
+   [:button.mic-clip-act {:type "button" :aria-label "Try again" :data-tip "Try again" :on-click #(try-again! n)} "↻"]
+   [:button.mic-clip-act {:type "button" :aria-label "Throw away" :data-tip "Throw away" :on-click #(throw-away! n)} "✕"]])
 
 (defn- row [{:keys [n secs dir state] :as c} now]
-  [:li.mic-clip {:class (name state)}
-   [:span (str (inc n) " · " secs " s → " (case dir :add "add" :now "now" "send"))]
-   (status c now)
-   (when (= state :failed)
-     [:span.mic-clip-acts
-      [:button {:type "button" :on-click #(try-again! n)} "Try again"]
-      [:button {:type "button" :on-click #(throw-away! n)} "Throw away"]])])
+  (let [label (pure/clip-label c now)]
+    [:li.mic-clip {:class (name state) :data-tip label :aria-label label}
+     (if (= state :failed) [:i.mic-clip-fail {:aria-hidden true} "!"] [:i.mic-clip-ring {:aria-hidden true}])
+     [:span.mic-clip-len (str secs "s")]
+     [:span.mic-clip-way {:aria-hidden true} (pure/way-mark dir)]
+     (when (= state :failed) [clip-acts n])]))
 
 (defn- list-view []
   (let [now (hooks/use-now) rs (vals @rows)]
