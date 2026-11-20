@@ -5,17 +5,22 @@
   the person ({as: email}, who must have a profile on that server). The hub then carries the
   operation out on the person's servers as them (claudia.slave.chat-ops on each runner).
 
-  Body {as, op, args}: op chats (every server's chats), new {server text folder?}, send {server
-  chat text}, archive {server chat archived}, stop {server chat}; and for any chat's bookmark tools
+  Body {as, op, args}: op chats (every server's chats and the person's chat order), new {server
+  text folder?}, send {server chat text}, archive {server chat archived}, stop {server chat},
+  organize {steps} (README decision 88: rename, recolour, archive, group and order any of the
+  person's chats, claudia.hub.organize); and for any chat's bookmark tools
   (README decision 67): bookmarks (the person's bookmarked folders, {items}), bookmark {server folder
   label? remove?} (one bookmark added, relabelled or removed; server one of the person's)."
   (:require [clojure.string :as str]
             [claudia.hub.bookmarks :as bookmarks]
+            [claudia.hub.chat-order :as chat-order]
             [claudia.hub.config :as config]
             [claudia.hub.hub-key :as hub-key]
+            [claudia.hub.organize :as organize]
             [claudia.hub.pass :as pass]
             [claudia.hub.store :as store]
-            [claudia.node.http :as io]))
+            [claudia.node.http :as io]
+            [claudia.shared.order :as order]))
 
 (def ^:private max-body (* 256 1024))
 
@@ -30,9 +35,12 @@
         :else nil))
 
 (defn row-of
-  "What Claudia sees of a chat row on server: its id, title, project, state."
+  "What Claudia sees of a chat row on server: its reference (server/id), title, colour, folder,
+  project, state, last activity (at) and start (started)."
   [server r]
-  (select-keys (assoc r :server server) [:server :id :title :project :archived :running :passive :lastTurn]))
+  (-> (assoc r :server server :ref (order/ref-of (assoc r :server server)))
+      (select-keys [:server :id :ref :title :color :folder :project :archived :running :passive :claudia
+                    :at :started :lastTurn])))
 
 (defn- all-chats [servers who]
   (-> (js/Promise.all
@@ -42,7 +50,7 @@
                               (if (= 200 status)
                                 (mapv #(row-of (:name s) %) (:chats body))
                                 [{:server (:name s) :error (or (:error body) "unreachable")}]))))))
-      (.then #(do {:status 200 :body {:chats (vec (apply concat %))}}))))
+      (.then #(do {:status 200 :body {:chats (vec (apply concat %)) :order (chat-order/of (:email who))}}))))
 
 (defn op-target
   "The chat operation's runner path for op, or nil when it is not one."
@@ -61,11 +69,39 @@
           (map? changed) {:status 400 :body changed}
           :else {:status 200 :body (select-keys (bookmarks/save! email changed) [:items])})))
 
+(defn- edit! [servers who {:keys [server chat body]}]
+  (if-let [s (some #(when (= server (:name %)) %) servers)]
+    (pass/json! s "PATCH" (str "/api/chats/" (js/encodeURIComponent chat)) who body)
+    (js/Promise.resolve {:status 400 :body {:error "not one of your servers"}})))
+
+(defn- organized
+  "The organize op's answer once plan's edits are made: each step's result and the list as kept."
+  [email {:keys [results edits]} answers]
+  {:status 200
+   :body {:results (reduce (fn [rs [e a]] (assoc rs (:i e) (organize/edit-result a))) results (map vector edits answers))
+          :order (chat-order/of email)}})
+
+(defn- organize
+  "organize {steps} (README decision 88): the order steps kept on the hub at once, then the edits
+  made on each chat's server as the person."
+  [servers who {:keys [steps]}]
+  (if-let [p (organize/steps-problem steps)]
+    (js/Promise.resolve {:status 400 :body {:error p}})
+    (.then (all-chats servers who)
+           (fn [{{:keys [chats]} :body}]
+             (let [email (:email who)
+                   plan (organize/plan chats (:items (chat-order/of email)) (vec steps)
+                                       (vec (repeatedly (count steps) #(str "g-" (random-uuid)))))]
+               (when (:changed plan) (chat-order/save! email (:items plan)))
+               (.then (js/Promise.all (into-array (map #(edit! servers who %) (:edits plan))))
+                      #(organized email plan (vec %))))))))
+
 (defn- operate [person {:keys [op args]}]
   (let [who {:email (:email person)}
         servers (config/servers-of person)]
     (case op
       "chats" (all-chats servers who)
+      "organize" (organize servers who args)
       "bookmarks" (js/Promise.resolve {:status 200 :body (select-keys (bookmarks/of (:email person)) [:items])})
       "bookmark" (js/Promise.resolve (bookmark person servers args))
       (let [target (op-target op)
