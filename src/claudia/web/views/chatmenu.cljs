@@ -1,9 +1,10 @@
 (ns claudia.web.views.chatmenu
   "Right click on a chat (a rail circle, a list row) or its header's ⋯: colour (the 20 solid
   colours and, under them, the 8 gradients; or passive ash, which remembers the colour it had),
-  rename, fork, Files… (opens the chat with Files in the right half: pick its folder), Move to
-  server… (README decision 82), archive."
-  (:require [clojure.string :as str]
+  rename, fork, Files… (opens the chat with Files in the right half: pick its folder), Take out of
+  group (when it sits in one), Move to server… (README decision 82), archive."
+  (:require [claudia.shared.order :as order]
+            [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.views.pure.menu :as pure]
@@ -73,6 +74,12 @@
                                       "Escape" (do (.stopPropagation e) (set-renaming false))
                                       nil))}])
 
+(defn- in-group-ref
+  "Chat k's reference in the person's list when it sits in a group, else nil."
+  [[server chat]]
+  (let [cref (order/ref-of {:server server :id chat})]
+    (when (order/group-of @(rf/subscribe [:order-items]) cref) cref)))
+
 (defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming]}]
   [:<>
    (if (= color "ash")
@@ -89,6 +96,9 @@
    [:button.cm-item {:role "menuitem" :title "Open this chat with Files in the right half (README decision 70)"
                      :on-click (act #(rf/dispatch [:folders/open {:chat k}]))}
     "Files…"]
+   (when-let [cref (in-group-ref k)]
+     [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:order/change (fn [items] (order/take-out items cref))]))}
+      "Take out of group"])
    (when @(rf/subscribe [:can-move? k])
      [:button.cm-item {:role "menuitem" :title "Move this chat to another of your servers (README decision 82)"
                        :on-click (act #(rf/dispatch [:move/ask k]))}

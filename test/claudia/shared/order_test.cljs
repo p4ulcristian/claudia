@@ -53,3 +53,16 @@
   (is (nil? (o/chat-key "nothing")))
   (is (= "g" (:group (o/find-group [{:chat "s/a"} {:group "g" :chats ["s/b"]}] "g"))))
   (is (nil? (o/find-group [{:chat "s/a"}] "g"))))
+
+(def ^:private grouped [{:chat "s/a"} {:group "g" :name "G" :chats ["s/b" "s/c"]} {:chat "s/d"}])
+
+(deftest a-chat-taken-out-goes-just-after-its-group
+  (is (= [{:chat "s/a"} {:group "g" :name "G" :chats ["s/c"]} {:chat "s/b"} {:chat "s/d"}]
+         (o/take-out grouped "s/b")))
+  (is (= grouped (o/take-out grouped "s/a")))
+  (is (= [{:chat "s/a"} {:chat "s/b"} {:chat "s/d"}]
+         (o/take-out [{:chat "s/a"} {:group "g" :name "G" :chats ["s/b"]} {:chat "s/d"}] "s/b"))))
+
+(deftest ungroup-puts-the-chats-where-the-group-was
+  (is (= [{:chat "s/a"} {:chat "s/b"} {:chat "s/c"} {:chat "s/d"}] (o/ungroup grouped "g")))
+  (is (= grouped (o/ungroup grouped "nope"))))

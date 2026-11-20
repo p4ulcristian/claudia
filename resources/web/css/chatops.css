@@ -386,8 +386,11 @@ body.chat-dragging .order-item { touch-action: none; }
    before or after a chat, a ring round a circle (a new group) or a stack (into the group); dragged
    out of the rail with a mouse, the copy says it opens in a window of its own. */
 .rail .drag-ghost.rail-chat { height: var(--rail-row-h); border-radius: 14px; margin: 0; }
-.drag-ghost.group-card-chat { border-radius: 9px; }
-.group-card-chat { position: relative; touch-action: pan-y; }
+.drag-ghost.group-card-row { border-radius: 9px; }
+.group-card-row { position: relative; display: flex; align-items: center; touch-action: pan-y; border-radius: 9px; }
+.group-card-row > .group-card-chat { flex: 1; min-width: 0; }
+.group-card-out, .group-ungroup { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font: 700 16px var(--sans); }
+.group-card-out:hover, .group-ungroup:hover { background: var(--panel); color: var(--fg); }
 .rail-dots .drop-before::before { top: -7px; }
 .rail-dots .drop-after::after { bottom: -7px; }
 .group-card .drop-before::before { top: -2px; }
