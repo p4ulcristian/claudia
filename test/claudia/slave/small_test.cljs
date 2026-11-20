@@ -189,6 +189,14 @@
     (is (= (str "rollback " t "\n") (front/trigger-line {:rollback t :main t} "now")) "rollback first")
     (is (= "check now\n" (front/trigger-line {:rollback "b; rm -rf /"} "now")) "hex only")))
 
+(deftest the-poke-says-a-new-sdk-or-its-rollback
+  (is (= "sdk 0.3.329\n" (front/trigger-line {:sdk "0.3.329"} "now")))
+  (is (= "sdk-rollback 0.3.329\n" (front/trigger-line {:sdkRollback "0.3.329" :sdk "0.3.329"} "now")) "rollback first")
+  (is (= "releases https://hub.example/hub/releases/files\nsdk 0.3.329\n"
+         (front/trigger-line {:sdk "0.3.329" :releases "https://hub.example/hub/releases/files"} "now")))
+  (is (= "check now\n" (front/trigger-line {:sdk "0.3.329; rm -rf /"} "now")) "plain versions only")
+  (is (= "check now\n" (front/trigger-line {:sdkRollback "1.0.0-beta.1"} "now"))))
+
 (deftest screenshot-reads-only-its-scenes-roots
   (is (= #{"/a"} (render/scene-roots {:blocks [{:form "scene3d" :data {:root "/a"}}
                                                {:form "files" :data {:root "/b"}}

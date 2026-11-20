@@ -11,9 +11,11 @@
             [claudia.node.system :as system]
             [claudia.shared.activity :as activity]
             [claudia.shared.protocol :as p]
+            [claudia.shared.sdk-channel :as channel]
             [claudia.slave.github-services :as github-services]
             [claudia.slave.http :as h]
             [claudia.slave.rootfront :as rootfront]
+            [claudia.slave.sdk-store :as sdk-store]
             [claudia.slave.sshfront :as sshfront]
             [claudia.slave.tokens :as tokens]))
 
@@ -133,6 +135,12 @@
   [url r]
   (boolean (and (or (= url "/api/folders") (str/starts-with? url "/api/folders/")) (not= "own" (via-of r)))))
 
+(defn- new-session-sdk
+  "The Agent SDK version a session started now runs on here (README decisions 86, 87): the newest
+  installed one not marked broken (one the host found failing is not known here)."
+  []
+  (:version (sdk-store/installed h/checkout)))
+
 (defn- me [res headers {:keys [own viewing read-only]}]
   (io/send-json res 200 {:server (.-FRONT_NAME env)
                          :profile (:profile own)
@@ -143,24 +151,28 @@
                          :viewing viewing
                          :readOnly read-only
                          :version h/version
-                         :commit h/commit}))
+                         :commit h/commit
+                         :sdk (new-session-sdk)}))
 
 (defn trigger-line
   "The lines the hub's poke adds to CLAUDIA_UPDATE_TRIGGER: \"rollback <commit>\" (body {:rollback
-  commit}: that release was broken in people's pages, go back one, README decision 35), \"stage
-  <tree>\" (body {:stage tree}: a git tree to fetch ahead), \"main <commit>\" (body {:main commit}:
-  main was pushed to it, which GitHub's API may name a few seconds later), else \"check <time>\"
-  (look at main now); first
-  \"releases <url>\" when the body names where the hub keeps the release builder's files (an https
-  address, README decision 29)."
+  commit}: that release was broken in people's pages, go back one, README decision 35),
+  \"sdk-rollback <version>\" (body {:sdkRollback version}: that channel Agent SDK is broken, new
+  sessions skip it, README decision 87), \"stage <tree>\" (body {:stage tree}: a git tree to fetch
+  ahead), \"main <commit>\" (body {:main commit}: main was pushed to it, which GitHub's API may name
+  a few seconds later), \"sdk <version>\" (body {:sdk version}: the release builder published that
+  Agent SDK, decision 87), else \"check <time>\" (look at main now); first \"releases <url>\" when
+  the body names where the hub keeps the release builder's files (an https address, decision 29)."
   [body iso]
   (let [hex? #(and (string? %) (re-matches #"^[0-9a-f]{40}$" %))
         url (when (string? (:releases body))
               (re-matches #"^https://[A-Za-z0-9.-]+(?::\d+)?/hub/releases/files$" (:releases body)))]
     (str (when url (str "releases " url "\n"))
          (cond (hex? (:rollback body)) (str "rollback " (:rollback body) "\n")
+               (channel/version? (:sdkRollback body)) (str "sdk-rollback " (:sdkRollback body) "\n")
                (hex? (:stage body)) (str "stage " (:stage body) "\n")
                (hex? (:main body)) (str "main " (:main body) "\n")
+               (channel/version? (:sdk body)) (str "sdk " (:sdk body) "\n")
                :else (str "check " iso "\n")))))
 
 (defn- update-check
@@ -290,7 +302,7 @@
       (= url "/api/system") (system-sample req res)
       (= url "/api/github/service-token") (github-services/handle req res)
       ;; The commit this machine runs (the update pill follows each one after a release).
-      (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version})
+      (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version :sdk (new-session-sdk)})
       status (io/send-json res status {:error error})
       (= :refuse (root-call (.-method req) url)) (io/send-json res 403 {:error "Not passed on: the runner's root and SSH routes are the front's own."})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)

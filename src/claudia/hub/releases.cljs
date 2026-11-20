@@ -13,7 +13,9 @@
   - Files: PUT /hub/releases/files/<name> (builder) into HUB_RELEASES (default <data>/releases);
     GET /hub/releases/files/<name> (no login: they are signed, and the code is public).
   - Ready: POST /hub/releases/ready {commit, tree, deps}: once a tree's code and both platforms'
-    node_modules are here with their signatures, servers and the gate are told to fetch it ahead."
+    node_modules are here with their signatures, servers and the gate are told to fetch it ahead.
+  - The Agent SDK channel (README decision 87): POST /hub/releases/sdk {version} (builder), GET
+    /hub/releases/sdk (anyone), claudia.hub.sdk-channel."
   (:require ["node:fs" :as fs]
             ["node:path" :as path]
             ["node:crypto" :as crypto]
@@ -23,6 +25,8 @@
             [claudia.node.http :as io]
             [claudia.hub.announce :as announce]
             [claudia.hub.progress :as progress]
+            [claudia.hub.sdk-channel :as sdk-channel]
+            [claudia.shared.sdk-channel :as channel]
             [claudia.hub.store :as store]))
 
 (def ^:private hex40 #"^[0-9a-f]{40}$")
@@ -43,10 +47,11 @@
 
 (defn file-name?
   "Whether file (a name) is a release file the hub keeps: a tree's code, a lockfile's node_modules (Linux or
-  a Mac's), or one of their signatures (.sig)."
+  a Mac's), an Agent SDK channel tarball (README decision 87), or one of their signatures (.sig)."
   [file]
-  (boolean (re-matches #"^claudia-(code-[0-9a-f]{40}|deps-[0-9a-f]{20}(-darwin-arm64)?)\.tar\.gz(\.sig)?$"
-                       (str file))))
+  (or (boolean (re-matches #"^claudia-(code-[0-9a-f]{40}|deps-[0-9a-f]{20}(-darwin-arm64)?)\.tar\.gz(\.sig)?$"
+                           (str file)))
+      (channel/file-name? file)))
 
 (defn needed-files
   "Every file a tree's release needs: its code, both platforms' node_modules, each signed."
@@ -181,12 +186,17 @@
         (tidy!)
         (io/send-json res 200 {:ok true}))))
 
+(defn- sdk-published [^js res {:keys [version]}]
+  (let [[status body] (sdk-channel/published! @dir version)]
+    (io/send-json res status body)))
+
 (defn- builder-call
-  "The builder's calls, after its token: what to build, a file, a tree done."
+  "The builder's calls, after its token: what to build, a file, a tree done, an Agent SDK published."
   [^js req ^js res method op file]
   (case [method op]
     ["GET" "wanted"] (wanted req res)
     ["POST" "ready"] (.then (io/read-json req 4096) #(ready res %))
+    ["POST" "sdk"] (.then (io/read-json req 4096) #(sdk-published res %))
     ["PUT" "files"] (put-file req res file)
     ["POST" "progress"] (.then (io/read-json req 4096)
                                #(do (progress/builder-said! (select-keys % [:commit :tree :state :description]))
@@ -194,13 +204,15 @@
     (fail res 405 "not this way")))
 
 (defn call
-  "/hub/releases/…: files for anyone (GET, HEAD); everything else for the builder only."
+  "/hub/releases/…: files and the Agent SDK channel's state for anyone (GET, HEAD); everything else
+  for the builder only."
   [^js req ^js res pathname]
-  (let [[_ op file] (re-matches #"^/hub/releases/(wanted|ready|files|progress)(?:/([^/]+))?$" pathname)
+  (let [[_ op file] (re-matches #"^/hub/releases/(wanted|ready|files|progress|sdk)(?:/([^/]+))?$" pathname)
         method (.-method req)]
     (cond
       (not @dir) (fail res 503 "no release folder")
       (not op) (fail res 404 "not found")
+      (and (= op "sdk") (= "GET" method)) (io/send-json res 200 (sdk-channel/now @dir))
       (and (= op "files") (not (file-name? file))) (fail res 404 "not a release file")
       (and (= op "files") (#{"GET" "HEAD"} method)) (get-file req res file)
       (not (builder? req)) (fail res 401 "not the release builder")
@@ -213,6 +225,16 @@
   []
   (when-let [b (store/release-builder)]
     {:host (:host b) :pairedAt (:paired-at b) :seenAt (:seen-at b)}))
+
+(defn sdk-state
+  "What Settings shows of the Agent SDK channel (README decision 87), or nil without a release folder."
+  []
+  (when @dir (sdk-channel/now @dir)))
+
+(defn sdk-roll-back!
+  "An admin rolls Agent SDK version v back on every server: [status body]."
+  [v]
+  (if @dir (sdk-channel/roll-back! @dir v) [503 {:error "no release folder"}]))
 
 (defn pair!
   "A pasted builder key makes that machine the release builder: [status body]."

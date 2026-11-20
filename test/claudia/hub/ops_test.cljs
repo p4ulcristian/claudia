@@ -19,6 +19,7 @@
   (is (= [:set-access] (ops/admin-route "PUT" "/hub/admin/access")))
   (is (= [:set-writer] (ops/admin-route "PUT" "/hub/admin/writers")))
   (is (= [:pair] (ops/admin-route "POST" "/hub/admin/pair")))
+  (is (= [:sdk-rollback] (ops/admin-route "POST" "/hub/admin/sdk-rollback")))
   (testing "anything else is nothing"
     (is (nil? (ops/admin-route "POST" "/hub/admin")))
     (is (nil? (ops/admin-route "GET" "/hub/admin/servers/box")))

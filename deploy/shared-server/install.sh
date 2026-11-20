@@ -6,6 +6,7 @@
 # Code goes to /srv/claudia (root-owned), units to /etc/systemd/system. Settings stay in
 # /etc/claudia (env, profiles, profile-<p>.env), written by hand, never from the repo.
 # Restarts the front and the runners; hosts only when --restart-hosts is given (that stops chats).
+# A new Agent SDK needs no host restart: each session a host starts loads the newest (README decision 86).
 # deploy/update.sh --shared runs this from each signed release (claudia-update.path/.timer).
 set -euo pipefail
 src=${1:?checkout}; shift
@@ -22,6 +23,9 @@ else git -C "$src" rev-parse HEAD > "$new/commit.txt" 2>/dev/null || true; fi
 chown -R root:root "$new"; chmod -R go-w "$new"
 rm -rf /srv/claudia.old; [ -d /srv/claudia ] && mv /srv/claudia /srv/claudia.old
 mv "$new" /srv/claudia
+# The release's Agent SDK into /srv/claudia.sdk, where the hosts load each new session's from
+# (README decision 86): a host never restarts for a new SDK.
+bash /srv/claudia/deploy/sdk-store.sh /srv/claudia
 # The saved Claude tokens (<token file>.d) and each person's pick (<token file>.picks.json): the front
 # (user claudia) writes them, the runners (group claudia-run) read them.
 getent group claudia-run >/dev/null || groupadd --system claudia-run

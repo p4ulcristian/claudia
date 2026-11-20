@@ -68,6 +68,7 @@ as test -f "$home/signing-key" || as ssh-keygen -q -t ed25519 -N '' -C "$user@$(
 as test -f "$home/token" || as sh -c "umask 077; head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=' > '$home/token'"
 as sh -c "umask 077; printf 'HUB_URL=%s\n' '$hub' > '$home/env'"
 install -o "$user" -g "$user" -m 0755 "$here/builder.sh" "$home/builder.sh"
+install -o "$user" -g "$user" -m 0755 "$here/sdk-channel.sh" "$home/sdk-channel.sh"
 
 install -m 0644 "$here/fence.nft" /etc/nftables-claudia-release-builder.nft
 install -m 0644 "$here/claudia_release_builder.slice" /etc/systemd/system/claudia_release_builder.slice
