@@ -1044,8 +1044,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the ring at any time while holding keeps the recording going (2026-11-20 later, the user's
     call; before: the clip was dropped) and the mic follows the finger on a spring
     (`motion`'s useSpring, 2026-11-19 later: "it should be more smoothly following ... like it would
-    have some personality"): it trails the finger and overshoots a little, the ring lit round a blue
-    disc saying move. Let go, the clip is heard and sent as when let go in place, and the mic
+    have some personality"): it trails the finger and overshoots a little, the ring lit round the
+    voice's bars and the red recording disc with its clock and "send" (2026-11-20 later, the user:
+    "it doesn't show the recording anymore, so it's confusing"; before: a blue disc saying move). Let go, the clip is heard and sent as when let go in place, and the mic
     glides there and stays, its slot in the rail a dashed ring. It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
