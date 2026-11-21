@@ -269,7 +269,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     decision 89; not when that chat is open), a Hungarian reply in Hungarian
     (`pure/talk.cljs`'s line and `language-of`), without code, tables, links or Markdown marks
     ("There's code in the chat." instead). While a reply is read the mic is that chat (decision
-    73): the chat's colour, bars that move, its name and voice over it. A tap on it stops that
+    73): the chat's colour, bars that move, its name and voice over it; while its sound is still
+    being made, three dots in turn and "getting ready" instead of the bars (2026-11-21, the user:
+    the bars moved before it talked), and the rail's bars below come only once it plays. A tap on it stops that
     one reply and the next one comes; a hold stops it and records into the open chat as always
     (talking to the chat that speaks instead is for later); nothing is read while the mic is held,
     and what arrives meanwhile waits and comes after it is let go. A voice turned Off drops that

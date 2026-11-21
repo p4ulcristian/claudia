@@ -3,7 +3,8 @@
   in arrival order (claudia.web.views.pure.talk's line), each in its chat's voice by the hub's
   voice service. Holding the mic drops the reply being read and holds the rest until it is let go;
   a chat turned Off leaves the line; the page going to the background drops it all, so nothing is
-  said late. The reply being read is in app-db as :speaking (the mic shows it)."
+  said late. The reply being read is in app-db as :speaking (the mic shows it), with :loading until
+  its sound is ready and plays."
   (:require [claudia.shared.voices :as voices]
             [claudia.web.sound :as sound]
             [claudia.web.views.pure.talk :as talk]
@@ -50,7 +51,10 @@
         (.getByteFrequencyData analyser a)
         {:spectrum (vec (array-seq a)) :rate (.-sampleRate ctx)}))))
 
-(defn- shown! [item] (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :voice]))]))
+(defn- shown!
+  "The mic shows item (nil: none); :loading while its sound is still being made."
+  [item]
+  (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :voice :loading]))]))
 
 (declare pump! stop!)
 
@@ -71,7 +75,8 @@
     (set! (.-onended src) #(finished! (:id item)))
     (sound/claim! ::reply stop!)
     (.start src)
-    (swap! audio assoc :source src)))
+    (swap! audio assoc :source src)
+    (shown! item)))
 
 (defn- read!
   "Reads item; its colour name is said only when its chat is not the one open now."
@@ -87,7 +92,7 @@
   (let [[before after] (swap-vals! line talk/next-up)
         item (:current after)]
     (when (and item (not= item (:current before)))
-      (shown! item)
+      (shown! (assoc item :loading true))
       (read! item))))
 
 (defn say!

@@ -96,7 +96,8 @@
   [{:keys [server id folder waiting running agents runningSince agentsSince root]} done? & [plain? badge]]
   (let [agents (or agents 0)
         state (cond waiting :waiting running :thinking done? :done)
-        talking? (= [server id] (:k @(rf/subscribe [:speaking])))]
+        speaking @(rf/subscribe [:speaking])
+        talking? (and (= [server id] (:k speaking)) (not (:loading speaking)))]
     (if plain?
       [:span.rail-dot
        (when talking? [:f> voice-ring/ring])

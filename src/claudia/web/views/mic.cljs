@@ -289,10 +289,15 @@
   "The bars on a mic that reads a reply aloud (they move by CSS)."
   [:span.mic-speak-bars {:aria-hidden true} [:i] [:i] [:i] [:i] [:i]])
 
+(def ^:private speaker-loading
+  "On a mic whose reply's sound is still being made: three dots in turn (they move by CSS)."
+  [:span.mic-speak-loading {:aria-hidden true} [:i] [:i] [:i]])
+
 (defn- speaker-label
-  "Under a mic that reads a reply aloud: whose reply, in which voice."
-  [{:keys [title voice]}]
-  [:span.mic-speaker [:b title] (when voice [:small voice])])
+  "Under a mic that reads a reply aloud: whose reply, in which voice (getting ready while loading)."
+  [{:keys [title voice loading]}]
+  [:span.mic-speaker [:b title]
+   (when (or voice loading) [:small (str voice (when (and voice loading) " \u00b7 ") (when loading "getting ready"))])])
 
 (defn- core
   "The button with its bars (a reply being read: its chat's bars and name), and the hint after a tap."
@@ -310,7 +315,7 @@
                         :on-pointer-up #(release! % parts)
                         :on-pointer-cancel #(release! % parts)
                         :on-context-menu #(.preventDefault %)}
-    (if speaker speaker-bars icon)]
+    (cond (:loading speaker) speaker-loading speaker speaker-bars :else icon)]
    (when speaker [speaker-label speaker])
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])])
 
@@ -330,7 +335,7 @@
   (when (and speaking (= :idle phase))
     (let [row (some-> (:k speaking) row-of)]
       {:title (or (not-empty (:title row)) "Claudia") :colour (some-> (:color row) words/colour-var)
-       :voice (some-> (:voice speaking) voices/by-id :name)})))
+       :voice (some-> (:voice speaking) voices/by-id :name) :loading (:loading speaking)})))
 
 (defn- speak-here
   "While recording in the app: a glow on the screen edge nearest the microphone iOS records from,
