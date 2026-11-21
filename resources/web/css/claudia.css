@@ -9,10 +9,10 @@
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
-  /* The chat's two voices (README decision 98): the person's own lines one near-white in every chat,
-     Claude's replies in the chat's chalk (--reply; plain --fg with no chat colour and in ash chats). */
-  --mine: #efefef;
-  --reply: var(--fg);
+  /* Whose message is which shows by shape and side, not text colour (README decision 103): both
+     write in --fg; Claude's replies have a line on their left in the chat's chalk (--claude-line;
+     grey with no chat colour). */
+  --claude-line: var(--muted);
   /* Chat colours, and the text colour that sits on them. */
   /* The chat colours: the crayon box (claudia.shared.colours, the same hexes; README decision 26). */
   --c-cherry: #e5383b; --c-chocolate: #a0673f; --c-peach: #ffc49b; --c-tangerine: #ff8c1a; --c-gold: #d4a72c;
@@ -63,12 +63,10 @@
   --panel: color-mix(in oklch, var(--hue) 20%, #3c3c3c); --panel2: color-mix(in oklch, var(--hue) 24%, #444444);
   --line: color-mix(in oklch, var(--hue) 32%, #525252);
   --fg: color-mix(in oklch, var(--hue) 8%, #efefef); --muted: color-mix(in oklch, var(--hue) 25%, #a9a9a9);
-  /* coloured chalk: the chat's hue, chalky; Claude's replies are written in it */
+  /* coloured chalk: the chat's hue, chalky; the line beside Claude's replies (grey in an ash chat) */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
-  --reply: var(--accent);
+  --claude-line: var(--accent);
 }
-/* An ash (grey, passive) chat: Claude's replies stay plain. */
-:root[data-chat="ash"] { --reply: var(--fg); }
 
 /* A gradient chat (README decision 80): the theme above, mixed from its stand-in colour, and the whole
    window one gradient between its two crayons (--hue-a top left, --hue-b bottom right), each as dark as
@@ -84,7 +82,7 @@
 :root[data-claudia] {
   --hue: #2bd46a; --bg: #0b1c12; --bg2: #08150d; --panel: #10261a; --panel2: #143020; --line: #1f4a2e;
   --fg: #e6f5ea; --muted: #8fb79c; --accent: #5cff8f; --board: transparent;
-  --reply: color-mix(in oklch, var(--hue) 75%, #fff);
+  --claude-line: color-mix(in oklch, var(--hue) 75%, #fff);
 }
 :root[data-claudia] body { background: linear-gradient(180deg, #0e2a19 0%, #0a1a10 45%, #050a07 100%); }
 :root[data-claudia] .rail, :root[data-claudia] .sidebar { background: rgba(3, 10, 6, 0.35); }
@@ -278,20 +276,17 @@ code, pre { font-family: var(--mono); }
 .hello { margin: auto; text-align: center; }
 .hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .msg { max-width: 100%; min-width: 0; }
-.msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
-.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 500 15px/1.5 var(--sans); color: var(--mine); text-align: right; }
+/* The two sides (README decision 103): the same text, the person's in a soft bubble on the right,
+   Claude's full width with a chalk line on its left. */
+.msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 82%; }
+.msg.user .bubble { min-width: 0; max-width: 100%; padding: 7px 11px; border-radius: 14px 14px 4px 14px; background: color-mix(in srgb, var(--fg) 9%, transparent); color: var(--fg); text-align: left; }
 /* A message with a menu (README decision 99): on a touch screen a long press opens it, so iOS's own
    selection and callout stay off these lines (Claude's replies still select). */
 @media (hover: none) { .msg.user.forkable .bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
-.msg.claude { padding: 0 2px; color: var(--reply); }
-/* Code, tables and quotes in a reply keep the plain text colour, to stay readable. */
-.msg.claude .md :is(code, pre, table, blockquote) { color: var(--fg); }
-/* The step chip (README decision 100): the number of the picture the reply's turn drew, the slider's;
-   filled while the board shows it. */
-.step-chip { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 4px 4px 0 0; padding: 0 6px; vertical-align: top;
-  border: 1.5px solid color-mix(in srgb, var(--reply) 70%, transparent); border-radius: 11px; color: var(--reply); font: 600 11px/1 var(--mono); }
-.step-chip:hover { border-color: var(--reply); background: color-mix(in srgb, var(--reply) 14%, transparent); }
-.step-chip.on { background: var(--reply); border-color: var(--reply); color: var(--on-hue); }
+/* The line is its own layer, so the search jump's rounded flash does not bend it. Its left edge and
+   the text's match a step group's line (.steps). */
+.msg.claude { position: relative; padding: 0 2px 0 14px; color: var(--fg); }
+.msg.claude::before { content: ""; position: absolute; left: 1px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--claude-line); }
 /* The chats' voices (views/talk.cljs, README decision 21): the voice pill's popup, a reply's play button. */
 .head-pop.voice-pop { width: 320px; }
 .voice-opt { display: flex; align-items: flex-start; gap: 4px; }
@@ -311,6 +306,7 @@ code, pre { font-family: var(--mono); }
 .unqueue { display: inline-grid; place-items: center; min-width: 32px; min-height: 32px; margin: -8px -8px -8px 0; font-size: 17px; line-height: 1; color: var(--muted); border-radius: 50%; }
 .unqueue:hover { color: var(--red); background: var(--panel); }
 .found-flash { animation: found-flash 1.8s ease-out; border-radius: 10px; }
+.msg.user.found-flash { border-radius: 14px 14px 4px 14px; }
 
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -366,6 +362,9 @@ code, pre { font-family: var(--mono); }
 .steps li, .steps, .steps ul, .step-row { min-width: 0; max-width: 100%; }
 .step-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transcript { display: grid; gap: 6px; max-height: 360px; overflow: auto; padding-right: 4px; }
+/* A subagent's replies in its transcript: the same line, thinner and fainter, like the step lines
+   between them (a full chalk line on every short line would outshout the chat beside it). */
+.transcript .msg.claude::before { left: 2px; width: 2px; background: color-mix(in srgb, var(--claude-line) 55%, transparent); }
 
 .working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: breathe 1.2s ease-in-out infinite; }

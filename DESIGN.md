@@ -7,7 +7,7 @@ Why it fits: Claudia is someone talking while drawing on a board. The look comes
 
 - **Board**: the picture pane is a slate board (mid-dark neutral grey since 2026-10-22, faint uneven wash), not near-black.
 - **Chalk**: diagram lines and labels look hand-drawn (slight wobble, a handwriting face for labels); the chat's colour is the coloured chalk for what changed.
-- **Talk**: chat text in a warm, very readable sans; the user's lines one near-white in every chat, Claude's replies in the chat's chalk colour (plain white in an ash chat; code and tables plain), README decision 95.
+- **Talk**: chat text in a warm, very readable sans, the same near-white for both sides; whose is which shows by shape and side: the user's messages in a soft grey bubble on the right, Claude's replies full width with a thin line on their left in the chat's chalk colour (grey in an ash chat; code and tables plain), README decision 103.
 - **Chalk lines**: parts are split by hand-drawn chalk lines (sidebar edge, the divider, above the composer), not borders or wood (the wooden ledge was removed 2026-10-22: its fixed brown ignored the chat colour).
 - **Chat colours**: every chat has one of 20 solid colours (a new chat gets the most different from those worn, README decision 26) or, picked by hand, one of 8 gradients between two of them (README decision 80); it tints the whole window and is the chalk colour. A gradient chat's window runs between its two crayons, its circles are chalked in the gradient, and its theme and chalk are mixed from the gradient's middle.
 - Stays plain: code, diffs, tables (readability first).

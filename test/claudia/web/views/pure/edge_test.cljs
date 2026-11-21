@@ -4,14 +4,13 @@
 
 (def ^:private idle {:running? false :new? true :folded? false :index 1 :n 3})
 
-(deftest four-slots-over-the-mic-and-four-under-it
-  (is (= 4 (count edge/over) (count edge/under)))
+(deftest four-slots-over-the-middle-and-five-under-it-archive-under-new-chat
   (is (= [:search :system :prompts :settings] edge/over))
-  (is (= [:stop :new :prev :next] edge/under)))
+  (is (= [:stop :new :archive :prev :next] edge/under)))
 
 (deftest every-slot-has-a-state-always
   (is (= (set (concat edge/over edge/under)) (set (keys (edge/slot-states {})))))
-  (is (every? #{:shown :passive :red} (vals (edge/slot-states {})))))
+  (is (every? #{:shown :passive :red :on} (vals (edge/slot-states {})))))
 
 (deftest stop-is-passive-while-nothing-runs-and-red-while-a-turn-runs
   (is (= :passive (:stop (edge/slot-states idle))))
@@ -32,3 +31,15 @@
 
 (deftest search-system-prompts-and-settings-always-act
   (is (= [:shown :shown :shown :shown] ((juxt :search :system :prompts :settings) (edge/slot-states {})))))
+
+(deftest a-sheet-slot-is-lit-while-its-sheet-is-on-top
+  (is (= :on (:system (edge/slot-states {:view :system}))))
+  (is (= [:shown :shown :shown] ((juxt :search :prompts :settings) (edge/slot-states {:view :system}))))
+  (is (= :on (:search (edge/slot-states {:view :search}))))
+  (is (= [:shown :shown :shown :shown]
+         ((juxt :search :system :prompts :settings) (edge/slot-states {:view :picture})))
+      "the Drawing board lights none"))
+
+(deftest archive-acts-only-on-an-open-chat-of-ones-own
+  (is (= :passive (:archive (edge/slot-states idle))))
+  (is (= :shown (:archive (edge/slot-states (assoc idle :archivable? true))))))

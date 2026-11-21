@@ -1682,7 +1682,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
-98. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
+98. The person writes in white, Claude in the chat's colour (since decision 103 both write in the
+    same near-white, and shape and side tell them apart) (2026-11-21, the user's call). The
     person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
     longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
     with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
@@ -1703,14 +1704,14 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     own selection does not cancel the press (Claude's replies still select). A fork's state is its
     own (`:fork {:k :busy :error}`, `pure.menu/fork-state`): an error shows in the open menu, with
     none open (the header) on the error line. Instead of: the "fork from here" link under each
-    message (shown on hover) and the "picture · N files" link beside it (the slider and the step
-    chips of decision 100 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
+    message (shown on hover) and the "picture · N files" link beside it (the slider of decision
+    100 shows a turn's picture; its step chips too until decision 103). Files: `src/claudia/web/views/head.cljs`,
     `src/claudia/web/views/head_pill.cljs`, `src/claudia/web/views/msgmenu.cljs`,
     `src/claudia/web/views/chatmenu.cljs`, `src/claudia/web/chatops.cljs`,
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/menu.cljs`,
     `resources/web/css/claudia.css`.
-100. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
-    user's call). The slider under the picture shows each picture's number, 1..N, the one shown
+100. The pictures are numbered steps, and the chat and the slider find each other (the step chips
+    on replies removed by decision 103) (2026-11-21, the user's call). The slider under the picture shows each picture's number, 1..N, the one shown
     filled in the chat's colour with dark text (pulsing while an older one loads); when the numbers
     do not fit (a number takes 12 px plus 7 per digit), every 5th or 10th (20th, 50th … for very
     many) shows, always with the first, the last and the shown one, and a number too close to one
@@ -1762,6 +1763,61 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/slave/codeforms.cljs`, `src/claudia/slave/history.cljs`,
     `src/claudia/shared/text.cljc`, `src/claudia/web/events.cljs`.
+103. Whose message is which shows by shape and side, not text colour (2026-11-21, the user's list,
+    items 22-24). The person's messages and Claude's replies are written alike: the same font, size
+    (15 px), weight and colour, the window's near-white `--fg` (tinted 8% by the chat colour, light
+    on every chat, gradient and Claudia's own green). The person's messages sit on the right in a
+    soft bubble (`--fg` at 9% over the window, so it follows every tint and gradient; 14 px corners,
+    the bottom right 4 px; at most 82% of the column; text left-aligned inside); sent photos, file
+    chips and code chips sit in the bubble, the queued tag and its × under it. Claude's replies run
+    the column's full width with no bubble and a 3 px line on their left in the chat's chalk
+    (`--claude-line`: the chat colour 75% with white, the old `--reply`; an ash chat's is grey, since
+    that mix of grey is grey; Claudia's own chat her green; no chat colour, `--muted` grey). The
+    line is a layer of its own (`::before`), so the search jump's rounded flash does not bend it,
+    and its edges and the text's line up with a step group's line. In a subagent's transcript (the
+    agents screen) the line is 2 px at 55%, like the step lines between its replies there: that view
+    is small and dense, and a full chalk line on each short line would outshout the chat beside it.
+    Code, tables and quotes keep their look. The step chip on the reply that closed a picture's turn
+    (decision 100) is gone; the numbered slider stays, and picking a number still scrolls the chat to
+    that reply and lights it (`pure.chat/seek-goal`, `step-reply`). Instead of: the person's lines
+    in a near-white weight 500 right-aligned without a bubble and Claude's in the chat's chalk
+    colour (decision 98), and the step chips. Files: `resources/web/css/claudia.css`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`, `DESIGN.md`.
+104. Background work ends, Claude carries on (2026-11-21, the user's list, items 25 and 26; Claude
+    started three subagents, said it would combine their branches, test and open a PR once they
+    finished, and on the last one's notice replied only "No response requested.", so the turn
+    ended and nothing happened until the user asked). Claude Code hands Claude a background task's
+    end as a message marked as not the user's input; Claude read that mark as "nothing to do".
+    Two fixes:
+    - The system prompt's Background work paragraph: when background work Claude started finishes,
+      it carries on in that same turn with the plan it told the user; the mark is about approval,
+      not about whether work is left; an empty reply ends the turn and the work stops.
+    - The empty-turn catch in the runner (`claudia.slave.chats.nudge`). A turn counts as started by
+      a background task's end when Claude Code stamps the turn's origin on its result message as
+      `task-notification` with no subkind (a scheduled task, a peer's message or an inbox delivery
+      has one and never counts); a result without an origin (a person's message, Claudia's own
+      sends, an older CLI) never counts. It ended with no real reply when the result's text is
+      blank or only the stock phrase "No response requested." (any case, a closing full stop or
+      brackets allowed; the only phrase seen in the sessions' replies to notices). Then Claudia
+      sends Claude once: "You ended your turn without a reply after "<task>" finished. Continue the
+      plan you told the user, or say in one line that nothing is left." The chat shows it as a note
+      ("Claudia: …"), never as the person's message: it goes inside `<claudia-nudge>`, and the
+      session file's copy reads back as the same note. Never: for a turn that failed or that the
+      person stopped (Stop, Esc); for an archived or moving chat; while other
+      background work of the chat still runs (its own end comes next); for a task that was stopped
+      (the person stopped it on its chip, or Claude did); when a message went in after the task's
+      end (the person's, or the nudge itself) or one waits in Claude Code's queue; when a turn
+      started or a message went in while the session was made ready. The notice (the newest
+      background task's end, kept with its time) goes at the end of the first turn that began
+      after it, and a nudge needs one, so one notice wakes Claude at most once and a turn the
+      nudge started never nudges. Read-only viewers send nothing: the nudge is the chat's own
+      runner's, decided from its session alone. Instead of: a prompt rule alone (a rule can be
+      missed), a nudge on every notice turn (two of three finished agents rightly say nothing),
+      the Stop hook handing the turn back (it runs before the result says the turn's origin), or
+      the nudge shown as the person's words.
+    Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
+    `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 
@@ -1812,7 +1868,11 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
     elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
     (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
-    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
+    Machines and Forms, the way to them on desktops and phones (no rail there). Since 2026-11-21
+    (the user's call) Search, System, Prompts and Settings are toggles: lit while their sheet is the
+    top one, and a press then closes it (`[:right/close …]`); and Archive is back on the rail, under
+    New chat (the open chat, asked first as the header's; Unarchive for an archived one; passive
+    with no started chat of one's own open), so the rail holds nine, five under its middle. Instead of: buttons
     shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
     ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
     Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,

@@ -85,9 +85,10 @@
 
 (defn with-sent
   "The chat's live state with a sent Msg: the turn's name, kept aside until the session file has
-  it; a message sent between turns starts a new turn, not begun until Claude Code says so."
+  it, when the last message went in (:sent-at); a message sent between turns starts a new turn, not
+  begun until Claude Code says so."
   [s msg]
-  (cond-> (-> s (assoc :turn-id (:id msg)) (assoc-in [:unsaved (:id msg)] msg))
+  (cond-> (-> s (assoc :turn-id (:id msg) :sent-at (:at msg)) (assoc-in [:unsaved (:id msg)] msg))
     (not (:queued msg)) (assoc :turn [] :begun false)))
 
 (defn taken-in

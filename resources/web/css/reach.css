@@ -27,10 +27,10 @@
 
 
   /* The rail (README decisions 73, 92, 94): a column on the right wall, the page beside it, four
-     slots of one size over its middle and four under it (the mic floats over the page since 94);
+     slots of one size over its middle and five under it (the mic floats over the page since 94);
      the gaps shrink on short screens so the foot keeps its room. */
   :root { --mic-rail-w: 88px; --edge-pad: max(calc(var(--edge-t) + env(safe-area-inset-top)), var(--edge-b));
-    --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 256px - 64px) / 5), 12px); }
+    --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 320px - 64px) / 6), 12px); }
   .app { padding-right: calc(var(--mic-rail-w) + env(safe-area-inset-right)); }
   .thumb-edge { position: fixed; z-index: 35; top: 0; bottom: 0; right: 0; box-sizing: border-box;
     width: calc(var(--mic-rail-w) + env(safe-area-inset-right)); padding: var(--edge-pad) env(safe-area-inset-right) var(--edge-pad) 0;
@@ -70,6 +70,8 @@
   .edge-name { font: 600 10px/1.1 var(--sans); white-space: nowrap; }
   .edge-step:active:not(:disabled) { background: var(--panel); }
   .edge-step:disabled { opacity: 0.3; color: var(--muted); }
+  /* A sheet slot whose sheet is on top: lit, and a press closes it. */
+  .thumb-edge .edge-step.on { opacity: 1; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
   .edge-step.red { background: var(--red); color: var(--bg); box-shadow: inset 0 0 0 1.5px var(--red), 0 6px 18px rgb(0 0 0 / 0.3); }
   .edge-step.red svg { fill: currentColor; }
   .edge-step.red:active { background: var(--red); }

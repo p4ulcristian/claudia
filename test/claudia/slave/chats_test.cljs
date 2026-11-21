@@ -194,9 +194,9 @@
 (deftest a-sent-message
   (let [msg (turns/sent-msg "u" "hi" [{:data "x"}] true 7)]
     (is (= {:id "u" :role "user" :text "hi" :at 7 :images 1 :queued true} msg))
-    (is (= {:turn [:old] :turn-id "u" :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg)) "queued: the turn goes on"))
+    (is (= {:turn [:old] :turn-id "u" :sent-at 7 :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg)) "queued: the turn goes on"))
   (let [msg (turns/sent-msg "u" "hi" nil false 7)]
-    (is (= {:turn [] :turn-id "u" :unsaved {"u" msg} :begun false} (turns/with-sent {:turn [:old]} msg))))
+    (is (= {:turn [] :turn-id "u" :sent-at 7 :unsaved {"u" msg} :begun false} (turns/with-sent {:turn [:old]} msg))))
   (testing "taken in or dropped"
     (let [s {:turn [{:id "u"} {:id "a"}] :unsaved {"u" {:id "u" :queued true}}}]
       (is (= {:turn [{:id "a"} {:id "u"}] :unsaved {"u" {:id "u"}}} (turns/taken-in s {:id "u"})))
