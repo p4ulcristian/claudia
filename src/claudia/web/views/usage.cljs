@@ -1,6 +1,6 @@
 (ns claudia.web.views.usage
-  "Meters and the model: the chalk rings (the chat's context in the header, a click runs /compact;
-  the plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside a button
+  "Meters and the model: the chalk rings (the chat's context in the header's Compact button, a click
+  runs /compact; the plan's 5-hour and week usage: claudia.web.views.head), where a popup opens beside a button
   (pop-place), the header's model · effort pill's state and popup, and the / command menu."
   (:require [re-frame.core :as rf]
             [claudia.web.views.pure.usage :as pure]))
@@ -9,18 +9,26 @@
 (def pretty-model pure/pretty-model)
 (def ^:private level pure/level)
 
-(defn mini-ring
-  "A small chalk ring (18 px) followed by its percent; tip names it. With on-click a button."
-  [{:keys [percent tip on-click on-context-menu]}]
+(defn- ring-svg
+  "The 18 px chalk ring filled to percent, sym (a letter or two: C, 5h, 7d) drawn inside it."
+  [percent sym]
   (let [r 7
         len (* 2 js/Math.PI r)]
-    [(if on-click :button.mini-ring.action :span.mini-ring)
-     {:class (level percent) :data-tip tip :aria-label tip :on-click on-click :on-context-menu on-context-menu}
-     [:svg {:viewBox "0 0 18 18" :aria-hidden true}
-      [:circle.r-track {:cx 9 :cy 9 :r r}]
-      [:circle.r-fill {:cx 9 :cy 9 :r r :transform "rotate(-90 9 9)"
-                       :stroke-dasharray (str (* (/ (min 100 percent) 100) len) " " len)}]]
-     [:span.mr-num (str percent "%")]]))
+    [:svg {:viewBox "0 0 18 18" :aria-hidden true}
+     [:circle.r-track {:cx 9 :cy 9 :r r}]
+     [:circle.r-fill {:cx 9 :cy 9 :r r :transform "rotate(-90 9 9)"
+                      :stroke-dasharray (str (* (/ (min 100 percent) 100) len) " " len)}]
+     (when sym
+       [:text.r-sym {:x 9 :y 9 :class (when (next sym) "two") :text-anchor "middle" :dominant-baseline "central"}
+        sym])]))
+
+(defn mini-ring
+  "A small chalk ring with sym inside it, followed by its percent; tip names it. With on-click a button."
+  [{:keys [percent sym tip on-click on-context-menu]}]
+  [(if on-click :button.mini-ring.action :span.mini-ring)
+   {:class (level percent) :data-tip tip :aria-label tip :on-click on-click :on-context-menu on-context-menu}
+   [ring-svg percent sym]
+   [:span.mr-num (str percent "%")]])
 
 (defn pop-place
   "Where the popup opens by the rings in box: below them (the list's header) or beside them (the
@@ -33,17 +41,20 @@
       beside? {:left (+ (.-right rc) 8) :bottom bottom}
       :else {:left (max 6 (.-left rc)) :top (+ (.-bottom rc) 6)})))
 
-(defn context-ring
-  "The open chat's context use; a click compacts it (not while a turn runs)."
-  [{:keys [ck state pending?]}]
+(defn compact-button
+  "The open chat's context use as a button (README decision 116): the C ring, its percent and the
+  word Compact; a click compacts it (not while a turn runs, nor read-only), a right click opens the chat menu."
+  [{:keys [ck state pending?]} ro]
   (when-let [c (:context state)]
-    (let [can? (and (not pending?) (not (:running state)))]
-      [mini-ring {:percent (:percent c)
-       :tip (str "Context " (:percent c) "% · " (k-tokens (:used c)) " of " (k-tokens (:max c))
-                 (when can? " · click to compact"))
-       :on-click (when can? #(rf/dispatch [:chat/compact ck]))
-       :on-context-menu (fn [^js e] (.preventDefault e)
-                          (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}])))
+    (let [can? (and (not ro) (not pending?) (not (:running state)))]
+      [:button.head-btn.compact-btn
+       {:type "button" :disabled (not can?) :on-click #(rf/dispatch [:chat/compact ck])
+        :data-tip (str "Context " (:percent c) "% · " (k-tokens (:used c)) " of " (k-tokens (:max c))
+                       (when can? " · click to compact"))
+        :on-context-menu (fn [^js e] (.preventDefault e)
+                           (rf/dispatch [:ops/ctx-menu {:x (.-clientX e) :y (.-clientY e)}]))}
+       [mini-ring {:percent (:percent c) :sym "C"}]
+       [:span "Compact"]])))
 
 ;; ---- model and effort ----
 
