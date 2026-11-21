@@ -40,7 +40,7 @@
 (defn blocks
   "The messages as the page shows them: runs of tool steps folded into one group, with Claude's
   texts whose id is in folded among them; a step that showed a picture or a video stands on its
-  own, what it showed after it; a word Claude offered (README decision 94) gets its card after its
+  own, what it showed after it; a word Claude offered (README decision 95) gets its card after its
   step."
   ([msgs] (blocks msgs #{}))
   ([msgs folded]

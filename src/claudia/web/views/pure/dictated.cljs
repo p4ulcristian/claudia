@@ -2,7 +2,7 @@
   "What the mic put into a draft, and the person's word list. Each clip's words come as a piece
   {:text :raw :shown}: text cleaned up by the listen service, raw as heard, shown which of the two
   the draft holds (:text first; a tap on the composer's chip swaps). A word Claude offers in the
-  chat (README decision 94) shows its card only when card-shown? says so."
+  chat (README decision 95) shows its card only when card-shown? says so."
   (:require [clojure.string :as str]))
 
 (def ^:private kept-pieces "The most pieces one draft remembers." 8)

@@ -1,17 +1,15 @@
 (ns claudia.web.views.thumb-edge
   "The right edge of a touch tablet (README decisions 40, 73, 92): a big tablet held in two hands is
   held at its sides partway up, so the right thumb rests on the right edge at middle height. There a
-  rail on the right wall, one column with the mic exactly at its middle height and four slots of one
-  size over it and four under it: Search, Machines, Prompts, Settings | mic | Stop, New chat,
-  ‹ (the previous picture), › (the next picture). Each a button with its name under its icon, at
-  least 12 mm, see-through at rest. A button never comes or goes, so nothing shifts and the mic never
-  moves: one that cannot act now is passive (greyed and disabled), Stop is red while the open chat's
-  turn runs (claudia.web.views.pure.edge). At its bottom, outside the eight, the foot the chats' rail
-  had: the update pill, your profile circle (its menu holds Settings, Archived chats, Prompts)
-  and the version's line, so the chats have the left edge to themselves.
-  The mic can be dragged out of the rail; its empty circle then offers it back
-  (claudia.web.views.mic). The composer leaves its own mic out on these screens
-  (claudia.web.views.chat)."
+  rail on the right wall, one column of eight slots of one size: Search, Machines, Prompts,
+  Settings, Stop, New chat, ‹ (the previous picture), › (the next picture). Each a button with its name
+  under its icon, at least 12 mm, see-through at rest. A button never comes or goes, so nothing
+  shifts: one that cannot act now is passive (greyed and disabled), Stop is red while the open
+  chat's turn runs (claudia.web.views.pure.edge). At its bottom, outside the eight, the foot the
+  chats' rail had: the update pill, your profile circle (its menu holds Settings, Archived chats,
+  Prompts) and the version's line, so the chats have the left edge to themselves.
+  The mic floats over the page beside it (README decision 94, claudia.web.views.mic); the composer
+  leaves its own mic out on these screens (claudia.web.views.chat)."
   (:require [claudia.web.search-open :as search-open]
             [re-frame.core :as rf]
             [claudia.web.views.icons :as icons]
@@ -79,18 +77,18 @@
    [:f> menu/button]
    [update-pill/updated]])
 
-(defn- mic-slot
-  "The mic's circle, one slot's size whether the mic shows, cannot work here or has moved out."
+(defn- floating-mic
+  "The mic, floating over the page out of the rail (README decision 94), speaking into the open chat."
   [oc]
   [:div.edge-mic
-   (when (composer-shown?) [:f> mic/button (if oc (:ck oc) :new) {:rail? true}])])
+   (when (composer-shown?) [:f> mic/button (if oc (:ck oc) :new) {:floating? true}])])
 
 (defn- edge-view []
   (let [oc @(rf/subscribe [:open-chat])
         states (pure/slot-states (now oc))]
     [:div.thumb-edge
      [:div.edge-over (column pure/over states)]
-     [mic-slot oc]
-     [:div.edge-under (column pure/under states) [foot]]]))
+     [:div.edge-under (column pure/under states) [foot]]
+     [floating-mic oc]]))
 
 (defn edge "The edge." [] [edge-view])

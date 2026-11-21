@@ -1,7 +1,7 @@
 (ns claudia.web.words
   "My words: the person's own names and terms for the listen service (claudia.hub.listen-words),
   read and saved through /hub/listen/words, edited in Settings (views.my-words). Claude offers a
-  word it saw misheard as a card in the chat (README decision 94); the person's choices about those
+  word it saw misheard as a card in the chat (README decision 95); the person's choices about those
   cards (the words they said No to, the words they added from the chat, whether cards show) are
   their prefs, kept by the hub (/hub/listen/prefs, claudia.hub.listen-prefs) for every device."
   (:require [claudia.web.views.pure.dictated :as dictated]

@@ -402,7 +402,7 @@ body.chat-tearing { cursor: copy; }
 body.chat-tearing .drag-ghost { outline: 2px dashed var(--accent); outline-offset: 2px; }
 body.chat-tearing .drag-ghost::after { content: "\2197 New window"; position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); white-space: nowrap;
   padding: 2px 8px; border-radius: 8px; background: var(--accent); color: var(--on-hue); font: 700 11px/1.4 var(--sans); }
-/* Settings' Dictation rows (README decision 94): a label, then a small button or two. */
+/* Settings' Dictation rows (README decision 95): a label, then a small button or two. */
 .words-row { cursor: default; }
 .words-row button, .words-sure button { padding: 4px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg2); color: var(--fg); font-size: 13px; }
 .words-row button:disabled { opacity: 0.45; }

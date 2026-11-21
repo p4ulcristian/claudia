@@ -61,3 +61,15 @@
     (is (= "Red here. It works." (talk/spoken item nil)) "no chat open")
     (is (= "It works." (talk/spoken item ["s" "c"])) "its own chat open")
     (is (= "It works." (talk/spoken (dissoc item :colour-name) nil)) "no colour: no name")))
+
+(deftest a-tapped-chat-goes-first-the-others-wait
+  (let [r1 {:id "r1" :k ["s" "red"]} b1 {:id "b1" :k ["s" "blue"]} b2 {:id "b2" :k ["s" "blue"]}
+        st (-> talk/empty-line (talk/with-item r1) (talk/with-item b1) talk/next-up)
+        tapped (talk/with-chat-first st [b1 b2])]
+    (is (nil? (:current tapped)) "the one being read stops")
+    (is (= [b1 b2] (:queue tapped)) "blue's own waiting one gives way to the tapped list")
+    (let [st2 (-> talk/empty-line (talk/with-item b1) talk/next-up talk/without-current (talk/with-item r1))
+          tapped2 (talk/with-chat-first st2 [b1 b2])]
+      (is (= [b1 b2 r1] (:queue tapped2)) "red, waiting, comes after them")
+      (is (= "b1" (:id (:current (talk/next-up tapped2)))) "b1 is read first")
+      (is (not-any? #{"b1"} (:said tapped2)) "read before, read again"))))

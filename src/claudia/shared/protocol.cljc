@@ -23,8 +23,7 @@
     "keys"
     ;; A queued message taken back with its × (README decision 83).
     "unqueue"
-    ;; The person touched this page (README decision 21); since decision 93 it chooses nothing,
-    ;; kept so older pages get no error.
+    ;; The person touched this page (README decisions 21, 94): a new voice message plays only there.
     "here"
     ;; Voice messages heard to their end or swiped away (README decision 93).
     "heard"})

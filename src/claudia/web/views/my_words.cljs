@@ -1,7 +1,7 @@
 (ns claudia.web.views.my-words
   "My words on the page (claudia.web.words): Settings' Dictation section (the list with words
   learned from the chat marked, the switch for the chat's cards, the words said No to, Reset), the
-  card in the chat for a word Claude offers (README decision 94), and the composer's chip that
+  card in the chat for a word Claude offers (README decision 95), and the composer's chip that
   swaps the last dictated words between clean and as heard."
   (:require [clojure.string :as str]
             [claudia.web.views.pure.dictated :as dictated]
@@ -85,7 +85,7 @@
       (when-not (:off m)
         [:section.st-section.st-words heading [words-body m @(rf/subscribe [:listen-prefs])]]))))
 
-;; ---- the card in the chat (README decision 94) ----
+;; ---- the card in the chat (README decision 95) ----
 
 (defn- card-view [{:keys [word heard]}]
   [:div.words-offer {:role "status"}

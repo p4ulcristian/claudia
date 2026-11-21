@@ -1,5 +1,5 @@
 (ns claudia.hub.listen-prefs
-  "A person's dictation choices in the hub's store (README decision 94): the words they said No to
+  "A person's dictation choices in the hub's store (README decision 95): the words they said No to
   when the chat offered them (never offered again), the words they added from the chat (marked in
   Settings), and whether the chat offers words at all. GET/PUT /hub/listen/prefs (claudia.hub.ops),
   the same on every device; the word lists are cleaned like My words (claudia.hub.listen-words)."

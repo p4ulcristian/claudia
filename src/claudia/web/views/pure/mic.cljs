@@ -28,19 +28,6 @@
       (<= dx (- drag-px)) :add
       :else :send)))
 
-(defn half-gesture
-  "The half flower's way (README decision 73: the mic in its rail on the right wall, its petals only
-  to the left): from drag-px on, the left half's quarter the finger points into, top to bottom
-  :cancel :add :send :now (each 45 degrees); nearer, or to the right of the mic, :send."
-  [dx dy]
-  (if (or (< (js/Math.hypot dx dy) drag-px) (pos? dx))
-    :send
-    (let [a (* (/ 180 js/Math.PI) (js/Math.atan2 dy dx))]
-      (cond (<= -135 a -90) :cancel
-            (< a -135) :add
-            (>= a 135) :send
-            :else :now))))
-
 (def ring-in
   "The move ring's inner edge, px from the mic's centre: just outside the petals (116 px out). A
   finger that reaches it while holding a mic that moves keeps recording and the mic follows it;
@@ -71,30 +58,6 @@
   [{:keys [x y]} w h r]
   {:x (-> x (max r) (min (- w r)))
    :y (-> y (max r) (min (- h r)))})
-
-(defn overlap-area
-  "The area two circles of radii r1, r2 whose centres are d apart have in common."
-  [d r1 r2]
-  (cond
-    (>= d (+ r1 r2)) 0
-    (<= d (js/Math.abs (- r1 r2))) (* js/Math.PI (js/Math.pow (min r1 r2) 2))
-    :else (let [part (fn [ra rb] (* ra ra (js/Math.acos (/ (+ (* d d) (* ra ra) (- (* rb rb))) (* 2 d ra)))))]
-            (- (+ (part r1 r2) (part r2 r1))
-               (* 0.5 (js/Math.sqrt (* (+ (- d) r1 r2) (+ d r1 (- r2)) (+ d (- r1) r2) (+ d r1 r2))))))))
-
-(defn home?
-  "Whether a mic let go as button {:x :y :r} goes back into the rail: it covers half or more of its
-  slot {:x :y :r}'s area."
-  [button slot]
-  (and (some? slot)
-       (>= (overlap-area (js/Math.hypot (- (:x button) (:x slot)) (- (:y button) (:y slot))) (:r button) (:r slot))
-           (* 0.5 js/Math.PI (:r slot) (:r slot)))))
-
-(defn flower-side
-  "Which flower a mic at x opens on a w-wide screen whose right rail-w px are the rail: in the rail
-  :left (half, to the left), out of it nil (the whole flower, four ways)."
-  [x w rail-w]
-  (when (> x (- w rail-w)) :left))
 
 (defn spot->stored "A spot as fractions of the screen, kept per device." [{:keys [x y]} w h]
   {:fx (/ x w) :fy (/ y h)})

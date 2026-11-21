@@ -187,7 +187,7 @@
     (= "mcp__workspace__show_image" (:name b)) (assoc :image true)
     ;; …and the video from the same address
     (= "mcp__workspace__show_video" (:name b)) (assoc :video true)
-    ;; a word for the person's My words: the page shows its card (README decision 94)
+    ;; a word for the person's My words: the page shows its card (README decision 95)
     (= "mcp__workspace__offer_word" (:name b)) (assoc :word (offered-word (:input b)))))
 
 (defn read-assistant

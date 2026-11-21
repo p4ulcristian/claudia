@@ -410,9 +410,20 @@
     (cond-> {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said :msg id}
       (colours/name-of colour) (assoc :colour-name (colours/name-of colour)))))
 
-(defmethod on-frame "voices" [db server {:keys [messages]}]
-  ;; Every waiting voice message of this server's chats (README decision 93), sent whenever they change.
-  {:db (assoc-in db [:voice-msgs server] (if (sequential? messages) (vec messages) []))})
+(defn played-item
+  "The message a `voices` frame says to play now ({:chat :id}, README decision 94) as a reply to
+  read, or nil."
+  [db server messages {:keys [chat id]}]
+  (when-let [m (some #(when (and (= chat (:chat %)) (= id (:id %))) %) messages)]
+    (speak-item server m (get-in db [:servers server :rows chat :color]))))
+
+(defmethod on-frame "voices" [db server {:keys [messages play]}]
+  ;; Every waiting voice message of this server's chats (README decision 93), sent whenever they
+  ;; change; play: this page was touched last, so it says the new one as soon as it can.
+  (let [msgs (if (sequential? messages) (vec messages) [])
+        item (when play (played-item db server msgs play))]
+    (cond-> {:db (assoc-in db [:voice-msgs server] msgs)}
+      item (assoc :fx [[:speech/enqueue item]]))))
 
 (defn without-heard
   "Server's messages without chat's ones with these ids (heard or swiped away)."

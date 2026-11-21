@@ -409,6 +409,10 @@ code, pre { font-family: var(--mono); }
   background: var(--chat, var(--grey)); color: #fff; font: 700 13px var(--sans); display: grid; place-items: center; cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); animation: voice-circle-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 .voice-circle.playing { outline: 3px solid var(--fg); outline-offset: 3px; }
+/* README decision 94: while one plays or is held the others step away; the held one stays, unseen,
+   so its finger is kept (the mic's flower is drawn round it). */
+.voice-circle.away { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.15s, visibility 0s 0.15s; }
+.voice-circle.held { opacity: 0; }
 @keyframes voice-circle-in { from { transform: translate(-50%, -50%) scale(0); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .voice-circle { animation: none; } }
 .mic-core { position: relative; width: 56px; height: 56px; }

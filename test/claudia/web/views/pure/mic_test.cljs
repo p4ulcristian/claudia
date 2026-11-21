@@ -48,16 +48,6 @@
   (is (= :add (mic/gesture -90 60)) "more left than down")
   (is (= :send (mic/gesture (- 1 mic/drag-px) 0)) "not far enough left"))
 
-(deftest the-half-flower-reads-the-left-half
-  (is (= :send (mic/half-gesture 0 0)) "in place")
-  (is (= :send (mic/half-gesture 60 -60)) "to the right of the mic")
-  (is (= :cancel (mic/half-gesture 0 -80)) "up")
-  (is (= :cancel (mic/half-gesture -30 -80)) "up, a little left")
-  (is (= :add (mic/half-gesture -80 -30)) "left, a little up")
-  (is (= :send (mic/half-gesture -80 30)) "left, a little down")
-  (is (= :now (mic/half-gesture -30 80)) "down, a little left")
-  (is (= :send (mic/half-gesture -30 0)) "not far enough"))
-
 (deftest the-move-ring-starts-past-the-petals
   (is (not (mic/in-ring? 100 0)) "on a petal")
   (is (not (mic/in-ring? 87 87)) "123 px out, between the petals")
@@ -72,24 +62,6 @@
   (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820 32)))
   (is (= {:x 788 :y 1148} (mic/stored->spot {:fx 0.99 :fy 0.99} 820 1180 32)) "turned: clamped again")
   (is (nil? (mic/stored->spot {} 1180 820 32))))
-
-(deftest circles-overlap
-  (is (= 0 (mic/overlap-area 64 32 32)) "touching")
-  (is (< (js/Math.abs (- (mic/overlap-area 0 32 32) (* js/Math.PI 1024))) 1e-9) "one on the other")
-  (is (< (js/Math.abs (- (mic/overlap-area 5 10 30) (* js/Math.PI 100))) 1e-9) "the small one inside")
-  (is (< (js/Math.abs (- (mic/overlap-area 1 1 1) (- (/ (* 2 js/Math.PI) 3) (/ (js/Math.sqrt 3) 2)))) 1e-9)
-      "two unit circles a radius apart"))
-
-(deftest home-only-when-it-covers-half-its-slot
-  (let [slot {:x 1136 :y 410 :r 32}]
-    (is (mic/home? {:x 1136 :y 410 :r 32} slot) "on it")
-    (is (mic/home? {:x 1112 :y 410 :r 32} slot) "24 px off: over half")
-    (is (not (mic/home? {:x 1108 :y 410 :r 32} slot)) "28 px off: under half")
-    (is (not (mic/home? {:x 1136 :y 100 :r 32} slot)) "elsewhere on the rail it stays")
-    (is (not (mic/home? {:x 600 :y 400 :r 32} slot)))
-    (is (not (mic/home? {:x 600 :y 400 :r 32} nil)) "no slot"))
-  (is (= :left (mic/flower-side 1136 1180 88)) "in the rail: half, to the left")
-  (is (nil? (mic/flower-side 968 1180 88)) "out of the rail: whole"))
 
 (deftest heard-clips-go-out-in-spoken-order
   (let [l0 {:next 0 :held {}}

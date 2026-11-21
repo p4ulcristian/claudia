@@ -274,7 +274,7 @@
   (let [db {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
         added (:db (ev/heard-fx db ["s" "c"] {:text "call mission now" :raw "call mission now um"} :add))]
     (is (= [{:text "call mission now" :raw "call mission now um" :shown :text}] (get-in added [:dictated ["s" "c"]])))
-    (testing "sent: the pieces forgotten, nothing offered (Claude offers words in the chat, decision 94)"
+    (testing "sent: the pieces forgotten, nothing offered (Claude offers words in the chat, decision 95)"
       (let [fx (ev/with-dictation-checked {:db added} added ["s" "c"])]
         (is (nil? (:fx fx)))
         (is (nil? (get-in fx [:db :dictated ["s" "c"]])))))
@@ -338,6 +338,16 @@
     (let [fx (ev/voice-heard-fx vdb ["s" "c"] ["t1" "t0"])]
       (is (= [{:chat "d" :id "t1" :voice "otto" :text "Other." :at 3}] (get-in fx [:db :voice-msgs "s"])))
       (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx))))))
+
+(deftest the-page-touched-last-plays-a-new-message
+  (let [msgs [{:chat "c" :id "t1" :voice "nora" :text "Done." :at 1}]
+        base {:servers {"s" {:rows {"c" {:color "cherry"}}}}}
+        fx (ev/on-frame base "s" {:type "voices" :messages msgs :play {:chat "c" :id "t1"}})]
+    (is (= [[:speech/enqueue {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "Done." :colour-name "Red" :msg "t1"}]]
+           (:fx fx)))
+    (is (nil? (:fx (ev/on-frame base "s" {:type "voices" :messages msgs}))) "other pages only show it")
+    (is (nil? (:fx (ev/on-frame base "s" {:type "voices" :messages msgs :play {:chat "c" :id "gone"}})))
+        "a message no longer kept is not played")))
 
 (def ^:private two-servers
   {:me {:servers [{:name "a"} {:name "b"}]}
