@@ -7,6 +7,7 @@
   (/hub/listen…),
   the gate's own numbers for admins (/hub/gate/system) and GitHub's webhook (/hub/github)."
   (:require [claudia.hub.bookmarks :as hub-bookmarks]
+            [claudia.hub.listen-prefs :as listen-prefs]
             [claudia.hub.chat-order :as chat-order]
             [claudia.hub.listen :as listen]
             [claudia.hub.listen-words :as listen-words]
@@ -352,6 +353,11 @@
   [req res email _]
   (with-body req (fn [b] (io/send-json res 200 (hub-bookmarks/save! email (:items b))))))
 
+(defn- save-listen-prefs
+  "PUT /hub/listen/prefs {declined learned offers}: the person's whole dictation choices, cleaned."
+  [req res email _]
+  (with-body req (fn [b] (io/send-json res 200 (listen-prefs/save! email b)))))
+
 (defn- right-view-of
   "What a person's right half shows, as the page gets it: {:views (the pile of sheets, bottom to top)
   :view (the top one, picture when none)}; no sheets before any."
@@ -382,6 +388,8 @@
       (and (= pathname "/hub/chat-order") (= method "PUT")) [:save-order]
       (and (= pathname "/hub/bookmarks") (= method "GET")) [:bookmarks]
       (and (= pathname "/hub/bookmarks") (= method "PUT")) [:save-bookmarks]
+      (and (= pathname "/hub/listen/prefs") (= method "GET")) [:listen-prefs]
+      (and (= pathname "/hub/listen/prefs") (= method "PUT")) [:save-listen-prefs]
       (and (= pathname "/hub/right-view") (= method "GET")) [:right-view]
       (and (= pathname "/hub/right-view") (= method "PUT")) [:save-right-view]
       :else nil)))
@@ -396,6 +404,8 @@
    :save-order save-order
    :bookmarks (fn [_ res email _] (io/send-json res 200 (hub-bookmarks/of email)))
    :save-bookmarks save-bookmarks
+   :listen-prefs (fn [_ res email _] (io/send-json res 200 (listen-prefs/of email)))
+   :save-listen-prefs save-listen-prefs
    :right-view (fn [_ res email _] (io/send-json res 200 (right-view-of email)))
    :save-right-view save-right-view
    :elsewhere (fn [^js req res email _]
@@ -508,7 +518,7 @@
 
 (defn- gate-system-call
   "GET /hub/gate/system: the gate's own numbers, and /hub/gate/system/<details|history> its System
-  (README decision 95), for admins."
+  (README decision 96), for admins."
   [^js req ^js res pathname admin?]
   (cond (not admin?) (fail res 403 "admins only")
         (not= "GET" (.-method req)) (fail res 405 "GET only")
@@ -538,7 +548,7 @@
                  (picture-call req res pathname admin?)
                  (str/starts-with? pathname "/hub/admin")
                  (if admin? (admin-call req res pathname) (fail res 403 "admins only"))
-                 (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order" "/hub/bookmarks" "/hub/right-view"} pathname))
+                 (or (str/starts-with? pathname "/hub/push/") (#{"/hub/presence" "/hub/chat-order" "/hub/bookmarks" "/hub/right-view" "/hub/listen/prefs"} pathname))
                  (person-call req res pathname email)
                  (= pathname "/hub/narrate") (narrate/call req res)
                  (= pathname "/hub/progress") (io/send-json res 200 (progress/now))

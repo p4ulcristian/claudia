@@ -1,5 +1,5 @@
 (ns claudia.node.ports
-  "Listening ports for System (README decision 95, PROTOCOL.md `Port`): pure functions over `ss
+  "Listening ports for System (README decision 96, PROTOCOL.md `Port`): pure functions over `ss
   -Htlnup` (Linux) and `lsof -nP -F pcPn` (macOS), and who an address reaches."
   (:require [clojure.string :as str]))
 

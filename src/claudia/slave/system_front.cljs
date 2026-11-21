@@ -1,5 +1,5 @@
 (ns claudia.slave.system-front
-  "The front's System calls (README decision 95), the hub's only: GET /api/system/details,
+  "The front's System calls (README decision 96), the hub's only: GET /api/system/details,
   /api/system/history and /api/system/unit-log. The chats' owners come from each profile's runner
   (POST /api/system/chats with the key hashes the root helper read); the history is kept in the
   front's own SQLite (FRONT_DATA/system.db), one row a minute, whether or not anyone asks."

@@ -1,5 +1,5 @@
 (ns claudia.node.owner
-  "What a process belongs to (README decision 95, PROTOCOL.md `Owner`), from its cgroup: pure
+  "What a process belongs to (README decision 96, PROTOCOL.md `Owner`), from its cgroup: pure
   functions over /proc/<pid>/cgroup's text and what else is known (users, containers, the chats'
   key hashes), shared by the front, the hub and the root helper."
   (:require [clojure.string :as str]))

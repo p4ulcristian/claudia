@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-tabs
-  "System's tabs under \"Needs a look\" (README decision 95): Ports, Services, Processes, History,
+  "System's tabs under \"Needs a look\" (README decision 96): Ports, Services, Processes, History,
   Log and Machine (the old Machines card), each with its count; a server without the root helper
   says why once, quietly, above them."
   (:require [claudia.web.views.pure.system-lists :as lists]

@@ -5,7 +5,7 @@
 
 (def over
   "The slots over the mic, top to bottom."
-  [:search :system :prompts :words])
+  [:search :system :prompts :settings])
 
 (def under
   "The slots under the mic, top to bottom."
@@ -15,13 +15,11 @@
 
 (defn slot-states
   "Each slot's state now: :shown (it acts), :passive (greyed and disabled: it cannot act now) or
-  :red (Stop while the open chat's turn runs). now: words? (the hub has a listen service and the
-  composer shows), running? (the open chat's turn runs), new? (a new chat can be written in),
+  :red (Stop while the open chat's turn runs). now: running? (the open chat's turn runs), new? (a new chat can be written in),
   folded? (the picture is folded), index and n (the picture shown, of how many)."
-  [{:keys [words? running? new? folded? index n]}]
+  [{:keys [running? new? folded? index n]}]
   (let [i (or index 0) n (or n 0)]
-    {:search :shown :system :shown :prompts :shown
-     :words (shown-if words?)
+    {:search :shown :system :shown :prompts :shown :settings :shown
      :stop (if running? :red :passive)
      :new (shown-if new?)
      :prev (shown-if (and (not folded?) (pos? i) (< i n)))

@@ -1,5 +1,5 @@
 (ns claudia.node.details
-  "System's Details of this machine (README decision 95, PROTOCOL.md `Details`): ports, services,
+  "System's Details of this machine (README decision 96, PROTOCOL.md `Details`): ports, services,
   containers, every process grouped by its owner, leftovers and the last week's log. On Linux the
   reads that need root come from the root helper's read socket; without it (an older helper, the
   gate) the same reads run as this program's user and Details says why. On macOS from lsof, ps and

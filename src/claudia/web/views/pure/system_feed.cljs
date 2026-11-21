@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-feed
-  "Where the System sheet asks (README decision 95, PROTOCOL.md), pure: the servers it has a tab
+  "Where the System sheet asks (README decision 96, PROTOCOL.md), pure: the servers it has a tab
   for, each one's hub routes, the tab it opens on, and the chats' proposals about one server.")
 
 (def gate-name "The gate's tab (admins only); its labels name it so too." "gate")

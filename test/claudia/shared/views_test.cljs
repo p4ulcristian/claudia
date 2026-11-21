@@ -23,12 +23,12 @@
 (deftest closing-takes-a-sheet-off
   (is (= [:files] (views/close [:files :search] :search)))
   (is (= [:search] (views/close [:files :search] :files)) "one under the top")
-  (is (= [:files] (views/close [:files] :words)) "one not there: nothing changes"))
+  (is (= [:files] (views/close [:files] :prompts)) "one not there: nothing changes"))
 
 (deftest toggling-closes-the-top-sheet-else-opens-it
-  (is (= [:files] (views/toggle [:files :words] :words)))
-  (is (= [:words :files] (views/toggle [:files :words] :files)) "under the top: brought up")
-  (is (= [:files :words] (views/toggle [:files] :words)))
+  (is (= [:files] (views/toggle [:files :prompts] :prompts)))
+  (is (= [:prompts :files] (views/toggle [:files :prompts] :files)) "under the top: brought up")
+  (is (= [:files :prompts] (views/toggle [:files] :prompts)))
   (is (= [] (views/toggle [] :picture)))
   (is (= [] (views/toggle [:files] :picture))))
 
@@ -57,7 +57,7 @@
     (is (= [] (views/from-stored "")))))
 
 (deftest machines-reads-as-system
-  (is (= :system (views/clean "machines")) "README decision 95: Machines became System")
+  (is (= :system (views/clean "machines")) "README decision 96: Machines became System")
   (is (= :system (views/clean :machines)))
   (is (= "System" (views/label :system)))
   (is (= [:files :system] (views/from-stored "machines files system")) "each once, where it lies highest")

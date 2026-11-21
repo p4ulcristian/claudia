@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-history
-  "System's History tab (README decision 95): the last 7 days, a sample a minute: busy cores and
+  "System's History tab (README decision 96): the last 7 days, a sample a minute: busy cores and
   memory (waiting on a press of its key) as lines in percent over the days, and the crashes,
   out-of-memory kills and failed units as marks; a click on a mark shows what happened."
   (:require [reagent.hooks :as h]

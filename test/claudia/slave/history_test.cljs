@@ -115,3 +115,11 @@
            (first out)))
     (is (nil? (:merged (second out))) "only the user message"))
   (is (= [{:id "x" :role "assistant"}] (history/with-merged [{:id "x" :role "assistant"}] {"x" ["y"]}))))
+
+(deftest an-offered-word-becomes-a-card-s-data
+  (let [[[m]] (history/read-assistant {:id "m1" :content [{:type "tool_use" :id "t1" :name "mcp__workspace__offer_word"
+                                                           :input {:word " GitHub " :heard "get hub"}}]}
+                                      {} 0 nil)]
+    (is (= {:word "GitHub" :heard "get hub"} (:word m)))
+    (is (= "offer word: GitHub" (:summary m))))
+  (is (= {:word "" :heard ""} (history/offered-word nil)) "nothing given: blank, no card"))

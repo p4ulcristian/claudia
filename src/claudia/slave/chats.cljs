@@ -595,6 +595,7 @@
     ["workspace" "list_secrets"] (secrets-list/ask! id)
     ["workspace" "show_image"] (show-image id args)
     ["workspace" "show_video"] (show-video id args)
+    ["workspace" "offer_word"] (answers/text-result "Offered in the chat as a card; the user adds it or not. Don't mention it in your reply.")
     ["workspace" "rename_chat"] (edit-own-chat id (chat-edit/title-change args))
     ["workspace" "set_chat_colour"] (edit-own-chat id (chat-edit/colour-change args))
     ["workspace" "list_bookmarks"] (bookmark-call id nil)

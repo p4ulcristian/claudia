@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-lists
-  "The System sheet's lists (README decision 95), pure: what a thing's project is by the labels,
+  "The System sheet's lists (README decision 96), pure: what a thing's project is by the labels,
   who owns a process in words, the ports folded per listener, the services and processes grouped
   as the tabs show them."
   (:require [clojure.string :as str]

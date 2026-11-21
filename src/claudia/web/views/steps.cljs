@@ -92,7 +92,7 @@
           (for [[i b] (map-indexed vector bs)]
             (case (:k b)
               :steps ^{:key (str "s" (:id b))} [steps nil (:tools b) (and live? (= i (dec (count bs))))]
-              :shown nil
+              (:shown :word) nil
               (let [{:keys [id role text]} (:m b)]
                 (when (= "assistant" role)
                   ^{:key id} [:div.msg.claude.small [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]])))))))

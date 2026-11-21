@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-look
-  "\"Needs a look\" and each server's dot on System (README decision 95), pure: only problems and the
+  "\"Needs a look\" and each server's dot on System (README decision 96), pure: only problems and the
   chats' proposals, each a row with its facts and its actions, and the dot they make: red = a failed
   unit, a crash or an out-of-memory kill in the last hour; amber = a port open on all addresses that
   nothing owns, a leftover, memory or a disk over 85%, waiting over 10%; green otherwise; grey = not

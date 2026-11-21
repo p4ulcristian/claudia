@@ -5,7 +5,7 @@
   the server and the project (claudia.web.views.head-place), whose Claude subscription, model ·
   effort, the prompt profile, the voice that reads its replies (decision 21), the notify sound
   (claudia.web.views.notify) and the colour. Row 3: the rings (context, 5-hour, week) on the left;
-  on the right buttons with words: Files, System (decision 95), Sudo (its owner), Archive. A new chat picks all of them
+  on the right buttons with words: Files, System (decision 96), Sudo (its owner), Archive. A new chat picks all of them
   here before its first message (they go with `new`); once it has started a server pick moves it
   (decision 82) and every other pick changes the chat."
   (:require [re-frame.core :as rf]
@@ -215,7 +215,7 @@
                  :on-click #(rf/dispatch [:right/toggle :files])}]))
 
 (defn- system-button
-  "System: every server's health, ports and services in the right half (README decision 95), filled
+  "System: every server's health, ports and services in the right half (README decision 96), filled
   while it shows."
   []
   (let [on? (= :system @(rf/subscribe [:right-view]))]

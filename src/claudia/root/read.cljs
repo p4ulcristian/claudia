@@ -1,5 +1,5 @@
 (ns claudia.root.read
-  "The root helper's read socket (README decision 95): <ROOT_READ_SOCKET_DIR>/read.sock, in a folder
+  "The root helper's read socket (README decision 96): <ROOT_READ_SOCKET_DIR>/read.sock, in a folder
   only root and the front's group may enter, so only the front asks. One frame in, {out} or {error}
   out, then the end. Only the fixed reads of claudia.node.reads run, as root (claudia.node.collect);
   nothing of the caller's reaches a command but a checked unit name, user name and line count. Each

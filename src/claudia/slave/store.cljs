@@ -97,7 +97,7 @@
                 at INTEGER NOT NULL,
                 PRIMARY KEY (chat, id)
               );
-              -- A chat's proposed System label (README decision 95, its system_label tool): nothing
+              -- A chat's proposed System label (README decision 96, its system_label tool): nothing
               -- applies until the person accepts it on System (the hub's labels) or says no.
               CREATE TABLE IF NOT EXISTS system_proposals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -458,7 +458,7 @@
       (.exec ^js @db "COMMIT")
       (catch :default e (.exec ^js @db "ROLLBACK") (throw e)))))
 
-;; System proposals (README decision 95) -----------------------------------------------------------
+;; System proposals (README decision 96) -----------------------------------------------------------
 
 (defn add-proposal!
   "Keeps a chat's proposed label; its id."

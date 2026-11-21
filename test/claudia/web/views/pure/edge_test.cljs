@@ -2,11 +2,11 @@
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.edge :as edge]))
 
-(def ^:private idle {:words? true :running? false :new? true :folded? false :index 1 :n 3})
+(def ^:private idle {:running? false :new? true :folded? false :index 1 :n 3})
 
 (deftest four-slots-over-the-mic-and-four-under-it
   (is (= 4 (count edge/over) (count edge/under)))
-  (is (= [:search :system :prompts :words] edge/over))
+  (is (= [:search :system :prompts :settings] edge/over))
   (is (= [:stop :new :prev :next] edge/under)))
 
 (deftest every-slot-has-a-state-always
@@ -16,10 +16,6 @@
 (deftest stop-is-passive-while-nothing-runs-and-red-while-a-turn-runs
   (is (= :passive (:stop (edge/slot-states idle))))
   (is (= :red (:stop (edge/slot-states (assoc idle :running? true))))))
-
-(deftest my-words-is-passive-without-a-listen-service
-  (is (= :shown (:words (edge/slot-states idle))))
-  (is (= :passive (:words (edge/slot-states (assoc idle :words? false))))))
 
 (deftest new-chat-is-passive-where-a-new-chat-cannot-be-written
   (is (= :passive (:new (edge/slot-states (assoc idle :new? false))))))
@@ -34,5 +30,5 @@
 (deftest a-folded-picture-makes-both-steps-passive
   (is (= [:passive :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :folded? true))))))
 
-(deftest search-system-and-prompts-always-act
-  (is (= [:shown :shown :shown] ((juxt :search :system :prompts) (edge/slot-states {})))))
+(deftest search-system-prompts-and-settings-always-act
+  (is (= [:shown :shown :shown :shown] ((juxt :search :system :prompts :settings) (edge/slot-states {})))))

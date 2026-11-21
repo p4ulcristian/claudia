@@ -1,5 +1,5 @@
 (ns claudia.node.root-read
-  "The front's side of the root helper's read socket (README decision 95): one frame out, the whole
+  "The front's side of the root helper's read socket (README decision 96): one frame out, the whole
   answer in. A missing socket means no helper, or one from before System (decision 54: a person
   copies the helper with host/, the automatic update never does)."
   (:require ["node:net" :as net]

@@ -1,5 +1,5 @@
 (ns claudia.slave.system-label
-  "System's proposals (README decision 95): a chat's system_label tool proposes a project name for
+  "System's proposals (README decision 96): a chat's system_label tool proposes a project name for
   a unit, container, port or program on System; the runner keeps it (system_proposals) until the
   person accepts it (the page writes the hub's label) or says no. Nothing a chat proposes applies by
   itself. Also the front's lookup of chats by their key's hash (POST /api/system/chats), which names

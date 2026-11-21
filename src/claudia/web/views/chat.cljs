@@ -253,6 +253,7 @@
   [ck i b {:keys [running last-i] :as marks}]
   (case (:k b)
     :steps ^{:key (str "s" (:id b))} [steps/steps ck (:tools b) (and running (= i last-i))]
+    :word ^{:key (str "word-" (:id (:tool b)))} [my-words/word-card (:tool b)]
     :shown ^{:key (str "shown-" (:id (:tool b)))} [:div.msg.claude.shown
                                                    [(if (:video (:tool b)) attach/shown-video attach/shown-image)
                                                     (first ck) (second ck) (:tool b)]]
@@ -418,7 +419,6 @@
     (h/use-effect (fn [] (when-not (db/touch?) (some-> (.-current ref) .focus)) nil) [(str draft-key)])
     [:div.composer
      [link-strip server]
-     [my-words/offer-strip]
      [my-words/raw-chip draft-key]
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]

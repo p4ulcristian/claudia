@@ -1,5 +1,5 @@
 (ns claudia.node.history
-  "System's history (README decision 95, PROTOCOL.md `History`): one row a minute in SQLite
+  "System's history (README decision 96, PROTOCOL.md `History`): one row a minute in SQLite
   (`system_samples`), kept 7 days, sampled whether or not anyone asks, so a crash at night still
   shows in the morning. The front keeps its machine's in its own store, the hub the gate's in hub.db.
   Each row covers the whole minute: CPU and each process's CPU are the difference of two reads 60 s

@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-lists
-  "System's list tabs (README decision 95): Ports (port, reach, the process and its owner, the
+  "System's list tabs (README decision 96): Ports (port, reach, the process and its owner, the
   project), Services (grouped: Claudia, projects, no project, containers, the system's own folded),
   Processes (grouped by owner, then the leftovers) and Log (the week's events, newest first)."
   (:require [clojure.string :as str]

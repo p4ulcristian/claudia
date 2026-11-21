@@ -1,5 +1,5 @@
 (ns claudia.node.services
-  "Services and containers for System (README decision 95, PROTOCOL.md `Service`, `Container`):
+  "Services and containers for System (README decision 96, PROTOCOL.md `Service`, `Container`):
   pure functions over `systemctl list-units --output=json`, `systemctl show`, `launchctl list`,
   `podman ps --format json` and `docker ps --format '{{json .}}'`."
   (:require [clojure.string :as str]

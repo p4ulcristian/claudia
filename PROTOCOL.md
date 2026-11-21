@@ -49,7 +49,7 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
 | front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
 | front | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME` | the hub's https address and this server's name as the hub knows it (its hub key is made of it). With them and `FRONT_HUB_KEY_FILE` the front calls the hub as its server for the agent users' SSH certificates (`POST /hub/server/ssh-cert`, README decision 53); unset: no certificates, logged at start when a profile runs as an agent user |
-| front | `FRONT_DATA` | folder of the front's own store `system.db`: System's minute samples (README decision 95; default `~/.local/share/claudia-front`; claudia-front.service: `/var/lib/claudia-front`). A store that does not open is logged and `/api/system/history` answers 503 |
+| front | `FRONT_DATA` | folder of the front's own store `system.db`: System's minute samples (README decision 96; default `~/.local/share/claudia-front`; claudia-front.service: `/var/lib/claudia-front`). A store that does not open is logged and `/api/system/history` answers 503 |
 | front | `FRONT_ROOT_READ_SOCKET` | the root helper's read socket (default `/run/claudia-root-read/read.sock`) |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
@@ -139,12 +139,14 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 | `POST /hub/listen/log` `{ event, ms?, warm?, steps?, bytes?, chars?, error?, ua?, app? }` | a page's mic report, one line in the hub's log (no sound, no words): 200 |
 | `GET /hub/listen/words` | `{ words: [string] }`: the caller's own words for the listen service (`GET <HUB_LISTEN_URL>/v1/vocabulary/<email>`). 501 without a listen service, 502 when it fails |
 | `PUT /hub/listen/words` `{ words: [string] }` | the caller's list replaced (`PUT <HUB_LISTEN_URL>/v1/vocabulary/<email>`); the hub trims each word, drops blanks and repeats (case ignored): `{ words }` as the service keeps them. The speaker is always the signed-in caller, never a name in the request. 400 not a list of strings, a word over 60 characters or over 500 words; 501, 502 as GET |
+| `GET /hub/listen/prefs` | `{ declined: [string], learned: [string], offers }`: the caller's dictation choices (README decision 95): the words they said No to in the chat, the words they added from the chat, whether the chat offers words (`true` before any choice) |
+| `PUT /hub/listen/prefs` `{ declined, learned, offers }` | the caller's whole choices replaced; the hub cleans the word lists like My words (bad entries and repeats dropped) and keeps `offers` on unless it is `false`: the choices as kept |
 | `POST /hub/videos` `{ server, chat, block, title, data }` | a 3D scene's video (`data`: the scene3d form's data as shown): handed to the caller's runner on that server (`POST /api/chats/:id/videos`, as the caller), answered at once `202 { id }`; then, when a voice is set up and the story has lines (the page's voice switch does not count: a video is watched later), the lines are said (as `POST /hub/narrate` would) and brought to the runner (`PUT …/videos/:id/voice`). 400 without chat, block or data; 403 no access to the server |
 | `POST /hub/chat-move` `{ chat, from, to, folder? }` | the person's own chat moved from server `from` to server `to`, both servers where they have a profile (README decision 82): `folder` (absolute, `~/…` or relative to `to`'s working folder; blank or none: no project folder) must be a folder there. The hub drives both runners as the person (Runner HTTP: moving a chat, below), streams the copy from one to the other without keeping it, and checks the target's read-back against the source (`claudia.shared.chat-move/check-problem`: same message count, same last message, every file's size and SHA-256, as many pictures and file changes). `200 { ok, server, chat, folder }` once the chat is on `to` and archived on `from` (its root switch there turned off); `409 { error }` when it did not move (the source keeps the chat as it was, the target drops its copy); `400` for a bad request or a server not the person's |
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
 | `GET /hub/servers/:name/system` | that server's newest `Sample` (from its front's `GET /api/system`, 4 s); 502 `{ error }` when the front is not reached or fails; 403 when not in the person's list |
 | `GET /hub/gate/system` | admins: the gate's own `Sample` (the hub reads its machine itself); 403 for others |
-| `GET /hub/servers/:name/system/details`, `…/system/history?hours=`, `…/system/unit-log?unit=&scope=&n=` | System (README decision 95): passed on to that server's front (`GET /api/system/details`, `/history`, `/unit-log`, same query), same access as `/system`; 502 `{ error }` when the front is not reached or fails |
+| `GET /hub/servers/:name/system/details`, `…/system/history?hours=`, `…/system/unit-log?unit=&scope=&n=` | System (README decision 96): passed on to that server's front (`GET /api/system/details`, `/history`, `/unit-log`, same query), same access as `/system`; 502 `{ error }` when the front is not reached or fails |
 | `GET /hub/gate/system/details`, `/hub/gate/system/history?hours=` | admins: the gate's own, read by the hub itself (no root helper there: `root: false`) |
 | `GET /hub/system/labels` | `{ labels: [Label] }`: every label, for anyone who may see System |
 | `PUT /hub/system/labels` `{ server, kind, match, project }` | admins: adds the label, or replaces the one with the same `server`, `kind` and `match`; `{ label }`; 400 `{ error }` when a field is missing or too long (`match` and `project` at most 120 characters) |
@@ -273,7 +275,7 @@ net: { rx, tx }, temps: [{ name, label, c }], gpus: [{ index, name, util, memUse
 claudia: [{ kind: front|runner|host|chats|hub, count, rss }] }`; `Share` = `{ busy, user, sys, iowait, steal }`
 (busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null. On macOS iowait and steal are 0, `temps` is empty, and a disk is an APFS container (its volumes' files summed).
 
-Since README decision 95 a `Sample` also has `pressure: { cpu, memory, io }` (the kernel's PSI, `/proc/pressure/*`: each
+Since README decision 96 a `Sample` also has `pressure: { cpu, memory, io }` (the kernel's PSI, `/proc/pressure/*`: each
 `{ some, full }`, the share of the last 10 s some or all programs waited for it, percent; `cpu.full` is null; the whole field null on
 macOS or a kernel without PSI) and `top: [Proc]`: the 8 processes using the most CPU over the window and the 8 using the most memory
 (each once, busiest first). `Proc` = `{ pid, name (the program's name, never its command line), cores (CPU over the window, in cores:
@@ -314,7 +316,7 @@ not anyone asks; each row covers its whole minute (`cores` and each process's `c
 `Label` = `{ id, server (a server's name, or "*" for every one), kind: unit|container|port|process, match (the unit's,
 container's or program's name, or the port number as text), project, by (who added it), at }`: what a page calls a project.
 
-### The root helper's read socket (README decision 95)
+### The root helper's read socket (README decision 96)
 
 The root helper also listens on `/run/claudia-root-read/read.sock` (the folder 0750 root:<the front's group>, the socket 0660), for
 the front only. A connection sends one frame `{ read, unit?, scope?, user?, n? }` and gets one `{ out }` (the program's standard
@@ -347,7 +349,7 @@ Without the helper (its socket missing: an older helper, decision 54; macOS; the
 its own journal and core dumps). `Details.root` is then false and `why` says it. The system's units come from `systemctl
 list-units` and `show` as the front, with or without the helper.
 
-## Runner HTTP: System proposals (README decision 95)
+## Runner HTTP: System proposals (README decision 96)
 
 A chat proposes a project name for something on System with its `system_label` tool `{ server?, kind, match, project, why }`
 (server: this one when left out); nothing changes until the person accepts. The runner keeps proposals (table `system_proposals`).
@@ -544,7 +546,8 @@ A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/
 the turn's end, says it was), and `merged?` (ids of the earlier sends Claude Code took in together
 with it as this one message, their texts joined by line breaks; the message's own id is the last
 send's, README decision 83); a `show_image` step has `image: true` and a `show_video` step `video: true`
-(both from `GET /api/chats/:chat/shown/<id>`).
+(both from `GET /api/chats/:chat/shown/<id>`); an `offer_word` step has `word: { word, heard }` (the
+page shows its card, README decision 95).
 An assistant message has `aside: true` when it was the turn's final reply and went over the chat's
 limit (`claudia.slave.tools/reply-limit` characters): the Stop hook handed it back to Claude to
 shorten, and the page folds it into the steps. Once a turn has ended the page folds every text of

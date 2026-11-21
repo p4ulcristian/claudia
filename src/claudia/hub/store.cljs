@@ -171,6 +171,14 @@
      items TEXT NOT NULL,
      at INTEGER NOT NULL
    );
+   -- A person's dictation choices (claudia.hub.listen-prefs): the words they said No to in the
+   -- chat, the words they added from the chat, and whether the chat offers words; JSON, the same on
+   -- every device of theirs.
+   CREATE TABLE IF NOT EXISTS listen_prefs (
+     email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
+     prefs TEXT NOT NULL,
+     at INTEGER NOT NULL
+   );
    -- What a person's right half shows (claudia.shared.views, README decision 91): the same on
    -- every device of theirs. view: the pile of sheets over the Drawing board, their names bottom to
    -- top, space separated ('' for none; one name, or picture, before decision 91).
@@ -179,7 +187,7 @@
      view TEXT NOT NULL,
      at INTEGER NOT NULL
    );
-   -- What a page calls a project on System (README decision 95): a label for a unit, container,
+   -- What a page calls a project on System (README decision 96): a label for a unit, container,
    -- port or program, per server or for every one (server '*'), written by admins.
    CREATE TABLE IF NOT EXISTS system_labels (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -588,6 +596,16 @@
           ON CONFLICT (email) DO UPDATE SET items = excluded.items, at = excluded.at"
          email items-json (now)))
 
+(defn listen-prefs
+  "A person's dictation choices: {:prefs (JSON text) :at}, or nil."
+  [email]
+  (one "SELECT prefs, at FROM listen_prefs WHERE email = ?" email))
+
+(defn save-listen-prefs! [email prefs-json]
+  (exec! "INSERT INTO listen_prefs (email, prefs, at) VALUES (?, ?, ?)
+          ON CONFLICT (email) DO UPDATE SET prefs = excluded.prefs, at = excluded.at"
+         email prefs-json (now)))
+
 (defn right-view
   "What a person's right half shows: {:view (the pile's names, space separated) :at}, or nil."
   [email]
@@ -614,7 +632,7 @@
 
 (defn release-builder-seen! [] (exec! "UPDATE release_builder SET seen_at = ? WHERE id = 1" (now)))
 
-;; System labels (README decision 95) ------------------------------------------------------------
+;; System labels (README decision 96) ------------------------------------------------------------
 
 (defn system-labels []
   (all "SELECT id, server, kind, match, project, by, at FROM system_labels ORDER BY server, kind, match"))

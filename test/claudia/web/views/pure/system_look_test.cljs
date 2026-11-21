@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-look-test
-  "\"Needs a look\" and the servers' dots (README decision 95), on plain data."
+  "\"Needs a look\" and the servers' dots (README decision 96), on plain data."
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.system-look :as look]))
 

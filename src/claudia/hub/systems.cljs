@@ -1,5 +1,5 @@
 (ns claudia.hub.systems
-  "The Systems popup's numbers (README decision 12) and System (decision 95): a server's from its
+  "The Systems popup's numbers (README decision 12) and System (decision 96): a server's from its
   front (GET /api/system…, calls only the hub makes), the gate's from the hub itself, for admins;
   the labels that name projects on System (system_labels), written by admins."
   (:require [clojure.string :as str]

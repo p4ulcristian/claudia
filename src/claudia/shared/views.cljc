@@ -11,7 +11,6 @@
    [:files "File Browser"]
    [:search "Search"]
    [:settings "Settings"]
-   [:words "My words"]
    [:system "System"]
    [:prompts "Prompts"]
    [:forms "Forms"]])
@@ -19,7 +18,7 @@
 (def ^:private ids (set (map first all)))
 
 (def ^:private aliases
-  "Old names still read as the view they became: Machines became System (README decision 95), so a
+  "Old names still read as the view they became: Machines became System (README decision 96), so a
   pile kept, a slot or a link that says machines opens System."
   {:machines :system})
 

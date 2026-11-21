@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-tiles
-  "System's four tiles (README decision 95): CPU as busy cores of all with every core as a bar and
+  "System's four tiles (README decision 96): CPU as busy cores of all with every core as a bar and
   the busiest process and its owner; Waiting (the kernel's pressure; macOS has none, so no tile and
   CPU takes the row); memory with the
   90% cap; the fullest disk; the cards' memory. Each over its line of the last 24 hours."

@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-chart
-  "The History tab's 7-day chart (README decision 95), pure: the days' lines and names, the busy
+  "The History tab's 7-day chart (README decision 96), pure: the days' lines and names, the busy
   cores, memory and waiting as lines in percent, and the events as marks."
   (:require [claudia.web.views.pure.system-tiles :as tiles]))
 

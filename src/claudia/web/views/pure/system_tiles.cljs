@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-tiles
-  "The System sheet's four tiles (README decision 95), pure: CPU as busy cores of all, the cores
+  "The System sheet's four tiles (README decision 96), pure: CPU as busy cores of all, the cores
   pinned, the waiting rows, memory, the fullest disk and the cards' memory, and the 24-hour lines
   under them (time slots, an SVG path)."
   (:require [clojure.string :as str]

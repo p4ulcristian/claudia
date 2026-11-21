@@ -4,7 +4,7 @@
   calls. A command runs when it is on the no-tap list (ROOT_NO_TAP), else when the front
   (ROOT_FRONT_SOCKET, user claudia's, which no agent user reaches) says the chat's root switch is on
   or the person tapped Allow there. Every command is logged. A second socket answers the front's
-  fixed reads for System (claudia.root.read, README decision 95)."
+  fixed reads for System (claudia.root.read, README decision 96)."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:net" :as net]
@@ -152,5 +152,5 @@
   (js/process.umask (js/parseInt "177" 8))
   (js/console.log (str "claudia-root: sockets in " socket-dir ", no-tap list " no-tap-file))
   (serve-all!)
-  ;; System's fixed reads for the front (README decision 95).
+  ;; System's fixed reads for the front (README decision 96).
   (read/listen!))

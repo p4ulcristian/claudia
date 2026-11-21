@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-lists-test
-  "System's lists (README decision 95): labels, owners, ports, services, processes, on plain data."
+  "System's lists (README decision 96): labels, owners, ports, services, processes, on plain data."
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.system-lists :as l]))
 

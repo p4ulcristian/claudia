@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-tiles-test
-  "System's tiles (README decision 95), on plain data."
+  "System's tiles (README decision 96), on plain data."
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.system-tiles :as t]))
 

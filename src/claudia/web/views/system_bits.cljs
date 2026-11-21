@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-bits
-  "Small parts the System sheet's rows share (README decision 95): a chat's colour square, who owns
+  "Small parts the System sheet's rows share (README decision 96): a chat's colour square, who owns
   a process, a row's project chip (admins add or take off a label there), a unit's journal lines
   under a row, and the buttons."
   (:require [reagent.hooks :as h]
@@ -63,7 +63,7 @@
        (:project l) x])))
 
 (defn project-cell
-  "A row's project from the labels, or \"unknown\"; an admin may label it here (README decision 95).
+  "A row's project from the labels, or \"unknown\"; an admin may label it here (README decision 96).
   keys-of: what the row can be labelled by (claudia.web.views.pure.system-lists/label-keys);
   Claudia's own rows are Claudia's. mode: :full, :quiet (no \"unknown\") or :grouped (the group's
   title names the project: no chip)."

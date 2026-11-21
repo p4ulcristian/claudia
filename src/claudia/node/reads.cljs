@@ -1,5 +1,5 @@
 (ns claudia.node.reads
-  "The fixed reads System needs (README decision 95, PROTOCOL.md \"The root helper's read socket\"),
+  "The fixed reads System needs (README decision 96, PROTOCOL.md \"The root helper's read socket\"),
   as data: every program and argument is a constant here but a checked unit name, user name and line
   count. The root helper runs them as root for the front; without it the front runs the same ones
   as its own user (what that user may see). Pure: the argv, the checks, the log's rule."

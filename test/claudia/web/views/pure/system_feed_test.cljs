@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-feed-test
-  "Where System asks (README decision 95, PROTOCOL.md), on plain data."
+  "Where System asks (README decision 96, PROTOCOL.md), on plain data."
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.system-feed :as feed]))
 

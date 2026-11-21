@@ -1,5 +1,5 @@
 (ns claudia.web.views.systems
-  "System (README decision 95; Machines before it, decisions 12, 75, 91), a sheet on the right
+  "System (README decision 96; Machines before it, decisions 12, 75, 91), a sheet on the right
   half's Drawing board, opened by the header's System button, the edge's and the menu's entries:
   one tab per server the person may see (the gate for admins), each with its dot; under it the
   tiles, \"Needs a look\" and the tabs. It asks while open: the shown server's Sample every 2 s (the

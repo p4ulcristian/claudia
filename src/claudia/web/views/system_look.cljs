@@ -1,5 +1,5 @@
 (ns claudia.web.views.system-look
-  "System's \"Needs a look\" (README decision 95): only problems and the chats' proposals, a card
+  "System's \"Needs a look\" (README decision 96): only problems and the chats' proposals, a card
   each with its one action: Log (the unit's journal opens under it), Ask a chat (the row's facts go
   into the open chat's composer, not sent), and for a proposal No or Accept (admins: the label is
   written on the hub, then the proposal taken away). \"All quiet\" when there is nothing."

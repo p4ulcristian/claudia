@@ -1,18 +1,17 @@
 (ns claudia.web.views.thumb-edge
   "The right edge of a touch tablet (README decisions 40, 73, 92): a big tablet held in two hands is
   held at its sides partway up, so the right thumb rests on the right edge at middle height. There a
-  rail on the right wall, one column of eight slots of one size: Search, System, Prompts, My
-  words, Stop, New chat, ‹ (the previous picture), › (the next picture). Each a button with its name
+  rail on the right wall, one column of eight slots of one size: Search, System, Prompts,
+  Settings, Stop, New chat, ‹ (the previous picture), › (the next picture). Each a button with its name
   under its icon, at least 12 mm, see-through at rest. A button never comes or goes, so nothing
   shifts: one that cannot act now is passive (greyed and disabled), Stop is red while the open
   chat's turn runs (claudia.web.views.pure.edge). At its bottom, outside the eight, the foot the
   chats' rail had: the update pill, your profile circle (its menu holds Settings, Archived chats,
-  Prompts, My words) and the version's line, so the chats have the left edge to themselves.
+  Prompts) and the version's line, so the chats have the left edge to themselves.
   The mic floats over the page beside it (README decision 94, claudia.web.views.mic); the composer
   leaves its own mic out on these screens (claudia.web.views.chat)."
   (:require [claudia.web.search-open :as search-open]
             [re-frame.core :as rf]
-            [reagent.core :as r]
             [claudia.web.views.icons :as icons]
             [claudia.web.views.menu :as menu]
             [claudia.web.views.mic :as mic]
@@ -30,7 +29,8 @@
             :act #(rf/dispatch [:right/view :system])}
    :prompts {:label "Prompts" :tip "Prompt profiles" :icon icons/prompts-icon
              :act #(rf/dispatch [:right/view :prompts])}
-   :words {:label "My words" :tip "My words" :icon icons/words-icon :act #(rf/dispatch [:right/view :words])}
+   :settings {:label "Settings" :tip "Settings, your dictation words too" :icon icons/settings-icon
+              :act #(rf/dispatch [:right/view :settings])}
    :stop {:label "Stop" :tip "Stop the running turn (Esc)" :act #(rf/dispatch [:chat/stop])
           :icon (svg-of [:rect {:x 6 :y 6 :width 12 :height 12 :rx 2}])}
    :new {:label "New chat" :tip "New chat (Alt+N)" :icon (svg-of [:path {:d "M12 5v14M5 12h14"}])
@@ -54,18 +54,11 @@
   (let [me @(rf/subscribe [:me])]
     (and (not @(rf/subscribe [:read-only?])) (seq (:servers me)))))
 
-(defn- words-ready?
-  "My words can act: where the composer shows and the hub has a listen service (claudia.web.words)."
-  []
-  (let [m @(rf/subscribe [:my-words])]
-    (boolean (and (composer-shown?) (some? m) (not (:off m))))))
-
 (defn- now
   "What the slots' states depend on (pure/slot-states), read from the page; oc: the open chat."
   [oc]
   (let [{:keys [pictures index]} @(rf/subscribe [:picture-history])]
-    {:words? (words-ready?)
-     :running? (boolean (when oc (:running @(rf/subscribe [:chat (:ck oc)]))))
+    {:running? (boolean (when oc (:running @(rf/subscribe [:chat (:ck oc)]))))
      :new? (not @(rf/subscribe [:new-chat-read-only?]))
      :folded? (boolean (:folded? @(rf/subscribe [:fold-state])))
      :index index :n (count pictures)}))
@@ -98,8 +91,4 @@
      [:div.edge-under (column pure/under states) [foot]]
      [floating-mic oc]]))
 
-(defn edge
-  "The edge; mounting it asks the hub whether it has a listen service (for My words)."
-  []
-  (r/with-let [_ (rf/dispatch [:words/load])]
-    [edge-view]))
+(defn edge "The edge." [] [edge-view])

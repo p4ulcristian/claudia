@@ -1,5 +1,5 @@
 (ns claudia.node.events
-  "System's log (README decision 95, PROTOCOL.md `Event`): pure functions over the journal's JSON
+  "System's log (README decision 96, PROTOCOL.md `Event`): pure functions over the journal's JSON
   lines (out-of-memory kills, systemd-oomd kills, failed units), `coredumpctl list --json=short`
   and the kernel's modules folder (a reboot needed)."
   (:require [clojure.string :as str]

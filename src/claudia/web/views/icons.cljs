@@ -3,11 +3,12 @@
   (claudia.web.views.thumb-edge) and the profile menu (claudia.web.views.menu). The strokes come
   from each place's CSS (fill none, stroke currentColor).")
 
-(def words-icon
-  "My words: a book."
-  [:svg {:viewBox "0 0 24 24" :aria-hidden true}
-   [:path {:d "M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"}]
-   [:path {:d "M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"}] [:path {:d "M9 7.5h6"}]])
+(def settings-icon
+  "Settings: a gear."
+  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
+   [:circle {:cx 10 :cy 10 :r 2.6}]
+   [:path {:d "M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"}]
+   [:circle {:cx 10 :cy 10 :r 5.4}]])
 
 (def prompts-icon
   "Prompts: a speech bubble with two lines of text."

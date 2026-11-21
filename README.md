@@ -239,14 +239,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
     `{text, raw}` back: text cleaned up, raw as heard. The draft gets the clean text; while the
     raw words differ and the draft still holds them, a chip over the composer shows the other
-    version and a tap swaps them (and back). My words (the iPad edge's panel; in Settings until
-    decision 58): the list, Add, and × to remove,
-    saved through `/hub/listen/words` (the caller's own list only; hidden without a listen
-    service). When the person changes exactly one dictated word before sending, to one that looks
-    like a name or a term (a capital not at a sentence's start, a capital inside, a digit, or
-    - _ . inside), the composer offers "Add <word> to My words?" once: each word is offered once
-    on a device (`claudia.wordsOffered`), never when the list holds it, Add or No. A one-word clip
-    counts only when it was sent alone. The clip flow above is the same. Files:
+    version and a tap swaps them (and back). My words: the list, Add, and × to remove, saved
+    through `/hub/listen/words` (the caller's own list only; hidden without a listen service); since
+    decision 95 in Settings' Dictation section only, and words come from cards Claude puts in the
+    chat (the composer's "Add <word> to My words?" after a corrected word is gone). The clip flow
+    above is the same. Files:
     `src/claudia/hub/listen_words.cljs`, `src/claudia/web/words.cljs`,
     `src/claudia/web/views/my_words.cljs`, `src/claudia/web/views/pure/dictated.cljs`.
 
@@ -1693,7 +1690,86 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
-95. Machines becomes System (2026-11-21, the user's design, one call at a time: "another button next
+## Back from the TypeScript Claudia (2026-11-03)
+
+- Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
+- The camera's PNG of the picture (draw answers carry no screenshot since 2026-11-18: one per draw was about 3% of all tokens spent): playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
+
+91. The Drawing board is the table, every other view a sheet of paper on it (2026-11-21, the user's
+    design). The Drawing board has no frame, title or dropdown: the picture's blocks sit straight on
+    it, with its bar (‹ ›, the snapshot) under them, always the bottom layer. File Browser, Search,
+    Settings, My words, Machines, Prompts and Forms each open as a sheet laid on it: the board's
+    colour, set apart only by its edge and a shadow, with a title strip (the view's icon and name in
+    the hand font) and an × that closes it. Sheets pile up: the one opened last lies on top, each one
+    24 px down and 20 px right of the one under it (10 and 14 px on a phone, inside the picture
+    screen), all one size; opening one already in the pile brings it to the top. Only the top sheet
+    is drawn in full and takes input (the board under sheets is inert); the ones under it show their
+    title strip and left edge, and a click there brings one to the top. Closing the top sheet shows
+    the one under it; closing all shows the board. The events: `[:right/view v]` lays v on top (the
+    Drawing board takes every sheet off), `[:right/toggle v]` closes v when it is the top sheet,
+    else lays it on top, `[:right/close v]` takes v off; the sub `:right-view` is the top sheet's
+    view (`:picture` when none), `:right-sheets` the pile, bottom to top. Opening a sheet closes the
+    world; on a phone it brings the picture screen up; Files asks for the bookmarks again; a
+    read-only view leaves Files out of the pile it shows. The pile is the person's on every device:
+    `PUT /hub/right-view {views}` (bottom to top), answered and read back as `{views, view}` with
+    `view` the top one for older pages, an older page's `{view}` setting a pile of that one view; the
+    hub keeps the names space separated in `right_views.view`, so a pick kept before reads as a pile
+    of one (pure: `claudia.shared.views`, tested on plain data). The File Browser's and My words'
+    own headings went: the title strip names them. Instead of: one view at a time, picked in a
+    "Drawing board ▾" dropdown over the right half (decision 75).
+    Files: `src/claudia/shared/views.cljc`, `src/claudia/web/right.cljs`,
+    `src/claudia/web/views/sheets.cljs`, `src/claudia/web/views/picture.cljs`,
+    `src/claudia/hub/ops.cljs`, `resources/web/css/right.css`, `PROTOCOL.md`.
+
+92. The mic rail: four slots over the mic, four under it, and none comes or goes (since decision 94
+    the mic floats over the page and the rail keeps the eight without it) (2026-11-21, the
+    user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
+    least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
+    Search, Machines (System since decision 96), Prompts, My words (Settings since decision 95), then the mic, then Stop, New chat, ‹ (Previous picture),
+    › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
+    under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
+    at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
+    the foot loses its room. A button never appears or disappears, so nothing shifts and the mic
+    never moves: one that cannot act now stays, passive (greyed, disabled): Stop while the open chat
+    has no running turn (filled red while one runs), ‹ › with no earlier or later picture or the
+    picture folded, My words without the hub's listen service or the composer, New chat where no
+    new chat can be written (`claudia.web.views.pure.edge/slot-states`). The mic's circle keeps its
+    size when the mic cannot work there. Machines, Prompts and My words open their view of the right
+    half (`[:right/view …]`; My words no longer toggles back to the Drawing board). Archive left the
+    rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
+    elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
+    (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
+    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
+    shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
+    ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
+    Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
+    `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.
+
+95. Claude offers the words dictation misheard, as cards in the chat (2026-11-21, the user's design:
+    "I never touch the text, so I won't correct my words"). When Claude sees that a word in the
+    person's dictated message was plainly misheard ("get hub" for GitHub) and knows the word they
+    meant, it calls `mcp__workspace__offer_word {word, heard}`. The step carries `word: {word,
+    heard}` (`claudia.slave.history/offered-word`) and the chat shows a small card after it: "Add
+    <word> to My words? heard: <heard>", Add and No. Nothing waits on it; the person scrolls past or
+    taps. The card shows only in the person's own chats, only while their offers are on, and never
+    for a word already in their list or one they said No to (`claudia.web.views.pure.dictated/
+    card-shown?`, case ignored). Add puts the word in the dictating person's My words and marks it
+    learned from the chat; No puts it on their No list. Both lists and the offers switch are the
+    person's prefs, kept by the hub for every device: `GET/PUT /hub/listen/prefs {declined, learned,
+    offers}` (table `listen_prefs`, `claudia.hub.listen-prefs`). Settings' Dictation section holds
+    it all: the words (× removes one, "from chat" marks the learned ones, Add), "Offer words in the
+    chat" (a switch), "Words you said No to (n)" with Offer again, and "Reset dictation profile"
+    (asks once more, then clears the words and both lists; the switch stays). Removed: the My words
+    sheet and its rail slot (Settings takes the slot, so the rail keeps its eight, decision 92), the profile menu's My words, and the composer's offer after a corrected word
+    (`claudia.wordsOffered`). Since the same day the page also sends the chat's last words with each
+    clip (`x-listen-context`), so names the chat uses are heard right in the first place. Files:
+    `src/claudia/slave/tools.cljs`, `src/claudia/slave/history.cljs`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/hub/listen_prefs.cljs`, `src/claudia/hub/store.cljs`, `src/claudia/hub/ops.cljs`,
+    `src/claudia/web/words.cljs`, `src/claudia/web/views/my_words.cljs`,
+    `src/claudia/web/views/pure/dictated.cljs`, `src/claudia/web/views/pure/steps.cljs`.
+
+96. Machines becomes System (2026-11-21, the user's design, one call at a time: "another button next
     to files in the header called System"; "make it nice designed"). One sheet for everything about a
     server, for troubleshooting: the header's System button (beside Files, toggles it like Files) and
     the edge's and the menu's old Machines entries open it; a stored pile, rail slot or link that says
@@ -1736,58 +1812,3 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `system_lists.cljs`, `system_chart.cljs`, `src/claudia/shared/views.cljc` (`machines` read as
     `system`), `src/claudia/web/views/head.cljs`, `resources/web/css/system.css`.
 
-## Back from the TypeScript Claudia (2026-11-03)
-
-- Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
-- The camera's PNG of the picture (draw answers carry no screenshot since 2026-11-18: one per draw was about 3% of all tokens spent): playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
-
-91. The Drawing board is the table, every other view a sheet of paper on it (2026-11-21, the user's
-    design). The Drawing board has no frame, title or dropdown: the picture's blocks sit straight on
-    it, with its bar (‹ ›, the snapshot) under them, always the bottom layer. File Browser, Search,
-    Settings, My words, Machines, Prompts and Forms each open as a sheet laid on it: the board's
-    colour, set apart only by its edge and a shadow, with a title strip (the view's icon and name in
-    the hand font) and an × that closes it. Sheets pile up: the one opened last lies on top, each one
-    24 px down and 20 px right of the one under it (10 and 14 px on a phone, inside the picture
-    screen), all one size; opening one already in the pile brings it to the top. Only the top sheet
-    is drawn in full and takes input (the board under sheets is inert); the ones under it show their
-    title strip and left edge, and a click there brings one to the top. Closing the top sheet shows
-    the one under it; closing all shows the board. The events: `[:right/view v]` lays v on top (the
-    Drawing board takes every sheet off), `[:right/toggle v]` closes v when it is the top sheet,
-    else lays it on top, `[:right/close v]` takes v off; the sub `:right-view` is the top sheet's
-    view (`:picture` when none), `:right-sheets` the pile, bottom to top. Opening a sheet closes the
-    world; on a phone it brings the picture screen up; Files asks for the bookmarks again; a
-    read-only view leaves Files out of the pile it shows. The pile is the person's on every device:
-    `PUT /hub/right-view {views}` (bottom to top), answered and read back as `{views, view}` with
-    `view` the top one for older pages, an older page's `{view}` setting a pile of that one view; the
-    hub keeps the names space separated in `right_views.view`, so a pick kept before reads as a pile
-    of one (pure: `claudia.shared.views`, tested on plain data). The File Browser's and My words'
-    own headings went: the title strip names them. Instead of: one view at a time, picked in a
-    "Drawing board ▾" dropdown over the right half (decision 75).
-    Files: `src/claudia/shared/views.cljc`, `src/claudia/web/right.cljs`,
-    `src/claudia/web/views/sheets.cljs`, `src/claudia/web/views/picture.cljs`,
-    `src/claudia/hub/ops.cljs`, `resources/web/css/right.css`, `PROTOCOL.md`.
-
-92. The mic rail: four slots over the mic, four under it, and none comes or goes (since decision 94
-    the mic floats over the page and the rail keeps the eight without it) (2026-11-21, the
-    user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
-    least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
-    Search, Machines, Prompts, My words, then the mic, then Stop, New chat, ‹ (Previous picture),
-    › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
-    under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
-    at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
-    the foot loses its room. A button never appears or disappears, so nothing shifts and the mic
-    never moves: one that cannot act now stays, passive (greyed, disabled): Stop while the open chat
-    has no running turn (filled red while one runs), ‹ › with no earlier or later picture or the
-    picture folded, My words without the hub's listen service or the composer, New chat where no
-    new chat can be written (`claudia.web.views.pure.edge/slot-states`). The mic's circle keeps its
-    size when the mic cannot work there. Machines, Prompts and My words open their view of the right
-    half (`[:right/view …]`; My words no longer toggles back to the Drawing board). Archive left the
-    rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
-    elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
-    (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
-    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
-    shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
-    ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
-    Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
-    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
-    `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.

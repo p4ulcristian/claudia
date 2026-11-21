@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.system-chart-test
-  "System's 7-day chart (README decision 95), on plain data."
+  "System's 7-day chart (README decision 96), on plain data."
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.system-chart :as c]))
 

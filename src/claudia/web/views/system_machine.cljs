@@ -2,7 +2,7 @@
   "A machine's card (README decision 12): every core's use split into user, system, steal and
   waiting on disk, memory, swap, disks, disk and network speed, temperatures, NVIDIA cards and
   Claudia's own processes. System's Machine tab shows it from the sheet's own Sample
-  (claudia.web.views.systems, decision 95); the world's stats ask for theirs every 2 s. A card older
+  (claudia.web.views.systems, decision 96); the world's stats ask for theirs every 2 s. A card older
   than 8 s greys; a server that does not answer says so."
   (:require [reagent.hooks :as h]
             [claudia.web.format :as format]

@@ -107,7 +107,7 @@
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
     ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
     (#{"/api/update-check" "/api/claude-token/picks" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
-    ;; System's machine reads (README decision 95): the hub's own, passed on by /hub/servers/<name>/system/….
+    ;; System's machine reads (README decision 96): the hub's own, passed on by /hub/servers/<name>/system/….
     (#{"/api/system/details" "/api/system/history" "/api/system/unit-log"} rest-path) {:status 404 :error "not found"}
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     ;; A service's app token (README decision 78): the hub's own, never a page's.
@@ -169,7 +169,7 @@
 
 (defn- server-call
   "/hub/servers/<name>/state (does its front answer), /hub/servers/<name>/system (its numbers) and
-  /hub/servers/<name>/system/<details|history|unit-log> (System, README decision 95, the query
+  /hub/servers/<name>/system/<details|history|unit-log> (System, README decision 96, the query
   passed on), for a server this person may use."
   [^js req ^js res person email server-name what]
   (if-let [server (config/server-of person server-name)]
