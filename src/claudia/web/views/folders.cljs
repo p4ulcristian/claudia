@@ -142,7 +142,7 @@
 (defn- top-bar [{:keys [server hidden? set-hidden] :as where}]
   [:header.fd-bar
    [:div.fd-where
-    [:div.fd-title-row [:h1.fd-heading "File Browser"] [server-toggle where]]
+    [:div.fd-title-row [server-toggle where]]
     [:f> machine-line server]]
    [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]])
 

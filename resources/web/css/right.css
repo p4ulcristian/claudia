@@ -7,19 +7,34 @@
 .right { position: relative; container-type: inline-size; background: var(--board); }
 .right-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .right-scroll > * { flex-shrink: 0; }
-/* The right half's dropdown (views/right_pick.cljs, README decision 75): the view shown, a press lists
-   every view. */
-.rp-row { flex: none; display: flex; padding: 10px 14px 0; position: relative; z-index: 5; }
-.rp { position: relative; }
-.rp-button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 12px; border-radius: 99px; border: 1px solid var(--line);
-  background: var(--bg2); color: var(--fg); font: 700 17px var(--hand); }
-.rp-button:hover { border-color: var(--accent); }
-.rp-chev { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.rp-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; display: grid; gap: 2px; min-width: 210px; padding: 6px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.45); }
-.rp-item { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 8px; text-align: left; color: var(--fg); font-size: 14px; }
-.rp-item:hover, .rp-item.on { background: var(--panel2); }
-.rp-tick { color: var(--accent); }
+/* The Drawing board (README decision 90): the table itself, no frame and no title; the stage and its
+   bar, always the bottom layer. */
+.board { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The sheets of paper laid on it (views/sheets.cljs): the board's colour (--bg, so a see-through
+   board does not show through), set apart by an edge and a shadow, each a step down and right of the
+   one under it (--i: its place in the pile of --n), all one size, the top one at the right and
+   bottom. Only the top one is drawn in full. */
+.sheets { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  --sheet-x0: 16px; --sheet-y0: 14px; --sheet-dx: 20px; --sheet-dy: 24px; --sheet-r: 14px; --sheet-b: var(--edge-b); }
+.sheet { position: absolute; display: flex; flex-direction: column; pointer-events: auto; overflow: hidden; box-sizing: border-box;
+  top: calc(var(--sheet-y0) + var(--i) * var(--sheet-dy)); left: calc(var(--sheet-x0) + var(--i) * var(--sheet-dx));
+  right: calc(var(--sheet-r) + (var(--n) - 1 - var(--i)) * var(--sheet-dx)); bottom: calc(var(--sheet-b) + (var(--n) - 1 - var(--i)) * var(--sheet-dy));
+  background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.42); }
+.sheet:not(.under) { animation: sheet-in 0.16s ease-out; }
+@keyframes sheet-in { from { opacity: 0; translate: -10px -12px; } }
+/* The title strip: the icon and the name in the hand font in its top 24 px (what a sheet over it
+   leaves showing), the × at its end. */
+.sheet-head { flex: none; display: flex; align-items: flex-start; gap: 8px; height: 34px; padding: 2px 6px 0 12px; box-sizing: border-box;
+  border-bottom: 1px solid var(--line); color: var(--fg); }
+.sheet-icon { flex: none; width: 17px; height: 17px; margin-top: 3px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
+.sheet-title { flex: 1; min-width: 0; margin: 0; font: 700 17px/22px var(--hand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-x { flex: none; width: 28px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--muted); }
+.sheet-x:hover { background: var(--panel); color: var(--fg); }
+.sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
+/* A sheet under the top one: a click on its edge brings it up. */
+.sheet.under { cursor: pointer; }
+.sheet.under:hover .sheet-title, .sheet.under:hover .sheet-icon { color: var(--accent); }
+.sheet-up { position: absolute; inset: 0; width: 100%; background: none; border: 0; cursor: pointer; }
 /* A view's pane in the right half (Search, Settings, My words, Machines, Prompts, Forms). */
 .rv-pane { width: 100%; max-width: 900px; box-sizing: border-box; padding: 14px 18px 40px; }
 .gallery.rv-pane { max-width: none; max-height: none; overflow: visible; border-radius: 0; box-shadow: none; background: none; }
@@ -245,6 +260,8 @@
 /* ---------- Phones (under 680px): the picture is a screen over the chat ---------- */
 @media (max-width: 679px) {
   .split > .right { background: var(--bg); }
+  /* The same pile inside the picture screen, in smaller steps. */
+  .sheets { top: var(--top-safe); --sheet-x0: 8px; --sheet-y0: 8px; --sheet-dx: 10px; --sheet-dy: 14px; --sheet-r: 8px; }
   .rbar-zone { padding: 6px 10px calc(var(--edge-b) + (var(--foot-h) - 46px) / 2); }
 }
 

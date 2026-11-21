@@ -1,23 +1,18 @@
 (ns claudia.web.views.picture
-  "The right half: the open chat's picture, a canvas of blocks top to bottom (two half blocks side by
-  side), the stepper under it, the folded edge. No title on the board: the title
-  names a picture only in the bar's scrubber."
+  "The right half: the Drawing board (the open chat's picture, a canvas of blocks top to bottom, two
+  half blocks side by side, the stepper under it) with the sheets of the other views laid on it
+  (README decision 90), and the folded edge. No title and no frame on the board: the title names a
+  picture only in the bar's scrubber."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
+            [claudia.shared.views :as views]
             [claudia.web.db :as db]
-            [claudia.web.folders :as folders]
             [claudia.web.views.codeforms :as codeforms]
-            [claudia.web.views.folders :as folder-views]
             [claudia.web.views.forms :as forms]
-            [claudia.web.views.my-words :as my-words]
-            [claudia.web.views.prompts :as prompts]
-            [claudia.web.views.right-pick :as right-pick]
-            [claudia.web.views.search-panel :as search-panel]
-            [claudia.web.views.settings :as settings]
-            [claudia.web.views.systems :as systems]
             [claudia.web.views.pure.picture :as pure]
             [claudia.web.views.rightbar :as rightbar]
+            [claudia.web.views.sheets :as sheets]
             [claudia.web.views.snapshot :as snapshot]))
 
 ;; ---- one block ----
@@ -106,35 +101,18 @@
     [:f> picture-view {:scene (:scene hist) :k (:ck oc)
                        :live? (and (not (:viewing? hist)) (not ro))}]]])
 
-(defn- forms-pane
-  "The Forms gallery for the open chat's server, else the new chat's."
-  [oc]
-  (when-let [server (or (:server oc) @(rf/subscribe [:new-server]))]
-    ^{:key server} [:f> codeforms/gallery server]))
-
-(defn- shown-view
-  "The view the right half shows (README decision 75): the person's pick, but the Drawing board for
-  the File Browser in a read-only view (another profile's runner answers no folder calls)."
-  [ro]
-  (let [v @(rf/subscribe [:right-view])]
-    (if (and ro (= v :files)) :picture v)))
-
-(defn- view-pane
-  "The view v's pane (the Drawing board's is the stage)."
-  [v oc hist ro]
-  (case v
-    :files [folder-views/pane (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))]
-    :search [:div.right-scroll [search-panel/pane]]
-    :settings [:div.right-scroll [settings/pane]]
-    :words [:div.right-scroll [my-words/pane]]
-    :machines [:div.right-scroll [systems/pane]]
-    :prompts [:div.right-scroll [prompts/pane]]
-    :forms [:div.right-scroll [forms-pane oc]]
-    [stage oc hist ro]))
+(defn- board
+  "The Drawing board: the stage, and the bar under it for a chat. covered?: sheets lie on it, so it
+  takes no input (README decision 90)."
+  [oc hist ro covered?]
+  [:div.board {:inert (when covered? true)}
+   [stage oc hist ro]
+   (when (:chat oc)
+     [rightbar/bar (when (seq (:blocks (:scene hist))) [snapshot/button oc hist])])])
 
 (defn picture-pane
-  "The right half of the open chat: the dropdown over the view picked in it (the Drawing board, the
-  File Browser, Search, …), and the Drawing board's bar under it."
+  "The right half of the open chat: the Drawing board, with the person's pile of sheets laid on it
+  (claudia.web.views.sheets)."
   []
   (let [oc @(rf/subscribe [:open-chat])
         hist @(rf/subscribe [:picture-history])
@@ -144,12 +122,10 @@
         asks (get-in oc [:state :asks])]
     (if (and (:folded? fold) (not phone?))
       [rightbar/fold-edge (:unseen? fold)]
-      (let [v (shown-view ro)]
+      (let [shown (views/shown @(rf/subscribe [:right-sheets]) ro)]
         [:section.right
-         [:f> right-pick/pick v ro]
-         [view-pane v oc hist ro]
-         (when (and (:chat oc) (= v :picture))
-           [rightbar/bar (when (seq (:blocks (:scene hist))) [snapshot/button oc hist])])
+         [board oc hist ro (seq shown)]
+         [sheets/pile shown oc]
          (when (seq asks)
            [:button.ask-return.phone-only {:on-click #(rf/dispatch [:nav/screen :chat])}
             "Claude asks you something"])]))))

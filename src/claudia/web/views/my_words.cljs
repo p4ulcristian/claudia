@@ -1,7 +1,7 @@
 (ns claudia.web.views.my-words
   "My words on the page (claudia.web.words): the Settings section that lists, adds and removes
-  them, and the same as a view of the right half (README decision 75, opened from the iPad's edge
-  or the right half's dropdown); the offer over the composer to add a word the person corrected
+  them, and the same as a sheet on the right half's Drawing board (README decisions 75 and 90,
+  opened from the iPad's edge); the offer over the composer to add a word the person corrected
   before sending; and the composer's chip that swaps the last dictated words between clean and as heard."
   (:require [clojure.string :as str]
             [claudia.web.views.pure.dictated :as dictated]
@@ -49,7 +49,9 @@
     (nil? words) [:p.small "Checking…"]
     :else [word-list m]))
 
-(def ^:private heading [:h3 "My words " [:span.muted.small "names and terms dictation should hear right"]])
+(def ^:private hint [:span.muted.small "names and terms dictation should hear right"])
+
+(def ^:private heading [:h3 "My words " hint])
 
 (defn settings-section
   "My words in Settings; nothing when the hub has no listen service."
@@ -65,7 +67,8 @@
   []
   (r/with-let [_ (rf/dispatch [:words/load])]
     [:div.sp-panel.wp-panel.rv-pane {:role "region" :aria-label "My words"}
-     [:header.wp-head heading]
+     ;; The sheet's title strip names it (README decision 90).
+     [:header.wp-head hint]
      [words-body @(rf/subscribe [:my-words])]]))
 
 ;; ---- the composer ----
