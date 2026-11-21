@@ -2,7 +2,7 @@
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
   the working line) and the composer (Attach, the message and one Send). The mic floats over the
-  page instead (claudia.web.views.mic/floating, README decisions 94, 105, 106)."
+  page instead (claudia.web.views.mic/floating, README decisions 94, 109, 110)."
   (:require [claudia.web.views.asks :as asks]
             [claudia.web.db :as db]
             [clojure.string :as str]

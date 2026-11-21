@@ -228,5 +228,5 @@
        (rail-top m)
        (map-indexed #(entry-view m %1 %2) entries)]]
      ;; The update pill, your profile circle and the version stand at the edge column's foot
-     ;; (thumb_edge.cljs, README decisions 73, 105).
+     ;; (thumb_edge.cljs, README decisions 73, 109).
      [rail-width/edge]]))

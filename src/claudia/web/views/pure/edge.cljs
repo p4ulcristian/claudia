@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.edge
-  "The edge column of every screen wider than a phone (README decisions 40, 73, 92, 105) as data: nine slots of one size, four
+  "The edge column of every screen wider than a phone (README decisions 40, 73, 92, 109) as data: nine slots of one size, four
   over the rail's middle and five under it. A slot never comes or
   goes: one that cannot act now is passive (greyed), Stop is red while a turn runs; Archive (the open
   chat, asked first; Unarchive for an archived one) sits under New chat. Search, System,

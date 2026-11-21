@@ -1,10 +1,10 @@
 /* ---------- Buttons where touches land (README decision 40) ----------
    The phone's places only where touch is the main input (pointer: coarse); wider screens share one
-   layout, touch or mouse, with sizes by the pointer (README decision 105).
+   layout, touch or mouse, with sizes by the pointer (README decision 109).
    Misses are about 7 mm in a screen's middle, 9 mm along its edges, 12 mm in its corners, so the
    main buttons are at least 12 mm wide: 72 pt on a phone, 64 pt on an iPad. */
 
-/* The floating mic (README decisions 94, 106): on every screen it floats over the page where it was
+/* The floating mic (README decisions 94, 110): on every screen it floats over the page where it was
    put, its centre there (claudia.web.views.mic), its whole flower on the screen; it takes no room. */
 :root { --mic-float: 56px; --mic-float-icon: 26px; }
 .float-mic { position: absolute; width: 0; height: 0; }
@@ -32,7 +32,7 @@
   .cs-fab svg { width: 32px; height: 32px; }
 }
 
-/* Wider than a phone, touch or mouse alike (README decision 105): the left edge holds the chats
+/* Wider than a phone, touch or mouse alike (README decision 109): the left edge holds the chats
    (centred at middle height), the right wall the edge column (claudia.web.views.thumb-edge). Only
    sizes follow the pointer: a mouse gets 48 px buttons on a 64 px column, a finger 12 mm ones
    (64 px on an 88 px column, the block after this one). */

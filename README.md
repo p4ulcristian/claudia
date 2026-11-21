@@ -543,7 +543,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 40. Buttons where touches land (2026-11-16, #197): on screens where
     touch is the main input (`pointer: coarse`: phones and iPads, with or without a trackpad), the
-    most used buttons sit where people tap best (since decision 105 a desktop has the iPad's layout
+    most used buttons sit where people tap best (since decision 109 a desktop has the iPad's layout
     too, its buttons mouse-sized). Source:
     Steven Hoober's measurements (millions of touches on phones and tablets): misses are about 7 mm
     in the middle of a screen, 9 mm along the edges and 12 mm in the corners, and people move what
@@ -1659,7 +1659,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 94. The mic floats with its little mics, and new messages play by themselves (2026-11-21, the
     user's calls one at a time, after decision 93 was in use). On a touch tablet the mic leaves the
     rail ("the microphone should not be a part of the rail anymore so it can stay with the circles
-    with the petals"; on phones too since decision 106): it floats over the page, bottom right beside the rail until dragged through
+    with the petals"; on phones too since decision 110): it floats over the page, bottom right beside the rail until dragged through
     its move ring (decision 73's spring), its spot kept on this device, always the whole flower,
     four petals; the rail keeps its eight slots without it (decision 92) and the "mic back" circle
     is gone. The big mic is the open chat; every other chat with voice messages waiting is a little
@@ -1887,7 +1887,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`,
     `resources/web/css/claudia.css`, `PROTOCOL.md`.
 
-105. One layout on every screen wider than a phone, touch or mouse (2026-11-21, the user's call:
+109. One layout on every screen wider than a phone, touch or mouse (2026-11-21, the user's call:
     "desktop would get the tablet view, because it's almost the same"). The two wide layouts
     differed only in the edge column on the right wall (decisions 73, 92), the floating mic
     (decision 94) and the chats' rail centred at middle height (decision 40); now a desktop has
@@ -1903,7 +1903,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/rail.cljs`, `src/claudia/web/views/chat.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
-106. The phone's mic floats like the tablet's, and every floating mic keeps its whole flower on the
+110. The phone's mic floats like the tablet's, and every floating mic keeps its whole flower on the
     screen (2026-11-21, the user's calls: "where should we put it to be usable, because it's pretty
     usable on tablet?", then "on tablet it would act the same, like the petal would always fit",
     and "after dragging I want it to reset a little bit faster to the not moving state"). Before,

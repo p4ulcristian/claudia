@@ -1,10 +1,10 @@
 (ns claudia.web.views.shell
   "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Wider than a phone, touch or
-  mouse alike (README decision 105): the rail of chat circles (the only chat list there, README
+  mouse alike (README decision 109): the rail of chat circles (the only chat list there, README
   decision 24) | the chat column | a 6 px divider | the right half | the edge column
   (claudia.web.views.thumb-edge); the archived chats take the chat column. Phone (under 680 px):
   three full screens, list -> chat -> picture, one shown at a time, the mic floating over the
-  chat (README decision 106)."
+  chat (README decision 110)."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
@@ -124,7 +124,7 @@
    (split-view m)])
 
 (defn- phone-mic
-  "A phone's mic, floating over the chat screen (README decision 106); the list and the picture
+  "A phone's mic, floating over the chat screen (README decision 110); the list and the picture
   screens have none."
   []
   [mic/floating @(rf/subscribe [:open-chat])])

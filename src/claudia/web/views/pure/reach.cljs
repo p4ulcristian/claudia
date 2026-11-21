@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.reach
-  "Where touches land (README decisions 40, 105), as data: which screens get the edge column, and
+  "Where touches land (README decisions 40, 109), as data: which screens get the edge column, and
   how far the rail scrolls to put the open chat in its middle.")
 
 (def phone

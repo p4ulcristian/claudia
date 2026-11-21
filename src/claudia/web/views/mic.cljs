@@ -8,7 +8,7 @@
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
-  Wider than a phone (README decisions 94, 105) the mic floats over the page, out of the rail: bottom
+  Wider than a phone (README decisions 94, 109) the mic floats over the page, out of the rail: bottom
   right beside the rail until dragged, its spot kept on this device; a ring round the petals says
   move, and the finger reaching it (pure/in-ring?) at any time while holding keeps the recording
   going while the mic follows the finger on a spring (motion's useSpring: it trails and overshoots
@@ -444,7 +444,7 @@
 (defn button
   "The mic, or nothing where the mic cannot work. draft-key: the composer it speaks into ([server
   chat] or :new); the heard words go there (:mic/heard), sent or added as each press chose.
-  opts {:floating? true}: the mic floating over the page (moves; README decisions 94, 106)."
+  opts {:floating? true}: the mic floating over the page (moves; README decisions 94, 110)."
   [draft-key & [{:keys [floating?]}]]
   (let [[ok set-ok] (h/use-state false)
         [spot set-spot] (use-spot floating?)
@@ -476,7 +476,7 @@
     (and (not @(rf/subscribe [:read-only?])) (seq (:servers me)))))
 
 (defn floating
-  "The mic floating over the page (README decisions 94, 106), speaking into the open chat oc: beside
+  "The mic floating over the page (README decisions 94, 110), speaking into the open chat oc: beside
   the edge column wider than a phone, over the composer on a phone's chat screen."
   [oc]
   [:div.float-mic

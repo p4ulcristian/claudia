@@ -78,7 +78,7 @@
 
 (defn clamp-spot
   "A floating mic's centre {:x :y} on a w x h screen, so its whole flower (petal-reach round it)
-  stays on it: every petal can be reached on every device (README decision 106). A screen too
+  stays on it: every petal can be reached on every device (README decision 110). A screen too
   small for the flower one way keeps the mic in its middle that way."
   [{:keys [x y]} w h]
   (let [mx (min petal-reach (/ w 2)) my (min petal-reach (/ h 2))]
