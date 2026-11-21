@@ -1886,6 +1886,15 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`,
     `resources/web/css/claudia.css`, `PROTOCOL.md`.
 
+115. A reply shows its time where its last line has room (2026-11-21, the user: "when Claudia sends
+    answer, if the height is enough, show the time for that message"). Each finished text of
+    Claude's in the chat carries its time ("14:02" today, "Tue 14:02" this week, else "Nov 12,
+    14:02"), small and muted at the end of its last line, right-aligned. It shows only when that
+    line ends far enough from the right edge for it (10 px kept between), measured after each
+    change of text or width, so no reply grows a line for its time; a reply ending in a code block
+    or a full line shows none. Not while it streams. Files: `src/claudia/web/views/chat.cljs`,
+    `src/claudia/web/views/pure/chat.cljs`, `resources/web/css/claudia.css`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.

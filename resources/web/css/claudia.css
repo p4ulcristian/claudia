@@ -293,6 +293,12 @@ code, pre { font-family: var(--mono); }
 .voice-hear { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); }
 .voice-hear:hover { background: var(--bg); color: var(--fg); }
 .voice-hear svg { width: 14px; height: 14px; }
+/* A reply's time at the end of its last line, only where that line has room (README decision 115,
+   views/chat.cljs measures); hidden, it still takes its width so it can be measured. */
+.msg-body { position: relative; }
+.msg-time { position: absolute; right: 0; bottom: 0; font-size: 11px; line-height: 24px; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; visibility: hidden; pointer-events: none; }
+.msg-time.fits { visibility: visible; }
 .say-reply { vertical-align: top; display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }

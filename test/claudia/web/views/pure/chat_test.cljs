@@ -216,3 +216,9 @@
   (is (false? (chat/task-long? "Short.")))
   (is (true? (chat/task-long? (apply str (repeat 300 "a")))))
   (is (true? (chat/task-long? "a\nb\nc\nd\ne\nf")) "many lines"))
+
+(deftest a-reply-shows-its-time-only-where-its-last-line-has-room
+  (is (chat/time-fits? 500 400 40 10) "100 px free for 40 + 10")
+  (is (not (chat/time-fits? 500 460 40 10)) "40 px free: the line is too full")
+  (is (chat/time-fits? 500 450 40 10) "exactly enough")
+  (is (not (chat/time-fits? 500 nil 40 10)) "no line found"))

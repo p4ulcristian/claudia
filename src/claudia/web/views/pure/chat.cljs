@@ -11,6 +11,13 @@
   [id]
   (first (str/split (str id) #":")))
 
+(defn time-fits?
+  "Whether a reply's time (time-w px wide) fits on its last line, beside the text there: the line
+  ends at line-right, the reply's box at box-right, gap px kept between (README decision 115). A
+  reply with no line found (nil) has no room."
+  [box-right line-right time-w gap]
+  (boolean (and line-right (>= (- box-right line-right) (+ time-w gap)))))
+
 (defn- opens-turn?
   "Whether a message starts a turn: one the person sent (an answer to Claude's question stays in
   its turn)."
