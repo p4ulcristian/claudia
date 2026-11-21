@@ -3,12 +3,10 @@
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as str]
             [claudia.slave.api :as api]
-            [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.tools :as tools]
-            [claudia.slave.explain :as explain]
             [claudia.slave.git :as repo]
             [claudia.slave.runner :as runner]
             [claudia.slave.scene :as scene]))
@@ -70,32 +68,6 @@
         line (js/JSON.stringify #js {:type "user" :uuid "u1" :message #js {:content #js [img]}})]
     (is (= "image/png" (.. ^js (api/image-of-line line {:uuid "u1" :n 0}) -source -media_type)))
     (is (nil? (api/image-of-line line {:uuid "u2" :n 0})))))
-
-(deftest changes-rows
-  (is (changes/same-state? {:text "a"} {:text "a"}))
-  (is (not (changes/same-state? {:text "a"} {:text "b"})))
-  (is (= {:turn "" :path "/f" :before nil :after "x\n" :status "added" :skipped nil :at 5 :added 1 :removed 0}
-         (changes/change-row nil "/f" {:text nil} {:text "x\n"} 5)))
-  (is (= "deleted" (:status (changes/change-row "t" "/f" {:text "x"} {:text nil} 5))))
-  (is (= "modified" (:status (changes/change-row "t" "/f" {:text nil :skipped "binary file"} {:text nil :skipped "binary file"} 5)))))
-
-(deftest explain-reads-a-step
-  (let [text (str (js/JSON.stringify #js {:type "user" :message #js {:content "do it"}}) "\n"
-                  (js/JSON.stringify #js {:type "assistant" :timestamp "2026-01-01T00:00:00Z"
-                                          :message #js {:content #js [#js {:type "text" :text "ok"}
-                                                                      #js {:type "tool_use" :id "s1" :name "Read" :input #js {}}]}})
-                  "\nnot json\n"
-                  (js/JSON.stringify #js {:type "user" :message #js {:content #js [#js {:type "tool_result" :tool_use_id "s1" :content "fine"}]}}))
-        s (explain/step-in text "s1")]
-    (is (= ["do it" "ok" "Read" true false] ((juxt :asked :before :name :finished :error) s)))
-    (is (nil? (explain/step-in text "s2")))
-    (is (re-find #"It is still running, for 3 seconds" (explain/prompt-of {:name "Bash" :at 1000} 4000)))
-    (is (re-find #"Its output \(it failed\):\nboom" (explain/prompt-of {:name "Bash" :finished true :error true :result "boom"} 0)))
-    (is (= {:name "Bash" :title "t" :input "d" :at 1 :result "r" :error false :finished true}
-           (explain/live-step {:tool "Bash" :title "t" :detail "d" :at 1 :result {:text "r"}})))
-    (is (= "ab" (explain/message-text #js {:type "assistant" :message #js {:content #js [#js {:type "text" :text "a"} #js {:type "image"} #js {:type "text" :text "b"}]}})))
-    (is (= "" (explain/message-text #js {:type "user"})))
-    (is (= {:k "t"} (explain/remember (into {} (map (fn [i] [i i])) (range 501)) :k "t")))))
 
 (deftest codeforms-routes
   (is (= {:op :forms} (codeforms/form-route "GET" "/api/forms")))

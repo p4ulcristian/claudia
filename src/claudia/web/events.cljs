@@ -298,7 +298,7 @@
   "A chat's state from its `chat` frame, loaded."
   [frame]
   (-> (select-keys frame [:title :folder :scene :running :asks :more
-                          :agents :changes :settings :model :effort :commands :context])
+                          :agents :settings :model :effort :commands :context])
       (assoc :messages (vec (:messages frame)) :loaded true)))
 
 (defmethod on-frame "chat" [db server {:keys [chat] :as f}]
@@ -726,29 +726,12 @@
     fx
     (update fx :db #(update (or % db) :dictated dissoc k))))
 
-(defn with-voice-tagged
-  "A send's effects fx (nothing sent: empty) from composer k: the mic's clips heard into that draft
-  are tied to the message it sent (its msg id), to be listened back to (claudia.web.voice-back)."
-  [fx db k]
-  (let [clips (get-in db [:voice-draft k])
-        msg (get-in fx [:ws/send 1 :msg])]
-    (if (or (empty? fx) (empty? clips) (nil? msg))
-      fx
-      (-> fx
-          (update :db #(update (or % db) :voice-draft dissoc k))
-          (update :fx (fnil conj []) [:voice-back/tag [clips msg]])))))
-
-(defn after-send
-  "A send's effects from composer k with the dictation's follow-ups: its pieces forgotten, clips tied."
-  [fx db k]
-  (-> fx (with-dictation-checked db k) (with-voice-tagged db k)))
-
 (rf/reg-event-fx
  :composer/send
  (fn [{:keys [db]} [_ typed]]
    (let [[_ chat :as k] (:open db)
          k (if chat k :new)]
-     (after-send (send-for db k typed) db k))))
+     (with-dictation-checked (send-for db k typed) db k))))
 
 (defn heard-fx
   "What the mic's words (heard: {:text :raw}, text cleaned up, raw as heard) do in the composer k
@@ -758,16 +741,15 @@
   answers that chat's question or is sent."
   [db k heard dir]
   (let [text (mic/with-heard (get-in db [:drafts k] "") (:text heard))
-        with-text (cond-> (-> db (assoc-in [:drafts k] text) (update-in [:dictated k] dictated/added heard))
-                    (:clip heard) (update-in [:voice-draft k] (fnil conj []) (:clip heard)))
+        with-text (-> db (assoc-in [:drafts k] text) (update-in [:dictated k] dictated/added heard))
         ask (when (vector? k) (first (get-in db [:chats k :asks])))
         answers (when ask (chat-pure/typed-answer ask (str/trim text) (get-in db [:attach k])))]
     (cond
       (not (#{:send :now} dir)) {:db with-text}
-      answers {:db (-> db (assoc-in [:drafts k] "") (update :dictated dissoc k) (update :voice-draft dissoc k))
+      answers {:db (-> db (assoc-in [:drafts k] "") (update :dictated dissoc k))
                :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
       :else (let [sent (send-for with-text k text (= dir :now))]
-              (if (seq sent) (after-send sent with-text k) {:db with-text})))))
+              (if (seq sent) (with-dictation-checked sent with-text k) {:db with-text})))))
 
 (rf/reg-event-db
  :dictated/swap

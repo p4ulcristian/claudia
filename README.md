@@ -31,7 +31,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
-   (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
+   (removed by decision 96), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
    An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
@@ -226,14 +226,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it, turned with the screen (`screen.orientation.angle`). A data source can be several
     microphones combined, so it names a side, not one hole. Headsets and AirPods show nothing; a
     browser cannot tell, so it shows nothing. The hub's mic log gets `mic` with each start.
-    Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
-    deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
-    (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,
-    PROTOCOL.md), which ties the clips to it. On that message, ▶ plays the clips in spoken order
-    and "heard as" lists each one's raw and cleaned words: bad audio = the voice or the microphone,
-    raw wrong = the speech model, cleaned wrong = the cleanup. On the device that recorded them only
-    (never uploaded), deleted 30 minutes after they were spoken (swept at start and every minute).
-    Files: `src/claudia/web/voice_back.cljs`, `src/claudia/web/views/voice_back.cljs`.
+    Listen back (2026-11-18): removed by decision 96.
     My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
     the listen service hears with each person's own names and terms and cleans the text up. The hub
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
@@ -280,8 +273,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     wears the voice's bars round it in its colour, following the voice as the held mic's bars follow
     yours (2026-11-21, the user's pick of four: bars round it, ripples, bars inside, sound waves;
     `src/claudia/web/views/voice_ring.cljs`, the reply played through an AnalyserNode). One sound at a
-    time (2026-11-21, the user's call): a reply read aloud, your voice played back (decision 20's
-    Listen back) and a 3D story's narrator each claim the sound as they start, and the one playing
+    time (2026-11-21, the user's call): a reply read aloud and a 3D story's narrator each claim
+    the sound as they start, and the one playing
     before stops (a reply stopping that way drops the replies waiting after it, as the page going
     to the background does; `src/claudia/web/sound.cljs`). A reply is heard from its first sentence
     (2026-11-21): the voice service makes a clip a sentence at a time, the hub passes each piece on
@@ -1265,12 +1258,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     channel (no new port): the target says the folder is there; the source holds the chat (its
     Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
     source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
-    talk and bell), its settings, context, last turn and agents' list, its pictures and file
-    changes, and Claude Code's session file with everything under `<id>/` (subagents, tool
+    talk and bell), its settings, context, last turn and agents' list, its pictures (its file
+    changes too until decision 96), and Claude Code's session file with everything under `<id>/` (subagents, tool
     results), placed in the target runner's own project folder (its working folder's slug). The
     target reads its copy back and the hub checks it against the source: the same number of
-    messages, the same last message, every file's size and SHA-256, as many pictures and file
-    changes. Only then does the target take the chat in and the source archive its own, marked as
+    messages, the same last message, every file's size and SHA-256, as many pictures. Only then does the target take the chat in and the source archive its own, marked as
     moved (never deleted; a move back replaces that copy unless it was written to since), with its
     root switch turned off: the switch is the source front's, and a moved chat starts with root off
     and a new chat key. Any failure stops the move: the target drops its copy, the source keeps the
@@ -1768,3 +1760,34 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/hub/listen_prefs.cljs`, `src/claudia/hub/store.cljs`, `src/claudia/hub/ops.cljs`,
     `src/claudia/web/words.cljs`, `src/claudia/web/views/my_words.cljs`,
     `src/claudia/web/views/pure/dictated.cljs`, `src/claudia/web/views/pure/steps.cljs`.
+96. Three features go: listen back, explain, and the changed-files tracking (2026-11-21, the
+    user's call). Each cost code on the page, the runner or the host for something the chats no
+    longer need:
+    - Listen back (decision 20): the "▶ your voice" player and "heard as" under a sent dictated
+      message. A heard clip leaves the device's IndexedDB as before listen back; its database
+      `claudia-mic` goes to version 3, which deletes the store `sounds` with the recordings kept
+      there. The mic's own clips (kept until their words went out, retries, Try again and Throw
+      away) stay as they were. A send still carries the id the page made for its message (`msg`,
+      PROTOCOL.md): the runner uses it as the message's id, and queued messages (decision 83) take
+      one back by it.
+    - Explain on a tool step: the "explain" button on each step and on the running one, and the
+      runner's `POST /api/chats/:id/explain` with its Haiku call. The steps groups stay as they
+      were. The 3D view's Explain on a part (it asks Claude in the open chat) is a different
+      thing and stays.
+    - The changed-files tracking (decision 8's file changes): the runner's copy of every file
+      before Claude's Edit/Write first touched it in a turn (a PreToolUse hook) and its git
+      snapshots of the chat's folder through an index of its own (`RUNNER_DATA/index`), the
+      `changes` and `diff` frames, and the page's leftovers of the changes pill (gone since
+      2026-11-11). A runner drops its table `changes` and deletes `RUNNER_DATA/index` when it
+      starts; forks and server moves (decision 82) no longer carry file changes, and a move's check
+      no longer counts them. The agents' Files tab is not part of it and stays: it reads an agent's
+      Edit/Write calls from its own transcript (`claudia.slave.tasks`, the line counts moved there
+      from `claudia.slave.changes`) and shows them in `claudia.web.views.diff`, which keeps only
+      the one-column table it uses. The PostToolUse hook stays (a chat with no folder gets the
+      edited file's project; Sentinel's worktrees hear of edits).
+    Instead of: keeping them unused, or leaving the sounds, the table and the index files on disk.
+    Files: `src/claudia/web/clip_store.cljs`, `src/claudia/web/views/mic_clips.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/views/steps.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/session.cljs`,
+    `src/claudia/slave/store.cljs`, `src/claudia/slave/runner.cljs`, `src/claudia/slave/move.cljs`,
+    `src/claudia/slave/tasks.cljs`, `src/claudia/web/views/diff.cljs`, `PROTOCOL.md`.

@@ -66,6 +66,8 @@
     k (assoc "SENTINEL_KEY" k)
     url (assoc "SENTINEL_URL" url)))
 
+(def edit-tools-matcher "The hook matcher of Claude Code's tools that edit a file." "Write|Edit|MultiEdit|NotebookEdit")
+
 (defn start-spec
   "What the host starts (resume? true: resumes) a chat's Claude Code with. prompt: the system
   prompt's addition; allowed: the allowed tools; edit-tools: the edit tools' matcher; worktrees?:
@@ -84,11 +86,9 @@
               effort (assoc :effort effort)
               (seq disallowed) (assoc :disallowedTools disallowed))
    :mcp mcp
-   ;; A copy of each file before Claude's edit tools first touch it (the turn's changes).
-   :hooks {:PreToolUse [{:matcher edit-tools}]
-           ;; After an edit: a chat with no folder gets the edited file's project. Edits and commands
-           ;; inside Sentinel's worktrees are reported (where configured).
-           :PostToolUse [{:matcher (if worktrees? (str edit-tools "|Bash") edit-tools)}]
+   ;; After an edit: a chat with no folder gets the edited file's project. Edits and commands
+   ;; inside Sentinel's worktrees are reported (where configured).
+   :hooks {:PostToolUse [{:matcher (if worktrees? (str edit-tools "|Bash") edit-tools)}]
            ;; The end of every turn: its input says the effort the turn ran with, and its final reply
            ;; (one over the chat's limit is handed back), and the background tasks still in flight.
            :Stop [{}]}})

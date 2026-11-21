@@ -1,9 +1,8 @@
 (ns claudia.web.extras
-  "The page's side of agents, changes and meters: their frames, events and subscriptions.
+  "The page's side of agents and meters: their frames, events and subscriptions.
   app-db gets :meta (server -> {:limits :models :commands :defaultModel}), :agent-view ([server chat] -> agent id,
-  \"\" = the list), :agent-detail ([server chat agent] -> the runner's answer), :diffs ([server chat
-  change] -> {:before :after}) and :slash-pick; each chat's state gets :agents :changes :settings
-  :model :commands :context."
+  \"\" = the list), :agent-detail ([server chat agent] -> the runner's answer) and :slash-pick; each
+  chat's state gets :agents :settings :model :commands :context."
   (:require [re-frame.core :as rf]
             [claudia.web.back :as back]
             [claudia.web.db :as db]
@@ -13,9 +12,6 @@
 
 (defmethod events/on-frame "agents" [db server {:keys [chat agents]}]
   {:db (assoc-in db [:chats [server chat] :agents] agents)})
-
-(defmethod events/on-frame "changes" [db server {:keys [chat changes]}]
-  {:db (update-in db [:chats [server chat] :changes] (fn [cs] (into (vec cs) changes)))})
 
 (defmethod events/on-frame "context" [db server {:keys [chat context]}]
   {:db (assoc-in db [:chats [server chat] :context] context)})
@@ -32,9 +28,6 @@
 
 (defmethod events/on-frame "agent" [db server {:keys [chat agent] :as f}]
   {:db (assoc-in db [:agent-detail [server chat agent]] (dissoc f :type :chat :agent))})
-
-(defmethod events/on-frame "diff" [db server {:keys [chat change] :as f}]
-  {:db (assoc-in db [:diffs [server chat change]] (select-keys f [:before :after :skipped :error]))})
 
 (defmethod events/on-frame "agent_git" [db server {:keys [chat agent rev] :as f}]
   {:db (assoc-in db [:agent-git [server chat agent rev]] (select-keys f [:patch :error]))})
@@ -84,19 +77,6 @@
  (fn [_ [_ [s c] task]]
    {:ws/send [s {:type "stop_task" :chat c :task task}]}))
 
-;; ---- changes ----
-
-(rf/reg-event-fx
- :changes/diff
- (fn [{:keys [db]} [_ [s c] change]]
-   (when-not (get-in db [:diffs [s c change]])
-     {:ws/send [s {:type "diff" :chat c :change change}]})))
-
-(rf/reg-event-fx
- :changes/split
- (fn [{:keys [db]} [_ v]]
-   {:db (assoc db :diff-split v) :store ["claudia.diffSplit" v]}))
-
 ;; ---- model, effort, compact ----
 
 (rf/reg-event-fx
@@ -138,6 +118,4 @@
 (rf/reg-sub :agent-view (fn [db [_ k]] (get-in db [:agent-view k])))
 (rf/reg-sub :agent-detail (fn [db [_ k id]] (get-in db [:agent-detail (conj (vec k) id)])))
 (rf/reg-sub :agent-git (fn [db [_ k id rev]] (get-in db [:agent-git (conj (vec k) id rev)])))
-(rf/reg-sub :diff (fn [db [_ k change]] (get-in db [:diffs (conj (vec k) change)])))
-(rf/reg-sub :diff-split (fn [db] (boolean (:diff-split db (try (= "true" (js/localStorage.getItem "claudia.diffSplit")) (catch :default _ false))))))
 (rf/reg-sub :slash-pick (fn [db] (or (:slash-pick db) 0)))

@@ -18,7 +18,7 @@
 
 (def page->runner
   #{"hello" "open" "close" "new" "claudia" "send" "stop" "answer" "secret" "deny" "rename" "archive" "folder" "seen"
-    "stop_task" "settings" "agent" "agent_git" "diff" "picture" "older" "code_edit" "code_send"
+    "stop_task" "settings" "agent" "agent_git" "picture" "older" "code_edit" "code_send"
     ;; The person's keys for list_secrets (README decision 77), answering a keys_ask.
     "keys"
     ;; A queued message taken back with its × (README decision 83).
@@ -30,7 +30,7 @@
 
 (def runner->page
   #{"chats" "chat" "created" "claudia" "msg" "delta" "scene" "turn" "ask" "asked" "error"
-    "agents" "changes" "context" "settings" "meta" "agent" "agent_git" "diff" "pictures" "picture" "older"
+    "agents" "context" "settings" "meta" "agent" "agent_git" "pictures" "picture" "older"
     ;; The working line's note (Thinking, Retrying…, Compacting); no note: plain working.
     "status"
     ;; list_secrets wants the person's keys: the page fetches them and answers with keys.
@@ -40,7 +40,7 @@
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."
-  #{"hello" "here" "open" "close" "agent" "agent_git" "diff" "picture" "older"})
+  #{"hello" "here" "open" "close" "agent" "agent_git" "picture" "older"})
 
 (def ^:private max-here-ago
   "How long ago a page may say it was touched: a day (older or broken: never)."

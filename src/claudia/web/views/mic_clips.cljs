@@ -30,7 +30,7 @@
   (let [out (atom nil)]
     (swap! line (fn [l] (let [[l' ready] (pure/in-order l n result)] (reset! out ready) l')))
     (swap! rows (fn [rs] (into {} (remove (fn [[i]] (< i (:next @line)))) (cond-> rs (get rs n) (assoc-in [n :state] :heard)))))
-    (doseq [{:keys [text raw k dir clip]} @out] (rf/dispatch [:mic/heard k {:text text :raw raw :clip clip} dir]))))
+    (doseq [{:keys [text raw k dir]} @out] (rf/dispatch [:mic/heard k {:text text :raw raw} dir]))))
 
 (declare hear!)
 
@@ -42,17 +42,16 @@
       (swap! rows assoc-in [n :state] :failed))))
 
 (defn- hear!
-  "Clip n heard by the hub; on success its words take their turn and the kept copy moves to the
-  sounds kept to listen back to (clip-store/heard!)."
+  "Clip n heard by the hub; on success its words take their turn and the kept copy goes."
   [n]
-  (when-let [{:keys [id k dir secs t0]} (get @rows n)]
+  (when-let [{:keys [id k dir]} (get @rows n)]
     (swap! rows #(-> % (assoc-in [n :state] :hearing) (update-in [n :tries] inc)))
     (-> (mic/hear (get @blobs id) (pure/listen-context (get-in @rdb/app-db [:chats k :messages])))
         (.then (fn [{:keys [text raw]}]
                  (mic/report! {:event "heard" :bytes (.-size (get @blobs id)) :chars (count text)})
-                 (store/heard! {:id id :at t0 :secs secs :blob (get @blobs id)} text raw)
+                 (store/drop! id)
                  (swap! blobs dissoc id)
-                 (arrive! n {:text text :raw raw :k k :dir dir :clip id})))
+                 (arrive! n {:text text :raw raw :k k :dir dir})))
         (.catch #(failed! n %)))))
 
 (defn- add-row! [n {:keys [id k dir secs at blob]} state]

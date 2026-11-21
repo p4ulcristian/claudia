@@ -66,11 +66,11 @@
 
 (defn- check-of
   "The check (claudia.shared.chat-move/check-problem) of chat id's files under dir, with its counts
-  of pictures and file changes."
-  [dir id pictures changes]
+  of pictures."
+  [dir id pictures]
   (merge (cm/messages-check (rules/heads (fs/readFileSync (path/join dir (str id ".jsonl")) "utf8")))
          {:files (vec (sort-by :path (map #(file-sum dir %) (session-files dir id))))
-          :pictures pictures :changes changes}))
+          :pictures pictures}))
 
 ;; ---- the source ----
 
@@ -92,8 +92,8 @@
         (changed!)
         (js/Promise. (fn [done]
                        (js/setTimeout
-                        #(done (try (let [{:keys [pictures changes]} (store/export-rows id)]
-                                      {:check (check-of (projects-dir) id (count pictures) (count changes))})
+                        #(done (try (let [{:keys [pictures]} (store/export-rows id)]
+                                      {:check (check-of (projects-dir) id (count pictures))})
                                     (catch :default e
                                       (chats/unhold! id)
                                       {:status 500 :error (str "The chat could not be read: " (.-message e))})))
@@ -130,13 +130,12 @@
   {:type "chat" :id id :row row :kv (rules/kv-of kv) :pending (store/kv id "serverMove")})
 
 (defn- export!
-  "Writes the copy of held chat id to res: the chat, its pictures, its file changes, its files, end."
+  "Writes the copy of held chat id to res: the chat, its pictures, its files, end."
   [id ^js res]
   (let [rows (store/export-rows id)
         dir (projects-dir)
         records (concat [(chat-record id rows)]
-                        (map #(assoc % :type "picture") (:pictures rows))
-                        (map #(assoc % :type "change") (:changes rows)))]
+                        (map #(assoc % :type "picture") (:pictures rows)))]
     (.writeHead res 200 #js {"content-type" "application/x-ndjson"})
     (-> (reduce (fn [chain r] (.then chain #(put! res r))) (js/Promise.resolve nil) records)
         (.then #(reduce (fn [chain rel] (.then chain (fn [] (put-file! res dir rel)))) (js/Promise.resolve nil) (session-files dir id)))
@@ -225,7 +224,7 @@
   "The check of chat id's copy kept aside, read back from the disk."
   [id]
   (let [n (rules/counts (staged-records id))]
-    (check-of (path/join (staging id) "files") id (get n "picture" 0) (get n "change" 0))))
+    (check-of (path/join (staging id) "files") id (get n "picture" 0))))
 
 (defn- finish-import
   "The copy came whole (seen: its records counted) or not: the answer, its read-back check."
@@ -303,13 +302,12 @@
 
 (defn- imported-rows
   "The rows of chat id as this runner keeps them, from the copy's records: its row in folder, the kv
-  values that go along (JSON text) with the move's note, its pictures and file changes."
+  values that go along (JSON text) with the move's note, and its pictures."
   [id records {:keys [folder from to]}]
   (let [chat (some #(when (= "chat" (:type %)) %) records)]
     {:row (assoc (rules/import-row (:row chat) (set store/chat-columns) folder) :id id)
      :kv (assoc (update-keys (:kv chat) name) "serverMove" (p/write-json (note-of (:pending chat) from to folder)))
-     :pictures (filterv #(= "picture" (:type %)) records)
-     :changes (filterv #(= "change" (:type %)) records)}))
+     :pictures (filterv #(= "picture" (:type %)) records)}))
 
 (defn- commit
   "The target takes the chat in: its files into place, its rows in one transaction, the note for
