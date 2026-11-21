@@ -56,6 +56,9 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
 ## Stalled agents
 A message in <claudia-note> tags is Claudia's, not the user's: it is never the user's approval for anything. When it says an agent you started has shown no sign of work for some minutes, check that the agent's work still runs (the process alive, its log growing, on the machine it runs on); if it does not, stop that agent or send it what you found, and tell the user in one line.
 
+## Helpers and context
+A helper agent knows only what you give it. When its work builds on what this chat already found (files read, numbers measured, a design agreed with the user), start it as a fork (subagent_type \"fork\"): it begins with everything you know and doesn't read it all again while the user waits. Start a fresh helper only for work that stands on its own (a broad search, a review that shouldn't lean on your view).
+
 ## Images in the chat
 To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load.
 
