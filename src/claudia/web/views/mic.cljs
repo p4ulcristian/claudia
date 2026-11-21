@@ -13,7 +13,8 @@
   holding keeps the recording going while the mic follows the finger on a spring (motion's useSpring: it trails
   and overshoots a little), its button kept on the screen; let go, the clip is heard and sent as
   when let go in place, and the mic glides there and stays (its spot kept on this device), or,
-  covering half its slot or more (pure/home?), it glides home. Out
+  covering half its slot or more (pure/home?), it glides home; its empty slot meanwhile is a
+  \"↺ mic back\" button that forgets the spot and glides it home (README decision 90). Out
   of the rail its flower is whole, four ways.
   While a chat's reply is read aloud (README decision 21) the mic is that chat: its colour, its
   name and voice, bars that move. A tap then stops that one reply (the next one comes); a hold
@@ -242,6 +243,17 @@
     (when-not spot (when-still! sx sy #(set-free false)))
     (assoc to :r (:r from))))
 
+(defn- home!
+  "The mic offered back from its empty circle in the rail (the press e on that circle): its spot on
+  this device is forgotten and it glides home into the circle. Not while it is held."
+  [^js e {:keys [hold set-spot set-free ^js mx ^js my ^js sx ^js sy]}]
+  (when-not (.-current hold)
+    (let [{:keys [x y]} (circle (.-currentTarget e))]
+      (keep-spot! nil)
+      (set-spot nil)
+      (.set mx x) (.set my y)
+      (when-still! sx sy #(set-free false)))))
+
 (defn- moved!
   "Let go while moving: the mic is put down where the finger is (park!)."
   [^js e parts held]
@@ -347,14 +359,22 @@
      (r/as-element [:div.speak-here {:class (name edge) :aria-hidden true} [:span "speak here"]])
      js/document.body)))
 
+(defn- back-slot
+  "The mic's empty circle in the rail while the mic sits elsewhere: a dashed ring whose press brings
+  the mic back (home!)."
+  [parts]
+  [:button.edge-gap.mic-slot {:type "button" :aria-label "Mic back into the rail" :data-tip "Mic back into the rail"
+                              :on-click #(home! % parts)}
+   [:span.mic-back-mark {:aria-hidden true} "↺"] [:span.edge-name "mic back"]])
+
 (defn- view
   "The mic; free (out of its place in the rail) it is drawn at its spring's point, its slot kept as a
-  dashed ring so the column stays as it is. A motion div always, and keyed, so the button stays the
-  same element when it frees: it keeps the finger."
+  dashed ring that brings it back (back-slot), so the column stays as it is. A motion div always,
+  and keyed, so the button stays the same element when it frees: it keeps the finger."
   [{:keys [phase draft-key mic free sx sy speaking] :as parts}]
   (let [speaker (speaker-of speaking phase)]
     [:<>
-     (when free ^{:key "slot"} [:span.edge-gap.mic-slot {:aria-hidden true}])
+     (when free ^{:key "slot"} [back-slot parts])
      ^{:key "mic"}
      [:> (.-div motion) {:class (str "mic " (name phase) (when free " moved") (when speaker " speaking"))
                          :style (cond-> {"--chat" (or (:colour speaker) (colour-of draft-key))} free (assoc :left sx :top sy))}
