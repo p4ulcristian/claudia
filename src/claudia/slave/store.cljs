@@ -145,6 +145,30 @@
   [^js d]
   (.exec d "DROP TABLE IF EXISTS changes"))
 
+;; Claudia's own chat is removed (README decision 112): her chat's id was kept here.
+(def ^:private claudia-chat-key "claudia-chat")
+
+(defn claudia-chat-gone
+  "The statements ([sql args]) that archive Claudia's own chat id (README decision 112) and drop the
+  kv that kept it, so it shows once among the archived chats, as an ordinary chat; nil when this
+  store never had her chat."
+  [id]
+  (when (and (string? id) (seq id))
+    [["UPDATE chats SET archived = 1 WHERE id = ?" [id]]
+     ["DELETE FROM kv WHERE chat = '' AND key = ?" [claudia-chat-key]]]))
+
+(defn- drop-claudia-chat!
+  "Claudia's own chat archived once and its kv gone (claudia-chat-gone), in one transaction."
+  [^js d]
+  (let [^js r (.get (.prepare d "SELECT value FROM kv WHERE chat = '' AND key = ?") claudia-chat-key)]
+    (when-let [statements (claudia-chat-gone (some-> r .-value p/read-json))]
+      (.exec d "BEGIN")
+      (try
+        (doseq [[sql args] statements]
+          (let [^js st (.prepare d sql)] (.apply (.-run st) st (into-array args))))
+        (.exec d "COMMIT")
+        (catch :default e (.exec d "ROLLBACK") (throw e))))))
+
 ;; Version 1 (2026-11-16, README decision 39): every saved picture's blocks are forms.
 (def ^:private version 1)
 
@@ -175,6 +199,7 @@
     (add-missing-columns! d)
     (drop-chat-settings! d)
     (drop-changes! d)
+    (drop-claudia-chat! d)
     (upgrade! d)
     (reset! db d)))
 

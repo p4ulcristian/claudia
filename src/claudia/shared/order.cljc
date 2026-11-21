@@ -107,32 +107,6 @@
   [items gid]
   (into [] (mapcat #(if (= gid (:group %)) (mapv (fn [c] {:chat c}) (:chats %)) [%])) items))
 
-(defn place-group
-  "items with group gid moved to before the item whose key (a chat cref or a group id) is before
-  (nil: at the end)."
-  [items gid before]
-  (if-let [g (find-group items gid)]
-    (let [its (vec (remove #(= gid (:group %)) items))
-          i (if before (or (index-of its #(= before (key-of %))) (count its)) (count its))]
-      (insert-at its i g))
-    items))
-
-(defn top-key?
-  "Whether key k (a chat cref or a group id) is one of items' own, not a chat inside a group."
-  [items k]
-  (boolean (index-of items #(= k (key-of %)))))
-
-(defn- holds? [it cref] (or (= cref (:chat it)) (some #{cref} (:chats it))))
-
-(defn new-group
-  "items with chats crefs (at least one) gathered, in that order, into a new group gid named
-  group-name, where the first of them was (at the top when it was not placed)."
-  [items crefs gid group-name]
-  (let [g {:group gid :name group-name :chats (vec (distinct crefs)) :folded false :picks {}}
-        marked (into [] (mapcat #(if (holds? % (first crefs)) [::here %] [%])) items)
-        its (reduce without marked crefs)]
-    (if (some #{::here} its) (mapv #(if (= ::here %) g %) its) (into [g] its))))
-
 (defn group-of "The group holding chat cref, or nil." [items cref]
   (first (filter #(and (:group %) (some #{cref} (:chats %))) items)))
 

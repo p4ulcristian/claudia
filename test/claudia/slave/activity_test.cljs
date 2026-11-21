@@ -79,8 +79,8 @@
   (let [r {:own {:profile "ann"} :target {:profile "bob"} :viewing "bob" :read-only false :by "ann@x.org"}]
     (is (= {:kind "connection" :by "ann@x.org" :profile "bob" :via "write-tick"}
            (entry-of (front/passed-line "connection" r nil nil))))
-    (is (= {:kind "call" :by "ann@x.org" :profile "bob" :via "write-tick" :method "POST" :path "/api/chat-ops/send"}
-           (entry-of (front/passed-line "call" r "POST" "/api/chat-ops/send"))))))
+    (is (= {:kind "call" :by "ann@x.org" :profile "bob" :via "write-tick" :method "POST" :path "/api/chat-move/hold"}
+           (entry-of (front/passed-line "call" r "POST" "/api/chat-move/hold"))))))
 
 (deftest the-front-logs-root-taps-and-certificates
   (let [route {:own {:profile "paul" :email "p@x.org"} :target {:profile "paul" :user "paul-claudia-agent"}}]

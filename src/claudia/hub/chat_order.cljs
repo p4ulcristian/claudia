@@ -1,8 +1,6 @@
 (ns claudia.hub.chat-order
-  "A person's chat order and groups in the hub's store (README decisions 38 and 88): read and kept
-  for the page (GET/PUT /hub/chat-order, claudia.hub.ops) and for Claudia's own chat (POST
-  /hub/server/claudia ops chats and organize, claudia.hub.claudia), always cleaned by
-  claudia.shared.order."
+  "A person's chat order and groups in the hub's store (README decision 38): read and kept for the
+  page (GET/PUT /hub/chat-order, claudia.hub.ops), always cleaned by claudia.shared.order."
   (:require [claudia.hub.store :as store]
             [claudia.shared.order :as order]
             [claudia.shared.protocol :as protocol]))

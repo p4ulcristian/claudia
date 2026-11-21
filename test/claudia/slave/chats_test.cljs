@@ -372,3 +372,11 @@
 (deftest the-prompt-asks-for-a-first-line-before-any-tool
   (is (str/includes? tools/system-append "before any tool call and before any drawing"))
   (is (str/includes? tools/system-append "the first line is the whole reply")))
+
+;; Every chat's own rename and recolour tools (README decision 88) -----------------------------------
+
+(deftest every-chat-may-rename-and-recolour-only-itself
+  (is (= ["title"] (get-in tools/workspace-mcp [:rename_chat :inputSchema :required])))
+  (is (= ["color"] (get-in tools/workspace-mcp [:set_chat_colour :inputSchema :required])))
+  (is (some #{"ash"} (get-in tools/workspace-mcp [:set_chat_colour :inputSchema :properties :color :enum])))
+  (is (every? (set tools/allowed-tools) ["mcp__workspace__rename_chat" "mcp__workspace__set_chat_colour"])))

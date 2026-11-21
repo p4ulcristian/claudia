@@ -22,7 +22,6 @@
             [claudia.shared.chat-edit :as chat-edit]
             [claudia.shared.colours :as colours]
             [claudia.slave.bookmarks :as bookmarks]
-            [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
@@ -204,8 +203,7 @@
                           :project (projects/root-name (:folder %) cwd))
              ;; The longest-running agent's clock (README decision 46), as ago like runningFor.
              (tasks/agents-since (:id %)) (assoc :agentsFor (- t (tasks/agents-since (:id %))))
-             (row-model (:id %)) (assoc :model (row-model (:id %)))
-             (claudia/her? (:id %)) (assoc :claudia true))
+             (row-model (:id %)) (assoc :model (row-model (:id %))))
           (store/chats))))
 
 (defn- note-msg!
@@ -595,8 +593,6 @@
       (do (store/add-proposal! prop)
           (answers/text-result (system-label/proposed-text prop))))))
 
-(declare ask!)
-
 (defn- edit-own-chat
   "rename_chat and set_chat_colour: the chat the call runs in changed by change ({:title} or
   {:color}, claudia.shared.chat-edit), or the refusal of {:error}."
@@ -607,19 +603,6 @@
         (answers/text-result (if (:title change)
                                (str "This chat's title is now: " (:title change))
                                (str "This chat's colour is now " (:color change) "."))))))
-
-(defn- claudia-call
-  "Her tool call (claudia.slave.claudia): to the hub; stop_chat first asks the person (it cannot be
-  undone)."
-  [id tool args]
-  (let [go #(.then (claudia/call-hub! tool args)
-                   (fn [{:keys [ok text]}] (if ok (answers/text-result text) (answers/refusal text))))]
-    (if (= tool "stop_chat")
-      (.then (ask! id {:ask (answers/permit-ask (str (random-uuid)) "Stop chat" args "Stop a running chat?"
-                                                "Claudia wants to stop this chat's running turn. It cannot be undone.")
-                       :input args})
-             (fn [answer] (if (= "allow" (:behavior answer)) (go) (answers/refusal "The person said no."))))
-      (go))))
 
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
@@ -638,9 +621,7 @@
     ["workspace" "list_bookmarks"] (bookmark-call id nil)
     ["workspace" "bookmark_folder"] (bookmark-call id args)
     ["workspace" "system_label"] (system-label-call id args)
-    (if (and (= server "claudia") (claudia/her? id))
-      (claudia-call id tool args)
-      (throw (js/Error. (str "No tool " server "/" tool))))))
+    (throw (js/Error. (str "No tool " server "/" tool)))))
 
 (defn- ask! [id entry] (js/Promise. (fn [done] (add-ask! id (assoc entry :resolve done)))))
 
@@ -875,13 +856,12 @@
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
 (defn- full-prompt
-  "The system prompt's addition for chat id: Claudia's part, its prompt profile's text (README
-  decision 60), and in Claudia's own chat her part."
+  "The system prompt's addition for chat id: Claudia's part and its prompt profile's text (README
+  decision 60)."
   [id]
   (let [profile-part (some-> (:prompt (settings id)) prompts/profile prompts/prompt-part)]
     (cond-> (codeforms/prompt-for)
-      profile-part (str "\n\n" profile-part)
-      (claudia/her? id) (str "\n\n" claudia/prompt))))
+      profile-part (str "\n\n" profile-part))))
 
 (defn- prompt-version [id] (session/hash36 (full-prompt id)))
 (defn- tools-version [] (session/hash36 (js/JSON.stringify (clj->js (codeforms/mcp-for)))))
@@ -1266,8 +1246,7 @@
   "Why chat id cannot move now, or nil. A move never stops anything: work running and questions
   open are the person's to end first."
   [id]
-  (cond (claudia/her? id) "Claudia's own chat stays on its server."
-        (moving? id) "This chat is moving already."
+  (cond (moving? id) "This chat is moving already."
         (working? id) "This chat is working (a turn, agents or background shells): stop them or let them finish, then move it."
         (seq (:asks (st id))) "This chat waits on a question or an OK: answer it first, then move it."
         :else nil))
@@ -1287,19 +1266,15 @@
 ;; Page actions -----------------------------------------------------------------------------------
 
 (defn- start-spec [id resume? child-env]
-  (let [s (settings id)
-        her (claudia/her? id)]
+  (let [s (settings id)]
     (session/start-spec {:cwd cwd :id id :resume? resume?
-                         ;; The chat's key ties its sudo commands to it (README decision 52); her
-                         ;; chat runs nothing in the background (README decision 48).
-                         :env (cond-> (-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
-                                          (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
-                                her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
+                         ;; The chat's key ties its sudo commands to it (README decision 52).
+                         :env (-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                                  (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
                          :prompt (full-prompt id)
-                         :allowed (cond-> (into tools/allowed-tools system-label/allowed) (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
-                         :disallowed (when her claudia/disallowed)
+                         :allowed (cond-> (into tools/allowed-tools system-label/allowed) (bookmarks/on?) (into bookmarks/allowed))
                          :model (:model s) :effort (:effort s)
-                         :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))
+                         :mcp (codeforms/mcp-for)
                          :edit-tools session/edit-tools-matcher :worktrees? (worktree/on?)})))
 
 (defn- start-session!

@@ -1,6 +1,6 @@
 (ns claudia.hub.main-test
   (:require [cljs.test :refer [deftest is testing]]
-            [claudia.hub.claudia :as hclaudia]
+            [claudia.hub.agent-bookmarks :as agent-bookmarks]
             [claudia.hub.config :as config]
             [claudia.hub.main :as main]
             [claudia.hub.pictures :as pictures]))
@@ -88,13 +88,9 @@
   (is (= "/hub/picture/" (subs (pictures/url-of "a@b.c" 5) 0 13)))
   (is (nil? (pictures/url-of "a@b.c" nil))))
 
-(deftest claudia-calls-need-the-servers-key-and-a-profile-there
-  (is (= "no server named" (hclaudia/caller-problem "" "a@b" true true)))
-  (is (= "not that server's key" (hclaudia/caller-problem "destiny" "a@b" false true)))
-  (is (= "no person named" (hclaudia/caller-problem "destiny" "" true true)))
-  (is (= "that person has no profile on that server" (hclaudia/caller-problem "destiny" "a@b" true false)))
-  (is (nil? (hclaudia/caller-problem "destiny" "a@b" true true)))
-  (is (= "/api/chat-ops/stop" (hclaudia/op-target "stop")))
-  (is (nil? (hclaudia/op-target "delete")))
-  (is (= {:server "box" :id "c" :ref "box/c" :title "T" :color "jade" :at 5}
-         (hclaudia/row-of "box" {:id "c" :title "T" :scene "big" :color "jade" :at 5}))))
+(deftest bookmark-calls-need-the-servers-key-and-a-profile-there
+  (is (= "no server named" (agent-bookmarks/caller-problem "" "a@b" true true)))
+  (is (= "not that server's key" (agent-bookmarks/caller-problem "box" "a@b" false true)))
+  (is (= "no person named" (agent-bookmarks/caller-problem "box" "" true true)))
+  (is (= "that person has no profile on that server" (agent-bookmarks/caller-problem "box" "a@b" true false)))
+  (is (nil? (agent-bookmarks/caller-problem "box" "a@b" true true))))

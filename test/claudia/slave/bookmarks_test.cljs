@@ -7,6 +7,11 @@
 
 (defn- t [args] (b/target args "home" "/home/ana/Work" "/home/ana" dirs))
 
+(deftest bookmarks-are-on-only-with-all-four-settings
+  (is (= {:url "u" :server "s" :key-file "k" :email "e"}
+         (b/config #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s" :CLAUDIA_HUB_KEY_FILE "k" :CLAUDIA_OWNER_EMAIL "e"})))
+  (is (nil? (b/config #js {:CLAUDIA_HUB_URL "u" :CLAUDIA_SERVER_NAME "s" :CLAUDIA_HUB_KEY_FILE "k"}))))
+
 (deftest target-resolves-on-this-server
   (is (= {:server "home" :folder "/home/ana/Work"} (t {})))
   (is (= {:server "home" :folder "/home/ana/Work/app"} (t {:folder "app"})))

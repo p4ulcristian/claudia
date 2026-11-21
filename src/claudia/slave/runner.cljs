@@ -11,8 +11,6 @@
             [claudia.shared.protocol :as p]
             [claudia.slave.activity :as activity]
             [claudia.slave.api :as api]
-            [claudia.slave.claudia :as claudia]
-            [claudia.slave.chat-ops :as chat-ops]
             [claudia.slave.chats :as chats]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.history :as history]
@@ -100,8 +98,8 @@
 
 (defn frame-gate
   "What to do with a page frame of type frame-type before its chat: :unknown (no such frame),
-  :read-only (a read-only caller may not send it), :hello, :new, :claudia (her own chat), :no-chat
-  (its chat is not known) or :chat."
+  :read-only (a read-only caller may not send it), :hello, :here, :new, :no-chat (its chat is not
+  known) or :chat."
   [frame-type read-only chat-known]
   (cond
     (not (contains? p/page->runner frame-type)) :unknown
@@ -109,7 +107,6 @@
     (= frame-type "hello") :hello
     (= frame-type "here") :here
     (= frame-type "new") :new
-    (= frame-type "claudia") :claudia
     (not chat-known) :no-chat
     :else :chat))
 
@@ -238,11 +235,6 @@
            (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)
            (send! c {:type "created" :chat id :id (:id f)}))
-    :claudia (if (claudia/on?)
-               (let [id (claudia/ensure-chat!)]
-                 (chats-changed)
-                 (send! c {:type "claudia" :chat id}))
-               (send! c {:type "error" :text "Claudia's own chat is not on this server."}))
     :no-chat (send! c {:type "error" :chat chat :text "No such chat."})
     :chat (on-chat-frame c f chat)))
 
@@ -310,23 +302,6 @@
   (let [[_ chat-id sub] (re-matches #"/api/chats/([^/]+)/(.+)" url)]
     [(some-> chat-id js/decodeURIComponent) sub]))
 
-(defn- chat-ops-fns
-  "What the chat operations over HTTP do (claudia.slave.chat-ops) for caller who: the same as the
-  socket's frames, a message logged with its sender."
-  [who]
-  {:rows chats/rows
-   :known? known?
-   :new! (fn [text folder]
-           (doto (chats/new-chat! text folder nil {} nil) (activity/note-message! (:profile who) who)))
-   :send! (fn [chat text]
-            (activity/note-message! chat (:profile who) who)
-            (wake-with! chat text nil false nil nil))
-   :archive! (fn [chat archived]
-               (store/update! chat {:archived archived})
-               (chats/session-follows-row! chat)
-               (chats-changed))
-   :stop! chats/stop!})
-
 (defn- on-request [^js req ^js res]
   (let [who (caller req)
         url (first (str/split (.-url req) #"\?"))
@@ -339,7 +314,6 @@
       :root (root-call req res (subs url (count "/api/root/")))
       :ssh (ssh-cert/call req res (subs url (count "/api/ssh/")))
       nil (cond
-            (chat-ops/handle req res (chat-ops-fns who)) nil
             (move/handle req res url who) nil
             (video/handle req res url who) nil
             (codeforms/handle req res url who {:scene-of chats/scene-of :work chats/cwd

@@ -9,8 +9,8 @@
             ["http" :as http]
             ["path" :as path]
             [clojure.string :as str]
+            [claudia.hub.agent-bookmarks :as agent-bookmarks]
             [claudia.hub.broker :as broker]
-            [claudia.hub.claudia :as claudia]
             [claudia.hub.config :as config]
             [claudia.hub.github :as github]
             [claudia.hub.health :as health]
@@ -203,8 +203,8 @@
         own? (or (= pathname "/hub/me") server-name)]
     (cond
       (= pathname "/hub/alive") (alive res)
-      ;; A server's call for Claudia's own chat: its hub key, no login (README decision 48).
-      (and (= pathname "/hub/server/claudia") (= "POST" (.-method req))) (claudia/call req res)
+      ;; An agent's bookmark tools: its server's hub key, no login (README decisions 67, 112).
+      (and (= pathname "/hub/server/claudia") (= "POST" (.-method req))) (agent-bookmarks/call req res)
       ;; A runner's SSH certificate for its agent user: its server's hub key, no login (decision 53).
       (and (= pathname "/hub/server/ssh-cert") (= "POST" (.-method req))) (ssh-ca/call req res)
       ;; The SSH authority's public key, for every server's TrustedUserCAKeys: no login, no secret.

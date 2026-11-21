@@ -82,13 +82,12 @@
 (defn list-rows
   "Every shown server's chats in one list, each with its :server and :off (its socket not open),
   those in-list? only. In the order the chats were started (the TypeScript Claudia's list): a new chat
-  sits last. Claudia's own chat is in no list: her face opens it (README decision 48)."
+  sits last."
   [servers archived? hidden & [open]]
   (->> servers
        (remove (fn [[s]] (hidden s)))
        (mapcat (fn [[s {:keys [rows status]}]]
                  (map #(assoc % :server s :off (not= :open status)) (vals rows))))
-       (remove :claudia)
        (filter #(in-list? % archived? open))
        (sort-by events/list-order)))
 
@@ -172,13 +171,6 @@
  (fn [db]
    (sidebar-pure/fresh-chat (assoc (select-keys db [:open :pending-new :servers :new-settings :new-server])
                                    :ro (events/read-only? db (events/default-server db))))))
-
-(rf/reg-sub
- :open-claudia?
- ;; Whether the open chat is Claudia's own (README decision 48): it wears her look (decision 50).
- (fn [db]
-   (let [[s c] (:open db)]
-     (boolean (get-in db [:servers s :rows c :claudia])))))
 
 (rf/reg-sub
  :open-color

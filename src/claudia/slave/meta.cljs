@@ -6,7 +6,6 @@
   the Agent SDK a new session gets (README decision 86)."
   (:require [claudia.node.crypto :as crypto]
             [claudia.shared.text :as text]
-            [claudia.slave.claudia :as claudia]
             [claudia.slave.sdk-load :as sdk-load]
             [claudia.slave.store :as store]
             [claudia.slave.tokens :as tokens]))
@@ -216,6 +215,4 @@
          :accountLabel (:name (tokens/current profile))
          :defaultEfforts (vec (store/kv "" "defaultEfforts"))
          :plans (mapv #(select-keys % [:key :name]) (tokens/saved))
-         :planKey (:key (tokens/current profile))
-         ;; Claudia's own chat is on this server (README decision 48): her face opens it here.
-         :claudia (claudia/on?)))
+         :planKey (:key (tokens/current profile))))
