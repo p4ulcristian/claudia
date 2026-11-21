@@ -164,3 +164,23 @@
   [plans picked default-key]
   (let [by-key (into {} (map (juxt :key identity)) plans)]
     (or (by-key picked) (by-key default-key))))
+
+
+;; ---- a background task's end as a card (README decision 108) ----
+
+(defn task-tone
+  "A task card's colour: :bad (failed, or a command's exit code not 0), :off (stopped or killed),
+  else :good."
+  [{:keys [status state]}]
+  (let [code (some-> (re-find #"exit code (-?\d+)" (str state)) second js/parseInt)]
+    (cond
+      (or (= "failed" status) (and code (not (zero? code)))) :bad
+      (#{"stopped" "killed"} status) :off
+      :else :good)))
+
+(def task-long-chars "A card's answer longer than this folds to a few lines, with More to open it." 280)
+
+(defn task-long?
+  "Whether a task card's body folds."
+  [body]
+  (or (> (count (str body)) task-long-chars) (> (count (re-seq #"\n" (str body))) 4)))

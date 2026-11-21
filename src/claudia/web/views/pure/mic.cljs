@@ -28,6 +28,12 @@
       (<= dx (- drag-px)) :add
       :else :send)))
 
+(defn circle-way
+  "What a drag chooses on a voice message's circle (README decision 107): the mic's way, but left
+  skips all of that chat's waiting messages (:skip) instead of adding to a draft."
+  [dir]
+  (if (= dir :add) :skip dir))
+
 (def ring-in
   "The move ring's inner edge, px from the mic's centre: just outside the petals (petal-reach). A
   finger that reaches it while holding a mic that moves keeps recording and the mic follows it;
@@ -35,6 +41,19 @@
   124)
 
 (def ring-out "The move ring's outer edge, px from the mic's centre." 148)
+
+(defn arc-letters
+  "Where each letter of a word goes when it is written along a circle of radius r, centred on angle a
+  (radians, 0 right, y down), widths its letters' widths in px: [{:angle :turn}], the angle of the
+  letter's middle and its turn. Over the middle it runs clockwise, under it counterclockwise, so the
+  word always reads upright, left to right."
+  [widths r a]
+  (let [dir (if (neg? (js/Math.sin a)) 1 -1)
+        start (- a (* dir (/ (reduce + widths) 2 r)))]
+    (mapv (fn [before w]
+            (let [t (+ start (* dir (/ (+ before (/ w 2)) r)))]
+              {:angle t :turn (+ t (* dir (/ js/Math.PI 2)))}))
+          (reductions + 0 widths) widths)))
 
 (defn in-ring?
   "Whether a finger dx, dy px from the mic's centre is in the move ring or past it."

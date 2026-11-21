@@ -1784,7 +1784,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     in a near-white weight 500 right-aligned without a bubble and Claude's in the chat's chalk
     colour (decision 98), and the step chips. Files: `resources/web/css/claudia.css`,
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`, `DESIGN.md`.
-104. Background work ends, Claude carries on (2026-11-21, the user's list, items 25 and 26; Claude
+104. Background work ends, Claude carries on (removed by decision 105, which found the real cause; 2026-11-21, the user's list, items 25 and 26; Claude
     started three subagents, said it would combine their branches, test and open a PR once they
     finished, and on the last one's notice replied only "No response requested.", so the turn
     ended and nothing happened until the user asked). Claude Code hands Claude a background task's
@@ -1819,6 +1819,73 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
+107. The big mic is the open chat's; other chats talk from their circles (2026-11-21, the user's
+    calls one at a time). The mic never takes another chat's colour, name, voice or bars ("they
+    are hijacking the main microphone button ... the main microphone should be always about the
+    main chat"): a hold always talks to the open chat. A chat read aloud shows on its own circle,
+    the bars moving on it (dots while its sound is made), its name and voice beside the mic in its
+    colour; only the open chat's own reply moves the bars on the mic, and a tap there stops it. A
+    tap on the mic while another chat reads starts that chat's cut message again and says to hold.
+    A hold on the circle of the chat reading talks back to it. Skipping: a tap on the playing
+    circle skips to that chat's next message (as before), and a held circle's left petal is skip
+    all instead of add: let go there and the clip is thrown away and all that chat's waiting
+    messages are marked heard. Stop and drop: a hold (not a tap) on the mic or a circle stops the
+    reading at once and marks all of the stopped chat's waiting messages heard, so its circle goes
+    ("only the new message will be relevant"). Read is heard: opening a chat marks its waiting
+    voice messages heard, here and on every device through its runner, and stops its reading; a
+    reply that comes while the chat is open is still read aloud. The move ring's word is written
+    along the ring, upright. Instead of: the mic wearing the chat being read (decision 21) and a
+    hold replying to it (decision 93), stopped messages staying unheard on their circle, a chat
+    opened keeping its voice messages, "move" written flat. Files:
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/mic_flower.cljs`,
+    `src/claudia/web/views/voice_circles.cljs`, `src/claudia/web/views/pure/mic.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/speech.cljs`, `resources/web/css/claudia.css`.
+
+106. Claude's first output in a turn is one line in the chat, before any tool call (2026-11-21, the
+    user: "Could we make Claudia answer very fast? It doesn't have to act very fast, but now it
+    can't answer for a while; it thinks a lot, then it talks."). Measured over the last seven
+    days' session files (3840 turns): the first spoken line came after 12 s at the median and 43 s
+    at the 90th percentile; turns that spoke before any tool took 4.6 s, turns that ran tools first
+    (60% of all) 21 s. The wait is the work before the first word, not the thinking (94% of
+    thinking blocks are empty: the API hides the text on these models). So the system prompt's
+    chat section says: the first output of every turn is one short line saying what was heard and
+    what comes next, before any tool call and before any drawing; the thinking and the tools
+    follow it; small talk and a known answer are that one line and nothing else. The request
+    start itself (about 4 s to the first block, the context's size) stays. Rejected: a fast-mode
+    switch per chat (2x plan usage, and the tools would still come before the line; it may come
+    later as an addition), a thinking-progress counter on the Thinking chip (nothing gets faster),
+    a cheap model's greeting ahead of the real reply (its own start eats the gain and it can
+    contradict the answer). Measured again the same way after a week of use.
+
+105. A turn Claude Code starts by itself runs, so nothing closes its session under it (2026-11-21,
+    the user's "it happened again"). Decision 104 was built on a wrong reading: every "No response
+    requested." after a background task's end (14 in three days of session files) is Claude Code's
+    own placeholder (model `<synthetic>`, 0 tokens), written when a session resumes over a turn that
+    never got its answer. The answer was lost because the runner closed the session while that turn
+    waited for it: a turn Claude Code starts after a background task's end counted as running only
+    from its first streamed words, so a stale session (other tools or instructions after an update)
+    was closed by `restart-if-stale!` the moment the last agent ended, or by `settled!` after the
+    30 s init wait while a big chat's first answer was still coming; `move-to-newest-sdk!` and the
+    idle close had the same gap. Now the turn runs from its `init` (`turns/init-starts-running?`),
+    and no stale restart happens while the chat settles (`turns/stale-restart?`): the settle wait
+    sees the notice's turn start, and the close comes after that turn's result. Removed: decision
+    104's nudge (it watched for a reply Claude never writes) and its prompt paragraph. Instead of:
+    keeping the nudge as a safety net. Files: `src/claudia/slave/chats.cljs`,
+    `src/claudia/slave/chats/turns.cljs`.
+108. A background task's end is a card (2026-11-21, the user: "these cards in the chat look pretty
+    bad ... the ones which say that background agent finished, we need those styles"). The note a
+    finished background task leaves in the chat was a dashed code box with Claude Code's raw line,
+    and an agent's whole answer showed there as monospace with its Markdown marks. Now it is a card:
+    a coloured edge and mark for how it went (green done, red failed or a command's exit code not
+    0, grey stopped or killed), the agent's name or "Background command" with its state in words
+    ("finished", "completed (exit code 0)"), a command on one mono line, and the agent's answer as
+    Markdown, folded to four lines with More. The runner reads the card from the session file's
+    notice (`<status>`, `<summary>`, `<result>`, unescaped) and from the live `task_notification`
+    (its status, its summary, the task's description); other notes (slash command output, move
+    notes, Claudia's nudge) keep the code box. Instead of: every note in the dashed mono box.
+    Files: `src/claudia/slave/history.cljs`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`,
+    `resources/web/css/claudia.css`, `PROTOCOL.md`.
 
 105. One layout on every screen wider than a phone, touch or mouse (2026-11-21, the user's call:
     "desktop would get the tablet view, because it's almost the same"). The two wide layouts

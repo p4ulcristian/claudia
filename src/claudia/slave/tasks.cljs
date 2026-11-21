@@ -590,12 +590,12 @@
   [chat id]
   (part-of-agent? (get @tasks chat) id))
 
-(defn task-name
-  "A chat's task's name (its description), or nil when the task is not known."
-  [chat id]
-  (get-in @tasks [chat id :name]))
-
 (defn background?
   "A task Claude put in the background (its end comes as a notice)."
   [chat id]
   (boolean (get-in @tasks [chat id :background])))
+
+(defn task-name
+  "A chat's task's name (its description), or nil when the task is not known."
+  [chat id]
+  (get-in @tasks [chat id :name]))
