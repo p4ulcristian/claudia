@@ -34,7 +34,7 @@
             (js/window.removeEventListener "blur" close))))
    []))
 
-(defn- use-in-view!
+(defn use-in-view!
   "The menu in box, opened at x y, kept inside the page's visible layer (the body; above a phone's
   keyboard while it is up)."
   [box x y set-pos deps]
@@ -48,7 +48,10 @@
      nil)
    deps))
 
-(defn- inside-of [box] (fn [t] (some-> (.-current box) (.contains t))))
+(defn inside-of
+  "Whether a node lies inside the element box (a ref) holds."
+  [box]
+  (fn [t] (some-> (.-current box) (.contains t))))
 
 (defn- swatch-row [cs k color act taken]
   (for [c cs
@@ -85,7 +88,7 @@
   (let [cref (order/ref-of {:server server :id chat})]
     (when (order/group-of @(rf/subscribe [:order-items]) cref) cref)))
 
-(defn- menu-items [{:keys [k forking error]} {:keys [title color archived]} {:keys [close act renaming set-renaming]}]
+(defn- menu-items [{:keys [k forking? error]} {:keys [title color archived]} {:keys [close act renaming set-renaming]}]
   [:<>
    (if (= color "ash")
      [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch [:ops/color k "wake"]))} "Make active"]
@@ -93,10 +96,10 @@
    (if renaming
      (rename-input k title close set-renaming)
      [:button.cm-item {:role "menuitem" :on-click #(set-renaming true)} "Rename"])
-   [:button.cm-item {:role "menuitem" :disabled (boolean forking)
+   [:button.cm-item {:role "menuitem" :disabled forking?
                      :title "A new chat with this one up to its last finished turn, in the same folder"
                      :on-click #(rf/dispatch [:ops/fork k nil])}
-    (if forking "Forking…" "Fork chat")]
+    (if forking? "Forking…" "Fork chat")]
    (when error [:div.cm-error error])
    [:button.cm-item {:role "menuitem" :title "Open this chat with Files in the right half (README decision 70)"
                      :on-click (act #(rf/dispatch [:folders/open {:chat k}]))}
@@ -111,8 +114,9 @@
    [:button.cm-item {:role "menuitem" :on-click (act #(rf/dispatch (if archived [:chat/archive k false] [:archive/ask k])))}
     (if archived "Unarchive" "Archive")]])
 
-(defn- menu-box [{:keys [k x y error] :as m} row]
-  (let [box (h/use-ref nil)
+(defn- menu-box [{:keys [k x y] :as menu} row]
+  (let [{:keys [error] :as m} (merge menu (pure/fork-state @(rf/subscribe [:fork]) k))
+        box (h/use-ref nil)
         [pos set-pos] (h/use-state {:left x :top y})
         [renaming set-renaming] (h/use-state false)
         close #(rf/dispatch [:ops/menu nil])

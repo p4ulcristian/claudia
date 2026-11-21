@@ -192,7 +192,7 @@
 
 /* ---------- Chalk for the parts above and below ----------
    The colour (--ink) through a baked mask (--ring) on a ::before 2px bigger than the box. */
-.chalk-box::before, .explain-note::before, .rbar::before, .rbar-chip::before {
+.chalk-box::before, .rbar::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -202,7 +202,7 @@
 }
 .edge-line::before, .f-arrow::before { inset: -2px; }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.rbar, .rbar-chip {
+.rbar {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
   --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
@@ -223,17 +223,18 @@
 .rbar-rail { right: 0; background: var(--line); }
 .rbar-fill { background: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .rbar-tick { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--panel2); border: 1.5px solid var(--muted); pointer-events: none; transition: transform 0.1s; }
-.rbar-track.packed .rbar-tick:not(.on) { display: none; }
-.rbar-track.dense .rbar-tick { width: 2px; height: 10px; margin: -5px 0 0 -1px; border: 0; border-radius: 1px; background: var(--muted); opacity: 0.6; }
+.rbar-track.packed .rbar-tick:not(.on):not(.num) { display: none; }
+.rbar-track.dense .rbar-tick:not(.num) { width: 2px; height: 10px; margin: -5px 0 0 -1px; border: 0; border-radius: 1px; background: var(--muted); opacity: 0.6; }
 .rbar-tick.hover { transform: scale(1.35); opacity: 1; }
-.rbar-tick.on, .rbar-track.dense .rbar-tick.on { width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 0; border-radius: 50%; opacity: 1; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); z-index: 1; }
+.rbar-tick.on:not(.num), .rbar-track.dense .rbar-tick.on:not(.num) { width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 0; border-radius: 50%; opacity: 1; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); z-index: 1; }
+/* A picture's step number (README decision 100): every one where they fit, else every 5th or 10th and
+   the first, the last and the shown one; the shown one filled in the chat's colour. */
+.rbar-tick.num { width: auto; min-width: 18px; height: 18px; margin: -9px 0 0; padding: 0 4px; translate: -50% 0; border-width: 1px; border-radius: 9px;
+  display: grid; place-items: center; font: 600 10.5px/1 var(--mono); color: var(--muted); background: var(--bg2); }
+.rbar-tick.num.hover { transform: none; color: var(--fg); border-color: var(--fg); }
+.rbar-tick.num.on { z-index: 1; border-color: var(--accent); background: var(--accent); color: var(--on-hue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.rbar-tick.loading { animation: breathe 1s ease-in-out infinite; }
 .rbar-tip { position: fixed; left: -9999px; top: 0; max-width: min(320px, 90vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 9px; border-radius: 7px; background: var(--panel2); border: 1px solid var(--line); box-shadow: 0 4px 14px rgb(0 0 0 / 0.3); font-size: 12px; pointer-events: none; z-index: 5; }
-.rbar-chip { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 99px; font: 600 11.5px var(--sans); white-space: nowrap; --ring: var(--chalk-r12-2); }
-.rbar-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-/* The bar is hidden until the mouse comes near (not on phones): its dots rest meanwhile. */
-.rbar-chip.past { color: var(--violet); --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
-.rbar-chip.past:hover { --chalk-bg: color-mix(in srgb, var(--violet) 26%, var(--violet-bg)); }
-@container (max-width: 430px) { .rbar-chip { padding: 0 8px; } .rbar-chip-text { display: none; } }
 /* The snapshot camera: a PNG of the picture shown, copied or saved. */
 .rbar-snap { position: relative; }
 .rbar-snap svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }

@@ -1,7 +1,7 @@
 (ns claudia.slave.api
   "The runner's HTTP calls beyond /api/me and the vault read (PROTOCOL.md, \"Runner HTTP: chat
   operations\"):
-  uploads, search, fork, explain, the limits kept per token (the front collects them for the hub), the working folder's project, all ~/Work sessions, the chat
+  uploads, search, fork, the limits kept per token (the front collects them for the hub), the working folder's project, all ~/Work sessions, the chat
   menu's changes, and Settings' tokens."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             [claudia.node.http :as io]
@@ -9,7 +9,6 @@
             [clojure.string :as str]
             [claudia.slave.chats :as chats]
             [claudia.slave.codeforms :as codeforms]
-            [claudia.slave.explain :as explain]
             [claudia.slave.fork :as fork]
             [claudia.slave.history :as history]
             [claudia.slave.meta :as meta]
@@ -157,23 +156,6 @@
         (.then (fn [fid] (chats/refresh-title! fid) (changed!) {:id fid}))
         (.catch (fn [e] {:error (.-message e) :status 409})))))
 
-(defn- claude-token
-  "The token chat id runs on, or nil when there is none here."
-  [id]
-  (try (chats/token-of id) (catch :default _ nil)))
-
-(defn- explain-step [req id]
-  (if-not (known? id)
-    no-chat
-    (.then (io/read-json req max-body)
-           (fn [{:keys [step]}]
-             (let [token (claude-token id)]
-               (cond (not (string? step)) {:error "step: a tool call's id"}
-                     (not (seq token)) {:error "No Claude token on this runner." :status 503}
-                     :else (.then (explain/explain chats/cwd id step token
-                                                   (some #(when (= step (:id %)) %) (:turn (get @chats/state id))))
-                                  (fn [t] {:text t}))))))))
-
 (defn- patch-chat [req id]
   (.then (io/read-json req max-body)
          (fn [b]
@@ -243,7 +225,6 @@
    ["GET" "sent"] :sent
    ["GET" "shown"] :shown
    ["POST" "fork"] :fork
-   ["POST" "explain"] :explain
    ["PATCH" nil] :patch-chat})
 
 (defn route
@@ -283,7 +264,6 @@
       :sent (.then (find-image id {:uuid a :n (js/Number b)}) #(image-reply res %))
       :shown (shown-reply req res id a)
       :fork (reply (fork-chat req id))
-      :explain (reply (explain-step req id))
       :patch-chat (reply (patch-chat req id)))))
 
 (defn handle

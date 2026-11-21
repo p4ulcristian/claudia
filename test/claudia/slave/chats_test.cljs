@@ -334,6 +334,12 @@
   (is (re-find (re-pattern (str "never over " tools/reply-limit " characters")) tools/system-append))
   (is (contains? tools/form-help "notes")))
 
+(deftest claude-is-told-of-steps-and-can-read-them
+  (is (str/includes? tools/system-append "Steps: the picture is a numbered row of steps"))
+  (is (some #{"mcp__picture__steps"} tools/allowed-tools))
+  (is (contains? (tools/picture-mcp ["graph"]) :steps))
+  (is (= "integer" (get-in (tools/picture-mcp ["graph"]) [:draw :inputSchema :properties :from :type]))))
+
 (deftest last-replies-are-the-texts-after-the-last-step
   (is (= ["b" "a"] (map :id (turns/last-replies [{:id "t" :role "tool"} {:id "a" :role "assistant"} {:id "b" :role "assistant"}]))))
   (is (= [] (turns/last-replies [{:id "a" :role "assistant"} {:id "t" :role "tool"}]))))

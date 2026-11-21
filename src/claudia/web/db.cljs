@@ -58,7 +58,6 @@
    :search nil             ; {:text :found {server [Found]}}
    :attach {}              ; draft key -> [attachment]
    :projects {}            ; [server folder] -> {:name :logo}
-   :explain {}             ; [server chat step] -> {:busy :text :error :open}
    :menu nil               ; {:k [server chat] :x :y}: the chat menu
    :tokens nil :github-login nil :sentinel-key nil
    ;; a new chat's picks, kept from the last chat (events/carried-picks) across reloads; its colour

@@ -1,7 +1,7 @@
 (ns claudia.slave.fork
   "Forking a chat (the TypeScript Claudia's src/fork.ts): a new Claude Code session holding the chat
-  up to the end of one turn, with Claudia's own rows for the turns it keeps (settings, pictures,
-  file changes) copied over and a colour of its own. The fork works in the same folder:
+  up to the end of one turn, with Claudia's own rows for the turns it keeps (settings, pictures)
+  copied over and a colour of its own. The fork works in the same folder:
   files on disk are not touched."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             ["node:fs/promises" :as fsp]
@@ -78,7 +78,7 @@
 
 (defn- copy-rows!
   "The fork's own rows: its chat (a title and colour of its own), settings, the kept
-  turns' pictures and changes, and its picture: the last one of the turns it keeps. Returns its id."
+  turns' pictures, and its picture: the last one of the turns it keeps. Returns its id."
   [id fork turns colour]
   (let [r (store/chat id)
         t (js/Date.now)]

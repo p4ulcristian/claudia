@@ -11,7 +11,6 @@
             [claudia.shared.protocol :as p]
             [claudia.slave.activity :as activity]
             [claudia.slave.api :as api]
-            [claudia.slave.changes :as changes]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.chat-ops :as chat-ops]
             [claudia.slave.chats :as chats]
@@ -30,6 +29,7 @@
             [claudia.slave.secret :as secret]
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.ssh-cert :as ssh-cert]
+            [claudia.slave.steps :as steps]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.folders :as folders]
             [claudia.slave.system-label :as system-label]
@@ -128,15 +128,16 @@
 (defn- wake-with!
   "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
   now: the message and every message queued before it go in at once, the running turn stopped for
-  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil)."
-  [chat text images now msg-id]
+  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil); reminder:
+  said to Claude after the text, not shown (nil: none)."
+  [chat text images now msg-id reminder]
   (if (chats/moving? chat)
     (chats/moving-error! chat)
     (do (store/update! chat {:archived false})
         (chats/wake! chat)
         (if now
-          (chats/send-after-stop! chat text images msg-id)
-          (chats/send-text! chat text images msg-id))
+          (chats/send-after-stop! chat text images msg-id reminder)
+          (chats/send-text! chat text images msg-id reminder))
         (chats-changed))))
 
 (defn msg-id
@@ -173,7 +174,8 @@
         images (sent-images f)]
     (when (or (seq (:text f)) (seq files) (seq images))
       (activity/note-message! chat (:profile c) c)
-      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
+      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)
+                  (steps/viewing-note (pictures/listing chat) (:viewing f))))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
 (defmethod on-chat-frame "unqueue" [_ f chat] (when-let [m (msg-id f)] (chats/unqueue! chat m)))
@@ -210,10 +212,6 @@
   (.then (chats/agent-git chat (str (:agent f)) (str (:rev f)))
          (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
 
-(defmethod on-chat-frame "diff" [c f chat]
-  (send! c (merge {:type "diff" :chat chat :change (:change f)}
-                  (or (chats/change-texts chat (:change f)) {:error "No such change."}))))
-
 ;; The editor form: the user's typing saved into the picture, and its Send.
 (defmethod on-chat-frame "code_edit" [_ f chat]
   (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat)))
@@ -223,7 +221,7 @@
     (chats/set-scene! chat scene)
     (when (seq text)
       (activity/note-message! chat (:profile c) c)
-      (wake-with! chat text nil false nil))))
+      (wake-with! chat text nil false nil nil))))
 
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))
@@ -322,7 +320,7 @@
            (doto (chats/new-chat! text folder nil {} nil) (activity/note-message! (:profile who) who)))
    :send! (fn [chat text]
             (activity/note-message! chat (:profile who) who)
-            (wake-with! chat text nil false nil))
+            (wake-with! chat text nil false nil nil))
    :archive! (fn [chat archived]
                (store/update! chat {:archived archived})
                (chats/session-follows-row! chat)
@@ -392,8 +390,15 @@
   (folders-trash/start! data-dir)
   (listen!))
 
+(defn- drop-snapshot-indexes!
+  "The per-turn git snapshots' index files (RUNNER_DATA/index) went with the changed-files tracking
+  (README decision 97): any left from before go."
+  []
+  (fs/rmSync (path/join data-dir "index") #js {:recursive true :force true}))
+
 (defn main [& _]
   (store/open! data-dir)
+  (drop-snapshot-indexes!)
   (chats/colour-every-chat!)
   (uploads/set-root! data-dir)
   (video/set-root! data-dir)
@@ -404,7 +409,6 @@
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed :speak speak-to!})
   (reset! secrets-list/send-pages! send-pages!)
-  (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame profile)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
   (.then secret/ready start!))

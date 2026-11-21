@@ -1,6 +1,6 @@
 (ns claudia.slave.move.rules
   "Moving a chat to another server (README decision 82), the runner's pure parts: what a chat's copy
-  carries (its row, kv values, pictures, file changes and session files, as lines of JSON), where a
+  carries (its row, kv values, pictures and session files, as lines of JSON), where a
   copied file goes on the target, and the target's row for it."
   (:require ["node:path" :as path]
             [clojure.string :as str]
@@ -43,13 +43,11 @@
 
 (defn record-problem
   "What is wrong with one line of a copy of chat id (data), or nil. Records: chat {id row kv},
-  picture {turn scene at}, change {turn path before after added removed status skipped at},
-  file {path data (base64)}, end {}."
+  picture {turn scene at}, file {path data (base64)}, end {}."
   [id r]
   (case (:type r)
     "chat" (when-not (and (= id (:id r)) (map? (:row r)) (map? (:kv r))) "the chat record is not this chat's")
     "picture" (when-not (and (string? (:turn r)) (string? (:scene r)) (number? (:at r))) "a picture without its turn, scene or time")
-    "change" (when-not (and (string? (:turn r)) (string? (:path r)) (string? (:status r))) "a file change without its turn, path or status")
     "file" (when-not (and (cm/rel-ok? id (:path r)) (string? (:data r))) (str "not a file of this chat: " (:path r)))
     "end" nil
     (str "unknown record " (:type r))))

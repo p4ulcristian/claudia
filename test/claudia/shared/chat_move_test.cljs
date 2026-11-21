@@ -41,7 +41,7 @@
 
 (def ^:private src
   {:messages 4 :last "u4" :files [{:path "a.jsonl" :size 10 :sha256 "aa"} {:path "a/s/b.jsonl" :size 3 :sha256 "bb"}]
-   :pictures 2 :changes 1})
+   :pictures 2})
 
 (deftest check-problem-passes-only-the-same-chat
   (is (nil? (cm/check-problem "home" "work" src src)))
@@ -55,5 +55,4 @@
          (cm/check-problem "home" "work" src (assoc-in src [:files 1 :sha256] "cc"))))
   (is (= "The copy of a/s/b.jsonl on work is not the one on home."
          (cm/check-problem "home" "work" src (update src :files #(subvec % 0 1)))) "a missing file")
-  (is (= "The copy on work has 1 pictures, home 2." (cm/check-problem "home" "work" src (assoc src :pictures 1))))
-  (is (= "The copy on work has 0 file changes, home 1." (cm/check-problem "home" "work" src (assoc src :changes 0)))))
+  (is (= "The copy on work has 1 pictures, home 2." (cm/check-problem "home" "work" src (assoc src :pictures 1)))))

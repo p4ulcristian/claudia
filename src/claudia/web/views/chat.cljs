@@ -13,12 +13,13 @@
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.md :as md]
-            [claudia.web.views.voice-back :as voice-back]
+            [claudia.web.pictures :as pictures]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.head :as head]
             [claudia.web.views.mic :as mic]
+            [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
@@ -33,21 +34,11 @@
                         :aria-label label}
      @(rf/subscribe [:server-mark server])]))
 
-;; ---- the picture of a turn, from its user message ----
-
-(rf/reg-sub :viewing-msg (fn [db [_ k]] (get-in db [:viewing-msg k])))
-
-(rf/reg-event-fx
- :chat/view-turn
- ;; The picture (and changes) of the turn a user message started, or back to live (nil).
- (fn [{:keys [db]} [_ k msg-id]]
-   (let [idx (when msg-id (pure/turn-picture (get-in db [:pictures k]) (get-in db [:chats k :messages]) msg-id))]
-     (if (nil? idx)
-       {:db (-> db (update :viewing dissoc k) (update :viewing-msg dissoc k))}
-       {:db (assoc-in db [:viewing-msg k] msg-id)
-        :fx [[:dispatch [:picture/pick idx]]]}))))
+;; ---- the pictures of a chat, and the one looked at ----
 
 (rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
+
+(rf/reg-sub :viewing-turn (fn [db [_ k]] (get-in db [:viewing k])))
 
 ;; ---- messages ----
 
@@ -68,17 +59,6 @@
        (seq t) [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html t))}])
      (when (seq sent) [attach/file-chips server chat sent])]))
 
-(defn- msg-links [ck id {:keys [viewing? picture? files forkable?]}]
-  [:div.msg-links
-   (when forkable?
-     [:button.pic-link.fork-link {:title "A new chat with this one up to the end of this turn, in the same folder"
-                                  :on-click #(rf/dispatch [:ops/fork ck id])}
-      "fork from here"])
-   (when (or picture? (pos? files))
-     [:button.pic-link {:title "Show the picture from this turn"
-                        :on-click #(rf/dispatch [:chat/view-turn ck (when-not viewing? id)])}
-      (pure/turn-links picture? files)])])
-
 (defn- queued-tag
   "Under a queued message: the tag, and its × when it can be taken back (README decision 83)."
   [ck id removable?]
@@ -89,18 +69,15 @@
                        :on-click #(rf/dispatch [:chat/unqueue ck id])}
       "×"])])
 
-(defn- user-msg [ck {:keys [id text images merged]} {:keys [viewing? picture? files forkable? queued? removable?] :as marks}]
-  (let [[server chat] ck]
-    [:div.msg.user {:data-at id :class [(when viewing? "viewing") (when queued? "queued")]
+(defn- user-msg [ck {:keys [id text images]} {:keys [forkable? queued? removable?]}]
+  (let [[server chat] ck
+        menu? (and forkable? (not queued?))]
+    [:div.msg.user {:data-at id :class [(when menu? "forkable") (when queued? "queued")]
                     :title (when queued? "Claude reads this at its next step")}
-     [:div.bubble
+     [:div.bubble (when menu? (msgmenu/handlers ck id))
       (when (and images (pos? images)) [attach/sent-images server chat id images])
       [user-text server chat text]]
-     (when queued? [queued-tag ck id removable?])
-     ;; A message Claude Code took in with other queued sends (merged) keeps each send's voice.
-     (for [m (concat merged [id])] ^{:key m} [voice-back/listen-back m])
-     (when (and (not queued?) (or picture? (pos? files) forkable?))
-       (msg-links ck id marks))]))
+     (when queued? [queued-tag ck id removable?])]))
 
 (rf/reg-event-db :nav/jump-done (fn [db _] (dissoc db :jump-to)))
 
@@ -214,6 +191,22 @@
   [{:keys [box stuck]}]
   (hooks/use-resize box #(when (.-current stuck) (to-bottom! %)) []))
 
+(defn- use-find!
+  "A picture picked on the bar (:find-at, README decision 100): the chat goes to the reply that
+  closed its turn and lights it, or for the live one back to its end, following it again."
+  [{:keys [box stuck]} ck]
+  (let [f @(rf/subscribe [:find-at])]
+    (h/use-effect
+     (fn []
+       (when-let [^js el (and f (= ck (:k f)) (.-current box))]
+         (let [[kind at] (:goal f)]
+           (if (= :end kind)
+             (do (set! (.-current stuck) true) (to-bottom! el))
+             (some-> (.querySelector el (str "[data-at=\"" (js/CSS.escape at) "\"]")) flash!)))
+         (rf/dispatch [:chat/found]))
+       nil)
+     [f])))
+
 (defn- use-load-older!
   "Near the top (or a first page shorter than the column): the next older page."
   [{:keys [box]} ck state msg-count]
@@ -238,21 +231,38 @@
 (def ^:private hello
   [:div.hello [:h2 "What are we working on?"] [:p.muted "Claude answers short here and explains on the right."]])
 
+(defn- step-chip
+  "On the reply that closed a turn which drew a picture: that picture's number n, the slider's
+  (README decision 100). A tap shows it on the board (on a phone, the picture screen too); a tap
+  while it is shown goes back to live."
+  [n shown?]
+  [:button.step-chip {:type "button" :class (when shown? "on") :aria-pressed shown?
+                      :title (if shown? "Back to the live picture" (str "Show picture " n " of this turn"))
+                      :on-click (fn []
+                                  (rf/dispatch (if shown? [:picture/live] [:picture/pick (dec n)]))
+                                  (when (and (not shown?) (db/phone?)) (rf/dispatch [:nav/screen :picture])))}
+   n])
+
+(defn- claude-msg [ck {:keys [id text streaming]} {:keys [steps shown-step]}]
+  (let [n (get steps id)]
+    [:div.msg.claude {:data-at (pure/msg-anchor id) :class (when streaming "streaming")}
+     [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
+     (when-not streaming
+       [:<> (when n [step-chip n (= n shown-step)]) [talk/say-button ck text]])]))
+
 (defn- msg-row
   "One message of the feed: the user's, a note, or Claude's."
-  [ck i {:keys [id role text streaming] :as m} marks]
+  [ck i {:keys [id role text] :as m} marks]
   (case role
     "user" ^{:key id} [user-msg ck m (pure/user-marks m marks)]
     "note" ^{:key (str "note-" id "-" i)} [:pre.note-line text]
-    ^{:key id} [:div.msg.claude {:data-at (first (str/split (str id) #":")) :class (when streaming "streaming")}
-                [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
-                (when-not streaming [talk/say-button ck text])]))
+    ^{:key id} [claude-msg ck m marks]))
 
 (defn- feed-row
   "One block of the feed: a run of steps, a picture a step showed, or a message."
   [ck i b {:keys [running last-i] :as marks}]
   (case (:k b)
-    :steps ^{:key (str "s" (:id b))} [steps/steps ck (:tools b) (and running (= i last-i))]
+    :steps ^{:key (str "s" (:id b))} [steps/steps (:tools b) (and running (= i last-i))]
     :word ^{:key (str "word-" (:id (:tool b)))} [my-words/word-card (:tool b)]
     :shown ^{:key (str "shown-" (:id (:tool b)))} [:div.msg.claude.shown
                                                    [(if (:video (:tool b)) attach/shown-video attach/shown-image)
@@ -317,12 +327,13 @@
         first-id (:id (first msgs))
         since @(rf/subscribe [:turn-since ck])
         pictures @(rf/subscribe [:pictures-of ck])
-        marks {:picture-turns (set (map :turn pictures))
-               :change-turns (frequencies (map :turn (:changes state)))
-               :viewing @(rf/subscribe [:viewing-msg ck])
+        viewing @(rf/subscribe [:viewing-turn ck])
+        marks {:steps (pure/reply-steps pictures (remove :queued msgs) running)
+               :shown-step (when viewing (inc (pictures/shown-index pictures viewing)))
                :read-only? @(rf/subscribe [:read-only?])
                :last-user last-user :running running :last-i (dec (count blocks))}]
     (jump! ck (:more state))
+    (use-find! scroll ck)
     (use-bottom-on-open! scroll ck)
     (use-keep-place! scroll ck first-id)
     (use-bottom-on-send! scroll (count (:outbox oc)))

@@ -24,7 +24,6 @@
             [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
-            [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.meta :as meta]
@@ -37,6 +36,7 @@
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.sentinel-key :as sentinel-key]
             [claudia.slave.shown :as shown]
+            [claudia.slave.steps :as steps]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
             [claudia.slave.system-label :as system-label]
@@ -213,7 +213,7 @@
   (swap-chat! id update :turn view/with-msg msg)
   (emit! id {:type "msg" :msg msg}))
 
-(declare arm-idle! turn-id! restart-if-stale! send-text!)
+(declare arm-idle! restart-if-stale! send-text!)
 
 (declare stop-task! close-session! move-to-newest-sdk!)
 
@@ -279,8 +279,7 @@
     (swap-chat! id assoc :running running)
     (when running
       (swap-chat! id assoc :since (js/Date.now))
-      (unsettle! id)
-      (changes/begin-turn! id (turn-id! id) (:folder (store/chat id))))
+      (unsettle! id))
     (store/update! id {:at (js/Date.now)})
     ;; stopped: the turn the person stopped (the page says "Stopped.").
     (emit! id (cond-> {:type "turn" :running running}
@@ -453,18 +452,56 @@
   [id]
   (when (store/chat id) (current-scene id)))
 
-(defn- draw [id input]
-  (let [prev (current-scene id)
-        {s :scene changed :changed error :error summary :text} (codeforms/draw id prev input (chat-folder id))]
-    (if error
-      (answers/text-result error)
-      (let [turn (turn-id! id)]
-        (swap-chat! id assoc :scene s)
-        (store/save-scene! id s)
-        (pictures/record! id turn prev s)
-        (emit! id {:type "scene" :scene s :changed changed :turn turn})
-        (emit! id {:type "pictures" :pictures (pictures/listing id)})
-        (answers/text-result summary)))))
+(defn- draw-base
+  "The scene a draw call starts from: step from's (steps/from-turn) or the live one; {:scene} or
+  {:error}."
+  [id listing input]
+  (let [{:keys [turn error]} (steps/from-turn listing input)]
+    (cond error {:error error}
+          turn {:scene (or (pictures/one id turn) scene/empty-scene)}
+          :else {:scene (current-scene id)})))
+
+(defn- drawn!
+  "A draw's scene s kept as the chat's picture and turn's step (prev: the picture before it), sent
+  to the page; the steps after it."
+  [id turn prev s changed]
+  (swap-chat! id assoc :scene s)
+  (store/save-scene! id s)
+  (pictures/record! id turn prev s)
+  (let [after (pictures/listing id)]
+    (emit! id {:type "scene" :scene s :changed changed :turn turn})
+    (emit! id {:type "pictures" :pictures after})
+    after))
+
+(defn- draw
+  "The draw tool: input applied to the live picture, or with from to a copy of that step; the result
+  names the step it made or updated (claudia.slave.steps/head)."
+  [id input]
+  (let [listing (pictures/listing id)
+        {base :scene base-error :error} (draw-base id listing input)
+        {s :scene changed :changed error :error summary :text}
+        (when-not base-error (codeforms/draw id base (dissoc input :from) (chat-folder id)))]
+    (if-let [why (or base-error error)]
+      (answers/text-result why)
+      (let [turn (turn-id! id)
+            again? (some? (steps/number-of listing turn))
+            after (drawn! id turn (current-scene id) s changed)]
+        (answers/text-result (str (steps/head (steps/number-of after turn) again? input
+                                              (steps/changes base input changed))
+                                  "\n" summary))))))
+
+(defn- read-steps
+  "The steps tool: the chat's steps listed (no number), or step number's scene (block: that block
+  only)."
+  [id {:keys [number block]}]
+  (let [listing (pictures/listing id)
+        why (when (some? number) (steps/step-error listing number))]
+    (answers/text-result
+     (cond (nil? number) (steps/list-text listing)
+           why why
+           :else (steps/scene-text number (count listing)
+                                   (or (pictures/one id (steps/turn-of listing number)) scene/empty-scene)
+                                   block steps/scene-limit)))))
 
 (defn- sh-out [cmd args]
   (js/Promise. (fn [done]
@@ -486,7 +523,6 @@
       (answers/text-result (str "No folder at " folder ". Nothing changed."))
       (do (when (not= folder (:folder (store/chat id)))
             (store/update! id {:folder folder})
-            (changes/folder-set! id folder (:running (st id)))
             (changed!))
           (-> (js/Promise.all #js [(read-start folder "CLAUDE.md") (read-start folder ".claude/CLAUDE.md")
                                    (sh-out "git" ["-C" folder "status" "--short" "--branch"])])
@@ -504,7 +540,6 @@
       (= folder (:folder (store/chat id))) nil
       :else (do (store/update! id {:folder folder})
                 (store/kv! id "moved" {:folder folder})
-                (when folder (changes/folder-set! id folder (:running (st id))))
                 (changed!)))))
 
 (defn- take-moved-note!
@@ -512,7 +547,7 @@
   [id text]
   (if-let [{:keys [folder]} (store/kv id "moved")]
     (do (store/kv! id "moved" nil)
-        (str text "\n\n<system-reminder>" (answers/moved-note folder cwd) "</system-reminder>"))
+        (text/with-reminder text (answers/moved-note folder cwd)))
     text))
 
 (defn- show-image
@@ -588,6 +623,7 @@
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
     ["picture" "draw"] (draw id args)
+    ["picture" "steps"] (read-steps id args)
     ["picture" "templates"] (answers/text-result (codeforms/template-list))
     ["picture" "save_template"] (answers/text-result (codeforms/save-template! (current-scene id) args))
     ["workspace" "set_folder"] (set-folder id (:path args))
@@ -625,7 +661,7 @@
 
 (defn- folder-from-edit!
   "Claude edited a file while the chat has no folder: the file's project (its git root, else its own
-  folder) becomes the chat's folder, so its changes and logo follow."
+  folder) becomes the chat's folder, so its logo follows."
   [id {:keys [tool_name tool_input]}]
   (let [p (or (:file_path tool_input) (:notebook_path tool_input))]
     (when (and (not= "Bash" tool_name) (string? p) (str/starts-with? p "/") (not (:folder (store/chat id))))
@@ -665,7 +701,6 @@
   (note-effort! id input)
   (case event
     "Stop" (on-stop! id input)
-    "PreToolUse" (changes/before-edit! id (:tool_input input))
     "PostToolUse" (do (worktree/report! (store/chat id) input)
                       (folder-from-edit! id input)
                       {:continue true})
@@ -689,7 +724,7 @@
           :when (= rpc (:rpc entry))]
     (take-ask! id ask-id)))
 
-;; Agents, changes, meters -----------------------------------------------------------------------
+;; Agents, meters --------------------------------------------------------------------------------
 
 (defn- folder-of [id] (:folder (store/chat id)))
 
@@ -835,8 +870,6 @@
 (defn agent-detail [id agent] (tasks/detail cwd id (folder-of id) agent))
 
 (defn agent-git [id agent rev] (tasks/agent-git cwd id agent rev))
-
-(defn change-texts [id change] (store/change-texts id change))
 
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
@@ -1013,9 +1046,7 @@
     (changed!)
     (read-context! id)
     (refresh-title! id)
-    (probe-soon! 8000)
-    (-> (changes/finish! id)
-        (.then (fn [changed-rows] (when (seq changed-rows) (emit! id {:type "changes" :changes changed-rows})))))))
+    (probe-soon! 8000)))
 
 (defn- stream-text-start!
   "A text block starts streaming: a new assistant Msg (its id numbered like the session file's)."
@@ -1258,7 +1289,7 @@
                          :disallowed (when her claudia/disallowed)
                          :model (:model s) :effort (:effort s)
                          :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))
-                         :edit-tools changes/edit-tools :worktrees? (worktree/on?)})))
+                         :edit-tools session/edit-tools-matcher :worktrees? (worktree/on?)})))
 
 (defn- start-session!
   "Starts (resume?: resumes) the chat's Claude Code in the host on token t (account: its name)."
@@ -1348,12 +1379,13 @@
 
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
-  msg-id: the id the page made for it (nil: one is made here)."
-  [id message images msg-id was-live?]
+  msg-id: the id the page made for it (nil: one is made here); reminder: said to Claude after the
+  message, not shown in the chat (nil: none)."
+  [id message images msg-id reminder was-live?]
   (let [msg (turns/sent-msg (or msg-id (str (random-uuid))) message images (boolean (:running (st id))) (js/Date.now))
         ;; The forms news and a folder move's note go as reminders the chat doesn't show (the forms
         ;; only to a session that ran with the old tools); a server move's note shows.
-        [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id message was-live?)))]
+        [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id (text/with-reminder message reminder) was-live?)))]
     (swap-chat! id turns/with-sent msg)
     (store/kv! id "turn" (:id msg))
     (when note (show-server-note! id msg note))
@@ -1364,16 +1396,17 @@
 
 (defn send-text!
   "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames);
-  msg-id: the message's id as the page made it (nil: one is made). Sent while a turn runs, it is
-  queued until Claude takes it in."
-  [id message & [images msg-id]]
+  msg-id: the message's id as the page made it (nil: one is made); reminder: said to Claude after it,
+  not shown (the step the user looks at, claudia.slave.steps/viewing-note). Sent while a turn runs,
+  it is queued until Claude takes it in."
+  [id message & [images msg-id reminder]]
   (if (moving? id)
     (js/Promise.resolve (moving-error! id))
     (-> (js/Promise.resolve)
         (.then (fn []
                  (let [live? (boolean (:live (st id)))]
                    (.then (ensure-session! id) (fn [] live?)))))
-        (.then #(send-now! id message images msg-id %))
+        (.then #(send-now! id message images msg-id reminder %))
         (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
 
 (defn new-chat-colour
@@ -1402,11 +1435,11 @@
   "A message sent with now (README decision 83): while a turn runs it is queued behind the messages
   queued before it, and once Claude Code has it in its queue the turn stops (stop-for-now!); every
   queued message then goes in the next turn, in order. With no turn running it goes at once.
-  msg-id: the message's id as the page made it (or nil)."
-  [id message images msg-id]
+  msg-id: the message's id as the page made it (or nil); reminder as send-text!."
+  [id message images msg-id reminder]
   (let [msg-id (or msg-id (str (random-uuid)))]
     (when (:running (st id)) (swap-chat! id assoc :now {:msg msg-id :queued false}))
-    (send-text! id message images msg-id)))
+    (send-text! id message images msg-id reminder)))
 
 (defn unqueue!
   "The person removed a queued message (its ×): Claude Code drops it unless it took it in already;
@@ -1443,7 +1476,6 @@
     (tasks/load! id (boolean (:live s)))
     {:type "chat" :chat id :title (:title r) :folder (:folder r)
      :agents (tasks/agents cwd id (:folder r))
-     :changes (store/changes id)
      :settings (settings id)
      :model (:model s)
      :effort (:effort-now s)

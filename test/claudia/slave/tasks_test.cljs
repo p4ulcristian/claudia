@@ -2,6 +2,11 @@
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.slave.tasks :as tasks]))
 
+(deftest line-counts-of-an-edit
+  (is (= {:added 2 :removed 1} (tasks/line-counts "a\nb\n" "a\nc\nd\n")))
+  (is (= {:added 1 :removed 0} (tasks/line-counts nil "x\n")))
+  (is (= {:added 0 :removed 0} (tasks/line-counts "same\n" "same\n"))))
+
 (deftest loaded-stops-what-a-gone-session-ran
   (let [saved [{:id "a" :status "running"} {:id "b" :status "running" :end 3} {:id "c" :status "completed"}]]
     (is (= {"a" {:id "a" :status "stopped" :end 9} "b" {:id "b" :status "stopped" :end 3}

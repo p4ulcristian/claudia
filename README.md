@@ -31,7 +31,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
-   (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
+   (removed by decision 97), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
    An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
@@ -226,14 +226,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it, turned with the screen (`screen.orientation.angle`). A data source can be several
     microphones combined, so it names a side, not one hole. Headsets and AirPods show nothing; a
     browser cannot tell, so it shows nothing. The hub's mic log gets `mic` with each start.
-    Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
-    deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
-    (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,
-    PROTOCOL.md), which ties the clips to it. On that message, ▶ plays the clips in spoken order
-    and "heard as" lists each one's raw and cleaned words: bad audio = the voice or the microphone,
-    raw wrong = the speech model, cleaned wrong = the cleanup. On the device that recorded them only
-    (never uploaded), deleted 30 minutes after they were spoken (swept at start and every minute).
-    Files: `src/claudia/web/voice_back.cljs`, `src/claudia/web/views/voice_back.cljs`.
+    Listen back (2026-11-18): removed by decision 96.
     My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
     the listen service hears with each person's own names and terms and cleans the text up. The hub
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
@@ -280,8 +273,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     wears the voice's bars round it in its colour, following the voice as the held mic's bars follow
     yours (2026-11-21, the user's pick of four: bars round it, ripples, bars inside, sound waves;
     `src/claudia/web/views/voice_ring.cljs`, the reply played through an AnalyserNode). One sound at a
-    time (2026-11-21, the user's call): a reply read aloud, your voice played back (decision 20's
-    Listen back) and a 3D story's narrator each claim the sound as they start, and the one playing
+    time (2026-11-21, the user's call): a reply read aloud and a 3D story's narrator each claim
+    the sound as they start, and the one playing
     before stops (a reply stopping that way drops the replies waiting after it, as the page going
     to the background does; `src/claudia/web/sound.cljs`). A reply is heard from its first sentence
     (2026-11-21): the voice service makes a clip a sentence at a time, the hub passes each piece on
@@ -1265,12 +1258,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     channel (no new port): the target says the folder is there; the source holds the chat (its
     Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
     source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
-    talk and bell), its settings, context, last turn and agents' list, its pictures and file
-    changes, and Claude Code's session file with everything under `<id>/` (subagents, tool
+    talk and bell), its settings, context, last turn and agents' list, its pictures (its file
+    changes too until decision 97), and Claude Code's session file with everything under `<id>/` (subagents, tool
     results), placed in the target runner's own project folder (its working folder's slug). The
     target reads its copy back and the hub checks it against the source: the same number of
-    messages, the same last message, every file's size and SHA-256, as many pictures and file
-    changes. Only then does the target take the chat in and the source archive its own, marked as
+    messages, the same last message, every file's size and SHA-256, as many pictures. Only then does the target take the chat in and the source archive its own, marked as
     moved (never deleted; a move back replaces that copy unless it was written to since), with its
     root switch turned off: the switch is the source front's, and a moved chat starts with root off
     and a new chat key. Any failure stops the move: the target drops its copy, the source keeps the
@@ -1690,6 +1682,87 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
+98. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
+    person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
+    longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
+    with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
+    Claudia's own chat from her green. An ash (grey, passive) chat and a page with no chat colour
+    keep Claude's replies plain (`--fg`). Code, tables and quotes in a reply stay in the plain text
+    colour, links blue, so they read as before. The window's tint by chat colour does not change
+    (decisions 26, 80). Instead of: the person's lines in the chat's colour and Claude's in plain
+    white. Files: `resources/web/css/claudia.css`, `DESIGN.md`.
+99. Fork from the header and from a message's menu (2026-11-21, the user's call). Row 3 of the
+    header (decision 90) gains Fork beside Files, Sudo and Archive, the same rounded button with an
+    icon and a word, on a started chat outside a read-only view: a new chat with this one up to its
+    last finished turn, in the same folder (`[:ops/fork k nil]`), "Forking…" and filled while the
+    server makes it. A right click on one of the person's own messages, or a long press (450 ms, a
+    move over 10 px cancels) on a touch screen, opens a small menu in the chat menu's look with Fork
+    from here (`[:ops/fork k id]`), only where a fork may start (not an answer to a question, not the
+    running turn's message, not a read-only view: `pure.chat/user-marks`). iOS sends no contextmenu,
+    so the page times the press itself; on touch screens those messages are not selectable, so iOS's
+    own selection does not cancel the press (Claude's replies still select). A fork's state is its
+    own (`:fork {:k :busy :error}`, `pure.menu/fork-state`): an error shows in the open menu, with
+    none open (the header) on the error line. Instead of: the "fork from here" link under each
+    message (shown on hover) and the "picture · N files" link beside it (the slider and the step
+    chips of decision 100 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
+    `src/claudia/web/views/head_pill.cljs`, `src/claudia/web/views/msgmenu.cljs`,
+    `src/claudia/web/views/chatmenu.cljs`, `src/claudia/web/chatops.cljs`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/menu.cljs`,
+    `resources/web/css/claudia.css`.
+100. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
+    user's call). The slider under the picture shows each picture's number, 1..N, the one shown
+    filled in the chat's colour with dark text (pulsing while an older one loads); when the numbers
+    do not fit (a number takes 12 px plus 7 per digit), every 5th or 10th (20th, 50th … for very
+    many) shows, always with the first, the last and the shown one, and a number too close to one
+    of those three is a dot like the rest (`pure.shell/tick-kinds`). Nothing is numbered on the
+    board itself. "Back to live" left the bar: the last number or › is live. The Claude reply that
+    ends a turn which drew a picture wears a small round chip with that picture's number, in the
+    reply's colour (`pure.chat/reply-steps`: a turn runs from a message the person sent to the next,
+    an answer to a question staying in it; its reply is Claude's last text, an aside not counted; the
+    running turn has none yet; an imported picture none). A tap shows that picture on the board (on
+    a phone, the picture screen too); a tap on the chip of the picture shown goes back to live.
+    Picking a number on the slider, ‹ ›, or ←/→ (`[:picture/seek i]`) scrolls the chat to the reply
+    that closed that picture's turn and lights it (the search jump's flash); the live one sends the
+    chat back to its end and it follows the end again. Instead of: unnumbered dots, the Back to live
+    chip, and the picture of a turn reached only from the link under its message. Files:
+    `src/claudia/web/views/rightbar.cljs`, `src/claudia/web/views/pure/shell.cljs`,
+    `src/claudia/web/pictures.cljs`, `src/claudia/web/views/chat.cljs`,
+    `src/claudia/web/views/pure/chat.cljs`, `resources/web/css/right.css`,
+    `resources/web/css/claudia.css`.
+101. Claude's question cards fit a narrow chat column (2026-11-21, the user's call). The chat column
+    is a named container (`chat`), and at 440 px or less the question, secret and OK cards follow
+    its width, not the window's (the person drags it, about 280 to 700 px): one column of options,
+    12 px padding, no key hint, the buttons sharing their row (Answer, alone there, the whole row),
+    the secret card's facts stacked. A touch screen never shows the key hint. Instead of: window
+    media queries, and the wide card's 16/18 px padding and side-by-side buttons in a column too
+    narrow for them. Files: `resources/web/css/claudia.css`.
+102. Claude knows the picture's history as numbered steps (2026-11-21, the user's list, items 9-13;
+    Claude cleared the board and lost the user's base drawing because it was never told the old
+    pictures stay). A step is a picture of the history (decision "Picture history" below), numbered
+    by its 1-based place in the chat's list, oldest first, the number the page's bar shows; the last
+    is live. The system prompt says so in a Steps paragraph: every turn that draws makes the next
+    step, more draws in one turn update it, changing by id and clear both make a new step, old steps
+    never change and stay, the user names steps by number, and in one talk about one thing Claude
+    keeps the base drawing and changes it by id, clearing only when the topic changes (it replaces
+    "Start a new picture (clear: true) when the topic changes"). The page's `send` carries `viewing`
+    (the turn of the older picture looked at) and the runner tells Claude "The user is looking at
+    step 3 of 7 (step 7 is live) while writing this." in a reminder after the text, hidden from the
+    chat; on the live step nothing is said (the least noisy choice that is still unambiguous:
+    the prompt says a message without that note was written on the newest step, so a line on every
+    message would add nothing). A draw may give `from: N`: the new step starts as a
+    copy of step N, then the rest of the call applies; `from` with `clear` is refused, not ignored
+    (they contradict, and an error tells Claude which one it meant). The new `steps` tool of the
+    picture server lists the steps (number, title, UTC time, which is live) or returns one step's
+    scene as JSON, blocks whole up to 30,000 characters and the rest without their data, readable
+    one at a time with `block`. The draw's answer starts with the step: "Step 8 · modified from 7 ·
+    2 blocks changed", "Step 8 · fresh (clear)", "Step 8 · copied from 3", "Updated step 8 (this
+    turn's step) · …", then "Picture now: …" and the notes as before. Instead of: steps kept from
+    Claude (it cleared and lost work), a step line on every message, from with clear meaning
+    either one. Files: `src/claudia/slave/steps.cljs`, `src/claudia/slave/tools.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/runner.cljs`,
+    `src/claudia/slave/codeforms.cljs`, `src/claudia/slave/history.cljs`,
+    `src/claudia/shared/text.cljc`, `src/claudia/web/events.cljs`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
@@ -1768,6 +1841,37 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/hub/listen_prefs.cljs`, `src/claudia/hub/store.cljs`, `src/claudia/hub/ops.cljs`,
     `src/claudia/web/words.cljs`, `src/claudia/web/views/my_words.cljs`,
     `src/claudia/web/views/pure/dictated.cljs`, `src/claudia/web/views/pure/steps.cljs`.
+97. Three features go: listen back, explain, and the changed-files tracking (2026-11-21, the
+    user's call). Each cost code on the page, the runner or the host for something the chats no
+    longer need:
+    - Listen back (decision 20): the "▶ your voice" player and "heard as" under a sent dictated
+      message. A heard clip leaves the device's IndexedDB as before listen back; its database
+      `claudia-mic` goes to version 3, which deletes the store `sounds` with the recordings kept
+      there. The mic's own clips (kept until their words went out, retries, Try again and Throw
+      away) stay as they were. A send still carries the id the page made for its message (`msg`,
+      PROTOCOL.md): the runner uses it as the message's id, and queued messages (decision 83) take
+      one back by it.
+    - Explain on a tool step: the "explain" button on each step and on the running one, and the
+      runner's `POST /api/chats/:id/explain` with its Haiku call. The steps groups stay as they
+      were. The 3D view's Explain on a part (it asks Claude in the open chat) is a different
+      thing and stays.
+    - The changed-files tracking (decision 8's file changes): the runner's copy of every file
+      before Claude's Edit/Write first touched it in a turn (a PreToolUse hook) and its git
+      snapshots of the chat's folder through an index of its own (`RUNNER_DATA/index`), the
+      `changes` and `diff` frames, and the page's leftovers of the changes pill (gone since
+      2026-11-11). A runner drops its table `changes` and deletes `RUNNER_DATA/index` when it
+      starts; forks and server moves (decision 82) no longer carry file changes, and a move's check
+      no longer counts them. The agents' Files tab is not part of it and stays: it reads an agent's
+      Edit/Write calls from its own transcript (`claudia.slave.tasks`, the line counts moved there
+      from `claudia.slave.changes`) and shows them in `claudia.web.views.diff`, which keeps only
+      the one-column table it uses. The PostToolUse hook stays (a chat with no folder gets the
+      edited file's project; Sentinel's worktrees hear of edits).
+    Instead of: keeping them unused, or leaving the sounds, the table and the index files on disk.
+    Files: `src/claudia/web/clip_store.cljs`, `src/claudia/web/views/mic_clips.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/views/steps.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/session.cljs`,
+    `src/claudia/slave/store.cljs`, `src/claudia/slave/runner.cljs`, `src/claudia/slave/move.cljs`,
+    `src/claudia/slave/tasks.cljs`, `src/claudia/web/views/diff.cljs`, `PROTOCOL.md`.
 
 96. Machines becomes System (2026-11-21, the user's design, one call at a time: "another button next
     to files in the header called System"; "make it nice designed"). One sheet for everything about a

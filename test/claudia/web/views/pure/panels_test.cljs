@@ -1,10 +1,9 @@
 (ns claudia.web.views.pure.panels-test
-  "The asks, agents, usage, settings, list, menu, changes, picture, attach and layout helpers."
+  "The asks, agents, usage, settings, list, menu, picture, attach and layout helpers."
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.agents :as agents]
             [claudia.web.views.pure.asks :as asks]
             [claudia.web.views.pure.attach :as attach]
-            [claudia.web.views.pure.changes :as changes]
             [claudia.web.views.pure.menu :as menu]
             [claudia.web.views.pure.picture :as picture]
             [claudia.web.views.pure.settings :as settings]
@@ -153,16 +152,12 @@
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))
   (is (= "P" (menu/initials " Paul ")))
-  (is (= "155k" (menu/k-tokens 155000))))
-
-(deftest changes-of-the-turn
-  (let [state {:messages [{:id "u1" :role "user"} {:id "u2" :role "user"}]
-               :changes [{:turn "u1" :added 1 :removed 0} {:turn "u2" :added 2 :removed 1} {:turn "u2" :added 3 :removed 0}]}]
-    (is (= {:turn "u2" :label "This turn" :added 5 :removed 1} (dissoc (changes/turn-changes state nil) :changes)))
-    (is (= "Earlier turn" (:label (changes/turn-changes state "u1"))))
-    (is (= 1 (count (:changes (changes/turn-changes state "u1"))))))
-  (is (= "src/a.clj" (changes/short-path "/w/p/src/a.clj" "/w/p")))
-  (is (= "~/x" (changes/short-path "/home/someone/x" "/w/p"))))
+  (is (= "155k" (menu/k-tokens 155000)))
+  (is (false? (menu/moved-far? [10 10] [16 18])) "10 px: still a long press")
+  (is (true? (menu/moved-far? [10 10] [17 18])))
+  (is (= {:forking? true :error nil} (menu/fork-state {:k ["s" "a"] :busy true} ["s" "a"])))
+  (is (= {:forking? false :error "no"} (menu/fork-state {:k ["s" "a"] :error "no"} ["s" "a"])))
+  (is (= {:forking? false :error nil} (menu/fork-state {:k ["s" "a"] :busy true} ["s" "b"])) "another chat's fork"))
 
 (deftest picture-keeps-blocks
   (let [prev {:blocks [{:id "a" :form "notes"} {:id "g" :form "graph" :data {:nodes [{:id "n1"}] :edges [{:from "n1" :to "n2"}]}}]}
@@ -206,6 +201,17 @@
   (is (= "packed" (shell/density 100 200)))
   (is (= "" (shell/density 2 200)))
   (is (= 8 (shell/tip-left 0 50 0 500))))
+
+(deftest scrubber-numbers
+  (is (= [:number :number :number] (shell/tick-kinds 3 300 1)) "room: every number")
+  (testing "no room: every 5th, the first, the last and the shown one; one too close a dot"
+    (let [kinds (shell/tick-kinds 30 200 11)
+          numbers (keep-indexed (fn [i k] (when (= :number k) (inc i))) kinds)]
+      (is (= [1 5 12 20 25 30] numbers) "10 and 15 sit too close to the shown 12")))
+  (testing "the shown one wins over an end it would touch"
+    (is (= :dot (first (shell/tick-kinds 30 200 1))))
+    (is (= :number (second (shell/tick-kinds 30 200 1)))))
+  (is (= 26 (shell/label-width 12))))
 
 (deftest freshness-says-how-old
   (is (= "not heard yet" (usage/freshness nil 0)))

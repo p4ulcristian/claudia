@@ -24,7 +24,9 @@ Give every block a short, telling name (blocks[].name, e.g. \"Deploy steps\", \"
 
 Templates: the user can save an html block as a named template (or ask you to: save_template). The templates tool lists them; draw one with blocks: [{ id, form: \"html\", data: { template: \"<name>\", parts } }] and fill its parts. When the user asks to change a template, change it with save_template (same name), then draw it again.
 
-When to draw: whenever a turn changes something worth seeing (a new idea, a step done, a choice made, a file touched, a result found). Small talk leaves the picture as it is. Change only what changed and keep ids (blocks, nodes, parts) stable across turns, so the picture grows instead of jumping. Start a new picture (clear: true) when the topic changes.
+When to draw: whenever a turn changes something worth seeing (a new idea, a step done, a choice made, a file touched, a result found). Small talk leaves the picture as it is. Change only what changed and keep ids (blocks, nodes, parts) stable across turns, so the picture grows instead of jumping.
+
+Steps: the picture is a numbered row of steps, oldest first, and the user moves through them under the picture. Every turn that draws makes the next step; more draws in the same turn update that step. Changing blocks by id and starting fresh (clear: true) both make a new step; old steps never change and stay in the row. The user talks about steps by number (\"step 3\"). A message the user writes while looking at an older step says which one; without that note they are on the newest. The steps tool lists the steps or reads one; draw with from: N starts the new step as a copy of step N, then applies the rest of the call. While you talk about one thing, keep its base drawing and change it by id; clear only when the topic changes.
 
 How to draw well:
 - Circles and boxes are things; arrows are how they connect or what flows. Label arrows with verbs when it helps.
@@ -169,7 +171,9 @@ mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspac
    :properties
    (array-map
     :title (s "Picture title, a few words")
-    :clear {:type "boolean" :description "Start a fresh picture before applying the rest (new topic)"}
+    :clear {:type "boolean" :description "Start this step empty before applying the rest (a new topic; earlier steps stay)"}
+    :from {:type "integer" :minimum 1
+           :description "Start this step as a copy of step N (see the steps tool), then apply the rest; not with clear"}
     :blocks {:type "array"
              :items (block-item forms)
              :description "Add or change blocks by id"}
@@ -184,6 +188,10 @@ mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspac
   {:draw {:description (str "Change the picture on the right half of the user's screen: a canvas of named blocks, each one form with its data: a graph (nodes, arrows, groups), a predefined form or your own html page. Everything is upserted by id, so send only what changed: a few nodes, a few form items, one block, or one part of an html page.\n\n"
                             "The forms (blocks[].form + blocks[].data) and their data are listed in the system prompt, under \"The forms of the draw tool and their data\"; pick graph or a predefined one when it fits, before html.")
           :inputSchema (draw-schema forms)}
+   :steps {:description "Read the picture's steps (every turn that drew left one, numbered from 1, oldest first; the last is live). No number: the list of steps (number, title, time, which is live). A number: that step's picture as JSON (its blocks with their data; big blocks without their data, read one with block)."
+           :inputSchema (obj [] (array-map
+                                 :number {:type "integer" :minimum 1 :description "The step to read"}
+                                 :block (s "With number: only this block of that step, whole")))}
    :templates {:description "List the saved templates (html blocks kept by name): name, description, parts."
                :inputSchema {:type "object" :properties {} :additionalProperties false}}
    :save_template {:description "Save or change a template: from an html block of the picture (block) and/or new html. Same name = change it."
@@ -230,7 +238,7 @@ mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspac
   (str "The forms of the draw tool and their data (blocks[].form + blocks[].data):\n" (help-lines forms)))
 
 (def allowed-tools
-  ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
+  ["mcp__picture__draw" "mcp__picture__steps" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
    "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"
    "mcp__workspace__list_secrets" "mcp__workspace__rename_chat" "mcp__workspace__set_chat_colour"
    "mcp__workspace__offer_word"])
