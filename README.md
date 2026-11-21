@@ -1682,6 +1682,61 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
+97. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
+    person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
+    longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
+    with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
+    Claudia's own chat from her green. An ash (grey, passive) chat and a page with no chat colour
+    keep Claude's replies plain (`--fg`). Code, tables and quotes in a reply stay in the plain text
+    colour, links blue, so they read as before. The window's tint by chat colour does not change
+    (decisions 26, 80). Instead of: the person's lines in the chat's colour and Claude's in plain
+    white. Files: `resources/web/css/claudia.css`, `DESIGN.md`.
+98. Fork from the header and from a message's menu (2026-11-21, the user's call). Row 3 of the
+    header (decision 90) gains Fork beside Files, Sudo and Archive, the same rounded button with an
+    icon and a word, on a started chat outside a read-only view: a new chat with this one up to its
+    last finished turn, in the same folder (`[:ops/fork k nil]`), "Forking…" and filled while the
+    server makes it. A right click on one of the person's own messages, or a long press (450 ms, a
+    move over 10 px cancels) on a touch screen, opens a small menu in the chat menu's look with Fork
+    from here (`[:ops/fork k id]`), only where a fork may start (not an answer to a question, not the
+    running turn's message, not a read-only view: `pure.chat/user-marks`). iOS sends no contextmenu,
+    so the page times the press itself; on touch screens those messages are not selectable, so iOS's
+    own selection does not cancel the press (Claude's replies still select). A fork's state is its
+    own (`:fork {:k :busy :error}`, `pure.menu/fork-state`): an error shows in the open menu, with
+    none open (the header) on the error line. Instead of: the "fork from here" link under each
+    message (shown on hover) and the "picture · N files" link beside it (the slider and the step
+    chips of decision 99 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
+    `src/claudia/web/views/head_pill.cljs`, `src/claudia/web/views/msgmenu.cljs`,
+    `src/claudia/web/views/chatmenu.cljs`, `src/claudia/web/chatops.cljs`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/menu.cljs`,
+    `resources/web/css/claudia.css`.
+99. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
+    user's call). The slider under the picture shows each picture's number, 1..N, the one shown
+    filled in the chat's colour with dark text (pulsing while an older one loads); when the numbers
+    do not fit (a number takes 12 px plus 7 per digit), every 5th or 10th (20th, 50th … for very
+    many) shows, always with the first, the last and the shown one, and a number too close to one
+    of those three is a dot like the rest (`pure.shell/tick-kinds`). Nothing is numbered on the
+    board itself. "Back to live" left the bar: the last number or › is live. The Claude reply that
+    ends a turn which drew a picture wears a small round chip with that picture's number, in the
+    reply's colour (`pure.chat/reply-steps`: a turn runs from a message the person sent to the next,
+    an answer to a question staying in it; its reply is Claude's last text, an aside not counted; the
+    running turn has none yet; an imported picture none). A tap shows that picture on the board (on
+    a phone, the picture screen too); a tap on the chip of the picture shown goes back to live.
+    Picking a number on the slider, ‹ ›, or ←/→ (`[:picture/seek i]`) scrolls the chat to the reply
+    that closed that picture's turn and lights it (the search jump's flash); the live one sends the
+    chat back to its end and it follows the end again. Instead of: unnumbered dots, the Back to live
+    chip, and the picture of a turn reached only from the link under its message. Files:
+    `src/claudia/web/views/rightbar.cljs`, `src/claudia/web/views/pure/shell.cljs`,
+    `src/claudia/web/pictures.cljs`, `src/claudia/web/views/chat.cljs`,
+    `src/claudia/web/views/pure/chat.cljs`, `resources/web/css/right.css`,
+    `resources/web/css/claudia.css`.
+100. Claude's question cards fit a narrow chat column (2026-11-21, the user's call). The chat column
+    is a named container (`chat`), and at 440 px or less the question, secret and OK cards follow
+    its width, not the window's (the person drags it, about 280 to 700 px): one column of options,
+    12 px padding, no key hint, the buttons sharing their row (Answer, alone there, the whole row),
+    the secret card's facts stacked. A touch screen never shows the key hint. Instead of: window
+    media queries, and the wide card's 16/18 px padding and side-by-side buttons in a column too
+    narrow for them. Files: `resources/web/css/claudia.css`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.

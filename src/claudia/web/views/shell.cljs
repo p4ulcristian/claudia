@@ -14,6 +14,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.login :as login]
+            [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.rail-width :as rail-width]
             [claudia.web.views.picture :as picture]
@@ -105,6 +106,7 @@
   [:<>
    [chatmenu/chat-menu]
    [chatmenu/context-menu]
+   [msgmenu/msg-menu]
    [:f> attach/drop-zone draft-key (not ro)]])
 
 (defn- chats-view

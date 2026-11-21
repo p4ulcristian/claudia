@@ -4,7 +4,8 @@
   looked at, and the picture shown until then stays."
   (:require [re-frame.core :as rf]
             [claudia.web.db :as db]
-            [claudia.web.events :as events]))
+            [claudia.web.events :as events]
+            [claudia.web.views.pure.chat :as chat]))
 
 ;; ---- frames ----
 
@@ -47,12 +48,27 @@
            (assoc :ws/send [s {:type "picture" :chat c :turn turn}])))))))
 
 (rf/reg-event-fx
+ :picture/seek
+ ;; Picked on the bar (a number, ‹ ›, ←/→): the board shows picture i and the chat finds the reply
+ ;; that closed its turn, or goes back to its end for the live one (README decision 99).
+ (fn [{:keys [db]} [_ i]]
+   (let [k (:open db)
+         {:keys [messages running]} (get-in db [:chats k])
+         goal (chat/seek-goal (get-in db [:pictures k] []) (remove :queued messages) running i)]
+     (cond-> {:fx [[:dispatch [:picture/pick i]]]}
+       goal (assoc :db (assoc db :find-at {:k k :goal goal :n (inc (get-in db [:find-at :n] 0))}))))))
+
+(rf/reg-event-db :chat/found (fn [db _] (dissoc db :find-at)))
+
+(rf/reg-sub :find-at (fn [db] (:find-at db)))
+
+(rf/reg-event-fx
  :picture/step
  (fn [{:keys [db]} [_ delta]]
    (let [k (:open db)
          pictures (get-in db [:pictures k])
          i (shown-index pictures (get-in db [:viewing k]))]
-     {:fx [[:dispatch [:picture/pick (+ i delta)]]]})))
+     {:fx [[:dispatch [:picture/seek (+ i delta)]]]})))
 
 (rf/reg-event-db
  :picture/live

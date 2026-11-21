@@ -1,21 +1,59 @@
 (ns claudia.web.views.pure.chat
-  "The chat column's decisions on plain data: which picture a turn shows, the count on the Chats
-  button, what the messages column holds, where it scrolls, what the composer sends."
+  "The chat column's decisions on plain data: which reply closed the turn that drew a picture, what
+  the messages column holds, where it scrolls, what the composer sends."
   (:require [clojure.string :as str]
             [claudia.web.views.pure.steps :as steps]
             [claudia.web.views.pure.words :as words]))
 
-(defn- index-where [pred xs]
-  (first (keep-indexed (fn [i x] (when (pred x) i)) xs)))
+(defn msg-anchor
+  "What a message's element is found by (data-at): its id, a Claude text's without its \":n\" (search
+  hits name the API message)."
+  [id]
+  (first (str/split (str id) #":")))
 
-(defn turn-picture
-  "The index of the picture a turn (its user message's id) shows: its own, else the last one drawn
-  before the next user message; nil when there is none."
-  [pictures msgs msg-id]
-  (let [at (:at (some #(when (= msg-id (:id %)) %) msgs) 0)
-        next-at (some #(when (and (= "user" (:role %)) (> (:at % 0) at)) (:at %)) msgs)]
-    (or (index-where #(= msg-id (:turn %)) pictures)
-        (last (keep-indexed (fn [i p] (when (or (nil? next-at) (< (:at p 0) next-at)) i)) pictures)))))
+(defn- opens-turn?
+  "Whether a message starts a turn: one the person sent (an answer to Claude's question stays in
+  its turn)."
+  [{:keys [role id]}]
+  (and (= "user" role) (not (str/starts-with? (str id) "answer-"))))
+
+(defn- close-turn [{:keys [open reply] :as acc}]
+  (cond-> acc (and open reply) (update :out assoc open reply)))
+
+(defn- turn-step [acc m]
+  (cond
+    (opens-turn? m) (assoc (close-turn acc) :open (:id m) :reply nil)
+    (and (= "assistant" (:role m)) (not (:aside m))) (assoc acc :reply (:id m))
+    :else acc))
+
+(defn turn-replies
+  "Each turn's closing reply: {id of the message that started it -> id of Claude's last text before
+  the next turn}; the last turn has none while it runs (running?)."
+  [msgs running?]
+  (let [acc (reduce turn-step {:out {}} msgs)]
+    (:out (if running? acc (close-turn acc)))))
+
+(defn reply-steps
+  "Which reply wears which picture's step number (1-based, the slider's numbers): {reply id -> n}.
+  A picture whose turn has no reply among msgs (imported, not loaded yet, still running) has none."
+  [pictures msgs running?]
+  (let [replies (turn-replies msgs running?)]
+    (into {} (keep-indexed (fn [i p] (when-let [r (get replies (:turn p))] [r (inc i)]))) pictures)))
+
+(defn step-reply
+  "The id of the reply that closed the turn which drew picture i, or nil."
+  [pictures msgs running? i]
+  (get (turn-replies msgs running?) (:turn (get pictures i))))
+
+(defn seek-goal
+  "Where the chat goes when the person picks picture i of the bar (README decision 99): the newest
+  sends it back to its end ([:end]), an older one to the reply that closed its turn ([:at anchor]);
+  nil when that turn has no reply on the page or there is no picture i."
+  [pictures msgs running? i]
+  (cond
+    (not (< -1 i (count pictures))) nil
+    (= i (dec (count pictures))) [:end]
+    :else (some->> (step-reply pictures msgs running? i) msg-anchor (vector :at))))
 
 (defn server-state
   "What the header shows of a server's connection (status): :off when it is closed, :offline when
@@ -66,12 +104,10 @@
      :last-user (when running (:id (last (filter #(and (= "user" (:role %)) (not (:queued %))) msgs))))}))
 
 (defn user-marks
-  "What a user message in the feed shows: whether its picture is the one viewed, whether its turn
-  drew one, whether it can be forked from."
-  [{:keys [id]} {:keys [viewing picture-turns read-only? last-user]}]
-  {:viewing? (= viewing id)
-   :picture? (contains? picture-turns id)
-   :forkable? (and (not read-only?) (not (str/starts-with? (str id) "answer-")) (not= id last-user))})
+  "What a user message in the feed allows: whether it can be forked from (its menu, README decision
+  98)."
+  [{:keys [id]} {:keys [read-only? last-user]}]
+  {:forkable? (and (not read-only?) (not (str/starts-with? (str id) "answer-")) (not= id last-user))})
 
 (defn working-label
   "The working line while a turn runs: waiting on the person, else Claude's note."

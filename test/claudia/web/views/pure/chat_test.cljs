@@ -4,14 +4,35 @@
             [claudia.web.views.pure.steps :as steps]
             [claudia.web.views.pure.words :as words]))
 
-(deftest turn-picture-is-its-own-else-the-last-before-the-next-turn
-  (let [msgs [{:id "a" :role "user" :at 10} {:id "b" :role "user" :at 20}]
-        pictures [{:turn "a" :at 11} {:turn "x" :at 15} {:turn "b" :at 21}]]
-    (is (= 0 (chat/turn-picture pictures msgs "a")))
-    (is (= 2 (chat/turn-picture pictures msgs "b")))
-    (testing "no picture of its own: the last one drawn before the next user message"
-      (is (= 1 (chat/turn-picture [{:turn "y" :at 5} {:turn "x" :at 15} {:turn "z" :at 25}] msgs "a"))))
-    (is (nil? (chat/turn-picture [] msgs "a")))))
+(def ^:private turns
+  [{:id "u1" :role "user"} {:id "m1:0" :role "assistant"} {:id "t1" :role "tool"} {:id "m2:0" :role "assistant"}
+   {:id "u2" :role "user"} {:id "m3:0" :role "assistant"} {:id "answer-q" :role "user"} {:id "m4:0" :role "assistant"}
+   {:id "n1" :role "note"}
+   {:id "u3" :role "user"} {:id "m5:0" :role "assistant"} {:id "m6:0" :role "assistant" :aside true}])
+
+(deftest turn-replies-are-the-last-claude-text-before-the-next-turn
+  (is (= {"u1" "m2:0" "u2" "m4:0" "u3" "m5:0"} (chat/turn-replies turns false))
+      "an answer stays in its turn, a note does not end it, an aside is no reply")
+  (is (= {"u1" "m2:0" "u2" "m4:0"} (chat/turn-replies turns true)) "the running turn has none yet")
+  (is (= {} (chat/turn-replies [{:id "u1" :role "user"} {:id "t" :role "tool"}] false)) "a turn without a text"))
+
+(deftest reply-steps-number-pictures-from-one
+  (let [pictures [{:turn "imported"} {:turn "u1"} {:turn "gone"} {:turn "u2"}]]
+    (is (= {"m2:0" 2 "m4:0" 4} (chat/reply-steps pictures turns false)))
+    (is (= "m4:0" (chat/step-reply pictures turns false 3)))
+    (is (nil? (chat/step-reply pictures turns false 0)) "imported: no reply")
+    (is (nil? (chat/step-reply pictures turns false 9)))))
+
+(deftest seek-goal-finds-the-reply-or-the-end
+  (let [pictures [{:turn "imported"} {:turn "u1"} {:turn "u2"}]]
+    (is (= [:at "m2"] (chat/seek-goal pictures turns false 1)))
+    (is (= [:end] (chat/seek-goal pictures turns false 2)) "the live one: back to the end")
+    (is (nil? (chat/seek-goal pictures turns false 0)) "imported: nothing to find")
+    (is (nil? (chat/seek-goal pictures turns false 3)))))
+
+(deftest msg-anchor-drops-the-text-number
+  (is (= "m1" (chat/msg-anchor "m1:0")))
+  (is (= "u1" (chat/msg-anchor "u1"))))
 
 (deftest server-state-off-reconnecting-or-nothing
   (is (= :off (chat/server-state :closed)))
@@ -80,8 +101,8 @@
     (is (= "u1" last-user))))
 
 (deftest user-marks-of-a-message
-  (is (= {:viewing? true :picture? true :forkable? true}
-         (chat/user-marks {:id "a"} {:viewing "a" :picture-turns #{"a"} :last-user "b"})))
+  (is (= {:forkable? true} (chat/user-marks {:id "a"} {:last-user "b"})))
+  (is (false? (:forkable? (chat/user-marks {:id "a"} {:read-only? true}))))
   (is (false? (:forkable? (chat/user-marks {:id "answer-1"} {}))))
   (is (false? (:forkable? (chat/user-marks {:id "a"} {:last-user "a"})))))
 

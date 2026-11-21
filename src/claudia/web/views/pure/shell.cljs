@@ -1,6 +1,6 @@
 (ns claudia.web.views.pure.shell
   "The layout's numbers as plain data: what the chat column shows, the chat column's width while
-  the divider is dragged, the split's columns, the scrubber's marks.")
+  the divider is dragged, the split's columns, the scrubber's marks and numbers.")
 
 (defn column-pane
   "What takes the chat column wider than a phone (README decision 24): :archived (the archived
@@ -38,6 +38,39 @@
   [n width]
   (let [gap (if (> n 1) (/ width (dec n)) width)]
     (cond (>= gap 14) "" (>= gap 4) "dense" :else "packed")))
+
+(defn label-width
+  "The px one step number of n pictures takes on the scrubber, a little room beside it included."
+  [n]
+  (+ 12 (* 7 (count (str n)))))
+
+(def ^:private label-steps
+  "Every how many pictures a number shows when not every one fits."
+  [1 5 10 20 50 100 200 500 1000])
+
+(defn- label-step
+  "The fewest pictures between two numbers so that numbers gap px apart need px each do not touch;
+  nil when even the widest step is too close."
+  [gap need]
+  (some #(when (>= (* gap %) need) %) label-steps))
+
+(defn tick-kinds
+  "What each of n marks on a track width px wide shows (README decision 99), index the picture
+  shown: :number or :dot. Every number when they fit; else every 5th or 10th (20th …) and always
+  the first, the last and the shown one, a number too close to one of those a dot."
+  [n width index]
+  (let [gap (if (> n 1) (/ width (dec n)) width)
+        need (label-width n)
+        near? (fn [i j] (< (* (js/Math.abs (- i j)) gap) need))
+        ends (remove #(and (not= % index) (near? % index)) [0 (dec n)])
+        fixed (set (conj ends index))
+        step (label-step gap need)]
+    (mapv (fn [i]
+            (if (or (fixed i)
+                    (and step (zero? (mod (inc i) step)) (not-any? #(near? i %) fixed)))
+              :number
+              :dot))
+          (range n))))
 
 (defn tip-left
   "The hover label's left: over its mark (at x, w wide) but 8 px inside the box from box-left to

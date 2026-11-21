@@ -1,5 +1,6 @@
 (ns claudia.web.views.pure.menu
-  "Where a menu opened at the mouse sits, the profile circle, and token counts, as plain data."
+  "Where a menu opened at the mouse sits, when a finger's press is still a long press, the profile
+  circle, and token counts, as plain data."
   (:require [clojure.string :as str]))
 
 (defn menu-pos
@@ -8,6 +9,20 @@
   [x y {:keys [left top width height]} w h]
   {:left (max 6 (min (- x left) (- width w 6)))
    :top (max 6 (min (- y top) (- height h 6)))})
+
+(defn moved-far?
+  "Whether a finger that came down at [x0 y0] and is now at [x y] moved more than 10 px: no long
+  press any more, a scroll or a drag."
+  [[x0 y0] [x y]]
+  (let [dx (- x x0) dy (- y y0)]
+    (> (+ (* dx dx) (* dy dy)) 100)))
+
+(defn fork-state
+  "What the fork asked last (fork: {:k :busy :error}) means for chat k: {:forking? :error}."
+  [fork k]
+  (if (= k (:k fork))
+    {:forking? (boolean (:busy fork)) :error (:error fork)}
+    {:forking? false :error nil}))
 
 (defn initials
   "\"Paul\" -> \"P\", \"Ananda Mishung\" -> \"AM\"."

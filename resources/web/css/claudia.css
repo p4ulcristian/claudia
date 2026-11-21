@@ -9,6 +9,10 @@
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
+  /* The chat's two voices (README decision 97): the person's own lines one near-white in every chat,
+     Claude's replies in the chat's chalk (--reply; plain --fg with no chat colour and in ash chats). */
+  --mine: #efefef;
+  --reply: var(--fg);
   /* Chat colours, and the text colour that sits on them. */
   /* The chat colours: the crayon box (claudia.shared.colours, the same hexes; README decision 26). */
   --c-cherry: #e5383b; --c-chocolate: #a0673f; --c-peach: #ffc49b; --c-tangerine: #ff8c1a; --c-gold: #d4a72c;
@@ -59,9 +63,12 @@
   --panel: color-mix(in oklch, var(--hue) 20%, #3c3c3c); --panel2: color-mix(in oklch, var(--hue) 24%, #444444);
   --line: color-mix(in oklch, var(--hue) 32%, #525252);
   --fg: color-mix(in oklch, var(--hue) 8%, #efefef); --muted: color-mix(in oklch, var(--hue) 25%, #a9a9a9);
-  /* coloured chalk: the chat's hue, chalky */
+  /* coloured chalk: the chat's hue, chalky; Claude's replies are written in it */
   --accent: color-mix(in oklch, var(--hue) 75%, #fff);
+  --reply: var(--accent);
 }
+/* An ash (grey, passive) chat: Claude's replies stay plain. */
+:root[data-chat="ash"] { --reply: var(--fg); }
 
 /* A gradient chat (README decision 80): the theme above, mixed from its stand-in colour, and the whole
    window one gradient between its two crayons (--hue-a top left, --hue-b bottom right), each as dark as
@@ -77,6 +84,7 @@
 :root[data-claudia] {
   --hue: #2bd46a; --bg: #0b1c12; --bg2: #08150d; --panel: #10261a; --panel2: #143020; --line: #1f4a2e;
   --fg: #e6f5ea; --muted: #8fb79c; --accent: #5cff8f; --board: transparent;
+  --reply: color-mix(in oklch, var(--hue) 75%, #fff);
 }
 :root[data-claudia] body { background: linear-gradient(180deg, #0e2a19 0%, #0a1a10 45%, #050a07 100%); }
 :root[data-claudia] .rail, :root[data-claudia] .sidebar { background: rgba(3, 10, 6, 0.35); }
@@ -141,7 +149,7 @@ code, pre { font-family: var(--mono); }
 .archived-toggle:hover, .archived-toggle.on { color: var(--fg); }
 
 /* ---------- Chat ---------- */
-.left { container-type: inline-size; }
+.left { container: chat / inline-size; }
 /* The header (views/head.cljs, README decisions 22, 90): one panel lightly tinted with the chat's colour
    (--chat; none: neutral), three rows: the title; the setting pills; the rings and the worded buttons. */
 .chat-head { padding: var(--edge-t) 12px 8px; }
@@ -271,21 +279,26 @@ code, pre { font-family: var(--mono); }
 .hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
 .msg { max-width: 100%; min-width: 0; }
 .msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
-.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 500 15px/1.5 var(--sans); color: var(--accent); text-align: right; }
-.msg.user.viewing .bubble { outline: 0; text-decoration: underline 2px; text-underline-offset: 4px; }
-.pic-link { font-size: 11.5px; color: var(--muted); }
-.pic-link:hover { color: var(--blue); }
-.msg-links { display: flex; gap: 10px; }
-/* fork link: shown on hover where there is a pointer that hovers */
-@media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
-.msg.claude { padding: 0 2px; }
+.msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 500 15px/1.5 var(--sans); color: var(--mine); text-align: right; }
+/* A message with a menu (README decision 98): on a touch screen a long press opens it, so iOS's own
+   selection and callout stay off these lines (Claude's replies still select). */
+@media (hover: none) { .msg.user.forkable .bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
+.msg.claude { padding: 0 2px; color: var(--reply); }
+/* Code, tables and quotes in a reply keep the plain text colour, to stay readable. */
+.msg.claude .md :is(code, pre, table, blockquote) { color: var(--fg); }
+/* The step chip (README decision 99): the number of the picture the reply's turn drew, the slider's;
+   filled while the board shows it. */
+.step-chip { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 4px 4px 0 0; padding: 0 6px; vertical-align: top;
+  border: 1.5px solid color-mix(in srgb, var(--reply) 70%, transparent); border-radius: 11px; color: var(--reply); font: 600 11px/1 var(--mono); }
+.step-chip:hover { border-color: var(--reply); background: color-mix(in srgb, var(--reply) 14%, transparent); }
+.step-chip.on { background: var(--reply); border-color: var(--reply); color: var(--on-hue); }
 /* The chats' voices (views/talk.cljs, README decision 21): the voice pill's popup, a reply's play button. */
 .head-pop.voice-pop { width: 320px; }
 .voice-opt { display: flex; align-items: flex-start; gap: 4px; }
 .voice-hear { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); }
 .voice-hear:hover { background: var(--bg); color: var(--fg); }
 .voice-hear svg { width: 14px; height: 14px; }
-.say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
+.say-reply { vertical-align: top; display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }
 .msg.small { font-size: 13px; }
@@ -511,6 +524,21 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .asks-inline .options { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px; }
 .asks-inline .option.other { grid-column: 1 / -1; }
 .asks-inline .preview { font-size: 13px; max-height: 40vh; }
+.asks-inline .panel > p { margin: 0; }
+/* The cards follow the chat column, whose width the person drags (README decision 100): narrow, one
+   column of options, less padding, no key hint, the buttons sharing the row (Answer the whole row). */
+@container chat (max-width: 440px) {
+  .asks-inline .panel.ask, .asks-inline .panel.permit { padding: 12px; gap: 10px; }
+  .asks-inline .options { grid-template-columns: minmax(0, 1fr); }
+  .asks-inline .option { padding: 8px 10px; }
+  .asks-inline .key-hint { display: none; }
+  .asks-inline .actions { flex-wrap: wrap; }
+  .asks-inline .actions button { flex: 1 1 auto; }
+  .asks-inline .secret-facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .asks-inline .secret-facts dd + dt { margin-top: 4px; }
+}
+/* A touch screen has no keys to hint at. */
+@media (hover: none) { .asks-inline .key-hint { display: none; } }
 .ask-return { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 9px 18px; border-radius: 99px; border: 1px solid var(--violet); background: var(--violet-bg); color: var(--violet); font-weight: 600; box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
 
 /* Where a new chat starts: a row of servers over the composer of an empty chat. */
@@ -659,8 +687,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .f-kind::before, .rail-server::before, .server-mark::before,
-.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,
-.rbar-chip::before {
+.rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }
@@ -675,7 +702,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
    README decision 80). Without the masks (Firefox) the plain outline keeps the one colour. */
 @supports (-webkit-mask-box-image: none) { .rail-dot::before { background: var(--chat-fill, var(--ink)); } }
 /* Buttons and bars: the outline in --chalk-c (default --chalk), the fill --chalk-bg. */
-.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button, .rbar-chip {
+.rbar, .input-row, .new, .search-box, .primary, .stop, .actions button:not(.primary), .prompt-actions button {
   position: relative; isolation: isolate; border-color: transparent !important; box-shadow: none !important; background: var(--chalk-bg, transparent) !important;
   --ink: var(--chalk-c, var(--chalk)); --ring: var(--chalk-r8-2);
 }
@@ -691,8 +718,6 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .stop { --chalk-c: var(--red); }
 .input-row .primary, .input-row .stop { --ring: var(--chalk-r7-2); }
 .prompt-actions button.primary { --chalk-c: var(--accent); }
-.rbar-chip { --ring: var(--chalk-r12-2); }
-.rbar-chip.past { --chalk-c: color-mix(in srgb, var(--violet) 55%, transparent); --chalk-bg: var(--violet-bg); }
 .rbar { --chalk-bg: color-mix(in srgb, var(--bg2) 88%, transparent); }
 
 /* Small chalk strokes (icons, the git and clojure maps, charts): the soft grain as their mask. */
