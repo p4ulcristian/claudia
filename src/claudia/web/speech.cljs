@@ -18,7 +18,8 @@
   "No reply sounding: no pieces scheduled (:sources), none to come (:stream, the fetch's
   AbortController), :until the end of the last piece on the context's clock, :fed once the sound
   has stopped coming, :whole when it came to its end (not broken off)."
-  {:sources [] :until nil :stream nil :fed false :whole false})
+  {:sources [] :until nil :stream nil :fed false :whole false :stall nil})
+(def ^:private stall-margin-ms "Grace after a reply's own length before it is given up." 3000)
 (defonce ^:private audio (atom (assoc quiet :ctx nil :analyser nil)))
 
 (defn- visible? [] (= "visible" (.-visibilityState js/document)))
@@ -28,19 +29,26 @@
       (:ctx (swap! audio assoc :ctx (js/AudioContext.)))))
 
 (defn unlock!
-  "Readies the sound inside a tap (iOS plays only after one)."
+  "Readies the sound inside a tap (iOS plays only after one, and only a touch revives a context iOS
+  interrupted: README decision 121)."
   []
-  (let [^js c (context!)]
-    (when (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)))))
+  (sound/resumed! (context!)))
+
+(defn- pieces-stopped!
+  "Every piece scheduled is stopped, saying nothing more about them."
+  [sources]
+  (doseq [^js src sources]
+    (set! (.-onended src) nil)
+    (try (.stop src) (catch :default _ nil))))
 
 (defn- silence!
-  "The reply sounding now stops: its fetch is cancelled and every piece scheduled is stopped."
+  "The reply sounding now stops: its fetch is cancelled, every piece scheduled is stopped and its
+  watchdog is off."
   []
-  (let [{:keys [sources ^js stream]} @audio]
+  (let [{:keys [sources ^js stream stall]} @audio]
     (some-> stream .abort)
-    (doseq [^js src sources]
-      (set! (.-onended src) nil)
-      (try (.stop src) (catch :default _ nil))))
+    (some-> stall js/clearTimeout)
+    (pieces-stopped! sources))
   (swap! audio merge quiet))
 
 (defn- analyser!
@@ -85,10 +93,30 @@
 (defn- streaming? "Whether ctrl is the fetch of the reply sounding now." [ctrl] (identical? ctrl (:stream @audio)))
 
 (defn- over!
-  "item's reply is over: heard when its whole sound came and played (a broken-off one is not)."
+  "item's reply is over: heard when its whole sound came and played (a broken-off one is not); its
+  watchdog is off."
   [item whole]
+  (some-> (:stall @audio) js/clearTimeout)
+  (swap! audio assoc :stall nil)
   (when whole (heard! item))
   (finished! (:id item)))
+
+(defn- stalled!
+  "item's sound has not ended by its own length: the context is frozen (README decision 121). Its
+  pieces are dropped and the reply is over, not heard, so the line moves on."
+  [item ctrl]
+  (when (streaming? ctrl)
+    (pieces-stopped! (:sources @audio))
+    (swap! audio assoc :sources [])
+    (over! item false)))
+
+(defn- watched!
+  "A watchdog on item's sound ending, armed once all of it has come: its length left on the
+  context's clock plus a margin."
+  [item ctrl]
+  (let [{:keys [until ^js ctx]} @audio
+        ms (talk/stall-ms until (.-currentTime ctx) stall-margin-ms)]
+    (swap! audio assoc :stall (js/setTimeout #(stalled! item ctrl) ms))))
 
 (defn- piece-ended!
   "A piece of item's sound ended: the reply is over once it has all come and none is left."
@@ -108,6 +136,7 @@
     (.connect src (analyser!))
     (set! (.-onended src) #(piece-ended! item src))
     (when-not until (sound/claim! ::reply stop!) (shown! item))
+    (sound/resumed! c)
     (.start src at)
     (swap! audio #(-> % (update :sources conj src) (assoc :until (+ at (.-duration buf)))))))
 
@@ -124,7 +153,7 @@
   [item ctrl whole]
   (when (streaming? ctrl)
     (let [{:keys [sources]} (swap! audio assoc :fed true :whole whole)]
-      (when (empty? sources) (over! item whole)))))
+      (if (empty? sources) (over! item whole) (watched! item ctrl)))))
 
 (defn- read!
   "Reads item, playing its sound as it comes; its colour name is said only when its chat is not the
@@ -185,8 +214,10 @@
     (shown! nil)))
 
 (defn let-go!
-  "The mic is let go: what waits comes."
+  "The mic is let go: the sound is readied again inside the touch (the app's recording may have
+  interrupted it, README decision 121) and what waits comes."
   []
+  (sound/resumed! (context!))
   (swap! line talk/held false)
   (pump!))
 

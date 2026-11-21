@@ -76,6 +76,14 @@
   [st]
   (assoc st :current nil))
 
+(defn stall-ms
+  "How long to wait for a reply's scheduled sound to end before giving it up (README decision 121):
+  what is left of it on the context's clock (until: where its last piece ends, now: the clock),
+  plus margin-ms. A frozen clock leaves all of it, so a reply never blocks the line longer than its
+  own length."
+  [until now margin-ms]
+  (+ margin-ms (* 1000 (max 0 (- (or until 0) now)))))
+
 (defn held
   "The line while the mic is held (on: true) or let go: holding drops the item being read."
   [st on]

@@ -2253,3 +2253,18 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
       Profiles; under it Stop, New chat, Fork, Archive, Settings.
     Files: `src/claudia/web/views/mic.cljs`, `pure/mic.cljs`, `folder_contents.cljs`, `folders.cljs`,
     `head_place.cljs`, `pure/edge.cljs`, `thumb_edge.cljs`, `resources/web/css/folders.css`.
+
+121. A reply still sounds after the app's own recording interrupted the page (2026-11-21, the user:
+    the Claudia iPad app, "it has a voice, but I hear nothing"). Seen on the iPad: a reply's sound
+    was fetched and scheduled, never ended, and every later reply waited behind it unheard. The
+    app's mic turns on an iOS recording session the first time it is held and keeps it; iOS
+    interrupts the web view's sound at that moment and WebKit puts the page's audio context into
+    its own `interrupted` state, which the page revived only from `suspended`. Now: the one list
+    of states that need resume (suspended, interrupted) lives in `claudia.web.sound`; the context
+    is resumed on every touch, when the mic is let go (inside the touch, after the recording), and
+    before each piece is scheduled; the 3D narrator's context the same. And a watchdog: once a
+    reply's sound has all come, it is given up after its length left on the context's clock plus
+    3 s (`talk/stall-ms`), its pieces dropped and the reply over but not heard, so the line moves
+    on and the message stays for a tap. Files: `src/claudia/web/sound.cljs`,
+    `src/claudia/web/speech.cljs`, `src/claudia/web/views/pure/talk.cljs`,
+    `src/claudia/web/scene3d/voice.cljs`.
