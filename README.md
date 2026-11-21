@@ -1840,6 +1840,22 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/voice_circles.cljs`, `src/claudia/web/views/pure/mic.cljs`,
     `src/claudia/web/events.cljs`, `src/claudia/web/speech.cljs`, `resources/web/css/claudia.css`.
 
+106. Claude's first output in a turn is one line in the chat, before any tool call (2026-11-21, the
+    user: "Could we make Claudia answer very fast? It doesn't have to act very fast, but now it
+    can't answer for a while; it thinks a lot, then it talks."). Measured over the last seven
+    days' session files (3840 turns): the first spoken line came after 12 s at the median and 43 s
+    at the 90th percentile; turns that spoke before any tool took 4.6 s, turns that ran tools first
+    (60% of all) 21 s. The wait is the work before the first word, not the thinking (94% of
+    thinking blocks are empty: the API hides the text on these models). So the system prompt's
+    chat section says: the first output of every turn is one short line saying what was heard and
+    what comes next, before any tool call and before any drawing; the thinking and the tools
+    follow it; small talk and a known answer are that one line and nothing else. The request
+    start itself (about 4 s to the first block, the context's size) stays. Rejected: a fast-mode
+    switch per chat (2x plan usage, and the tools would still come before the line; it may come
+    later as an addition), a thinking-progress counter on the Thinking chip (nothing gets faster),
+    a cheap model's greeting ahead of the real reply (its own start eats the gain and it can
+    contradict the answer). Measured again the same way after a week of use.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
