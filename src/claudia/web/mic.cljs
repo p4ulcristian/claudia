@@ -286,8 +286,10 @@
 
 (defn hear
   "Promise of {:text :raw} the hub heard in a clip: text cleaned up by the listen service, raw as
-  heard (the text again from a service without cleanup)."
-  [clip]
-  (.then (api/post-blob "/hub/listen" clip)
+  heard (the text again from a service without cleanup). context: the chat's last words
+  (pure/listen-context), sent URI-encoded in x-listen-context so names in them are heard right."
+  [clip context]
+  (.then (api/post-blob "/hub/listen" clip
+                        (if (seq context) {"x-listen-context" (js/encodeURIComponent context)} {}))
          (fn [{:keys [text raw]}]
            {:text (or text "") :raw (or raw text "")})))

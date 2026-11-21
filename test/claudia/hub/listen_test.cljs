@@ -31,3 +31,9 @@
   (is (= "mic: a@x.org {\"event\":\"started\",\"angle\":90,\"edge\":\"left\",\"mic\":{\"port\":\"MicrophoneBuiltIn\",\"location\":\"Upper\",\"orientation\":\"Front\"}}"
          (listen/log-line "a@x.org" {:event "started" :angle 90 :edge "left"
                                      :mic {:port "MicrophoneBuiltIn" :location "Upper" :orientation "Front" :evil 5}}))))
+
+(deftest the-page-s-context-is-passed-on-decoded
+  (is (= "Is PostHog slow?\nÁrvíztűrő" (listen/context-of (js/encodeURIComponent " Is PostHog slow?\nÁrvíztűrő "))))
+  (is (= "" (listen/context-of nil)) "no header: no context")
+  (is (= "" (listen/context-of "%E0%A4%A")) "a header that does not decode: no context")
+  (is (= 4000 (count (listen/context-of (apply str (repeat 5000 "a"))))) "cut to 4000 characters"))

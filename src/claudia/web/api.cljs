@@ -75,12 +75,14 @@
   (fetch-json u (call-opts method body)))
 
 (defn post-blob
-  "Promise of the JSON answer to POSTing blob as the body (its type as content-type); rejects like
-  fetch-json."
-  [u ^js blob]
-  (fetch-json u {:method "POST" :headers {"content-type" (or (not-empty (.-type blob)) "application/octet-stream")
-                                          "accept" "application/json"}
-                 :body blob}))
+  "Promise of the JSON answer to POSTing blob as the body (its type as content-type), with any
+  extra headers; rejects like fetch-json."
+  ([u blob] (post-blob u blob {}))
+  ([u ^js blob headers]
+   (fetch-json u {:method "POST" :headers (merge {"content-type" (or (not-empty (.-type blob)) "application/octet-stream")
+                                                  "accept" "application/json"}
+                                                 headers)
+                  :body blob})))
 
 (defn share-of
   "How far got bytes of total are, 0 to 99 (100 only once the whole body is in; a compressed body
