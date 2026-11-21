@@ -1762,6 +1762,41 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/slave/codeforms.cljs`, `src/claudia/slave/history.cljs`,
     `src/claudia/shared/text.cljc`, `src/claudia/web/events.cljs`.
+103. Background work ends, Claude carries on (2026-11-21, the user's list, items 25 and 26; Claude
+    started three subagents, said it would combine their branches, test and open a PR once they
+    finished, and on the last one's notice replied only "No response requested.", so the turn
+    ended and nothing happened until the user asked). Claude Code hands Claude a background task's
+    end as a message marked as not the user's input; Claude read that mark as "nothing to do".
+    Two fixes:
+    - The system prompt's Background work paragraph: when background work Claude started finishes,
+      it carries on in that same turn with the plan it told the user; the mark is about approval,
+      not about whether work is left; an empty reply ends the turn and the work stops.
+    - The empty-turn catch in the runner (`claudia.slave.chats.nudge`). A turn counts as started by
+      a background task's end when Claude Code stamps the turn's origin on its result message as
+      `task-notification` with no subkind (a scheduled task, a peer's message or an inbox delivery
+      has one and never counts); a result without an origin (a person's message, Claudia's own
+      sends, an older CLI) never counts. It ended with no real reply when the result's text is
+      blank or only the stock phrase "No response requested." (any case, a closing full stop or
+      brackets allowed; the only phrase seen in the sessions' replies to notices). Then Claudia
+      sends Claude once: "You ended your turn without a reply after "<task>" finished. Continue the
+      plan you told the user, or say in one line that nothing is left." The chat shows it as a note
+      ("Claudia: …"), never as the person's message: it goes inside `<claudia-nudge>`, and the
+      session file's copy reads back as the same note. Never: for a turn that failed or that the
+      person stopped (Stop, Esc); for an archived or moving chat; while other
+      background work of the chat still runs (its own end comes next); for a task that was stopped
+      (the person stopped it on its chip, or Claude did); when a message went in after the task's
+      end (the person's, or the nudge itself) or one waits in Claude Code's queue; when a turn
+      started or a message went in while the session was made ready. The notice (the newest
+      background task's end, kept with its time) goes at the end of the first turn that began
+      after it, and a nudge needs one, so one notice wakes Claude at most once and a turn the
+      nudge started never nudges. Read-only viewers send nothing: the nudge is the chat's own
+      runner's, decided from its session alone. Instead of: a prompt rule alone (a rule can be
+      missed), a nudge on every notice turn (two of three finished agents rightly say nothing),
+      the Stop hook handing the turn back (it runs before the result says the turn's origin), or
+      the nudge shown as the person's words.
+    Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
+    `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 
