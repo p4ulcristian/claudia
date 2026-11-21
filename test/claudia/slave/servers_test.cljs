@@ -116,7 +116,7 @@
   (is (nil? (codeforms/with-template {:id "b"} nil)))
   (is (= {:id "b" :form "html" :data {:template "T" :html "<p>" :parts {:a "1" :b "2"}} :name "T"}
          (codeforms/with-template {:id "b" :form "html" :data {:parts {:b "2"}}} {:name "T" :html "<p>" :parts {:a "1" :b "1"}})))
-  (is (= "Picture updated: The picture is empty.. Not drawn: git: the user deleted that form; use another kind"
+  (is (= "Picture now: The picture is empty.. Not drawn: git: the user deleted that form; use another kind"
          (codeforms/draw-text {:blocks []} {:refused ["git" "git"]}))))
 
 (deftest clojure-index-from-analysis

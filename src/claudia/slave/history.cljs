@@ -44,6 +44,7 @@
       "TodoWrite" (str (count (:todos i)) " todos")
       "AskUserQuestion" (str "ask: " (str/join ", " (map :header (:questions i))))
       "mcp__picture__draw" (if (seq (:title i)) (str "draw: " (short-text (:title i) 60)) "draw")
+      "mcp__picture__steps" (if (:number i) (str "read step " (:number i)) "list steps")
       "mcp__workspace__set_folder" (str "folder " (shown-path (str (:path i)) nil))
       "mcp__workspace__run_with_secret" (str "secret: " (short-text (:reason i) 80))
       "mcp__workspace__show_image" (str "image " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))

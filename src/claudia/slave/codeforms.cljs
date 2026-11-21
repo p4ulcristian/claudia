@@ -10,6 +10,7 @@
             [clojure.string :as str]
             [claudia.shared.forms :as forms]
             [claudia.shared.protocol :as p]
+            [claudia.shared.text :as text]
             [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
@@ -476,9 +477,7 @@
   session already ran with the old tools) goes with it as a reminder after the text, hidden from
   the chat."
   [id text live?]
-  (if-let [news (when live? (see-forms! id))]
-    (str text "\n\n<system-reminder>" news "</system-reminder>")
-    text))
+  (text/with-reminder text (when live? (see-forms! id))))
 
 (defn mcp-for
   "The tools for a chat (src/chat.ts tools): the draw tool offers this runner's forms, less the
@@ -510,9 +509,10 @@
      :refused (vec refused)}))
 
 (defn draw-text
-  "What Claude hears after a draw: the picture now and every note about what was not drawn."
+  "What Claude hears after a draw, under the step's line (claudia.slave.steps/head): the picture now
+  and every note about what was not drawn."
   [s {:keys [news missing refused notes]}]
-  (str "Picture updated: " (scene/describe s)
+  (str "Picture now: " (scene/describe s)
        (when news (str "\n\n" news))
        (when (seq missing) (str ". No template named " (str/join ", " (map #(str "\"" % "\"") missing)) " (see the templates tool)."))
        (when (seq refused) (str ". Not drawn: " (str/join ", " (distinct refused)) ": the user deleted that form; use another kind"))

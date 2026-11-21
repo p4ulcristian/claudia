@@ -302,6 +302,15 @@
     (is (= "new" (get-in (ev/send-for (assoc-in db [:new-settings :folder] "/w/app") :new "hello") [:ws/send 1 :type]))
         "with a folder it goes")))
 
+(deftest a-send-names-the-earlier-picture-looked-at
+  (let [chat-db {:servers {"s" {:status :open}} :drafts {["s" "c"] "hi"}}]
+    (is (= "t3" (get-in (ev/send-for (assoc chat-db :viewing {["s" "c"] "t3"}) ["s" "c"] "hi") [:ws/send 1 :viewing]))
+        "an older step looked at goes with the message")
+    (is (not (contains? (get-in (ev/send-for chat-db ["s" "c"] "hi") [:ws/send 1]) :viewing))
+        "on the live step nothing is added")
+    (is (not (contains? (get-in (ev/send-for (assoc chat-db :viewing {["s" "d"] "t3"}) ["s" "c"] "hi") [:ws/send 1]) :viewing))
+        "another chat's step is not this chat's")))
+
 (deftest dictated-clips-are-tied-to-the-message-they-went-out-in
   (let [base {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
         added (:db (ev/heard-fx base ["s" "c"] {:text "one" :raw "one" :clip "c1"} :add))

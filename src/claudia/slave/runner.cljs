@@ -30,6 +30,7 @@
             [claudia.slave.secret :as secret]
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.ssh-cert :as ssh-cert]
+            [claudia.slave.steps :as steps]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.folders :as folders]
             [claudia.slave.move :as move]
@@ -127,15 +128,16 @@
 (defn- wake-with!
   "The user wrote text (and images) to chat: an archived chat comes back, a passive one wakes.
   now: the message and every message queued before it go in at once, the running turn stopped for
-  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil)."
-  [chat text images now msg-id]
+  them (chats/send-after-stop!). msg-id: the message's id as the page made it (or nil); reminder:
+  said to Claude after the text, not shown (nil: none)."
+  [chat text images now msg-id reminder]
   (if (chats/moving? chat)
     (chats/moving-error! chat)
     (do (store/update! chat {:archived false})
         (chats/wake! chat)
         (if now
-          (chats/send-after-stop! chat text images msg-id)
-          (chats/send-text! chat text images msg-id))
+          (chats/send-after-stop! chat text images msg-id reminder)
+          (chats/send-text! chat text images msg-id reminder))
         (chats-changed))))
 
 (defn msg-id
@@ -172,7 +174,8 @@
         images (sent-images f)]
     (when (or (seq (:text f)) (seq files) (seq images))
       (activity/note-message! chat (:profile c) c)
-      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)))))
+      (wake-with! chat (uploads/with-files (str (:text f)) files) images (true? (:now f)) (msg-id f)
+                  (steps/viewing-note (pictures/listing chat) (:viewing f))))))
 
 (defmethod on-chat-frame "stop" [_ _ chat] (chats/stop! chat))
 (defmethod on-chat-frame "unqueue" [_ f chat] (when-let [m (msg-id f)] (chats/unqueue! chat m)))
@@ -222,7 +225,7 @@
     (chats/set-scene! chat scene)
     (when (seq text)
       (activity/note-message! chat (:profile c) c)
-      (wake-with! chat text nil false nil))))
+      (wake-with! chat text nil false nil nil))))
 
 (defn- on-frame [c {frame-type :type :keys [chat] :as f}]
   (case (frame-gate frame-type (:read-only c) (known? chat))
@@ -321,7 +324,7 @@
            (doto (chats/new-chat! text folder nil {} nil) (activity/note-message! (:profile who) who)))
    :send! (fn [chat text]
             (activity/note-message! chat (:profile who) who)
-            (wake-with! chat text nil false nil))
+            (wake-with! chat text nil false nil nil))
    :archive! (fn [chat archived]
                (store/update! chat {:archived archived})
                (chats/session-follows-row! chat)

@@ -19,6 +19,12 @@
   [s]
   (str/trim (str/replace (str s) #"\s+" " ")))
 
+(defn with-reminder
+  "text, then note inside <system-reminder> (what Claude gets and the chat does not show); text alone
+  without a note."
+  [text note]
+  (if (seq note) (str text "\n\n<system-reminder>" note "</system-reminder>") text))
+
 #?(:cljs
    (defn error-text
      "An error (or anything thrown) as text: its message, else itself."

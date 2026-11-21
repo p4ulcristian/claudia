@@ -1693,6 +1693,33 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
+95. Claude knows the picture's history as numbered steps (2026-11-21, the user's list, items 9-13;
+    Claude cleared the board and lost the user's base drawing because it was never told the old
+    pictures stay). A step is a picture of the history (decision "Picture history" below), numbered
+    by its 1-based place in the chat's list, oldest first, the number the page's bar shows; the last
+    is live. The system prompt says so in a Steps paragraph: every turn that draws makes the next
+    step, more draws in one turn update it, changing by id and clear both make a new step, old steps
+    never change and stay, the user names steps by number, and in one talk about one thing Claude
+    keeps the base drawing and changes it by id, clearing only when the topic changes (it replaces
+    "Start a new picture (clear: true) when the topic changes"). The page's `send` carries `viewing`
+    (the turn of the older picture looked at) and the runner tells Claude "The user is looking at
+    step 3 of 7 (step 7 is live) while writing this." in a reminder after the text, hidden from the
+    chat; on the live step nothing is said (the least noisy choice that is still unambiguous:
+    the prompt says a message without that note was written on the newest step, so a line on every
+    message would add nothing). A draw may give `from: N`: the new step starts as a
+    copy of step N, then the rest of the call applies; `from` with `clear` is refused, not ignored
+    (they contradict, and an error tells Claude which one it meant). The new `steps` tool of the
+    picture server lists the steps (number, title, UTC time, which is live) or returns one step's
+    scene as JSON, blocks whole up to 30,000 characters and the rest without their data, readable
+    one at a time with `block`. The draw's answer starts with the step: "Step 8 · modified from 7 ·
+    2 blocks changed", "Step 8 · fresh (clear)", "Step 8 · copied from 3", "Updated step 8 (this
+    turn's step) · …", then "Picture now: …" and the notes as before. Instead of: steps kept from
+    Claude (it cleared and lost work), a step line on every message, from with clear meaning
+    either one. Files: `src/claudia/slave/steps.cljs`, `src/claudia/slave/tools.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/runner.cljs`,
+    `src/claudia/slave/codeforms.cljs`, `src/claudia/slave/history.cljs`,
+    `src/claudia/shared/text.cljc`, `src/claudia/web/events.cljs`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
