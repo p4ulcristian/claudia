@@ -1740,3 +1740,35 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
     `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
     `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.
+
+95. Three features go: listen back, explain, and the changed-files tracking (2026-11-21, the
+    user's call). Each cost code on the page, the runner or the host for something the chats no
+    longer need:
+    - Listen back (decision 20): the "▶ your voice" player and "heard as" under a sent dictated
+      message. A heard clip leaves the device's IndexedDB as before listen back; its database
+      `claudia-mic` goes to version 3, which deletes the store `sounds` with the recordings kept
+      there. The mic's own clips (kept until their words went out, retries, Try again and Throw
+      away) stay as they were. A send still carries the id the page made for its message (`msg`,
+      PROTOCOL.md): the runner uses it as the message's id, and queued messages (decision 83) take
+      one back by it.
+    - Explain on a tool step: the "explain" button on each step and on the running one, and the
+      runner's `POST /api/chats/:id/explain` with its Haiku call. The steps groups stay as they
+      were. The 3D view's Explain on a part (it asks Claude in the open chat) is a different
+      thing and stays.
+    - The changed-files tracking (decision 8's file changes): the runner's copy of every file
+      before Claude's Edit/Write first touched it in a turn (a PreToolUse hook) and its git
+      snapshots of the chat's folder through an index of its own (`RUNNER_DATA/index`), the
+      `changes` and `diff` frames, and the page's leftovers of the changes pill (gone since
+      2026-11-11). A runner drops its table `changes` and deletes `RUNNER_DATA/index` when it
+      starts; forks and server moves (decision 82) no longer carry file changes, and a move's check
+      no longer counts them. The agents' Files tab is not part of it and stays: it reads an agent's
+      Edit/Write calls from its own transcript (`claudia.slave.tasks`, the line counts moved there
+      from `claudia.slave.changes`) and shows them in `claudia.web.views.diff`, which keeps only
+      the one-column table it uses. The PostToolUse hook stays (a chat with no folder gets the
+      edited file's project; Sentinel's worktrees hear of edits).
+    Instead of: keeping them unused, or leaving the sounds, the table and the index files on disk.
+    Files: `src/claudia/web/clip_store.cljs`, `src/claudia/web/views/mic_clips.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/views/steps.cljs`,
+    `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/session.cljs`,
+    `src/claudia/slave/store.cljs`, `src/claudia/slave/runner.cljs`, `src/claudia/slave/move.cljs`,
+    `src/claudia/slave/tasks.cljs`, `src/claudia/web/views/diff.cljs`, `PROTOCOL.md`.
