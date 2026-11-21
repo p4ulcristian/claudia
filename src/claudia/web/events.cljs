@@ -456,7 +456,7 @@
 (rf/reg-event-fx :voice/done (fn [{:keys [db]} [_ k]] (voice-done-fx db k)))
 
 (defn voice-opened-fx
-  "Chat k was opened (README decision 110): its waiting voice messages are read on the screen, so
+  "Chat k was opened (README decision 113): its waiting voice messages are read on the screen, so
   they are marked heard, here and on every device, except the one being read aloud now, which plays
   on to its end (and is marked heard there)."
   [db k]
@@ -530,7 +530,7 @@
      {:db (-> (on-chat-screen db) (assoc :open k) (assoc-in [:chats k :error] nil))
       :ws/send-all (switch-frames (:open db) k)
       ;; Opened, its replies are read on the screen: its waiting voice messages are done, the one
-      ;; sounding plays on (README decisions 105, 110).
+      ;; sounding plays on (README decisions 105, 113).
       :fx (cond-> [[:dispatch [:chat/check-seen]] [:dispatch [:voice/opened k]]]
             history? (conj [:history/push k]))})))
 

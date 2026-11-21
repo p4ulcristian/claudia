@@ -214,7 +214,7 @@
 
 (defn drop-waiting!
   "Chat k was opened: its waiting replies go (they are read on the screen); the one being read now
-  plays on to its end (README decision 110)."
+  plays on to its end (README decision 113)."
   [k]
   (swap! line talk/without-waiting k))
 
