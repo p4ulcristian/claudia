@@ -1783,7 +1783,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     in a near-white weight 500 right-aligned without a bubble and Claude's in the chat's chalk
     colour (decision 98), and the step chips. Files: `resources/web/css/claudia.css`,
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`, `DESIGN.md`.
-104. Background work ends, Claude carries on (2026-11-21, the user's list, items 25 and 26; Claude
+104. Background work ends, Claude carries on (removed by decision 105, which found the real cause; 2026-11-21, the user's list, items 25 and 26; Claude
     started three subagents, said it would combine their branches, test and open a PR once they
     finished, and on the last one's notice replied only "No response requested.", so the turn
     ended and nothing happened until the user asked). Claude Code hands Claude a background task's
@@ -1818,6 +1818,22 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
+
+105. A turn Claude Code starts by itself runs, so nothing closes its session under it (2026-11-21,
+    the user's "it happened again"). Decision 104 was built on a wrong reading: every "No response
+    requested." after a background task's end (14 in three days of session files) is Claude Code's
+    own placeholder (model `<synthetic>`, 0 tokens), written when a session resumes over a turn that
+    never got its answer. The answer was lost because the runner closed the session while that turn
+    waited for it: a turn Claude Code starts after a background task's end counted as running only
+    from its first streamed words, so a stale session (other tools or instructions after an update)
+    was closed by `restart-if-stale!` the moment the last agent ended, or by `settled!` after the
+    30 s init wait while a big chat's first answer was still coming; `move-to-newest-sdk!` and the
+    idle close had the same gap. Now the turn runs from its `init` (`turns/init-starts-running?`),
+    and no stale restart happens while the chat settles (`turns/stale-restart?`): the settle wait
+    sees the notice's turn start, and the close comes after that turn's result. Removed: decision
+    104's nudge (it watched for a reply Claude never writes) and its prompt paragraph. Instead of:
+    keeping the nudge as a safety net. Files: `src/claudia/slave/chats.cljs`,
+    `src/claudia/slave/chats/turns.cljs`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

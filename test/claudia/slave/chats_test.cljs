@@ -194,9 +194,9 @@
 (deftest a-sent-message
   (let [msg (turns/sent-msg "u" "hi" [{:data "x"}] true 7)]
     (is (= {:id "u" :role "user" :text "hi" :at 7 :images 1 :queued true} msg))
-    (is (= {:turn [:old] :turn-id "u" :sent-at 7 :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg)) "queued: the turn goes on"))
+    (is (= {:turn [:old] :turn-id "u" :unsaved {"u" msg}} (turns/with-sent {:turn [:old]} msg)) "queued: the turn goes on"))
   (let [msg (turns/sent-msg "u" "hi" nil false 7)]
-    (is (= {:turn [] :turn-id "u" :sent-at 7 :unsaved {"u" msg} :begun false} (turns/with-sent {:turn [:old]} msg))))
+    (is (= {:turn [] :turn-id "u" :unsaved {"u" msg} :begun false} (turns/with-sent {:turn [:old]} msg))))
   (testing "taken in or dropped"
     (let [s {:turn [{:id "u"} {:id "a"}] :unsaved {"u" {:id "u" :queued true}}}]
       (is (= {:turn [{:id "a"} {:id "u"}] :unsaved {"u" {:id "u"}}} (turns/taken-in s {:id "u"})))
@@ -350,3 +350,21 @@
   (is (false? (view/keeps-session? {:id 1 :color "blue" :archived true})) "archived")
   (is (false? (view/keeps-session? {:id 1 :color "ash"})) "passive")
   (is (false? (view/keeps-session? nil)) "no such chat"))
+
+(deftest a-turn-claude-code-starts-by-itself-runs-from-its-init
+  (is (true? (turns/init-starts-running? {:subtype "init"} false)) "a notice's turn counts from its init")
+  (is (false? (turns/init-starts-running? {:subtype "init"} true)) "already running: nothing to do")
+  (is (false? (turns/init-starts-running? {:subtype "init" :parent_tool_use_id "t1"} false))
+      "a subagent's init is not the chat's turn"))
+
+(deftest a-stale-session-never-closes-under-a-starting-turn
+  (let [idle {:live true :running false :settling false :stale true}]
+    (is (true? (turns/stale-restart? idle false)) "quiet and stale: it starts again")
+    (is (false? (turns/stale-restart? (assoc idle :running true) false)) "never mid-turn")
+    (is (false? (turns/stale-restart? (assoc idle :settling true) false))
+        "not while the last task's notice may be starting a turn")
+    (is (false? (turns/stale-restart? idle true)) "not while background work runs")
+    (is (true? (turns/stale-restart? (assoc idle :stale false :plan-changed true) true))
+        "a changed plan starts again even with work running")
+    (is (false? (turns/stale-restart? (assoc idle :live false) false)) "no session held: nothing to close")))
+
