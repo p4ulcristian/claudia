@@ -36,6 +36,7 @@
 (rf/reg-fx :speech/enqueue speech/enqueue!)
 (rf/reg-fx :speech/stop (fn [_] (speech/stop!)))
 (rf/reg-fx :speech/drop speech/drop-chat!)
+(rf/reg-fx :speech/drop-waiting speech/drop-waiting!)
 
 ;; ---- HTTP (same origin; the gate's login cookie goes along) ----
 
