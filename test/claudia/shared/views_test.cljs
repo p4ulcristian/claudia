@@ -55,3 +55,12 @@
     (is (= [] (views/from-stored "picture")))
     (is (= [] (views/from-stored nil)))
     (is (= [] (views/from-stored "")))))
+
+(deftest machines-reads-as-system
+  (is (= :system (views/clean "machines")) "README decision 96: Machines became System")
+  (is (= :system (views/clean :machines)))
+  (is (= "System" (views/label :system)))
+  (is (= [:files :system] (views/from-stored "machines files system")) "each once, where it lies highest")
+  (is (= [:system] (views/from-wire {:views ["machines"]})))
+  (is (= [:system] (views/from-wire {:view "machines"})) "an older page's one view")
+  (is (= [:system] (views/open [:machines] :system))))

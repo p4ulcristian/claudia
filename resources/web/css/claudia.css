@@ -9,7 +9,7 @@
   --amber: #f2c46b; --amber-bg: #4a4330; --blue: #8fc4ea; --blue-bg: #31434b;
   --grey: #c0c0c0; --grey-bg: #434343; --violet: #bba8f2; --violet-bg: #3d3b50;
   --accent: #f2e3a0;
-  /* The chat's two voices (README decision 97): the person's own lines one near-white in every chat,
+  /* The chat's two voices (README decision 98): the person's own lines one near-white in every chat,
      Claude's replies in the chat's chalk (--reply; plain --fg with no chat colour and in ash chats). */
   --mine: #efefef;
   --reply: var(--fg);
@@ -280,13 +280,13 @@ code, pre { font-family: var(--mono); }
 .msg { max-width: 100%; min-width: 0; }
 .msg.user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 88%; }
 .msg.user .bubble { background: none; border: 0; padding: 0; border-radius: 0; font: 500 15px/1.5 var(--sans); color: var(--mine); text-align: right; }
-/* A message with a menu (README decision 98): on a touch screen a long press opens it, so iOS's own
+/* A message with a menu (README decision 99): on a touch screen a long press opens it, so iOS's own
    selection and callout stay off these lines (Claude's replies still select). */
 @media (hover: none) { .msg.user.forkable .bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 .msg.claude { padding: 0 2px; color: var(--reply); }
 /* Code, tables and quotes in a reply keep the plain text colour, to stay readable. */
 .msg.claude .md :is(code, pre, table, blockquote) { color: var(--fg); }
-/* The step chip (README decision 99): the number of the picture the reply's turn drew, the slider's;
+/* The step chip (README decision 100): the number of the picture the reply's turn drew, the slider's;
    filled while the board shows it. */
 .step-chip { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 4px 4px 0 0; padding: 0 6px; vertical-align: top;
   border: 1.5px solid color-mix(in srgb, var(--reply) 70%, transparent); border-radius: 11px; color: var(--reply); font: 600 11px/1 var(--mono); }
@@ -525,7 +525,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .asks-inline .option.other { grid-column: 1 / -1; }
 .asks-inline .preview { font-size: 13px; max-height: 40vh; }
 .asks-inline .panel > p { margin: 0; }
-/* The cards follow the chat column, whose width the person drags (README decision 100): narrow, one
+/* The cards follow the chat column, whose width the person drags (README decision 101): narrow, one
    column of options, less padding, no key hint, the buttons sharing the row (Answer the whole row). */
 @container chat (max-width: 440px) {
   .asks-inline .panel.ask, .asks-inline .panel.permit { padding: 12px; gap: 10px; }
@@ -837,42 +837,6 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .pair-state.fetched, .pair-state.on-WireGuard { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .pair-state.peer-up { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .pair-state.waiting-for-peer { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
-
-/* ---------- The Systems popup (claudia.web.views.systems) ----------
-   One card per machine: the cores as bars (user, system, steal filled; waiting on disk faint),
-   then memory, disks, speeds, cards, temperatures and Claudia's own processes. */
-.systems-pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.sys-card > * { min-width: 0; }
-.sys-card { display: grid; gap: 5px; padding: 8px 8px 9px; border-radius: 10px; background: var(--bg2); transition: opacity 0.3s; }
-.sys-card.stale { opacity: 0.55; filter: grayscale(0.7); }
-.sys-card.off { opacity: 0.6; }
-.sys-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.sys-name { font: 700 16px/1.1 var(--hand); color: var(--fg); }
-.sys-sub { min-width: 0; font: 11px/1.2 var(--mono); color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sys-meta { font: 11px/1.2 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sys-error { font-size: 11.5px; color: var(--amber); overflow-wrap: anywhere; }
-.sys-cores { display: grid; gap: 2px; height: 46px; margin: 2px 0 4px; }
-.sys-cores:has(.sys-core:nth-child(33)) { height: auto; grid-auto-rows: 30px; }
-.sys-core { position: relative; display: flex; flex-direction: column-reverse; height: 100%; min-width: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.sys-core i { display: block; flex: none; transition: height 0.6s var(--ease); }
-.sys-core i.user { background: var(--green); }
-.sys-core i.sys { background: var(--red); }
-.sys-core i.steal { background: var(--violet); }
-.sys-core i.iowait { background: color-mix(in srgb, var(--amber) 45%, transparent); }
-.sys-row { display: grid; grid-template-columns: 74px 1fr 136px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.sys-row .m-bar > span { background: var(--blue); transition: width 0.6s var(--ease); }
-.sys-row.amber .m-bar > span { background: var(--amber); }
-.sys-row.red .m-bar > span { background: var(--red); }
-.sys-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sys-num { font: 11.5px/1.2 var(--mono); color: var(--fg); text-align: right; white-space: nowrap; }
-.sys-rate { grid-template-columns: 74px 1fr 1fr; }
-.sys-line { grid-template-columns: 74px 1fr; }
-.sys-text { font: 11.5px/1.2 var(--mono); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sys-chips, .sys-own { display: flex; flex-wrap: wrap; gap: 4px; }
-.sys-chip { padding: 2px 6px; border-radius: 6px; background: var(--panel); font: 11px/1.3 var(--mono); color: var(--muted); }
-.sys-chip b { font-weight: 500; color: var(--fg); }
-.sys-chip.amber { color: var(--amber); }
-.sys-chip.red { color: var(--red); }
 
 /* Full screen where the browser has none for elements (Safari on the iPhone): the element fills the
    window (claudia.web.fullscreen). */

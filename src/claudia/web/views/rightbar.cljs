@@ -1,6 +1,6 @@
 (ns claudia.web.views.rightbar
   "The right half's bar, always shown under the picture: a scrubber over every picture of the chat,
-  numbered 1..N (README decision 99), with ‹ ›, and the snapshot camera. The last number or › is
+  numbered 1..N (README decision 100), with ‹ ›, and the snapshot camera. The last number or › is
   live again. The fold has no button: Alt+P (its edge unfolds it)."
   (:require [re-frame.core :as rf]
             [claudia.web.hooks :as hooks]

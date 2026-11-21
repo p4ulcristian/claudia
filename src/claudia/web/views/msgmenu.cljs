@@ -1,5 +1,5 @@
 (ns claudia.web.views.msgmenu
-  "The menu on one of the person's own messages (README decision 98): a right click, or a long
+  "The menu on one of the person's own messages (README decision 99): a right click, or a long
   press on a touch screen, opens it at the pointer; Fork from here makes a new chat with this one up
   to the end of that turn, in the same folder. Only on a message a fork may start from
   (claudia.web.views.pure.chat/user-marks). The look is the chat menu's (claudia.web.views.chatmenu)."

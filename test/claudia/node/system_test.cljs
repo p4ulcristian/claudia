@@ -27,3 +27,16 @@
   (is (= "Flatcar Container Linux by Kinvolk 4152.2.3" (system/os-name "NAME=\"Flatcar\"\nPRETTY_NAME=\"Flatcar Container Linux by Kinvolk 4152.2.3\"")))
   (is (= "Debian" (system/os-name "NAME=Debian\n")))
   (is (nil? (system/os-name ""))))
+
+(deftest each-processes-cpu-over-the-window
+  (let [a {:t 1000 :procs [{:pid 1 :ticks 100} {:pid 2 :ticks 50}]}
+        b {:t 3000 :procs [{:pid 1 :ticks 300 :name "busy" :rss 10} {:pid 3 :ticks 9 :name "new" :rss 99}]}]
+    (is (= [{:pid 1 :ticks 300 :name "busy" :rss 10 :cores 1} {:pid 3 :ticks 9 :name "new" :rss 99 :cores 0}]
+           (system/procs-of a b 2)))))
+
+(deftest a-sample-names-its-top-processes-never-their-commands
+  (let [r {:cpu (proc/cpu-times "cpu  0 0 0 100 0 0 0 0\n") :procs [{:pid 1 :ppid 0 :ticks 0 :kind "front" :rss 5}]}
+        s (system/sample-of (assoc r :t 0) (assoc r :t 1000 :procs [{:pid 1 :ppid 0 :ticks 50 :name "node" :kind "front" :rss 5 :start 9}]) nil)]
+    (is (= [{:pid 1 :name "node" :cores 0.5 :rss 5}] (:top s)))
+    (is (= [{:kind "front" :count 1 :rss 5}] (:claudia s)))
+    (is (nil? (:pressure s)))))

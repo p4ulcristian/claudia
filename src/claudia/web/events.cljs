@@ -561,6 +561,25 @@
    (cond-> (assoc-in db [:drafts k] text)
      (str/blank? text) (update :dictated dissoc k))))
 
+(defn draft-key
+  "The draft the composer writes now: the open chat's, or :new (no chat open, or one on its way)."
+  [{:keys [open pending-new]}]
+  (if (and open (not (contains? pending-new (second open)))) open :new))
+
+(defn draft-with
+  "A draft with text put under what it holds (a blank line between)."
+  [draft text]
+  (if (str/blank? draft) text (str (str/trimr draft) "\n\n" text)))
+
+(rf/reg-event-db
+ :draft/add
+ ;; Text put in the composer from elsewhere, not sent (System's Ask a chat, README decision 96); on
+ ;; a phone the chat comes up to show it.
+ (fn [db [_ text]]
+   (let [k (draft-key db)]
+     (cond-> (assoc-in db [:drafts k] (draft-with (get-in db [:drafts k]) text))
+       (db/phone?) (assoc :screen :chat)))))
+
 (rf/reg-event-fx
  :chat/switches
  ;; The chat's voice, bell and/or sound (m: {:voice :bell :sound}, those set), kept with the chat; k nil: the new
@@ -706,7 +725,7 @@
   "A send of typed from the composer k ([server chat], or :new): into that chat, or a new chat.
   now: it and every message queued before it go in at once, the running turn stopped for them
   (README decision 83). viewing: the turn of the earlier picture the person looks at in that chat
-  (none on the live one), so Claude hears which step (README decision 101)."
+  (none on the live one), so Claude hears which step (README decision 102)."
   [db k typed & [now]]
   (let [chat (when (vector? k) (second k))
         server (if chat (first k) (default-server db))

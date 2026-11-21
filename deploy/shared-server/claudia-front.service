@@ -17,6 +17,9 @@ Environment=FRONT_ROOT_SOCKET=/run/claudia-front/root.sock FRONT_ROOT_STATE=/var
 # GitHub for services (README decision 78): the hub's 1-hour app tokens go to <dir>/<service>/token,
 # only for a service whose folder root made (owner claudia, the service's group, setgid, 2750).
 Environment=FRONT_GITHUB_SERVICES_DIR=/var/lib/claudia-github-services
+# System (README decision 95): its 7 days of minute samples in <dir>/system.db; the root helper's
+# fixed reads on its read socket (host/ makes the folder; without it System shows what claudia sees).
+Environment=FRONT_DATA=/var/lib/claudia-front FRONT_ROOT_READ_SOCKET=/run/claudia-root-read/read.sock
 RuntimeDirectory=claudia-front
 RuntimeDirectoryMode=0700
 StateDirectory=claudia-front

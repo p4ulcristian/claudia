@@ -5,7 +5,7 @@
   the server and the project (claudia.web.views.head-place), whose Claude subscription, model ·
   effort, the prompt profile, the voice that reads its replies (decision 21), the notify sound
   (claudia.web.views.notify) and the colour. Row 3: the rings (context, 5-hour, week) on the left;
-  on the right buttons with words: Files, Fork, Sudo (its owner), Archive. A new chat picks all of them
+  on the right buttons with words: Files, System (decision 96), Fork, Sudo (its owner), Archive. A new chat picks all of them
   here before its first message (they go with `new`); once it has started a server pick moves it
   (decision 82) and every other pick changes the chat."
   (:require [re-frame.core :as rf]
@@ -215,9 +215,18 @@
                  :tip (if on? "Hide the File Browser" "Show the File Browser")
                  :on-click #(rf/dispatch [:right/toggle :files])}]))
 
+(defn- system-button
+  "System: every server's health, ports and services in the right half (README decision 96), filled
+  while it shows."
+  []
+  (let [on? (= :system @(rf/subscribe [:right-view]))]
+    [act-button {:icon [hp/icon :system] :word "System" :on? on? :class "system-btn"
+                 :tip (if on? "Hide System" "Show System: the servers' health, ports and services")
+                 :on-click #(rf/dispatch [:right/toggle :system])}]))
+
 (defn- fork-button
   "Fork: a new chat with this one up to its last finished turn, in the same folder (README decision
-  98); Forking… while the server makes it."
+  99); Forking… while the server makes it."
   [ck]
   (let [{:keys [forking?]} (menu-pure/fork-state @(rf/subscribe [:fork]) ck)]
     [act-button {:icon [hp/icon :fork] :word (if forking? "Forking…" "Fork") :class "fork-btn" :on? forking?
@@ -241,11 +250,12 @@
                  :on-click #(rf/dispatch (if out? [:chat/archive ck false] [:archive/ask ck]))}]))
 
 (defn- actions
-  "Row 3's buttons on the right: Files (not in a read-only view, which shows the picture only),
-  Fork (a started chat), Sudo (its owner, a started chat), Archive (a started chat)."
+  "Row 3's buttons on the right: Files and System (not in a read-only view, which shows the picture
+  only), Fork (a started chat), Sudo (its owner, a started chat), Archive (a started chat)."
   [{:keys [ck row ro view-ro]}]
   [:span.head-acts
    (when-not view-ro [files-button])
+   (when-not view-ro [system-button])
    (when (and row (not ro)) [fork-button ck])
    (when (and row (not ro) @(rf/subscribe [:owner?])) [root-button ck])
    (when (and row (not ro)) (archive-button ck row))])

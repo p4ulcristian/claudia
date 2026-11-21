@@ -1,0 +1,266 @@
+/* System (README decision 95; claudia.web.views.systems and its parts, system_*.cljs): one sheet
+   for everything about a server. Calm and roomy: radii 10 px for cards and tiles, 8 px for rows,
+   6-7 px for chips and buttons; Kalam only for titles, tabs and group headers; numbers in mono;
+   colour only where it means something (green fine, amber a look, red broken, violet a chat's
+   proposal, blue memory and disk). Everything follows the chat's theme variables. */
+
+.system-pane { display: flex; flex-direction: column; gap: 18px; max-width: 780px; }
+.sy-mono { font-family: var(--mono); }
+.sy-muted { color: var(--muted); }
+.sy-empty { padding: 14px 8px; color: var(--muted); font-size: 13px; }
+.sy-unreached { padding: 12px 14px; border-radius: 10px; background: var(--bg2); color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.sy-err { color: var(--red); font-size: 11.5px; }
+.sy-hint { margin: 2px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+
+/* ---- the server tabs: a segmented control, each with its dot ---- */
+.sy-servers { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; padding: 3px; border-radius: 11px; background: var(--bg2); }
+.sy-server { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px 5px 12px; border-radius: 8px; font: 700 15px/1.3 var(--hand); color: var(--muted); }
+.sy-server:hover { color: var(--fg); }
+.sy-server.on { background: var(--panel2); color: var(--fg); box-shadow: inset 0 1px 0 var(--accent); }
+.sy-health { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--grey); opacity: 0.5; }
+.sy-health.green { background: var(--green); opacity: 1; }
+.sy-health.amber { background: var(--amber); opacity: 1; }
+.sy-health.red { background: var(--red); opacity: 1; box-shadow: 0 0 0 3px var(--red-bg); }
+
+/* ---- the tiles: CPU and Waiting wide, then memory, disk, cards ---- */
+.sy-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.sy-tile { grid-column: span 2; display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 9px 12px 8px; border-radius: 10px; background: var(--bg2); }
+.sy-tile.cpu, .sy-tile.wait { grid-column: span 3; }
+.sy-tiles:not(:has(.wait)) .sy-tile.cpu { grid-column: 1 / -1; }
+.sy-tiles.n2 .sy-tile.small { grid-column: span 3; }
+.sy-tiles.n1 .sy-tile.small { grid-column: 1 / -1; }
+@container (max-width: 600px) {
+  .sy-tile.cpu, .sy-tile.wait { grid-column: 1 / -1; }
+  .sy-tile.small, .sy-tiles.n2 .sy-tile.small { grid-column: span 3; }
+  .sy-tiles.n3 .sy-tile.small:last-child { grid-column: 1 / -1; }
+}
+.sy-tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sy-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; opacity: 0.85; }
+.sy-value { font: 600 21px/1.2 var(--mono); color: var(--fg); letter-spacing: -0.01em; }
+.sy-value b { font-weight: 600; }
+.sy-unit { font: 400 13px/1.2 var(--sans); color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+.sy-pct { font: 500 13px/1.2 var(--mono); color: var(--muted); letter-spacing: 0; }
+.sy-sub { font: 11.5px/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.sy-tile-foot { margin-top: auto; padding-top: 4px; }
+.sy-spark { display: block; width: 100%; height: 26px; overflow: visible; }
+.sy-spark path { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sy-spark .green { stroke: var(--green); }
+.sy-spark .blue { stroke: var(--blue); }
+.sy-spark .violet { stroke: var(--violet); }
+.sy-spark .amber { stroke: var(--amber); }
+.sy-cap { stroke: var(--red); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; opacity: 0.8; }
+
+/* The CPU tile: every core a thin bar (claudia.web.views.system-machine/core-bar), a key, the busiest. */
+.sy-cores { display: flex; gap: 2px; height: 34px; margin: 3px 0 1px; }
+.sy-cores.many { gap: 1px; }
+.sy-cores .sys-core { flex: 1 1 0; min-width: 1px; }
+.sy-key { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--muted); }
+.sy-key span { display: inline-flex; align-items: center; gap: 5px; }
+.sy-key i { width: 8px; height: 8px; border-radius: 2px; }
+.sy-key i.user { background: var(--green); }
+.sy-key i.sys { background: var(--red); }
+.sy-key i.iowait { background: color-mix(in srgb, var(--amber) 45%, transparent); }
+.sy-key i.steal { background: var(--violet); }
+.sy-busiest { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.sy-busiest b { font-weight: 500; color: var(--fg); }
+.sy-owner { color: var(--fg); }
+.sy-square { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; vertical-align: -0.5px; }
+
+/* The Waiting tile: three rows, a 7 px bar each. */
+.sy-wait-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 38px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sy-wait-row .sy-mono { font-size: 12px; color: var(--fg); text-align: right; }
+.sy-meter { height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--line) 75%, transparent); overflow: hidden; }
+.sy-meter i { display: block; height: 100%; border-radius: 4px; transition: width 0.6s var(--ease); }
+.sy-meter i.green { background: var(--green); }
+.sy-meter i.amber { background: var(--amber); }
+.sy-meter i.red { background: var(--red); }
+
+/* ---- Needs a look: a card per row, a stripe on its left in its colour ---- */
+.sy-look { display: flex; flex-direction: column; gap: 6px; }
+.sy-h { margin: 0 0 4px; font: 700 16px/1.2 var(--hand); color: var(--accent); }
+.sy-card { position: relative; padding: 9px 10px 9px 16px; border-radius: 10px; background: var(--bg2); overflow: hidden; }
+.sy-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--grey); }
+.sy-card.red::before { background: var(--red); }
+.sy-card.amber::before { background: var(--amber); }
+.sy-card.violet::before { background: var(--violet); }
+.sy-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sy-card-main { flex: 1 1 240px; min-width: 0; }
+.sy-card-line { font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.sy-card-line b { font-weight: 650; }
+.sy-card-facts { margin-top: 2px; font: 11.5px/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.sy-card-acts { display: flex; gap: 6px; flex: none; margin-left: auto; }
+.sy-btn { padding: 4px 11px; border: 1px solid transparent; border-radius: 7px; background: var(--panel); font-size: 12px; line-height: 1.4; color: var(--fg); white-space: nowrap; }
+.sy-btn:hover { border-color: var(--line); }
+.sy-btn.primary { background: var(--accent); color: var(--on-hue); font-weight: 600; }
+.sy-btn.primary:hover { border-color: var(--accent); filter: brightness(1.06); }
+.sy-btn:disabled { opacity: 0.6; cursor: default; border-color: transparent; }
+.sy-quiet { display: flex; align-items: center; gap: 8px; padding: 2px; font: 700 17px/1.2 var(--hand); color: var(--fg); }
+.sy-quiet svg { width: 18px; height: 18px; fill: none; stroke: var(--green); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A unit's journal lines, opened under its row. */
+.sy-log { display: grid; gap: 1px; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--bg) 55%, var(--bg2)); font: 11.5px/1.5 var(--mono); }
+.sy-log-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+.sy-log-at { color: var(--muted); white-space: nowrap; }
+.sy-log-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sy-log-line.red .sy-log-text, .sy-log-note.red { color: var(--red); }
+.sy-log-line.amber .sy-log-text { color: var(--amber); }
+.sy-log-note { color: var(--muted); }
+
+/* ---- the tabs ---- */
+.sy-tabbed { display: flex; flex-direction: column; gap: 8px; }
+.sy-why { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.sy-tabs { display: flex; flex-wrap: wrap; gap: 0 18px; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 70%, transparent); }
+.sy-tab { padding: 4px 1px 6px; border-bottom: 2px solid transparent; font: 700 15px/1.3 var(--hand); color: var(--muted); }
+.sy-tab:hover { color: var(--fg); }
+.sy-tab.on { color: var(--fg); border-bottom-color: var(--accent); }
+.sy-tab small { margin-left: 5px; font: 500 10.5px/1 var(--mono); opacity: 0.85; }
+.sy-tab-body { display: flex; flex-direction: column; gap: 4px; }
+
+/* Rows: one grid each, hover tints them. */
+.sy-rows { display: flex; flex-direction: column; gap: 1px; }
+.sy-row { display: grid; align-items: center; gap: 10px; min-height: 34px; padding: 5px 8px; border-radius: 8px; font-size: 13px; }
+.sy-row:hover { background: var(--bg2); }
+.sy-row > * { min-width: 0; }
+
+.sy-port { grid-template-columns: 52px 104px minmax(0, 1fr) auto; }
+.sy-port-n { font: 600 13px/1.2 var(--mono); }
+.sy-port-n small { font-weight: 400; font-size: 10px; color: var(--muted); }
+.sy-reach { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; line-height: 1.5; white-space: nowrap; background: var(--grey-bg); color: var(--muted); }
+.sy-reach.all { background: var(--red-bg); color: var(--red); }
+.sy-reach.lan { background: var(--amber-bg); color: var(--amber); }
+.sy-reach.headscale { background: var(--blue-bg); color: var(--blue); }
+.sy-proc { font: 12px/1.3 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-proc .sy-mono { color: var(--fg); }
+.sy-dot-sep { color: var(--muted); }
+
+/* A row's project: a chip, "unknown" as a dashed amber outline, an admin's ghost "label" button. */
+.sy-project { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; justify-self: end; }
+.sy-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 170px; padding: 1px 8px; border-radius: 6px; background: var(--panel); font-size: 12px; line-height: 1.5; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sy-chip.unknown { padding: 0 7px; border: 1px dashed color-mix(in srgb, var(--amber) 70%, transparent); background: none; color: var(--amber); }
+.sy-chip-x { margin-right: -3px; padding: 0 2px; font-size: 14px; line-height: 1; color: var(--muted); }
+.sy-chip-x:hover { color: var(--red); }
+.sy-ghost { padding: 1px 6px; border-radius: 6px; font-size: 11.5px; color: var(--muted); opacity: 0; transition: opacity 0.15s; }
+.sy-row:hover .sy-ghost, .sy-ghost:focus-visible, .sy-ghost:focus-within { opacity: 1; }
+.sy-ghost:hover { background: var(--panel); color: var(--fg); }
+@media (hover: none) { .sy-ghost { opacity: 1; } }
+.sy-label-edit { display: inline-flex; align-items: center; gap: 6px; }
+.sy-input { width: 128px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 12px; line-height: 1.5; }
+.sy-input:focus { outline: none; border-color: var(--accent); }
+
+/* Services and processes: group headers in the hand, counts in mono. */
+.sy-group { display: flex; flex-direction: column; }
+.sy-group + .sy-group { margin-top: 6px; }
+.sy-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; padding: 6px 8px 3px; font: 700 14px/1.3 var(--hand); color: var(--muted); text-align: left; }
+.sy-group-head.amber { color: var(--amber); }
+.sy-group-head.fold:hover { color: var(--fg); }
+.sy-counts { font: 400 11px/1.3 var(--mono); color: var(--muted); white-space: nowrap; }
+.sy-counts.bad { color: var(--red); }
+.sy-service { grid-template-columns: 8px minmax(0, 1fr) 76px 34px 70px minmax(0, 140px); }
+.sy-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grey); opacity: 0.6; }
+.sy-dot.green { background: var(--green); opacity: 1; }
+.sy-dot.amber { background: var(--amber); opacity: 1; }
+.sy-dot.red { background: var(--red); opacity: 1; }
+.sy-svc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.sy-svc-up { font: 12px/1.3 var(--mono); color: var(--muted); text-align: right; white-space: nowrap; }
+.sy-svc-up.red { color: var(--red); }
+.sy-restarts { font: 11.5px/1.3 var(--mono); color: var(--muted); white-space: nowrap; }
+.sy-mem { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.sy-proc-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 76px 72px; }
+.sy-proc-row > .sy-mono:not(.sy-names):not(.sy-owner) { font-size: 12px; text-align: right; white-space: nowrap; }
+.sy-proc-row > .sy-mem { color: var(--fg); }
+.sy-proc-row > .sy-owner, .sy-proc-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-names { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (max-width: 480px) {
+  .sy-service { grid-template-columns: 8px minmax(0, 1fr) auto minmax(0, auto); }
+  .sy-service .sy-restarts, .sy-service .sy-mem { display: none; }
+  .sy-proc-row { grid-template-columns: minmax(0, 1fr) 64px 64px; }
+  .sy-proc-row .sy-names, .sy-proc-row > .sy-muted { display: none; }
+  .sy-port { grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: "n r p" "n c c"; gap: 3px 10px; padding: 6px 8px; }
+  .sy-port > :nth-child(1) { grid-area: n; align-self: start; padding-top: 2px; }
+  .sy-port > :nth-child(2) { grid-area: r; }
+  .sy-port > :nth-child(3) { grid-area: c; }
+  .sy-port > :nth-child(4) { grid-area: p; }
+  .sy-tabs { gap: 0 14px; }
+}
+
+/* The Log tab: time, its mark, what happened, its journal. */
+.sy-event-row { grid-template-columns: 84px 14px minmax(0, 1fr) auto; }
+.sy-event-row > .sy-mono { font-size: 12px; white-space: nowrap; }
+.sy-event-icon { text-align: center; }
+.sy-event-icon.red { color: var(--red); }
+.sy-event-icon.amber { color: var(--amber); }
+.sy-event-text { overflow-wrap: anywhere; }
+.sy-event .sy-log { margin: 0 8px 6px; }
+
+/* ---- History: the week's chart, drawn by claudia.web.views.system-history ---- */
+.sy-history { display: flex; flex-direction: column; gap: 8px; }
+.sy-chart { padding: 12px 12px 4px; border-radius: 10px; background: var(--bg2); }
+.sy-chart-svg { display: block; overflow: visible; }
+.sy-grid line { stroke: color-mix(in srgb, var(--line) 65%, transparent); stroke-width: 1; }
+.sy-grid line.base { stroke: var(--line); }
+.sy-grid text { fill: var(--muted); font: 11px var(--sans); }
+.sy-grid text.day { text-anchor: middle; }
+.sy-grid text.pct { font: 10px var(--mono); paint-order: stroke; stroke: var(--bg2); stroke-width: 3px; }
+.sy-line { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.sy-line.green { stroke: var(--green); }
+.sy-line.blue { stroke: var(--blue); }
+.sy-line.amber { stroke: var(--amber); }
+.sy-mark { cursor: pointer; }
+.sy-mark line { stroke-width: 1.5; stroke-dasharray: 2 3; }
+.sy-mark.red line { stroke: var(--red); }
+.sy-mark.amber line { stroke: var(--amber); }
+.sy-mark.red circle { fill: var(--red); }
+.sy-mark.amber circle { fill: var(--amber); }
+.sy-mark.on circle, .sy-mark:hover circle { stroke: var(--fg); stroke-width: 2; }
+.sy-mark .hit { fill: transparent; }
+.sy-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.sy-key-btn, .sy-key-mark { display: inline-flex; align-items: center; gap: 6px; }
+.sy-key-btn { padding: 2px 6px; margin: 0 -6px; border-radius: 6px; opacity: 0.5; }
+.sy-key-btn.on { opacity: 1; color: var(--fg); }
+.sy-key-btn:hover { background: var(--panel); }
+.sy-key-btn i { width: 14px; height: 3px; border-radius: 2px; background: var(--grey); }
+.sy-key-btn.green i { background: var(--green); }
+.sy-key-btn.blue i { background: var(--blue); }
+.sy-key-btn.amber i { background: var(--amber); }
+.sy-key-mark i { width: 7px; height: 7px; border-radius: 50%; }
+.sy-key-mark.red i { background: var(--red); }
+.sy-key-mark.amber i { background: var(--amber); }
+
+/* ---- Machine: the old Machines card (claudia.web.views.system-machine, README decision 12) ----
+   The cores as bars (user, system, steal filled; waiting on disk faint), then memory, disks,
+   speeds, cards, temperatures and Claudia's own processes. */
+.sys-card > * { min-width: 0; }
+.sys-card { display: grid; gap: 5px; padding: 8px 8px 9px; border-radius: 10px; background: var(--bg2); transition: opacity 0.3s; }
+.sys-card.stale { opacity: 0.55; filter: grayscale(0.7); }
+.sys-card.off { opacity: 0.6; }
+.sys-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sys-name { font: 700 16px/1.1 var(--hand); color: var(--fg); }
+.sys-sub { min-width: 0; font: 11px/1.2 var(--mono); color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-meta { font: 11px/1.2 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-error { font-size: 11.5px; color: var(--amber); overflow-wrap: anywhere; }
+.sys-cores { display: grid; gap: 2px; height: 46px; margin: 2px 0 4px; }
+.sys-cores:has(.sys-core:nth-child(33)) { height: auto; grid-auto-rows: 30px; }
+.sys-core { position: relative; display: flex; flex-direction: column-reverse; height: 100%; min-width: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.sys-core i { display: block; flex: none; transition: height 0.6s var(--ease); }
+.sys-core i.user { background: var(--green); }
+.sys-core i.sys { background: var(--red); }
+.sys-core i.steal { background: var(--violet); }
+.sys-core i.iowait { background: color-mix(in srgb, var(--amber) 45%, transparent); }
+.sys-row { display: grid; grid-template-columns: 74px 1fr 136px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.sys-row .m-bar > span { background: var(--blue); transition: width 0.6s var(--ease); }
+.sys-row.amber .m-bar > span { background: var(--amber); }
+.sys-row.red .m-bar > span { background: var(--red); }
+.sys-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-num { font: 11.5px/1.2 var(--mono); color: var(--fg); text-align: right; white-space: nowrap; }
+.sys-rate { grid-template-columns: 74px 1fr 1fr; }
+.sys-line { grid-template-columns: 74px 1fr; }
+.sys-text { font: 11.5px/1.2 var(--mono); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-chips, .sys-own { display: flex; flex-wrap: wrap; gap: 4px; }
+.sys-chip { padding: 2px 6px; border-radius: 6px; background: var(--panel); font: 11px/1.3 var(--mono); color: var(--muted); }
+.sys-chip b { font-weight: 500; color: var(--fg); }
+.sys-chip.amber { color: var(--amber); }
+.sys-chip.red { color: var(--red); }
+
+
+/* In System's CPU tile the cores' empty part is faint: the bars read as how busy, not as blocks. */
+.sy-cores .sys-core { background: color-mix(in srgb, var(--line) 38%, transparent); border-radius: 2px; }

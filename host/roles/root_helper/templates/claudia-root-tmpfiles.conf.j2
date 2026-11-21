@@ -5,3 +5,6 @@ d {{ root_socket_dir }} 0755 root root -
 {% for user in agent_users %}
 d {{ root_socket_dir }}/{{ user }} 0750 root {{ user }} -
 {% endfor %}
+# System's read socket (README decision 95): only root and the front's group ({{ front_group }}) enter,
+# so only the front asks the helper's fixed reads.
+d {{ root_read_socket_dir }} 0750 root {{ front_group }} -

@@ -274,7 +274,7 @@
   (let [db {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
         added (:db (ev/heard-fx db ["s" "c"] {:text "call mission now" :raw "call mission now um"} :add))]
     (is (= [{:text "call mission now" :raw "call mission now um" :shown :text}] (get-in added [:dictated ["s" "c"]])))
-    (testing "sent: the pieces forgotten, nothing offered (Claude offers words in the chat, decision 95)"
+    (testing "sent: the pieces forgotten, nothing offered (Claude offers words in the chat, decision 96)"
       (let [fx (ev/with-dictation-checked {:db added} added ["s" "c"])]
         (is (nil? (:fx fx)))
         (is (nil? (get-in fx [:db :dictated ["s" "c"]])))))
@@ -379,3 +379,11 @@
 (deftest a-chat-back-from-the-archive-keeps-its-colour-unless-taken
   (is (some? (ev/back-colour two-servers ["a" "3"])) "ocean is worn by an open chat")
   (is (nil? (ev/back-colour (assoc-in two-servers [:servers "a" :rows "3" :color] "jade") ["a" "3"]))))
+
+(deftest text-put-in-the-composer-goes-under-the-draft
+  (is (= :new (ev/draft-key {})))
+  (is (= ["s" "c"] (ev/draft-key {:open ["s" "c"]})))
+  (is (= :new (ev/draft-key {:open ["s" "c"] :pending-new {"c" {}}})) "a chat on its way writes the new draft")
+  (is (= "facts" (ev/draft-with nil "facts")))
+  (is (= "facts" (ev/draft-with "  " "facts")))
+  (is (= "hi\n\nfacts" (ev/draft-with "hi \n" "facts"))))

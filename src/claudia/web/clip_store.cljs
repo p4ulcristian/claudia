@@ -12,7 +12,7 @@
 
 (defn- upgrade!
   "A database at version old brought to version 3: the store clips (version 1) made; the store
-  sounds (version 2, heard clips kept to listen back to, README decision 96) deleted."
+  sounds (version 2, heard clips kept to listen back to, README decision 97) deleted."
   [^js db old]
   (when (< old 1) (.createObjectStore db store #js {:keyPath "id"}))
   (when (= old 2) (.deleteObjectStore db "sounds")))

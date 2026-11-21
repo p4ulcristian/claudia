@@ -31,7 +31,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
-   (removed by decision 96), the plan's 5-hour and week usage and the chat's context use (a click
+   (removed by decision 97), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
    An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
@@ -1259,7 +1259,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
     source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
     talk and bell), its settings, context, last turn and agents' list, its pictures (its file
-    changes too until decision 96), and Claude Code's session file with everything under `<id>/` (subagents, tool
+    changes too until decision 97), and Claude Code's session file with everything under `<id>/` (subagents, tool
     results), placed in the target runner's own project folder (its working folder's slug). The
     target reads its copy back and the hub checks it against the source: the same number of
     messages, the same last message, every file's size and SHA-256, as many pictures. Only then does the target take the chat in and the source archive its own, marked as
@@ -1682,7 +1682,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
-97. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
+98. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
     person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
     longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
     with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
@@ -1691,7 +1691,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     colour, links blue, so they read as before. The window's tint by chat colour does not change
     (decisions 26, 80). Instead of: the person's lines in the chat's colour and Claude's in plain
     white. Files: `resources/web/css/claudia.css`, `DESIGN.md`.
-98. Fork from the header and from a message's menu (2026-11-21, the user's call). Row 3 of the
+99. Fork from the header and from a message's menu (2026-11-21, the user's call). Row 3 of the
     header (decision 90) gains Fork beside Files, Sudo and Archive, the same rounded button with an
     icon and a word, on a started chat outside a read-only view: a new chat with this one up to its
     last finished turn, in the same folder (`[:ops/fork k nil]`), "Forking…" and filled while the
@@ -1704,12 +1704,12 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     own (`:fork {:k :busy :error}`, `pure.menu/fork-state`): an error shows in the open menu, with
     none open (the header) on the error line. Instead of: the "fork from here" link under each
     message (shown on hover) and the "picture · N files" link beside it (the slider and the step
-    chips of decision 99 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
+    chips of decision 100 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
     `src/claudia/web/views/head_pill.cljs`, `src/claudia/web/views/msgmenu.cljs`,
     `src/claudia/web/views/chatmenu.cljs`, `src/claudia/web/chatops.cljs`,
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/menu.cljs`,
     `resources/web/css/claudia.css`.
-99. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
+100. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
     user's call). The slider under the picture shows each picture's number, 1..N, the one shown
     filled in the chat's colour with dark text (pulsing while an older one loads); when the numbers
     do not fit (a number takes 12 px plus 7 per digit), every 5th or 10th (20th, 50th … for very
@@ -1729,14 +1729,14 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/pictures.cljs`, `src/claudia/web/views/chat.cljs`,
     `src/claudia/web/views/pure/chat.cljs`, `resources/web/css/right.css`,
     `resources/web/css/claudia.css`.
-100. Claude's question cards fit a narrow chat column (2026-11-21, the user's call). The chat column
+101. Claude's question cards fit a narrow chat column (2026-11-21, the user's call). The chat column
     is a named container (`chat`), and at 440 px or less the question, secret and OK cards follow
     its width, not the window's (the person drags it, about 280 to 700 px): one column of options,
     12 px padding, no key hint, the buttons sharing their row (Answer, alone there, the whole row),
     the secret card's facts stacked. A touch screen never shows the key hint. Instead of: window
     media queries, and the wide card's 16/18 px padding and side-by-side buttons in a column too
     narrow for them. Files: `resources/web/css/claudia.css`.
-101. Claude knows the picture's history as numbered steps (2026-11-21, the user's list, items 9-13;
+102. Claude knows the picture's history as numbered steps (2026-11-21, the user's list, items 9-13;
     Claude cleared the board and lost the user's base drawing because it was never told the old
     pictures stay). A step is a picture of the history (decision "Picture history" below), numbered
     by its 1-based place in the chat's list, oldest first, the number the page's bar shows; the last
@@ -1798,7 +1798,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     the mic floats over the page and the rail keeps the eight without it) (2026-11-21, the
     user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
     least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
-    Search, Machines, Prompts, My words (Settings since decision 95), then the mic, then Stop, New chat, ‹ (Previous picture),
+    Search, Machines (System since decision 96), Prompts, My words (Settings since decision 95), then the mic, then Stop, New chat, ‹ (Previous picture),
     › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
     under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
     at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
@@ -1841,7 +1841,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/hub/listen_prefs.cljs`, `src/claudia/hub/store.cljs`, `src/claudia/hub/ops.cljs`,
     `src/claudia/web/words.cljs`, `src/claudia/web/views/my_words.cljs`,
     `src/claudia/web/views/pure/dictated.cljs`, `src/claudia/web/views/pure/steps.cljs`.
-96. Three features go: listen back, explain, and the changed-files tracking (2026-11-21, the
+97. Three features go: listen back, explain, and the changed-files tracking (2026-11-21, the
     user's call). Each cost code on the page, the runner or the host for something the chats no
     longer need:
     - Listen back (decision 20): the "▶ your voice" player and "heard as" under a sent dictated
@@ -1872,3 +1872,47 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/session.cljs`,
     `src/claudia/slave/store.cljs`, `src/claudia/slave/runner.cljs`, `src/claudia/slave/move.cljs`,
     `src/claudia/slave/tasks.cljs`, `src/claudia/web/views/diff.cljs`, `PROTOCOL.md`.
+
+96. Machines becomes System (2026-11-21, the user's design, one call at a time: "another button next
+    to files in the header called System"; "make it nice designed"). One sheet for everything about a
+    server, for troubleshooting: the header's System button (beside Files, toggles it like Files) and
+    the edge's and the menu's old Machines entries open it; a stored pile, rail slot or link that says
+    `machines` opens System. On top, one tab per server the person may see (the gate for admins), each
+    with a dot: red = a failed unit, a crash or an out-of-memory kill in the last hour; amber = a port
+    open on all addresses that no unit, container or chat owns, a leftover, memory or a disk over 85%
+    or waiting over 10%; green otherwise; grey = not reached. Under it four tiles, each the number now
+    over a 24-hour line from the history: CPU as busy cores of all ("3.7 of 16 cores busy (23%)", the
+    user: "is that the full CPU or only one core?"), every core as a bar, the busiest process and its
+    owner; Waiting (the kernel's pressure numbers: the share of the last 10 s programs waited for CPU,
+    memory or disk; macOS has none); memory with the 90% cap as a line; the fullest disk and the
+    cards' memory. Then "Needs a look": only problems and the chats' proposals, each with its one
+    action (Log, Ask a chat, Accept / No), "All quiet" when none. Then tabs: Ports (port, reach: all
+    addresses / LAN / Headscale / this machine, the process and its owner, the project), Services
+    (grouped: Claudia, projects, containers, the system's own folded), Processes (grouped by owner:
+    chats with their colour and title, units, containers, then leftovers), History (7 days, a sample a
+    minute: busy cores, memory, waiting, with crashes, out-of-memory kills and failed units marked),
+    Log (those events, newest first), Machine (the old Machines card unchanged: every core, disk and
+    network speed, temperatures). Categories come by themselves from each process's cgroup (its
+    unit, container, chat or login session) and the unit file's place; projects come from labels on
+    the hub (`system_labels`), per server or for all; something with no label is "unknown", itself the
+    hint to look. A chat proposes a label with its `system_label` tool and the person accepts or says
+    no on System (the user: "the chat could help me in the long run ... if I accept these changes");
+    nothing a chat proposes applies by itself, and System never stops, restarts or kills anything:
+    Ask a chat puts the row's facts in the composer and the chat goes through sudo as always
+    (decision 52). Ports of other users, user units, chats' process keys, the journal and core dumps
+    need root: the root helper answers the front on a read socket of its own with a fixed list of
+    reads (PROTOCOL.md), so no tap is needed and no caller's argument reaches a command but a checked
+    unit name; without the helper (macOS, the gate) System shows what Claudia's own user can see and
+    says so. Each front keeps 7 days of minute samples in its SQLite whether or not anyone looks, so a
+    crash at 3 am still shows in the morning. System shows program names, never command lines (they
+    can hold secrets); who may see a server's System is who may see its Machines card (decision 12);
+    labels are written by admins. Instead of: a second sheet beside Machines (the same numbers
+    twice), a hand-written list only (anything new invisible), live numbers only (nothing to trace
+    back), sudo taps per read (a tap a minute), history on the hub (gone when the hub is down).
+    Files (the page): `src/claudia/web/views/systems.cljs` (the sheet and what it asks),
+    `src/claudia/web/views/system_tiles.cljs`, `system_look.cljs`, `system_tabs.cljs`,
+    `system_lists.cljs`, `system_history.cljs`, `system_bits.cljs`, `system_machine.cljs` (the old
+    card), `src/claudia/web/views/pure/system_feed.cljs`, `system_look.cljs`, `system_tiles.cljs`,
+    `system_lists.cljs`, `system_chart.cljs`, `src/claudia/shared/views.cljc` (`machines` read as
+    `system`), `src/claudia/web/views/head.cljs`, `resources/web/css/system.css`.
+

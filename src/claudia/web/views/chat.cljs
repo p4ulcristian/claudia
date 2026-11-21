@@ -192,7 +192,7 @@
   (hooks/use-resize box #(when (.-current stuck) (to-bottom! %)) []))
 
 (defn- use-find!
-  "A picture picked on the bar (:find-at, README decision 99): the chat goes to the reply that
+  "A picture picked on the bar (:find-at, README decision 100): the chat goes to the reply that
   closed its turn and lights it, or for the live one back to its end, following it again."
   [{:keys [box stuck]} ck]
   (let [f @(rf/subscribe [:find-at])]
@@ -233,7 +233,7 @@
 
 (defn- step-chip
   "On the reply that closed a turn which drew a picture: that picture's number n, the slider's
-  (README decision 99). A tap shows it on the board (on a phone, the picture screen too); a tap
+  (README decision 100). A tap shows it on the board (on a phone, the picture screen too); a tap
   while it is shown goes back to live."
   [n shown?]
   [:button.step-chip {:type "button" :class (when shown? "on") :aria-pressed shown?

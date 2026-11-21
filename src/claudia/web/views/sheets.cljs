@@ -1,6 +1,6 @@
 (ns claudia.web.views.sheets
   "The sheets of paper on the Drawing board (README decision 91): every view but the board (File
-  Browser, Search, Settings, Machines, Prompts, Forms) is a sheet laid on it, each one a
+  Browser, Search, Settings, System, Prompts, Forms) is a sheet laid on it, each one a
   step down and right of the one under it, the newest on top. Only the top sheet is drawn in full and
   takes input; the ones under it show their edges, and a click on one brings it to the top. Its ×
   closes it (claudia.web.right keeps the pile)."
@@ -20,7 +20,7 @@
    :search [[:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16.5 16.5l-3.8-3.8"}]]
    :settings [[:circle {:cx 10 :cy 10 :r 2.6}] [:circle {:cx 10 :cy 10 :r 5.4}]
               [:path {:d "M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"}]]
-   :machines [[:rect {:x 2.5 :y 3.5 :width 15 :height 10 :rx 1.5}] [:path {:d "M7 17h6M10 13.5V17"}]]
+   :system systems/icon-parts
    :prompts [[:rect {:x 4 :y 2.5 :width 12 :height 15 :rx 1.5}] [:path {:d "M7 6.5h6M7 10h6M7 13.5h3.5"}]]
    :forms [[:rect {:x 3 :y 3 :width 6 :height 6 :rx 1.5}] [:circle {:cx 14 :cy 6 :r 3}] [:path {:d "M3 15h6M11 12.5l3 3 3-3"}]]})
 
@@ -40,7 +40,7 @@
     :files [folder-views/pane (folders/chat-place oc @(rf/subscribe [:new-server]) @(rf/subscribe [:new-settings]))]
     :search [:div.right-scroll [search-panel/pane]]
     :settings [:div.right-scroll [settings/pane]]
-    :machines [:div.right-scroll [systems/pane]]
+    :system [:div.right-scroll [systems/pane]]
     :prompts [:div.right-scroll [prompts/pane]]
     :forms [:div.right-scroll [forms-pane oc]]
     nil))

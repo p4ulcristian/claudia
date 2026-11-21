@@ -50,7 +50,7 @@
 (rf/reg-event-fx
  :picture/seek
  ;; Picked on the bar (a number, ‹ ›, ←/→): the board shows picture i and the chat finds the reply
- ;; that closed its turn, or goes back to its end for the live one (README decision 99).
+ ;; that closed its turn, or goes back to its end for the live one (README decision 100).
  (fn [{:keys [db]} [_ i]]
    (let [k (:open db)
          {:keys [messages running]} (get-in db [:chats k])

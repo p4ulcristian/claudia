@@ -26,14 +26,17 @@
     group: root
     mode: "0644"
 
-- name: Describe the socket folders (one per agent user) to systemd-tmpfiles
+- name: Describe the socket folders (one per agent user, and System's read folder) to systemd-tmpfiles
   ansible.builtin.template:
     src: claudia-root-tmpfiles.conf.j2
     dest: /etc/tmpfiles.d/claudia-root.conf
     owner: root
     group: root
     mode: "0644"
-  notify: Make the root helper's socket folders
+  # The helper listens in the folders it finds at start: a new folder needs a restart after it.
+  notify:
+    - Make the root helper's socket folders
+    - Restart the root helper
 
 - name: Make the guard's own folder
   ansible.builtin.file:

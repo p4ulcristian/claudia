@@ -60,12 +60,10 @@
          (proc/disk-space {:bsize 4096 :blocks 1000 :bfree 750 :bavail 500}))))
 
 (deftest processes
-  (is (= {:comm "node (x) y" :ppid 7} (proc/proc-stat "42 (node (x) y) S 7 42 42 0 -1")))
   (is (= "runner" (proc/claudia-kind "node\u0000/srv/claudia/out/runner.js\u0000")))
   (is (= "hub" (proc/claudia-kind "node\u0000hub.js\u0000")))
   (is (nil? (proc/claudia-kind "node\u0000/srv/other/server.js\u0000")))
   (is (= #{3 4 5} (proc/descendants-of {1 0 2 1 3 2 4 3 5 2 6 1} [2])))
-  (is (= 123904 (proc/vm-rss "Name:\tnode\nVmRSS:\t     121 kB\n")))
   (is (= [{:kind "front" :count 1 :rss 5} {:kind "chats" :count 2 :rss 7}]
          (proc/group-rss [["chats" 3] ["front" 5] ["chats" 4]]))))
 
@@ -76,3 +74,36 @@
   (is (= [{:index 0 :name "NVIDIA GeForce RTX 4090" :util 7 :memUsed 1048576000 :memTotal 25757220864 :temp 41 :power 30.5}
           {:index 1 :name "Tesla" :util nil :memUsed nil :memTotal nil :temp nil :power nil}]
          (proc/gpu-rows "0, NVIDIA GeForce RTX 4090, 7, 1000, 24564, 41, 30.50\n1, Tesla, [N/A], [N/A], [N/A], [N/A], [N/A]\n"))))
+
+;; A real /proc/<pid>/stat line (cat reading its own), and one whose name holds parentheses.
+(def stat-line "84241 (cat) R 84191 84241 84191 0 -1 4194304 96 0 0 0 7 3 0 0 20 0 1 0 103897329 6422528 518 18446744073709551615 94449625595904 0")
+
+(deftest a-process-stat-line
+  (is (= {:comm "cat" :ppid 84191 :ticks 10 :start 103897329 :rss 518} (proc/pid-stat stat-line)))
+  (is (= "node (x) y" (:comm (proc/pid-stat "42 (node (x) y) S 7 42 42 0 -1"))))
+  (is (nil? (proc/pid-stat "garbage"))))
+
+(deftest a-process-cpu-in-cores
+  (testing "150 ticks in 2 s at 100 a second: three quarters of a core"
+    (is (= 0.75 (proc/proc-cores {:ticks 100} {:ticks 250} 2))))
+  (testing "a new pid (no read before) or a counter gone back counts 0"
+    (is (= 0 (proc/proc-cores nil {:ticks 250} 2)))
+    (is (= 0 (proc/proc-cores {:ticks 300} {:ticks 250} 2)))))
+
+(deftest the-top-processes-by-cpu-and-memory
+  (let [ps [{:pid 1 :cores 2 :rss 10} {:pid 2 :cores 0 :rss 900} {:pid 3 :cores 0.5 :rss 5}
+            {:pid 4 :cores 0 :rss 1} {:pid 5 :cores 0 :rss 800}]]
+    (is (= [1 3 2 5] (mapv :pid (proc/top-procs ps 2))))))
+
+(def psi-cpu "some avg10=0.91 avg60=1.25 avg300=0.97 total=81149559804\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")
+(def psi-memory "some avg10=2.50 avg60=0.40 avg300=0.10 total=186099503\nfull avg10=1.00 avg60=0.20 avg300=0.00 total=174350564\n")
+
+(deftest pressure-from-psi
+  (is (= {"some" {:avg10 0.91 :avg60 1.25} "full" {:avg10 0 :avg60 0}} (proc/psi psi-cpu)))
+  (is (nil? (proc/psi nil)))
+  (is (= {:cpu {:some 0.91 :full nil} :memory {:some 2.5 :full 1} :io {:some 2.5 :full 1}}
+         (proc/pressure {:cpu (proc/psi psi-cpu) :memory (proc/psi psi-memory) :io (proc/psi psi-memory)} :avg10)))
+  (is (= 0.4 (get-in (proc/pressure {:cpu (proc/psi psi-cpu) :memory (proc/psi psi-memory) :io (proc/psi psi-memory)} :avg60) [:memory :some])))
+  (testing "no PSI (macOS, an old kernel): null"
+    (is (nil? (proc/pressure {:cpu nil :memory nil :io nil} :avg10)))))
+

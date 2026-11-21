@@ -55,7 +55,7 @@
   (some #(when (>= (* gap %) need) %) label-steps))
 
 (defn tick-kinds
-  "What each of n marks on a track width px wide shows (README decision 99), index the picture
+  "What each of n marks on a track width px wide shows (README decision 100), index the picture
   shown: :number or :dot. Every number when they fit; else every 5th or 10th (20th …) and always
   the first, the last and the shown one, a number too close to one of those a dot."
   [n width index]

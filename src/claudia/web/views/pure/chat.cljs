@@ -46,7 +46,7 @@
   (get (turn-replies msgs running?) (:turn (get pictures i))))
 
 (defn seek-goal
-  "Where the chat goes when the person picks picture i of the bar (README decision 99): the newest
+  "Where the chat goes when the person picks picture i of the bar (README decision 100): the newest
   sends it back to its end ([:end]), an older one to the reply that closed its turn ([:at anchor]);
   nil when that turn has no reply on the page or there is no picture i."
   [pictures msgs running? i]
@@ -105,7 +105,7 @@
 
 (defn user-marks
   "What a user message in the feed allows: whether it can be forked from (its menu, README decision
-  98)."
+  99)."
   [{:keys [id]} {:keys [read-only? last-user]}]
   {:forkable? (and (not read-only?) (not (str/starts-with? (str id) "answer-")) (not= id last-user))})
 

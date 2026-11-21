@@ -1,5 +1,5 @@
 (ns claudia.slave.steps
-  "The picture history as Claude sees it (README decision 101): numbered steps. A step's number is its
+  "The picture history as Claude sees it (README decision 102): numbered steps. A step's number is its
   1-based place in the chat's picture list (claudia.slave.pictures/listing, oldest first), the
   number the page's bar shows; the last one is live. Pure: lists and scenes in, text and data out."
   (:require [clojure.string :as str]

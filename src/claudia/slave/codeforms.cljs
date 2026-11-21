@@ -12,6 +12,7 @@
             [claudia.shared.protocol :as p]
             [claudia.shared.text :as text]
             [claudia.slave.bookmarks :as bookmarks]
+            [claudia.slave.system-label :as system-label]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.editor :as editor]
             [claudia.slave.files :as files]
@@ -484,13 +485,13 @@
   deleted ones; the bookmark tools where the runner reaches the hub as its owner (README decision 67)."
   []
   {:picture (tools/picture-mcp (offered))
-   :workspace (cond-> tools/workspace-mcp (bookmarks/on?) (merge bookmarks/mcp))})
+   :workspace (cond-> (merge tools/workspace-mcp system-label/mcp) (bookmarks/on?) (merge bookmarks/mcp))})
 
 (defn prompt-for
   "The system prompt's Claudia part: src/prompt.ts SYSTEM_APPEND, then every form this runner
   offers with its data (the one place they are said: Claude Code cuts long tool descriptions)."
   []
-  (str tools/system-append (when (bookmarks/on?) (str "\n" bookmarks/prompt))
+  (str tools/system-append "\n" system-label/prompt (when (bookmarks/on?) (str "\n" bookmarks/prompt))
        "\n\n" (tools/forms-prompt (offered))))
 
 (defn- touches?

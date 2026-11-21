@@ -7,6 +7,17 @@
   [at]
   (when at (.toLocaleString (js/Date. at) js/undefined #js {:dateStyle "medium" :timeStyle "short"})))
 
+(defn clock-text
+  "A time (ms) as the reader's clock: \"14:02\" today, \"Tue 14:02\" in the last week, else
+  \"Nov 12, 14:02\"; nil for nil."
+  [at now]
+  (when at
+    (let [d (js/Date. at)
+          hm (.toLocaleTimeString d js/undefined #js {:hour "2-digit" :minute "2-digit" :hour12 false})]
+      (cond (= (.toDateString d) (.toDateString (js/Date. now))) hm
+            (< (- now at) (* 6 86400000)) (str (.toLocaleDateString d js/undefined #js {:weekday "short"}) " " hm)
+            :else (str (.toLocaleDateString d js/undefined #js {:month "short" :day "numeric"}) ", " hm)))))
+
 (defn tilde
   "A path under someone's home folder with ~ for that folder."
   [p]

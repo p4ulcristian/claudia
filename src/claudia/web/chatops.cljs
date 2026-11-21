@@ -217,7 +217,7 @@
 (rf/reg-event-fx
  :ops/fork
  ;; A new chat with chat k up to the end of the turn message at started (nil: its last finished
- ;; turn), from the chat menu, a message's menu or the header's Fork (README decision 98).
+ ;; turn), from the chat menu, a message's menu or the header's Fork (README decision 99).
  (fn [{:keys [db]} [_ [s c :as k] at]]
    (when-not (events/read-only? db s)
      {:db (assoc db :fork {:k k :busy true})
