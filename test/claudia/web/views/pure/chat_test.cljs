@@ -65,8 +65,6 @@
 (deftest small-words
   (is (= "5s" (chat/elapsed-text 0 5400)))
   (is (= "2m 5s" (chat/elapsed-text 0 125000)))
-  (is (= "picture · 1 file" (chat/turn-links true 1)))
-  (is (= "3 files" (chat/turn-links false 3)))
   (is (= "Message Claude…" (chat/placeholder nil nil)))
   (is (= "Add to this turn…" (chat/placeholder nil true)))
   (is (= "Paul's chat · read only" (chat/read-only-note "paul")))
@@ -82,8 +80,8 @@
     (is (= "u1" last-user))))
 
 (deftest user-marks-of-a-message
-  (is (= {:viewing? true :picture? true :files 2 :forkable? true}
-         (chat/user-marks {:id "a"} {:viewing "a" :picture-turns #{"a"} :change-turns {"a" 2} :last-user "b"})))
+  (is (= {:viewing? true :picture? true :forkable? true}
+         (chat/user-marks {:id "a"} {:viewing "a" :picture-turns #{"a"} :last-user "b"})))
   (is (false? (:forkable? (chat/user-marks {:id "answer-1"} {}))))
   (is (false? (:forkable? (chat/user-marks {:id "a"} {:last-user "a"})))))
 

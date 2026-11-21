@@ -52,7 +52,7 @@
 (def ^:private asks-again
   "Frames the page sends again by itself after a reconnect (hello re-opens the open chat), or that
   only read: never queued."
-  #{"hello" "open" "close" "older" "picture" "agent" "agent_git" "diff" "seen"})
+  #{"hello" "open" "close" "older" "picture" "agent" "agent_git" "seen"})
 
 (defn kept?
   "Whether a frame that cannot go out now waits in the queue (a user action) or is dropped."

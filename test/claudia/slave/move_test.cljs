@@ -42,7 +42,7 @@
   (is (= "not a file of this chat: /etc/passwd" (rules/record-problem id {:type "file" :path "/etc/passwd" :data ""})))
   (is (nil? (rules/record-problem id {:type "picture" :turn "t" :scene "{}" :at 1})))
   (is (some? (rules/record-problem id {:type "picture" :turn "t" :scene {} :at 1})))
-  (is (nil? (rules/record-problem id {:type "change" :turn "t" :path "a" :status "added"})))
+  (is (some? (rules/record-problem id {:type "change" :turn "t" :path "a" :status "added"})) "file changes are no longer carried")
   (is (nil? (rules/record-problem id {:type "end"})))
   (is (= "unknown record x" (rules/record-problem id {:type "x"}))))
 
@@ -118,7 +118,6 @@
   (store/kv! id "settings" {:model "opus"})
   (store/kv! id "session" {:account "a"})
   (store/save-picture! id "t1" {:title "one"} 1)
-  (store/add-change! id {:turn "t1" :path "/old/a" :before nil :after "x" :added 1 :removed 0 :status "added" :at 2})
   (store/export-rows id))
 
 (deftest rows-go-through-json-into-another-store
@@ -128,14 +127,13 @@
     (store/open! b)
     (store/import-chat! {:row (assoc (rules/import-row (:row out) (set store/chat-columns) "/new") :id id)
                          :kv (update-keys (rules/kv-of (:kv out)) name)
-                         :pictures (:pictures out) :changes (:changes out)})
+                         :pictures (:pictures out)})
     (let [r (store/chat id)]
       (is (= ["T" "/new" "gold" false false nil "otto"] ((juxt :title :folder :color :archived :root :chat-key :voice) r))))
     (is (= {:title "pic" :blocks []} (store/scene id)))
     (is (= {:model "opus"} (store/kv id "settings")))
     (is (nil? (store/kv id "session")) "the session's versions stay behind")
     (is (= [{:turn "t1" :title "one" :at 1}] (store/pictures id)))
-    (is (= ["/old/a" "x"] [(:path (first (store/changes id))) (:after (store/change-texts id (:id (first (store/changes id)))))]))
-    (store/import-chat! {:row {:id id :title "T2" :created 1 :at 1} :kv {} :pictures [] :changes []})
+    (store/import-chat! {:row {:id id :title "T2" :created 1 :at 1} :kv {} :pictures []})
     (is (= ["T2" []] [(:title (store/chat id)) (store/pictures id)]) "a copy left behind gives way")
     (doseq [d [a b]] (fs/rmSync d #js {:recursive true :force true}))))

@@ -302,15 +302,15 @@ chat id (a lower-case uuid).
 |---|---|---|
 | `POST /api/chat-move/check` `{ chat, folder }` | target | `{ folder }` (resolved; null: none); 404 no folder there; 409 a chat with that id is here (unless it is the copy an earlier move away left behind: archived, `movedTo` kept, not written to since) |
 | `POST /api/chat-move/hold` `{ chat }` | source | `{ check }` once the chat is held (15 minutes at most: messages to it are refused with an `error` frame, its Claude Code closes and does not start); 409 when it works (a turn, agents or background shells), waits on an ask, is Claudia's own chat, is held already, or has no session file. A move never stops anything |
-| `GET /api/chat-move/export?chat=` | source | the copy of a held chat, `application/x-ndjson`: `{ type: "chat", id, row (every column of chats), kv ({ key: JSON text } of settings, context, turn, tasks), pending (its own move note not said yet, or null) }`, then `{ type: "picture", turn, scene (JSON text), at }` and `{ type: "change", turn, path, before, after, added, removed, status, skipped, at }` each, then the session's files (`<id>.jsonl` and everything under `<id>/`, paths relative to its Claude Code project folder) as `{ type: "file", path, data (base64, 768 KB a line) }`, then `{ type: "end" }`; 409 when not held |
+| `GET /api/chat-move/export?chat=` | source | the copy of a held chat, `application/x-ndjson`: `{ type: "chat", id, row (every column of chats), kv ({ key: JSON text } of settings, context, turn, tasks), pending (its own move note not said yet, or null) }`, then `{ type: "picture", turn, scene (JSON text), at }` each, then the session's files (`<id>.jsonl` and everything under `<id>/`, paths relative to its Claude Code project folder) as `{ type: "file", path, data (base64, 768 KB a line) }`, then `{ type: "end" }`; 409 when not held |
 | `POST /api/chat-move/import?chat=` (the copy) | target | `{ check }`: the copy kept in `RUNNER_DATA/moves/<chat>` (15 minutes at most; gone on a restart), read back from the disk. 400 for a broken copy (a line over 8 MB, a record of another chat, a file path outside the chat's files, no `end`) |
-| `POST /api/chat-move/commit` `{ chat, folder, from, to }` | target | `{ ok, folder }`: the files placed in this runner's own project folder (Claude Code's folder for `CLAUDIA_CWD`, its own slug), the rows in (the row in `folder`, not archived, root off, a new chat key; the kv values; pictures; changes) and the move's note kept (`serverMove`); a copy left behind here before gives way |
+| `POST /api/chat-move/commit` `{ chat, folder, from, to }` | target | `{ ok, folder }`: the files placed in this runner's own project folder (Claude Code's folder for `CLAUDIA_CWD`, its own slug), the rows in (the row in `folder`, not archived, root off, a new chat key; the kv values; pictures) and the move's note kept (`serverMove`); a copy left behind here before gives way |
 | `POST /api/chat-move/drop` `{ chat }` | target | `{ ok }`: the copy kept aside goes |
 | `POST /api/chat-move/release` `{ chat, to? }` | source | `{ ok }`; with `to` (only while held): the chat archived and marked `movedTo { server, at }`; without: the move given up, the chat as before |
 
-`check` = `{ messages, last, files: [{ path, size, sha256 }], pictures, changes }`: the session file's
+`check` = `{ messages, last, files: [{ path, size, sha256 }], pictures }`: the session file's
 user and assistant entries with a uuid (how many, the last one's uuid), every file of the session,
-and the chat's pictures and file changes.
+and the chat's pictures.
 
 The move's note goes to Claude with the next message, after the text, as `<claudia-moved>…</claudia-moved>`;
 the chat shows the same words as a `note` Msg (id `<message id>:moved`, from the session file too),
@@ -344,7 +344,7 @@ One socket per server the page uses. Every frame is a JSON object with `type`.
 Page heartbeat: the page sends exactly `{"type":"ping"}` on a socket it has heard nothing on for
 10 s; the hub answers `{"type":"pong"}` itself and passes the ping on to no one. No frame within
 6 s after a ping = the socket is dead: the page opens a new one at once. A user action (any frame
-but `hello`, `open`, `close`, `older`, `picture`, `agent`, `agent_git`, `diff`, `seen`) sent while
+but `hello`, `open`, `close`, `older`, `picture`, `agent`, `agent_git`, `seen`) sent while
 the socket is closed or quiet waits in the page and goes out after the socket is heard from (on a
 new socket: after `hello` and the open chat's `open`).
 
@@ -376,7 +376,6 @@ Page → runner:
 | `stop_task` | `chat`, `task` | stops one agent or background shell of the chat (`Agent.task`) |
 | `settings` | `chat`, `model?`, `effort?` (null = the person's default), `plan?` (a saved token's key from `meta.plans`; null or one not saved = no pick: its owner's last pick, `meta.planKey`), `prompt?` (a prompt profile's name; null = none: README decision 60), `voice?` (a voice id from `claudia.shared.voices`, `""` = Off; an unknown id is Off), `bell?` (boolean), `sound?` (a sound id from `claudia.shared.sounds`; an unknown id is the Bell, README decision 90) | the chat's model and effort: kept, used on its next start, and given to a live session at once. Its plan: kept, and its session starts again on that token with its next message. Its voice, bell and sound: kept with the chat, then `chats` goes to every page |
 | `agent` | `chat`, `agent` (an `Agent.id`) | runner answers `agent` (one agent's view); read-only callers may ask |
-| `diff` | `chat`, `change` (a `Change.id`) | runner answers `diff`; read-only callers may ask |
 | `agent_git` | `chat`, `agent`, `rev` (a commit of the agent's worktree branch, or `"BRANCHED"`: all of it since it branched) | runner answers `agent_git`; read-only callers may ask |
 | `picture` | `chat`, `turn` | runner answers `picture` with that turn's scene (an earlier picture; read-only callers may send it) |
 
@@ -399,12 +398,10 @@ Runner → page:
 | `voices` | `messages`: every voice message this runner keeps for its person, oldest first, each `{ chat, id, voice, text \| ask, at }` (id: the turn's result uuid, or `ask-<ask id>`; at: ms) | the chats' voice messages (README decision 93): sent after `hello` (not to read-only pages) and to every page that may answer whenever they change (a chat with a voice ended a turn by itself or asks; one was heard; a voice went Off; a chat was archived). Messages a day old are dropped. The page shows one circle per chat round the mic and plays them only on a tap. `play` (`{ chat, id }`, only to the page its person touched last, `here`): that message was just kept, and that page plays it as soon as nothing else plays and the mic is not held (README decision 94). Replaces `speak` |
 | `error` | `chat?`, `text` |
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
-| `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
 | `context` | `chat`, `context: Context` |
 | `settings` | `chat`, `settings: { model, effort, plan, prompt }`, `model?` (the model the session runs), `effort?` (the effort its turn runs with, known from its first tool call on), `commands?` (its slash command names) |
 | `meta` | `limits: [Limit]`, `limitsAt` (ms, when they were heard, or null), `models: [{ value, name, efforts }]`, `commands: [{ name, description, hint }]`, `defaultModel` (the model a chat gets when none is picked, e.g. `claude-opus-5-5[1m]`), `account` (`token-<hash>`), `accountLabel` (the name of this profile's person's last pick, or null), `plans: [{ key, name }]` (the saved tokens a chat can be put on), `planKey` (the key of this profile's person's last pick: what a chat without a pick runs on, or null; README decision 57), `defaultEfforts: [{ model, effort }]` (the effort a chat runs with when it picks none, by its picked model, `""` for none, as heard from the sessions); sent after `chats` on `hello` and on every change |
 | `agent` | `chat`, `agent` (id), `info: Agent`, `steps: [Msg]`, `files: [{ path, rel, added, removed, edits: [{ name, before, after }] }]`, `prompt`, `report`, `worktree: { path, branch } | null`, `git: { branch, base, commits: [{ hash, subject, when }], worktree (folder still there) } | null`; a shell: `info`, `command`, `output` (its last 64 KB); or `error` |
-| `diff` | `chat`, `change`, `before`, `after` (null: the file did not exist), `skipped?`; or `error` |
 | `agent_git` | `chat`, `agent`, `rev`, `patch` (git's patch text, cut at 400 KB); or `error` |
 | `pictures` | `chat`, `pictures: [{ turn, title, at }]`: the chat's picture history, oldest first; the last is the live `scene`. Sent after `chat` on `open` and after every draw |
 | `picture` | `chat`, `turn`, `scene` (null when there is none) |
@@ -423,8 +420,7 @@ last turn ended (not stopped) after the person last looked, nothing works and it
 `<claudia-file>` tags: the text before them, else the first file's name), else "New chat"; before
 the session file exists, the first message's first line (≤ 120) or its first file's name.
 
-The `chat` frame also carries `agents`, `changes` (the chat's newest 500), `settings`, `model`,
-`commands` and `context`.
+The `chat` frame also carries `agents`, `settings`, `model`, `commands` and `context`.
 
 `Agent` (a subagent or a background shell; an agent's own shells and agents are part of it, counted in
 `children`, while it runs: one that outlives it, still running or ending after it, is an Agent of its own): `{ id, kind: "agent" | "shell", name, status: "running" | "completed" | "failed" | "stopped",
@@ -432,10 +428,6 @@ start, end, tools, tokens, step (what it is on: "Edit src/x.cljs", "$ npm test")
 while it runs), type, background, model, active, children, progress: { done, total, label } | null }`,
 running ones first. `progress` is the last `##progress <done>/<total> <label>` line of a shell's output
 (`bin/claudia-progress` prints them; it is on the PATH of every chat's commands).
-
-`Change` (one file Claude changed in one turn, from its Edit/Write calls and a git snapshot of the chat's
-folder repo, so shell edits count): `{ id, turn, path, added, removed, status: "added" | "deleted" |
-"modified", skipped (why no text is kept: "binary file", "too large to show") | null, at }`.
 
 `Context`: `{ used, max, percent, model }` (the chat's context window, read after each turn).
 `Limit`: `{ key: "five_hour" | "seven_day" | …, label, percent, resetsAt (ms) | null }`, from the SDK's

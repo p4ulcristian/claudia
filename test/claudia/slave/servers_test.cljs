@@ -3,7 +3,6 @@
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as str]
             [claudia.slave.api :as api]
-            [claudia.slave.changes :as changes]
             [claudia.slave.chats :as chats]
             [claudia.slave.clojure :as clojure]
             [claudia.slave.codeforms :as codeforms]
@@ -69,14 +68,6 @@
         line (js/JSON.stringify #js {:type "user" :uuid "u1" :message #js {:content #js [img]}})]
     (is (= "image/png" (.. ^js (api/image-of-line line {:uuid "u1" :n 0}) -source -media_type)))
     (is (nil? (api/image-of-line line {:uuid "u2" :n 0})))))
-
-(deftest changes-rows
-  (is (changes/same-state? {:text "a"} {:text "a"}))
-  (is (not (changes/same-state? {:text "a"} {:text "b"})))
-  (is (= {:turn "" :path "/f" :before nil :after "x\n" :status "added" :skipped nil :at 5 :added 1 :removed 0}
-         (changes/change-row nil "/f" {:text nil} {:text "x\n"} 5)))
-  (is (= "deleted" (:status (changes/change-row "t" "/f" {:text "x"} {:text nil} 5))))
-  (is (= "modified" (:status (changes/change-row "t" "/f" {:text nil :skipped "binary file"} {:text nil :skipped "binary file"} 5)))))
 
 (deftest codeforms-routes
   (is (= {:op :forms} (codeforms/form-route "GET" "/api/forms")))

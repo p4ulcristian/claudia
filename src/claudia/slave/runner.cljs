@@ -11,7 +11,6 @@
             [claudia.shared.protocol :as p]
             [claudia.slave.activity :as activity]
             [claudia.slave.api :as api]
-            [claudia.slave.changes :as changes]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.chat-ops :as chat-ops]
             [claudia.slave.chats :as chats]
@@ -209,10 +208,6 @@
   (.then (chats/agent-git chat (str (:agent f)) (str (:rev f)))
          (fn [d] (send! c (merge {:type "agent_git" :chat chat :agent (:agent f) :rev (:rev f)} d)))))
 
-(defmethod on-chat-frame "diff" [c f chat]
-  (send! c (merge {:type "diff" :chat chat :change (:change f)}
-                  (or (chats/change-texts chat (:change f)) {:error "No such change."}))))
-
 ;; The editor form: the user's typing saved into the picture, and its Send.
 (defmethod on-chat-frame "code_edit" [_ f chat]
   (some->> (codeforms/code-edit (chats/scene-of chat) f) (chats/set-scene! chat)))
@@ -390,8 +385,15 @@
   (folders-trash/start! data-dir)
   (listen!))
 
+(defn- drop-snapshot-indexes!
+  "The per-turn git snapshots' index files (RUNNER_DATA/index) went with the changed-files tracking
+  (README decision 95): any left from before go."
+  []
+  (fs/rmSync (path/join data-dir "index") #js {:recursive true :force true}))
+
 (defn main [& _]
   (store/open! data-dir)
+  (drop-snapshot-indexes!)
   (chats/colour-every-chat!)
   (uploads/set-root! data-dir)
   (video/set-root! data-dir)
@@ -402,7 +404,6 @@
   (search/warm! (for [r (store/chats)] [(history/session-file chats/cwd (:id r)) (:id r)]))
   (reset! chats/out {:emit emit :changed chats-changed :speak speak-to!})
   (reset! secrets-list/send-pages! send-pages!)
-  (reset! changes/data-dir data-dir)
   (reset! meta/on-change (fn [_] (let [frame (meta/frame profile)]
                                    (doseq [c @conns :when @(:hello c)] (send! c frame)))))
   (.then secret/ready start!))

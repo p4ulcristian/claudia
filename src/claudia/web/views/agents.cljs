@@ -112,7 +112,7 @@
            ^{:key i}
            [:div.ag-diff
             [:span.muted.small (if (= "Write" (:name e)) "Written whole" (:name e))]
-            [diff/diff-table (:before e) (:after e) false false]]))])))
+            [diff/diff-table (:before e) (:after e)]]))])))
 
 (defn- commit-list [g rev pick!]
   [:ul.ag-commits

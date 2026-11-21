@@ -58,21 +58,6 @@
                 value TEXT NOT NULL,
                 PRIMARY KEY (chat, key)
               );
-              -- Files Claude changed, one row per file per turn, with the text before and after.
-              CREATE TABLE IF NOT EXISTS changes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat TEXT NOT NULL,
-                turn TEXT NOT NULL,
-                path TEXT NOT NULL,
-                before TEXT,
-                after TEXT,
-                added INTEGER NOT NULL,
-                removed INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                skipped TEXT,
-                at INTEGER NOT NULL
-              );
-              CREATE INDEX IF NOT EXISTS changes_by_chat ON changes (chat, id);
               -- One row per turn that changed the picture: turn = the user message the turn answers
               -- (or an id made for a turn Claude started itself); at = when it first drew.
               CREATE TABLE IF NOT EXISTS pictures (
@@ -142,6 +127,12 @@
               DROP TABLE chat_settings;
               COMMIT;")))
 
+(defn- drop-changes!
+  "The changed-files tracking is gone (README decision 95): the files Claude changed per turn, with
+  their texts before and after, go with the table changes."
+  [^js d]
+  (.exec d "DROP TABLE IF EXISTS changes"))
+
 ;; Version 1 (2026-11-16, README decision 39): every saved picture's blocks are forms.
 (def ^:private version 1)
 
@@ -171,6 +162,7 @@
     (.exec d schema)
     (add-missing-columns! d)
     (drop-chat-settings! d)
+    (drop-changes! d)
     (upgrade! d)
     (reset! db d)))
 
@@ -305,31 +297,6 @@
 
 (defn save-forms-seen! [id seen] (kv! id "formsSeen" seen))
 
-;; changes ----------------------------------------------------------------------------------------
-
-(defn- change-row [^js r]
-  {:id (.-id r) :turn (.-turn r) :path (.-path r) :added (.-added r) :removed (.-removed r)
-   :status (.-status r) :skipped (.-skipped r) :at (.-at r)})
-
-(defn add-change!
-  "One changed file of a turn; returns its row (without the texts)."
-  [chat-id {:keys [turn path before after added removed status skipped at]}]
-  (let [^js r (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                    chat-id turn path before after added removed status skipped at)]
-    (change-row (.get (stmt "SELECT * FROM changes WHERE id = ?") (.-lastInsertRowid r)))))
-
-(defn changes
-  "The chat's changes, oldest first (the newest 500)."
-  [chat-id]
-  (vec (reverse (map change-row (.all (stmt "SELECT id, turn, path, added, removed, status, skipped, at FROM changes
-                                             WHERE chat = ? ORDER BY id DESC LIMIT 500") chat-id)))))
-
-(defn change-texts
-  "{:before :after} of one change of the chat, or nil."
-  [chat-id id]
-  (when-let [^js r (.get (stmt "SELECT before, after, skipped FROM changes WHERE chat = ? AND id = ?") chat-id id)]
-    {:before (.-before r) :after (.-after r) :skipped (.-skipped r)}))
 (defn save-picture!
   "The picture as a turn left it (so far): one row per chat and turn, its first time kept."
   [id turn s at]
@@ -354,7 +321,7 @@
           .-scene p/read-json))
 
 (defn copy-turns!
-  "A fork takes along the pictures and file changes of the turns it keeps (src/db.ts copyTurns):
+  "A fork takes along the pictures of the turns it keeps (src/db.ts copyTurns):
   turns maps each kept turn's uuid in the chat `from` to its uuid in the fork `to`."
   [from to turns]
   (.exec ^js @db "BEGIN")
@@ -365,12 +332,6 @@
       (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?)
                    ON CONFLICT (chat, turn) DO UPDATE SET scene = excluded.scene")
             to t (.-scene r) (.-at r)))
-    (doseq [^js r (.all (stmt "SELECT * FROM changes WHERE chat = ? ORDER BY id") from)
-            :let [t (get turns (.-turn r))]
-            :when t]
-      (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            to t (.-path r) (.-before r) (.-after r) (.-added r) (.-removed r) (.-status r) (.-skipped r) (.-at r)))
     (.exec ^js @db "COMMIT")
     (catch :default e (.exec ^js @db "ROLLBACK") (throw e))))
 
@@ -397,20 +358,17 @@
 
 (defn export-rows
   "Chat id's own rows: {:row (every column) :kv [[key json-text]] :pictures [{:turn :scene (JSON
-  text) :at}] :changes [{:turn :path :before :after :added :removed :status :skipped :at}]}, or nil."
+  text) :at}]}, or nil."
   [id]
   (when-let [^js r (.get (stmt "SELECT * FROM chats WHERE id = ?") id)]
     {:row (plain-row r)
      :kv (mapv (fn [^js x] [(.-key x) (.-value x)]) (.all (stmt "SELECT key, value FROM kv WHERE chat = ?") id))
-     :pictures (mapv plain-row (.all (stmt "SELECT turn, scene, at FROM pictures WHERE chat = ? ORDER BY at, rowid") id))
-     :changes (mapv plain-row (.all (stmt "SELECT turn, path, before, after, added, removed, status, skipped, at
-                                           FROM changes WHERE chat = ? ORDER BY id") id))}))
+     :pictures (mapv plain-row (.all (stmt "SELECT turn, scene, at FROM pictures WHERE chat = ? ORDER BY at, rowid") id))}))
 
 (defn- drop-chat-rows!
-  "Every row of chat id: the chat, its kv values, pictures and file changes."
+  "Every row of chat id: the chat, its kv values, pictures and voice messages."
   [id]
-  (doseq [t ["chats WHERE id = ?" "kv WHERE chat = ?" "pictures WHERE chat = ?" "changes WHERE chat = ?"
-             "voice_messages WHERE chat = ?"]]
+  (doseq [t ["chats WHERE id = ?" "kv WHERE chat = ?" "pictures WHERE chat = ?" "voice_messages WHERE chat = ?"]]
     (.run (stmt (str "DELETE FROM " t)) id)))
 
 (defn- insert-row!
@@ -422,26 +380,22 @@
     (.apply (.-run st) st (into-array (map #(get m %) ks)))))
 
 (defn- insert-copied!
-  "A copied chat's kv values ({key json-text}), pictures and changes."
-  [id kvs pics chs]
+  "A copied chat's kv values ({key json-text}) and pictures."
+  [id kvs pics]
   (doseq [[k v] kvs] (.run (stmt "INSERT INTO kv (chat, key, value) VALUES (?, ?, ?)") id k v))
   (doseq [{turn :turn s :scene at :at} pics]
     (.run (stmt "INSERT INTO pictures (chat, turn, scene, at) VALUES (?, ?, ?, ?) ON CONFLICT (chat, turn) DO NOTHING")
-          id turn s at))
-  (doseq [{:keys [turn path before after added removed status skipped at]} chs]
-    (.run (stmt "INSERT INTO changes (chat, turn, path, before, after, added, removed, status, skipped, at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          id turn path before after (or added 0) (or removed 0) status skipped (or at 0))))
+          id turn s at)))
 
 (defn import-chat!
   "A moved chat's rows, in one transaction: whatever rows its id had here (the copy left behind by an
-  earlier move away) give way to row (columns of chats), kv ({key json-text}), pictures, changes."
-  [{r :row kvs :kv pics :pictures chs :changes}]
+  earlier move away) give way to row (columns of chats), kv ({key json-text}) and pictures."
+  [{r :row kvs :kv pics :pictures}]
   (let [id (:id r)]
     (.exec ^js @db "BEGIN")
     (try
       (drop-chat-rows! id)
       (insert-row! r)
-      (insert-copied! id kvs pics chs)
+      (insert-copied! id kvs pics)
       (.exec ^js @db "COMMIT")
       (catch :default e (.exec ^js @db "ROLLBACK") (throw e)))))

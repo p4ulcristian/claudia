@@ -24,7 +24,6 @@
             [claudia.slave.bookmarks :as bookmarks]
             [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
-            [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
             [claudia.slave.meta :as meta]
@@ -207,7 +206,7 @@
   (swap-chat! id update :turn view/with-msg msg)
   (emit! id {:type "msg" :msg msg}))
 
-(declare arm-idle! turn-id! restart-if-stale! send-text!)
+(declare arm-idle! restart-if-stale! send-text!)
 
 (declare stop-task! close-session! move-to-newest-sdk!)
 
@@ -273,8 +272,7 @@
     (swap-chat! id assoc :running running)
     (when running
       (swap-chat! id assoc :since (js/Date.now))
-      (unsettle! id)
-      (changes/begin-turn! id (turn-id! id) (:folder (store/chat id))))
+      (unsettle! id))
     (store/update! id {:at (js/Date.now)})
     ;; stopped: the turn the person stopped (the page says "Stopped.").
     (emit! id (cond-> {:type "turn" :running running}
@@ -480,7 +478,6 @@
       (answers/text-result (str "No folder at " folder ". Nothing changed."))
       (do (when (not= folder (:folder (store/chat id)))
             (store/update! id {:folder folder})
-            (changes/folder-set! id folder (:running (st id)))
             (changed!))
           (-> (js/Promise.all #js [(read-start folder "CLAUDE.md") (read-start folder ".claude/CLAUDE.md")
                                    (sh-out "git" ["-C" folder "status" "--short" "--branch"])])
@@ -498,7 +495,6 @@
       (= folder (:folder (store/chat id))) nil
       :else (do (store/update! id {:folder folder})
                 (store/kv! id "moved" {:folder folder})
-                (when folder (changes/folder-set! id folder (:running (st id))))
                 (changed!)))))
 
 (defn- take-moved-note!
@@ -607,7 +603,7 @@
 
 (defn- folder-from-edit!
   "Claude edited a file while the chat has no folder: the file's project (its git root, else its own
-  folder) becomes the chat's folder, so its changes and logo follow."
+  folder) becomes the chat's folder, so its logo follows."
   [id {:keys [tool_name tool_input]}]
   (let [p (or (:file_path tool_input) (:notebook_path tool_input))]
     (when (and (not= "Bash" tool_name) (string? p) (str/starts-with? p "/") (not (:folder (store/chat id))))
@@ -647,7 +643,6 @@
   (note-effort! id input)
   (case event
     "Stop" (on-stop! id input)
-    "PreToolUse" (changes/before-edit! id (:tool_input input))
     "PostToolUse" (do (worktree/report! (store/chat id) input)
                       (folder-from-edit! id input)
                       {:continue true})
@@ -671,7 +666,7 @@
           :when (= rpc (:rpc entry))]
     (take-ask! id ask-id)))
 
-;; Agents, changes, meters -----------------------------------------------------------------------
+;; Agents, meters --------------------------------------------------------------------------------
 
 (defn- folder-of [id] (:folder (store/chat id)))
 
@@ -817,8 +812,6 @@
 (defn agent-detail [id agent] (tasks/detail cwd id (folder-of id) agent))
 
 (defn agent-git [id agent rev] (tasks/agent-git cwd id agent rev))
-
-(defn change-texts [id change] (store/change-texts id change))
 
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
@@ -995,9 +988,7 @@
     (changed!)
     (read-context! id)
     (refresh-title! id)
-    (probe-soon! 8000)
-    (-> (changes/finish! id)
-        (.then (fn [changed-rows] (when (seq changed-rows) (emit! id {:type "changes" :changes changed-rows})))))))
+    (probe-soon! 8000)))
 
 (defn- stream-text-start!
   "A text block starts streaming: a new assistant Msg (its id numbered like the session file's)."
@@ -1240,7 +1231,7 @@
                          :disallowed (when her claudia/disallowed)
                          :model (:model s) :effort (:effort s)
                          :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))
-                         :edit-tools changes/edit-tools :worktrees? (worktree/on?)})))
+                         :edit-tools session/edit-tools-matcher :worktrees? (worktree/on?)})))
 
 (defn- start-session!
   "Starts (resume?: resumes) the chat's Claude Code in the host on token t (account: its name)."
@@ -1425,7 +1416,6 @@
     (tasks/load! id (boolean (:live s)))
     {:type "chat" :chat id :title (:title r) :folder (:folder r)
      :agents (tasks/agents cwd id (:folder r))
-     :changes (store/changes id)
      :settings (settings id)
      :model (:model s)
      :effort (:effort-now s)

@@ -298,7 +298,7 @@
   "A chat's state from its `chat` frame, loaded."
   [frame]
   (-> (select-keys frame [:title :folder :scene :running :asks :more
-                          :agents :changes :settings :model :effort :commands :context])
+                          :agents :settings :model :effort :commands :context])
       (assoc :messages (vec (:messages frame)) :loaded true)))
 
 (defmethod on-frame "chat" [db server {:keys [chat] :as f}]

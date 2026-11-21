@@ -52,12 +52,6 @@
   (let [s (js/Math.floor (/ (- now since) 1000))]
     (if (< s 60) (str s "s") (str (quot s 60) "m " (mod s 60) "s"))))
 
-(defn turn-links
-  "The link under a user message: picture, 2 files, or both."
-  [picture? files]
-  (str/join " · " (remove nil? [(when picture? "picture")
-                                (when (pos? files) (str files (if (= 1 files) " file" " files")))])))
-
 (defn feed
   "What the messages column shows of a chat's state: its messages, those sent while Claude worked and
   not taken in yet (queued, shown below), the rest as blocks (steps folded), and the user message the
@@ -73,11 +67,10 @@
 
 (defn user-marks
   "What a user message in the feed shows: whether its picture is the one viewed, whether its turn
-  drew one, how many files it changed, whether it can be forked from."
-  [{:keys [id]} {:keys [viewing picture-turns change-turns read-only? last-user]}]
+  drew one, whether it can be forked from."
+  [{:keys [id]} {:keys [viewing picture-turns read-only? last-user]}]
   {:viewing? (= viewing id)
    :picture? (contains? picture-turns id)
-   :files (get change-turns id 0)
    :forkable? (and (not read-only?) (not (str/starts-with? (str id) "answer-")) (not= id last-user))})
 
 (defn working-label

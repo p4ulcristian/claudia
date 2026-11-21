@@ -60,8 +60,8 @@
 (defn check-problem
   "Why the copy on server to (its check dst) is not the chat on server from (src), as the person
   reads it; nil when they match: the same number of messages, the same last message, every file
-  the same size and SHA-256, as many pictures and file changes. A check:
-  {:messages :last :files [{:path :size :sha256}] :pictures :changes}."
+  the same size and SHA-256, as many pictures. A check:
+  {:messages :last :files [{:path :size :sha256}] :pictures}."
   [from to src dst]
   (cond
     (not (map? dst)) (str to " gave no check of its copy.")
@@ -71,5 +71,4 @@
     (first-file-difference (:files src) (:files dst))
     (str "The copy of " (first-file-difference (:files src) (:files dst)) " on " to " is not the one on " from ".")
     (not= (:pictures src) (:pictures dst)) (str "The copy on " to " has " (:pictures dst) " pictures, " from " " (:pictures src) ".")
-    (not= (:changes src) (:changes dst)) (str "The copy on " to " has " (:changes dst) " file changes, " from " " (:changes src) ".")
     :else nil))

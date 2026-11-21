@@ -67,16 +67,16 @@
        (seq t) [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html t))}])
      (when (seq sent) [attach/file-chips server chat sent])]))
 
-(defn- msg-links [ck id {:keys [viewing? picture? files forkable?]}]
+(defn- msg-links [ck id {:keys [viewing? picture? forkable?]}]
   [:div.msg-links
    (when forkable?
      [:button.pic-link.fork-link {:title "A new chat with this one up to the end of this turn, in the same folder"
                                   :on-click #(rf/dispatch [:ops/fork ck id])}
       "fork from here"])
-   (when (or picture? (pos? files))
+   (when picture?
      [:button.pic-link {:title "Show the picture from this turn"
                         :on-click #(rf/dispatch [:chat/view-turn ck (when-not viewing? id)])}
-      (pure/turn-links picture? files)])])
+      "picture"])])
 
 (defn- queued-tag
   "Under a queued message: the tag, and its × when it can be taken back (README decision 83)."
@@ -88,7 +88,7 @@
                        :on-click #(rf/dispatch [:chat/unqueue ck id])}
       "×"])])
 
-(defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? files forkable? queued? removable?] :as marks}]
+(defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? forkable? queued? removable?] :as marks}]
   (let [[server chat] ck]
     [:div.msg.user {:data-at id :class [(when viewing? "viewing") (when queued? "queued")]
                     :title (when queued? "Claude reads this at its next step")}
@@ -96,7 +96,7 @@
       (when (and images (pos? images)) [attach/sent-images server chat id images])
       [user-text server chat text]]
      (when queued? [queued-tag ck id removable?])
-     (when (and (not queued?) (or picture? (pos? files) forkable?))
+     (when (and (not queued?) (or picture? forkable?))
        (msg-links ck id marks))]))
 
 (rf/reg-event-db :nav/jump-done (fn [db _] (dissoc db :jump-to)))
@@ -314,7 +314,6 @@
         since @(rf/subscribe [:turn-since ck])
         pictures @(rf/subscribe [:pictures-of ck])
         marks {:picture-turns (set (map :turn pictures))
-               :change-turns (frequencies (map :turn (:changes state)))
                :viewing @(rf/subscribe [:viewing-msg ck])
                :read-only? @(rf/subscribe [:read-only?])
                :last-user last-user :running running :last-i (dec (count blocks))}]

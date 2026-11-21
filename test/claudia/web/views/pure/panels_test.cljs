@@ -1,10 +1,9 @@
 (ns claudia.web.views.pure.panels-test
-  "The asks, agents, usage, settings, list, menu, changes, picture, attach and layout helpers."
+  "The asks, agents, usage, settings, list, menu, picture, attach and layout helpers."
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.web.views.pure.agents :as agents]
             [claudia.web.views.pure.asks :as asks]
             [claudia.web.views.pure.attach :as attach]
-            [claudia.web.views.pure.changes :as changes]
             [claudia.web.views.pure.menu :as menu]
             [claudia.web.views.pure.picture :as picture]
             [claudia.web.views.pure.settings :as settings]
@@ -154,15 +153,6 @@
   (is (= "AM" (menu/initials "Ananda Mishung")))
   (is (= "P" (menu/initials " Paul ")))
   (is (= "155k" (menu/k-tokens 155000))))
-
-(deftest changes-of-the-turn
-  (let [state {:messages [{:id "u1" :role "user"} {:id "u2" :role "user"}]
-               :changes [{:turn "u1" :added 1 :removed 0} {:turn "u2" :added 2 :removed 1} {:turn "u2" :added 3 :removed 0}]}]
-    (is (= {:turn "u2" :label "This turn" :added 5 :removed 1} (dissoc (changes/turn-changes state nil) :changes)))
-    (is (= "Earlier turn" (:label (changes/turn-changes state "u1"))))
-    (is (= 1 (count (:changes (changes/turn-changes state "u1"))))))
-  (is (= "src/a.clj" (changes/short-path "/w/p/src/a.clj" "/w/p")))
-  (is (= "~/x" (changes/short-path "/home/someone/x" "/w/p"))))
 
 (deftest picture-keeps-blocks
   (let [prev {:blocks [{:id "a" :form "notes"} {:id "g" :form "graph" :data {:nodes [{:id "n1"}] :edges [{:from "n1" :to "n2"}]}}]}

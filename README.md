@@ -31,7 +31,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 8. Back from the TypeScript Claudia (2026-11-03): agent chips (right above the composer since 2026-11-14) (subagents and
    background shells, their view with Steps / Files / Prompt / Report, Stop, progress bars from
    `##progress` lines, the dashed amber ring while work runs after the turn), the turn's file changes
-   (a pill with +/− and diffs), the plan's 5-hour and week usage and the chat's context use (a click
+   (removed by decision 95), the plan's 5-hour and week usage and the chat's context use (a click
    compacts), the model and effort per chat, and the `/` command menu. Edits inside Sentinel's
    worktrees are reported to it where `CLAUDIA_WORKTREES_DIR` and `CLAUDIA_SENTINEL_URL` are set.
    An agent's own shells and agents are part of it while it runs; Claude Code keeps a subagent's
@@ -1261,12 +1261,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     channel (no new port): the target says the folder is there; the source holds the chat (its
     Claude Code closes, nothing is sent into it, for 15 minutes at most); the copy streams from the
     source into the target, the hub keeping none of it: the runner's row (title, colour, picture,
-    talk and bell), its settings, context, last turn and agents' list, its pictures and file
-    changes, and Claude Code's session file with everything under `<id>/` (subagents, tool
+    talk and bell), its settings, context, last turn and agents' list, its pictures (its file
+    changes too until decision 95), and Claude Code's session file with everything under `<id>/` (subagents, tool
     results), placed in the target runner's own project folder (its working folder's slug). The
     target reads its copy back and the hub checks it against the source: the same number of
-    messages, the same last message, every file's size and SHA-256, as many pictures and file
-    changes. Only then does the target take the chat in and the source archive its own, marked as
+    messages, the same last message, every file's size and SHA-256, as many pictures. Only then does the target take the chat in and the source archive its own, marked as
     moved (never deleted; a move back replaces that copy unless it was written to since), with its
     root switch turned off: the switch is the source front's, and a moved chat starts with root off
     and a new chat key. Any failure stops the move: the target drops its copy, the source keeps the

@@ -3,7 +3,8 @@
   the background. Kept from the SDK's task_* messages (and the chat's Agent and Bash calls), saved per
   chat, and read for the page: the agent list (chips), one agent's view (steps, files, prompt,
   report, a shell's output), and progress bars from a shell's `##progress done/total label` lines."
-  (:require ["node:fs" :as fs]
+  (:require ["diff" :as jsdiff]
+            ["node:fs" :as fs]
             [claudia.shared.text :as text]
             ["node:fs/promises" :as fsp]
             ["node:os" :as os]
@@ -11,7 +12,6 @@
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
             [claudia.slave.agentgit :as agentgit]
-            [claudia.slave.changes :as changes]
             [claudia.slave.history :as history]
             [claudia.slave.store :as store]))
 
@@ -438,6 +438,16 @@
 
 ;; One agent -----------------------------------------------------------------------------------
 
+(defn line-counts
+  "Lines added and removed from before to after."
+  [before after]
+  (reduce (fn [acc ^js part]
+            (cond (.-added part) (update acc :added + (or (.-count part) 0))
+                  (.-removed part) (update acc :removed + (or (.-count part) 0))
+                  :else acc))
+          {:added 0 :removed 0}
+          (jsdiff/diffLines (or before "") (or after ""))))
+
 (defn- edit-of
   "An Edit/Write/MultiEdit call as the texts before and after (numbered within the replaced text)."
   [tool input]
@@ -452,7 +462,7 @@
   edits kept (each text cut at 20000 characters)."
   [f b p edits folder]
   (let [f (or f {:path p :rel (history/shown-path p folder) :added 0 :removed 0 :edits []})
-        counts (for [{:keys [before after]} edits] (changes/line-counts before after))]
+        counts (for [{:keys [before after]} edits] (line-counts before after))]
     (-> f
         (update :added + (reduce + (map :added counts)))
         (update :removed + (reduce + (map :removed counts)))
