@@ -205,3 +205,14 @@
   (is (chat/sent? nil 1) "the first send")
   (is (not (chat/sent? 1 1)) "nothing new")
   (is (not (chat/sent? 2 1)) "the server took one: not a send"))
+
+
+(deftest a-task-card-says-how-it-went
+  (is (= :good (chat/task-tone {:status "completed" :state "completed (exit code 0)"})))
+  (is (= :bad (chat/task-tone {:status "completed" :state "completed (exit code 2)"})) "a command that failed")
+  (is (= :bad (chat/task-tone {:status "failed" :state "failed"})))
+  (is (= :off (chat/task-tone {:status "killed" :state "was stopped"})))
+  (is (= :good (chat/task-tone {:status nil :state "finished"})) "an agent that finished")
+  (is (false? (chat/task-long? "Short.")))
+  (is (true? (chat/task-long? (apply str (repeat 300 "a")))))
+  (is (true? (chat/task-long? "a\nb\nc\nd\ne\nf")) "many lines"))

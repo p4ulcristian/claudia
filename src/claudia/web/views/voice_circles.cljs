@@ -6,7 +6,7 @@
   it and talks to that chat. While one plays or is held the others step away, and while the mic is
   held all do (the held one stays, unseen, to keep the finger). The one playing wears the bars that
   move (dots while its sound is made), not the big mic, which stays the open chat's (README decision
-  105); held, its left petal skips all of its waiting messages."
+  107); held, its left petal skips all of its waiting messages."
   (:require [claudia.shared.colours :as colours]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.voicemail :as pure]

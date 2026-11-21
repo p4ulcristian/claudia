@@ -29,7 +29,7 @@
       :else :send)))
 
 (defn circle-way
-  "What a drag chooses on a voice message's circle (README decision 105): the mic's way, but left
+  "What a drag chooses on a voice message's circle (README decision 107): the mic's way, but left
   skips all of that chat's waiting messages (:skip) instead of adding to a draft."
   [dir]
   (if (= dir :add) :skip dir))

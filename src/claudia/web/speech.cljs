@@ -175,7 +175,7 @@
 
 (defn hold!
   "The mic is held: the reply being read stops and the rest of its chat's line is dropped (the mic,
-  once it is a hold, marks that chat's messages heard: README decision 105); other chats' wait until
+  once it is a hold, marks that chat's messages heard: README decision 107); other chats' wait until
   let-go!."
   []
   (let [k (:k (:current @line))]

@@ -14,7 +14,7 @@
   going while the mic follows the finger on a spring (motion's useSpring: it trails and overshoots
   a little), its button kept on the screen; let go, the clip is heard and sent as when let go in
   place, and the mic stays there. Its flower is always whole, four ways.
-  The mic is always the open chat's (README decision 105): its colour, its words. While the open
+  The mic is always the open chat's (README decision 107): its colour, its words. While the open
   chat's own reply is read aloud (README decision 21) its bars move on the mic and a tap stops it.
   The chats' voice messages wait as circles round it (README decisions 93 and 94,
   views/voice_circles.cljs), each a little mic: a tap plays that chat's messages (on the one playing:
@@ -142,7 +142,7 @@
   "Pointer down on the mic, or on a voice message's circle (target {:k its chat :at {:x :y} its
   offset from the mic}): the clip starts (the microphone opens if it is cold; the first time the
   browser asks for it), its flower round what was pressed. The words go to the circle's chat, else
-  to draft-key's (README decision 105)."
+  to draft-key's (README decision 107)."
   [^js e {:keys [hold set-phase set-dir set-reply set-aim draft-key floating?] :as parts} & [target]]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)

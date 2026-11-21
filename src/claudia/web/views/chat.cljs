@@ -229,12 +229,35 @@
    [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
    (when-not streaming [talk/say-button ck text])])
 
+(def ^:private tone-mark {:good "\u2713" :bad "\u2715" :off "\u25a0"})
+
+(defn- task-body
+  "A task card's answer in Markdown; a long one folds to a few lines, More opens it."
+  [body]
+  (r/with-let [open (r/atom false)]
+    (let [long? (pure/task-long? body)]
+      [:<>
+       [:div.task-body.md {:class (when (and long? (not @open)) "folded")
+                           :dangerouslySetInnerHTML (r/unsafe-html (md/html body))}]
+       (when long? [:button.task-more {:type "button" :on-click #(swap! open not)} (if @open "Less" "More")])])))
+
+(defn- task-card
+  "A background task's end (README decision 108): how it went, its name or command, its answer."
+  [{:keys [title code state body] :as card}]
+  (let [tone (pure/task-tone card)]
+    [:div.task-card {:class (name tone)}
+     [:div.task-head [:span.task-mark (tone-mark tone)] [:b.task-title title] [:span.task-state state]]
+     (when code [:code.task-code code])
+     (when (seq body) [task-body body])]))
+
 (defn- msg-row
   "One message of the feed: the user's, a note, or Claude's."
   [ck i {:keys [id role text] :as m} marks]
   (case role
     "user" ^{:key id} [user-msg ck m (pure/user-marks m marks)]
-    "note" ^{:key (str "note-" id "-" i)} [:pre.note-line text]
+    "note" (if (:card m)
+             ^{:key (str "note-" id "-" i)} [task-card (:card m)]
+             ^{:key (str "note-" id "-" i)} [:pre.note-line text])
     ^{:key id} [claude-msg ck m]))
 
 (defn- feed-row

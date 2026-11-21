@@ -387,6 +387,24 @@ code, pre { font-family: var(--mono); }
 .raw-chip-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
 /* Notes: slash-command output, compaction */
 .note-line { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--bg2); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
+/* A background task's end (README decision 108): a card, not a code box. A coloured edge and mark say
+   how it went (green done, red failed, grey stopped), then its name or its command on one line, then
+   what it said back in Markdown, folded to four lines with More. */
+.task-card { --t: var(--green); display: grid; gap: 6px; padding: 8px 12px; border-radius: 10px; background: var(--panel2);
+  box-shadow: inset 3px 0 0 var(--t), inset 0 0 0 1px var(--line); font: 13px/1.5 var(--sans); color: var(--fg); min-width: 0; }
+.task-card.bad { --t: var(--red); }
+.task-card.off { --t: var(--grey); }
+.task-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.task-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; align-self: center;
+  background: color-mix(in srgb, var(--t) 22%, transparent); color: var(--t); font: 700 11px var(--sans); }
+.task-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.task-state { flex: none; margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.task-code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); color: var(--muted); }
+.task-body { color: var(--fg); overflow-wrap: anywhere; }
+.task-body > :first-child { margin-top: 0; }
+.task-body > :last-child { margin-bottom: 0; }
+.task-body.folded { max-height: 6em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.task-more { justify-self: start; border: 0; background: none; padding: 0; color: var(--accent); font: 600 12px var(--sans); cursor: pointer; }
 
 /* The composer: no line above it, the chat runs straight into it. */
 .composer { position: relative; background: none; padding: 12px 14px var(--edge-b); }
@@ -402,7 +420,7 @@ code, pre { font-family: var(--mono); }
   background: var(--chat, var(--grey)); color: #fff; font: 700 13px var(--sans); display: grid; place-items: center; cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); animation: voice-circle-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 .voice-circle.playing { outline: 3px solid var(--fg); outline-offset: 3px; }
-/* README decision 105: the chat read aloud wears the moving bars on its own circle, not the big mic. */
+/* README decision 107: the chat read aloud wears the moving bars on its own circle, not the big mic. */
 .voice-circle .mic-speak-bars, .voice-circle .mic-speak-loading { height: 14px; gap: 2px; }
 .voice-circle .mic-speak-bars i { width: 2.5px; }
 .voice-circle .mic-speak-loading i { width: 4px; height: 4px; }
@@ -446,7 +464,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: transform 0.15s var(--ease), background 0.15s; }
 .mic-button svg { width: 26px; height: 26px; }
 
-/* The open chat's own reply read aloud (README decisions 21, 105): its bars move on the mic, and its
+/* The open chat's own reply read aloud (README decisions 21, 107): its bars move on the mic, and its
    name and voice sit beside it. A tap stops that reply; a hold talks. Another chat read aloud only
    shows its name there (in its colour); its bars are on its circle. */
 .mic.speaking .mic-button { background: var(--m); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--m) 30%, transparent); }

@@ -447,7 +447,7 @@
   (->> (get-in db [:voice-msgs server]) (filter #(= chat (:chat %))) (mapv :id)))
 
 (defn voice-done-fx
-  "Chat k's waiting voice messages are done with (README decision 105): all marked heard, here at
+  "Chat k's waiting voice messages are done with (README decision 107): all marked heard, here at
   once and on every device through its runner, and its line stops if it is being read."
   [db k]
   (assoc (or (voice-heard-fx db k (chat-msg-ids db k)) {}) :fx [[:speech/drop k]]))
@@ -518,7 +518,7 @@
      {:db (on-chat-screen db)}
      {:db (-> (on-chat-screen db) (assoc :open k) (assoc-in [:chats k :error] nil))
       :ws/send-all (switch-frames (:open db) k)
-      ;; Opened, its replies are read on the screen: its voice messages are done (README decision 105).
+      ;; Opened, its replies are read on the screen: its voice messages are done (README decision 107).
       :fx (cond-> [[:dispatch [:chat/check-seen]] [:dispatch [:voice/done k]]]
             history? (conj [:history/push k]))})))
 
