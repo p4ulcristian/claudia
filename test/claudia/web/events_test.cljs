@@ -2,7 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [claudia.shared.colours :as colours]
             [claudia.shared.files :as files]
-            [claudia.web.events :as ev]))
+            [claudia.web.events :as ev]
+            [claudia.web.views.pure.talk :as talk]))
 
 (deftest status-remembers-the-outage-and-shows-a-long-one-back
   (let [down (ev/with-status {:status :open :rows {}} :closed 1000)]
@@ -13,8 +14,9 @@
     (is (false? (:back (ev/with-status down :open 1100))) "a blip"))
   (is (= {:status :open :back false} (ev/with-status {:status :connecting} :open 5)) "the first open"))
 
-(deftest new-picks-carry-the-voice-and-bell
-  (is (= {:voice "otto" :bell true :color "jade"} (ev/new-picks {:voice "otto" :bell true :color "jade" :model nil}))))
+(deftest new-picks-carry-the-voice-bell-and-sound
+  (is (= {:voice "otto" :bell true :color "jade"} (ev/new-picks {:voice "otto" :bell true :color "jade" :model nil})))
+  (is (= {:bell true :sound "marimba"} (ev/new-picks {:bell true :sound "marimba"}))))
 
 (deftest an-error-goes-only-while-it-is-the-one-shown
   (let [db {:error "s: boom" :error-from "s" :chats {["s" "c"] {:error "bad" :title "t"}}}]
@@ -317,13 +319,27 @@
     (is (= {:server "s" :chat "c" :ask "a"} (:keys/answer fx)))
     (is (= {:chats {}} (:db fx)) "no ask card is added")))
 
-(deftest a-speak-frame-is-a-reply-to-read
-  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "It works." :colour-name "Red"}
+(deftest a-voice-message-is-a-reply-to-read
+  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "It works." :colour-name "Red" :msg "t1"}
          (ev/speak-item "s" {:chat "c" :id "t1" :voice "nora" :text "**It works.**"} "cherry")))
-  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Which one?" :colour-name "Lagoon"}
+  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Which one?" :colour-name "Lagoon" :msg "ask-a"}
          (ev/speak-item "s" {:chat "c" :id "ask-a" :voice "otto" :ask {:questions [{:question "Which one?"}]}} "lagoon")))
   (is (nil? (:colour-name (ev/speak-item "s" {:chat "c" :id "t3" :voice "nora" :text "It works."} nil))) "no colour: no name")
   (is (nil? (ev/speak-item "s" {:chat "c" :id "t2" :voice "nora" :text "  "} "cherry")) "nothing to say"))
+
+(deftest voice-messages-come-in-heard-ones-go
+  (let [msgs [{:chat "c" :id "t1" :voice "nora" :text "One." :at 2}
+              {:chat "c" :id "t0" :voice "nora" :text "Zero." :at 1}
+              {:chat "d" :id "t1" :voice "otto" :text "Other." :at 3}]
+        vdb (:db (ev/on-frame {:servers {"s" {:rows {"c" {:color "cherry"}}}}} "s" {:type "voices" :messages msgs}))]
+    (is (= msgs (get-in vdb [:voice-msgs "s"])))
+    (is (= ["Red here. Zero." "Red here. One."] (map #(talk/spoken % nil) (ev/chat-items vdb ["s" "c"])))
+        "a chat's messages, oldest first, each with its colour's name")
+    (is (= ["t0" "t1"] (map :msg (ev/chat-items vdb ["s" "c"]))))
+    (is (= [(first msgs) (last msgs)] (ev/without-heard msgs "c" ["t0"])) "only that chat's id goes")
+    (let [fx (ev/voice-heard-fx vdb ["s" "c"] ["t1" "t0"])]
+      (is (= [{:chat "d" :id "t1" :voice "otto" :text "Other." :at 3}] (get-in fx [:db :voice-msgs "s"])))
+      (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx))))))
 
 (def ^:private two-servers
   {:me {:servers [{:name "a"} {:name "b"}]}

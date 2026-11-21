@@ -137,11 +137,11 @@
   (first (filter #(and (:group %) (some #{cref} (:chats %))) items)))
 
 (defn clean-picks
-  "A group's picks kept: its plan, model, effort, folder, server, voice and bell. A speaker switched
+  "A group's picks kept: its plan, model, effort, folder, server, voice, bell and sound. A speaker switched
   on before voices came (:talk true) is the first voice."
   [picks]
   (if (map? picks)
-    (cond-> (select-keys picks [:plan :model :effort :folder :server :voice :bell])
+    (cond-> (select-keys picks [:plan :model :effort :folder :server :voice :bell :sound])
       (and (true? (:talk picks)) (not (contains? picks :voice))) (assoc :voice voices/default-id))
     {}))
 

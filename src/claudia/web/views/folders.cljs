@@ -1,6 +1,6 @@
 (ns claudia.web.views.folders
   "The File Browser in the right half (README decisions 61 to 64, 68 to 72), in place of the picture
-  while the header's place pill has it on, on the open chat's server; the top bar's computer toggle
+  while the header's Files button has it on, on the open chat's server; the top bar's computer toggle
   picks a new chat's computer (README decision 71) and, for a started chat, only which computer is
   browsed (decision 72: on another one Select is gone): on top the server's bookmarks as cards (the
   project's logo as the chats show it, else a folder; name, path, ★ to unpin, \"missing\" greyed;
@@ -142,7 +142,7 @@
 (defn- top-bar [{:keys [server hidden? set-hidden] :as where}]
   [:header.fd-bar
    [:div.fd-where
-    [:div.fd-title-row [:h1.fd-heading "File Browser"] [server-toggle where]]
+    [:div.fd-title-row [server-toggle where]]
     [:f> machine-line server]]
    [:label.fd-switch [:input {:type "checkbox" :checked hidden? :on-change #(set-hidden (not hidden?))}] "show hidden"]])
 

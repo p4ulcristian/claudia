@@ -1,10 +1,11 @@
 (ns claudia.web.speech
-  "The chats' voices (README decision 21): replies of chats with a voice, read aloud one at a time
-  in arrival order (claudia.web.views.pure.talk's line), each in its chat's voice by the hub's
-  voice service. Holding the mic drops the reply being read and holds the rest until it is let go;
-  a chat turned Off leaves the line; the page going to the background drops it all, so nothing is
-  said late. The reply being read is in app-db as :speaking (the mic shows it), with :loading until
-  its first sound plays (the sound plays as it comes, a sentence at a time)."
+  "The chats' voices (README decisions 21 and 93): a tap on a chat's voice message plays that chat's
+  waiting messages one after the other (claudia.web.views.pure.talk's line), each in its chat's voice
+  by the hub's voice service; one heard to its end is told to its runner (:voice/heard). Holding the
+  mic stops it and drops the rest of the line (the messages stay, unheard); the page going to the
+  background drops it too, so nothing is said late. The reply being read is in app-db as :speaking
+  (the mic shows it), with :loading until its first sound plays (the sound plays as it comes, a
+  sentence at a time)."
   (:require [claudia.shared.voices :as voices]
             [claudia.web.sound :as sound]
             [claudia.web.views.pure.talk :as talk]
@@ -15,9 +16,9 @@
 (defonce ^:private line (atom talk/empty-line))
 (def ^:private quiet
   "No reply sounding: no pieces scheduled (:sources), none to come (:stream, the fetch's
-  AbortController), :until the end of the last piece on the context's clock, :fed once the whole
-  sound has come."
-  {:sources [] :until nil :stream nil :fed false})
+  AbortController), :until the end of the last piece on the context's clock, :fed once the sound
+  has stopped coming, :whole when it came to its end (not broken off)."
+  {:sources [] :until nil :stream nil :fed false :whole false})
 (defonce ^:private audio (atom (assoc quiet :ctx nil :analyser nil)))
 
 (defn- visible? [] (= "visible" (.-visibilityState js/document)))
@@ -67,6 +68,11 @@
 
 (declare pump! stop!)
 
+(defn- heard!
+  "A voice message read to its end: its runner hears of it, so it goes on every device."
+  [{:keys [k msg]}]
+  (when msg (rf/dispatch [:voice/heard k [msg]])))
+
 (defn- finished!
   "The reply with this id is over (read to its end or failed): the next one, if it still is this one."
   [id]
@@ -78,11 +84,17 @@
 
 (defn- streaming? "Whether ctrl is the fetch of the reply sounding now." [ctrl] (identical? ctrl (:stream @audio)))
 
+(defn- over!
+  "item's reply is over: heard when its whole sound came and played (a broken-off one is not)."
+  [item whole]
+  (when whole (heard! item))
+  (finished! (:id item)))
+
 (defn- piece-ended!
   "A piece of item's sound ended: the reply is over once it has all come and none is left."
   [item ^js src]
-  (let [{:keys [sources fed]} (swap! audio update :sources (fn [ss] (filterv #(not (identical? % src)) ss)))]
-    (when (and fed (empty? sources)) (finished! (:id item)))))
+  (let [{:keys [sources fed whole]} (swap! audio update :sources (fn [ss] (filterv #(not (identical? % src)) ss)))]
+    (when (and fed (empty? sources)) (over! item whole))))
 
 (defn- scheduled!
   "buf plays right where the piece before it ends (at once when none is left), so the pieces join
@@ -107,11 +119,12 @@
     (if (visible?) (scheduled! item (voice/audio-buffer (context!) pcm)) (stop!))))
 
 (defn- streamed!
-  "item's sound has all come (or broke off: what came still plays): the reply is over once its
-  pieces have played."
-  [item ctrl]
+  "item's sound has stopped coming, whole or broken off (what came still plays): the reply is over
+  once its pieces have played."
+  [item ctrl whole]
   (when (streaming? ctrl)
-    (when (empty? (:sources (swap! audio assoc :fed true))) (finished! (:id item)))))
+    (let [{:keys [sources]} (swap! audio assoc :fed true :whole whole)]
+      (when (empty? sources) (over! item whole)))))
 
 (defn- read!
   "Reads item, playing its sound as it comes; its colour name is said only when its chat is not the
@@ -121,8 +134,9 @@
     (swap! audio merge quiet {:stream ctrl})
     (-> (voice/stream-pcm (talk/spoken item (:open @rdb/app-db)) (:description (voices/by-id voice))
                           (talk/language-of text) (.-signal ctrl) #(piece! item ctrl %))
-        (.catch (fn [e] (when (streaming? ctrl) (js/console.warn "voice:" (.-message e)))))
-        (.then #(streamed! item ctrl)))))
+        (.then (fn [_] true)
+               (fn [e] (when (streaming? ctrl) (js/console.warn "voice:" (.-message e))) false))
+        (.then #(streamed! item ctrl %)))))
 
 (defn- pump!
   "Starts the next reply when none is being read and the mic is not held."
@@ -133,11 +147,13 @@
       (shown! (assoc item :loading true))
       (read! item))))
 
-(defn say!
-  "item {:id :k :voice :text} joins the line (a reply already waiting, read or being read does not)."
-  [item]
-  (when (and (seq (:text item)) (visible?))
-    (swap! line talk/with-item item)
+(defn play-chat!
+  "items (one chat's voice messages, oldest first, each {:id :k :voice :text :msg}) are read one after
+  the other from now; whatever was playing stops."
+  [items]
+  (when (seq items)
+    (silence!)
+    (reset! line (reduce talk/with-item talk/empty-line items))
     (pump!)))
 
 (defn say-now!
@@ -148,31 +164,27 @@
     (swap! line #(-> % talk/without-current (talk/with-item-first item)))
     (pump!)))
 
-(defn skip!
-  "The reply being read stops; the next one comes."
-  []
-  (silence!)
-  (swap! line talk/without-current)
-  (shown! nil)
-  (pump!))
-
 (defn hold!
-  "The mic is held: the reply being read stops and nothing is read until let-go!."
+  "The mic is held: the reply being read stops and the rest of its chat's line is dropped (a hold
+  then replies to that chat; its messages not heard stay)."
   []
-  (silence!)
-  (swap! line talk/held true)
-  (shown! nil))
+  (stop!)
+  (swap! line talk/held true))
 
 (defn let-go!
-  "The mic is let go: the waiting replies come again."
+  "The mic is let go."
   []
-  (swap! line talk/held false)
-  (pump!))
+  (swap! line talk/held false))
 
 (defn reading?
   "Whether a reply is being read now."
   []
   (some? (:current @line)))
+
+(defn reading-chat
+  "The chat whose reply is being read now ([server chat]), or nil."
+  []
+  (:k (:current @line)))
 
 (defn drop-chat!
   "Chat k's voice is Off: its waiting replies go, and it stops if it is being read."
@@ -186,7 +198,6 @@
   []
   (sound/release! ::reply)
   (silence!)
-  (shown! nil)
   (swap! line #(assoc talk/empty-line :said (:said %) :held (:held %)))
   (shown! nil))
 

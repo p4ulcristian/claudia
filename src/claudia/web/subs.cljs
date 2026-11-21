@@ -21,7 +21,7 @@
 (rf/reg-sub :dictated-swap (fn [db [_ k]] (dictated/swappable (get-in db [:dictated k]) (get-in db [:drafts k]))))
 (rf/reg-sub :voice (fn [db [_ k]] (switches/voice-of db k)))   ; k nil: the new chat
 (rf/reg-sub :speaking (fn [db _] (:speaking db)))
-(rf/reg-sub :bell? (fn [db [_ k]] (switches/bell-on? db k)))
+(rf/reg-sub :notify (fn [db [_ k]] (switches/notify-of db k)))
 (rf/reg-sub :root? (fn [db [_ k]] (switches/root-on? db k)))
 (rf/reg-sub :owner? (fn [db _] (not (events/viewing-other? db))))   ; the person's own chats, not a view
 (rf/reg-sub :root-ask   ; the chat whose root switch waits on a yes: {:k :title}, or nil

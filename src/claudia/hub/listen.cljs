@@ -3,7 +3,9 @@
   microphone, claudia.web.mic) as the body, its type as content-type; the hub passes it to
   the listen service (HUB_LISTEN_URL, its token in HUB_LISTEN_TOKEN_FILE or HUB_LISTEN_TOKEN):
   <url>/v1/audio/transcriptions, OpenAI's shape (a multipart `file`) plus `speaker`: the signed-in
-  caller's email, so the service hears with that person's words (claudia.hub.listen-words) ->
+  caller's email, so the service hears with that person's words (claudia.hub.listen-words), and
+  `context`: the chat's last words the page sends in x-listen-context, so names in them are heard
+  right ->
   {text, raw}: text cleaned up, raw as heard (a service without cleanup answers {text} only: raw is
   then the same text). No language is given, so the service writes down whatever language was spoken.
 
@@ -39,11 +41,23 @@
         raw (some-> answer .-raw)]
     {:text text :raw (if (string? raw) (str/trim raw) text)}))
 
-(defn- transcribe [{:keys [url token]} ^js clip content-type speaker]
+(def ^:private max-context-chars
+  "The most of a page's context passed on (the page sends at most 2000; the service keeps 200 words)."
+  4000)
+
+(defn context-of
+  "The page's context for a clip (x-listen-context, URI-encoded: the chat's last words), decoded,
+  trimmed and cut to max-context-chars; \"\" when there is none or it does not decode."
+  [header]
+  (let [text (try (str/trim (js/decodeURIComponent (str header))) (catch :default _ ""))]
+    (subs text 0 (min max-context-chars (count text)))))
+
+(defn- transcribe [{:keys [url token]} ^js clip content-type speaker context]
   (let [form (js/FormData.)]
     (.set form "file" (js/Blob. #js [clip] #js {:type (or content-type "application/octet-stream")})
           (clip-name content-type))
     (.set form "speaker" speaker)
+    (when (seq context) (.set form "context" context))
     (-> (js/fetch (str url "/v1/audio/transcriptions")
                   #js {:method "POST" :headers #js {:authorization (str "Bearer " token)} :body form
                        :signal (js/AbortSignal.timeout 90000)})
@@ -56,7 +70,8 @@
   (cond
     (not c) (io/send-json res 501 {:error "no listen service on this hub (HUB_LISTEN_URL, HUB_LISTEN_TOKEN_FILE)"})
     (zero? (.-length clip)) (io/send-json res 400 {:error "an empty clip"})
-    :else (-> (transcribe c clip (.. req -headers -content-type) email)
+    :else (-> (transcribe c clip (.. req -headers -content-type) email
+                          (context-of (aget (.-headers req) "x-listen-context")))
               (.then #(io/send-json res 200 %))
               (.catch (fn [e] (io/send-json res 502 {:error (.-message e)}))))))
 

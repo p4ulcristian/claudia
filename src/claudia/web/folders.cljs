@@ -1,11 +1,11 @@
 (ns claudia.web.folders
-  "Files in the right half (README decisions 61 to 64, 68 to 70, 75): the place pill in a chat's
-  header (row 2) toggles the right half between the Drawing board and the File Browser
+  "Files in the right half (README decisions 61 to 64, 68 to 70, 90, 91): the Files button in a chat's
+  header (row 3) opens or closes the File Browser's sheet over the Drawing board
   (claudia.web.right), the folder browser of the open
   chat's server with its folder selected; the chat menu's Folders… opens that chat and its Files.
   Select (a bookmark card's, or Use for this chat) sets the chat's folder: a new chat's folder pick,
   or a started chat moved there. A new chat's first message without a folder opens Files and waits
-  (README decision 65): Select then sends it and the picture comes back. The fetches of the runner's
+  (README decision 65): Select then sends it and the File Browser's sheet closes. The fetches of the runner's
   /api/folders… calls (PROTOCOL.md, \"Runner HTTP: folders\")."
   (:require [re-frame.core :as rf]
             [claudia.web.api :as api]
@@ -32,13 +32,13 @@
 (defn use-folder
   "What Select does with folder for chat k (nil: the new chat): a started chat moves there, a new
   chat's folder pick becomes it, and when Files opened on a held first message (db's :folders
-  :send?, README decision 65) the draft goes and the picture comes back. The effects."
+  :send?, README decision 65) the draft goes and the File Browser's sheet closes. The effects."
   [db folder k]
-  (let [send? (and (not k) (get-in db [:folders :send?]))]
-    (cond-> {:db (cond-> (dissoc db :folders) send? (assoc :right-view :picture :right-saving true))
-             :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
-                   send? (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]]))}
-      send? (assoc :right/put :picture))))
+  (let [send? (and (not k) (get-in db [:folders :send?]))
+        db (dissoc db :folders)]
+    (assoc (if send? (right/close-view db :files) {:db db})
+           :fx (cond-> [(if k [:dispatch [:chat/folder k folder]] [:dispatch [:new/settings {:folder folder}]])]
+                 send? (conj [:dispatch [:composer/send (get-in db [:drafts :new] "")]])))))
 
 (rf/reg-event-fx :folders/use (fn [{:keys [db]} [_ folder k]] (use-folder db folder k)))
 

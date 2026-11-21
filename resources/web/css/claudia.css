@@ -142,8 +142,8 @@ code, pre { font-family: var(--mono); }
 
 /* ---------- Chat ---------- */
 .left { container-type: inline-size; }
-/* The header (views/head.cljs, README decision 22): one panel lightly tinted with the chat's colour
-   (--chat; none: neutral), three rows: the title; five setting pills; the rings and the buttons. */
+/* The header (views/head.cljs, README decisions 22, 90): one panel lightly tinted with the chat's colour
+   (--chat; none: neutral), three rows: the title; the setting pills; the rings and the worded buttons. */
 .chat-head { padding: var(--edge-t) 12px 8px; }
 .head-panel { position: relative; display: grid; gap: 8px; padding: 9px 14px 8px; border-radius: 14px;
   background: color-mix(in srgb, var(--chat, transparent) 7%, var(--panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chat, var(--muted)) 45%, transparent); }
@@ -155,8 +155,7 @@ code, pre { font-family: var(--mono); }
 .chat-head h1 { flex: 0 1 auto; font: 700 19px/1.3 var(--hand); margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-head h1.renamable { cursor: text; }
 .title-edit { flex: 1; min-width: 0; font: 700 18px var(--hand); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 1px 8px; outline: none; }
-/* Row 2: five pills, one look: icon, value, ▾ when it can change; a fixed value (a started chat's
-   computer) dashed, no ▾. */
+/* Row 2: the pills, one look: icon (or the colour's dot), value, ▾ when it can change. */
 .head-field { position: relative; display: flex; min-width: 0; }
 .head-pill { box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
   padding: 4px 11px 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg);
@@ -168,19 +167,27 @@ code, pre { font-family: var(--mono); }
 .pill-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pill-caret { flex: none; margin-left: -1px; font-size: 10px; color: var(--muted); }
 .pill-empty { font-style: italic; font-weight: 500; color: var(--muted); }
-.head-field:has(.folder-pill) { flex: 0 1 auto; }
-.folder-pill { max-width: 420px; }
-.place { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.place-server { flex: none; font-weight: 600; }
-.place .folder-path, .place .pill-empty { min-width: 0; }
-.folder-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; font: 500 12px var(--mono); }
+.head-pill .colour-dot { flex: none; width: 12px; height: 12px; margin: 0 1px; }
+.project-pill { max-width: 320px; }
+/* A popup's list of choices (server, project, notify): the name bold, a quiet line under it (a
+   path in mono), ✓ after the current one; an off server dimmed. */
+.pop-row { display: grid; gap: 1px; width: 100%; min-width: 0; padding: 6px 8px; border-radius: 8px; text-align: left; color: var(--fg); }
+.pop-row:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.pop-row-name { font: 600 13px var(--sans); }
+.pop-row.on .pop-row-name { color: var(--accent); }
+.pop-row.on .pop-row-name::after { content: " ✓"; }
+.pop-row.off { opacity: 0.55; }
+.pop-row-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.pop-row-line.mono { direction: rtl; text-align: left; font: 500 11.5px var(--mono); }
+.pop-sep { height: 0; margin: 4px 6px; border-top: 1px solid var(--line); }
+.head-pop.notify-pop { min-width: 260px; }
 /* The server's state: turning arrows while reconnecting, a power sign when it is off. */
 .head-state { flex: none; align-self: center; display: grid; width: 16px; height: 16px; color: var(--amber); }
 .head-state.off { color: var(--red); }
 .head-state svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .head-state.reconnecting svg { animation: ag-spin 1.6s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .head-state.reconnecting svg { animation: none; } }
-/* Row 3: the rings (an 18 px ring and its %) on the left, the round buttons on the right. Quiet
+/* Row 3: the rings (an 18 px ring and its %) on the left, the worded buttons on the right. Quiet
    rings: grey while use is low, amber and red (agents.css) when it is high. */
 .head-rings { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .mini-ring { display: inline-flex; align-items: center; gap: 4px; font: 600 11.5px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -194,9 +201,16 @@ code, pre { font-family: var(--mono); }
 .mini-ring.red { color: var(--red); }
 .mini-ring.action { cursor: pointer; }
 .mini-ring.action:hover { color: var(--fg); }
-.head-acts { flex: none; display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.head-acts .icon { border-radius: 50%; }
-.head-act { position: relative; }
+.head-acts { flex: 0 1 auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-left: auto; }
+/* Row 3's buttons: a rounded rectangle, an icon and a word; Files filled in the accent while it
+   shows, Sudo filled red while root is on. */
+.head-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 4px 8px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 600 12.5px/18px var(--sans); white-space: nowrap; }
+.head-btn:hover { border-color: var(--accent); }
+.head-btn svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
+.head-btn.on { background: var(--accent); border-color: var(--accent); color: var(--on-hue); }
+.head-btn.on svg { color: currentColor; }
+.head-btn.root-btn.on { background: var(--red); border-color: var(--red); }
 .colour-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px color-mix(in srgb, var(--fg) 18%, transparent); }
 .colour-dot.passive { opacity: 0.85; }
 .icon { width: 30px; height: 30px; border-radius: 7px; color: var(--muted); display: grid; place-items: center; }
@@ -207,7 +221,7 @@ code, pre { font-family: var(--mono); }
 .server-chip { font-family: var(--sans); }
 @container (max-width: 600px) { .chat-head .folder-chip { display: none; } }
 
-/* Chat colour: the palette, opened from row 3's colour button. */
+/* Chat colour: the palette, opened from row 2's colour pill. */
 .palette { display: grid; grid-template-columns: repeat(6, 26px); gap: 8px; padding: 2px; }
 /* The gradients start a row of their own, under a faint line (README decision 80). */
 .swatch-break { grid-column: 1 / -1; height: 0; border-top: 1px dashed var(--line); }
@@ -221,21 +235,20 @@ code, pre { font-family: var(--mono); }
 .swatch.taken:hover { transform: none; }
 .swatch.passive.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
 .plan-pick { position: relative; }
-/* The one popup style of the header's pills and the colour button. */
+/* The one popup style of the header's pills. */
 .head-pop { position: absolute; top: calc(100% + 6px); left: -4px; z-index: 30; display: grid; gap: 2px; width: max-content; min-width: 220px; max-width: min(340px, calc(100vw - 24px));
   max-height: calc(100vh - 160px); overflow-y: auto; overscroll-behavior: contain; padding: 8px; text-align: left; cursor: default;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.45); }
-.head-pop.colour-pop { left: auto; right: -4px; min-width: 0; }
+.head-pop.colour-pop { min-width: 0; }
 .head-pop.prompt-pop { position: absolute; z-index: 30; width: 340px; }
 .pop-note { padding: 4px 6px; max-width: 260px; color: var(--muted); font-size: 12px; white-space: normal; }
 .head-pop .plan-list { position: static; min-width: 0; padding: 0; border: 0; box-shadow: none; background: none; }
-/* Where the chat works, at the top of the computer popup: the full path, then its computer. */
 /* A phone-wide column: tighter. */
 @container (max-width: 679px) {
   .chat-head { padding: 8px; }
   .head-panel { padding: 7px 10px; }
   .head-rings { gap: 9px; }
-  .head-acts { gap: 0; }
+  .head-acts { gap: 4px; }
 }
 .plan-list { position: absolute; top: calc(100% + 6px); left: -6px; z-index: 30; display: grid; gap: 2px; min-width: 230px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 .plan-title { padding: 2px 6px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
@@ -270,15 +283,11 @@ code, pre { font-family: var(--mono); }
 @media (hover: hover) { .msg.user:not(:hover) .fork-link { visibility: hidden; } }
 .msg.claude { padding: 0 2px; }
 /* The chats' voices (views/talk.cljs, README decision 21): the voice pill's popup, a reply's play button. */
-.sound-toggle svg { width: 19px; height: 19px; }
-.sound-toggle.on { color: var(--accent); }
 .head-pop.voice-pop { width: 320px; }
 .voice-opt { display: flex; align-items: flex-start; gap: 4px; }
 .voice-hear { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); }
 .voice-hear:hover { background: var(--bg); color: var(--fg); }
 .voice-hear svg { width: 14px; height: 14px; }
-.root-toggle svg { width: 19px; height: 19px; }
-.root-toggle.on { color: var(--red); }
 .say-reply { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }
@@ -392,7 +401,16 @@ code, pre { font-family: var(--mono); }
 /* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
 .talk-row { display: flex; align-items: center; gap: 10px; }
 .talk-row > .input-row { flex: 1; min-width: 0; }
-.mic { flex: none; position: relative; }
+/* --rec: the recording's colour (the flower's bars and disc): red, or the chat a hold replies to (README decision 93). */
+.mic { flex: none; position: relative; --rec: var(--red); }
+/* Voice messages round the mic (README decision 93): one circle per chat, in its colour. */
+.voice-circles { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.voice-circle { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; border: 0; padding: 0; pointer-events: auto; touch-action: none;
+  background: var(--chat, var(--grey)); color: #fff; font: 700 13px var(--sans); display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); animation: voice-circle-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.voice-circle.playing { outline: 3px solid var(--fg); outline-offset: 3px; }
+@keyframes voice-circle-in { from { transform: translate(-50%, -50%) scale(0); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .voice-circle { animation: none; } }
 .mic-core { position: relative; width: 56px; height: 56px; }
 /* While the mic is held: the flower (views/mic_flower.cljs, its size set there), round the button, over everything
    near it so it shows past the finger; the button itself goes clear so the disc shows through. */
