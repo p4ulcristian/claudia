@@ -286,6 +286,12 @@ code, pre { font-family: var(--mono); }
 .messages > * { flex-shrink: 0; }
 /* Older messages put in front are kept in place by the chat itself, the same in every browser. */
 .messages { overflow-anchor: none; }
+/* The rubber-band end (README decision 118, claudia.web.views.stretch): where the browser has no
+   bounce of its own the page draws one, so its own overscroll effect (Android's glow) is off; the
+   messages move by --stretch while a push goes past an end and spring back after. */
+.messages.band { overscroll-behavior-y: none; }
+.messages.stretch > * { transform: translate3d(0, var(--stretch, 0px), 0); }
+.messages.spring > * { transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1); }
 .older-line { min-height: 1.5em; text-align: center; }
 .hello { margin: auto; text-align: center; }
 .hello h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }

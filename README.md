@@ -2202,3 +2202,19 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `chat_context.cljs` (what the header and the strip share), `chat_strip.cljs`, `chat.cljs`,
     `thumb_edge.cljs`, `pure/edge.cljs`, `prompts.cljs`, `menu.cljs`, `src/claudia/shared/views.cljc`,
     `resources/web/css/claudia.css`, `bin/smoke.mjs`.
+
+118. The chat's rubber-band end (2026-11-21, the user: "for the chat I need that scroll effect that
+    we have on iOS ... saying that is the end of the scroll, some rubbery stuff"). A wheel, trackpad
+    or finger pushing past the top or the bottom of the messages moves them with the push, less and
+    less (iOS's band: (1 - 1/(1 + 0.55·p/L))·L, L = 110 px, never reached), and they spring back
+    (380 ms) when the finger lets go or the wheel has been still for 140 ms. Every device gets it:
+    Apple devices (iPhone, iPad, the Mac in any browser) bounce by themselves, so the page leaves
+    them alone; everywhere else (Chrome and Firefox on Linux, Windows, Android) the page draws it,
+    with the browser's own overscroll effect (Android's glow) turned off on the column. Off with
+    reduced motion. The column's scroll position never changes: its children move by a transform,
+    so following the bottom, keeping the place when older messages come in and loading them stay
+    as they were; a box inside the messages that still scrolls itself (a long code block) takes its
+    own push, and pinch zoom (a wheel with Ctrl) is left alone.
+    Files: `src/claudia/web/views/stretch.cljs` (the listeners), `src/claudia/web/views/pure/stretch.cljs`
+    (the numbers), `src/claudia/web/views/chat.cljs`, `resources/web/css/claudia.css`, `bin/smoke.mjs`
+    (a wheel past the end in Chromium stretches the messages and they spring back).
