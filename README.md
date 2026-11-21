@@ -239,14 +239,11 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
     `{text, raw}` back: text cleaned up, raw as heard. The draft gets the clean text; while the
     raw words differ and the draft still holds them, a chip over the composer shows the other
-    version and a tap swaps them (and back). My words (the iPad edge's panel; in Settings until
-    decision 58): the list, Add, and × to remove,
-    saved through `/hub/listen/words` (the caller's own list only; hidden without a listen
-    service). When the person changes exactly one dictated word before sending, to one that looks
-    like a name or a term (a capital not at a sentence's start, a capital inside, a digit, or
-    - _ . inside), the composer offers "Add <word> to My words?" once: each word is offered once
-    on a device (`claudia.wordsOffered`), never when the list holds it, Add or No. A one-word clip
-    counts only when it was sent alone. The clip flow above is the same. Files:
+    version and a tap swaps them (and back). My words: the list, Add, and × to remove, saved
+    through `/hub/listen/words` (the caller's own list only; hidden without a listen service); since
+    decision 94 in Settings' Dictation section only, and words come from cards Claude puts in the
+    chat (the composer's "Add <word> to My words?" after a corrected word is gone). The clip flow
+    above is the same. Files:
     `src/claudia/hub/listen_words.cljs`, `src/claudia/web/words.cljs`,
     `src/claudia/web/views/my_words.cljs`, `src/claudia/web/views/pure/dictated.cljs`.
 
@@ -1699,7 +1696,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 92. The mic rail: four slots over the mic, four under it, and none comes or goes (2026-11-21, the
     user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
     least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
-    Search, Machines, Prompts, My words, then the mic, then Stop, New chat, ‹ (Previous picture),
+    Search, Machines, Prompts, My words (Settings since decision 94), then the mic, then Stop, New chat, ‹ (Previous picture),
     › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
     under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
     at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
@@ -1719,3 +1716,27 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
     `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
     `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.
+
+94. Claude offers the words dictation misheard, as cards in the chat (2026-11-21, the user's design:
+    "I never touch the text, so I won't correct my words"). When Claude sees that a word in the
+    person's dictated message was plainly misheard ("get hub" for GitHub) and knows the word they
+    meant, it calls `mcp__workspace__offer_word {word, heard}`. The step carries `word: {word,
+    heard}` (`claudia.slave.history/offered-word`) and the chat shows a small card after it: "Add
+    <word> to My words? heard: <heard>", Add and No. Nothing waits on it; the person scrolls past or
+    taps. The card shows only in the person's own chats, only while their offers are on, and never
+    for a word already in their list or one they said No to (`claudia.web.views.pure.dictated/
+    card-shown?`, case ignored). Add puts the word in the dictating person's My words and marks it
+    learned from the chat; No puts it on their No list. Both lists and the offers switch are the
+    person's prefs, kept by the hub for every device: `GET/PUT /hub/listen/prefs {declined, learned,
+    offers}` (table `listen_prefs`, `claudia.hub.listen-prefs`). Settings' Dictation section holds
+    it all: the words (× removes one, "from chat" marks the learned ones, Add), "Offer words in the
+    chat" (a switch), "Words you said No to (n)" with Offer again, and "Reset dictation profile"
+    (asks once more, then clears the words and both lists; the switch stays). Removed: the My words
+    sheet and its rail slot (Settings takes the slot, so the mic stays at the rail's middle height,
+    decision 92), the profile menu's My words, and the composer's offer after a corrected word
+    (`claudia.wordsOffered`). Since the same day the page also sends the chat's last words with each
+    clip (`x-listen-context`), so names the chat uses are heard right in the first place. Files:
+    `src/claudia/slave/tools.cljs`, `src/claudia/slave/history.cljs`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/hub/listen_prefs.cljs`, `src/claudia/hub/store.cljs`, `src/claudia/hub/ops.cljs`,
+    `src/claudia/web/words.cljs`, `src/claudia/web/views/my_words.cljs`,
+    `src/claudia/web/views/pure/dictated.cljs`, `src/claudia/web/views/pure/steps.cljs`.

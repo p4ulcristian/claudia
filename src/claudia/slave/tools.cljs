@@ -52,6 +52,9 @@ A background command that takes minutes (a test suite, a build, a copy) shows a 
 ## Images in the chat
 To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load.
 
+## Dictation
+The user often dictates; a speech model writes their words down and sometimes mishears a name or term (\"get hub\" for \"GitHub\", \"post talk\" for \"PostHog\"). When you see that a word in the user's message was plainly misheard and you know the word they meant, call mcp__workspace__offer_word with the word as it should be written and the word as it was heard; a small card in the chat offers it for their word list, and nothing waits on it. Offer only names and terms you are sure of, never ordinary words, and don't mention the card in your reply.
+
 ## This chat's title and colour
 mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspace__set_chat_colour its colour; both touch only the chat you run in. Use them when the user asks, or rename_chat to give the chat a telling title."))
 
@@ -206,6 +209,9 @@ mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspac
    :set_chat_colour {:description "Recolour this chat: changes only the colour this chat (the one you run in) wears in the list and its window. Nothing else changes, and no other chat. Use it when the user asks."
                      :inputSchema (obj ["color"] {:color {:type "string" :enum chat-edit/colours
                                                           :description "The new colour (ash: passive grey)"}})}
+   :offer_word {:description "Offer a word for the user's word list (the names and terms their dictation should hear right): when their dictated message plainly misheard a name or term and you know what they meant. A small card in the chat offers it; they add it or scroll past, nothing waits. A word already in their list, or one they said no to, is not shown again."
+                :inputSchema (obj ["word" "heard"] (array-map :word (s "The word or name as it should be written, e.g. GitHub")
+                                                              :heard (s "What the speech model wrote instead, e.g. get hub")))}
    :set_folder {:description "Set the project folder you are working in (absolute, ~/…, or relative to ~/Work). Returns that folder's CLAUDE.md and git status. Call it when you start on a project and whenever you switch projects."
                 :inputSchema (obj ["path"] {:path (s "The project's root folder")})}
    :list_secrets {:description "List the 1Password keys you may use in this chat, by name, with the exact op://Claudia/<item>/<field> references to pass to run_with_secret. No values are shown and nothing needs the user's approval. Call it before run_with_secret instead of guessing a reference."
@@ -226,4 +232,5 @@ mcp__workspace__rename_chat changes this chat's title in the list, mcp__workspac
 (def allowed-tools
   ["mcp__picture__draw" "mcp__picture__templates" "mcp__picture__save_template" "mcp__workspace__set_folder"
    "mcp__workspace__show_image" "mcp__workspace__show_video" "mcp__workspace__run_with_secret"
-   "mcp__workspace__list_secrets" "mcp__workspace__rename_chat" "mcp__workspace__set_chat_colour"])
+   "mcp__workspace__list_secrets" "mcp__workspace__rename_chat" "mcp__workspace__set_chat_colour"
+   "mcp__workspace__offer_word"])

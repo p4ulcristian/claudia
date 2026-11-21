@@ -709,15 +709,11 @@
 
 (defn with-dictation-checked
   "A send's effects fx (nothing sent: empty) from composer k, whose text went out: the mic's pieces
-  in that draft are forgotten, and a word the person corrected in them before sending is offered
-  for My words (claudia.web.words)."
-  [fx db k text]
-  (let [pieces (get-in db [:dictated k])
-        word (dictated/offered-word pieces text)]
-    (if (or (empty? fx) (empty? pieces))
-      fx
-      (cond-> (update fx :db #(update (or % db) :dictated dissoc k))
-        word (update :fx (fnil conj []) [:dispatch [:words/maybe-offer word]])))))
+  in that draft are forgotten."
+  [fx db k]
+  (if (or (empty? fx) (empty? (get-in db [:dictated k])))
+    fx
+    (update fx :db #(update (or % db) :dictated dissoc k))))
 
 (defn with-voice-tagged
   "A send's effects fx (nothing sent: empty) from composer k: the mic's clips heard into that draft
@@ -732,16 +728,16 @@
           (update :fx (fnil conj []) [:voice-back/tag [clips msg]])))))
 
 (defn after-send
-  "A send's effects from composer k with the dictation's follow-ups: My words offered, clips tied."
-  [fx db k text]
-  (-> fx (with-dictation-checked db k text) (with-voice-tagged db k)))
+  "A send's effects from composer k with the dictation's follow-ups: its pieces forgotten, clips tied."
+  [fx db k]
+  (-> fx (with-dictation-checked db k) (with-voice-tagged db k)))
 
 (rf/reg-event-fx
  :composer/send
  (fn [{:keys [db]} [_ typed]]
    (let [[_ chat :as k] (:open db)
          k (if chat k :new)]
-     (after-send (send-for db k typed) db k typed))))
+     (after-send (send-for db k typed) db k))))
 
 (defn heard-fx
   "What the mic's words (heard: {:text :raw}, text cleaned up, raw as heard) do in the composer k
@@ -760,7 +756,7 @@
       answers {:db (-> db (assoc-in [:drafts k] "") (update :dictated dissoc k) (update :voice-draft dissoc k))
                :fx [[:dispatch [:ask/answer k (:id ask) answers]]]}
       :else (let [sent (send-for with-text k text (= dir :now))]
-              (if (seq sent) (after-send sent with-text k text) {:db with-text})))))
+              (if (seq sent) (after-send sent with-text k) {:db with-text})))))
 
 (rf/reg-event-db
  :dictated/swap

@@ -270,18 +270,16 @@
             fx (ev/heard-fx db ["s" "c"] {:text "this one" :raw "this one"} :send)]
         (is (= [[:dispatch [:ask/answer ["s" "c"] "q" {"Which?" "half this one"}]]] (:fx fx)))))))
 
-(deftest dictated-words-are-kept-and-checked-at-send
+(deftest dictated-words-are-kept-and-forgotten-at-send
   (let [db {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
         added (:db (ev/heard-fx db ["s" "c"] {:text "call mission now" :raw "call mission now um"} :add))]
     (is (= [{:text "call mission now" :raw "call mission now um" :shown :text}] (get-in added [:dictated ["s" "c"]])))
-    (testing "sent with one word corrected to a name: offered, and the pieces forgotten"
-      (let [fx (ev/with-dictation-checked {:db added} added ["s" "c"] "call Dorka now")]
-        (is (= [[:dispatch [:words/maybe-offer "Dorka"]]] (:fx fx)))
+    (testing "sent: the pieces forgotten, nothing offered (Claude offers words in the chat, decision 94)"
+      (let [fx (ev/with-dictation-checked {:db added} added ["s" "c"])]
+        (is (nil? (:fx fx)))
         (is (nil? (get-in fx [:db :dictated ["s" "c"]])))))
-    (testing "sent unchanged: nothing offered"
-      (is (nil? (:fx (ev/with-dictation-checked {:db added} added ["s" "c"] "call mission now")))))
     (testing "nothing sent: nothing changes"
-      (is (= {} (ev/with-dictation-checked {} added ["s" "c"] "call Dorka now"))))))
+      (is (= {} (ev/with-dictation-checked {} added ["s" "c"]))))))
 
 (deftest a-new-chat-carries-the-last-chats-picks
   (let [db {:chats {["s" "c"] {:settings {:plan "max" :model "opus" :effort "high" :other 1} :folder "/w/ir"}}

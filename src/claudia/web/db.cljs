@@ -35,8 +35,7 @@
    :drafts {}              ; [server chat] or :new -> composer text
    :dictated {}            ; draft key -> [{:text :raw :shown}]: what the mic put in it (pure/dictated)
    :my-words nil           ; claudia.web.words: nil unknown, {:off true} no listen service, {:words :busy :error}
-   :words-offer nil        ; a corrected word offered for My words
-   :words-offered (let [v (stored "claudia.wordsOffered" #js [])] (if (array? v) (set v) #{})) ; lower case, offered once
+   :listen-prefs nil       ; claudia.web.words: {:declined :learned :offers} from /hub/listen/prefs
    :ask-state {}           ; ask id -> {:busy bool :error text}
    :seen-sent {}           ; [server chat] -> the row's :at we last sent `seen` for
    :pictures {}            ; [server chat] -> [{:turn :title :at}], oldest first; the last is live

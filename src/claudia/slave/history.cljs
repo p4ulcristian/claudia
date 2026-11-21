@@ -52,6 +52,7 @@
       "mcp__workspace__bookmark_folder" (str (if (:remove i) "unbookmark " "bookmark ") (or (not-empty (shown-path (str (:folder i)) nil)) "working folder"))
       "mcp__workspace__rename_chat" (str "rename chat: " (short-text (:title i) 60))
       "mcp__workspace__set_chat_colour" (str "chat colour " (:color i))
+      "mcp__workspace__offer_word" (str "offer word: " (short-text (:word i) 60))
       "mcp__workspace__show_video" (str "video " (if (seq (:caption i)) (short-text (:caption i) 60) (p (:path i))))
       (if (str/starts-with? tool "mcp__")
         (str/join " " (rest (str/split tool #"__")))
@@ -170,6 +171,11 @@
   (into {} (for [[_ q a] (re-seq #"\"((?:[^\"\\\\]|\\\\.)*)\"=\"((?:[^\"\\\\]|\\\\.)*)\"" (str result))]
              [(keyword q) a])))
 
+(defn offered-word
+  "offer_word's input as the card's data: {:word :heard}, each trimmed text (\"\" when missing)."
+  [input]
+  {:word (str/trim (str (:word input))) :heard (str/trim (str (:heard input)))})
+
 (defn- tool-msg
   "A tool_use block as its step Msg."
   [b at folder]
@@ -180,7 +186,9 @@
     ;; the page shows the image from GET /api/chats/:id/shown/<this id>
     (= "mcp__workspace__show_image" (:name b)) (assoc :image true)
     ;; …and the video from the same address
-    (= "mcp__workspace__show_video" (:name b)) (assoc :video true)))
+    (= "mcp__workspace__show_video" (:name b)) (assoc :video true)
+    ;; a word for the person's My words: the page shows its card (README decision 94)
+    (= "mcp__workspace__offer_word" (:name b)) (assoc :word (offered-word (:input b)))))
 
 (defn read-assistant
   "One assistant API message's content blocks -> [Msgs counts]. counts: API message id -> text blocks

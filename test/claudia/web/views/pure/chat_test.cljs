@@ -131,6 +131,10 @@
   (is (= [{:k :steps :id 4 :tools [{:id 4 :role "tool" :video true}]}
           {:k :shown :tool {:id 4 :role "tool" :video true}}]
          (steps/blocks [{:id 4 :role "tool" :video true}])))
+  (let [w {:id 6 :role "tool" :word {:word "GitHub" :heard "get hub"}}]
+    (is (= [{:k :steps :id 5 :tools [{:id 5 :role "tool"} w]} {:k :word :tool w}]
+           (steps/blocks [{:id 5 :role "tool"} w]))
+        "an offered word: its step stays in the group, its card after it"))
   (is (= "old" (steps/step-summary {:title "old" :summary "new"})))
   (is (= "new" (steps/step-summary {:summary "new"})))
   (is (= "out" (steps/step-result {:text "out"})))

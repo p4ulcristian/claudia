@@ -11,7 +11,6 @@
    [:files "File Browser"]
    [:search "Search"]
    [:settings "Settings"]
-   [:words "My words"]
    [:machines "Machines"]
    [:prompts "Prompts"]
    [:forms "Forms"]])
