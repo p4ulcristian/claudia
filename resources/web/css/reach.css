@@ -1,36 +1,51 @@
 /* ---------- Buttons where touches land (README decision 40) ----------
-   Only where touch is the main input (pointer: coarse); a mouse keeps the layout above.
+   The phone's places only where touch is the main input (pointer: coarse); wider screens share one
+   layout, touch or mouse, with sizes by the pointer (README decision 109).
    Misses are about 7 mm in a screen's middle, 9 mm along its edges, 12 mm in its corners, so the
    main buttons are at least 12 mm wide: 72 pt on a phone, 64 pt on an iPad. */
 
-/* Phone: the mic in the bottom middle, above the text row; the list's + in the bottom middle. */
-@media (pointer: coarse) and (max-width: 679px) {
-  .talk-row { flex-direction: column; align-items: stretch; gap: 8px; }
-  .talk-row > .mic { align-self: center; }
-  .talk-row .mic-core, .talk-row .mic-button { width: 72px; height: 72px; }
-  .talk-row .mic-button svg { width: 32px; height: 32px; }
-  .talk-row .mic-clips { left: 50%; transform: translateX(-50%); align-items: center; }
-  .talk-row .mic-hint { left: 50%; transform: translateX(-50%); bottom: 82px; }
+/* The floating mic (README decisions 94, 110): on every screen it floats over the page where it was
+   put, its centre there (claudia.web.views.mic), its whole flower on the screen; it takes no room. */
+:root { --mic-float: 56px; --mic-float-icon: 26px; }
+.float-mic { position: absolute; width: 0; height: 0; }
+.float-mic .mic-core, .float-mic .mic-button { width: var(--mic-float); height: var(--mic-float); }
+.float-mic .mic-button svg { width: var(--mic-float-icon); height: var(--mic-float-icon); }
+.mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
+/* At rest it lets the page show through only a little (2026-11-21, the user: less transparent). */
+.float-mic .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
+
+/* Phone: the mic over the chat, bottom middle until moved; what it says (the clips, the hint, the
+   speaker's name) centred above it, past its ring of voice messages (116 px from its centre). */
+@media (max-width: 679px) {
+  .float-mic .mic-clips, .float-mic .mic-hint, .float-mic .mic-speaker { left: 50%; right: auto; top: auto;
+    bottom: calc(50% + 124px); transform: translateX(-50%); }
+  .float-mic .mic-clips { align-items: center; }
   /* Typing: while the on-screen keyboard is up (claudia.web.viewport sets data-keyboard) the hands
-     are on it, so the mic gives its row back (the clips still being heard stay). */
-  :root[data-keyboard] .talk-row > .mic:not(.starting, .recording) > .mic-core { display: none; }
-  :root[data-keyboard] .talk-row { gap: 0; }
+     are on it, so the mic steps away (the clips still being heard stay). */
+  :root[data-keyboard] .float-mic .mic:not(.starting, .recording, .moving) > .mic-core { display: none; }
+}
+
+/* A finger on a phone: 12 mm buttons, the mic and the list's + in the bottom middle. */
+@media (pointer: coarse) and (max-width: 679px) {
+  :root { --mic-float: 72px; --mic-float-icon: 32px; }
   .cs-fab { right: auto; left: calc(50% - 36px); width: 72px; height: 72px; --ring: var(--chalk-dot72); }
   .cs-fab svg { width: 32px; height: 32px; }
 }
 
-/* iPad: the left edge holds the chats (centred at middle height), the right wall the mic rail
-   (claudia.web.views.thumb-edge). */
-@media (pointer: coarse) and (min-width: 680px) {
+/* Wider than a phone, touch or mouse alike (README decision 109): the left edge holds the chats
+   (centred at middle height), the right wall the edge column (claudia.web.views.thumb-edge). Only
+   sizes follow the pointer: a mouse gets 48 px buttons on a 64 px column, a finger 12 mm ones
+   (64 px on an 88 px column, the block after this one). */
+@media (min-width: 680px) {
+  :root { --mic-rail-w: 64px; --edge-btn: 48px; --edge-icon: 20px; --edge-name: 9px; --edge-mic-icon: 24px;
+    --mic-float: var(--edge-btn); --mic-float-icon: var(--edge-mic-icon); }
   .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
-  .rail-chat { min-height: 64px; justify-content: center; }
-
 
   /* The rail (README decisions 73, 92, 94): a column on the right wall, the page beside it, four
      slots of one size over its middle and five under it (the mic floats over the page since 94);
      the gaps shrink on short screens so the foot keeps its room. */
-  :root { --mic-rail-w: 88px; --edge-pad: max(calc(var(--edge-t) + env(safe-area-inset-top)), var(--edge-b));
-    --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 320px - 64px) / 6), 12px); }
+  :root { --edge-pad: max(calc(var(--edge-t) + env(safe-area-inset-top)), var(--edge-b));
+    --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 5 * var(--edge-btn) - var(--edge-btn)) / 6), 12px); }
   .app { padding-right: calc(var(--mic-rail-w) + env(safe-area-inset-right)); }
   .thumb-edge { position: fixed; z-index: 35; top: 0; bottom: 0; right: 0; box-sizing: border-box;
     width: calc(var(--mic-rail-w) + env(safe-area-inset-right)); padding: var(--edge-pad) env(safe-area-inset-right) var(--edge-pad) 0;
@@ -44,30 +59,22 @@
   .edge-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
   .edge-foot .mn-gear { margin: 4px auto; }
   .thumb-edge .up-panel { left: auto; right: calc(var(--mic-rail-w) + 8px + env(safe-area-inset-right)); }
-  /* The mic floats over the page (README decision 94): it takes no room in the rail. */
-  .edge-mic { position: absolute; width: 0; height: 0; }
-  .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
-  .thumb-edge .mic-button svg { width: 30px; height: 30px; }
-  .edge-gap { width: 64px; height: 64px; flex: none; }
-  /* The floating mic sits where it was put, its centre there (claudia.web.views.mic). */
-  .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
+  .edge-gap { width: var(--edge-btn); height: var(--edge-btn); flex: none; }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
   .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
-  /* The mic only a little (2026-11-21, the user: less transparent). */
-  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
   .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
   /* The speaker's name, the hint and the clips: to the mic's left, past its ring of voice messages
      (76 px out, circles up to 40 px: 96 px from its centre), so none covers a circle. */
-  .thumb-edge .mic-clips { align-items: flex-end; }
-  .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 72px); bottom: auto; top: 50%; transform: translateY(-50%); }
+  .float-mic .mic-clips { align-items: flex-end; }
+  .float-mic .mic-clips, .float-mic .mic-hint, .float-mic .mic-speaker { left: auto; right: calc(100% + 72px); bottom: auto; top: 50%; transform: translateY(-50%); }
 
   /* A slot: its icon with its name under it. Passive (it cannot act now) it stays, greyed; Stop is
      filled red while a turn runs. */
-  .edge-step { box-sizing: border-box; width: 64px; height: 64px; flex: none; padding: 0; border-radius: 50%; color: var(--fg);
+  .edge-step { box-sizing: border-box; width: var(--edge-btn); height: var(--edge-btn); flex: none; padding: 0; border-radius: 50%; color: var(--fg);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     background: color-mix(in srgb, var(--bg2) 88%, transparent); box-shadow: inset 0 0 0 1.5px var(--line), 0 6px 18px rgb(0 0 0 / 0.3); }
-  .edge-step svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .edge-name { font: 600 10px/1.1 var(--sans); white-space: nowrap; }
+  .edge-step svg { width: var(--edge-icon); height: var(--edge-icon); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .edge-name { font: 600 var(--edge-name)/1.1 var(--sans); white-space: nowrap; }
   .edge-step:active:not(:disabled) { background: var(--panel); }
   .edge-step:disabled { opacity: 0.3; color: var(--muted); }
   /* A sheet slot whose sheet is on top: lit, and a press closes it. */
@@ -75,4 +82,15 @@
   .edge-step.red { background: var(--red); color: var(--bg); box-shadow: inset 0 0 0 1.5px var(--red), 0 6px 18px rgb(0 0 0 / 0.3); }
   .edge-step.red svg { fill: currentColor; }
   .edge-step.red:active { background: var(--red); }
+}
+
+/* A finger on a screen wider than a phone: 12 mm buttons on the edge column, chat rows as tall. */
+@media (pointer: coarse) and (min-width: 680px) {
+  :root { --mic-rail-w: 88px; --edge-btn: 64px; --edge-icon: 24px; --edge-name: 10px; --edge-mic-icon: 30px; }
+  .rail-chat { min-height: 64px; justify-content: center; }
+}
+
+/* A mouse: a button comes up solid under the pointer. */
+@media (hover: hover) and (min-width: 680px) {
+  .thumb-edge .edge-step:hover:not(:disabled) { opacity: 1; }
 }

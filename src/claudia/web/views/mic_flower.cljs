@@ -22,7 +22,7 @@
 (def ^:private bar-r 39)
 (def ^:private bar-len 24)
 (def ^:private petal-in 66)
-(def ^:private petal-out 116)
+(def ^:private petal-out pure/petal-reach)
 
 (def ^:private petals
   ;; [way from-degrees to-degrees icon word colour-var]; 0 degrees = right, -90 = up.

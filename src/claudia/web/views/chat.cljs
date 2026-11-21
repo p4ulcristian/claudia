@@ -1,11 +1,12 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
-  the working line) and the composer (the mic, Attach, the message and one Send). On a touch tablet
-  the mic sits on the screen's right edge instead (claudia.web.views.thumb-edge, README decision 40)."
+  the working line) and the composer (Attach, the message and one Send). The mic floats over the
+  page instead (claudia.web.views.mic/floating, README decisions 94, 109, 110)."
   (:require [claudia.web.views.asks :as asks]
             [claudia.web.db :as db]
             [clojure.string :as str]
+            [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
             [re-frame.core :as rf]
             [reagent.core :as r]
@@ -17,12 +18,10 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.head :as head]
-            [claudia.web.views.mic :as mic]
             [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
 
@@ -224,10 +223,35 @@
 (def ^:private hello
   [:div.hello [:h2 "What are we working on?"] [:p.muted "Claude answers short here and explains on the right."]])
 
-(defn- claude-msg [ck {:keys [id text streaming]}]
-  [:div.msg.claude {:data-at (pure/msg-anchor id) :class (when streaming "streaming")}
-   [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
-   (when-not streaming [talk/say-button ck text])])
+(defn- last-line-right
+  "Where the last line of an element's text ends on the screen (px), or nil: the last box its
+  contents draw, a text line or a block such as code (which takes the whole width)."
+  [^js el]
+  (let [rng (js/document.createRange)]
+    (.selectNodeContents rng el)
+    (some-> (last (filter #(pos? (.-width %)) (array-seq (.getClientRects rng)))) .-right)))
+
+(defn- fit-time!
+  "Shows the reply's time (in body, the .md and the time's elements) only where its last line has
+  room, so no reply grows a line for it."
+  [^js body set-fits]
+  (let [md (.querySelector body ".md") t (.querySelector body ".msg-time")]
+    (when (and md t)
+      (set-fits (pure/time-fits? (.-right (.getBoundingClientRect md)) (last-line-right md) (.-offsetWidth t) 10)))))
+
+(defn- claude-msg
+  "One of Claude's texts; finished, its time at the end of its last line when that has room (README
+  decision 115)."
+  [ck {:keys [id text streaming at]}]
+  (let [body (h/use-ref nil)
+        [fits set-fits] (h/use-state false)]
+    (hooks/use-resize body #(fit-time! % set-fits) [text streaming])
+    [:div.msg.claude {:data-at (pure/msg-anchor id) :class (when streaming "streaming")}
+     [:div.msg-body {:ref #(set! (.-current body) %)}
+      [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
+      (when (and at (not streaming))
+        [:time.msg-time {:class (when fits "fits")} (format/clock-text at (js/Date.now))])]
+     (when-not streaming [talk/say-button ck text])]))
 
 (def ^:private tone-mark {:good "\u2713" :bad "\u2715" :off "\u25a0"})
 
@@ -258,7 +282,7 @@
     "note" (if (:card m)
              ^{:key (str "note-" id "-" i)} [task-card (:card m)]
              ^{:key (str "note-" id "-" i)} [:pre.note-line text])
-    ^{:key id} [claude-msg ck m]))
+    ^{:key id} [:f> claude-msg ck m]))
 
 (defn- feed-row
   "One block of the feed: a run of steps, a picture a step showed, or a message."
@@ -420,8 +444,7 @@
         attached @(rf/subscribe [:attach draft-key])
         send-text! (send-fn draft-key oc attached)
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
-                     :send! #(send-text! text))
-        edge-mic? (hooks/use-media reach/touch-tablet)]
+                     :send! #(send-text! text))]
     (use-grow! ref text)
     ;; The box is ready to type in on each chat, except on a touch screen, where focus brings up
     ;; the keyboard over the chat.
@@ -432,7 +455,6 @@
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      (when-not edge-mic? [:f> mic/button draft-key])
       [:div.input-row
        (attach-button parts)
        (message-box parts)

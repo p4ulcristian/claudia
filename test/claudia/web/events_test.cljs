@@ -346,7 +346,15 @@
     (let [fx (ev/voice-done-fx vdb ["s" "c"])]
       (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx)) "every waiting message of the chat")
       (is (= [[:speech/drop ["s" "c"]]] (:fx fx)) "and its line stops"))
-    (is (= {:fx [[:speech/drop ["s" "x"]]]} (ev/voice-done-fx vdb ["s" "x"])) "none waiting: only the stop")))
+    (is (= {:fx [[:speech/drop ["s" "x"]]]} (ev/voice-done-fx vdb ["s" "x"])) "none waiting: only the stop")
+    (let [fx (ev/voice-opened-fx vdb ["s" "c"])]
+      (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx)) "opened, nothing sounding: all heard")
+      (is (= [[:speech/drop-waiting ["s" "c"]]] (:fx fx)) "its waiting line goes, nothing is stopped"))
+    (let [fx (ev/voice-opened-fx (assoc vdb :speaking {:k ["s" "c"] :msg "t1"}) ["s" "c"])]
+      (is (= ["s" {:type "heard" :chat "c" :ids ["t0"]}] (:ws/send fx)) "the one sounding stays to play on")
+      (is (= [[:speech/drop-waiting ["s" "c"]]] (:fx fx))))
+    (is (= ["t1" "t0"] (get-in (ev/voice-opened-fx (assoc vdb :speaking {:k ["s" "d"] :msg "t1"}) ["s" "c"]) [:ws/send 1 :ids]))
+        "another chat sounding: this chat's all heard")))
 
 (deftest the-page-touched-last-plays-a-new-message
   (let [msgs [{:chat "c" :id "t1" :voice "nora" :text "Done." :at 1}]

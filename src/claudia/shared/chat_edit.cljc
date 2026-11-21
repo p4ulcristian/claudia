@@ -1,7 +1,6 @@
 (ns claudia.shared.chat-edit
   "What an agent may change of a chat by itself (README decision 88): its title and its colour, checked
-  the same way in every chat's rename_chat and set_chat_colour (the runner) and in Claudia's
-  organize_chats (the hub)."
+  the same way in every chat's rename_chat and set_chat_colour (the runner)."
   (:require [clojure.string :as str]
             [claudia.shared.colours :as colours]))
 

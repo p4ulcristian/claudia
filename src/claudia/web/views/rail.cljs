@@ -1,21 +1,20 @@
 (ns claudia.web.views.rail
   "The rail, the one chat list wider than a phone (README decision 24; web/app.tsx of the
-  TypeScript Claudia): at its top Claudia's face, bare (a click: :claudia/open), and under it the 2D/3D switch as two small circles
+  TypeScript Claudia): at its top Claudia's face, bare (a click opens the chat her lenses talk about), and under it the 2D/3D switch as two small circles
   (claudia.web.views.logotools); then a circle per chat with its title under it; passive (ash)
-  chats last, after a chalk line, with the same spacing. At its foot: your profile circle
-  (claudia.web.views.menu). Circles
+  chats last, after a chalk line, with the same spacing (your profile circle stands at the edge
+  column's foot, claudia.web.views.thumb-edge). Circles
   slide to their new places when the order changes; a new one grows in. Every circle with its title
   takes the same height (a title is cut after two lines; one line keeps the room of two), so the
   spacing never changes. On a touch screen, pulling the circles down from the top and letting go
   reloads the page (claudia.web.updates keeps what is typed). A new chat has its circle at the top
-  at once, before its first message (fresh-dot). On a touch tablet the circles sit centred at middle
-  height, under the left thumb, and opening a chat scrolls its circle to the middle (README decision
-  40). Its right edge drags it wider, and from 170 px on each circle becomes a card as tall as its
+  at once, before its first message (fresh-dot). The circles sit centred at middle height, under
+  the left thumb on a tablet, and opening a chat scrolls its circle to the middle (README decisions
+  40, 105). Its right edge drags it wider, and from 170 px on each circle becomes a card as tall as its
   row (claudia.web.views.rail-width, rail-card); with more than one server every circle carries its
   server's mark; a chat dragged on the rail moves in the order or into a group, and out of it tears
   into a window of its own (claudia.web.views.chat-drag; README decision 81)."
-  (:require [claudia.web.search-open :as search-open]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [claudia.shared.order :as order]
             [reagent.hooks :as h]
@@ -27,12 +26,10 @@
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
             [claudia.web.views.sidebar :as sidebar]
-            [claudia.web.views.menu :as menu]
             [claudia.web.views.tearoff :as tearoff]
             [claudia.web.views.chat-drag :as drag]
             [claudia.web.views.rail-card :as rail-card]
             [claudia.web.views.rail-width :as rail-width]
-            [claudia.web.views.update-pill :as update-pill]
             [claudia.web.views.logotools :as logotools]
             [claudia.web.views.rail-group :as rail-group]))
 
@@ -63,12 +60,12 @@
      [order])))
 
 (defn- use-centre-open!
-  "On a touch tablet, scrolls the rail (box) so the open chat's circle sits in its middle."
+  "Scrolls the rail (box) so the open chat's circle sits in its middle."
   [box open]
   (h/use-effect
    (fn []
      (when-let [^js el (.-current box)]
-       (when-let [^js on (and (.-matches (js/matchMedia reach/touch-tablet)) (.querySelector el ".rail-chat.on"))]
+       (when-let [^js on (.querySelector el ".rail-chat.on")]
          (let [r (.getBoundingClientRect on) b (.getBoundingClientRect el)]
            (.scrollBy el #js {:top (reach/centre-offset (.-top r) (.-height r) (.-top b) (.-clientHeight el))
                               :behavior "smooth"}))))
@@ -183,29 +180,16 @@
    [dot/chat-dot fresh false true (when (and multi? server) [rail-card/server-badge server])]
    (if cards? [rail-card/fresh-text fresh multi?] [:span.rail-name title])])
 
-(defn- rail-acts
-  "Search and New chat, side by side (a mouse's way to both; the iPad's edge has its own)."
-  []
-  [:div.rail-acts
-   [:button.rail-dot.search {:title "Search chats (\u2318K)" :aria-label "Search chats"
-                             :on-click search-open/open!}
-    [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:circle {:cx 9 :cy 9 :r 5}] [:path {:d "M16 16l-3.5-3.5"}]]]
-   (when-not @(rf/subscribe [:new-chat-read-only?])
-     [:button.rail-dot.search {:title "New chat (Alt+N)" :aria-label "New chat" :on-click #(rf/dispatch [:nav/new])}
-      [:svg {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M10 4.5v11M4.5 10h11"}]]])])
-
 (defn- rail-top
-  "Search and New chat where the screen has no right-edge column (the iPad's edge has both), and
-  the chat being started. A new chat also starts from Alt+N."
-  [edge? m]
-  (let [fresh @(rf/subscribe [:fresh-chat])]
-    [:<>
-     (when-not edge? [rail-acts])
-     (when fresh [fresh-dot fresh m])]))
+  "The chat being started, at the top (Search and New chat are on the edge column, README decision
+  105; a new chat also starts from Alt+N)."
+  [m]
+  (when-let [fresh @(rf/subscribe [:fresh-chat])]
+    [fresh-dot fresh m]))
 
 (defn- rail-head
   "Claudia's face, no frame round her so her animations show whole (a click opens the chat her
-  lenses talk about, else her own chat), and the 2D/3D switch under it."
+  lenses talk about, else nothing), and the 2D/3D switch under it."
   []
   [:div.rail-head
    [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click face/click!}
@@ -230,8 +214,7 @@
   (let [entries @(rf/subscribe [:arranged])
         {:keys [rows open cards?] :as m} (rail-state entries)
         box (h/use-ref nil)
-        pulled (use-pull! box)
-        edge? (hooks/use-media reach/touch-tablet)]
+        pulled (use-pull! box)]
     (use-centre-open! box open)
     (sidebar/scroll-open-into-view! [(str open) (count rows)])
     (use-slide! box (str/join "," (map #(if-let [g (:group %)] (:group g) (order/ref-of (:row %))) entries)))
@@ -242,10 +225,8 @@
       (pull-mark pulled)
       [:div.rail-dots {:ref #(set! (.-current box) %)
                        :style (when (pos? pulled) {:transform (str "translateY(" pulled "px)")})}
-       (rail-top edge? m)
+       (rail-top m)
        (map-indexed #(entry-view m %1 %2) entries)]]
-     ;; The update pill, your profile circle (whose chats, the menu) and the version; on a touch
-     ;; tablet they stand at the foot of the mic's rail instead (thumb_edge.cljs, README decision 73).
-     (when-not edge?
-       [:<> [update-pill/pill] [:f> menu/button] [update-pill/updated]])
+     ;; The update pill, your profile circle and the version stand at the edge column's foot
+     ;; (thumb_edge.cljs, README decisions 73, 109).
      [rail-width/edge]]))

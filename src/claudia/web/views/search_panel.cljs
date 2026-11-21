@@ -4,8 +4,8 @@
   the project chips under it, then before a word is typed the ten archived chats last active, else
   the finds newest first under time sections, each with the lines that matched lit. A tap on a find
   opens that chat at that message, Search staying beside it; the typed words stay for the next time.
-  Opened by the iPad's edge search, the rail's search (screens without the edge), the list's
-  search and ⌘K / Ctrl+K."
+  Opened by the edge column's Search (every screen wider than a phone), the list's search on a
+  phone and ⌘K / Ctrl+K."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.search-open :as search-open]

@@ -8,7 +8,7 @@
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
-  On a touch tablet (README decision 94) the mic floats over the page, out of the rail: bottom
+  Wider than a phone (README decisions 94, 109) the mic floats over the page, out of the rail: bottom
   right beside the rail until dragged, its spot kept on this device; a ring round the petals says
   move, and the finger reaching it (pure/in-ring?) at any time while holding keeps the recording
   going while the mic follows the finger on a spring (motion's useSpring: it trails and overshoots
@@ -94,21 +94,24 @@
 
 (def ^:private spot-key "Where a moved mic sits on this device (localStorage)." "claudia.mic-spot")
 
-(defn- rail-width []
-  (or (some-> (js/document.querySelector ".thumb-edge") .-offsetWidth) 88))
+(defn- edge-width
+  "The edge column's width, px; 0 on a phone, which has none."
+  []
+  (or (some-> (js/document.querySelector ".thumb-edge") .-offsetWidth) 0))
 
 (defn- button-r
-  "The rail mic's button's radius, px."
+  "The floating mic's button's radius, px."
   []
-  (/ (or (some-> (js/document.querySelector ".thumb-edge .mic-button") .-offsetWidth) 64) 2))
+  (/ (or (some-> (js/document.querySelector ".float-mic .mic-button") .-offsetWidth) 64) 2))
 
 (defn- kept-spot
-  "The mic's spot on this device, clamped so its button is on the screen now, or nil (in the rail)."
+  "The mic's spot on this device, clamped so its whole flower is on the screen now, or nil (never
+  moved)."
   []
   (let [kept (try (js->clj (js/JSON.parse (.getItem js/localStorage spot-key)) :keywordize-keys true)
                   (catch :default _ nil))]
     (when (map? kept)
-      (pure/stored->spot kept js/innerWidth js/innerHeight (button-r)))))
+      (pure/stored->spot kept js/innerWidth js/innerHeight))))
 
 (defn- keep-spot! [spot]
   (if spot
@@ -123,11 +126,11 @@
       {:x (+ (.-left r) (/ (.-width r) 2)) :y (+ (.-top r) (/ (.-height r) 2)) :r (/ (.-width r) 2)})))
 
 (defn- default-spot
-  "Where a floating mic sits until dragged: bottom right of the page, beside the rail, clear of the
-  edges by its circles' ring."
+  "Where a floating mic sits until dragged (pure/default-spot): beside the edge column, or on a
+  phone just over the composer."
   []
-  (pure/clamp-spot {:x (- js/innerWidth (rail-width) 110) :y (- js/innerHeight 110)}
-                   js/innerWidth js/innerHeight (button-r)))
+  (pure/default-spot {:w js/innerWidth :h js/innerHeight :edge-w (edge-width) :r (button-r)
+                      :composer-top (some-> (js/document.querySelector ".composer") .getBoundingClientRect .-top)}))
 
 (defn- recording!
   "The microphone records session s: the hold, if still held, records from now."
@@ -183,15 +186,14 @@
     (set-phase :moving)))
 
 (defn- on-screen
-  "Where a moved mic's button goes for a finger at x y: there, kept wholly on the screen."
-  [x y r]
-  (pure/clamp-spot {:x x :y y} js/innerWidth js/innerHeight r))
+  "Where a moved mic goes for a finger at x y: there, its whole flower kept on the screen."
+  [x y]
+  (pure/clamp-spot {:x x :y y} js/innerWidth js/innerHeight))
 
 (defn- follow!
-  "The mic, moving, pulled towards the finger (its button kept on the screen)."
-  [^js e {:keys [hold ^js mx ^js my]}]
-  (let [{:keys [from]} (.-current hold)
-        {:keys [x y]} (on-screen (.-clientX e) (.-clientY e) (:r from))]
+  "The mic, moving, pulled towards the finger (its whole flower kept on the screen)."
+  [^js e {:keys [^js mx ^js my]}]
+  (let [{:keys [x y]} (on-screen (.-clientX e) (.-clientY e))]
     (.set mx x) (.set my y)))
 
 (declare park!)
@@ -233,10 +235,10 @@
         (set-dir dir)))))
 
 (defn- park!
-  "The mic put down for a finger at x y: it glides there (its button on the screen) and stays (kept
-  on this device). -> where it goes {:x :y :r}."
+  "The mic put down for a finger at x y: it glides there (its whole flower on the screen) and stays
+  (kept on this device). -> where it goes {:x :y :r}."
   [x y {:keys [set-spot ^js mx ^js my]} {:keys [from]}]
-  (let [at (on-screen x y (:r from))]
+  (let [at (on-screen x y)]
     (keep-spot! at)
     (set-spot at)
     (.set mx (:x at)) (.set my (:y at))
@@ -410,8 +412,9 @@
       (when (= phase :recording) [speak-here mic])]]))
 
 (def ^:private spring
-  "The mic's follow: a little slack and one soft overshoot, a follower with a will of its own."
-  #js {:stiffness 170 :damping 17 :mass 1.1})
+  "The mic's follow: a little slack and one soft overshoot, a follower with a will of its own; it
+  comes to rest in about 0.3 s, not 0.5 s (2026-11-21, the user: back to still a bit faster)."
+  #js {:stiffness 300 :damping 26 :mass 1})
 
 (defn- use-follow
   "The mic's spring: mx/my where it is pulled to, sx/sy where it is (drawn), put on spot whenever
@@ -441,7 +444,7 @@
 (defn button
   "The mic, or nothing where the mic cannot work. draft-key: the composer it speaks into ([server
   chat] or :new); the heard words go there (:mic/heard), sent or added as each press chose.
-  opts {:floating? true}: a touch tablet's mic, floating over the page (moves; README decision 94)."
+  opts {:floating? true}: the mic floating over the page (moves; README decisions 94, 110)."
   [draft-key & [{:keys [floating?]}]]
   (let [[ok set-ok] (h/use-state false)
         [spot set-spot] (use-spot floating?)
@@ -465,3 +468,16 @@
                     :reply reply :set-reply set-reply :aim aim :set-aim set-aim
                     :floating? floating? :spot spot :set-spot set-spot
                     :speaking @(rf/subscribe [:speaking])})))))
+
+(defn- composer-shown?
+  "The composer shows (claudia.web.views.chat/pane-foot): not read-only, and a server to chat on."
+  []
+  (let [me @(rf/subscribe [:me])]
+    (and (not @(rf/subscribe [:read-only?])) (seq (:servers me)))))
+
+(defn floating
+  "The mic floating over the page (README decisions 94, 110), speaking into the open chat oc: beside
+  the edge column wider than a phone, over the composer on a phone's chat screen."
+  [oc]
+  [:div.float-mic
+   (when (composer-shown?) [:f> button (if oc (:ck oc) :new) {:floating? true}])])

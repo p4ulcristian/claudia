@@ -1,9 +1,10 @@
 (ns claudia.web.views.shell
-  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Desktop and iPad: the rail of
-  chat circles (the only chat list there, README decision 24) | the chat column | a 6 px divider |
-  the picture; Settings and the archived chats take the chat column, full height, with a Back to
-  the chat. Phone (under 680 px): three full screens, list -> chat -> picture, one shown at a time;
-  Settings slides over the list."
+  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Wider than a phone, touch or
+  mouse alike (README decision 109): the rail of chat circles (the only chat list there, README
+  decision 24) | the chat column | a 6 px divider | the right half | the edge column
+  (claudia.web.views.thumb-edge); the archived chats take the chat column. Phone (under 680 px):
+  three full screens, list -> chat -> picture, one shown at a time, the mic floating over the
+  chat (README decision 110)."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
@@ -14,6 +15,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.login :as login]
+            [claudia.web.views.mic :as mic]
             [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.rail-width :as rail-width]
@@ -22,21 +24,15 @@
             [claudia.web.views.sidebar :as sidebar]
             [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.thumb-edge :as thumb-edge]
-            [claudia.web.views.claudia-rain :as claudia-rain]
             [claudia.web.world :as world]))
 
 (defn- chat-colour!
   "The open chat's colour tints the whole window (claudia.css, \":root[data-chat]\", a gradient's
-  \":root[data-gradient]\"); Claudia's own chat wears her green gradient instead
-  (\":root[data-claudia]\", README decision 50)."
-  [color claudia?]
+  \":root[data-gradient]\")."
+  [color]
   (h/use-effect
-   (fn []
-     (let [root js/document.documentElement]
-       (sidebar/tint-window! color)
-       (if claudia? (.setAttribute root "data-claudia" "") (.removeAttribute root "data-claudia")))
-     nil)
-   [color claudia?]))
+   (fn [] (sidebar/tint-window! color) nil)
+   [color]))
 
 (defn- keys!
   "Escape stops the running turn, Alt+N starts a new chat, Ctrl+K (⌘K) opens Search in the right half."
@@ -121,18 +117,23 @@
       [:f> rail/rail])]
    (split-view m)])
 
-(defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia? phone?] :as m}]
+(defn- phone-mic
+  "A phone's mic, floating over the chat screen (README decision 110); the list and the picture
+  screens have none."
+  []
+  [mic/floating @(rf/subscribe [:open-chat])])
+
+(defn- app-view [{:keys [screen ro narrow? shown? draft-key world? phone?] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar")
                      (when narrow? "narrow") (when ro "read-only") (when (rail-width/resizing?) "rail-resizing")]
              ;; The rail's width, dragged and kept per device (README decision 81); a phone has no rail.
              :style (when-not phone? {"--rail-w" (str (rail-width/width) "px")})
              :data-screen (name screen)}
-   (when claudia? [:f> claudia-rain/rain])
    [confirm/archive-ask]
    [confirm/root-ask]
    [confirm/move-ask]
    (when-not world? (chats-view m))
-   (when (and (:edge? m) (not world?)) [thumb-edge/edge])
+   (when-not world? (if phone? (when (= screen :chat) [phone-mic]) [thumb-edge/edge]))
    (layers {:ro ro :draft-key draft-key})
    [admin/dialog]
    [:f> world/overlay]
@@ -141,23 +142,20 @@
 (defn app []
   (let [screen @(rf/subscribe [:screen])
         color @(rf/subscribe [:open-color])
-        claudia? @(rf/subscribe [:open-claudia?])
         open @(rf/subscribe [:open])
         pending @(rf/subscribe [:pending-new])
         ro @(rf/subscribe [:read-only?])
         mode @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
-        phone? (hooks/use-media "(max-width: 679px)")
+        phone? (hooks/use-media reach/phone)
         narrow? (hooks/use-media "(max-width: 1099px)")
-        edge? (hooks/use-media reach/touch-tablet)
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Wider: never (the rail is the list).
         shown? (and phone? (= screen :list))]
-    (chat-colour! color claudia?)
+    (chat-colour! color)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
-               :claudia? claudia?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown?
                :draft-key (if (and open (not (contains? pending (second open)))) open :new)})))

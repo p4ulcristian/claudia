@@ -13,10 +13,13 @@
             [claudia.shared.protocol :as p]
             [claudia.slave.agentgit :as agentgit]
             [claudia.slave.history :as history]
+            [claudia.slave.stall :as stall]
             [claudia.slave.store :as store]))
 
 ;; chat -> {task id -> Task}; Task = {:id :use :name :type :status :background :start :end :tokens
-;; :tools :step :parent :ambient :output :summary :active :progress}
+;; :tools :step :parent :ambient :output :summary :active :progress :heard :stall-noted}
+;; (:heard: when a shell's output was last written, ms; :stall-noted: the quiet start of the stall
+;; the chat was told of, claudia.slave.stall)
 (defonce ^:private tasks (atom {}))
 ;; chat -> {tool_use id -> {:tool :input}}: the chat's own Agent and Bash calls (their prompt or command).
 (defonce ^:private calls (atom {}))
@@ -365,6 +368,25 @@
 
 ;; The list ------------------------------------------------------------------------------------
 
+(defn row-name
+  "A task's name on the page: the Agent or Bash call's own description first (call: the chat's own
+  call that started it; task_progress renames it by what it does now)."
+  [t call]
+  (or (not-empty (get-in call [:input :description])) (not-empty (:call-name t)) (:name t)))
+
+(defn running-kids
+  "The running tasks of m (a chat's tasks by id) that are part of t, t not among them."
+  [t m]
+  (filter #(and (not= (:id %) (:id t)) (= "running" (:status %)) (= (:id t) (:id (top-of % m))))
+          (vals m)))
+
+(defn- with-shell [t] (assoc t :shell (shell? t)))
+
+(defn stalled-since
+  "When the top task t of m (a chat's tasks by id) stalled, ms (claudia.slave.stall), or nil."
+  [t m now]
+  (stall/stalled-since (with-shell t) (map with-shell (running-kids t m)) now))
+
 (defn agent-row
   "One top task as the page's Agent (PROTOCOL.md). call: the chat's own call that started it; shown:
   the chat's counted tasks, by-id the same by id (for its running children)."
@@ -374,8 +396,7 @@
                                   (= (:id t) (:id (top-of % by-id))))
                             shown))]
     {:id (:id t) :kind (if shell "shell" "agent")
-     ;; The Agent or Bash call's own description first: task_progress renames it by what it does now.
-     :name (or (not-empty (get-in call [:input :description])) (not-empty (:call-name t)) (:name t)) :status (:status t)
+     :name (row-name t call) :status (:status t)
      :start (:start t) :end (:end t) :tools (or (:tools t) 0) :tokens (:tokens t)
      :step (if shell
              (some->> (or (get-in call [:input :command]) (:command t)) str/split-lines first (str "$ "))
@@ -391,29 +412,53 @@
    (- (if (= "running" (:status a)) (:active a) (or (:end a) (:active a))))])
 
 (defn agents
-  "The chat's agents and background shells for the page (Agent in PROTOCOL.md), running first."
+  "The chat's agents and background shells for the page (Agent in PROTOCOL.md), running first; a
+  stalled one carries when it went quiet (:stalled, ms)."
   [_cwd chat _folder]
   (let [m (get @tasks chat)
         shown (counted m)
-        by-id (by-id-of shown)]
+        by-id (by-id-of shown)
+        now (js/Date.now)]
     (->> (tops m)
-         (map #(agent-row % (call-of chat %) by-id shown))
+         (map #(assoc (agent-row % (call-of chat %) by-id shown) :stalled (stalled-since % m now)))
          (sort-by agent-order)
          vec)))
 
+(defn- written-at
+  "When a file was last written, ms, or nil."
+  [file]
+  (when file (try (.-mtimeMs (fs/statSync file)) (catch :default _ nil))))
+
+(defn- shell-read
+  "What a running shell shows now: its progress and when its output was last written (the stall
+  watch's sign), only what changed; nil when nothing did."
+  [chat t]
+  (let [file (output-file chat t)
+        progress (last-progress (tail file 16000))
+        heard (written-at file)]
+    (not-empty (cond-> {}
+                 (not= progress (:progress t)) (assoc :progress progress)
+                 (not= heard (:heard t)) (assoc :heard heard)))))
+
 (defn- running-read
-  "What a running task shows now that no event tells: a shell's progress (its output), an agent's
-  newest step (its file); nil when that did not change."
+  "What a running task shows now that no event tells: a shell's progress and output time (its
+  output), an agent's newest step (its file); nil when that did not change."
   [cwd chat folder t now]
   (if (shell? t)
-    (let [progress (last-progress (tail (output-file chat t) 16000))]
-      (when (not= progress (:progress t)) {:progress progress}))
+    (shell-read chat t)
     (when-let [step (some-> (agent-file cwd chat t) (newest-step folder))]
       (when (not= step (:step t)) {:step step :active now}))))
 
+(defn- unheard
+  "A chat's tasks without when shells last wrote (:heard): the page shows nothing of it, so a shell
+  that only printed sends the page nothing new."
+  [m]
+  (update-vals m #(dissoc % :heard)))
+
 (defn refresh!
   "Reads what grows without a task event: each running agent's newest step (its file) and each
-  running shell's progress (its output). Returns true when something changed."
+  running shell's progress and output time (its output). Returns true when something the page
+  shows changed."
   [cwd chat folder]
   (let [before (get @tasks chat)
         now (js/Date.now)
@@ -425,7 +470,7 @@
         patches (vec (filter second (concat running finished)))]
     (when (seq patches)
       (swap! tasks update chat #(reduce (fn [ts [id m]] (update ts id merge m)) % patches)))
-    (not= before (get @tasks chat))))
+    (not= (unheard before) (unheard (get @tasks chat)))))
 
 (defn running-any? [chat] (some #(= "running" (:status %)) (vals (get @tasks chat))))
 
@@ -599,3 +644,33 @@
   "A chat's task's name (its description), or nil when the task is not known."
   [chat id]
   (get-in @tasks [chat id :name]))
+
+;; The stall watch (README decision 111) ------------------------------------------------------
+
+(defn stall-kid
+  "A stalled agent's running work k as its note names it: a shell by its command's first line, an
+  agent by its name (call: the call that started it)."
+  [k call]
+  (if (shell? k)
+    {:shell true :name (text/cut (first (str/split-lines (str (or (get-in call [:input :command]) (:command k) (:name k))))) 80 "…")}
+    {:shell false :name (row-name k call)}))
+
+(defn stalls
+  "The chat's stalled agents at now, each {:id :name :since :noted? :kids [{:shell :name}]}; noted?:
+  the chat was told of this stall already."
+  [chat now]
+  (let [m (get @tasks chat)]
+    (vec (for [t (tops m)
+               :let [since (stalled-since t m now)]
+               :when since]
+           {:id (:id t) :name (row-name t (call-of chat t)) :since since
+            :noted? (= since (:stall-noted t))
+            :kids (mapv #(stall-kid % (call-of chat %)) (running-kids t m))}))))
+
+(defn stall-noted!
+  "The chat was told that its agent id stalled, quiet since since (ms): kept with the task, so a
+  runner restart tells it no second time."
+  [chat id since]
+  (when (get-in @tasks [chat id])
+    (swap! tasks assoc-in [chat id :stall-noted] since)
+    (save-soon! chat)))

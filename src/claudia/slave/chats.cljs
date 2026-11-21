@@ -22,7 +22,6 @@
             [claudia.shared.chat-edit :as chat-edit]
             [claudia.shared.colours :as colours]
             [claudia.slave.bookmarks :as bookmarks]
-            [claudia.slave.claudia :as claudia]
             [claudia.slave.codeforms :as codeforms]
             [claudia.slave.history :as history]
             [claudia.slave.hostlink :as hostlink]
@@ -36,6 +35,7 @@
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.sentinel-key :as sentinel-key]
             [claudia.slave.shown :as shown]
+            [claudia.slave.stall :as stall]
             [claudia.slave.steps :as steps]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
@@ -203,8 +203,7 @@
                           :project (projects/root-name (:folder %) cwd))
              ;; The longest-running agent's clock (README decision 46), as ago like runningFor.
              (tasks/agents-since (:id %)) (assoc :agentsFor (- t (tasks/agents-since (:id %))))
-             (row-model (:id %)) (assoc :model (row-model (:id %)))
-             (claudia/her? (:id %)) (assoc :claudia true))
+             (row-model (:id %)) (assoc :model (row-model (:id %))))
           (store/chats))))
 
 (defn- note-msg!
@@ -594,8 +593,6 @@
       (do (store/add-proposal! prop)
           (answers/text-result (system-label/proposed-text prop))))))
 
-(declare ask!)
-
 (defn- edit-own-chat
   "rename_chat and set_chat_colour: the chat the call runs in changed by change ({:title} or
   {:color}, claudia.shared.chat-edit), or the refusal of {:error}."
@@ -606,19 +603,6 @@
         (answers/text-result (if (:title change)
                                (str "This chat's title is now: " (:title change))
                                (str "This chat's colour is now " (:color change) "."))))))
-
-(defn- claudia-call
-  "Her tool call (claudia.slave.claudia): to the hub; stop_chat first asks the person (it cannot be
-  undone)."
-  [id tool args]
-  (let [go #(.then (claudia/call-hub! tool args)
-                   (fn [{:keys [ok text]}] (if ok (answers/text-result text) (answers/refusal text))))]
-    (if (= tool "stop_chat")
-      (.then (ask! id {:ask (answers/permit-ask (str (random-uuid)) "Stop chat" args "Stop a running chat?"
-                                                "Claudia wants to stop this chat's running turn. It cannot be undone.")
-                       :input args})
-             (fn [answer] (if (= "allow" (:behavior answer)) (go) (answers/refusal "The person said no."))))
-      (go))))
 
 (defn- mcp-call [id {:keys [server tool args]}]
   (case [server tool]
@@ -637,9 +621,7 @@
     ["workspace" "list_bookmarks"] (bookmark-call id nil)
     ["workspace" "bookmark_folder"] (bookmark-call id args)
     ["workspace" "system_label"] (system-label-call id args)
-    (if (and (= server "claudia") (claudia/her? id))
-      (claudia-call id tool args)
-      (throw (js/Error. (str "No tool " server "/" tool))))))
+    (throw (js/Error. (str "No tool " server "/" tool)))))
 
 (defn- ask! [id entry] (js/Promise. (fn [done] (add-ask! id (assoc entry :resolve done)))))
 
@@ -874,13 +856,12 @@
 ;; Sessions: tools and instructions ---------------------------------------------------------------
 
 (defn- full-prompt
-  "The system prompt's addition for chat id: Claudia's part, its prompt profile's text (README
-  decision 60), and in Claudia's own chat her part."
+  "The system prompt's addition for chat id: Claudia's part and its prompt profile's text (README
+  decision 60)."
   [id]
   (let [profile-part (some-> (:prompt (settings id)) prompts/profile prompts/prompt-part)]
     (cond-> (codeforms/prompt-for)
-      profile-part (str "\n\n" profile-part)
-      (claudia/her? id) (str "\n\n" claudia/prompt))))
+      profile-part (str "\n\n" profile-part))))
 
 (defn- prompt-version [id] (session/hash36 (full-prompt id)))
 (defn- tools-version [] (session/hash36 (js/JSON.stringify (clj->js (codeforms/mcp-for)))))
@@ -948,14 +929,18 @@
                        (meta/plans-changed!))))
          (catch :default e (js/console.error "token watch:" (text/error-text e))))))
 
+(declare stall-watch!)
+
 (defn init!
   "Called once by the runner: agent lists follow their tasks, running agents' steps and shells'
-  progress are read every 2 s, the models and commands are probed, and titles are read."
+  progress are read every 2 s and the stall watch looks (README decision 111), the models and
+  commands are probed, and titles are read."
   []
   (reset! tasks/on-change emit-agents!)
   (js/setInterval (fn []
                     (doseq [id (tasks/chats-running)]
-                      (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))))
+                      (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))
+                      (stall-watch! id)))
                   2000)
   (refresh-titles!)
   (try (meta/probe! cwd (run-env) @newest-sdk)
@@ -1261,8 +1246,7 @@
   "Why chat id cannot move now, or nil. A move never stops anything: work running and questions
   open are the person's to end first."
   [id]
-  (cond (claudia/her? id) "Claudia's own chat stays on its server."
-        (moving? id) "This chat is moving already."
+  (cond (moving? id) "This chat is moving already."
         (working? id) "This chat is working (a turn, agents or background shells): stop them or let them finish, then move it."
         (seq (:asks (st id))) "This chat waits on a question or an OK: answer it first, then move it."
         :else nil))
@@ -1282,19 +1266,15 @@
 ;; Page actions -----------------------------------------------------------------------------------
 
 (defn- start-spec [id resume? child-env]
-  (let [s (settings id)
-        her (claudia/her? id)]
+  (let [s (settings id)]
     (session/start-spec {:cwd cwd :id id :resume? resume?
-                         ;; The chat's key ties its sudo commands to it (README decision 52); her
-                         ;; chat runs nothing in the background (README decision 48).
-                         :env (cond-> (-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
-                                          (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
-                                her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
+                         ;; The chat's key ties its sudo commands to it (README decision 52).
+                         :env (-> (assoc child-env "CLAUDIA_CHAT_KEY" (chat-key! id))
+                                  (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
                          :prompt (full-prompt id)
-                         :allowed (cond-> (into tools/allowed-tools system-label/allowed) (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
-                         :disallowed (when her claudia/disallowed)
+                         :allowed (cond-> (into tools/allowed-tools system-label/allowed) (bookmarks/on?) (into bookmarks/allowed))
                          :model (:model s) :effort (:effort s)
-                         :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))
+                         :mcp (codeforms/mcp-for)
                          :edit-tools session/edit-tools-matcher :worktrees? (worktree/on?)})))
 
 (defn- start-session!
@@ -1383,6 +1363,18 @@
   (emit! id {:type "msg" :msg {:id pending-note-id :role "note" :gone true}})
   (note-msg! id {:id (str (:id msg) ":moved") :role "note" :text note :at (:at msg)}))
 
+(defn- send-msg!
+  "The sent Msg msg into the live session as text (what Claude gets) with images; shown in the chat
+  before it goes (show!: a step shown first, e.g. a server move's note)."
+  [id msg text images show!]
+  (swap-chat! id turns/with-sent msg)
+  (store/kv! id "turn" (:id msg))
+  (show!)
+  (note-msg! id msg)
+  (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
+                    (seq images) (assoc :images images)))
+  (set-running! id true))
+
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
   msg-id: the id the page made for it (nil: one is made here); reminder: said to Claude after the
@@ -1392,13 +1384,7 @@
         ;; The forms news and a folder move's note go as reminders the chat doesn't show (the forms
         ;; only to a session that ran with the old tools); a server move's note shows.
         [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id (text/with-reminder message reminder) was-live?)))]
-    (swap-chat! id turns/with-sent msg)
-    (store/kv! id "turn" (:id msg))
-    (when note (show-server-note! id msg note))
-    (note-msg! id msg)
-    (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
-                      (seq images) (assoc :images images)))
-    (set-running! id true)))
+    (send-msg! id msg text images #(when note (show-server-note! id msg note)))))
 
 (defn send-text!
   "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames);
@@ -1414,6 +1400,35 @@
                    (.then (ensure-session! id) (fn [] live?)))))
         (.then #(send-now! id message images msg-id reminder %))
         (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+;; The stall watch (README decision 111) ----------------------------------------------------------
+
+;; chat -> the ids of its agents shown stalled on the page now.
+(defonce ^:private shown-stalled (atom {}))
+
+(defn- send-stall-note!
+  "The chat is told that its agent stalled (claudia.slave.stall/note-text), as Claudia's note; sent
+  while a turn runs, Claude takes it in mid-turn, else it starts a turn."
+  [id {agent-name :name :keys [kids since]}]
+  (let [tagged (history/with-claudia-tag (stall/note-text agent-name kids (stall/minutes (- (js/Date.now) since))))]
+    (-> (ensure-session! id)
+        (.then #(send-msg! id {:id (str (random-uuid)) :role "note" :text (history/claudia-note tagged) :at (js/Date.now)}
+                           tagged nil (fn [])))
+        (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+(defn- stall-watch!
+  "Every 2 s for a chat with running tasks: an agent that stalled turns red on the page (and back
+  once it shows a sign), and the chat is told once per stall, unless it is archived or moving."
+  [id]
+  (let [found (tasks/stalls id (js/Date.now))
+        ids (set (map :id found))]
+    (when (not= ids (get @shown-stalled id #{}))
+      (swap! shown-stalled assoc id ids)
+      (emit-agents! id))
+    (doseq [s found :when (not (:noted? s))]
+      (tasks/stall-noted! id (:id s) (:since s))
+      (when-not (or (archived? id) (moving? id))
+        (send-stall-note! id s)))))
 
 (defn new-chat-colour
   "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."

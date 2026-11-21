@@ -71,22 +71,10 @@
 /* A gradient chat (README decision 80): the theme above, mixed from its stand-in colour, and the whole
    window one gradient between its two crayons (--hue-a top left, --hue-b bottom right), each as dark as
    a solid chat's background so the text keeps its contrast. The rail, the list and the picture are
-   see-through over it, as in Claudia's own chat. */
+   see-through over it. */
 :root[data-gradient] { --board: transparent; }
 :root[data-gradient] body { background: linear-gradient(135deg, color-mix(in oklch, var(--hue-a) 20%, #343434), color-mix(in oklch, var(--hue-b) 20%, #2a2a2a)); }
 :root[data-gradient] .rail, :root[data-gradient] .sidebar { background: color-mix(in srgb, var(--bg2) 55%, transparent); }
-
-/* Claudia's own chat (README decision 50): her own green theme, whatever colour her row has, and the
-   whole window one gradient from deep green to near black, with a few faint columns of code falling
-   behind everything (claudia-rain). The rail, the picture and the chat are see-through over it. */
-:root[data-claudia] {
-  --hue: #2bd46a; --bg: #0b1c12; --bg2: #08150d; --panel: #10261a; --panel2: #143020; --line: #1f4a2e;
-  --fg: #e6f5ea; --muted: #8fb79c; --accent: #5cff8f; --board: transparent;
-  --claude-line: color-mix(in oklch, var(--hue) 75%, #fff);
-}
-:root[data-claudia] body { background: linear-gradient(180deg, #0e2a19 0%, #0a1a10 45%, #050a07 100%); }
-:root[data-claudia] .rail, :root[data-claudia] .sidebar { background: rgba(3, 10, 6, 0.35); }
-.claudia-rain { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 
 * { box-sizing: border-box; scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
@@ -293,6 +281,12 @@ code, pre { font-family: var(--mono); }
 .voice-hear { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); }
 .voice-hear:hover { background: var(--bg); color: var(--fg); }
 .voice-hear svg { width: 14px; height: 14px; }
+/* A reply's time at the end of its last line, only where that line has room (README decision 115,
+   views/chat.cljs measures); hidden, it still takes its width so it can be measured. */
+.msg-body { position: relative; }
+.msg-time { position: absolute; right: 0; bottom: 0; font-size: 11px; line-height: 24px; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; visibility: hidden; pointer-events: none; }
+.msg-time.fits { visibility: visible; }
 .say-reply { vertical-align: top; display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; color: var(--muted); }
 .say-reply:hover { background: var(--panel); color: var(--fg); }
 .say-reply svg { width: 14px; height: 14px; }
@@ -344,6 +338,11 @@ code, pre { font-family: var(--mono); }
 .steps.busy { border-left-color: var(--blue); }
 .steps-head { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; text-align: left; width: 100%; color: var(--muted); }
 .steps-head > span:nth-child(2) { color: var(--fg); font-weight: 500; white-space: nowrap; }
+/* While the group runs, its count pops each time it changes (a new element per count, views/steps.cljs). */
+.steps-n { display: inline-block; }
+.steps.busy .steps-n { animation: steps-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes steps-pop { 0% { transform: scale(1.6); color: var(--accent); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .steps.busy .steps-n { animation: none; } }
 .steps-head .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .chev { display: inline-block; transition: transform 0.15s; width: 8px; }
 .chev.open { transform: rotate(90deg); }
@@ -585,7 +584,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
 .logo-tools { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
 /* The rail's top: Claudia's face (no frame), then 2D and 3D as two small circles. */
 .rail-head { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 0 9px; }
-/* Claudia's face (README decision 48): bare, never clipped, so her animations show whole. */
+/* Claudia's face: bare, never clipped, so her animations show whole. */
 .rail-face { position: relative; display: block; width: 56px; height: 58px; margin: 0 auto; padding: 0; overflow: visible; background: none; }
 .rail-face:hover { background: none; }
 .rail-face .face { display: block; width: 56px; height: 58px; overflow: visible; pointer-events: none; }
@@ -601,7 +600,6 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--green) 60%, transparent)); }
 @keyframes rail-check-in { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .rail-check path { animation: none; stroke-dashoffset: 0; } }
-.rail-acts { flex: none; display: flex; justify-content: center; gap: 2px; }
 .rail .lt-dim { border: 0; border-radius: 0; overflow: visible; gap: 6px; }
 .rail .lt-dim button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid var(--line); font: 700 10px/1 var(--hand); color: var(--muted); }

@@ -55,13 +55,21 @@
   (is (mic/in-ring? -100 -100) "141 px out, in the ring")
   (is (mic/in-ring? 400 0) "past the ring"))
 
-(deftest a-moved-button-stays-on-the-screen
-  (is (= {:x 32 :y 788} (mic/clamp-spot {:x 10 :y 900} 1180 820 32)) "only the button's radius from the walls")
-  (is (= {:x 1148 :y 400} (mic/clamp-spot {:x 1170 :y 400} 1180 820 32)) "over the rail too")
-  (is (= {:x 600 :y 400} (mic/clamp-spot {:x 600 :y 400} 1180 820 32)))
-  (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820 32)))
-  (is (= {:x 788 :y 1148} (mic/stored->spot {:fx 0.99 :fy 0.99} 820 1180 32)) "turned: clamped again")
-  (is (nil? (mic/stored->spot {} 1180 820 32))))
+(deftest a-floating-mic-keeps-its-whole-flower-on-the-screen
+  (is (= {:x 116 :y 704} (mic/clamp-spot {:x 10 :y 900} 1180 820)) "the petals' reach from the walls")
+  (is (= {:x 1064 :y 400} (mic/clamp-spot {:x 1170 :y 400} 1180 820)) "over the edge column too")
+  (is (= {:x 600 :y 400} (mic/clamp-spot {:x 600 :y 400} 1180 820)))
+  (is (= {:x 100 :y 116} (mic/clamp-spot {:x 0 :y 0} 200 820)) "too narrow for the flower: the middle that way")
+  (is (= {:x 590 :y 410} (mic/stored->spot (mic/spot->stored {:x 590 :y 410} 1180 820) 1180 820)))
+  (is (= {:x 704 :y 1064} (mic/stored->spot {:fx 0.99 :fy 0.99} 820 1180)) "turned: clamped again")
+  (is (nil? (mic/stored->spot {} 1180 820))))
+
+(deftest a-floating-mic-starts-beside-the-edge-or-over-the-phone-composer
+  (is (= {:x 982 :y 704} (mic/default-spot {:w 1180 :h 820 :edge-w 88 :r 32})) "bottom right beside the edge, the flower whole")
+  (is (= {:x 195 :y 728} (mic/default-spot {:w 390 :h 844 :edge-w 0 :composer-top 792 :r 36}))
+      "phone: the bottom middle, raised so the down petal fits")
+  (is (= {:x 195 :y 500} (mic/default-spot {:w 390 :h 844 :edge-w 0 :composer-top 544 :r 36}))
+      "phone: just over a taller composer"))
 
 (deftest heard-clips-go-out-in-spoken-order
   (let [l0 {:next 0 :held {}}

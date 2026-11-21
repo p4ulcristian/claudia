@@ -64,7 +64,7 @@
 (defn- shown!
   "The mic shows item (nil: none); :loading while its sound is still being made."
   [item]
-  (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :voice :loading]))]))
+  (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :msg :voice :loading]))]))
 
 (declare pump! stop!)
 
@@ -211,6 +211,12 @@
   (when (= k (:k (:current @line))) (silence!) (shown! nil))
   (swap! line talk/without-chat k)
   (pump!))
+
+(defn drop-waiting!
+  "Chat k was opened: its waiting replies go (they are read on the screen); the one being read now
+  plays on to its end (README decision 113)."
+  [k]
+  (swap! line talk/without-waiting k))
 
 (defn stop!
   "Silence now; whatever waits is dropped (another sound started, or the page went to the background)."

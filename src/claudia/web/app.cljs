@@ -20,7 +20,6 @@
             [claudia.web.chalk :as chalk]
             [claudia.web.chatops]
             [claudia.web.events]
-            [claudia.web.claudia-chat]
             [claudia.web.extras]
             [claudia.web.fx]
             [claudia.web.gaze :as gaze]

@@ -19,6 +19,10 @@
 .ag-chip.completed { --ink: color-mix(in srgb, var(--green) 40%, var(--line)); }
 .ag-chip.failed { --ink: color-mix(in srgb, var(--red) 55%, var(--line)); }
 .ag-chip.stopped { --ink: var(--line); }
+/* Stalled (README decision 111): red ink, the spinner still, its line red. */
+.ag-chip.stalled { --ink: var(--red); }
+.ag-chip.stalled .ag-spin { animation: none; border-color: var(--red); }
+.ag-chip.stalled .ag-l2 { color: var(--red); }
 .ag-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
 .ag-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .ag-facts { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }

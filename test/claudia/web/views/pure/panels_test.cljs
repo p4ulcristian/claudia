@@ -325,3 +325,10 @@
   (is (= 7 (sidebar/second-dot 1000 (+ 1000 (* 1000 (+ 240 35))))) "4:35 -> 35 s -> the 7th dot from the top")
   (is (= 11 (sidebar/second-dot 0 59999)))
   (is (= 0 (sidebar/second-dot 0 60000)) "a new minute starts at the top"))
+
+(deftest a-stalled-chip-says-it-waits-on-nothing
+  (let [a {:status "running" :kind "agent" :step "Bash ssh box" :children 1 :stalled 0}]
+    (is (agents/stalled? a))
+    (is (= "waiting on nothing · quiet 16m 0s" (agents/chip-line a (* 16 60000))))
+    (is (not (agents/stalled? (assoc a :status "completed"))) "a finished one is never stalled")
+    (is (= "Bash ssh box · +1" (agents/chip-line (dissoc a :stalled) 0)) "not stalled: its step and work")))

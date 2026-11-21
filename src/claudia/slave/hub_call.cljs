@@ -1,8 +1,9 @@
 (ns claudia.slave.hub-call
-  "Calls to the hub as this server (README decisions 47, 48 and 53): the hub's address, this server's
+  "Calls to the hub as this server (README decisions 47, 53 and 67): the hub's address, this server's
   name and its hub key go with every call as X-Claudia-Server-Name and X-Claudia-Server-Key. The
   front calls through here for the agent users' SSH certificates (claudia.slave.sshfront, its own
-  FRONT_HUB_KEY_FILE); a runner for Claudia's own chat (CLAUDIA_HUB_KEY_FILE, readable by it)."
+  FRONT_HUB_KEY_FILE); a runner for its agents' bookmark tools (claudia.slave.bookmarks,
+  CLAUDIA_HUB_KEY_FILE, readable by it)."
   (:require ["node:fs" :as fs]
             [clojure.string :as str]))
 

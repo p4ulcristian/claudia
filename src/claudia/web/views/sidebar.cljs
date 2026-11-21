@@ -18,6 +18,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.format :as format]
             [claudia.web.views.dot :as dot]
+            [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.pure.sidebar :as pure]
             [claudia.web.views.pure.words :as words]
             [claudia.web.views.menu :as menu]
@@ -50,7 +51,7 @@
   here\" (on a phone it shows its screen). Web Animations, so a re-render doesn't cut them short."
   [k active? ^js e]
   (let [el (.-currentTarget e)
-        phone? (.-matches (js/matchMedia "(max-width: 679px)"))]
+        phone? (.-matches (js/matchMedia reach/phone))]
     (cond
       (and active? phone?) (rf/dispatch [:nav/open k])
       active? (.animate el (clj->js (map (fn [x] {:translate (str x "px 0")}) [0 -4 4 -3 2 0]))

@@ -126,11 +126,11 @@
     #(do (reset! stopped true) (unlisten) (remove-watch rdb/app-db ::face))))
 
 (defn click!
-  "A click on her: the chat her lenses talk about opens; else her own chat (:claudia/open)."
+  "A click on her: the chat her lenses talk about opens; else nothing (README decision 112)."
   []
-  (if-let [k (get-in @brain [:ticker :k])]
-    (do (swap! brain mind/clear-ticker) (rf/dispatch [:nav/open k]))
-    (rf/dispatch [:claudia/open])))
+  (when-let [k (get-in @brain [:ticker :k])]
+    (swap! brain mind/clear-ticker)
+    (rf/dispatch [:nav/open k])))
 
 (defn face
   "Claudia's face, alive (use as [:f> face] inside the button it belongs to)."

@@ -1,5 +1,5 @@
 (ns claudia.web.views.icons
-  "Icons for buttons that open a view of the right half from two places: the touch tablet's rail
+  "Icons for buttons that open a view of the right half from two places: the edge column
   (claudia.web.views.thumb-edge) and the profile menu (claudia.web.views.menu). The strokes come
   from each place's CSS (fill none, stroke currentColor).")
 
