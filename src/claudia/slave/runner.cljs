@@ -19,6 +19,7 @@
             [claudia.slave.history :as history]
             [claudia.slave.search :as search]
             [claudia.slave.uploads :as uploads]
+            [claudia.slave.voice-messages :as voice-messages]
             [claudia.slave.shown :as shown]
             [claudia.slave.video :as video]
             [claudia.slave.hostlink :as hostlink]
@@ -63,12 +64,17 @@
     (doseq [c cs] (send! c frame))
     (count cs)))
 
+(defn- voices-changed!
+  "Every page that may answer gets the voice messages as they are now (README decision 93)."
+  []
+  (send-pages! (voice-messages/current-frame)))
+
 (defn- speak-to!
-  "A chat's reply to read aloud goes to the one page its person touched last (README decision 21):
-  not every open device talks at once."
+  "A chat's reply or ask to say aloud is kept as a voice message, and every page hears of it
+  (README decision 93; before: read at once on the page touched last)."
   [frame]
-  (when-let [c (p/last-touched (answering-pages) #(deref (:here %)))]
-    (send! c frame)))
+  (voice-messages/keep! frame)
+  (voices-changed!))
 
 (defn- chats-changed []
   (let [frame {:type "chats" :chats (chats/rows)}]
@@ -172,14 +178,22 @@
 (defmethod on-chat-frame "archive" [_ f chat]
   (store/update! chat {:archived (boolean (:archived f))})
   (chats/session-follows-row! chat)
-  (chats-changed))
+  (chats-changed)
+  (when (:archived f) (voice-messages/drop-chat! chat) (voices-changed!)))
 (defmethod on-chat-frame "folder" [_ f chat] (chats/move-folder! chat (:folder f)))
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
 (defmethod on-chat-frame "settings" [_ f chat]
   (chats/set-flags! chat (select-keys f [:voice :bell]))
+  (when (and (contains? f :voice) (= "" (:voice (store/chat chat))))
+    (voice-messages/drop-chat! chat)
+    (voices-changed!))
   (when (some #(contains? f %) [:model :effort :plan :prompt])
     (chats/set-settings! chat (select-keys f [:model :effort :plan :prompt]))))
+
+(defmethod on-chat-frame "heard" [_ f chat]
+  (voice-messages/heard! chat (when (sequential? (:ids f)) (:ids f)))
+  (voices-changed!))
 
 (defmethod on-chat-frame "agent" [c f chat]
   (.then (chats/agent-detail chat (str (:agent f)))
@@ -211,7 +225,8 @@
     :here (reset! (:here c) (p/touched-at (js/Date.now) (:ago f)))
     :hello (do (reset! (:hello c) true)
                (send! c {:type "chats" :chats (chats/rows)})
-               (send! c (meta/frame profile)))
+               (send! c (meta/frame profile))
+               (when-not (:read-only c) (send! c (voice-messages/current-frame))))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
                                    (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell])
                                    (msg-id f))]

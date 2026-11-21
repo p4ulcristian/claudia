@@ -402,18 +402,51 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (defn speak-item
-  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text
-  :colour-name}, the name of the chat's colour (colour, its id) to say first unless the chat is open
-  when it is read (talk/spoken), or nil when nothing in it can be said."
+  "A voice message from server (README decisions 21 and 93) as a reply to read: {:id :k :voice :text
+  :colour-name :msg}, the name of the chat's colour (colour, its id) to say first unless the chat is
+  open when it is read (talk/spoken), msg the message's own id; nil when nothing in it can be said."
   [server {:keys [chat id voice text ask]} colour]
   (when-let [said (talk/speakable (if ask (talk/ask-text ask) text))]
-    (cond-> {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said}
+    (cond-> {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said :msg id}
       (colours/name-of colour) (assoc :colour-name (colours/name-of colour)))))
 
-(defmethod on-frame "speak" [db server f]
-  (if-let [item (speak-item server f (get-in db [:servers server :rows (:chat f) :color]))]
-    {:db db :fx [[:speech/say item]]}
-    {:db db}))
+(defmethod on-frame "voices" [db server {:keys [messages]}]
+  ;; Every waiting voice message of this server's chats (README decision 93), sent whenever they change.
+  {:db (assoc-in db [:voice-msgs server] (if (sequential? messages) (vec messages) []))})
+
+(defn without-heard
+  "Server's messages without chat's ones with these ids (heard or swiped away)."
+  [msgs chat ids]
+  (let [gone (set ids)]
+    (vec (remove #(and (= chat (:chat %)) (gone (:id %))) msgs))))
+
+(defn voice-heard-fx
+  "Chat k's messages ids heard to their end or swiped away: gone here at once, and on every device
+  once its runner says so."
+  [db [server chat] ids]
+  (when (seq ids)
+    {:db (update-in db [:voice-msgs server] without-heard chat ids)
+     :ws/send [server {:type "heard" :chat chat :ids (vec ids)}]}))
+
+(rf/reg-event-fx :voice/heard (fn [{:keys [db]} [_ k ids]] (voice-heard-fx db k ids)))
+
+(defn chat-items
+  "Chat k's waiting voice messages in db as replies to read, oldest first."
+  [db [server chat]]
+  (let [colour (get-in db [:servers server :rows chat :color])]
+    (->> (get-in db [:voice-msgs server])
+         (filter #(= chat (:chat %)))
+         (sort-by :at)
+         (keep #(speak-item server % colour))
+         vec)))
+
+(rf/reg-event-fx
+ :voice/play
+ ;; A tap on chat k's circle (or on the mic, for the chat waiting longest): its messages play.
+ (fn [{:keys [db]} [_ k]]
+   {:speech/play-chat (chat-items db k)}))
+
+(rf/reg-sub :voice-msgs (fn [db _] (:voice-msgs db)))
 
 (defn remove-ask
   "The asks without the one with this id."

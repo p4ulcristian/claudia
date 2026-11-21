@@ -83,6 +83,18 @@
               -- Claudia's Trash (README decision 63): one row per folder moved to
               -- RUNNER_DATA/trash/<id>/<name>; path = where it was, size in bytes (null: not measured),
               -- by = who moved it (the front's X-Claudia-By).
+              -- Voice messages (README decision 93): a chat with a voice that ended a turn by itself
+              -- or asks leaves its reply (text) or ask (JSON) here until a page says it was heard or
+              -- swiped away, at most a day (claudia.slave.voice-messages).
+              CREATE TABLE IF NOT EXISTS voice_messages (
+                chat TEXT NOT NULL,
+                id TEXT NOT NULL,
+                voice TEXT NOT NULL,
+                text TEXT,
+                ask TEXT,
+                at INTEGER NOT NULL,
+                PRIMARY KEY (chat, id)
+              );
               CREATE TABLE IF NOT EXISTS trash (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL,
@@ -237,6 +249,30 @@
 
 (defn delete-template! [template-name] (.run (stmt "DELETE FROM templates WHERE name = ?") template-name))
 
+;; Voice messages (README decision 93) ------------------------------------------------------------
+
+(defn- voice-message-row [^js r]
+  (cond-> {:chat (.-chat r) :id (.-id r) :voice (.-voice r) :at (.-at r)}
+    (.-text r) (assoc :text (.-text r))
+    (.-ask r) (assoc :ask (p/read-json (.-ask r)))))
+
+(defn add-voice-message!
+  "Keeps a voice message {:chat :id :voice :text or :ask :at} (the same chat and id: replaced)."
+  [{chat-id :chat :keys [id voice text ask at]}]
+  (.run (stmt "INSERT OR REPLACE INTO voice_messages (chat, id, voice, text, ask, at) VALUES (?, ?, ?, ?, ?, ?)")
+        chat-id id voice text (some-> ask p/write-json) at))
+
+(defn voice-messages
+  "Every voice message kept, oldest first."
+  []
+  (mapv voice-message-row (.all (stmt "SELECT * FROM voice_messages ORDER BY at, rowid"))))
+
+(defn drop-voice-message! [chat-id id] (.run (stmt "DELETE FROM voice_messages WHERE chat = ? AND id = ?") chat-id id))
+
+(defn drop-chat-voice-messages! [chat-id] (.run (stmt "DELETE FROM voice_messages WHERE chat = ?") chat-id))
+
+(defn drop-voice-messages-before! [t] (.run (stmt "DELETE FROM voice_messages WHERE at < ?") t))
+
 ;; kv ---------------------------------------------------------------------------------------------
 
 (defn kv
@@ -369,7 +405,8 @@
 (defn- drop-chat-rows!
   "Every row of chat id: the chat, its kv values, pictures and file changes."
   [id]
-  (doseq [t ["chats WHERE id = ?" "kv WHERE chat = ?" "pictures WHERE chat = ?" "changes WHERE chat = ?"]]
+  (doseq [t ["chats WHERE id = ?" "kv WHERE chat = ?" "pictures WHERE chat = ?" "changes WHERE chat = ?"
+             "voice_messages WHERE chat = ?"]]
     (.run (stmt (str "DELETE FROM " t)) id)))
 
 (defn- insert-row!

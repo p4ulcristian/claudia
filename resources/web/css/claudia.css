@@ -392,7 +392,16 @@ code, pre { font-family: var(--mono); }
 /* The mic at the composer's left end (views/mic.cljs): 56 px, under a tablet's left thumb. */
 .talk-row { display: flex; align-items: center; gap: 10px; }
 .talk-row > .input-row { flex: 1; min-width: 0; }
-.mic { flex: none; position: relative; }
+/* --rec: the recording's colour (the flower's bars and disc): red, or the chat a hold replies to (README decision 93). */
+.mic { flex: none; position: relative; --rec: var(--red); }
+/* Voice messages round the mic (README decision 93): one circle per chat, in its colour. */
+.voice-circles { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.voice-circle { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; border: 0; padding: 0; pointer-events: auto; touch-action: none;
+  background: var(--chat, var(--grey)); color: #fff; font: 700 13px var(--sans); display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); animation: voice-circle-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.voice-circle.playing { outline: 3px solid var(--fg); outline-offset: 3px; }
+@keyframes voice-circle-in { from { transform: translate(-50%, -50%) scale(0); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .voice-circle { animation: none; } }
 .mic-core { position: relative; width: 56px; height: 56px; }
 /* While the mic is held: the flower (views/mic_flower.cljs, its size set there), round the button, over everything
    near it so it shows past the finger; the button itself goes clear so the disc shows through. */

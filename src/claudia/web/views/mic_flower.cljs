@@ -103,7 +103,7 @@
   "The voice's bars round the disc (levels 0-1, one per bar, the first pointing right); side :left:
   only the left half's."
   [^js g ^js el levels side]
-  (set! (.-fillStyle g) (css el "--red"))
+  (set! (.-fillStyle g) (css el "--rec"))
   (doseq [[i level] (map-indexed vector levels)
           :when (and (> level 0.02) (or (nil? side) (left-half? i (count levels))))]
     (.save g)
@@ -127,7 +127,7 @@
   (let [[above under] (disc-text state)]
     (.beginPath g)
     (.arc g 0 0 disc-r 0 (* 2 js/Math.PI))
-    (set! (.-fillStyle g) (css el (if (recording? state) "--red" "--amber")))
+    (set! (.-fillStyle g) (css el (if (recording? state) "--rec" "--amber")))
     (.fill g)
     (set! (.-fillStyle g) "#fff")
     (set! (.-textAlign g) "center")
