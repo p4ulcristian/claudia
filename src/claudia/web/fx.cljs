@@ -33,6 +33,7 @@
 
 (rf/reg-fx :store (fn [[k v]] (db/store! k v)))
 (rf/reg-fx :speech/play-chat speech/play-chat!)
+(rf/reg-fx :speech/enqueue speech/enqueue!)
 (rf/reg-fx :speech/stop (fn [_] (speech/stop!)))
 (rf/reg-fx :speech/drop speech/drop-chat!)
 

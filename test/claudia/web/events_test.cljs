@@ -341,6 +341,16 @@
       (is (= [{:chat "d" :id "t1" :voice "otto" :text "Other." :at 3}] (get-in fx [:db :voice-msgs "s"])))
       (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx))))))
 
+(deftest the-page-touched-last-plays-a-new-message
+  (let [msgs [{:chat "c" :id "t1" :voice "nora" :text "Done." :at 1}]
+        base {:servers {"s" {:rows {"c" {:color "cherry"}}}}}
+        fx (ev/on-frame base "s" {:type "voices" :messages msgs :play {:chat "c" :id "t1"}})]
+    (is (= [[:speech/enqueue {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "Done." :colour-name "Red" :msg "t1"}]]
+           (:fx fx)))
+    (is (nil? (:fx (ev/on-frame base "s" {:type "voices" :messages msgs}))) "other pages only show it")
+    (is (nil? (:fx (ev/on-frame base "s" {:type "voices" :messages msgs :play {:chat "c" :id "gone"}})))
+        "a message no longer kept is not played")))
+
 (def ^:private two-servers
   {:me {:servers [{:name "a"} {:name "b"}]}
    :servers {"a" {:status :open :rows {"1" {:id "1" :color "cherry" :started 1}
