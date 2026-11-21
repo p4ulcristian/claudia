@@ -108,3 +108,7 @@
 (deftest the-prompt-says-to-carry-on-after-background-work
   (is (str/includes? tools/system-append "carry on in that same turn with the plan you told the user"))
   (is (str/includes? tools/system-append "An empty reply ends the turn and the work stops.")))
+
+(deftest the-prompt-asks-for-a-first-line-before-any-tool
+  (is (str/includes? tools/system-append "before any tool call and before any drawing"))
+  (is (str/includes? tools/system-append "the first line is the whole reply")))
