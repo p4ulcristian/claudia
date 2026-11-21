@@ -3,9 +3,11 @@
   105): a big tablet held in two hands is held at its sides partway up, so the right thumb rests on
   the right edge at middle height; a desktop gets the same column, its buttons mouse-sized
   (reach.css), so every device keeps the same places. There a rail on the right wall, one column
-  of nine slots of one size: Search, System, Prompts,
-  Settings (toggles: lit while their sheet is on top, a press then closes it), Stop, New chat,
-  Archive (the open chat, asked first; Unarchive for an archived one), ‹ (the previous picture), › (the next picture). Each a button with its name
+  of nine slots of one size: Search, System, Files, Profiles, Settings (toggles: lit while their
+  sheet is on top, a press then closes it), Stop, New chat, Fork (the open chat up to its last
+  finished turn, README decision 99) and Archive (the open chat, asked first; Unarchive for an
+  archived one); README decision 117 moved Files, Fork and Archive here from the chat's header and
+  took the picture steps off (the picture has its own). Each a button with its name
   under its icon, at least 12 mm on a touch screen, see-through at rest. A button never comes or goes, so nothing
   shifts: one that cannot act now is passive (greyed and disabled), Stop is red while the open
   chat's turn runs (claudia.web.views.pure.edge). At its bottom, outside the nine, the foot the
@@ -18,8 +20,10 @@
             [claudia.web.views.head :as head]
             [claudia.web.views.icons :as icons]
             [claudia.web.views.menu :as menu]
+            [claudia.web.views.head-pill :as hp]
             [claudia.web.views.mic :as mic]
             [claudia.web.views.pure.edge :as pure]
+            [claudia.web.views.pure.menu :as menu-pure]
             [claudia.web.views.systems :as systems]
             [claudia.web.views.update-pill :as update-pill]))
 
@@ -31,18 +35,25 @@
             :icon (svg-of [:circle {:cx 11 :cy 11 :r 6}] [:path {:d "M20 20l-4.5-4.5"}])}
    :system {:label "System" :tip "System: health, ports, services" :icon [systems/system-icon]
             :act #(rf/dispatch [:right/view :system])}
-   :prompts {:label "Prompts" :tip "Prompt profiles" :icon icons/prompts-icon
+   :files {:label "Files" :tip "File Browser" :icon [hp/icon :folder]
+           :act #(rf/dispatch [:right/view :files])}
+   :prompts {:label "Profiles" :tip "Prompt profiles: edit them, pick this chat's" :icon icons/prompts-icon
              :act #(rf/dispatch [:right/view :prompts])}
    :settings {:label "Settings" :tip "Settings, your dictation words too" :icon icons/settings-icon
               :act #(rf/dispatch [:right/view :settings])}
    :stop {:label "Stop" :tip "Stop the running turn (Esc)" :act #(rf/dispatch [:chat/stop])
           :icon (svg-of [:rect {:x 6 :y 6 :width 12 :height 12 :rx 2}])}
    :new {:label "New chat" :tip "New chat (Alt+N)" :icon (svg-of [:path {:d "M12 5v14M5 12h14"}])
-         :act #(rf/dispatch [:nav/new])}
-   :prev {:label "Previous" :tip "Previous picture" :icon (svg-of [:path {:d "M14.5 5.5L8 12l6.5 6.5"}])
-          :act #(rf/dispatch [:picture/step -1])}
-   :next {:label "Next" :tip "Next picture" :icon (svg-of [:path {:d "M9.5 5.5L16 12l-6.5 6.5"}])
-          :act #(rf/dispatch [:picture/step 1])}})
+         :act #(rf/dispatch [:nav/new])}})
+
+(defn- fork-slot
+  "The Fork slot for the open chat ck: a new chat with it up to its last finished turn, in the same
+  folder (README decision 99); Forking… while the server makes it."
+  [ck forking?]
+  {:label (if forking? "Forking…" "Fork")
+   :tip "A new chat with this one up to its last finished turn, in the same folder"
+   :icon [hp/icon :fork]
+   :act #(when-not forking? (rf/dispatch [:ops/fork ck nil]))})
 
 (defn- archive-slot
   "The Archive slot for the open chat ck: Archive (asked first, as the header's) or Unarchive for an
@@ -57,7 +68,7 @@
   "What a press on slot id in state does: a lit sheet slot closes its sheet, back to what lay under
   it (the Drawing board when it was the only one); any other press acts."
   [id state act]
-  (if (= state :on)
+  (if (and (= state :on) (contains? pure/sheet-of id))
     #(rf/dispatch [:right/close (pure/sheet-of id)])
     act))
 
@@ -75,20 +86,23 @@
 (defn- now
   "What the slots' states depend on (pure/slot-states), read from the page; oc: the open chat."
   [oc]
-  (let [{:keys [pictures index]} @(rf/subscribe [:picture-history])]
+  (let [ro? @(rf/subscribe [:read-only?])]
     {:running? (boolean (when oc (:running @(rf/subscribe [:chat (:ck oc)]))))
-     :archivable? (boolean (and (:row oc) (not (:pending? oc)) (not @(rf/subscribe [:read-only?]))))
+     :archivable? (boolean (and (:row oc) (not (:pending? oc)) (not ro?)))
+     :forking? (:forking? (menu-pure/fork-state @(rf/subscribe [:fork]) (:ck oc)))
      :new? (not @(rf/subscribe [:new-chat-read-only?]))
-     :folded? (boolean (:folded? @(rf/subscribe [:fold-state])))
-     :view @(rf/subscribe [:right-view])
-     :index index :n (count pictures)}))
+     :read-only? ro?
+     :view @(rf/subscribe [:right-view])}))
 
 (defn- column
-  "The slots ids, top to bottom, each in its state; oc: the open chat (the Archive slot's)."
+  "The slots ids, top to bottom, each in its state; oc: the open chat (the Fork and Archive slots')."
   [ids states oc]
   (into [:<>] (for [id ids]
                 ^{:key id} [slot-button id (states id)
-                            (if (= id :archive) (archive-slot (:ck oc) (:archived (:row oc))) (slots id))])))
+                            (case id
+                              :archive (archive-slot (:ck oc) (:archived (:row oc)))
+                              :fork (fork-slot (:ck oc) (= :on (states id)))
+                              (slots id))])))
 
 (defn- foot
   "The rail's foot: the update pill, your profile circle (whose chats, the menu with Settings) and the

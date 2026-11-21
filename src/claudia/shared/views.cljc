@@ -12,7 +12,7 @@
    [:search "Search"]
    [:settings "Settings"]
    [:system "System"]
-   [:prompts "Prompts"]
+   [:prompts "Profiles"]
    [:forms "Forms"]])
 
 (def ^:private ids (set (map first all)))

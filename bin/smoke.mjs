@@ -92,25 +92,26 @@ async function visit(browser, hubUrl, screen) {
       await page.locator('.sheet').first().waitFor({ state: 'detached', timeout: waitMs });
       await kept([]);
     });
-    if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill (server, project, notify and colour among them) and the model · effort popup, no select; Files first among the worded buttons (README decisions 22, 90)', async () => {
+    if (screen.name === 'desktop') await step('the header has two rows: the title; the where pill (logo, server › project), notify and the colour circle at the end; model · effort and the subscription sit in the strip over the message box, Files on the rail (README decisions 22, 90, 117)', async () => {
       const head = page.locator('.chat-head');
       await head.locator('.head-row.r2 .head-pill').first().waitFor({ timeout: waitMs });
-      if (await head.locator('select, .proj-btn, .r1 .icon, .r3 .icon').count()) throw new Error('a select, the old project button or a round button is still there');
-      for (const name of ['Server', 'Notify', 'Colour']) {
-        if (!(await head.locator(`.r2 .head-pill[aria-label="${name}"]`).count())) throw new Error(`no ${name} pill in row 2`);
-      }
-      const acts = await head.locator('.head-acts > *').evaluateAll((els) => els.map((e) => `${e.className} ${e.textContent}`));
-      if (!/head-btn/.test(acts[0] ?? '') || !/Files/.test(acts[0] ?? '')) throw new Error(`the first button is ${acts[0]}`);
-      await head.locator('.head-pill[aria-label="Model · effort"]').click({ timeout: waitMs });
-      await head.locator('.head-pop.model-pop').getByText('Model', { exact: true }).waitFor({ timeout: waitMs });
+      if (await head.locator('select, .proj-btn, .r3, .head-acts, .r1 .icon').count()) throw new Error('a select, the old project button, row 3 or its buttons are still there');
+      if (!(await head.locator('.r2 .head-pill.project-pill[aria-label^="Where: "] .where-face').count())) throw new Error('no where pill with its face first in row 2');
+      if (!(await head.locator('.r2 .head-pill[aria-label="Notify"]').count())) throw new Error('no Notify pill in row 2');
+      if (!(await head.locator('.r2 .head-end .head-pill.colour-pill[aria-label^="Colour: "] .colour-dot').count())) throw new Error('no colour circle at the end of row 2');
+      if (await head.locator('.head-pill[aria-label="Model · effort"], .plan-pill').count()) throw new Error('model · effort or the subscription is still in the header');
+      if (!(await page.locator('.thumb-edge .edge-step', { hasText: 'Files' }).count())) throw new Error('no Files slot on the rail');
+      const strip = page.locator('.composer .chat-strip');
+      await strip.locator('.head-pill[aria-label="Model · effort"]').click({ timeout: waitMs });
+      await strip.locator('.head-pop.model-pop').getByText('Model', { exact: true }).waitFor({ timeout: waitMs });
       await page.keyboard.press('Escape');
-      await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
+      await strip.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
     });
     if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and closes the File Browser\'s sheet (README decisions 61 to 65, 70, 90, 91)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
       const pill = page.locator('.chat-head .project-pill');
       await pill.locator('.pill-empty', { hasText: 'Pick a project' }).waitFor({ timeout: waitMs });
-      if (!(await page.locator('.chat-head .head-pill[aria-label="Server"] .pill-val').innerText()).trim()) throw new Error('the server pill names no server (README decision 90)');
+      if (!(await page.locator('.chat-head .project-pill .where-server').innerText()).trim()) throw new Error('the where pill names no server (README decisions 90, 117)');
       const box = page.getByPlaceholder('Message Claude…');
       await box.fill('Start here please');
       await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });
@@ -134,6 +135,26 @@ async function visit(browser, hubUrl, screen) {
       await page.getByText(question).first().waitFor({ timeout: waitMs });
       await page.getByText(reply).first().waitFor({ timeout: waitMs });
     });
+    if (engine === 'chromium' && screen.name === 'desktop') {
+      await step('a wheel past the end stretches the messages and they spring back (README decision 118)', async () => {
+        const col = page.locator('.messages');
+        await col.hover();
+        const seenBand = col.evaluate((el) => new Promise((done) => {
+          el.scrollTop = el.scrollHeight;
+          const marks = [];
+          const mo = new MutationObserver(() => {
+            marks.push(el.classList.contains('stretch'));
+            if (marks.includes(true) && !el.classList.contains('stretch')) { mo.disconnect(); done(marks); }
+          });
+          mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+          setTimeout(() => { mo.disconnect(); done(marks); }, 3000);
+        }));
+        await page.mouse.wheel(0, 300);
+        const marks = await seenBand;
+        if (!marks.includes(true)) throw new Error('the messages never stretched');
+        if (marks[marks.length - 1]) throw new Error('the messages did not spring back');
+      });
+    }
     await step('the page tells the hub it works (README decision 35)', () => until('POST /hub/health {ok: true}',
       () => seen.health.length > 0).then(() => {
         if (seen.health.length !== 1 || seen.health[0].ok !== true) throw new Error(`it said ${JSON.stringify(seen.health)}`);

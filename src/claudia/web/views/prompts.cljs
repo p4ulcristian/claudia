@@ -1,11 +1,13 @@
 (ns claudia.web.views.prompts
-  "Prompt profiles (README decision 60): the popup of the prompt pill in the chat's header (beside
-  model · effort) and the Prompts view of the right half (README decision 75), where a server's profiles are added, edited and deleted. A profile's text
-  goes after Claudia's part of the system prompt of every chat that picks it."
+  "Prompt profiles (README decisions 60, 117): the Profiles sheet of the right half (decision 75,
+  opened from the rail), where the open chat picks its profile and a server's profiles are added,
+  edited and deleted. A profile's text goes after Claudia's part of the system prompt of every chat
+  that picks it."
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
             [reagent.hooks :as h]
-            [claudia.web.api :as api]))
+            [claudia.web.api :as api]
+            [claudia.web.views.chat-context :as chat-context]))
 
 ;; ---- the server's profiles ----
 
@@ -16,12 +18,6 @@
        (assoc-in [:prompts-built-in server] (:builtIn answer)))))
 (rf/reg-sub :prompts/list (fn [db [_ server]] (get-in db [:prompts server])))
 (rf/reg-sub :prompts/built-in (fn [db [_ server]] (get-in db [:prompts-built-in server])))
-(rf/reg-event-fx
- :prompts/open
- ;; The Prompts view of the right half for server's profiles (README decision 75).
- (fn [{:keys [db]} [_ server]]
-   {:db (assoc db :prompts-open server) :fx [[:dispatch [:right/view :prompts]]]}))
-(rf/reg-sub :prompts/open (fn [db] (:prompts-open db)))
 
 (defn- took! [server p]
   (.then p #(rf/dispatch [:prompts/list server %])))
@@ -35,7 +31,7 @@
 
 (defn- delete! [server n] (.catch (took! server (api/call-json "DELETE" (profile-url server n) nil)) (fn [_])))
 
-;; ---- the header pill's popup ----
+;; ---- the open chat's pick ----
 
 (defn picked-name
   "The chat's pick when it is one of profiles (else nil: none, deleted, or still loading)."
@@ -63,7 +59,7 @@
   [:button.prompt-opt {:type "button" :class (when sel? "sel") :on-click on-pick}
    [:span.dot] [:span [:span.nm label] (when (seq line) [:small line])]])
 
-(defn- popup-body [server picked profiles choose!]
+(defn- pick-body [server picked profiles choose!]
   [:<>
    [:div.prompt-sec "Always on"]
    [:f> built-in-card @(rf/subscribe [:prompts/built-in server])]
@@ -72,26 +68,20 @@
    [profile-option "None" "only the built-in prompt" (nil? picked) #(choose! nil)]
    (for [p profiles]
      ^{:key (:name p)}
-     [profile-option (:name p) (first-line (:text p)) (= picked (:name p)) #(choose! (:name p))])
-   [:button.prompt-edit {:type "button" :on-click #(do (choose! :edit) (rf/dispatch [:prompts/open server]))}
-    "Edit profiles…"]])
+     [profile-option (:name p) (first-line (:text p)) (= picked (:name p)) #(choose! (:name p))])])
 
-(defn use-profiles
-  "Loads server's profiles once the header shows it; the chat's picked profile's name (nil: none)."
-  [server settings]
-  (h/use-effect (fn [] (load! server) nil) [server])
-  (picked-name (:prompt settings) @(rf/subscribe [:prompts/list server])))
+(defn- chat-pick
+  "The open chat's (or the new chat's) profile, when it runs on server and may be changed: the
+  locked built-in part and the profiles to pick from; a pick applies at once (a live chat takes it
+  after its turn)."
+  [server profiles]
+  (let [{:keys [settings put! ro] :as hc} (chat-context/context @(rf/subscribe [:open-chat]) @(rf/subscribe [:read-only?]))]
+    (when (and (= server (:server hc)) (not ro))
+      [:section.prompt-chat {:role "group" :aria-label "This chat's profile"}
+       [:h3 "This chat's profile"]
+       [pick-body server (picked-name (:prompt settings) profiles) profiles #(put! {:prompt %})]])))
 
-(defn pick-pop
-  "The header's prompt pill's popup: the locked built-in part, the profiles to choose from, Edit
-  profiles…. A pick closes it; a live chat takes it after its turn."
-  [server settings put! close!]
-  (let [profiles @(rf/subscribe [:prompts/list server])
-        choose! (fn [v] (close!) (when-not (keyword? v) (put! {:prompt v})))]
-    [:div.head-pop.prompt-pop {:role "dialog" :aria-label "Prompt"}
-     [popup-body server (picked-name (:prompt settings) profiles) profiles choose!]]))
-
-;; ---- the Prompts view ----
+;; ---- the Profiles sheet ----
 
 (defn- profile-entry
   "One profile: its name, its text to edit, Save (when changed) and Delete."
@@ -121,20 +111,20 @@
      [:button {:type "submit" :disabled (or (str/blank? n) taken?)} "Add"]]))
 
 (defn- window
-  "The server's prompt profiles to add, edit and delete."
+  "The open chat's pick, then the server's prompt profiles to add, edit and delete."
   [server]
   (let [profiles @(rf/subscribe [:prompts/list server])]
     (h/use-effect (fn [] (load! server) nil) [server])
-    [:div.gallery.prompts.rv-pane {:role "region" :aria-label "Prompts"}
+    [:div.gallery.prompts.rv-pane {:role "region" :aria-label "Profiles"}
+     [chat-pick server profiles]
      [:header
-      [:p.muted (str "Profiles a chat can pick in its header, on " @(rf/subscribe [:server-label server])
-                     ". The text goes after Claudia's own instructions; a chat on a profile takes a change after its turn.")]]
+      [:h3 (str "Profiles on " @(rf/subscribe [:server-label server]))]
+      [:p.muted "The text goes after Claudia's own instructions; a chat on a profile takes a change after its turn."]]
      [:f> new-profile server profiles]
      (for [p profiles] ^{:key (:name p)} [:f> profile-entry server p])]))
 
 (defn pane
-  "Prompts in the right half: the profiles of the server last opened from a prompt pill, else the
-  open chat's server, else the new chat's."
+  "Profiles in the right half: the open chat's server's, else the new chat's."
   []
-  (when-let [server (or @(rf/subscribe [:prompts/open]) (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
+  (when-let [server (or (:server @(rf/subscribe [:open-chat])) @(rf/subscribe [:new-server]))]
     ^{:key server} [:f> window server]))
