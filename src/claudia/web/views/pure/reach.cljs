@@ -1,11 +1,12 @@
 (ns claudia.web.views.pure.reach
-  "Where touches land (README decision 40), as data: which screens get the thumb places, and how far
-  the rail scrolls to put the open chat in its middle.")
+  "Where touches land (README decisions 40, 105), as data: which screens get the edge column, and
+  how far the rail scrolls to put the open chat in its middle.")
 
-(def touch-tablet
-  "A screen wider than a phone where touch is the main input (an iPad, with or without a trackpad):
-  the left edge holds the chats, the right edge the mic and the picture's steps."
-  "(pointer: coarse) and (min-width: 680px)")
+(def phone
+  "A phone-wide screen: three full screens (list, chat, picture), the mic over the text row. Every
+  wider screen, touch or mouse, has one layout: the chats' rail on the left edge, the edge column
+  on the right (claudia.web.views.thumb-edge); only sizes follow the pointer (reach.css)."
+  "(max-width: 679px)")
 
 (defn centre-offset
   "How far (px, down is positive) a scroller must scroll so an item sits in its middle: the item's

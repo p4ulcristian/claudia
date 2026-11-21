@@ -1,9 +1,9 @@
 (ns claudia.web.views.shell
-  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Desktop and iPad: the rail of
-  chat circles (the only chat list there, README decision 24) | the chat column | a 6 px divider |
-  the picture; Settings and the archived chats take the chat column, full height, with a Back to
-  the chat. Phone (under 680 px): three full screens, list -> chat -> picture, one shown at a time;
-  Settings slides over the list."
+  "The layout, as the TypeScript Claudia laid it out (web/app.tsx). Wider than a phone, touch or
+  mouse alike (README decision 105): the rail of chat circles (the only chat list there, README
+  decision 24) | the chat column | a 6 px divider | the right half | the edge column
+  (claudia.web.views.thumb-edge); the archived chats take the chat column. Phone (under 680 px):
+  three full screens, list -> chat -> picture, one shown at a time."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
@@ -132,7 +132,7 @@
    [confirm/root-ask]
    [confirm/move-ask]
    (when-not world? (chats-view m))
-   (when (and (:edge? m) (not world?)) [thumb-edge/edge])
+   (when-not (or phone? world?) [thumb-edge/edge])
    (layers {:ro ro :draft-key draft-key})
    [admin/dialog]
    [:f> world/overlay]
@@ -148,15 +148,14 @@
         mode @(rf/subscribe [:list-mode])
         folded? (:folded? @(rf/subscribe [:fold-state]))
         world? @(rf/subscribe [:world?])
-        phone? (hooks/use-media "(max-width: 679px)")
+        phone? (hooks/use-media reach/phone)
         narrow? (hooks/use-media "(max-width: 1099px)")
-        edge? (hooks/use-media reach/touch-tablet)
         [chat-w set-chat-w] (h/use-state stored-width)
         ;; Phone: the list shows unless a chat (or its picture) does. Wider: never (the rail is the list).
         shown? (and phone? (= screen :list))]
     (chat-colour! color claudia?)
     (keys!)
-    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world? :edge? edge?
+    (app-view {:screen screen :ro ro :phone? phone? :narrow? narrow? :folded? folded? :world? world?
                :claudia? claudia?
                :chat-w chat-w :set-chat-w set-chat-w :pane (pure/column-pane phone? mode)
                :shown? shown?

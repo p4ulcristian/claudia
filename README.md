@@ -543,7 +543,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 40. Buttons where touches land (2026-11-16, #197): on screens where
     touch is the main input (`pointer: coarse`: phones and iPads, with or without a trackpad), the
-    most used buttons sit where people tap best; a desktop with a mouse keeps its layout. Source:
+    most used buttons sit where people tap best (since decision 105 a desktop has the iPad's layout
+    too, its buttons mouse-sized). Source:
     Steven Hoober's measurements (millions of touches on phones and tablets): misses are about 7 mm
     in the middle of a screen, 9 mm along the edges and 12 mm in the corners, and people move what
     they want to the middle to tap it; a big tablet held up is held at its sides partway up, so the
@@ -1818,6 +1819,22 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
+
+105. One layout on every screen wider than a phone, touch or mouse (2026-11-21, the user's call:
+    "desktop would get the tablet view, because it's almost the same"). The two wide layouts
+    differed only in the edge column on the right wall (decisions 73, 92), the floating mic
+    (decision 94) and the chats' rail centred at middle height (decision 40); now a desktop has
+    all three too: the rail's Search and New chat and its foot (the update pill, your profile
+    circle, the version) move to the edge column, the composer's mic floats beside it, and System,
+    Prompts, Settings, Stop, Archive and ‹ › are one click away. Only sizes follow the pointer
+    (`reach.css`): a finger gets 12 mm buttons (64 px on an 88 px column, chat rows 64 px tall), a
+    mouse 48 px buttons on a 64 px column, solid under the pointer. A phone (under 680 px) keeps its
+    three screens. Instead of: two wide layouts (two sets of places to learn, two to build and
+    test; System, Prompts and Stop only through the menu or keys on a desktop), or the tablet's
+    sizes on a desktop too (88 px of the right half for buttons a mouse does not need that big).
+    Files: `src/claudia/web/views/pure/reach.cljs`, `src/claudia/web/views/shell.cljs`,
+    `src/claudia/web/views/rail.cljs`, `src/claudia/web/views/chat.cljs`,
+    `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

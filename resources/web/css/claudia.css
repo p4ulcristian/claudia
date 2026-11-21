@@ -574,7 +574,6 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--green) 60%, transparent)); }
 @keyframes rail-check-in { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .rail-check path { animation: none; stroke-dashoffset: 0; } }
-.rail-acts { flex: none; display: flex; justify-content: center; gap: 2px; }
 .rail .lt-dim { border: 0; border-radius: 0; overflow: visible; gap: 6px; }
 .rail .lt-dim button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid var(--line); font: 700 10px/1 var(--hand); color: var(--muted); }

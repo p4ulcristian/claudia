@@ -1,8 +1,9 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
-  the working line) and the composer (the mic, Attach, the message and one Send). On a touch tablet
-  the mic sits on the screen's right edge instead (claudia.web.views.thumb-edge, README decision 40)."
+  the working line) and the composer (Attach, the message and one Send; on a phone the mic too).
+  Wider than a phone the mic floats beside the edge column instead (claudia.web.views.thumb-edge,
+  README decisions 94, 105)."
   (:require [claudia.web.views.asks :as asks]
             [claudia.web.db :as db]
             [clojure.string :as str]
@@ -398,7 +399,7 @@
         send-text! (send-fn draft-key oc attached)
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
                      :send! #(send-text! text))
-        edge-mic? (hooks/use-media reach/touch-tablet)]
+        phone? (hooks/use-media reach/phone)]
     (use-grow! ref text)
     ;; The box is ready to type in on each chat, except on a touch screen, where focus brings up
     ;; the keyboard over the chat.
@@ -409,7 +410,7 @@
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      (when-not edge-mic? [:f> mic/button draft-key])
+      (when phone? [:f> mic/button draft-key])
       [:div.input-row
        (attach-button parts)
        (message-box parts)

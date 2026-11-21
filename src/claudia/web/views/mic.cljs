@@ -8,7 +8,7 @@
   in a list over the composer with its own hearing clock, and the words go out in the order they
   were spoken. The button can be held again meanwhile. A tap only says to hold it. Shown only
   where the browser can record and the hub has a listen service.
-  On a touch tablet (README decision 94) the mic floats over the page, out of the rail: bottom
+  Wider than a phone (README decisions 94, 105) the mic floats over the page, out of the rail: bottom
   right beside the rail until dragged, its spot kept on this device; a ring round the petals says
   move, and the finger reaching it (pure/in-ring?) at any time while holding keeps the recording
   going while the mic follows the finger on a spring (motion's useSpring: it trails and overshoots
