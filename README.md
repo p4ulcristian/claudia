@@ -546,7 +546,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
-    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (since 2026-11-19 one column on a rail on the right wall, decision 73; before, 2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
+    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (since 2026-11-21 four slots over the mic and four under it on the rail on the right wall, none coming or going, decision 90; since 2026-11-19 one column on that rail, decision 73; before, 2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
       circles (no + since 2026-11-17: a new chat starts from the edge's New chat or Alt+N) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
@@ -1051,7 +1051,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     circle ... would move the circle towards my finger"; "drag should drop the recording"; "kept
     per device"; "on mobile it stays the same"). On a touch tablet a rail 88 px wide stands on the
     right wall with the page beside it, never under it: one column, the mic in its middle at
-    mid-height; over it search, My words, archive, Stop; under it New chat, then ‹ and › (since
+    mid-height; over it Search, Machines, Prompts, My words; under it Stop, New chat, ‹, › (since
+    2026-11-21, decision 90: four slots each side, none coming or going; before: over it search,
+    My words, archive, Stop, each shown only when it could act; under it New chat, then ‹ and ›,
     2026-11-19 later: "below the mic should be the plus, the left and right below them"); at its
     bottom the foot the chats' rail had on the left, the update pill, your profile circle (its menu
     opening to the left holds Settings, so the rail has no cog) and the version's line ("so the
@@ -1070,7 +1072,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     finger rests (pure/settle-ms, 350 ms, within 8 px) the mic is put down under it and the hold
     chooses again from there: a petal, letting go in place sends, the ring moves on. Let go while
     still moving, the clip is heard and sent as when let go in place, and the mic glides there and
-    stays, its slot in the rail a dashed ring. It may
+    stays, its slot in the rail a dashed ring (since 2026-11-21 a "↺ mic back" button, decision
+    90). It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
     let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the
@@ -1579,6 +1582,29 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/events.cljs`,
     `src/claudia/web/views/head.cljs`, `src/claudia/web/views/chatmenu.cljs`,
     `src/claudia/slave/chats.cljs`, `resources/web/css/claudia.css`.
+90. The mic rail: four slots over the mic, four under it, and none comes or goes (2026-11-21, the
+    user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
+    least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
+    Search, Machines, Prompts, My words, then the mic, then Stop, New chat, ‹ (Previous picture),
+    › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
+    under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
+    at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
+    the foot loses its room. A button never appears or disappears, so nothing shifts and the mic
+    never moves: one that cannot act now stays, passive (greyed, disabled): Stop while the open chat
+    has no running turn (filled red while one runs), ‹ › with no earlier or later picture or the
+    picture folded, My words without the hub's listen service or the composer, New chat where no
+    new chat can be written (`claudia.web.views.pure.edge/slot-states`). The mic's circle keeps its
+    size when the mic cannot work there. Machines, Prompts and My words open their view of the right
+    half (`[:right/view …]`; My words no longer toggles back to the Drawing board). Archive left the
+    rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
+    elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
+    (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
+    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
+    shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
+    ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
+    Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
+    `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

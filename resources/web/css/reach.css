@@ -25,42 +25,56 @@
   .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
   .rail-chat { min-height: 64px; justify-content: center; }
 
-  /* The mic rail (README decision 73): a column on the right wall, the page beside it, the mic in
-     its middle at mid-height; what is over the mic ends at it, what is under starts at it. */
-  :root { --mic-rail-w: 88px; --edge-gap: min(12px, 1.4vh); }
+
+  /* The mic rail (README decisions 73, 90): a column on the right wall, the page beside it, the mic
+     exactly at its middle height (the same padding over and under), four slots of one size over it
+     ending at it and four under it starting at it; the gaps shrink on short screens so the foot
+     keeps its room (half the rail: padding, half the mic, four slots of 64 px, the foot's ~64 px). */
+  :root { --mic-rail-w: 88px; --edge-pad: max(calc(var(--edge-t) + env(safe-area-inset-top)), var(--edge-b));
+    --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 256px - 64px) / 5), 12px); }
   .app { padding-right: calc(var(--mic-rail-w) + env(safe-area-inset-right)); }
   .thumb-edge { position: fixed; z-index: 35; top: 0; bottom: 0; right: 0; box-sizing: border-box;
-    width: calc(var(--mic-rail-w) + env(safe-area-inset-right)); padding: calc(var(--edge-t) + env(safe-area-inset-top)) env(safe-area-inset-right) var(--edge-b) 0;
+    width: calc(var(--mic-rail-w) + env(safe-area-inset-right)); padding: var(--edge-pad) env(safe-area-inset-right) var(--edge-pad) 0;
     display: flex; flex-direction: column; align-items: center; gap: var(--edge-gap);
     background: var(--bg2); box-shadow: inset 1.5px 0 0 var(--line); }
   .edge-over, .edge-under { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: var(--edge-gap); }
   .edge-over { justify-content: flex-end; }
   .edge-under { justify-content: flex-start; }
-  /* The foot (the update pill, your profile circle, the version) at the rail's bottom: the mic stays
-     in the middle. */
+  /* The foot (the update pill, your profile circle, the version) at the rail's bottom, inside the
+     lower half: the halves stay equal, so the mic stays in the middle. */
   .edge-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
   .edge-foot .mn-gear { margin: 4px auto; }
   .thumb-edge .up-panel { left: auto; right: calc(var(--mic-rail-w) + 8px + env(safe-area-inset-right)); }
+  /* The mic's circle: one slot's size whether the mic shows, cannot work here or has moved out. */
+  .edge-mic { width: 64px; height: 64px; flex: none; display: grid; place-items: center; }
   .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
   .thumb-edge .mic-button svg { width: 30px; height: 30px; }
   .edge-gap { width: 64px; height: 64px; flex: none; }
   /* Dragged out of the rail, the mic sits where it was let go (its centre there) and its slot
-     stays as a dashed ring (its spring: claudia.web.views.mic). */
-  .mic-slot { box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--line); }
+     stays as a dashed ring saying "↺ mic back", a press bringing it home (claudia.web.views.mic). */
+  .mic-slot { box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--line); padding: 0; background: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--muted); }
+  .mic-back-mark { font-size: 20px; line-height: 1; }
   .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
   .thumb-edge .mic.moved .mic-clips, .thumb-edge .mic.moved .mic-hint { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
-  .edge-icon { font-size: 0; }
-  .edge-icon svg { width: 28px; height: 28px; }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
-  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button, .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
-  .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
+  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button, .thumb-edge .edge-step:not(:disabled), .thumb-edge .mic-slot { opacity: 0.7; transition: opacity 0.15s; }
+  .thumb-edge .edge-step:active:not(:disabled), .thumb-edge .mic-slot:active { opacity: 1; }
   .thumb-edge .mic-clips { align-items: flex-end; }
   .thumb-edge .mic.moved .mic-clips { align-items: center; }
   .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 12px); bottom: auto; top: 50%; transform: translateY(-50%); }
   .thumb-edge .mic.moved .mic-speaker { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
 
-  .edge-step { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; line-height: 1; color: var(--fg);
+  /* A slot: its icon with its name under it. Passive (it cannot act now) it stays, greyed; Stop is
+     filled red while a turn runs. */
+  .edge-step { box-sizing: border-box; width: 64px; height: 64px; flex: none; padding: 0; border-radius: 50%; color: var(--fg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     background: color-mix(in srgb, var(--bg2) 88%, transparent); box-shadow: inset 0 0 0 1.5px var(--line), 0 6px 18px rgb(0 0 0 / 0.3); }
+  .edge-step svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .edge-name { font: 600 10px/1.1 var(--sans); white-space: nowrap; }
   .edge-step:active:not(:disabled) { background: var(--panel); }
-  .edge-step:disabled { opacity: 0.3; }
+  .edge-step:disabled { opacity: 0.3; color: var(--muted); }
+  .edge-step.red { background: var(--red); color: var(--bg); box-shadow: inset 0 0 0 1.5px var(--red), 0 6px 18px rgb(0 0 0 / 0.3); }
+  .edge-step.red svg { fill: currentColor; }
+  .edge-step.red:active { background: var(--red); }
 }
