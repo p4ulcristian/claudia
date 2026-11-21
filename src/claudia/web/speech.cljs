@@ -4,7 +4,7 @@
   voice service. Holding the mic drops the reply being read and holds the rest until it is let go;
   a chat turned Off leaves the line; the page going to the background drops it all, so nothing is
   said late. The reply being read is in app-db as :speaking (the mic shows it), with :loading until
-  its sound is ready and plays."
+  its first sound plays (the sound plays as it comes, a sentence at a time)."
   (:require [claudia.shared.voices :as voices]
             [claudia.web.sound :as sound]
             [claudia.web.views.pure.talk :as talk]
@@ -13,7 +13,12 @@
             [re-frame.db :as rdb]))
 
 (defonce ^:private line (atom talk/empty-line))
-(defonce ^:private audio (atom {:ctx nil :source nil :analyser nil}))
+(def ^:private quiet
+  "No reply sounding: no pieces scheduled (:sources), none to come (:stream, the fetch's
+  AbortController), :until the end of the last piece on the context's clock, :fed once the whole
+  sound has come."
+  {:sources [] :until nil :stream nil :fed false})
+(defonce ^:private audio (atom (assoc quiet :ctx nil :analyser nil)))
 
 (defn- visible? [] (= "visible" (.-visibilityState js/document)))
 
@@ -27,11 +32,15 @@
   (let [^js c (context!)]
     (when (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)))))
 
-(defn- silence! []
-  (when-let [^js src (:source @audio)]
-    (set! (.-onended src) nil)
-    (try (.stop src) (catch :default _ nil)))
-  (swap! audio assoc :source nil))
+(defn- silence!
+  "The reply sounding now stops: its fetch is cancelled and every piece scheduled is stopped."
+  []
+  (let [{:keys [sources ^js stream]} @audio]
+    (some-> stream .abort)
+    (doseq [^js src sources]
+      (set! (.-onended src) nil)
+      (try (.stop src) (catch :default _ nil))))
+  (swap! audio merge quiet))
 
 (defn- analyser!
   "The node every reply plays through on its way out, so its spectrum can be drawn (the rail's bars)."
@@ -45,8 +54,8 @@
 (defn spectrum
   "The reply being read now as {:spectrum (256 bytes 0-255, low to high) :rate}, nil when none plays."
   []
-  (let [{:keys [^js source ^js analyser ^js ctx]} @audio]
-    (when (and source analyser)
+  (let [{:keys [sources ^js analyser ^js ctx]} @audio]
+    (when (and (seq sources) analyser)
       (let [a (js/Uint8Array. (.-frequencyBinCount analyser))]
         (.getByteFrequencyData analyser a)
         {:spectrum (vec (array-seq a)) :rate (.-sampleRate ctx)}))))
@@ -67,24 +76,53 @@
     (shown! nil)
     (pump!)))
 
-(defn- play! [item ^js buf]
+(defn- streaming? "Whether ctrl is the fetch of the reply sounding now." [ctrl] (identical? ctrl (:stream @audio)))
+
+(defn- piece-ended!
+  "A piece of item's sound ended: the reply is over once it has all come and none is left."
+  [item ^js src]
+  (let [{:keys [sources fed]} (swap! audio update :sources (fn [ss] (filterv #(not (identical? % src)) ss)))]
+    (when (and fed (empty? sources)) (finished! (:id item)))))
+
+(defn- scheduled!
+  "buf plays right where the piece before it ends (at once when none is left), so the pieces join
+  without a gap; the first one starts the reply."
+  [item ^js buf]
   (let [^js c (context!)
-        ^js src (.createBufferSource c)]
-    (set! (.-buffer src) (voice/audio-buffer c buf))
+        ^js src (.createBufferSource c)
+        {:keys [until]} @audio
+        at (max (.-currentTime c) (or until 0))]
+    (set! (.-buffer src) buf)
     (.connect src (analyser!))
-    (set! (.-onended src) #(finished! (:id item)))
-    (sound/claim! ::reply stop!)
-    (.start src)
-    (swap! audio assoc :source src)
-    (shown! item)))
+    (set! (.-onended src) #(piece-ended! item src))
+    (when-not until (sound/claim! ::reply stop!) (shown! item))
+    (.start src at)
+    (swap! audio #(-> % (update :sources conj src) (assoc :until (+ at (.-duration buf)))))))
+
+(defn- piece!
+  "A piece of item's sound arrived (whole samples): it is scheduled while its fetch is still the one
+  sounding and the page is in front."
+  [item ctrl ^js pcm]
+  (when (streaming? ctrl)
+    (if (visible?) (scheduled! item (voice/audio-buffer (context!) pcm)) (stop!))))
+
+(defn- streamed!
+  "item's sound has all come (or broke off: what came still plays): the reply is over once its
+  pieces have played."
+  [item ctrl]
+  (when (streaming? ctrl)
+    (when (empty? (:sources (swap! audio assoc :fed true))) (finished! (:id item)))))
 
 (defn- read!
-  "Reads item; its colour name is said only when its chat is not the one open now."
-  [{:keys [id voice text] :as item}]
-  (-> (voice/fetch-pcm (talk/spoken item (:open @rdb/app-db))
-                       (:description (voices/by-id voice)) (talk/language-of text))
-      (.then #(if (and (= id (:id (:current @line))) (visible?)) (play! item %) (finished! id)))
-      (.catch (fn [e] (js/console.warn "voice:" (.-message e)) (finished! id)))))
+  "Reads item, playing its sound as it comes; its colour name is said only when its chat is not the
+  one open now."
+  [{:keys [voice text] :as item}]
+  (let [ctrl (js/AbortController.)]
+    (swap! audio merge quiet {:stream ctrl})
+    (-> (voice/stream-pcm (talk/spoken item (:open @rdb/app-db)) (:description (voices/by-id voice))
+                          (talk/language-of text) (.-signal ctrl) #(piece! item ctrl %))
+        (.catch (fn [e] (when (streaming? ctrl) (js/console.warn "voice:" (.-message e)))))
+        (.then #(streamed! item ctrl)))))
 
 (defn- pump!
   "Starts the next reply when none is being read and the mic is not held."

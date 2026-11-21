@@ -14,8 +14,13 @@
   language. For a language with no reference sentence here, the lines are spoken by the service's
   default voice in that language instead (a native accent beats the described voice).
 
+  The service sends a clip a sentence at a time, and a clip being made goes on to the page the same
+  way, so its first sentence is heard while the rest is made; it is kept on disk only once whole.
+
   GET /hub/narrate -> {voice: bool}; POST /hub/narrate {text, instruction?, language?} -> the PCM
-  (audio/L16;rate=24000;channels=1, x-seconds), or {error} (501 without a voice)."
+  (audio/L16;rate=24000;channels=1; x-seconds only for a clip already whole, kept or made for
+  another caller; a clip being made comes chunked, without a length), or {error} (501 without a
+  voice; a clip failing after its first sound breaks the connection off)."
   (:require [claudia.node.audio :as audio]
             [claudia.node.crypto :refer [sha256-hex]]
             [claudia.node.http :as io]
@@ -59,17 +64,40 @@
 
 (defn- config "A promise of {:url :token} or nil." [] (env/service "HUB_TTS"))
 
-(defn- speak [{:keys [url token]} ^js form]
-  (-> (js/fetch (str url "/v1/audio/speech")
-                #js {:method "POST" :headers #js {:authorization (str "Bearer " token)} :body form
-                     :signal (js/AbortSignal.timeout 120000)})
-      (.then (fn [^js r]
-               (when-not (.-ok r) (throw (js/Error. (str "the voice answered " (.-status r)))))
-               (.arrayBuffer r)))
-      (.then (fn [b]
-               (let [pcm (js/Buffer.from b)]
-                 (when (< (.-length pcm) 2) (throw (js/Error. "the voice answered with no sound")))
-                 pcm)))))
+(defn read-all
+  "Reads a web ReadableStream reader to its end, handing each chunk (a Buffer) to sink as it comes
+  -> Promise of all of them joined. Rejects when the stream breaks off, so a cut answer is never
+  taken for a whole one."
+  [^js reader sink]
+  (letfn [(step [chunks]
+            (.then (.read reader)
+                   (fn [^js r]
+                     (if (.-done r)
+                       (js/Buffer.concat (into-array chunks))
+                       (let [^js v (.-value r)
+                             b (js/Buffer.from (.-buffer v) (.-byteOffset v) (.-byteLength v))]
+                         (sink b)
+                         (step (conj chunks b)))))))]
+    (step [])))
+
+(defn whole-pcm
+  "The PCM a finished answer brought, or an error when it brought no sound."
+  [^js pcm]
+  (when (< (.-length pcm) 2) (throw (js/Error. "the voice answered with no sound")))
+  pcm)
+
+(defn- speak
+  "Asks the voice for form's speech -> Promise of its PCM, once the answer is complete. The service
+  sends it a sentence at a time: sink (nil: none) gets each chunk as it arrives."
+  ([c form] (speak c form nil))
+  ([{:keys [url token]} ^js form sink]
+   (-> (js/fetch (str url "/v1/audio/speech")
+                 #js {:method "POST" :headers #js {:authorization (str "Bearer " token)} :body form
+                      :signal (js/AbortSignal.timeout 120000)})
+       (.then (fn [^js r]
+                (when-not (.-ok r) (throw (js/Error. (str "the voice answered " (.-status r)))))
+                (read-all (.getReader (.-body r)) (or sink (fn [_])))))
+       (.then whole-pcm))))
 
 (defn- form-of
   "Form fields for the speech route, as [name value] or [name value file-name], with the language
@@ -123,26 +151,30 @@
            language))
 
 (defn- made
-  "Makes the clip in line after the ones before it -> Promise of the PCM, written to file."
-  [c said voice language file]
+  "Makes the clip in line after the ones before it, handing sink (nil: none) its chunks as they
+  come -> Promise of the PCM. Only a complete answer is written to file: a failed or cut one
+  rejects before the write, so no part of a clip is ever kept."
+  [c said voice language file sink]
   (let [p (.then @line
                  (fn [_]
                    (-> (if (seq voice) (reference c voice language) (js/Promise.resolve nil))
-                       (.then #(speak c (clone-form said % language)))
+                       (.then #(speak c (clone-form said % language) sink))
                        (.then #(saved file %)))))]
     (reset! line (.catch p (fn [_] nil)))
     p))
 
-(defn- narrate
+(defn clip
   "A promise of the PCM for text in language (nil: none asked), in the default voice or a clone of
-  the described one."
-  [c said instruction language]
+  the described one: from disk when kept, else made (sink, nil for none, gets its chunks as they
+  come). A caller asking while the same clip is being made waits for it whole, and sink gets
+  nothing."
+  [c said instruction language sink]
   (let [voice (spoken-voice (voice-of instruction) language)
         k (clip-key voice language (:url c) said)
         file (path/join @cache-dir (str k ".pcm"))]
     (or (get @pending k)
         (let [p (-> (fsp/readFile file)
-                    (.catch (fn [_] (made c said voice language file)))
+                    (.catch (fn [_] (made c said voice language file sink)))
                     (.finally #(swap! pending dissoc k)))]
           (swap! pending assoc k p)
           p))))
@@ -152,11 +184,34 @@
   [body]
   (some-> (when (string? (:text body)) (str/trim (:text body))) (text/cut max-chars "")))
 
-(defn- answer-pcm [^js res ^js pcm]
-  (.writeHead res 200 #js {"content-type" "audio/L16;rate=24000;channels=1"
+(def ^:private pcm-type "audio/L16;rate=24000;channels=1")
+
+(defn- answer-pcm
+  "A whole clip (kept on disk, or made for another caller first): its length is known."
+  [^js res ^js pcm]
+  (.writeHead res 200 #js {"content-type" pcm-type
                            "x-seconds" (.toFixed (/ (.-length pcm) bytes-per-second) 3)
                            "cache-control" "private, max-age=86400"})
   (.end res pcm))
+
+(defn- piped
+  "A sink sending each chunk of a clip being made on to res as it comes (chunked, no length yet)."
+  [^js res]
+  (fn [^js part]
+    (when-not (.-headersSent res)
+      (.writeHead res 200 #js {"content-type" pcm-type "cache-control" "private, max-age=86400"}))
+    (when-not (.-destroyed res) (.write res part))))
+
+(defn- answered
+  "The clip is complete: a streamed answer ends, a whole one is sent."
+  [^js res ^js pcm]
+  (if (.-headersSent res) (.end res) (answer-pcm res pcm)))
+
+(defn- failed
+  "The clip failed: before any sound an error answer; mid-stream the connection breaks, so the page
+  sees a cut answer, never a clean end."
+  [^js res ^js e]
+  (if (.-headersSent res) (.destroy res) (io/send-json res 502 {:error (.-message e)})))
 
 (defn- say [res c body]
   (let [said (said-text body)
@@ -164,9 +219,9 @@
     (cond
       (str/blank? said) (io/send-json res 400 {:error "text to say"})
       (not c) (io/send-json res 501 {:error "no voice set up on this hub (HUB_TTS_URL, HUB_TTS_TOKEN_FILE)"})
-      :else (-> (narrate c said instruction (narration/language-of body))
-                (.then #(answer-pcm res %))
-                (.catch (fn [e] (io/send-json res 502 {:error (.-message e)})))))))
+      :else (-> (clip c said instruction (narration/language-of body) (piped res))
+                (.then #(answered res %))
+                (.catch #(failed res %))))))
 
 (defn call
   "GET or POST /hub/narrate for a signed-in caller."
@@ -193,6 +248,6 @@
          (fn [c]
            (when-not c (throw (js/Error. "no voice set up on this hub")))
            (reduce (fn [chain {:keys [text instruction language] :as said}]
-                     (.then chain (fn [out] (.then (narrate c text instruction language) #(conj out (assoc said :pcm %))))))
+                     (.then chain (fn [out] (.then (clip c text instruction language nil) #(conj out (assoc said :pcm %))))))
                    (js/Promise.resolve [])
                    lines))))

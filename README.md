@@ -284,7 +284,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     time (2026-11-21, the user's call): a reply read aloud, your voice played back (decision 20's
     Listen back) and a 3D story's narrator each claim the sound as they start, and the one playing
     before stops (a reply stopping that way drops the replies waiting after it, as the page going
-    to the background does; `src/claudia/web/sound.cljs`). Instead of: a separate speaker button by the mic (the mic already
+    to the background does; `src/claudia/web/sound.cljs`). A reply is heard from its first sentence
+    (2026-11-21): the voice service makes a clip a sentence at a time, the hub passes each piece on
+    as it comes (`/hub/narrate` answers chunked, and keeps the clip on disk only once it came
+    whole: a failed or cut one leaves no file) and the page plays each piece on the AudioContext
+    right where the one before ends, so they join without a gap; the reply is over when its last
+    piece ends, and a tap, hold, Off or the page going away cancels the fetch with the pieces. A clip
+    already kept comes whole. The 3D narrator still takes whole clips: a story times its steps by
+    each clip's length, known only once it is all there. Instead of: a separate speaker button by the mic (the mic already
     sits under the thumb, and the person talking must silence the tablet anyway), every device
     talking at once, cutting a reply off with the next. Files: `src/claudia/shared/voices.cljc`,
     `src/claudia/web/speech.cljs`, `src/claudia/web/here.cljs`, `src/claudia/web/views/talk.cljs`,
