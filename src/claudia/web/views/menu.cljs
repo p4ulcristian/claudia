@@ -4,9 +4,9 @@
   opening to the left, README decision 73; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
-  Settings, where the plans are), Machines, Archived chats, Forms, Prompts, My words, the Desktop
-  popups switch, More settings (Machines, Forms, Prompts, My words and Settings open in the right
-  half, README decisions 75 and 92), and the
+  Settings, where the plans are), Machines, Archived chats, Forms, Prompts, the Desktop popups
+  switch, More settings (Machines, Forms, Prompts and Settings open in the right half, README
+  decisions 75 and 92; your dictation words are in Settings, decision 95), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -33,17 +33,10 @@
 
 (defn- open-prompts! [] (rf/dispatch [:right/view :prompts]))
 
-(defn- open-words! [] (rf/dispatch [:right/view :words]))
 
 ;; ---- the parts ----
 
 (def ^:private chev [:svg.mn-chev {:viewBox "0 0 20 20" :aria-hidden true} [:path {:d "M7.5 4l6 6-6 6"}]])
-
-(def gear-icon
-  [:svg {:viewBox "0 0 20 20" :aria-hidden true}
-   [:circle {:cx 10 :cy 10 :r 2.6}]
-   [:path {:d "M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"}]
-   [:circle {:cx 10 :cy 10 :r 5.4}]])
 
 (defn- limit-bar
   "One limit: its line (\"Week 56% · resets in 52 h\") and a bar coloured by how much is used."
@@ -121,11 +114,10 @@
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
    (item icons/prompts-icon "Prompts" "profiles a chat can pick" (act open-prompts!))
-   (item icons/words-icon "My words" "names dictation should hear right" (act open-words!))
    [:div.mn-sep]
    [:div.mn-switches [alerts/popups-switch]]
    [:div.mn-sep]
-   (item gear-icon "More settings" "Claude subscriptions, GitHub" (act open-settings!))
+   (item icons/settings-icon "More settings" "Claude subscriptions, GitHub" (act open-settings!))
    [version-line]])
 
 (defn- menu-pop [{:keys [box close!]}]

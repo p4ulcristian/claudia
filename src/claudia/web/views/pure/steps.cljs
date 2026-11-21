@@ -40,13 +40,15 @@
 (defn blocks
   "The messages as the page shows them: runs of tool steps folded into one group, with Claude's
   texts whose id is in folded among them; a step that showed a picture or a video stands on its
-  own, what it showed after it."
+  own, what it showed after it; a word Claude offered (README decision 95) gets its card after its
+  step."
   ([msgs] (blocks msgs #{}))
   ([msgs folded]
    (reduce (fn [out m]
              (cond
                (and (= "tool" (:role m)) (or (:image m) (:video m)))
                (conj out {:k :steps :id (:id m) :tools [m]} {:k :shown :tool m})
+               (and (= "tool" (:role m)) (:word m)) (conj (in-group out m) {:k :word :tool m})
                (or (= "tool" (:role m)) (folded (:id m))) (in-group out m)
                :else (conj out {:k :msg :m m})))
            [] msgs)))

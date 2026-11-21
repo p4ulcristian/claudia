@@ -37,10 +37,10 @@
 
 (deftest toggling-and-closing-sheets
   (is (= {:db {:right-sheets [:files] :right-saving true :world? true} :right/put [:files]}
-         (right/toggle-view {:right-sheets [:files :words] :world? true} :words true)) "the top sheet closes: no world, no screen change")
-  (let [fx (right/toggle-view {:right-sheets [:words :files]} :words true)]
-    (is (= [:files :words] (:right-sheets (:db fx))) "one under the top comes up")
+         (right/toggle-view {:right-sheets [:files :prompts] :world? true} :prompts true)) "the top sheet closes: no world, no screen change")
+  (let [fx (right/toggle-view {:right-sheets [:prompts :files]} :prompts true)]
+    (is (= [:files :prompts] (:right-sheets (:db fx))) "one under the top comes up")
     (is (= :picture (:screen (:db fx))) "and brings a phone's right half up"))
-  (is (contains? (right/toggle-view {:right-sheets [:files :words]} :files false) :bookmarks/get) "Files brought up asks the bookmarks again")
+  (is (contains? (right/toggle-view {:right-sheets [:files :prompts]} :files false) :bookmarks/get) "Files brought up asks the bookmarks again")
   (is (= {:db {:right-sheets [:search] :right-saving true} :right/put [:search]}
          (right/close-view {:right-sheets [:files :search]} :files))))
