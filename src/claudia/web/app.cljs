@@ -30,7 +30,6 @@
             [claudia.web.speech :as speech]
             [claudia.web.subs]
             [claudia.web.viewport :as viewport]
-            [claudia.web.voice-back :as voice-back]
             [claudia.web.words]
             [claudia.web.views.shell :as shell]
             [claudia.web.ws :as ws]
@@ -66,7 +65,6 @@
   (bookmarks/start!)
   (right/start!)
   (tabs/start!)
-  (voice-back/start!)
   (native/start!)
   (login/start!)
   (gaze/install!)

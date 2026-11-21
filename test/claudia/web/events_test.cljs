@@ -302,17 +302,12 @@
     (is (= "new" (get-in (ev/send-for (assoc-in db [:new-settings :folder] "/w/app") :new "hello") [:ws/send 1 :type]))
         "with a folder it goes")))
 
-(deftest dictated-clips-are-tied-to-the-message-they-went-out-in
+(deftest a-dictated-send-carries-the-id-the-page-made
   (let [base {:open ["s" "c"] :drafts {["s" "c"] ""} :servers {"s" {:status :open}}}
-        added (:db (ev/heard-fx base ["s" "c"] {:text "one" :raw "one" :clip "c1"} :add))
-        fx (ev/heard-fx added ["s" "c"] {:text "two" :raw "two" :clip "c2"} :send)
-        msg (get-in fx [:ws/send 1 :msg])]
-    (is (= ["c1"] (get-in added [:voice-draft ["s" "c"]])))
-    (is (string? msg) "every send carries the id the page made for its message")
-    (is (= [:voice-back/tag [["c1" "c2"] msg]] (last (:fx fx))))
-    (is (nil? (get-in fx [:db :voice-draft ["s" "c"]])))
-    (testing "nothing sent: nothing tied"
-      (is (= {} (ev/with-voice-tagged {} added ["s" "c"]))))))
+        added (:db (ev/heard-fx base ["s" "c"] {:text "one" :raw "one"} :add))
+        fx (ev/heard-fx added ["s" "c"] {:text "two" :raw "two"} :send)]
+    (is (= "one two" (get-in fx [:ws/send 1 :text])))
+    (is (string? (get-in fx [:ws/send 1 :msg])) "every send carries the id the page made for its message")))
 
 (deftest a-keys-ask-is-answered-without-a-card
   (let [fx (ev/on-frame {:chats {}} "s" {:type "keys_ask" :chat "c" :ask "a"})]

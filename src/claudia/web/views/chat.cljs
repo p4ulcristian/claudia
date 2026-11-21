@@ -13,7 +13,6 @@
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.md :as md]
-            [claudia.web.views.voice-back :as voice-back]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
@@ -89,7 +88,7 @@
                        :on-click #(rf/dispatch [:chat/unqueue ck id])}
       "×"])])
 
-(defn- user-msg [ck {:keys [id text images merged]} {:keys [viewing? picture? files forkable? queued? removable?] :as marks}]
+(defn- user-msg [ck {:keys [id text images]} {:keys [viewing? picture? files forkable? queued? removable?] :as marks}]
   (let [[server chat] ck]
     [:div.msg.user {:data-at id :class [(when viewing? "viewing") (when queued? "queued")]
                     :title (when queued? "Claude reads this at its next step")}
@@ -97,8 +96,6 @@
       (when (and images (pos? images)) [attach/sent-images server chat id images])
       [user-text server chat text]]
      (when queued? [queued-tag ck id removable?])
-     ;; A message Claude Code took in with other queued sends (merged) keeps each send's voice.
-     (for [m (concat merged [id])] ^{:key m} [voice-back/listen-back m])
      (when (and (not queued?) (or picture? (pos? files) forkable?))
        (msg-links ck id marks))]))
 

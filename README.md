@@ -226,14 +226,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     it, turned with the screen (`screen.orientation.angle`). A data source can be several
     microphones combined, so it names a side, not one hole. Headsets and AirPods show nothing; a
     browser cannot tell, so it shows nothing. The hub's mic log gets `mic` with each start.
-    Listen back (2026-11-18, to tell a bad recording from a bad hearing): a heard clip is not
-    deleted but moves to the store `sounds` with what it was heard as (raw) and cleaned up to
-    (text); the message it goes out in carries an id the page made (`msg` on `send` and `new`,
-    PROTOCOL.md), which ties the clips to it. On that message, ▶ plays the clips in spoken order
-    and "heard as" lists each one's raw and cleaned words: bad audio = the voice or the microphone,
-    raw wrong = the speech model, cleaned wrong = the cleanup. On the device that recorded them only
-    (never uploaded), deleted 30 minutes after they were spoken (swept at start and every minute).
-    Files: `src/claudia/web/voice_back.cljs`, `src/claudia/web/views/voice_back.cljs`.
+    Listen back (2026-11-18): removed by decision 95.
     My words (2026-11-17, decision `2026-11-17-listen-vocabulary-and-cleanup` in the Iris repo):
     the listen service hears with each person's own names and terms and cleans the text up. The hub
     sends the signed-in caller's email (lower case) as `speaker` with every clip and gets
@@ -283,8 +276,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     wears the voice's bars round it in its colour, following the voice as the held mic's bars follow
     yours (2026-11-21, the user's pick of four: bars round it, ripples, bars inside, sound waves;
     `src/claudia/web/views/voice_ring.cljs`, the reply played through an AnalyserNode). One sound at a
-    time (2026-11-21, the user's call): a reply read aloud, your voice played back (decision 20's
-    Listen back) and a 3D story's narrator each claim the sound as they start, and the one playing
+    time (2026-11-21, the user's call): a reply read aloud and a 3D story's narrator each claim
+    the sound as they start, and the one playing
     before stops (a reply stopping that way drops the replies waiting after it, as the page going
     to the background does; `src/claudia/web/sound.cljs`). A reply is heard from its first sentence
     (2026-11-21): the voice service makes a clip a sentence at a time, the hub passes each piece on
