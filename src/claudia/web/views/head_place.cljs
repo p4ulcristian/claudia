@@ -49,13 +49,24 @@
    [:span.where-face [dot/project-face server f [hp/icon :folder]]]
    [hp/pop-row (assoc r :mono? true :pick! #(pick! f))]])
 
+(defn- add-bookmark
+  "With no bookmark on the server: Add a bookmark…, the File Browser, whose ☆ Bookmark pins a folder
+  (README decision 120)."
+  [ck close!]
+  [:button.pop-row.where-other {:type "button" :role "menuitem"
+                                :on-click (fn [] (close!) (rf/dispatch [:folders/open {:chat ck}]))}
+   [:span.pop-row-name "Add a bookmark…"]
+   [:span.pop-row-line "no bookmarks on this server yet"]])
+
 (defn- project-list
-  "The rows under their headings: Bookmarks, then Used by your chats."
-  [server rows pick!]
+  "The rows under their headings: Bookmarks (none yet: Add a bookmark…), then Used by your chats."
+  [{:keys [ck server]} rows pick! close!]
   (let [[pinned used] ((juxt filter remove) :pinned? rows)]
     [:<>
-     (when (seq pinned) [:div.where-sub "Bookmarks"])
-     (for [{f :folder :as r} pinned] ^{:key f} [project-row server r pick!])
+     [:div.where-sub "Bookmarks"]
+     (if (seq pinned)
+       (for [{f :folder :as r} pinned] ^{:key f} [project-row server r pick!])
+       [add-bookmark ck close!])
      (when (seq used) [:div.where-sub "Used by your chats"])
      (for [{f :folder :as r} used] ^{:key f} [project-row server r pick!])]))
 
@@ -76,9 +87,7 @@
         pick! (fn [f] (close!) (rf/dispatch (if new? [:new/settings {:folder f}] [:chat/folder ck f])))]
     [:div {:role "group" :aria-label "Project"}
      [:div.prompt-sec (str "Projects on " @(rf/subscribe [:server-label server]))]
-     (if (seq rows)
-       [project-list server rows pick!]
-       [:div.pop-note "No projects here yet."])
+     [project-list hc rows pick! close!]
      [:div.pop-sep]
      [other-folder hc close!]]))
 

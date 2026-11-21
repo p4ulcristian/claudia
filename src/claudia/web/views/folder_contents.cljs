@@ -83,10 +83,20 @@
         :else [:div.fd-list {:on-click #(pick! nil)}
                (for [it items] ^{:key (:path it)} [row it ctx])]))
 
+(defn- bookmark-button
+  "Bookmarks the shown folder, worded and always on screen (README decision 120: a touch screen with
+  a trackpad never showed the row's ☆); Bookmarked (★) once it is, a click then unpins."
+  [pinned? pin!]
+  [:button.fd-btn.fd-bookmark {:type "button" :class (when pinned? "on") :aria-pressed (boolean pinned?)
+                               :title (if pinned? "Unpin this folder" "Pin this folder as a project of this server")
+                               :on-click pin!}
+   (if pinned? "★ Bookmarked" "☆ Bookmark")])
+
 (defn pane
   "The middle pane. opts: :server, :folder, :items (shown, nil while loading), :more, :error,
-  :picked (the picked item's path), :pick! (a path or nil), :open! (a folder's path)."
-  [{:keys [folder items more] :as opts}]
+  :picked (the picked item's path), :pick! (a path or nil), :open! (a folder's path), :pinned? (the
+  folder is bookmarked), :pin! (bookmarks it, or unpins it)."
+  [{:keys [folder items more pinned? pin!] :as opts}]
   (let [[mode set-mode] (use-mode)
         last-click (h/use-ref nil)
         ctx (assoc opts :last-click last-click)]
@@ -94,5 +104,6 @@
      [:header.fd-mid-bar
       [:span.fd-mid-name (pure/base-name folder)]
       [:span.fd-mid-count (when items (pure/count-text items more))]
+      [bookmark-button pinned? pin!]
       [mode-switch mode set-mode]]
      [:div.fd-mid-body (items-view ctx mode)]]))

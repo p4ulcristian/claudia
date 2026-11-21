@@ -245,3 +245,16 @@
   "Clip c ({:n :secs :dir :state :t0}) in words, for its tip and screen readers, at now."
   [{:keys [n secs dir] :as c} now]
   (str "Clip " (inc n) ", " secs " s, " (second (get ways dir ["↑" "send"])) ": " (status-text c now)))
+
+(defn tap-plan
+  "What a tap does (README decision 120), from the press: circle (the chat whose circle was tapped,
+  nil for the mic), reading and reading-msg (the chat and voice message being read at the press,
+  before it stopped). While a reply is read, a tap on the mic or on that chat's circle skips it:
+  :heard [chat [msg]] and :play that chat (its next waiting one); a tap on another chat's circle only
+  :play-s it; a tap on the mic with nothing read gives the hint (:phase :tap, else :idle)."
+  [{:keys [circle reading reading-msg]}]
+  (let [skipped (when (and reading (or (nil? circle) (= circle reading))) reading)
+        k (or circle skipped)]
+    (cond-> {:phase (if k :idle :tap)}
+      (and skipped reading-msg) (assoc :heard [skipped [reading-msg]])
+      k (assoc :play k))))

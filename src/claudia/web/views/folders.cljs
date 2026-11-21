@@ -4,6 +4,8 @@
   picks a new chat's computer (README decision 71) and, for a started chat, only which computer is
   browsed (decision 72: on another one Select is gone): on top the server's bookmarks as cards (the
   project's logo as the chats show it, else a folder; name, path, ★ to unpin, \"missing\" greyed;
+  with none, a line saying how to add one: the worded ☆ Bookmark over a folder's contents, README
+  decision 120;
   a click opens the tree there, Select uses it for the chat); on the left a filter field and the
   tree from \"/\" with the chat's folder (else the work folder) selected; in the middle what that
   folder holds, as a grid or a list (claudia.web.views.folder-contents); on the right the picked
@@ -86,7 +88,8 @@
         missing (use-missing server rows)]
     [:div.fd-cards
      (if (empty? rows)
-       [:p.muted.fd-none "No bookmarks on this server yet: ☆ on a folder's row pins it here."]
+       [:p.fd-none.fd-empty "No bookmarks on this server yet. Pick a folder on the left, then press "
+        [:b "☆ Bookmark"] " over its contents: it shows here and in the chat's project list."]
        (for [b (pure/bookmark-rows rows server missing)]
          ^{:key (:folder b)} [card server b (= selected (:folder b)) go! chat use?]))]))
 
@@ -171,9 +174,11 @@
   "The contents pane of the selected folder; picked: the picked item's path."
   [{:keys [server selected answer hidden? picked set-picked go!]}]
   (when selected
-    [:f> contents/pane {:server server :folder selected :error (:error answer) :more (:more answer)
-                        :items (some-> (:entries answer) (pure/shown-items hidden?))
-                        :picked picked :pick! set-picked :open! go!}]))
+    (let [pinned? (some #(= selected (:folder %)) (bookmarks/on-server @(rf/subscribe [:bookmarks]) server))]
+      [:f> contents/pane {:server server :folder selected :error (:error answer) :more (:more answer)
+                          :items (some-> (:entries answer) (pure/shown-items hidden?))
+                          :picked picked :pick! set-picked :open! go!
+                          :pinned? (boolean pinned?) :pin! #(rf/dispatch [:bookmarks/toggle server selected])}])))
 
 (defn- left-side
   "The filter field and the tree (once the work folder is known)."

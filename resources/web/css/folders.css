@@ -23,6 +23,11 @@
 .fd-right { min-height: 0; overflow-y: auto; padding: 14px 16px; border-left: 1px solid var(--line); }
 .fd-head { font: 700 15px var(--hand); color: var(--muted); margin: 2px 0 4px; }
 .fd-none { margin: 0; font-size: 12.5px; }
+.fd-empty { color: var(--muted); max-width: 520px; line-height: 1.45; }
+.fd-empty b { color: var(--fg); white-space: nowrap; }
+/* The worded Bookmark over a folder's contents; ★ Bookmarked in amber once pinned. */
+.fd-bookmark { flex: none; white-space: nowrap; }
+.fd-bookmark.on { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); }
 .fd-warn { margin: 4px 0; color: var(--amber); font-size: 12.5px; overflow-wrap: anywhere; }
 
 
@@ -41,7 +46,9 @@
 .fd-card-path { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .fd-card-use { justify-self: start; margin-top: 4px; }
 .fd-filter { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); color: var(--fg); font: 13.5px var(--sans); }
-.fd-pin { margin-left: auto; flex: none; width: 22px; color: var(--muted); font-size: 14px; opacity: 0; }
+/* The row's ☆ is always there, faint (README decision 120: a touch screen with a trackpad counts as
+   hover-capable, so a hover-only star never showed); full on hover, on the selected row, once pinned. */
+.fd-pin { margin-left: auto; flex: none; width: 22px; color: var(--muted); font-size: 14px; opacity: 0.4; }
 .fd-node:hover .fd-pin, .fd-pin.on, .fd-node.on .fd-pin { opacity: 1; }
 .fd-pin.on { color: var(--amber); }
 @media (hover: none) { .fd-pin { opacity: 1; } }
