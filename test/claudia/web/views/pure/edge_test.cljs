@@ -4,9 +4,9 @@
 
 (def ^:private idle {:running? false :new? true})
 
-(deftest five-slots-over-the-middle-and-four-under-it-fork-and-archive-under-new-chat
-  (is (= [:search :system :files :prompts :settings] edge/over))
-  (is (= [:stop :new :fork :archive] edge/under))
+(deftest four-slots-over-the-middle-and-five-under-it-settings-at-the-bottom
+  (is (= [:search :system :files :prompts] edge/over))
+  (is (= [:stop :new :fork :archive :settings] edge/under))
   (is (= 9 (count (concat edge/over edge/under))) "nine slots, as before the picture steps left"))
 
 (deftest every-slot-has-a-state-always

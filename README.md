@@ -2248,5 +2248,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
       touch screen with a trackpad counts as hover-capable, so the hover-only star never showed).
       With no bookmark on the server the bookmark row says how to add one, and the where pill's
       popup has Add a bookmark…, which opens the File Browser.
+    - The rail's Settings moves to its bottom slot, under Archive (the user: "settings is not that
+      important in the right rail. It should be at the bottom"): over the mic Search, System, Files,
+      Profiles; under it Stop, New chat, Fork, Archive, Settings.
     Files: `src/claudia/web/views/mic.cljs`, `pure/mic.cljs`, `folder_contents.cljs`, `folders.cljs`,
-    `head_place.cljs`, `resources/web/css/folders.css`.
+    `head_place.cljs`, `pure/edge.cljs`, `thumb_edge.cljs`, `resources/web/css/folders.css`.

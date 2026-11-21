@@ -1,6 +1,7 @@
 (ns claudia.web.views.pure.edge
-  "The edge column of every screen wider than a phone (README decisions 40, 73, 92, 109, 117) as
-  data: nine slots of one size, five over the rail's middle and four under it. A slot never comes or
+  "The edge column of every screen wider than a phone (README decisions 40, 73, 92, 109, 117, 120)
+  as data: nine slots of one size, four over the rail's middle and five under it, Settings at the
+  bottom. A slot never comes or
   goes: one that cannot act now is passive (greyed), Stop is red while a turn runs; Fork and Archive
   (the open chat; Archive asked first, Unarchive for an archived one) sit under New chat. Search,
   System, Files, Profiles (the :prompts sheet) and Settings are toggles: lit (:on) while their sheet
@@ -8,11 +9,12 @@
 
 (def over
   "The slots over the mic, top to bottom."
-  [:search :system :files :prompts :settings])
+  [:search :system :files :prompts])
 
 (def under
-  "The slots under the mic, top to bottom: Fork and Archive under New chat."
-  [:stop :new :fork :archive])
+  "The slots under the mic, top to bottom: Fork and Archive under New chat, Settings last (README
+  decision 120: the least used)."
+  [:stop :new :fork :archive :settings])
 
 (def sheet-of
   "The slots that open a sheet of the right half, and the sheet each opens."
