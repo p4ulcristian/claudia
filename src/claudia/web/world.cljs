@@ -13,7 +13,7 @@
             [claudia.web.face.view :as face]
             [claudia.web.views.chat :as chat]
             [claudia.web.views.logotools :as logotools]
-            [claudia.web.views.systems :as systems]
+            [claudia.web.views.system-machine :as system-machine]
             [claudia.web.world.state :as state]))
 
 (def ^:private lazy-view (lazy/loadable claudia.web.world.view/world-view))
@@ -66,7 +66,7 @@
 (defn- stats-content [{:keys [target]}]
   (let [label @(rf/subscribe [:server-label target])]
     [:div.world-stats
-     [:f> systems/machine-card {:title (if (= target "gate") "gate" label) :url (state/stats-url target)}]]))
+     [:f> system-machine/machine-card {:title (if (= target "gate") "gate" label) :url (state/stats-url target)}]]))
 
 (defn- panel
   "The panel beside the world: the open chat or a server's Systems card."

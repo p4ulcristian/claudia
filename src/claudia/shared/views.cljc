@@ -11,16 +11,23 @@
    [:files "File Browser"]
    [:search "Search"]
    [:settings "Settings"]
-   [:machines "Machines"]
+   [:system "System"]
    [:prompts "Prompts"]
    [:forms "Forms"]])
 
 (def ^:private ids (set (map first all)))
 
+(def ^:private aliases
+  "Old names still read as the view they became: Machines became System (README decision 96), so a
+  pile kept, a slot or a link that says machines opens System."
+  {:machines :system})
+
 (defn clean
-  "A view id from what was stored or sent (a keyword or its name), :picture for anything else."
+  "A view id from what was stored or sent (a keyword or its name, an old name read as its new one),
+  :picture for anything else."
   [v]
-  (let [k (keyword (if (keyword? v) (name v) (str v)))]
+  (let [k (keyword (if (keyword? v) (name v) (str v)))
+        k (get aliases k k)]
     (if (ids k) k :picture)))
 
 (defn label "A view's name (a sheet's title)." [v]
@@ -44,7 +51,7 @@
   (or (peek (vec pile)) :picture))
 
 (defn close "The pile without v." [pile v]
-  (clean-pile (remove #{(clean v)} pile)))
+  (vec (remove #{(clean v)} (clean-pile pile))))
 
 (defn open
   "The pile with v on top (brought up when it already lies there); :picture takes every sheet off."

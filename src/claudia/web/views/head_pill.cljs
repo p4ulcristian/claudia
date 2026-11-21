@@ -33,7 +33,8 @@
 (def icons
   "The pills' icons in place of words: the computer (the server), the folder (the project), Claude's
   spark (whose Claude plan), a sparkle (model · effort), a page (the prompt profile), a speaker (the
-  voice), the bell (notify) and the bell struck through (notify Off); row 3's shield (sudo)."
+  voice), the bell (notify) and the bell struck through (notify Off); row 3's pulse (System) and
+  shield (sudo)."
   {:server "M3.5 5h17v11h-17zM8.5 20h7M12 16v4"
    :folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
    :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
@@ -42,6 +43,7 @@
    :voice "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"
    :bell bell-path
    :bell-off (str bell-path "M4 4l16 16")
+   :system "M2.5 12.5h4.3l2.5-6 4.3 11.5 2.6-5.5h5.3"
    :root "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM10 9.5h3a1.5 1.5 0 0 1 0 3h-3v-3M10 12.5V15M12.6 12.5 14 15"})
 
 (defn icon

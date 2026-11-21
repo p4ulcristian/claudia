@@ -15,6 +15,8 @@ Environment=ROOT_SOCKET_DIR={{ root_socket_dir }}
 Environment=ROOT_NO_TAP={{ root_no_tap_file }}
 # The front keeps the person's word (switch, Allow); the helper asks it, never a runner.
 Environment=ROOT_FRONT_SOCKET={{ root_front_socket }}
+# System's fixed reads for the front (README decision 95): <dir>/read.sock.
+Environment=ROOT_READ_SOCKET_DIR={{ root_read_socket_dir }}
 ExecStart=/usr/bin/env node {{ root_lib_dir }}/root.js
 Restart=always
 RestartSec=5

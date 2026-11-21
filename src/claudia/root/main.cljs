@@ -3,7 +3,8 @@
   <ROOT_SOCKET_DIR>/<user>/root.sock, in a folder only that user may enter, so the socket proves who
   calls. A command runs when it is on the no-tap list (ROOT_NO_TAP), else when the front
   (ROOT_FRONT_SOCKET, user claudia's, which no agent user reaches) says the chat's root switch is on
-  or the person tapped Allow there. Every command is logged."
+  or the person tapped Allow there. Every command is logged. A second socket answers the front's
+  fixed reads for System (claudia.root.read, README decision 96)."
   (:require ["node:child_process" :as cp]
             ["node:fs" :as fs]
             ["node:net" :as net]
@@ -12,6 +13,7 @@
             [claudia.node.env :as env]
             [claudia.node.http :as io]
             [claudia.root.frames :as frames]
+            [claudia.root.read :as read]
             [claudia.root.rules :as rules]))
 
 (def ^:private socket-dir (env/env "ROOT_SOCKET_DIR" "/run/claudia-root"))
@@ -149,4 +151,6 @@
 (defn main [& _]
   (js/process.umask (js/parseInt "177" 8))
   (js/console.log (str "claudia-root: sockets in " socket-dir ", no-tap list " no-tap-file))
-  (serve-all!))
+  (serve-all!)
+  ;; System's fixed reads for the front (README decision 96).
+  (read/listen!))

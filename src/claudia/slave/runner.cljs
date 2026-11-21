@@ -32,6 +32,7 @@
             [claudia.slave.ssh-cert :as ssh-cert]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.folders :as folders]
+            [claudia.slave.system-label :as system-label]
             [claudia.slave.move :as move]
             [claudia.slave.folders.trash :as folders-trash]
             [claudia.slave.store :as store]))
@@ -347,6 +348,7 @@
                                                :tools-changed! chats/prefs-changed!}) nil
             (prompts/handle req res url who chats/prefs-changed!) nil
             (folders/handle req res url who {:cwd chats/cwd :data data-dir}) nil
+            (system-label/handle req res url who chats/session-live?) nil
             (api/handle req res who) nil
             :else (io/send-json res 404 {:error "Not found."})))))
 

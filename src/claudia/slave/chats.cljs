@@ -39,6 +39,7 @@
             [claudia.slave.shown :as shown]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
+            [claudia.slave.system-label :as system-label]
             [claudia.slave.tasks :as tasks]
             [claudia.slave.tools :as tools]
             [claudia.slave.worktree :as worktree]))
@@ -183,6 +184,11 @@
   with, else nil (the server's default): for the rail's cards (README decision 81)."
   [id]
   (or (not-empty (:model (settings id))) (not-empty (:model (st id)))))
+
+(defn session-live?
+  "Whether the chat's session is live in the host (System names its processes so)."
+  [id]
+  (boolean (:live (st id))))
 
 (defn- working? [id] (or (boolean (:running (st id))) (pos? (tasks/working id))))
 
@@ -543,6 +549,16 @@
           t (.then (bookmarks/bookmark! args t) done)
           :else (.then (bookmarks/list!) done))))
 
+(defn- system-label-call
+  "system_label: the chat's proposal kept for the person to accept or refuse on System
+  (claudia.slave.system-label); nothing changes until then."
+  [id args]
+  (let [prop (system-label/proposal args id (env/env "CLAUDIA_SERVER_NAME" (env/env "FRONT_NAME" "")) (js/Date.now))]
+    (if (:error prop)
+      (answers/refusal (:error prop))
+      (do (store/add-proposal! prop)
+          (answers/text-result (system-label/proposed-text prop))))))
+
 (declare ask!)
 
 (defn- edit-own-chat
@@ -584,6 +600,7 @@
     ["workspace" "set_chat_colour"] (edit-own-chat id (chat-edit/colour-change args))
     ["workspace" "list_bookmarks"] (bookmark-call id nil)
     ["workspace" "bookmark_folder"] (bookmark-call id args)
+    ["workspace" "system_label"] (system-label-call id args)
     (if (and (= server "claudia") (claudia/her? id))
       (claudia-call id tool args)
       (throw (js/Error. (str "No tool " server "/" tool))))))
@@ -1237,7 +1254,7 @@
                                           (session/with-sentinel (sentinel-key/read-key) (sentinel-key/url)))
                                 her (assoc "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" "1"))
                          :prompt (full-prompt id)
-                         :allowed (cond-> tools/allowed-tools (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
+                         :allowed (cond-> (into tools/allowed-tools system-label/allowed) (bookmarks/on?) (into bookmarks/allowed) her (into claudia/allowed))
                          :disallowed (when her claudia/disallowed)
                          :model (:model s) :effort (:effort s)
                          :mcp (cond-> (codeforms/mcp-for) her (assoc :claudia claudia/mcp))

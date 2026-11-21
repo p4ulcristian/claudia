@@ -79,6 +79,10 @@ root_socket_dir: /run/claudia-root
 root_no_tap_file: /etc/claudia/root-no-tap
 # The front's socket for the root helper (claudia-front.service makes it, mode 0600).
 root_front_socket: /run/claudia-front/root.sock
+# The helper's read socket for System (README decision 95): <dir>/read.sock, the folder 0750
+# root:<front_group>, so only the front (user claudia, group claudia) asks the fixed reads.
+root_read_socket_dir: /run/claudia-root-read
+front_group: claudia
 agent_bin_dir: /usr/local/lib/claudia-agent-bin
 # The PATH used when /etc/claudia/env sets none.
 default_system_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

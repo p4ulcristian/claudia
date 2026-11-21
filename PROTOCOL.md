@@ -49,6 +49,8 @@ browser (page) ──https──▶ gate: Caddy (login) ──▶ hub ──priv
 | front | `FRONT_PROFILES` | path of the profiles file (below) |
 | front | `FRONT_NAME` | this server's name (e.g. `home`, `work`) |
 | front | `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME` | the hub's https address and this server's name as the hub knows it (its hub key is made of it). With them and `FRONT_HUB_KEY_FILE` the front calls the hub as its server for the agent users' SSH certificates (`POST /hub/server/ssh-cert`, README decision 53); unset: no certificates, logged at start when a profile runs as an agent user |
+| front | `FRONT_DATA` | folder of the front's own store `system.db`: System's minute samples (README decision 96; default `~/.local/share/claudia-front`; claudia-front.service: `/var/lib/claudia-front`). A store that does not open is logged and `/api/system/history` answers 503 |
+| front | `FRONT_ROOT_READ_SOCKET` | the root helper's read socket (default `/run/claudia-root-read/read.sock`) |
 | runner | `RUNNER_SOCKET` | unix socket it serves HTTP + WebSocket on |
 | runner | `HOST_SOCKET` | the host's unix socket |
 | runner | `RUNNER_DATA` | folder for `claudia.db`, uploads, 3D scenes' videos (`videos/`) and the Trash (`trash/<id>/<folder name>`, README decision 63) |
@@ -144,6 +146,11 @@ inline scripts and `https://cdn.jsdelivr.net`, no Claudia API, framed only by th
 | `GET /hub/servers/:name/state` | `{ up: bool }`: `true` when the front answered `GET /api/me` (as the caller) with 2xx within 2 s |
 | `GET /hub/servers/:name/system` | that server's newest `Sample` (from its front's `GET /api/system`, 4 s); 502 `{ error }` when the front is not reached or fails; 403 when not in the person's list |
 | `GET /hub/gate/system` | admins: the gate's own `Sample` (the hub reads its machine itself); 403 for others |
+| `GET /hub/servers/:name/system/details`, `…/system/history?hours=`, `…/system/unit-log?unit=&scope=&n=` | System (README decision 96): passed on to that server's front (`GET /api/system/details`, `/history`, `/unit-log`, same query), same access as `/system`; 502 `{ error }` when the front is not reached or fails |
+| `GET /hub/gate/system/details`, `/hub/gate/system/history?hours=` | admins: the gate's own, read by the hub itself (no root helper there: `root: false`) |
+| `GET /hub/system/labels` | `{ labels: [Label] }`: every label, for anyone who may see System |
+| `PUT /hub/system/labels` `{ server, kind, match, project }` | admins: adds the label, or replaces the one with the same `server`, `kind` and `match`; `{ label }`; 400 `{ error }` when a field is missing or too long (`match` and `project` at most 120 characters) |
+| `DELETE /hub/system/labels/:id` | admins: removes it; `{ ok: true }` |
 | `ANY /s/<server>/api/…` | passed to that front's `/api/…`, bodies streamed both ways (refused 403 if not in the person's list; 502 when the front is not reachable) |
 | `WS /s/<server>/ws` | passed to that front's `/ws`; the front's own refusal (status and body) reaches the page; frames pass as they are, close codes too |
 
@@ -248,6 +255,9 @@ state `{ running: [Item], waiting: [Item], done, updatedAt }`, `Item` = `{ title
 | `GET /api/claude-token/limits` | the front, the hub only: `{ tokens: { <token hash>: { limits: [Limit], at } } }`, the newest of every profile's runner (`GET /api/limits` on each runner socket: the same shape), the hash = the first 16 hex of the token's SHA-256 |
 | `PUT /api/github/service-token` `{ name, token, expiresAt, login }` | the front, the hub only (README decision 78): a service's 1-hour app installation token written to `FRONT_GITHUB_SERVICES_DIR/<name>/token` (and `login`, the app's bot) through a rename; `{ ok: true }`, 400 `{ error }` not a service name, `ghs_` token or bot login, 404 when root made no folder for that service, 501 when the front has no `FRONT_GITHUB_SERVICES_DIR` |
 | `GET /api/system` | the front, the hub only: this machine's newest `Sample` (below); the first ask after 30 s without one waits about 1 s for its first window |
+| `GET /api/system/details` | the front, the hub only: this machine's `Details` (below); read again at most every 15 s while asked in the last 60 s, else read on the ask |
+| `GET /api/system/history?hours=<1..168>` | the front, the hub only: `History` (below) of the last `hours` (default 24) |
+| `GET /api/system/unit-log?unit=<unit>&scope=system\|user&user=<name>&n=<1..200>` | the front, the hub only: `{ lines: [{ at, prio, text }] }`, the unit's last `n` (default 50) journal lines, oldest first, through the root helper; 400 `{ error }` for a unit name outside `[A-Za-z0-9@._:-]{1,200}` ending in a unit type, 503 `{ error }` without the root helper |
 | `POST /api/secret/read` `{ ref, pubkey, request }` | the vault read (below): `{ sealed }` or `{ error }` |
 | `POST /api/ssh/pubkey` `{}` | a runner, the front only (never passed on from the hub: 403; README decision 53): `{ publicKey }`, the one line of `~/.ssh/claudia_agent.pub` of the agent user it runs as (the ed25519 key made with ssh-keygen the first time); 409 `{ error }` when it does not run as an agent user |
 | `POST /api/ssh/cert` `{ certificate }` | a runner, the front only: writes the certificate (one `ssh-ed25519-cert-v01@openssh.com` line, as the hub signed it) to `~/.ssh/claudia_agent-cert.pub` and the managed block of `~/.ssh/config` (`Host *`: that key and certificate, `IdentitiesOnly yes`, `User` the agent user it runs as): `{ ok: true }`; 400 for anything else, 409 when it does not run as an agent user. The front calls both on start and every 45 minutes for each profile whose `user=` in the profiles file is an agent user, the hub's `POST /hub/server/ssh-cert` between them (5 minutes after a failure) |
@@ -264,6 +274,91 @@ cached, swapTotal, swapUsed }, disks: [{ mount, fs, source, size, used, avail }]
 net: { rx, tx }, temps: [{ name, label, c }], gpus: [{ index, name, util, memUsed, memTotal, temp, power }],
 claudia: [{ kind: front|runner|host|chats|hub, count, rss }] }`; `Share` = `{ busy, user, sys, iowait, steal }`
 (busy = user + sys + steal; waiting on disk is not busy). A field a card does not report is null. On macOS iowait and steal are 0, `temps` is empty, and a disk is an APFS container (its volumes' files summed).
+
+Since README decision 96 a `Sample` also has `pressure: { cpu, memory, io }` (the kernel's PSI, `/proc/pressure/*`: each
+`{ some, full }`, the share of the last 10 s some or all programs waited for it, percent; `cpu.full` is null; the whole field null on
+macOS or a kernel without PSI) and `top: [Proc]`: the 8 processes using the most CPU over the window and the 8 using the most memory
+(each once, busiest first). `Proc` = `{ pid, name (the program's name, never its command line), cores (CPU over the window, in cores:
+1.0 = one core all the time), rss, owner: Owner }`.
+
+`Owner` = `{ kind, name, chat?, profile? }`, what a process belongs to, from its cgroup (`/proc/<pid>/cgroup`; on macOS from its parent
+chain): `kind` `chat` (a running chat's session or anything it started: `chat` = `{ id, title, colour }` when the profile's runner knows
+it, `profile`), `claudia` (front, runner, host, hub, root helper: `name` that program), `unit` (a system unit: `name` it),
+`user-unit` (a user's unit: `name` it, `profile`/user in `name` as `unit@user`), `container` (`name` the container's), `session` (a
+login session or desktop app scope: `name` the user), `kernel` (kernel threads, `name` "kernel"), `leftover` (in a Claudia host's
+cgroup, but started by no running chat: a session that ended left it behind; `name` the profile), `other`.
+
+`Details` = `{ at, root (true when the root helper answered; without it ports of other users have no process and `services` holds
+only system units and the front's own user's), why? (when root is false: why), ports: [Port], services: [Service], containers: [Container], groups: [Group],
+leftovers: [Proc + { age (s since it started) }], log: [Event] }`:
+- `Port` = `{ proto: tcp|udp, port, addr, reach: all|lan|headscale|local, pid?, name?, owner?: Owner }`, one per port and address
+  (listening TCP, bound UDP), port order; `reach` from `addr`: `all` = 0.0.0.0, `::` or `*`; `headscale` = 100.64.0.0/10 or
+  fd7a:115c:a1e0::/48; `local` = 127.0.0.0/8 or ::1; `lan` = any other address.
+- `Service` = `{ name, scope: system|user, user? (scope user: whose), state (systemd's ActiveState: active, failed, activating,
+  deactivating, inactive, reloading), sub, since (ms, when it entered that state; null when not known), restarts (NRestarts; null
+  when not known), rss? (systemd's MemoryCurrent, else its processes' resident memory summed), cores?, desc,
+  origin: claudia|os|admin|container }`: every loaded service unit that is active, failed or restarting, and every user manager's
+  (root helper); `origin` from its unit file: `claudia` (claudia-*), `container` (podman's generated units), `os` (under
+  /usr/lib/systemd or /lib/systemd), `admin` (written by people: /etc/systemd, ~/.config/systemd).
+- `Container` = `{ engine: podman|docker, id (12 hex), name, image, state, since (ms), ports: [text] }`.
+- `Group` = `{ owner: Owner, count, cores, rss, names: [the 3 biggest program names] }`: every process grouped by owner, most memory first.
+- `Event` = `{ at (ms), kind: oom|crash|failed|reboot, text, unit?, name?, pid? }`, the last 7 days newest first: `oom` an
+  out-of-memory kill (the kernel's or systemd-oomd's), `crash` a core dump (coredumpctl), `failed` a unit that failed, `reboot`
+  a reboot is needed (the running kernel's modules are gone from /usr/lib/modules); at most 200.
+
+`History` = `{ step: 60000, rows: [{ at, cores (busy cores), coresTotal, mem (used bytes), memTotal, swap (used bytes), disk (the
+fullest real filesystem's use, percent), gpuMem? (bytes, summed over cards), pressure? ({ cpu, memory, io }: each its `some`),
+top: [{ name, owner: Owner, cores, rss }] (the 3 busiest by CPU, then the 2 biggest by memory not among them) }], events: [Event] }`:
+one row a minute, kept 7 days on each machine (its front's SQLite, `system_samples`; the gate's in the hub's), sampled whether or
+not anyone asks; each row covers its whole minute (`cores` and each process's `cores` are the difference of two reads 60 s apart,
+`pressure` the kernel's 60 s average, `avg60`); `events` as in `Details`, over the hours asked.
+
+`Label` = `{ id, server (a server's name, or "*" for every one), kind: unit|container|port|process, match (the unit's,
+container's or program's name, or the port number as text), project, by (who added it), at }`: what a page calls a project.
+
+### The root helper's read socket (README decision 96)
+
+The root helper also listens on `/run/claudia-root-read/read.sock` (the folder 0750 root:<the front's group>, the socket 0660), for
+the front only. A connection sends one frame `{ read, unit?, scope?, user?, n? }` and gets one `{ out }` (the program's standard
+output) or `{ error }`, then closes. `read` names a fixed command; nothing of the caller's reaches its arguments but a unit name,
+a user name and a line count, each checked: `ports` (`ss -Htlnup`), `containers` (`podman ps -a --format json` and `docker ps -a
+--format json`, each where installed, as `{ podman, docker }`), `units` (every user manager's units, as `{ <user>: <systemctl --user
+list-units --output=json> }`), `pids` (`{ <pid>: <its CLAUDIA_CHAT_KEY's first 16 hex of SHA-256> }` for the processes in Claudia's host
+units' cgroups: the key itself never leaves root), `journal` (the last 7 days' out-of-memory kills and failed units, JSON lines),
+`coredumps` (`coredumpctl list --json=short --since=-7d`), `unit-log` (`journalctl` of one unit, `n` lines, JSON lines). The
+helper logs each kind at most once per 10 minutes (decision 59), every `unit-log`: `activity { kind: "read", read, unit?, scope?,
+user?, n? }`.
+
+The exact commands (`claudia.node.reads`; run by execFile, never a shell; `<unit>`, `<user>`, `<uid>` and `<n>` are the checked
+values, `<units…>` the unit names the list-units before it printed, each checked as a unit name):
+- `ports`: `ss -Htlnup`
+- `containers`: `podman ps -a --format json`, `docker ps -a --no-trunc --format {{json .}}` (one object a line)
+- `units`: per user whose manager runs (a folder `/run/user/<uid>`): `systemctl --user -M <user>@ list-units --type=service
+  --output=json --no-pager`, then `systemctl --user -M <user>@ show -p Id,ActiveState,SubState,StateChangeTimestampMonotonic,NRestarts,FragmentPath,MemoryCurrent,Description -- <units…>`;
+  the answer is `{ <user>: { units: <list-units' JSON text>, show: <show's text> } }`
+- `pids`: no command: every `/proc/<pid>/cgroup` read, and `/proc/<pid>/environ` of those in a `claudia-host[@<profile>].service`
+- `journal`: `journalctl --since=-7d -o json --no-pager --output-fields=MESSAGE,MESSAGE_ID,UNIT,USER_UNIT MESSAGE_ID=d989611b15e44c9dbf31e3c81256e4ed MESSAGE_ID=d9b373ed55a64feb8242e02dbe79a49c MESSAGE_ID=fe6faa94e7774663a0da52717891d8ef`
+  (systemd-oomd killed in a unit, a unit failed, the kernel's OOM killer took a unit's process)
+- `coredumps`: `coredumpctl list --json=short --since=-7d --no-pager`
+- `unit-log`: `journalctl --unit=<unit> -n <n> -o json --no-pager --output-fields=MESSAGE,PRIORITY`, for scope user
+  `journalctl --user-unit=<unit> _UID=<uid> -n <n> …` (the same options)
+
+Without the helper (its socket missing: an older helper, decision 54; macOS; the gate) the front runs the same `ports`,
+`containers`, `journal` and `coredumps` commands as its own user, `units` for its own manager only (`systemctl --user …`), and
+`pids` for the processes whose environment it may read: what Claudia's own user can see (ports of other users without a process,
+its own journal and core dumps). `Details.root` is then false and `why` says it. The system's units come from `systemctl
+list-units` and `show` as the front, with or without the helper.
+
+## Runner HTTP: System proposals (README decision 96)
+
+A chat proposes a project name for something on System with its `system_label` tool `{ server?, kind, match, project, why }`
+(server: this one when left out); nothing changes until the person accepts. The runner keeps proposals (table `system_proposals`).
+
+| Call | Answer |
+|---|---|
+| `GET /api/system/proposals` | the profile's own person: `{ proposals: [{ id, chat: { id, title, colour }, server, kind, match, project, why, at }] }`, oldest first; `server` `""` = the server the page asked (a runner of an agent user does not know its server's name) |
+| `DELETE /api/system/proposals/:id` | the profile's own person: taken away (the page accepted it, `PUT /hub/system/labels`, or said no); `{ ok: true }` |
+| `POST /api/system/chats` `{ keys: [hash] }` | the front only (never passed on from the hub: 403): `{ chats: { <hash>: { id, title, colour, running } } }` for the chats of this profile whose key hashes so (`running`: its session is live in the host). A process counts as a `leftover` only when every runner answered: one that did not leaves its chats' processes `chat` without a name |
 
 ## Runner HTTP: chat operations (`/api/…`)
 
@@ -575,6 +670,7 @@ user, so it only names chats and shows cards. Settings:
 | root | `ROOT_SOCKET_DIR` | the folder of the agent users' folders (default `/run/claudia-root`). Each folder is named after an agent user (`<profile>-claudia-agent`) and lets in only that user (Ansible: mode 0750, root:<the agent's group>). The helper listens on `<folder>/root.sock` in each (read at start: a new agent user needs a restart), group the folder's, mode 0660; a folder named otherwise, or that others may enter, is skipped and logged |
 | root | `ROOT_NO_TAP` | the no-tap list (default `/etc/claudia/root-no-tap`): one command per line, `#` starts a comment line; read on every command |
 | root | `ROOT_FRONT_SOCKET` | the front's root socket (default `/run/claudia-front/root.sock`) |
+| root | `ROOT_READ_SOCKET_DIR` | the folder of System's read socket `read.sock` (default `/run/claudia-root-read`; Ansible: mode 0750, root:<the front's group, `claudia`>). Missing, or others may enter it: no read socket, logged |
 | front | `FRONT_BROKER_GRANT_KEY` | the key broker's root-grant public key (SPKI DER, base64; `broker.js grant-key`), pinned in `/etc/claudia/env` by host apply (README decision 79); unset: root can't be turned on and Allow refuses |
 | front | `FRONT_ROOT_SOCKET` | where the front takes the helper's asks (unset: none): its own, mode 0600 in a 0700 folder of user claudia's, so only root opens it (claudia-front.service: `/run/claudia-front/root.sock`) |
 | front | `FRONT_ROOT_STATE` | the root switches kept across restarts, `{ "<profile>/<chat>": true }` (unset: in memory only; the unit: `/var/lib/claudia-front/root-switches.json`) |
