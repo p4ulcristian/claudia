@@ -1,6 +1,7 @@
 (ns claudia.web.views.rightbar
-  "The right half's bar, always shown under the picture: a scrubber over every picture of the chat
-  with ‹ ›, Back to live while an earlier picture is shown, and the snapshot camera. The fold has no button: Alt+P (its edge unfolds it)."
+  "The right half's bar, always shown under the picture: a scrubber over every picture of the chat,
+  numbered 1..N (README decision 97), with ‹ ›, and the snapshot camera. The last number or › is
+  live again. The fold has no button: Alt+P (its edge unfolds it)."
   (:require [re-frame.core :as rf]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.shell :as pure]
@@ -32,17 +33,27 @@
   [nearest index set-hover]
   {:on-pointer-down (fn [^js e]
                       (.setPointerCapture (.-currentTarget e) (.-pointerId e))
-                      (rf/dispatch [:picture/pick (nearest (.-clientX e))]))
+                      (rf/dispatch [:picture/seek (nearest (.-clientX e))]))
    :on-pointer-move (fn [^js e]
                       (let [i (nearest (.-clientX e))]
                         (set-hover i)
                         (when (and (.hasPointerCapture (.-currentTarget e) (.-pointerId e)) (not= i index))
-                          (rf/dispatch [:picture/pick i]))))
+                          (rf/dispatch [:picture/seek i]))))
    :on-pointer-leave #(set-hover nil)})
 
+(defn- tick
+  "Picture i's mark: its number (kind :number) or a dot; lit while shown, pulsing while it loads."
+  [i kind {:keys [index hover loading? at]}]
+  (let [on? (= i index)]
+    [:span.rbar-tick {:class [(when (= kind :number) "num") (when on? "on") (when (= i hover) "hover")
+                              (when (and on? loading?) "loading")]
+                      :style {:left (str (at i) "%")}}
+     (when (= kind :number) (inc i))]))
+
 (defn- scrubber
-  "One mark per picture along a track; click or drag to move through them, hover to see which one."
-  [pictures index]
+  "One mark per picture along a track, numbered where they fit; click or drag to move through
+  them, hover to see which one."
+  [pictures index loading?]
   (let [track (h/use-ref nil)
         tip (h/use-ref nil)
         [hover set-hover] (h/use-state nil)
@@ -51,32 +62,28 @@
         at #(pure/mark-at n %)
         nearest (fn [x]
                   (let [rect (.getBoundingClientRect (.-current track))]
-                    (pure/nearest-mark n (.-left rect) (.-width rect) x)))]
+                    (pure/nearest-mark n (.-left rect) (.-width rect) x)))
+        marks {:index index :hover hover :loading? loading? :at at}]
     (use-tip-place! track tip at hover)
     [:div.rbar-track (merge {:class (pure/density n width) :ref #(set! (.-current track) %)
                              :role "slider" :aria-label "Pictures" :aria-valuemin 1 :aria-valuemax n :aria-valuenow (inc index)}
                             (track-events nearest index set-hover))
      [:span.rbar-rail]
      [:span.rbar-fill {:style {:width (str (at index) "%")}}]
-     (for [[i p] (map-indexed vector pictures)]
-       ^{:key (:turn p)}
-       [:span.rbar-tick {:class [(when (= i index) "on") (when (= i hover) "hover")]
-                         :style {:left (str (at i) "%")}}])
+     (for [[i kind] (map-indexed vector (pure/tick-kinds n width index))]
+       ^{:key (:turn (get pictures i))} [tick i kind marks])
      (when-let [p (and hover (get pictures hover))]
        [:span.rbar-tip {:ref #(set! (.-current tip) %)}
         [:b (inc hover)] " " (if (seq (:title p)) (:title p) "Untitled") " " [:span.muted (clock (:at p))]])]))
 
-(defn- stepper [{:keys [pictures index viewing? loading?]}]
+(defn- stepper [{:keys [pictures index loading?]}]
   (let [n (count pictures)]
     [:div.rbar-nav
      [:button.rbar-step {:disabled (<= index 0) :title "Previous picture (←)" :aria-label "Previous picture"
                          :on-click #(rf/dispatch [:picture/step -1])} "‹"]
-     (if (> n 1) [:f> scrubber pictures index] [:span.rbar-track-empty])
+     (if (> n 1) [:f> scrubber pictures index loading?] [:span.rbar-track-empty])
      [:button.rbar-step {:disabled (>= index (dec n)) :title "Next picture (→)" :aria-label "Next picture"
-                         :on-click #(rf/dispatch [:picture/step 1])} "›"]
-     (when viewing?
-       [:button.rbar-chip.past {:on-click #(rf/dispatch [:picture/live]) :title "Back to the live picture"}
-        [:span.rbar-chip-dot] [:span.rbar-chip-text (if loading? "Loading…" "Back to live")]])]))
+                         :on-click #(rf/dispatch [:picture/step 1])} "›"]]))
 
 (defn bar
   "The bar under the picture; extra: more buttons at its end (the snapshot camera)."

@@ -195,10 +195,18 @@
 
 (rf/reg-sub :search (fn [db] (:search db)))
 
-;; ---- the chat menu: colour, rename, fork, archive ----
+;; ---- the chat menu (colour, rename, fork, archive) and a message's menu (fork from here) ----
 
-(rf/reg-event-db :ops/menu (fn [db [_ m]] (assoc db :menu m)))
+(defn- drop-old-fork
+  "A menu opening forgets a fork that failed before (one still on its way stays)."
+  [db]
+  (cond-> db (not (get-in db [:fork :busy])) (dissoc :fork)))
+
+(rf/reg-event-db :ops/menu (fn [db [_ m]] (assoc (drop-old-fork db) :menu m)))
 (rf/reg-sub :menu (fn [db] (:menu db)))
+
+(rf/reg-event-db :ops/msg-menu (fn [db [_ m]] (assoc (drop-old-fork db) :msg-menu m)))
+(rf/reg-sub :msg-menu (fn [db] (:msg-menu db)))
 
 (rf/reg-event-fx
  :ops/color
@@ -208,19 +216,28 @@
 
 (rf/reg-event-fx
  :ops/fork
- (fn [{:keys [db]} [_ [s c] at]]
+ ;; A new chat with chat k up to the end of the turn message at started (nil: its last finished
+ ;; turn), from the chat menu, a message's menu or the header's Fork (README decision 96).
+ (fn [{:keys [db]} [_ [s c :as k] at]]
    (when-not (events/read-only? db s)
-     {:db (assoc-in db [:menu :forking] true)
+     {:db (assoc db :fork {:k k :busy true})
       :api/call {:method "POST" :url (api-url s (str "chats/" c "/fork")) :body (if at {:at at} {})
                  :on-ok [:ops/forked s] :on-fail [:ops/fork-failed]}})))
 
 (rf/reg-event-fx
  :ops/forked
  (fn [{:keys [db]} [_ s {:keys [id]}]]
-   {:db (assoc db :menu nil)
+   {:db (dissoc db :menu :msg-menu :fork)
     :fx [[:dispatch [:nav/open [s id]]]]}))
 
-(rf/reg-event-db :ops/fork-failed (fn [db [_ e]] (update db :menu #(when % (assoc % :forking false :error e)))))
+(rf/reg-event-db
+ :ops/fork-failed
+ ;; The error shows in the open menu; with none open (the header's Fork) on the error line.
+ (fn [db [_ e]]
+   (cond-> (assoc db :fork {:k (get-in db [:fork :k]) :error e})
+     (not (or (:menu db) (:msg-menu db))) (assoc :error e))))
+
+(rf/reg-sub :fork (fn [db] (:fork db)))
 
 (rf/reg-event-db :ops/error (fn [db [_ e]] (assoc db :error e)))
 

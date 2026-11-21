@@ -153,7 +153,12 @@
   (is (= {:left 294 :top 194} (menu/menu-pos 390 290 {:left 0 :top 0 :width 400 :height 300} 100 100)))
   (is (= "AM" (menu/initials "Ananda Mishung")))
   (is (= "P" (menu/initials " Paul ")))
-  (is (= "155k" (menu/k-tokens 155000))))
+  (is (= "155k" (menu/k-tokens 155000)))
+  (is (false? (menu/moved-far? [10 10] [16 18])) "10 px: still a long press")
+  (is (true? (menu/moved-far? [10 10] [17 18])))
+  (is (= {:forking? true :error nil} (menu/fork-state {:k ["s" "a"] :busy true} ["s" "a"])))
+  (is (= {:forking? false :error "no"} (menu/fork-state {:k ["s" "a"] :error "no"} ["s" "a"])))
+  (is (= {:forking? false :error nil} (menu/fork-state {:k ["s" "a"] :busy true} ["s" "b"])) "another chat's fork"))
 
 (deftest changes-of-the-turn
   (let [state {:messages [{:id "u1" :role "user"} {:id "u2" :role "user"}]
@@ -206,6 +211,17 @@
   (is (= "packed" (shell/density 100 200)))
   (is (= "" (shell/density 2 200)))
   (is (= 8 (shell/tip-left 0 50 0 500))))
+
+(deftest scrubber-numbers
+  (is (= [:number :number :number] (shell/tick-kinds 3 300 1)) "room: every number")
+  (testing "no room: every 5th, the first, the last and the shown one; one too close a dot"
+    (let [kinds (shell/tick-kinds 30 200 11)
+          numbers (keep-indexed (fn [i k] (when (= :number k) (inc i))) kinds)]
+      (is (= [1 5 12 20 25 30] numbers) "10 and 15 sit too close to the shown 12")))
+  (testing "the shown one wins over an end it would touch"
+    (is (= :dot (first (shell/tick-kinds 30 200 1))))
+    (is (= :number (second (shell/tick-kinds 30 200 1)))))
+  (is (= 26 (shell/label-width 12))))
 
 (deftest freshness-says-how-old
   (is (= "not heard yet" (usage/freshness nil 0)))
