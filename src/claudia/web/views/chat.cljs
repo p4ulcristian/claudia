@@ -249,7 +249,7 @@
   "One block of the feed: a run of steps, a picture a step showed, or a message."
   [ck i b {:keys [running last-i] :as marks}]
   (case (:k b)
-    :steps ^{:key (str "s" (:id b))} [steps/steps ck (:tools b) (and running (= i last-i))]
+    :steps ^{:key (str "s" (:id b))} [steps/steps (:tools b) (and running (= i last-i))]
     :shown ^{:key (str "shown-" (:id (:tool b)))} [:div.msg.claude.shown
                                                    [(if (:video (:tool b)) attach/shown-video attach/shown-image)
                                                     (first ck) (second ck) (:tool b)]]

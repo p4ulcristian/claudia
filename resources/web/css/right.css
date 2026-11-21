@@ -192,7 +192,7 @@
 
 /* ---------- Chalk for the parts above and below ----------
    The colour (--ink) through a baked mask (--ring) on a ::before 2px bigger than the box. */
-.chalk-box::before, .explain-note::before, .rbar::before, .rbar-chip::before {
+.chalk-box::before, .rbar::before, .rbar-chip::before {
   content: ""; position: absolute; inset: var(--chalk-inset, -2px); z-index: -1; pointer-events: none; border-radius: inherit;
   border: var(--chalk-edge, 0px) solid var(--ink); background: var(--chalk-fill, var(--ink)); -webkit-mask-box-image: var(--ring); transition: background-color 0.12s;
 }

@@ -339,22 +339,6 @@ code, pre { font-family: var(--mono); }
 .chev { display: inline-block; transition: transform 0.15s; width: 8px; }
 .chev.open { transform: rotate(90deg); }
 .err-count { color: var(--red); white-space: nowrap; }
-/* Explain: a small hand-written button on each step (on hover; always on the running one) and the
-   answer under it as a chalk note. */
-.step-line, .steps-head-line { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-.step-line .step-row, .steps-head-line .steps-head { flex: 1; min-width: 0; width: auto; }
-.explain-btn { flex: none; font: 700 12.5px var(--hand); color: var(--muted); padding: 0 6px; border-radius: 6px; opacity: 0; transition: opacity 0.12s; }
-.step:hover .explain-btn, .explain-btn:focus-visible, .explain-btn.live, .step.busy .explain-btn { opacity: 1; }
-.explain-btn:hover { color: var(--fg); background: var(--panel2); }
-.explain-btn.live { color: var(--blue); }
-.explain-under { flex-basis: 100%; }
-.explain-note { position: relative; isolation: isolate; display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 6px 14px; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--fg);
-  border-radius: 9px; background: color-mix(in srgb, var(--blue) 8%, transparent); --ring: var(--chalk-r9-15); --ink: color-mix(in srgb, var(--blue) 55%, transparent); }
-.explain-note.busy { color: var(--muted); font: 700 13px var(--hand); }
-.explain-note.err { --ink: color-mix(in srgb, var(--red) 55%, transparent); }
-.explain-note span { flex: 1; }
-.explain-x { flex: none; color: var(--muted); font-size: 15px; line-height: 1; }
-.explain-x:hover { color: var(--fg); }
 .steps ul { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .step-row { display: flex; gap: 8px; align-items: center; font-size: 12.5px; width: 100%; text-align: left; padding: 2px 0; }
 .step-row b { font-weight: 600; }
@@ -672,7 +656,7 @@ body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; 
    ::before 2px bigger than its box on every side: room for the rough edge. An outlined box keeps
    its fill on itself (--chalk-bg on buttons), under the outline, so the text stays crisp.
    --chalk-c = a button's outline colour. */
-.explain-note::before, .rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
+.rail-dot::before, .state-badge::before, .tip-bubble::before, .project-tag::before, .chalk-box::before,
 .f-code::before, .f-files::before, .g-git::before, .cl-form::before, .ca-form::before, .f-flow-btn::before, .f-tree-row .ft::before, .confirm-card::before,
 .f-kind::before, .rail-server::before, .server-mark::before,
 .rbar::before, .input-row::before, .new::before, .search-box::before, .primary::before, .stop::before, .actions button:not(.primary)::before, .prompt-actions button::before,

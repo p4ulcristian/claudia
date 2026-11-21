@@ -1,7 +1,7 @@
 (ns claudia.web.chatops
   "The page's chat operations beyond talking: whose chats show (another profile's, read only) and
   which servers' (ticks), search, archived chats, all ~/Work sessions, Settings (tokens, GitHub),
-  attachments, fork, explain-a-step, chat colours, project logos, older pages of a chat."
+  attachments, fork, chat colours, project logos, older pages of a chat."
   (:require [re-frame.core :as rf]
             [clojure.string :as str]
             [claudia.shared.protocol :as protocol]
@@ -223,22 +223,6 @@
 (rf/reg-event-db :ops/fork-failed (fn [db [_ e]] (update db :menu #(when % (assoc % :forking false :error e)))))
 
 (rf/reg-event-db :ops/error (fn [db [_ e]] (assoc db :error e)))
-
-;; ---- explain a step ----
-
-(rf/reg-event-fx
- :ops/explain
- (fn [{:keys [db]} [_ [s c] step]]
-   (let [k [s c step]]
-     (if (get-in db [:explain k :text])
-       {:db (update-in db [:explain k :open] not)}
-       {:db (assoc-in db [:explain k] {:busy true :open true})
-        :api/call {:method "POST" :url (api-url s (str "chats/" c "/explain") (:view db)) :body {:step step}
-                   :on-ok [:ops/explained k] :on-fail [:ops/explain-failed k]}}))))
-
-(rf/reg-event-db :ops/explained (fn [db [_ k {:keys [text]}]] (assoc-in db [:explain k] {:text text :open true})))
-(rf/reg-event-db :ops/explain-failed (fn [db [_ k e]] (assoc-in db [:explain k] {:error e :open true})))
-(rf/reg-sub :explain (fn [db [_ k]] (get-in db [:explain k])))
 
 ;; ---- project of a working folder ----
 
