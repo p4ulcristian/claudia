@@ -402,9 +402,11 @@
      (when free ^{:key "slot"} [back-slot parts])
      ^{:key "mic"}
      [:> (.-div motion) {:class (str "mic " (name phase) (when free " moved") (when speaker " speaking") (when reply " replying"))
-                         :style (cond-> {"--chat" (or (:colour speaker) (colour-of draft-key))}
-                                  reply (assoc "--rec" (words/colour-var (:color to)))
-                                  free (assoc :left sx :top sy))}
+                         ;; Home again, left/top are auto: motion leaves the spring's last values
+                         ;; on the element, which pushed the mic off the screen from its slot.
+                         :style (cond-> {"--chat" (or (:colour speaker) (colour-of draft-key))
+                                         :left (if free sx "auto") :top (if free sy "auto")}
+                                  reply (assoc "--rec" (words/colour-var (:color to))))}
       [clips/clip-list]
       (core (assoc parts :speaker speaker))
       (when (and reply (not= :idle phase)) [reply-label to])
