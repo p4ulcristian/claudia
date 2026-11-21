@@ -1833,7 +1833,11 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
     elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
     (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
-    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
+    Machines and Forms, the way to them on desktops and phones (no rail there). Since 2026-11-21
+    (the user's call) Search, System, Prompts and Settings are toggles: lit while their sheet is the
+    top one, and a press then closes it (`[:right/close …]`); and Archive is back on the rail, under
+    New chat (the open chat, asked first as the header's; Unarchive for an archived one; passive
+    with no started chat of one's own open), so the rail holds nine, five under its middle. Instead of: buttons
     shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
     ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
     Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
