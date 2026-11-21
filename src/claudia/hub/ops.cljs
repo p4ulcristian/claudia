@@ -353,15 +353,17 @@
   (with-body req (fn [b] (io/send-json res 200 (hub-bookmarks/save! email (:items b))))))
 
 (defn- right-view-of
-  "What a person's right half shows, as the page gets it: {:view} (the Drawing board before any)."
+  "What a person's right half shows, as the page gets it: {:views (the pile of sheets, bottom to top)
+  :view (the top one, picture when none)}; no sheets before any."
   [email]
-  {:view (views/clean (:view (store/right-view email)))})
+  (views/to-wire (views/from-stored (:view (store/right-view email)))))
 
 (defn- save-right-view
-  "PUT /hub/right-view {view}: the person's pick, kept on every device (README decision 75)."
+  "PUT /hub/right-view {views} (an older page: {view}): the person's pile of sheets, kept on every
+  device (README decision 91)."
   [req res email _]
   (with-body req (fn [b]
-                   (store/save-right-view! email (name (views/clean (:view b))))
+                   (store/save-right-view! email (views/to-stored (views/from-wire b)))
                    (io/send-json res 200 (right-view-of email)))))
 
 (defn person-route

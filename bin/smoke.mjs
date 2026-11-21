@@ -66,15 +66,31 @@ async function visit(browser, hubUrl, screen) {
     await step('the chat list comes', () => until('the chats frame with the seeded chat',
       () => seen.heard.some((f) => f.type === 'chats' && f.chats.some((c) => c.id === chatId))));
     await step('the chat is in the list', () => page.getByText(title, { exact: true }).first().waitFor({ timeout: waitMs }));
-    if (screen.name === 'desktop') await step('Settings opens in the right half from the menu, the dropdown names it, and the pick is kept on the hub (README decisions 58, 75)', async () => {
+    if (screen.name === 'desktop') await step('views open as sheets on the Drawing board: Settings from the menu, Search on top of it (Ctrl+K), a peeking sheet comes up, × closes, and the pile is kept on the hub (README decisions 58, 91)', async () => {
+      const pile = () => page.evaluate(() => fetch('/hub/right-view').then((r) => r.json()));
+      const kept = (views) => until(`PUT /hub/right-view ${views.join(' ') || 'none'}`, async () => {
+        const p = await pile();
+        return JSON.stringify(p.views) === JSON.stringify(views) && p.view === (views.at(-1) ?? 'picture');
+      });
+      const sheet = (name) => page.locator('.sheet', { has: page.locator('.sheet-title', { hasText: name }) });
+      if (await page.locator('.rp-button').count()) throw new Error('the Drawing board dropdown is still there');
       await page.locator('button.mn-face').first().click({ timeout: waitMs });
       await page.getByRole('menuitem', { name: /More settings/ }).click({ timeout: waitMs });
-      await page.locator('.settings-pane').getByText('Claude subscriptions').waitFor({ timeout: waitMs });
-      await page.locator('.rp-button', { hasText: 'Settings' }).waitFor({ timeout: waitMs });
-      await until('PUT /hub/right-view settings', async () => (await page.evaluate(() => fetch('/hub/right-view').then((r) => r.json()))).view === 'settings');
-      await page.locator('.rp-button').click({ timeout: waitMs });
-      await page.getByRole('menuitemradio', { name: /Drawing board/ }).click({ timeout: waitMs });
+      await sheet('Settings').locator('.settings-pane').getByText('Claude subscriptions').waitFor({ timeout: waitMs });
+      await kept(['settings']);
+      await page.keyboard.press('Control+k');
+      await sheet('Search').locator('.sp-panel').waitFor({ timeout: waitMs });
+      await page.locator('.sheet.under', { hasText: 'Settings' }).waitFor({ timeout: waitMs });
+      if (await page.locator('.settings-pane').count()) throw new Error('a sheet under the top one is drawn in full');
+      await kept(['settings', 'search']);
+      await sheet('Settings').click({ position: { x: 60, y: 10 }, timeout: waitMs });
+      await sheet('Settings').locator('.settings-pane').waitFor({ timeout: waitMs });
+      await kept(['search', 'settings']);
+      await page.getByRole('button', { name: 'Close Settings' }).click({ timeout: waitMs });
       await page.locator('.settings-pane').waitFor({ state: 'detached', timeout: waitMs });
+      await page.getByRole('button', { name: 'Close Search' }).click({ timeout: waitMs });
+      await page.locator('.sheet').first().waitFor({ state: 'detached', timeout: waitMs });
+      await kept([]);
     });
     if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill (server, project, notify and colour among them) and the model · effort popup, no select; Files first among the worded buttons (README decisions 22, 90)', async () => {
       const head = page.locator('.chat-head');
@@ -90,7 +106,7 @@ async function visit(browser, hubUrl, screen) {
       await page.keyboard.press('Escape');
       await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70, 90)', async () => {
+    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and closes the File Browser\'s sheet (README decisions 61 to 65, 70, 90, 91)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
       const pill = page.locator('.chat-head .project-pill');
       await pill.locator('.pill-empty', { hasText: 'Pick a project' }).waitFor({ timeout: waitMs });
@@ -98,7 +114,7 @@ async function visit(browser, hubUrl, screen) {
       const box = page.getByPlaceholder('Message Claude…');
       await box.fill('Start here please');
       await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });
-      await page.locator('.fd-files .fd-heading', { hasText: 'File Browser' }).waitFor({ timeout: waitMs });
+      await page.locator('.sheet', { has: page.locator('.sheet-title', { hasText: 'File Browser' }) }).locator('.fd-files').waitFor({ timeout: waitMs });
       if (seen.sent.some((f) => f.type === 'new')) throw new Error('a new chat went out without a folder');
       await row('claude').click({ timeout: waitMs });
       await row('claude').locator('.fd-pin').click({ timeout: waitMs });

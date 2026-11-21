@@ -1019,15 +1019,15 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 70. Files lives in the right half, toggled from the header (2026-11-19, the user's call: "Files is
     so good that I want it instead of the picture, with a toggle; the button stays where it is").
-    The folder pill in a chat's header (row 2) no longer opens a modal: a click switches the right
-    half between the picture and Files, and the pill is lit while Files shows (since decision 90:
-    the Files button in row 3, filled while Files shows). Files is the same
+    The folder pill in a chat's header (row 2) no longer opens a modal: a click opens Files in the
+    right half, or closes it when it shows (since decision 90 the Files button in row 3 does, filled
+    while Files shows; a sheet on the Drawing board since decision 91). Files is the same
     browser as before (bookmark cards, tree, contents as grid or list, preview), on the open
     chat's server with its folder (else the work folder) selected, started again when another chat
-    opens; Select works on the open chat. The bar under the right half stays in both. The choice is
-    kept in the page's storage. The chat menu's Folders… is now Files…: it opens that chat with
+    opens; Select works on the open chat. The choice is kept per person on the hub (decisions 75
+    and 90). The chat menu's Folders… is now Files…: it opens that chat with
     Files. A new chat's first message without a folder (decision 65) opens Files instead of the
-    modal; Select sends it and the picture comes back. A read-only view shows the picture only.
+    modal; Select sends it and Files' sheet closes. A read-only view shows no Files.
     On a phone, Files brings the right half up. Instead of: the Folders modal over the page, or a
     Picture | Files switch in the right half's bar.
 
@@ -1103,19 +1103,19 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     chat here, Pin, recent chats) is gone, and with it the runner's `GET /api/folders/facts` (the
     folder's size by `du`, its chats, its git summary). Pinning stays on the tree's ☆ and the
     cards' ★. Instead of: a new chat with no folder, and a folder section under the preview.
-75. The right half's views, picked in a dropdown and kept per person (2026-11-19, the user's call:
+75. The right half's views, kept per person (the dropdown and one view at a time replaced by
+    decision 91's sheets, 2026-11-21) (2026-11-19, the user's call:
     "Search should do too. Settings too. All the views that we have in pop up should do this"; "a
     drop down so we could change between settings, file browser, and all the other windows"; "the
     drawing table or file browser, whichever is chosen, that should be per profile"). The right
-    half's top row is a dropdown naming the view shown: Drawing board (Claude's picture), File
-    Browser, Search, Settings, My words, Machines, Prompts, Forms (`claudia.shared.views`). The
-    buttons that opened pop-ups open the view instead (the header's Files button, decision 90, and the edge's search, My
-    words and cog toggle theirs with the Drawing board; ⌘K, the menu's Machines, Forms and More
-    settings, a prompt pill's edit). The pick is the person's, on the hub (`GET/PUT
-    /hub/right-view`, table `right_views`), so every device shows the same view; a read-only view of
-    another person's chats shows the Drawing board for the File Browser. Search stays beside the
-    chat a find opens; the Drawing board's bar shows only under the Drawing board. On a phone a view
-    brings the right half's screen up. Small pop-ups tied to a button (the header pills, menus, the
+    half shows the Drawing board (Claude's picture) or one of File Browser, Search, Settings, My
+    words, Machines, Prompts, Forms (`claudia.shared.views`; since decision 91 as sheets on the
+    board, no dropdown). The buttons that opened pop-ups open the view instead (the header's Files
+    button, decision 90, and the edge's search, My words and cog toggle theirs; ⌘K, the menu's
+    Machines, Forms and More settings, a prompt pill's edit). What shows is the person's, on
+    the hub (`GET/PUT /hub/right-view`, table `right_views`), so every device shows the same; a
+    read-only view of another person's chats shows no File Browser. Search stays beside the chat a
+    find opens. On a phone a view brings the right half's screen up. Small pop-ups tied to a button (the header pills, menus, the
     confirm card) stay; image zoom stays full screen. Instead of: Search and My words over the
     dimmed page, Settings, Prompts and Forms as centred windows, Machines in the menu's place, and
     the right half's view kept per browser.
@@ -1630,3 +1630,29 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
 - The camera's PNG of the picture (draw answers carry no screenshot since 2026-11-18: one per draw was about 3% of all tokens spent): playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
+
+91. The Drawing board is the table, every other view a sheet of paper on it (2026-11-21, the user's
+    design). The Drawing board has no frame, title or dropdown: the picture's blocks sit straight on
+    it, with its bar (‹ ›, the snapshot) under them, always the bottom layer. File Browser, Search,
+    Settings, My words, Machines, Prompts and Forms each open as a sheet laid on it: the board's
+    colour, set apart only by its edge and a shadow, with a title strip (the view's icon and name in
+    the hand font) and an × that closes it. Sheets pile up: the one opened last lies on top, each one
+    24 px down and 20 px right of the one under it (10 and 14 px on a phone, inside the picture
+    screen), all one size; opening one already in the pile brings it to the top. Only the top sheet
+    is drawn in full and takes input (the board under sheets is inert); the ones under it show their
+    title strip and left edge, and a click there brings one to the top. Closing the top sheet shows
+    the one under it; closing all shows the board. The events: `[:right/view v]` lays v on top (the
+    Drawing board takes every sheet off), `[:right/toggle v]` closes v when it is the top sheet,
+    else lays it on top, `[:right/close v]` takes v off; the sub `:right-view` is the top sheet's
+    view (`:picture` when none), `:right-sheets` the pile, bottom to top. Opening a sheet closes the
+    world; on a phone it brings the picture screen up; Files asks for the bookmarks again; a
+    read-only view leaves Files out of the pile it shows. The pile is the person's on every device:
+    `PUT /hub/right-view {views}` (bottom to top), answered and read back as `{views, view}` with
+    `view` the top one for older pages, an older page's `{view}` setting a pile of that one view; the
+    hub keeps the names space separated in `right_views.view`, so a pick kept before reads as a pile
+    of one (pure: `claudia.shared.views`, tested on plain data). The File Browser's and My words'
+    own headings went: the title strip names them. Instead of: one view at a time, picked in a
+    "Drawing board ▾" dropdown over the right half (decision 75).
+    Files: `src/claudia/shared/views.cljc`, `src/claudia/web/right.cljs`,
+    `src/claudia/web/views/sheets.cljs`, `src/claudia/web/views/picture.cljs`,
+    `src/claudia/hub/ops.cljs`, `resources/web/css/right.css`, `PROTOCOL.md`.
