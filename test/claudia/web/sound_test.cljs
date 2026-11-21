@@ -16,3 +16,9 @@
     (sound/claim! :d #(swap! stopped conj :d))
     (is (= [:a :b] @stopped) "a released sound is not stopped again")
     (sound/release! :d)))
+
+(deftest a-stopped-context-needs-resume
+  (is (sound/stopped-state? "suspended") "made before a touch, or paused")
+  (is (sound/stopped-state? "interrupted") "iOS took the sound away (WebKit's own state)")
+  (is (not (sound/stopped-state? "running")))
+  (is (not (sound/stopped-state? "closed"))))

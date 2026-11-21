@@ -38,7 +38,7 @@
 (defn- play! [{:keys [source] :as narrator} {:keys [buffer]}]
   (stop! narrator)
   (let [^js c (context! narrator)]
-    (-> (if (= "suspended" (.-state c)) (.catch (.resume c) (fn [_] nil)) (js/Promise.resolve nil))
+    (-> (or (sound/resumed! c) (js/Promise.resolve nil))
         (.then (fn [_]
                  (let [^js src (.createBufferSource c)]
                    (set! (.-buffer src) buffer)

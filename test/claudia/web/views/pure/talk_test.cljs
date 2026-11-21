@@ -73,3 +73,9 @@
       (is (= [b1 b2 r1] (:queue tapped2)) "red, waiting, comes after them")
       (is (= "b1" (:id (:current (talk/next-up tapped2)))) "b1 is read first")
       (is (not-any? #{"b1"} (:said tapped2)) "read before, read again"))))
+
+(deftest a-reply-is-given-up-after-its-own-length
+  (is (= 13000 (talk/stall-ms 15 5 3000)) "what is left on the clock, plus the margin")
+  (is (= 23000 (talk/stall-ms 20 0 3000)) "a frozen clock leaves all of it")
+  (is (= 3000 (talk/stall-ms 5 9 3000)) "past its end: only the margin")
+  (is (= 3000 (talk/stall-ms nil 0 3000)) "nothing scheduled: only the margin"))
