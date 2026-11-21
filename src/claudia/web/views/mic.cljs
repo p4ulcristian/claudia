@@ -146,6 +146,7 @@
   [^js e {:keys [hold set-phase set-dir set-reply set-aim draft-key floating?] :as parts} & [target]]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
+    (some-> (js/getSelection) .removeAllRanges)   ; nothing stays selected under the flower
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (let [reading (speech/reading-chat)
           reply (:k target)
@@ -306,6 +307,18 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
+(defn- use-no-select!
+  "While the mic or a circle is held, nothing on the page starts a selection (iOS selected the text
+  behind the flower)."
+  [phase]
+  (h/use-effect
+   (fn []
+     (when-not (#{:idle :tap} phase)
+       (let [stop #(.preventDefault %)]
+         (.addEventListener js/document "selectstart" stop)
+         #(.removeEventListener js/document "selectstart" stop))))
+   [phase]))
+
 (defn- speaker-label
   "Beside the mic while a reply is read aloud: whose reply (in its chat's colour), in which voice
   (getting ready while loading)."
@@ -444,6 +457,7 @@
     (h/use-effect (fn [] (.then (mic/available?) set-ok) nil) [])
     (use-flower! canvas live hold phase)
     (use-tap-hint! phase set-phase)
+    (use-no-select! phase)
     (when ok
       (view (merge follow
                    {:phase phase :dir dir :canvas canvas :hold hold :live live :mic mic

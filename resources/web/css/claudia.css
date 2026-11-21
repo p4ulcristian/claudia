@@ -418,6 +418,10 @@ code, pre { font-family: var(--mono); }
 .mic-flower { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 30; }
 /* While the flower is open, the rail's chalk line (a masked layer painted over the flower) steps back. */
 body:has(.mic.starting, .mic.recording, .mic.moving) .rail::after { visibility: hidden; }
+/* Pressing the mic or a voice message's circle never selects or highlights anything: not the button,
+   not the page under the flower, no iOS callout (2026-11-21, the user: it threw the hold off). */
+.mic, .mic *, .voice-circle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+body:has(.mic.starting, .mic.recording, .mic.moving) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* Nor does a mouse's hover tip cover the petals while the mic is held. */
 body:has(.mic.starting, .mic.recording, .mic.moving) .tip-root { display: none; }
 .mic.starting .mic-button, .mic.recording .mic-button, .mic.moving .mic-button { z-index: 31; background: transparent !important; box-shadow: none !important; color: #fff; transform: none !important; }
