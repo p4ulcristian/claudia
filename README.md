@@ -1693,6 +1693,43 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
+95. Machines becomes System (2026-11-21, the user's design, one call at a time: "another button next
+    to files in the header called System"; "make it nice designed"). One sheet for everything about a
+    server, for troubleshooting: the header's System button (beside Files, toggles it like Files) and
+    the edge's and the menu's old Machines entries open it; a stored pile, rail slot or link that says
+    `machines` opens System. On top, one tab per server the person may see (the gate for admins), each
+    with a dot: red = a failed unit, a crash or an out-of-memory kill in the last hour; amber = a port
+    open on all addresses that no unit, container or chat owns, a leftover, memory or a disk over 85%
+    or waiting over 10%; green otherwise; grey = not reached. Under it four tiles, each the number now
+    over a 24-hour line from the history: CPU as busy cores of all ("3.7 of 16 cores busy (23%)", the
+    user: "is that the full CPU or only one core?"), every core as a bar, the busiest process and its
+    owner; Waiting (the kernel's pressure numbers: the share of the last 10 s programs waited for CPU,
+    memory or disk; macOS has none); memory with the 90% cap as a line; the fullest disk and the
+    cards' memory. Then "Needs a look": only problems and the chats' proposals, each with its one
+    action (Log, Ask a chat, Accept / No), "All quiet" when none. Then tabs: Ports (port, reach: all
+    addresses / LAN / Headscale / this machine, the process and its owner, the project), Services
+    (grouped: Claudia, projects, containers, the system's own folded), Processes (grouped by owner:
+    chats with their colour and title, units, containers, then leftovers), History (7 days, a sample a
+    minute: busy cores, memory, waiting, with crashes, out-of-memory kills and failed units marked),
+    Log (those events, newest first), Machine (the old Machines card unchanged: every core, disk and
+    network speed, temperatures). Categories come by themselves from each process's cgroup (its
+    unit, container, chat or login session) and the unit file's place; projects come from labels on
+    the hub (`system_labels`), per server or for all; something with no label is "unknown", itself the
+    hint to look. A chat proposes a label with its `system_label` tool and the person accepts or says
+    no on System (the user: "the chat could help me in the long run ... if I accept these changes");
+    nothing a chat proposes applies by itself, and System never stops, restarts or kills anything:
+    Ask a chat puts the row's facts in the composer and the chat goes through sudo as always
+    (decision 52). Ports of other users, user units, chats' process keys, the journal and core dumps
+    need root: the root helper answers the front on a read socket of its own with a fixed list of
+    reads (PROTOCOL.md), so no tap is needed and no caller's argument reaches a command but a checked
+    unit name; without the helper (macOS, the gate) System shows what Claudia's own user can see and
+    says so. Each front keeps 7 days of minute samples in its SQLite whether or not anyone looks, so a
+    crash at 3 am still shows in the morning. System shows program names, never command lines (they
+    can hold secrets); who may see a server's System is who may see its Machines card (decision 12);
+    labels are written by admins. Instead of: a second sheet beside Machines (the same numbers
+    twice), a hand-written list only (anything new invisible), live numbers only (nothing to trace
+    back), sudo taps per read (a tap a minute), history on the hub (gone when the hub is down).
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
