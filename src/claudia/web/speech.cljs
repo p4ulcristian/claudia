@@ -174,8 +174,9 @@
     (pump!)))
 
 (defn hold!
-  "The mic is held: the reply being read stops and the rest of its chat's line is dropped (a hold
-  then replies to that chat; its messages not heard stay); other chats' wait until let-go!."
+  "The mic is held: the reply being read stops and the rest of its chat's line is dropped (the mic,
+  once it is a hold, marks that chat's messages heard: README decision 105); other chats' wait until
+  let-go!."
   []
   (let [k (:k (:current @line))]
     (sound/release! ::reply)

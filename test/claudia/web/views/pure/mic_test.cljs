@@ -129,3 +129,18 @@
     (is (<= (count out) mic/context-chars) "cut to its last context-chars")
     (is (re-find #"^word " out) "starting at a whole word")
     (is (re-find #"END$" out) "the newest words kept")))
+
+(deftest a-circle-skips-where-the-mic-adds
+  (is (= :skip (mic/circle-way (mic/gesture -60 0))) "left on a circle: skip all")
+  (is (= [:send :cancel :now] (map mic/circle-way [:send :cancel :now])) "the other ways as on the mic"))
+
+(defn- near [a b] (< (js/Math.abs (- a b)) 1e-9))
+
+(deftest move-is-written-along-the-ring-upright
+  (let [pi js/Math.PI
+        top (mic/arc-letters [10 10] 100 (- (/ pi 2)))
+        bottom (mic/arc-letters [10 10] 100 (/ pi 2))]
+    (is (every? true? (map near (map :angle top) [(- (- (/ pi 2)) 0.05) (+ (- (/ pi 2)) 0.05)])) "over the middle: left to right, clockwise")
+    (is (every? true? (map near (map :turn top) [-0.05 0.05])) "each letter turned along the ring, its top outwards")
+    (is (every? true? (map near (map :angle bottom) [(+ (/ pi 2) 0.05) (- (/ pi 2) 0.05)])) "under it: left to right, counterclockwise")
+    (is (every? true? (map near (map :turn bottom) [0.05 -0.05])) "its top inwards, so it reads upright")))

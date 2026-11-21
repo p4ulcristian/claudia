@@ -1818,6 +1818,27 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
+105. The big mic is the open chat's; other chats talk from their circles (2026-11-21, the user's
+    calls one at a time). The mic never takes another chat's colour, name, voice or bars ("they
+    are hijacking the main microphone button ... the main microphone should be always about the
+    main chat"): a hold always talks to the open chat. A chat read aloud shows on its own circle,
+    the bars moving on it (dots while its sound is made), its name and voice beside the mic in its
+    colour; only the open chat's own reply moves the bars on the mic, and a tap there stops it. A
+    tap on the mic while another chat reads starts that chat's cut message again and says to hold.
+    A hold on the circle of the chat reading talks back to it. Skipping: a tap on the playing
+    circle skips to that chat's next message (as before), and a held circle's left petal is skip
+    all instead of add: let go there and the clip is thrown away and all that chat's waiting
+    messages are marked heard. Stop and drop: a hold (not a tap) on the mic or a circle stops the
+    reading at once and marks all of the stopped chat's waiting messages heard, so its circle goes
+    ("only the new message will be relevant"). Read is heard: opening a chat marks its waiting
+    voice messages heard, here and on every device through its runner, and stops its reading; a
+    reply that comes while the chat is open is still read aloud. The move ring's word is written
+    along the ring, upright. Instead of: the mic wearing the chat being read (decision 21) and a
+    hold replying to it (decision 93), stopped messages staying unheard on their circle, a chat
+    opened keeping its voice messages, "move" written flat. Files:
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/mic_flower.cljs`,
+    `src/claudia/web/views/voice_circles.cljs`, `src/claudia/web/views/pure/mic.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/speech.cljs`, `resources/web/css/claudia.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

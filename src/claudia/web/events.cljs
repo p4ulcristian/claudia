@@ -441,6 +441,20 @@
 
 (rf/reg-event-fx :voice/heard (fn [{:keys [db]} [_ k ids]] (voice-heard-fx db k ids)))
 
+(defn chat-msg-ids
+  "The ids of chat k's ([server chat]) waiting voice messages in db."
+  [db [server chat]]
+  (->> (get-in db [:voice-msgs server]) (filter #(= chat (:chat %))) (mapv :id)))
+
+(defn voice-done-fx
+  "Chat k's waiting voice messages are done with (README decision 105): all marked heard, here at
+  once and on every device through its runner, and its line stops if it is being read."
+  [db k]
+  (assoc (or (voice-heard-fx db k (chat-msg-ids db k)) {}) :fx [[:speech/drop k]]))
+
+;; A chat opened (its words read on the screen), stopped by a hold, or skipped from its circle.
+(rf/reg-event-fx :voice/done (fn [{:keys [db]} [_ k]] (voice-done-fx db k)))
+
 (defn chat-items
   "Chat k's waiting voice messages in db as replies to read, oldest first."
   [db [server chat]]
@@ -504,7 +518,8 @@
      {:db (on-chat-screen db)}
      {:db (-> (on-chat-screen db) (assoc :open k) (assoc-in [:chats k :error] nil))
       :ws/send-all (switch-frames (:open db) k)
-      :fx (cond-> [[:dispatch [:chat/check-seen]]]
+      ;; Opened, its replies are read on the screen: its voice messages are done (README decision 105).
+      :fx (cond-> [[:dispatch [:chat/check-seen]] [:dispatch [:voice/done k]]]
             history? (conj [:history/push k]))})))
 
 (defn new-chat
