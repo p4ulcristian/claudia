@@ -2218,3 +2218,15 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/web/views/stretch.cljs` (the listeners), `src/claudia/web/views/pure/stretch.cljs`
     (the numbers), `src/claudia/web/views/chat.cljs`, `resources/web/css/claudia.css`, `bin/smoke.mjs`
     (a wheel past the end in Chromium stretches the messages and they spring back).
+
+119. The where pill names the project and lists every project on the server (2026-11-21, the user:
+    "the project chooser has only a path. It has no project chooser to it. We should fix that").
+    The pill's project, and every row of its popup, is named by its bookmark label, else the
+    project the server finds in the folder (the name the rail's circles use, `GET project`), else
+    the folder's last part; the full path stays in the tip and under each row. The popup lists the
+    server's bookmarks (Bookmarks), then the folders the person's chats there use, archived ones
+    too, the latest used first, at most 12 (Used by your chats), then the chat's own folder when
+    neither has it; each row with the project's logo. Its last row, Other folder…, opens the File
+    Browser for the chat (a new chat's Select picks its folder, decision 70; a started chat's moves
+    it). Files: `src/claudia/web/views/pure/head.cljs`, `src/claudia/web/views/head_place.cljs`,
+    `resources/web/css/claudia.css`.

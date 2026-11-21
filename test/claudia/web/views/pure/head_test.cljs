@@ -12,17 +12,38 @@
   (is (= "notes" (head/project-name {:folder "/home/ann/notes"})))
   (is (= "/" (head/project-name {:folder "/"}))))
 
-(deftest project-rows-are-the-servers-bookmarks-the-chats-ticked
-  (is (= [{:folder "/home/ann/Work/app" :title "App" :line "~/Work/app" :on? false}
-          {:folder "/home/ann/notes" :title "notes" :line "~/notes" :on? true}]
-         (head/project-rows bookmarks "home" "/home/ann/notes")))
-  (is (= [] (head/project-rows bookmarks "mac" "/x"))))
+(def ^:private rows
+  [{:server "home" :folder "/home/ann/shop" :at 30}
+   {:server "home" :folder "/home/ann/notes" :at 50}
+   {:server "home" :folder "/home/ann/shop" :at 10}
+   {:server "home" :folder "" :at 60}
+   {:server "work" :folder "/srv/api" :at 90}
+   {:server "home" :folder "/home/ann/blog" :at 20}])
 
-(deftest the-project-pill-shows-the-bookmark-else-the-path
-  (is (= "App" (head/project-value bookmarks "home" "/home/ann/Work/app")))
-  (is (= "~/Work/other" (head/project-value bookmarks "home" "/home/ann/Work/other")))
-  (is (= "/srv/site" (head/project-value bookmarks "home" "/srv/site")) "another server's bookmark is not this one's")
-  (is (nil? (head/project-value bookmarks "home" nil))))
+(def ^:private projects {["home" "/home/ann/shop"] {:name "Shop"} ["home" "/home/ann/blog"] {:name nil}})
+
+(deftest chat-folders-are-the-latest-used-first-each-once-on-the-server
+  (is (= ["/home/ann/notes" "/home/ann/shop" "/home/ann/blog"] (head/chat-folders rows "home" #{})))
+  (is (= ["/home/ann/shop" "/home/ann/blog"] (head/chat-folders rows "home" #{"/home/ann/notes"})))
+  (is (= head/used-max (count (head/chat-folders (map (fn [i] {:server "s" :folder (str "/f" i) :at i}) (range 30)) "s" #{})))))
+
+(deftest project-rows-are-the-bookmarks-then-the-chats-folders-then-the-own
+  (is (= [{:folder "/home/ann/Work/app" :title "App" :line "~/Work/app" :on? false :pinned? true}
+          {:folder "/home/ann/notes" :title "notes" :line "~/notes" :on? false :pinned? true}
+          {:folder "/home/ann/shop" :title "Shop" :line "~/shop" :on? true :pinned? false}
+          {:folder "/home/ann/blog" :title "blog" :line "~/blog" :on? false :pinned? false}]
+         (head/project-rows bookmarks rows projects "home" "/home/ann/shop")))
+  (is (= ["/home/ann/Work/app" "/home/ann/notes" "/home/ann/shop" "/home/ann/blog" "/tmp/x"]
+         (mapv :folder (head/project-rows bookmarks rows projects "home" "/tmp/x")))
+      "the chat's own folder comes last when nothing else has it")
+  (is (= [] (head/project-rows bookmarks rows projects "mac" nil))))
+
+(deftest the-pill-names-the-bookmark-else-the-found-project-else-the-last-folder
+  (is (= "App" (head/project-value bookmarks projects "home" "/home/ann/Work/app")))
+  (is (= "Shop" (head/project-value bookmarks projects "home" "/home/ann/shop")))
+  (is (= "other" (head/project-value bookmarks projects "home" "/home/ann/Work/other")))
+  (is (= "site" (head/project-value bookmarks projects "home" "/srv/site")) "another server's bookmark is not this one's")
+  (is (nil? (head/project-value bookmarks projects "home" nil))))
 
 (deftest server-rows-tick-the-chats-and-dim-the-closed
   (is (= [{:name "home" :title "Home" :on? true :off? false}

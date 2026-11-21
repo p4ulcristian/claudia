@@ -3,7 +3,9 @@
   project's logo (the folder icon when it has none), then server › project. Its popup holds both
   picks: the server (a new chat picks where it starts; a started chat's pick opens the move card,
   decision 82; left out when the server cannot change) and the project (the person's bookmarks on
-  that server, decision 61: a new chat's folder pick, a started chat's folder move)."
+  that server, decision 61, then the folders their chats there use, decision 119, each named by its
+  project; a new chat's folder pick, a started chat's folder move), and Other folder…, the File
+  Browser to pick any folder."
   (:require [re-frame.core :as rf]
             [claudia.web.format :as format]
             [claudia.web.views.dot :as dot]
@@ -47,23 +49,44 @@
    [:span.where-face [dot/project-face server f [hp/icon :folder]]]
    [hp/pop-row (assoc r :mono? true :pick! #(pick! f))]])
 
+(defn- project-list
+  "The rows under their headings: Bookmarks, then Used by your chats."
+  [server rows pick!]
+  (let [[pinned used] ((juxt filter remove) :pinned? rows)]
+    [:<>
+     (when (seq pinned) [:div.where-sub "Bookmarks"])
+     (for [{f :folder :as r} pinned] ^{:key f} [project-row server r pick!])
+     (when (seq used) [:div.where-sub "Used by your chats"])
+     (for [{f :folder :as r} used] ^{:key f} [project-row server r pick!])]))
+
+(defn- other-folder
+  "Other folder…: the File Browser for this chat (a new chat's Select picks its folder, decision 70)."
+  [{:keys [ck]} close!]
+  [:button.pop-row.where-other {:type "button" :role "menuitem"
+                                :on-click (fn [] (close!) (rf/dispatch [:folders/open {:chat ck}]))}
+   [:span.pop-row-name "Other folder…"]
+   [:span.pop-row-line "pick any folder in Files"]])
+
 (defn- project-section
-  "The server's bookmarks, each its logo, name and path, the chat's ticked; a pick sets a new chat's
-  folder or moves a started chat there."
-  [{:keys [new? ck server]} folder close!]
-  (let [rows (pure/project-rows @(rf/subscribe [:bookmarks]) server folder)
+  "The server's projects (pure/project-rows), the chat's ticked, then Other folder…; a pick sets a
+  new chat's folder or moves a started chat there."
+  [{:keys [new? ck server] :as hc} folder close!]
+  (let [rows (pure/project-rows @(rf/subscribe [:bookmarks]) @(rf/subscribe [:all-rows]) @(rf/subscribe [:projects])
+                                server folder)
         pick! (fn [f] (close!) (rf/dispatch (if new? [:new/settings {:folder f}] [:chat/folder ck f])))]
     [:div {:role "group" :aria-label "Project"}
      [:div.prompt-sec (str "Projects on " @(rf/subscribe [:server-label server]))]
      (if (seq rows)
-       (for [{f :folder :as r} rows] ^{:key f} [project-row server r pick!])
-       [:div.pop-note "No projects here yet: pin a folder in Files."])]))
+       [project-list server rows pick!]
+       [:div.pop-note "No projects here yet."])
+     [:div.pop-sep]
+     [other-folder hc close!]]))
 
 (defn- project-value
   "The pill's value: the project's name, else its path; a new chat with none: Pick a project."
   [{:keys [new? folder server]} shown]
   (cond (and new? (empty? folder)) [:span.pill-empty "Pick a project"]
-        shown [:bdi (pure/project-value @(rf/subscribe [:bookmarks]) server shown)]
+        shown [:bdi (pure/project-value @(rf/subscribe [:bookmarks]) @(rf/subscribe [:projects]) server shown)]
         :else [:span.pill-empty "work folder"]))
 
 (defn- where-value
