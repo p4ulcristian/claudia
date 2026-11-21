@@ -1,8 +1,10 @@
 (ns claudia.web.views.pure.switches
-  "A chat's voice and bell (README decision 21), kept with the chat: its Row's `voice` and `bell`
-  for a started chat (k = [server id]), the new chat's picks (`:new-settings`) for k nil. The
-  voice starts Off (\"\") and the bell on: a Row from a runner that sends neither reads that way."
-  (:require [claudia.shared.voices :as voices]))
+  "A chat's voice, bell and sound (README decisions 21, 90), kept with the chat: its Row's `voice`,
+  `bell` and `sound` for a started chat (k = [server id]), the new chat's picks (`:new-settings`)
+  for k nil. The voice starts Off (\"\"), the bell on, the sound the Bell: a Row from a runner that
+  sends none of them reads that way."
+  (:require [claudia.shared.sounds :as sounds]
+            [claudia.shared.voices :as voices]))
 
 (defn- row-of [db [server id]] (get-in db [:servers server :rows id]))
 
@@ -24,13 +26,30 @@
   [row]
   (not (false? (:bell row))))
 
+(defn row-sound
+  "The sound a Row rings: its sound's id, the Bell when it names none."
+  [row]
+  (sounds/sound-id (:sound row)))
+
+(defn notify-of
+  "The chat's notify pick (README decision 90): its sound's id while its bell is on, \"\" (Off)
+  while it is off (k nil: the new chat's pick)."
+  [db k]
+  (if (bell-on? db k) (sounds/sound-id (switch-of db k :sound)) ""))
+
+(defn notify-switches
+  "The switches a notify pick sets: a sound id turns the bell on with that sound; \"\" (Off) turns
+  the bell off and keeps the sound for later."
+  [id]
+  (if (= "" id) {:bell false} {:bell true :sound (sounds/sound-id id)}))
+
 (defn root-on?
   "Whether the chat's root switch is on (README decision 52); a new chat has none."
   [db k]
   (boolean (and k (true? (:root (row-of db k))))))
 
 (defn with-switches
-  "db with the chat's switches m ({:voice :bell}, those set) laid over: its Row, or the new chat's picks."
+  "db with the chat's switches m ({:voice :bell :sound}, those set) laid over: its Row, or the new chat's picks."
   [db [server id :as k] m]
   (if k
     (update-in db [:servers server :rows id] merge m)

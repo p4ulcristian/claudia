@@ -171,8 +171,9 @@
      items TEXT NOT NULL,
      at INTEGER NOT NULL
    );
-   -- What a person's right half shows (claudia.shared.views, README decision 75): the same on
-   -- every device of theirs.
+   -- What a person's right half shows (claudia.shared.views, README decision 91): the same on
+   -- every device of theirs. view: the pile of sheets over the Drawing board, their names bottom to
+   -- top, space separated ('' for none; one name, or picture, before decision 91).
    CREATE TABLE IF NOT EXISTS right_views (
      email TEXT PRIMARY KEY REFERENCES people (email) ON DELETE CASCADE,
      view TEXT NOT NULL,
@@ -570,7 +571,7 @@
          email items-json (now)))
 
 (defn right-view
-  "What a person's right half shows: {:view :at}, or nil."
+  "What a person's right half shows: {:view (the pile's names, space separated) :at}, or nil."
   [email]
   (one "SELECT view, at FROM right_views WHERE email = ?" email))
 

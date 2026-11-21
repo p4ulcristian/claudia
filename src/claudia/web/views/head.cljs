@@ -1,20 +1,22 @@
 (ns claudia.web.views.head
-  "The chat's header (README decision 22): one panel lightly tinted with the chat's colour, three
-  rows, the same for a new chat and a started one. Row 1: the title (a click renames it) and the
-  server's state when it is off or unreached. Row 2: five pills of one look: where it works, the
-  computer and the folder in one (toggles Files, README decisions 70, 71), whose Claude
-  subscription, model · effort, the prompt profile, the voice that reads its replies (README
-  decision 21). Row 3: the rings (context, 5-hour, week) on the left; on the right the round
-  buttons: colour, bell, root, archive. A new chat picks all
-  of them here before its first message (they go with `new`; its computer in Files); once it has
-  started the computer is fixed and every other pick changes the chat."
+  "The chat's header (README decisions 22, 90): one panel lightly tinted with the chat's colour,
+  three rows, the same for a new chat and a started one. Row 1: the title (a click renames it) and
+  the server's state when it is off or unreached. Row 2: pills of one look (claudia.web.views.head-pill):
+  the server and the project (claudia.web.views.head-place), whose Claude subscription, model ·
+  effort, the prompt profile, the voice that reads its replies (decision 21), the notify sound
+  (claudia.web.views.notify) and the colour. Row 3: the rings (context, 5-hour, week) on the left;
+  on the right buttons with words: Files, Sudo (its owner), Archive. A new chat picks all of them
+  here before its first message (they go with `new`); once it has started a server pick moves it
+  (decision 82) and every other pick changes the chat."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.shared.colours :as colours-pure]
-            [claudia.web.alerts :as alerts]
+            [claudia.shared.sounds :as sounds]
             [claudia.web.folders :as folders]
-            [claudia.web.format :as format]
             [claudia.web.hooks :as hooks]
+            [claudia.web.views.head-pill :as hp]
+            [claudia.web.views.head-place :as place]
+            [claudia.web.views.notify :as notify]
             [claudia.web.views.prompts :as prompts]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
@@ -34,74 +36,6 @@
    [:rect {:x 1.5 :y 2.5 :width 13 :height 3.5 :rx 0.8}]
    [:path {:d "M2.8 6v6.5a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V6"}]
    (if out? [:path {:d "M8 12V8.2M6.3 9.8 8 8.1l1.7 1.7"}] [:path {:d "M6.3 9h3.4"}])])
-
-(defn- use-closes-away!
-  "While open, a pointer down outside box or Escape calls close."
-  [box open close]
-  (h/use-effect
-   (fn []
-     (when open
-       (let [away (fn [e] (when-not (some-> (.-current box) (.contains (.-target e))) (close)))
-             esc (fn [e] (when (= "Escape" (.-key e)) (close)))]
-         (js/window.addEventListener "pointerdown" away)
-         (js/window.addEventListener "keydown" esc)
-         #(do (js/window.removeEventListener "pointerdown" away)
-              (js/window.removeEventListener "keydown" esc)))))
-   [open]))
-
-(defn- use-popup
-  "A popup's state: [open? toggle! close! box-ref], closing on a pointer down outside or Escape."
-  []
-  (let [[open set-open] (h/use-state false)
-        box (h/use-ref nil)
-        close! #(set-open false)]
-    (use-closes-away! box open close!)
-    [open #(set-open not) close! box]))
-
-(def ^:private pill-icons
-  "Row 2's icons in place of words: the folder (where the chat works), Claude's spark (whose Claude plan), a
-  sparkle (model · effort), a page (the prompt profile), a speaker (the voice)."
-  {:folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
-   :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
-   :model "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"
-   :prompt "M6 3.5h9l3.5 3.5v13.5H6zM15 3.5V7h3.5M9 11h6M9 14.5h6M9 18h4"
-   :voice "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"})
-
-(defn- pill
-  "One setting of row 2, every one the same: its icon (pill-icons, named by k), the value and a ▾
-  when it can be changed. label names it
-  for the tip and screen readers."
-  [{:keys [k label value open on-click ro class]}]
-  [:button.head-pill {:type "button" :class class :disabled ro :data-tip label
-                      :aria-label label :aria-haspopup "true" :aria-expanded (boolean open) :on-click on-click}
-   [:svg.head-ico {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor"
-                   :stroke-width 1.7 :stroke-linecap "round" :stroke-linejoin "round"}
-    [:path {:d (pill-icons k)}]]
-   [:span.pill-val value]
-   (when-not ro [:span.pill-caret "▾"])])
-
-(defn- use-inside-panel!
-  "While open, moves the popup in box (.head-pop) left so it ends inside the header panel (a pill
-  near the right edge would push it out of the chat column)."
-  [box open]
-  (h/use-layout-effect
-   (fn []
-     (when-let [^js el (and open (some-> (.-current box) (.querySelector ".head-pop")))]
-       (when-let [^js panel (.closest el ".head-panel")]
-         (let [over (- (.-right (.getBoundingClientRect el)) (.-right (.getBoundingClientRect panel)))]
-           (when (pos? over) (set! (.. el -style -transform) (str "translateX(" (- over) "px)"))))))
-     js/undefined)
-   [open]))
-
-(defn- popped
-  "A pill with its popup under it (opened by a click, closed by a pointer down outside or Escape),
-  kept inside the header panel. opts: as pill; popup-of: (fn [close!]) the popup's markup."
-  [opts popup-of]
-  (let [[open toggle! close! box] (use-popup)]
-    (use-inside-panel! box open)
-    [:div.head-field {:ref #(set! (.-current box) %)}
-     [pill (assoc opts :open open :on-click toggle!)]
-     (when open (popup-of close!))]))
 
 ;; ---- row 1: the title ----
 
@@ -150,30 +84,10 @@
        (title-line title (when (and row (not ro)) #(set-editing true))))
      (state-icon (or status @(rf/subscribe [:server-status server])) @(rf/subscribe [:server-label server]))]))
 
-(defn- archive-button [ck row]
-  (let [out? (boolean (:archived row))]
-    [:button.icon.archive {:title (if out? "Unarchive" "Archive") :aria-label (if out? "Unarchive" "Archive")
-                           :on-click #(rf/dispatch (if out? [:chat/archive ck false] [:archive/ask ck]))}
-     [archive-icon out?]]))
-
-(defn- root-button
-  "The chat's root switch (README decision 52), only for its owner: red while on; turning it on asks
-  first."
-  [ck]
-  (let [on? @(rf/subscribe [:root? ck])]
-    [:button.icon.root-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Root"
-                               :data-tip (if on? "Root on: sudo runs without asking. Click to turn it off"
-                                             "Root off: each sudo command asks you first")
-                               :on-click #(rf/dispatch (if on? [:chat/root ck false] [:root/ask ck]))}
-     [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
-            :stroke-linecap "round" :stroke-linejoin "round"}
-      [:path {:d "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"}]
-      [:path {:d "M10 9.5h3a1.5 1.5 0 0 1 0 3h-3v-3M10 12.5V15M12.6 12.5 14 15"}]]]))
-
 (defn- row-1 [hc]
   [:div.head-row.r1 [:f> head-names hc]])
 
-;; ---- row 2: place (computer + folder), subscription, model · effort, prompt ----
+;; ---- row 2: server, project, subscription, model · effort, prompt, voice, notify, colour ----
 
 (defn- plan-limit [label l now]
   [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
@@ -203,7 +117,7 @@
   it asks for one."
   [{:keys [plans on put! ro]}]
   (when (seq plans)
-    [:f> popped {:k :account :label "Claude subscription" :value (or (:name on) "Pick one") :ro ro}
+    [:f> hp/popped {:k :account :label "Claude subscription" :value (or (:name on) "Pick one") :ro ro}
      (fn [close!]
        [:div.head-pop
         [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))]])]))
@@ -228,52 +142,18 @@
      [:span.swatch-break]
      (for [c words/gradient-colours] ^{:key c} [swatch c color pick taken])]))
 
-(defn- shown-folder
-  "The folder a chat works in: its own, else (not for a read-only view, whose runner is another
-  profile's) its server's work folder once known; nil while unknown."
-  [{:keys [server folder ro]}]
-  (or (not-empty folder)
-      (when-not ro
-        (or @(rf/subscribe [:work-folder server])
-            (do (rf/dispatch [:folders/load-work server]) nil)))))
-
-(defn- place-value
-  "The place pill's value: the computer's name, then the working path (~ for the home, cut at its
-  start so the end shows); a new chat with no folder picked: \"Pick a folder\" (README decisions
-  65, 71)."
-  [{:keys [new? folder server] :as hc}]
-  [:span.place
-   [:b.place-server @(rf/subscribe [:server-label server])]
-   (if (and new? (empty? folder))
-     [:span.pill-empty "Pick a folder"]
-     (let [shown (shown-folder hc)]
-       [:span.folder-path [:bdi (if shown (format/tilde shown) "work folder")]]))])
-
-(defn- place-pick
-  "Where the chat works, the computer and the folder in one pill (README decision 71); a click
-  toggles the right half between the picture and Files, the folder browser on this computer with
-  the folder selected, where a new chat also picks its computer. Lit while Files shows."
-  [{:keys [new? ro folder server] :as hc}]
-  (let [shown (when-not (and new? (empty? folder)) (shown-folder hc))
-        files? (= :files @(rf/subscribe [:right-view]))
-        label (str @(rf/subscribe [:server-label server]) (when shown (str ": " shown)))]
-    [:div.head-field
-     [pill {:k :folder :label (str label (if files? " · hide Files" " · show Files"))
-            :value (place-value hc) :ro ro :open files? :class (str "folder-pill place-pill" (when files? " on"))
-            :on-click #(rf/dispatch [:right/toggle :files])}]]))
-
 (defn- model-pick
   "Model · effort in one pill; its popup lists both (claudia.web.views.usage)."
   [{:keys [new? oc server ro]}]
   (let [ms (usage/model-state (if new? {:server server} oc))]
-    [:f> popped {:k :model :label "Model · effort" :value (:text ms) :ro ro}
+    [:f> hp/popped {:k :model :label "Model · effort" :value (:text ms) :ro ro}
      (fn [close!] (usage/model-effort-pop ms close!))]))
 
 (defn- prompt-pick
   "The prompt profile on top of Claudia's built-in part (README decision 60)."
   [{:keys [server settings put! ro]}]
   (let [picked (prompts/use-profiles server settings)]
-    [:f> popped {:k :prompt :label "Prompt profile" :value (or picked "built-in") :ro ro}
+    [:f> hp/popped {:k :prompt :label "Prompt profile" :value (or picked "built-in") :ro ro}
      (fn [close!] [prompts/pick-pop server settings put! close!])]))
 
 (defn- voice-pick
@@ -283,19 +163,81 @@
   (let [k (when-not new? ck)
         picked @(rf/subscribe [:voice k])]
     (when (talk/use-voice?)
-      [:f> popped {:k :voice :label "Voice" :value (talk/voice-name picked) :ro ro
+      [:f> hp/popped {:k :voice :label "Voice" :value (talk/voice-name picked) :ro ro
                    :class (when (seq picked) "on")}
        (fn [close!] [talk/voice-pop k picked close!])])))
 
+(defn- notify-pick
+  "When the chat finishes or waits on you: its sound (README decision 90), or Off (its bell off: no
+  chime, popup or phone push, decision 21)."
+  [{:keys [new? ck ro color]}]
+  (let [k (when-not new? ck)
+        picked @(rf/subscribe [:notify k])]
+    [:f> hp/popped {:k (if (seq picked) :bell :bell-off) :label "Notify" :value (sounds/notify-name picked) :ro ro}
+     (fn [close!] [notify/notify-pop k picked color close!])]))
+
+(defn- colour-pick
+  "The chat's colour: a filled dot and its short name (README decision 89); the popup is the palette
+  (a new chat's pick goes with `new`)."
+  [{:keys [new? ck ro color put!]}]
+  (let [c (or color "ash")]
+    [:f> hp/popped {:dot c :label "Colour" :value (colours-pure/name-of c) :ro ro}
+     (fn [close!]
+       [:div.head-pop.colour-pop
+        [palette (when-not new? ck) c (fn [p] (if new? (put! {:color p}) (rf/dispatch [:ops/color ck p])) (close!))]])]))
+
 (defn- row-2 [hc]
   [:div.head-row.r2
-   [place-pick hc]
+   [place/server-pick hc]
+   [place/project-pick hc]
    [:f> account-pick hc]
    [:f> model-pick hc]
    [:f> prompt-pick hc]
-   [:f> voice-pick hc]])
+   [:f> voice-pick hc]
+   [notify-pick hc]
+   [colour-pick hc]])
 
 ;; ---- row 3: rings, actions ----
+
+(defn- act-button
+  "One of row 3's buttons: an icon and a word, filled while on (class names the fill's colour)."
+  [{:keys [icon word tip on? class on-click]}]
+  [:button.head-btn {:type "button" :class [class (when on? "on")] :aria-pressed (boolean on?)
+                     :data-tip tip :on-click on-click}
+   icon [:span word]])
+
+(defn- files-button
+  "Files: the File Browser in the right half (README decision 70), filled while it shows."
+  []
+  (let [on? (= :files @(rf/subscribe [:right-view]))]
+    [act-button {:icon [hp/icon :folder] :word "Files" :on? on? :class "files-btn"
+                 :tip (if on? "Hide the File Browser" "Show the File Browser")
+                 :on-click #(rf/dispatch [:right/toggle :files])}]))
+
+(defn- root-button
+  "The chat's root switch (README decision 52), only for its owner: red while on; turning it on asks
+  first."
+  [ck]
+  (let [on? @(rf/subscribe [:root? ck])]
+    [act-button {:icon [hp/icon :root] :word (if on? "Sudo on" "Sudo off") :on? on? :class "root-btn"
+                 :tip (if on? "Root on: sudo runs without asking. Click to turn it off"
+                          "Root off: each sudo command asks you first")
+                 :on-click #(rf/dispatch (if on? [:chat/root ck false] [:root/ask ck]))}]))
+
+(defn- archive-button [ck row]
+  (let [out? (boolean (:archived row))]
+    [act-button {:icon [archive-icon out?] :word (if out? "Unarchive" "Archive") :class "archive-btn"
+                 :tip (if out? "Back to the open chats" "Archive this chat")
+                 :on-click #(rf/dispatch (if out? [:chat/archive ck false] [:archive/ask ck]))}]))
+
+(defn- actions
+  "Row 3's buttons on the right: Files (not in a read-only view, which shows the picture only),
+  Sudo (its owner, a started chat), Archive (a started chat)."
+  [{:keys [ck row ro view-ro]}]
+  [:span.head-acts
+   (when-not view-ro [files-button])
+   (when (and row (not ro) @(rf/subscribe [:owner?])) [root-button ck])
+   (when (and row (not ro)) (archive-button ck row))])
 
 (defn- plan-limits
   "The 5-hour and week Limits of the plan a chat runs on (on; none saved: the server's own plan)."
@@ -311,32 +253,6 @@
 (defn- limit-ring [label l now]
   (when-let [p (usage-pure/ring-percent l now)]
     [usage/mini-ring {:percent p :tip (usage-pure/limit-text label l now)}]))
-
-(defn- colour-button
-  "The chat's colour as a filled dot in a round button; a click opens the palette (a new chat's goes
-  with `new`)."
-  [{:keys [new? ck row settings put!]}]
-  (let [[open toggle! close! box] (use-popup)
-        color (or (if new? (:color settings) (:color row)) "ash")]
-    [:div.head-act {:ref #(set! (.-current box) %)}
-     [:button.icon.colour-btn {:type "button" :aria-haspopup "true" :aria-expanded open :aria-label "Colour"
-                               :data-tip "This chat's colour" :on-click toggle!}
-      [:span.colour-dot {:class (when (= color "ash") "passive") :style {:background (words/colour-fill color)}}]]
-     (when open
-       [:div.head-pop.colour-pop
-        [palette (when-not new? ck) color (fn [c] (if new? (put! {:color c}) (rf/dispatch [:ops/color ck c])) (close!))]])]))
-
-(defn- actions
-  "Row 3's buttons on the right, all round: colour, bell, root (its owner, a started chat),
-  archive (a started chat). A chat only looked at has none."
-  [{:keys [ck row ro new? settings] :as hc}]
-  (let [k (when-not new? ck)]
-    (when-not ro
-      [:span.head-acts
-       [:f> colour-button hc]
-       [alerts/bell-button k (if new? (:color settings) (:color row))]
-       (when (and row @(rf/subscribe [:owner?])) [root-button ck])
-       (when row (archive-button ck row))])))
 
 (defn- row-3
   "The rings on the left (context for a started chat, 5-hour, week: each a small ring and its %),
@@ -371,7 +287,8 @@
     (assoc (if new? {} oc)
            :new? new? :oc oc :server server :settings settings :plans plans
            :on (pure/chat-plan plans (:plan settings) planKey)
-           :folder (:folder place)
+           :folder (:folder place) :view-ro ro
+           :color (if new? (:color settings) (:color row))
            :ro (or ro (and (not new?) (or pending? (not row))))
            :put! (if new? #(rf/dispatch [:new/settings %]) #(rf/dispatch [:chat/settings ck %])))))
 
@@ -379,7 +296,7 @@
   (let [hc (head-context oc ro)]
     (use-tokens!)
     [:header.chat-head
-     [:div.head-panel {:style (words/colour-style (if (:new? hc) (get-in hc [:settings :color]) (get-in hc [:row :color])))}
+     [:div.head-panel {:style (words/colour-style (:color hc))}
       (row-1 hc)
       (row-2 hc)
       [:f> row-3 hc]]]))

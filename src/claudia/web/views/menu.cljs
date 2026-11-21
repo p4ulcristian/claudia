@@ -4,14 +4,16 @@
   opening to the left, README decision 73; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
-  Settings, where the plans are), Machines, Archived chats, Forms, the Desktop popups switch, More
-  settings (Machines, Forms and Settings open in the right half, README decision 75), and the
+  Settings, where the plans are), Machines, Archived chats, Forms, Prompts, My words, the Desktop
+  popups switch, More settings (Machines, Forms, Prompts, My words and Settings open in the right
+  half, README decisions 75 and 92), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.alerts :as alerts]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.icons :as icons]
             [claudia.web.views.pure.menu :as menu-pure]
             [claudia.web.views.pure.settings :as settings-pure]
             [claudia.web.views.pure.usage :as usage-pure]
@@ -28,6 +30,10 @@
 (defn- open-forms! [] (rf/dispatch [:right/view :forms]))
 
 (defn- open-machines! [] (rf/dispatch [:right/view :machines]))
+
+(defn- open-prompts! [] (rf/dispatch [:right/view :prompts]))
+
+(defn- open-words! [] (rf/dispatch [:right/view :words]))
 
 ;; ---- the parts ----
 
@@ -114,6 +120,8 @@
    (item [systems/computer-icon] "Machines" "CPU, memory, disks" (act open-machines!))
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
+   (item icons/prompts-icon "Prompts" "profiles a chat can pick" (act open-prompts!))
+   (item icons/words-icon "My words" "names dictation should hear right" (act open-words!))
    [:div.mn-sep]
    [:div.mn-switches [alerts/popups-switch]]
    [:div.mn-sep]
@@ -137,7 +145,7 @@
         box (h/use-ref nil)
         close! #(set-open nil)
         {:keys [initials other? picture] nm :name} (menu-pure/profile-face @(rf/subscribe [:me]) @(rf/subscribe [:view])
-                                                                         @(rf/subscribe [:owners]))]
+                                                                           @(rf/subscribe [:owners]))]
     [:<>
      [:button.mn-gear.mn-face {:ref #(set! (.-current box) %) :class [(when open "on") (when other? "other")]
                                :aria-label (str nm ": whose chats, settings") :aria-haspopup "menu" :aria-expanded (boolean open)

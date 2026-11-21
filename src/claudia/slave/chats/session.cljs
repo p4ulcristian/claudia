@@ -2,6 +2,7 @@
   "A chat's Claude Code session as data: what the host starts it with, the environment it runs in,
   and the names that tell when it must start again (its account, its tools' and prompt's versions)."
   (:require [claudia.node.crypto :refer [sha256-hex]]
+            [claudia.shared.sounds :as sounds]
             [claudia.shared.voices :as voices]))
 
 (defn account-of
@@ -20,12 +21,13 @@
       (contains? s :prompt) (update :prompt #(when (and (string? %) (not= "" %)) %)))))
 
 (defn flags-of
-  "The chat's voice and bell m sets ({:voice :bell}: a voice id, \"\" for Off; a boolean), only
-  those it names."
+  "The chat's voice, bell and sound m sets ({:voice :bell :sound}: a voice id, \"\" for Off; a
+  boolean; a sound id, an unknown one the Bell), only those it names."
   [m]
   (cond-> {}
     (contains? m :voice) (assoc :voice (voices/voice-id (:voice m)))
-    (contains? m :bell) (assoc :bell (boolean (:bell m)))))
+    (contains? m :bell) (assoc :bell (boolean (:bell m)))
+    (contains? m :sound) (assoc :sound (sounds/sound-id (:sound m)))))
 
 (defn restart?
   "Whether a chat's live session starts again before its next message goes in: its token

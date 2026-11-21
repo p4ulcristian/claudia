@@ -1,11 +1,11 @@
 (ns claudia.web.views.search-panel
-  "Search (README decisions 45 and 75): one search for every chat, open and archived (titles,
-  projects, what was said), on every screen, a view of the right half: the field on top (focused),
+  "Search (README decisions 45, 75 and 91): one search for every chat, open and archived (titles,
+  projects, what was said), on every screen, a sheet on the right half's Drawing board: the field on top (focused),
   the project chips under it, then before a word is typed the ten archived chats last active, else
   the finds newest first under time sections, each with the lines that matched lit. A tap on a find
   opens that chat at that message, Search staying beside it; the typed words stay for the next time.
   Opened by the iPad's edge search, the rail's search (screens without the edge), the list's
-  search, ⌘K / Ctrl+K, and the right half's dropdown."
+  search and ⌘K / Ctrl+K."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
             [claudia.web.search-open :as search-open]

@@ -7,14 +7,16 @@
   none is, every page (claudia.web.presence/sound-here?).
 
   Sounds are made here with Web Audio (no files): each chat colour has its own note, so you hear
-  which chat it was. A finished turn rings its note once like a small bell; a chat waiting on you
-  asks with two notes going up. Popups go through the browser's notifications (turning them on asks
+  which chat it was, and each chat its own sound (README decision 90: Bell, Marimba, Chime, Drop,
+  Knock; claudia.shared.sounds). A finished turn strikes its note once; a chat waiting on you asks
+  with two notes going up. Popups go through the browser's notifications (turning them on asks
   its permission once), one per chat at a time, silent; a click brings the window up and opens the
   chat."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.core :as r]
             [claudia.shared.colours :as colours]
+            [claudia.shared.sounds :as sounds]
             [claudia.web.presence :as presence]
             [claudia.web.rowdiff :as rowdiff]
             [claudia.web.views.pure.switches :as switches]))
@@ -34,36 +36,66 @@
 (defonce ^:private ctx (atom nil))
 (defn- audio [] (or @ctx (reset! ctx (js/AudioContext.))))
 
-(defn- bell
-  "A soft bell: a sine with a faint octave above, a gentle start and a fade."
-  [m at gain length]
-  (let [^js a (audio)
-        out (.createGain a)]
+(defn- envelope!
+  "A gain node into the speakers from at: up to gain in attack seconds, then fading over length."
+  [^js a at gain attack length]
+  (let [out (.createGain a)]
     (.setValueAtTime (.-gain out) 0 at)
-    (.linearRampToValueAtTime (.-gain out) gain (+ at 0.03))
+    (.linearRampToValueAtTime (.-gain out) gain (+ at attack))
     (.exponentialRampToValueAtTime (.-gain out) 0.0001 (+ at length))
     (.connect out (.-destination a))
-    (doseq [[mult g] [[1 1] [2 0.12]]]
-      (let [o (.createOscillator a)
-            og (.createGain a)]
-        (set! (.-type o) "sine")
-        (set! (.. o -frequency -value) (* mult (hz m)))
-        (set! (.. og -gain -value) g)
-        (.connect (.connect o og) out)
-        (.start o at)
-        (.stop o (+ at length 0.05))))))
+    out))
+
+(defn- tone!
+  "One oscillator of wave (its type) into out from at for length seconds, at frequency f (or gliding from
+  f to f-to in glide seconds), its own level g."
+  [^js a out {:keys [wave f f-to glide g at length]}]
+  (let [o (.createOscillator a)
+        og (.createGain a)]
+    (set! (.-type o) wave)
+    (.setValueAtTime (.-frequency o) f at)
+    (when f-to (.exponentialRampToValueAtTime (.-frequency o) f-to (+ at glide)))
+    (set! (.. og -gain -value) g)
+    (.connect (.connect o og) out)
+    (.start o at)
+    (.stop o (+ at length 0.05))))
+
+(defn- struck!
+  "A note of partials over f Hz, with an attack and a fade."
+  [a f at gain attack length parts]
+  (let [out (envelope! a at gain attack length)]
+    (doseq [[mult g] (sounds/partials f parts)]
+      (tone! a out {:wave "sine" :f (* mult f) :g g :at at :length length}))))
+
+(def ^:private strikes
+  "Each sound (claudia.shared.sounds) as one strike: (fn [audio f at gain length]) on the note f."
+  {"bell" (fn [a f at gain length] (struck! a f at gain 0.03 length [[1 1] [2 0.12]]))
+   "marimba" (fn [a f at gain length] (struck! a f at (* 1.4 gain) 0.004 (* 0.45 length) [[1 1] [4 0.22] [10 0.04]]))
+   "chime" (fn [a f at gain length] (struck! a f at (* 0.8 gain) 0.005 (* 2 length) [[1 1] [2.76 0.35] [5.4 0.15] [8.93 0.06]]))
+   "drop" (fn [a f at gain length]
+            (let [d (sounds/octave-under f 900)]
+              (tone! a (envelope! a at (* 1.6 gain) 0.005 (* 0.3 length))
+                     {:wave "sine" :f (* 0.7 d) :f-to (* 2.2 d) :glide 0.09 :g 1 :at at :length (* 0.3 length)})))
+   "knock" (fn [a f at gain _]
+             (let [k (sounds/octave-under f 450)
+                   out (envelope! a at (* 2.2 gain) 0.002 0.13)]
+               (tone! a out {:wave "triangle" :f (* 2.2 k) :f-to (* 1.5 k) :glide 0.03 :g 1 :at at :length 0.13})
+               (tone! a out {:wave "sine" :f (* 3.3 k) :g 0.3 :at at :length 0.05})))})
 
 (defn play!
-  "kind: :done or :waiting; color: the chat's colour name."
-  [kind color]
+  "kind: :done or :waiting; color: the chat's colour name; sound: its sound's id (claudia.shared.sounds,
+  unknown: the Bell). A finished turn strikes the note once; waiting strikes it, then 4 steps higher."
+  [kind color sound]
   (let [^js a (audio)
-        m (note-of color)
+        f (hz (note-of color))
+        up (hz (+ (note-of color) 4))
+        strike (strikes (sounds/sound-id sound))
         t (+ (.-currentTime a) 0.02)]
     (when (= "suspended" (.-state a)) (.resume a))
     (if (= kind :done)
-      (bell m t 0.045 0.9)
-      (do (bell m t 0.035 0.5)
-          (bell (+ m 4) (+ t 0.16) 0.035 0.8)))))
+      (strike a f t 0.045 0.9)
+      (do (strike a f t 0.035 0.5)
+          (strike a up (+ t 0.16) 0.035 0.8)))))
 
 ;; ---- popups ----
 
@@ -115,27 +147,12 @@
   []
   [switch-row (:popups @on) set-popups! "Desktop popups" "when a chat finishes or waits on you"])
 
-(def ^:private bell-path "M6 9.5a6 6 0 0 1 12 0c0 4.6 1.8 6.2 1.8 6.2H4.2S6 14.1 6 9.5M10 19a2 2 0 0 0 4 0")
-
-(defn- ring-bell!
-  "The bell of chat k ([server id]; nil: the new chat) turned to on?; turning it on rings its note once."
-  [k on? color]
-  (rf/dispatch [:chat/switches k {:bell on?}])
-  (when on? (play! :done color)))
-
-(defn bell-button
-  "The chat header's bell for the chat k ([server id]; nil: the new chat) in colour color: its chime,
-  popup and phone push when it finishes or waits on you, on or off."
-  [k color]
-  (let [on? @(rf/subscribe [:bell? k])]
-    [:button.icon.sound-toggle {:type "button" :class (when on? "on") :aria-pressed on? :aria-label "Bell"
-                                :data-tip (if on? "Bell on: this chat chimes and pings your phone when it finishes or waits"
-                                              "Bell off: this chat stays quiet")
-                                :on-click #(ring-bell! k (not on?) color)}
-     [:svg {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor" :stroke-width 1.8
-            :stroke-linecap "round" :stroke-linejoin "round"}
-      [:path {:d bell-path}]
-      (when-not on? [:path {:d "M4 4l16 16"}])]]))
+(defn pick-sound!
+  "The notify pick id (a sound id, \"\" Off) for chat k ([server id]; nil: the new chat) in colour
+  color: kept with the chat (README decision 90); a sound picked rings once."
+  [k id color]
+  (rf/dispatch [:chat/switches k (switches/notify-switches id)])
+  (when (seq id) (play! :done color id)))
 
 ;; ---- watching the chat lists ----
 
@@ -161,5 +178,5 @@
                      (.then (presence/sound-here?)
                             (fn [here?]
                               (when here?
-                                (play! kind (:color row))
+                                (play! kind (:color row) (switches/row-sound row))
                                 (when (:popups @on) (popup! kind s (assoc row :id id))))))))))))
