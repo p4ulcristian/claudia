@@ -29,7 +29,7 @@
       :else :send)))
 
 (def ring-in
-  "The move ring's inner edge, px from the mic's centre: just outside the petals (116 px out). A
+  "The move ring's inner edge, px from the mic's centre: just outside the petals (petal-reach). A
   finger that reaches it while holding a mic that moves keeps recording and the mic follows it;
   let go, the clip is sent as when let go in place."
   124)
@@ -44,7 +44,7 @@
 (def settle-ms
   "How long a finger moving the mic rests before the mic is put down under it and the hold chooses
   again from there (the petals round it, the ring to move on)."
-  350)
+  200)
 
 (def rest-px "How far a resting finger may still drift (a finger trembles)." 8)
 
@@ -53,21 +53,38 @@
   [at x y]
   (< (js/Math.hypot (- x (:x at)) (- y (:y at))) rest-px))
 
+(def petal-reach
+  "How far the flower's petals reach from the mic's centre, px (claudia.web.views.mic-flower)."
+  116)
+
 (defn clamp-spot
-  "A moved mic's centre {:x :y} on a w x h screen, so its button (radius r) stays wholly on it."
-  [{:keys [x y]} w h r]
-  {:x (-> x (max r) (min (- w r)))
-   :y (-> y (max r) (min (- h r)))})
+  "A floating mic's centre {:x :y} on a w x h screen, so its whole flower (petal-reach round it)
+  stays on it: every petal can be reached on every device (README decision 106). A screen too
+  small for the flower one way keeps the mic in its middle that way."
+  [{:keys [x y]} w h]
+  (let [mx (min petal-reach (/ w 2)) my (min petal-reach (/ h 2))]
+    {:x (-> x (max mx) (min (- w mx)))
+     :y (-> y (max my) (min (- h my)))}))
 
 (defn spot->stored "A spot as fractions of the screen, kept per device." [{:keys [x y]} w h]
   {:fx (/ x w) :fy (/ y h)})
 
 (defn stored->spot
-  "A kept spot on a w x h screen, clamped so a button of radius r stays on it (the screen may have
+  "A kept spot on a w x h screen, clamped so the whole flower stays on it (the screen may have
   turned)."
-  [{:keys [fx fy]} w h r]
+  [{:keys [fx fy]} w h]
   (when (and (number? fx) (number? fy))
-    (clamp-spot {:x (* fx w) :y (* fy h)} w h r)))
+    (clamp-spot {:x (* fx w) :y (* fy h)} w h)))
+
+(defn default-spot
+  "Where a floating mic sits until it is moved, on a w x h screen: beside the edge column (edge-w
+  px wide) at the bottom right; on a phone (edge-w 0) in the bottom middle, its button (radius r)
+  just over the composer (whose top is composer-top). Clamped so the whole flower fits."
+  [{:keys [w h edge-w composer-top r]}]
+  (clamp-spot (if (pos? edge-w)
+                {:x (- w edge-w 110) :y (- h 110)}
+                {:x (/ w 2) :y (- (or composer-top h) 8 r)})
+              w h))
 
 (defn clock-text
   "A recording's time in ms with its milliseconds, so the start shows at once: \"0.000\",

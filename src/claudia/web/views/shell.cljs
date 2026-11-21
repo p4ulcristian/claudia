@@ -3,7 +3,8 @@
   mouse alike (README decision 105): the rail of chat circles (the only chat list there, README
   decision 24) | the chat column | a 6 px divider | the right half | the edge column
   (claudia.web.views.thumb-edge); the archived chats take the chat column. Phone (under 680 px):
-  three full screens, list -> chat -> picture, one shown at a time."
+  three full screens, list -> chat -> picture, one shown at a time, the mic floating over the
+  chat (README decision 106)."
   (:require [re-frame.core :as rf]
             [re-frame.db :as rdb]
             [reagent.hooks :as h]
@@ -14,6 +15,7 @@
             [claudia.web.views.chatmenu :as chatmenu]
             [claudia.web.views.confirm :as confirm]
             [claudia.web.views.login :as login]
+            [claudia.web.views.mic :as mic]
             [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.rail :as rail]
             [claudia.web.views.rail-width :as rail-width]
@@ -121,6 +123,12 @@
       [:f> rail/rail])]
    (split-view m)])
 
+(defn- phone-mic
+  "A phone's mic, floating over the chat screen (README decision 106); the list and the picture
+  screens have none."
+  []
+  [mic/floating @(rf/subscribe [:open-chat])])
+
 (defn- app-view [{:keys [screen ro narrow? shown? draft-key world? claudia? phone?] :as m}]
   [:div.app {:class [(when-not shown? "no-sidebar")
                      (when narrow? "narrow") (when ro "read-only") (when (rail-width/resizing?) "rail-resizing")]
@@ -132,7 +140,7 @@
    [confirm/root-ask]
    [confirm/move-ask]
    (when-not world? (chats-view m))
-   (when-not (or phone? world?) [thumb-edge/edge])
+   (when-not world? (if phone? (when (= screen :chat) [phone-mic]) [thumb-edge/edge]))
    (layers {:ro ro :draft-key draft-key})
    [admin/dialog]
    [:f> world/overlay]

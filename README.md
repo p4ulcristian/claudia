@@ -1659,7 +1659,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 94. The mic floats with its little mics, and new messages play by themselves (2026-11-21, the
     user's calls one at a time, after decision 93 was in use). On a touch tablet the mic leaves the
     rail ("the microphone should not be a part of the rail anymore so it can stay with the circles
-    with the petals"): it floats over the page, bottom right beside the rail until dragged through
+    with the petals"; on phones too since decision 106): it floats over the page, bottom right beside the rail until dragged through
     its move ring (decision 73's spring), its spot kept on this device, always the whole flower,
     four petals; the rail keeps its eight slots without it (decision 92) and the "mic back" circle
     is gone. The big mic is the open chat; every other chat with voice messages waiting is a little
@@ -1835,6 +1835,29 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/web/views/pure/reach.cljs`, `src/claudia/web/views/shell.cljs`,
     `src/claudia/web/views/rail.cljs`, `src/claudia/web/views/chat.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
+
+106. The phone's mic floats like the tablet's, and every floating mic keeps its whole flower on the
+    screen (2026-11-21, the user's calls: "where should we put it to be usable, because it's pretty
+    usable on tablet?", then "on tablet it would act the same, like the petal would always fit",
+    and "after dragging I want it to reset a little bit faster to the not moving state"). Before,
+    the phone's mic sat in a row of its own over the text box, and held there its down petal (now)
+    fell mostly off the screen's bottom. Now:
+    - On a phone's chat screen the mic floats over the chat (decision 94's mic): bottom middle,
+      just over the composer, until moved through its move ring; its spot kept on this device. The
+      list and the picture screens have none; while the on-screen keyboard is up it steps away. The
+      mic row is gone, so the chat gets its room back. What the mic says (clips, hint, speaker)
+      stands centred above its ring of voice messages.
+    - On every device a floating mic is kept on the screen by its flower, not its button: its
+      centre stays the petals' reach (116 px) from every wall, wherever it is put, dragged or kept
+      (a screen too small for that one way keeps it in the middle that way). The flower stays
+      centred on the button; the button moves.
+    - After a drag it comes to rest sooner: the finger resting 200 ms (was 350) puts it down, and
+      its spring settles in about 0.3 s (was 0.5 s) with less overshoot.
+    Instead of: the row lifted so the down petal fits (a taller row on a small screen, a different
+    mic than the tablet's), or a half flower above the button (four petals in 180°, a different
+    gesture set). Files: `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/pure/mic.cljs`,
+    `src/claudia/web/views/shell.cljs`, `src/claudia/web/views/chat.cljs`,
+    `resources/web/css/reach.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

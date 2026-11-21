@@ -4,18 +4,30 @@
    Misses are about 7 mm in a screen's middle, 9 mm along its edges, 12 mm in its corners, so the
    main buttons are at least 12 mm wide: 72 pt on a phone, 64 pt on an iPad. */
 
-/* Phone: the mic in the bottom middle, above the text row; the list's + in the bottom middle. */
-@media (pointer: coarse) and (max-width: 679px) {
-  .talk-row { flex-direction: column; align-items: stretch; gap: 8px; }
-  .talk-row > .mic { align-self: center; }
-  .talk-row .mic-core, .talk-row .mic-button { width: 72px; height: 72px; }
-  .talk-row .mic-button svg { width: 32px; height: 32px; }
-  .talk-row .mic-clips { left: 50%; transform: translateX(-50%); align-items: center; }
-  .talk-row .mic-hint { left: 50%; transform: translateX(-50%); bottom: 82px; }
+/* The floating mic (README decisions 94, 106): on every screen it floats over the page where it was
+   put, its centre there (claudia.web.views.mic), its whole flower on the screen; it takes no room. */
+:root { --mic-float: 56px; --mic-float-icon: 26px; }
+.float-mic { position: absolute; width: 0; height: 0; }
+.float-mic .mic-core, .float-mic .mic-button { width: var(--mic-float); height: var(--mic-float); }
+.float-mic .mic-button svg { width: var(--mic-float-icon); height: var(--mic-float-icon); }
+.mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
+/* At rest it lets the page show through only a little (2026-11-21, the user: less transparent). */
+.float-mic .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
+
+/* Phone: the mic over the chat, bottom middle until moved; what it says (the clips, the hint, the
+   speaker's name) centred above it, past its ring of voice messages (116 px from its centre). */
+@media (max-width: 679px) {
+  .float-mic .mic-clips, .float-mic .mic-hint, .float-mic .mic-speaker { left: 50%; right: auto; top: auto;
+    bottom: calc(50% + 124px); transform: translateX(-50%); }
+  .float-mic .mic-clips { align-items: center; }
   /* Typing: while the on-screen keyboard is up (claudia.web.viewport sets data-keyboard) the hands
-     are on it, so the mic gives its row back (the clips still being heard stay). */
-  :root[data-keyboard] .talk-row > .mic:not(.starting, .recording) > .mic-core { display: none; }
-  :root[data-keyboard] .talk-row { gap: 0; }
+     are on it, so the mic steps away (the clips still being heard stay). */
+  :root[data-keyboard] .float-mic .mic:not(.starting, .recording, .moving) > .mic-core { display: none; }
+}
+
+/* A finger on a phone: 12 mm buttons, the mic and the list's + in the bottom middle. */
+@media (pointer: coarse) and (max-width: 679px) {
+  :root { --mic-float: 72px; --mic-float-icon: 32px; }
   .cs-fab { right: auto; left: calc(50% - 36px); width: 72px; height: 72px; --ring: var(--chalk-dot72); }
   .cs-fab svg { width: 32px; height: 32px; }
 }
@@ -25,7 +37,8 @@
    sizes follow the pointer: a mouse gets 48 px buttons on a 64 px column, a finger 12 mm ones
    (64 px on an 88 px column, the block after this one). */
 @media (min-width: 680px) {
-  :root { --mic-rail-w: 64px; --edge-btn: 48px; --edge-icon: 20px; --edge-name: 9px; --edge-mic-icon: 24px; }
+  :root { --mic-rail-w: 64px; --edge-btn: 48px; --edge-icon: 20px; --edge-name: 9px; --edge-mic-icon: 24px;
+    --mic-float: var(--edge-btn); --mic-float-icon: var(--edge-mic-icon); }
   .rail-dots::before, .rail-dots::after { content: ""; flex: 1 1 0; }
 
   /* The rail (README decisions 73, 92, 94): a column on the right wall, the page beside it, four
@@ -46,22 +59,14 @@
   .edge-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
   .edge-foot .mn-gear { margin: 4px auto; }
   .thumb-edge .up-panel { left: auto; right: calc(var(--mic-rail-w) + 8px + env(safe-area-inset-right)); }
-  /* The mic floats over the page (README decision 94): it takes no room in the rail. */
-  .edge-mic { position: absolute; width: 0; height: 0; }
-  .thumb-edge .mic-core, .thumb-edge .mic-button { width: var(--edge-btn); height: var(--edge-btn); }
-  .thumb-edge .mic-button svg { width: var(--edge-mic-icon); height: var(--edge-mic-icon); }
   .edge-gap { width: var(--edge-btn); height: var(--edge-btn); flex: none; }
-  /* The floating mic sits where it was put, its centre there (claudia.web.views.mic). */
-  .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
   .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
-  /* The mic only a little (2026-11-21, the user: less transparent). */
-  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
   .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
   /* The speaker's name, the hint and the clips: to the mic's left, past its ring of voice messages
      (76 px out, circles up to 40 px: 96 px from its centre), so none covers a circle. */
-  .thumb-edge .mic-clips { align-items: flex-end; }
-  .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 72px); bottom: auto; top: 50%; transform: translateY(-50%); }
+  .float-mic .mic-clips { align-items: flex-end; }
+  .float-mic .mic-clips, .float-mic .mic-hint, .float-mic .mic-speaker { left: auto; right: calc(100% + 72px); bottom: auto; top: 50%; transform: translateY(-50%); }
 
   /* A slot: its icon with its name under it. Passive (it cannot act now) it stays, greyed; Stop is
      filled red while a turn runs. */

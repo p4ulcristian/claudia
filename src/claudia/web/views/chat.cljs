@@ -1,9 +1,8 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
-  the working line) and the composer (Attach, the message and one Send; on a phone the mic too).
-  Wider than a phone the mic floats beside the edge column instead (claudia.web.views.thumb-edge,
-  README decisions 94, 105)."
+  the working line) and the composer (Attach, the message and one Send). The mic floats over the
+  page instead (claudia.web.views.mic/floating, README decisions 94, 105, 106)."
   (:require [claudia.web.views.asks :as asks]
             [claudia.web.db :as db]
             [clojure.string :as str]
@@ -18,12 +17,10 @@
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
             [claudia.web.views.head :as head]
-            [claudia.web.views.mic :as mic]
             [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.my-words :as my-words]
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
-            [claudia.web.views.pure.reach :as reach]
             [claudia.web.views.steps :as steps]
             [claudia.web.views.usage :as usage]))
 
@@ -398,8 +395,7 @@
         attached @(rf/subscribe [:attach draft-key])
         send-text! (send-fn draft-key oc attached)
         parts (assoc props :ref ref :picker picker :text text :items items :pick pick :attached attached
-                     :send! #(send-text! text))
-        phone? (hooks/use-media reach/phone)]
+                     :send! #(send-text! text))]
     (use-grow! ref text)
     ;; The box is ready to type in on each chat, except on a touch screen, where focus brings up
     ;; the keyboard over the chat.
@@ -410,7 +406,6 @@
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
      [:div.talk-row
-      (when phone? [:f> mic/button draft-key])
       [:div.input-row
        (attach-button parts)
        (message-box parts)
