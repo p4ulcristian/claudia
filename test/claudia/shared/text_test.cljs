@@ -26,3 +26,8 @@
   (is (= "Árvíztűrő-tükör.png" (text/file-name " Árvíztűrő / tükör " "picture" "png")))
   (is (= "scene.webm" (text/file-name nil "scene" "webm")))
   (is (= "picture.png" (text/file-name "!!" "picture" "png"))))
+
+(deftest with-reminder-hides-a-note-after-the-text
+  (is (= "hi\n\n<system-reminder>step 2</system-reminder>" (text/with-reminder "hi" "step 2")))
+  (is (= "hi" (text/with-reminder "hi" nil)))
+  (is (= "hi" (text/with-reminder "hi" ""))))

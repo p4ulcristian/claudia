@@ -359,7 +359,7 @@ Page → runner:
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `prompt?`, `color?`, `voice?`, `bell?`, `sound?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its voice, bell and sound as picked (else voice Off, bell on, the Bell); runner answers `created { chat, id }` then events |
-| `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?` | a message into the chat (queued if a turn runs; `now: true`: it is queued behind the messages queued before it, then the running turn is stopped and Claude Code runs all of them in the next turn, in order, README decision 83). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one) |
+| `send` | `chat`, `text`, `files?`, `images?`, `now?`, `msg?`, `viewing?` | a message into the chat (queued if a turn runs; `now: true`: it is queued behind the messages queued before it, then the running turn is stopped and Claude Code runs all of them in the next turn, in order, README decision 83). `msg` (here and on `new`): a uuid the page made as the message's id, used for its `msg` events and in the session file (else the runner makes one). `viewing`: the turn of the earlier picture the person looks at in that chat (absent on the live one, README decision 101); the runner turns it into its step number and tells Claude in a `<system-reminder>` after the text ("The user is looking at step 3 of 7 (step 7 is live) while writing this."), not shown in the chat; a turn that is not in the chat's pictures, or is the live one, says nothing |
 | `claudia` | | Claudia's own chat (README decision 48): the runner that has her (its `meta` frame says `claudia: true`) makes or finds it and answers `claudia { chat }`; elsewhere an `error` |
 | `older` | `chat`, `before` (a Msg id) | runner answers `older` with the page of messages before it |
 | `stop` | `chat` | interrupts the running turn |
@@ -492,6 +492,18 @@ block's `kind`, `html`, `parts`, `template`, `height`) is refused with the new s
 the picture each turn leaves (SQLite `pictures`, keyed by chat and turn: the user message's uuid, or an
 id made for a turn Claude started itself), sends `pictures`, and answers the draw with text only: what changed (no
 screenshot). A chat older than the history has only its last picture (turn `imported`).
+
+Claude calls these pictures steps (README decision 101): a step's number is its 1-based place in
+`pictures` (oldest first), the last one live. `from: N` (a whole number) on a draw starts the call
+from a copy of step N's scene instead of the live one, then applies the rest (blocks, `removeItems`,
+`removeBlocks`, `title`); `from` with `clear` is refused, as is a step that is not there. The draw's
+answer starts with a line naming the step: `Step 8 · modified from 7 · 2 blocks changed`,
+`Step 8 · fresh (clear)`, `Step 8 · copied from 3`, `Step 1 · the first step`, and
+`Updated step 8 (this turn's step) · …` for a later draw of the same turn; then `Picture now: …` (the
+blocks) and the notes as before. The `picture` server's `steps { number?, block? }` reads them: with
+no number one line per step (number, title, time in UTC, the last marked `live`; the newest 60 when
+there are more), with a number that step's scene as JSON (`{ title, blocks }`, blocks whole while they
+fit in 30,000 characters, the rest without their data, which `block` then reads whole).
 
 ## Secrets (1Password through the key broker, README decision 66)
 
@@ -696,7 +708,7 @@ Page → runner reads, through the front (`/s/<server>/api/…` from the page). 
 Claude picks every kind of block itself: there are no per-chat choices. The draw tool refuses only
 forms deleted in the Forms window (a session started before the delete still lists them); changes
 to the forms are told to Claude once, in a `<system-reminder>` after the text of the next message
-(the forms news). `templates` and `save_template` are
+(the forms news). `steps`, `templates` and `save_template` are
 tools of the `picture` server; a block `{ id, form: "html", data: { template: "<name>", parts? } }` is
 drawn from the template. `graph` and `html` are on every runner and cannot be deleted.
 A files/git block's `root`/`repo` is made absolute (relative to the chat's folder) before it is kept.
