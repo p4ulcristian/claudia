@@ -10,10 +10,10 @@
          (folders/use-folder {:open ["home" "c1"]} "/w/app" ["home" "c1"])))
   (is (= {:db {} :fx [[:dispatch [:new/settings {:folder "/w/app"}]]]}
          (folders/use-folder {} "/w/app" nil)))
-  (testing "a held first message goes, and the picture comes back"
-    (is (= {:db {:drafts {:new "hi"} :right-view :picture :right-saving true} :right/put :picture
+  (testing "a held first message goes, and the File Browser's sheet closes"
+    (is (= {:db {:drafts {:new "hi"} :right-sheets [:search] :right-saving true} :right/put [:search]
             :fx [[:dispatch [:new/settings {:folder "/w/app"}]] [:dispatch [:composer/send "hi"]]]}
-           (folders/use-folder {:drafts {:new "hi"} :folders {:send? true}} "/w/app" nil)))))
+           (folders/use-folder {:drafts {:new "hi"} :folders {:send? true} :right-sheets [:search :files]} "/w/app" nil)))))
 
 (deftest where-a-chat-works
   (is (= {:new? true :ck nil :server "s" :folder "/w/a"}
@@ -23,10 +23,24 @@
   (is (= {:new? false :ck ["h" "c"] :server "h" :folder nil}
          (folders/chat-place {:ck ["h" "c"] :server "h" :row {}} "s" {})) "none: the work folder"))
 
-(deftest the-right-half-shows-the-persons-pick
+(deftest the-right-half-shows-the-persons-pile
   (let [fx (right/show-view {:world? true} :files true)]
-    (is (= {:right-view :files :right-saving true :screen :picture} (:db fx)) "a phone brings the right half up, the world closes")
-    (is (= :files (:right/put fx)) "kept for the person")
+    (is (= {:right-sheets [:files] :right-saving true :screen :picture} (:db fx)) "a phone brings the right half up, the world closes")
+    (is (= [:files] (:right/put fx)) "kept for the person")
     (is (contains? fx :bookmarks/get) "the bookmarks are asked again"))
-  (is (= {:db {:right-view :settings :right-saving true} :right/put :settings} (right/show-view {} "settings" false)))
-  (is (= :picture (:right-view (:db (right/show-view {} :nonsense false)))) "an unknown view is the Drawing board"))
+  (is (= {:db {:right-sheets [:files :settings] :right-saving true} :right/put [:files :settings]}
+         (right/show-view {:right-sheets [:files]} "settings" false)) "a sheet opens on top")
+  (is (= [] (:right-sheets (:db (right/show-view {:right-sheets [:files]} :nonsense false)))) "an unknown view is the Drawing board")
+  (testing "the Drawing board takes every sheet off and leaves the world and the screen"
+    (is (= {:db {:right-sheets [] :right-saving true :world? true} :right/put []}
+           (right/show-view {:right-sheets [:files :search] :world? true} :picture true)))))
+
+(deftest toggling-and-closing-sheets
+  (is (= {:db {:right-sheets [:files] :right-saving true :world? true} :right/put [:files]}
+         (right/toggle-view {:right-sheets [:files :words] :world? true} :words true)) "the top sheet closes: no world, no screen change")
+  (let [fx (right/toggle-view {:right-sheets [:words :files]} :words true)]
+    (is (= [:files :words] (:right-sheets (:db fx))) "one under the top comes up")
+    (is (= :picture (:screen (:db fx))) "and brings a phone's right half up"))
+  (is (contains? (right/toggle-view {:right-sheets [:files :words]} :files false) :bookmarks/get) "Files brought up asks the bookmarks again")
+  (is (= {:db {:right-sheets [:search] :right-saving true} :right/put [:search]}
+         (right/close-view {:right-sheets [:files :search]} :files))))

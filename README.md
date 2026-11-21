@@ -257,9 +257,10 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     description; the hub makes ONE reference clip per description and clones every line from it,
     `/hub/narrate`, so a voice is always the same person), each with a sample to hear. Beside it the
     chat's bell (the Row's `bell`): on, the chat chimes, pops up and pushes to the phones when it
-    finishes or waits; off, it does none of them (the phone's badge still counts it). A new chat
+    finishes or waits; off, it does none of them (the phone's badge still counts it). Since
+    decision 90 the bell is the notify pill, which also picks the sound it rings. A new chat
     takes the last chat's voice and bell (its header's picks go with `new`); a chat only looked at
-    (another profile's) shows neither. Chats whose speaker was on got the first voice (Nora).
+    (another profile's) shows both and changes neither. Chats whose speaker was on got the first voice (Nora).
     Since decision 93 a chat's reply is a voice message that plays only on a tap; what follows is
     how it was before. Every chat with a voice speaks, open or not: when its turn ends by itself (not stopped, not
     failed) the runner sends `speak` with the whole final reply (or a new ask's questions) to the
@@ -296,28 +297,24 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     2026-11-19, the user's approved layout): one panel lightly tinted with the chat's colour (its
     background 7% of the colour, its edge 45%), the same for a new chat and a started one. Row 1:
     the title (a click renames it) and the server's state only while it is off, offline or
-    reconnecting; nothing else. Row 2: five pills, one component and one look (rounded, a 1 px line,
+    reconnecting; nothing else. Row 2: pills, one component and one look (rounded, a 1 px line,
     a 16 px icon in the muted colour before the value, ▾ after it when it can be changed),
-    wrapping on a narrow column: where the chat works, the computer and the folder in one pill
-    (decision 71: the folder icon, the computer's name, then the chat's real working path in mono,
-    `~` for the home, cut at its start so the end stays visible; a started chat without a folder
-    shows its server's work folder, `CLAUDIA_CWD` as `GET /api/folders` answers it; a new chat with
-    none picked says "Pick a folder", decision 65; a click toggles Files, decision 70); whose
+    wrapping on a narrow column: the server and the project (decision 90; a started chat without
+    a folder shows its server's work folder, `CLAUDIA_CWD` as `GET /api/folders` answers it); whose
     Claude subscription (decision 16; only when tokens are saved); model · effort in one pill
     ("Opus 5.5 · high"; its popup lists the models and the efforts, no native selects); the
-    prompt profile (decision 60); the voice (Off or a name, decision 21). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
+    prompt profile (decision 60); the voice (Off or a name, decision 21); notify and the colour
+    (decision 90). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
     compacting it; the plan's 5-hour; its week), each an 18 px ring followed by its percent, its
-    tip naming it; on the right round 30 px buttons with tips: the colour (a filled dot in the
-    chat's colour; a click opens the palette), the bell (a chime, popup and push when it finishes
-    or waits), root (its owner, a started chat, decision
-    52) and Archive (a started chat). A read-only view has no buttons and its pills change
-    nothing. A new chat picks them before its first message, and they go with the `new` frame, so
+    tip naming it; on the right buttons with words (decision 90): Files, Sudo (its owner, a
+    started chat, decision 52) and Archive (a started chat). A read-only view has no buttons and
+    its pills change nothing. A new chat picks them before its first message, and they go with the `new` frame, so
     the first
     turn already runs on them (before, model and effort followed `created`, after the first turn
     had begun). A new chat also has its colour from the moment it opens (the most different from
     what the server's other chats wear, decision 26), the header wears it, the
-    colour button's palette changes it, and it goes with `new` (decision 25). Once started, the
-    computer is fixed and every other pick changes the chat. The composer keeps only writing and sending, one row
+    colour pill's palette changes it, and it goes with `new` (decision 25). Once started, a
+    server pick moves the chat (decision 82) and every other pick changes the chat. The composer keeps only writing and sending, one row
     centred: the mic, Attach, the message, Send; the chips of background work sit right above it.
     Instead of: the computer above the composer and model and effort in its toolbar (settings
     spread over two places, account and project not settable before the chat existed), a header
@@ -556,7 +553,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     thumbs rest on the side edges from the middle to the upper third, and the bottom edge is the
     hardest reach (88% of tablet use is seated; a big tablet lies flat in 40% of uses and stands in
     a holder in 22%). So:
-    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (since 2026-11-19 one column on a rail on the right wall, decision 73; before, 2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
+    - iPad: the left edge is for chats, the right side for the mic and the picture's ‹ › (since 2026-11-21 four slots over the mic and four under it on the rail on the right wall, none coming or going, decision 92; since 2026-11-19 one column on that rail, decision 73; before, 2026-11-17: Stop (while a turn runs) left of the mic, Settings right of it (a tap again closes it; the rail has no gear on the iPad), search, My words and archive over it, ‹ New chat › under it, all see-through at rest; the mic 128 px in so its flower fits; My words, shown when the hub has a listen service, opens a panel over the dimmed page, as search does, to see, add and remove words). The rail's
       circles (no + since 2026-11-17: a new chat starts from the edge's New chat or Alt+N) sit centred at middle height, the open chat kept in the middle; with more
       chats than fit, the rail fills the edge and scrolls the open chat to the middle.
     - Phone: the mic sits in the bottom middle, above the text row; the chat list's + sits in the
@@ -1023,18 +1020,20 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 
 70. Files lives in the right half, toggled from the header (2026-11-19, the user's call: "Files is
     so good that I want it instead of the picture, with a toggle; the button stays where it is").
-    The folder pill in a chat's header (row 2) no longer opens a modal: a click switches the right
-    half between the picture and Files, and the pill is lit while Files shows. Files is the same
+    The folder pill in a chat's header (row 2) no longer opens a modal: a click opens Files in the
+    right half, or closes it when it shows (since decision 90 the Files button in row 3 does, filled
+    while Files shows; a sheet on the Drawing board since decision 91). Files is the same
     browser as before (bookmark cards, tree, contents as grid or list, preview), on the open
     chat's server with its folder (else the work folder) selected, started again when another chat
-    opens; Select works on the open chat. The bar under the right half stays in both. The choice is
-    kept in the page's storage. The chat menu's Folders… is now Files…: it opens that chat with
+    opens; Select works on the open chat. The choice is kept per person on the hub (decisions 75
+    and 90). The chat menu's Folders… is now Files…: it opens that chat with
     Files. A new chat's first message without a folder (decision 65) opens Files instead of the
-    modal; Select sends it and the picture comes back. A read-only view shows the picture only.
+    modal; Select sends it and Files' sheet closes. A read-only view shows no Files.
     On a phone, Files brings the right half up. Instead of: the Folders modal over the page, or a
     Picture | Files switch in the right half's bar.
 
-71. The computer and the folder are one pill, and Files picks the computer (2026-11-19, the user's
+71. Its one pill split again by decision 90 (2026-11-21): a server pill and a project pill, and
+    Files a button in row 3. The computer and the folder are one pill, and Files picks the computer (2026-11-19, the user's
     call: "project and server pair needs to be one; both should open the file browser; the file
     browser should have a server toggle"). Row 2's computer pill and folder pill became one place
     pill, "destiny ~/Work/claudia", and a click toggles Files (decision 70); the computer popup is
@@ -1061,7 +1060,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     circle ... would move the circle towards my finger"; "drag should drop the recording"; "kept
     per device"; "on mobile it stays the same"). On a touch tablet a rail 88 px wide stands on the
     right wall with the page beside it, never under it: one column, the mic in its middle at
-    mid-height; over it search, My words, archive, Stop; under it New chat, then ‹ and › (since
+    mid-height; over it Search, Machines, Prompts, My words; under it Stop, New chat, ‹, › (since
+    2026-11-21, decision 92: four slots each side, none coming or going; before: over it search,
+    My words, archive, Stop, each shown only when it could act; under it New chat, then ‹ and ›,
     2026-11-19 later: "below the mic should be the plus, the left and right below them"); at its
     bottom the foot the chats' rail had on the left, the update pill, your profile circle (its menu
     opening to the left holds Settings, so the rail has no cog) and the version's line ("so the
@@ -1080,7 +1081,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     finger rests (pure/settle-ms, 350 ms, within 8 px) the mic is put down under it and the hold
     chooses again from there: a petal, letting go in place sends, the ring moves on. Let go while
     still moving, the clip is heard and sent as when let go in place, and the mic glides there and
-    stays, its slot in the rail a dashed ring. It may
+    stays, its slot in the rail a dashed ring (since 2026-11-21 a "↺ mic back" button, decision
+    92). It may
     sit anywhere its whole button is on the screen, the rail included (2026-11-20; before: 124 px
     from the walls and the rail so the whole flower fitted). It glides home only when the button
     let go covers half its slot's area or more (two circles' overlap; before: within 40 px of the
@@ -1098,26 +1100,27 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     I want to remove that section"). Replaces decision 65. New chat (and a group's +) starts on the
     computer and in the folder of the chat open (its own folder, else that computer's work folder),
     or with no chat open in the last new chat's (`claudia.newPicks` keeps the folder again); the
-    header's place pill shows it, and the File Browser changes it while working (a bookmark's
+    header's project pill shows it (decision 90), and the File Browser changes it while working (a bookmark's
     Select). A new chat that still has no folder (a fresh browser) asks for one on its first
     message as decision 65 said. The File Browser's right pane shows only the picked file's
     preview, else the folder's README: the folder section (its name, facts, Use for this chat, New
     chat here, Pin, recent chats) is gone, and with it the runner's `GET /api/folders/facts` (the
     folder's size by `du`, its chats, its git summary). Pinning stays on the tree's ☆ and the
     cards' ★. Instead of: a new chat with no folder, and a folder section under the preview.
-75. The right half's views, picked in a dropdown and kept per person (2026-11-19, the user's call:
+75. The right half's views, kept per person (the dropdown and one view at a time replaced by
+    decision 91's sheets, 2026-11-21) (2026-11-19, the user's call:
     "Search should do too. Settings too. All the views that we have in pop up should do this"; "a
     drop down so we could change between settings, file browser, and all the other windows"; "the
     drawing table or file browser, whichever is chosen, that should be per profile"). The right
-    half's top row is a dropdown naming the view shown: Drawing board (Claude's picture), File
-    Browser, Search, Settings, My words, Machines, Prompts, Forms (`claudia.shared.views`). The
-    buttons that opened pop-ups open the view instead (the place pill and the edge's search, My
-    words and cog toggle theirs with the Drawing board; ⌘K, the menu's Machines, Forms and More
-    settings, a prompt pill's edit). The pick is the person's, on the hub (`GET/PUT
-    /hub/right-view`, table `right_views`), so every device shows the same view; a read-only view of
-    another person's chats shows the Drawing board for the File Browser. Search stays beside the
-    chat a find opens; the Drawing board's bar shows only under the Drawing board. On a phone a view
-    brings the right half's screen up. Small pop-ups tied to a button (the header pills, menus, the
+    half shows the Drawing board (Claude's picture) or one of File Browser, Search, Settings, My
+    words, Machines, Prompts, Forms (`claudia.shared.views`; since decision 91 as sheets on the
+    board, no dropdown). The buttons that opened pop-ups open the view instead (the header's Files
+    button toggles Files, decision 90; the edge's Search, Machines, Prompts and My words open
+    theirs, decision 92; ⌘K, the menu's Machines, Forms, Prompts, My words and More settings, a
+    prompt pill's edit). What shows is the person's, on
+    the hub (`GET/PUT /hub/right-view`, table `right_views`), so every device shows the same; a
+    read-only view of another person's chats shows no File Browser. Search stays beside the chat a
+    find opens. On a phone a view brings the right half's screen up. Small pop-ups tied to a button (the header pills, menus, the
     confirm card) stay; image zoom stays full screen. Instead of: Search and My words over the
     dimmed page, Settings, Prompts and Forms as centred windows, Machines in the menu's place, and
     the right half's view kept per browser.
@@ -1194,7 +1197,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     from one stand-in colour, the gradient's middle in OKLCH (`--c-<name>`), the same way a solid
     colour mixes it, so text keeps a solid chat's contrast; the stand-in also paints the robot in
     the world and the tints. The bell rings its first crayon's note. Both palettes (the header's
-    colour button, the chat menu) show the 20 solids (and ash), then the gradients on rows of their
+    colour pill, the chat menu) show the 20 solids (and ash), then the gradients on rows of their
     own. A chat's colour is still one name, so old rows stay valid and every server's
     `chat-colour?` (the runner's PATCH, a new chat's picked colour, the crayon-box move on start)
     takes the new names; the hub passes colours through untouched. (Since decision 89: 16
@@ -1539,7 +1542,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
 - People: a `person` part is a rigged CC0 MakeHuman body (`resources/web/person/person.glb`, about 400 KB, made by the TypeScript Claudia's `tools/person/make-person.py`), posed live: named poses measured from the body (stand, t, reach, wave, point, hands_on_hips, hold, walk, sit, sit_floor, kneel, squat, bend, lie) and any target overridden; arms and legs are exact two-bone chains, hands, feet and the gaze can target a part; parts can ride on a joint (`parent: "anna.handR"`).
 - Phone: the list, the chat and the picture are screens, each sliding over the one before; sideways swipes follow the finger (`src/claudia/web/swipe.cljs`): on the chat right goes to the list and left pulls the picture in, on the list left brings the open chat back, on the picture and on Settings right goes back; past 40% or flicked it completes, else springs back; never in fields, on what scrolls sideways itself (code, tables, graphs, the 3D view), with two fingers or on a mostly vertical move. A Home Screen web app (`resources/web/app-icon/`: manifest and icons; standalone safe areas, 100lvh).
 - The chalk hover tip (a clipped chat title, or any `data-tip`), the logo mark in Settings and the favicon.
-- Sounds per chat colour (a bell when a chat finishes, two rising notes when it waits on you) for every chat whose bell is on (decision 21), and desktop popups (the browser's notifications, asked once; a per-device switch in Settings) for the same chats; the open chat only when the window is not in front (`src/claudia/web/alerts.cljs`).
+- Sounds per chat colour, in each chat's own sound (decision 90; one strike when a chat finishes, two rising notes when it waits on you) for every chat whose bell is on (decision 21), and desktop popups (the browser's notifications, asked once; a per-device switch in Settings) for the same chats; the open chat only when the window is not in front (`src/claudia/web/alerts.cljs`).
 
 ## Code forms and templates (2026-11-03)
 
@@ -1591,6 +1594,41 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/shared/colours.cljc`, `src/claudia/web/events.cljs`,
     `src/claudia/web/views/head.cljs`, `src/claudia/web/views/chatmenu.cljs`,
     `src/claudia/slave/chats.cljs`, `resources/web/css/claudia.css`.
+90. The header's pills name the server, the project, the sound and the colour, and row 3's
+    buttons have words (2026-11-21, the user's design). Row 2, every one a pill with a ▾ popup:
+    the server (a computer and its label; the popup lists the person's servers, the chat's ticked,
+    an off one dimmed: a new chat's pick is where it starts, as Files' computer toggle; a started
+    chat's pick opens the move card of decision 82 with that server as where it goes; passive in a
+    read-only view, for a new chat with one server, and where a move is not allowed: a view, a
+    write tick, Claudia's own chat); the project (a folder and the name of the person's bookmark of
+    the chat's folder on that server, decision 61, else the path with `~` for the home; a new chat
+    with none: "Pick a project"; the popup lists that server's bookmarks, the name bold and the
+    path in mono under it, the chat's ticked: a new chat's folder pick, a started chat's folder
+    move); the subscription, model · effort, prompt profile and voice as before; notify (a bell and
+    the sound's name, a struck bell and "Off" when off; the popup lists Bell, Marimba, Chime, Drop
+    and Knock, each with a ▶ that plays it once without picking it, then Off: no sound, no popup,
+    no phone push); the colour (a dot in it and its short name, decision 89; the popup is the
+    palette). Row 3 keeps the rings on the left; on the right, rounded rectangles with an icon and
+    a word: Files (toggles the File Browser in the right half, filled while it shows; not in a
+    read-only view, which shows the picture only), Sudo off / Sudo on (the root switch, filled red
+    while on) and Archive / Unarchive. The sounds are made by the page with Web Audio, no files
+    (`claudia.web.alerts`), each pitched by the chat's colour as the bell was, so two chats still
+    differ: Bell is the old chime (a sine and its faint octave), Marimba a short wooden strike (its
+    fourth and tenth partials), Chime a long ring of inharmonic partials, Drop a quick upward
+    glide, Knock a short falling triangle; a finished turn strikes once, a wait strikes twice going
+    up. A chat keeps its sound beside its bell: the runner's `chats.sound` (default `bell`), the
+    Row's `sound`, the `settings` and `new` frames' `sound?` (`claudia.shared.sounds`; an unknown or
+    missing one is the Bell), so an old `bell: true` reads as the Bell and the hub's pushes still
+    follow `bell` alone. A pick sets both (a sound: bell on with it; Off: bell off, the sound
+    kept); a new chat's pick goes with `new` and the next new chat takes it over like the bell; a
+    group's picks keep it; a moved chat takes it along (it is a column of the copied row). Instead
+    of: the place pill (computer and folder in one, a click toggling Files, decision 71), sound
+    files, and round icon-only buttons for colour, bell, root and archive. Files:
+    `src/claudia/web/views/head.cljs`, `src/claudia/web/views/head_pill.cljs`,
+    `src/claudia/web/views/head_place.cljs`, `src/claudia/web/views/notify.cljs`,
+    `src/claudia/web/views/pure/head.cljs`, `src/claudia/web/alerts.cljs`,
+    `src/claudia/shared/sounds.cljc`, `src/claudia/web/move.cljs`, `src/claudia/slave/store.cljs`,
+    `resources/web/css/claudia.css`.
 
 93. Voice messages (2026-11-21, the user's design, one call at a time). A chat with a voice that
     ends a turn by itself (not stopped, not failed) or asks no longer talks at once on the page
@@ -1624,3 +1662,53 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
 - The camera's PNG of the picture (draw answers carry no screenshot since 2026-11-18: one per draw was about 3% of all tokens spent): playwright-core opens the page's render mode (`claudia.web.render`) from this checkout's `out/web` in a headless Chromium (`/opt/claudia-tools/ms-playwright`, else Playwright's own, else a system Chrome or `CLAUDIA_CHROME`).
+
+91. The Drawing board is the table, every other view a sheet of paper on it (2026-11-21, the user's
+    design). The Drawing board has no frame, title or dropdown: the picture's blocks sit straight on
+    it, with its bar (‹ ›, the snapshot) under them, always the bottom layer. File Browser, Search,
+    Settings, My words, Machines, Prompts and Forms each open as a sheet laid on it: the board's
+    colour, set apart only by its edge and a shadow, with a title strip (the view's icon and name in
+    the hand font) and an × that closes it. Sheets pile up: the one opened last lies on top, each one
+    24 px down and 20 px right of the one under it (10 and 14 px on a phone, inside the picture
+    screen), all one size; opening one already in the pile brings it to the top. Only the top sheet
+    is drawn in full and takes input (the board under sheets is inert); the ones under it show their
+    title strip and left edge, and a click there brings one to the top. Closing the top sheet shows
+    the one under it; closing all shows the board. The events: `[:right/view v]` lays v on top (the
+    Drawing board takes every sheet off), `[:right/toggle v]` closes v when it is the top sheet,
+    else lays it on top, `[:right/close v]` takes v off; the sub `:right-view` is the top sheet's
+    view (`:picture` when none), `:right-sheets` the pile, bottom to top. Opening a sheet closes the
+    world; on a phone it brings the picture screen up; Files asks for the bookmarks again; a
+    read-only view leaves Files out of the pile it shows. The pile is the person's on every device:
+    `PUT /hub/right-view {views}` (bottom to top), answered and read back as `{views, view}` with
+    `view` the top one for older pages, an older page's `{view}` setting a pile of that one view; the
+    hub keeps the names space separated in `right_views.view`, so a pick kept before reads as a pile
+    of one (pure: `claudia.shared.views`, tested on plain data). The File Browser's and My words'
+    own headings went: the title strip names them. Instead of: one view at a time, picked in a
+    "Drawing board ▾" dropdown over the right half (decision 75).
+    Files: `src/claudia/shared/views.cljc`, `src/claudia/web/right.cljs`,
+    `src/claudia/web/views/sheets.cljs`, `src/claudia/web/views/picture.cljs`,
+    `src/claudia/hub/ops.cljs`, `resources/web/css/right.css`, `PROTOCOL.md`.
+
+92. The mic rail: four slots over the mic, four under it, and none comes or goes (2026-11-21, the
+    user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
+    least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
+    Search, Machines, Prompts, My words, then the mic, then Stop, New chat, ‹ (Previous picture),
+    › (Next picture). The mic sits exactly at the rail's middle height: the same padding over and
+    under, the halves equal, and the foot (the update pill, the profile circle, the version's line)
+    at the bottom of the lower half, outside the eight; on short screens the gaps shrink to 0 before
+    the foot loses its room. A button never appears or disappears, so nothing shifts and the mic
+    never moves: one that cannot act now stays, passive (greyed, disabled): Stop while the open chat
+    has no running turn (filled red while one runs), ‹ › with no earlier or later picture or the
+    picture folded, My words without the hub's listen service or the composer, New chat where no
+    new chat can be written (`claudia.web.views.pure.edge/slot-states`). The mic's circle keeps its
+    size when the mic cannot work there. Machines, Prompts and My words open their view of the right
+    half (`[:right/view …]`; My words no longer toggles back to the Drawing board). Archive left the
+    rail (the chat header has an Archive button). The mic's empty circle, while the mic sits
+    elsewhere, is a "↺ mic back" button: a press forgets the mic's spot on this device
+    (localStorage) and the mic glides home. The profile menu gains Prompts and My words beside
+    Machines and Forms, the way to them on desktops and phones (no rail there). Instead of: buttons
+    shown only when they could act (Stop popping in and out shifted the buttons over the mic), the
+    ‹ › pair, archive on the rail, and the only way home for a moved mic a drag back onto its slot.
+    Files: `src/claudia/web/views/thumb_edge.cljs`, `src/claudia/web/views/pure/edge.cljs`,
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/menu.cljs`,
+    `src/claudia/web/views/icons.cljs`, `resources/web/css/reach.css`.

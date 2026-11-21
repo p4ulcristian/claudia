@@ -2,7 +2,7 @@
    of the picture, chalk look; the top bar names the computer (a new chat's toggle of computers); on top the server's bookmarks as cards, then three panes: left the
    filter and the tree (react-arborist), in the middle the folder's contents as a grid or a list,
    right the picked file's preview or the folder. The right pane is quiet: small type, label-value
-   lines, no tiles. Sized by the right half (.right is a size container): under 1000 px the preview
+   lines, no tiles. Sized by its sheet (.sheet-body is a size container): under 1000 px the preview
    goes under the contents; under 680 px the panes stack. */
 
 .fd-files { flex: 1; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; color: var(--fg); }
@@ -10,7 +10,6 @@
 .fd-on { font: 15px var(--sans); color: var(--muted); }
 .fd-where { display: grid; gap: 4px; margin-right: auto; min-width: 0; }
 .fd-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.fd-heading { margin: 0; font: 700 22px/1 var(--hand); color: var(--accent); }
 .fd-servers { display: flex; flex-wrap: wrap; gap: 4px; }
 .fd-server { font: 700 15px var(--hand); padding: 2px 11px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
 .fd-server:hover { color: var(--fg); border-color: var(--accent); }

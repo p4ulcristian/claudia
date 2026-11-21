@@ -14,8 +14,9 @@
     (is (false? (:back (ev/with-status down :open 1100))) "a blip"))
   (is (= {:status :open :back false} (ev/with-status {:status :connecting} :open 5)) "the first open"))
 
-(deftest new-picks-carry-the-voice-and-bell
-  (is (= {:voice "otto" :bell true :color "jade"} (ev/new-picks {:voice "otto" :bell true :color "jade" :model nil}))))
+(deftest new-picks-carry-the-voice-bell-and-sound
+  (is (= {:voice "otto" :bell true :color "jade"} (ev/new-picks {:voice "otto" :bell true :color "jade" :model nil})))
+  (is (= {:bell true :sound "marimba"} (ev/new-picks {:bell true :sound "marimba"}))))
 
 (deftest an-error-goes-only-while-it-is-the-one-shown
   (let [db {:error "s: boom" :error-from "s" :chats {["s" "c"] {:error "bad" :title "t"}}}]

@@ -26,3 +26,14 @@
   (is (false? (get-in (sw/with-switches db ["s" "b"] {:bell false}) [:servers "s" :rows "b" :bell])))
   (is (= "b" (get-in (sw/with-switches db ["s" "b"] {:bell false}) [:servers "s" :rows "b" :id])))
   (is (= {:voice "" :bell false} (:new-settings (sw/with-switches db nil {:voice "" :bell false})))))
+
+(deftest the-notify-pick-is-the-sound-while-the-bell-is-on
+  (is (= "" (sw/notify-of db ["s" "a"])) "bell off: Off")
+  (is (= "bell" (sw/notify-of db ["s" "b"])) "an old row with its bell on rings the Bell")
+  (is (= "drop" (sw/notify-of {:new-settings {:bell true :sound "drop"}} nil)))
+  (is (= "bell" (sw/row-sound {:sound "gong"})))
+  (is (= "chime" (sw/row-sound {:sound "chime"}))))
+
+(deftest a-notify-pick-sets-the-bell-and-the-sound
+  (is (= {:bell true :sound "knock"} (sw/notify-switches "knock")))
+  (is (= {:bell false} (sw/notify-switches ""))))

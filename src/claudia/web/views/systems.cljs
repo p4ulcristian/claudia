@@ -1,6 +1,6 @@
 (ns claudia.web.views.systems
-  "Machines (README decisions 12 and 75), a view of the right half opened from the profile menu
-  (claudia.web.views.menu) or the right half's dropdown: a card per server the person may use (and the gate, for admins), each asking its own numbers every
+  "Machines (README decisions 12, 75 and 91), a sheet on the right half's Drawing board opened from
+  the profile menu (claudia.web.views.menu): a card per server the person may use (and the gate, for admins), each asking its own numbers every
   2 s while open: every core's use split into user, system, steal and waiting on disk, memory,
   swap, disks, disk and network speed, temperatures, NVIDIA cards and Claudia's own processes. A
   card older than 8 s greys; a server that does not answer says so."

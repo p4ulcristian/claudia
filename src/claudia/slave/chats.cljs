@@ -788,7 +788,7 @@
     (when (not= (:model before) (:model s)) (changed!))))
 
 (defn set-flags!
-  "Sets the chat's voice and/or bell (m: {:voice :bell}, those set); the list tells
+  "Sets the chat's voice, bell and/or sound (m: {:voice :bell :sound}, those set); the list tells
   every page and the hub."
   [id m]
   (when-let [flags (not-empty (session/flags-of m))]
@@ -1370,7 +1370,7 @@
   [message folder images picks msg-id]
   (let [id (str (random-uuid))
         ;; A new chat stays on its person's last pick unless one was picked: a later pick in another chat moves it not.
-        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current profile))) (dissoc picks :color :voice :bell) (map :key (tokens/saved)))]
+        s (session/settings-with (assoc (settings id) :plan (:key (tokens/current profile))) (dissoc picks :color :voice :bell :sound) (map :key (tokens/saved)))]
     (store/add! {:id id :title (titles/first-sent-title message) :at (js/Date.now)
                  :folder (when (seq folder) folder)
                  :color (new-chat-colour (:color picks))})

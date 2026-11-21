@@ -184,7 +184,7 @@
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
 (defmethod on-chat-frame "settings" [_ f chat]
-  (chats/set-flags! chat (select-keys f [:voice :bell]))
+  (chats/set-flags! chat (select-keys f [:voice :bell :sound]))
   (when (and (contains? f :voice) (= "" (:voice (store/chat chat))))
     (voice-messages/drop-chat! chat)
     (voices-changed!))
@@ -228,7 +228,7 @@
                (send! c (meta/frame profile))
                (when-not (:read-only c) (send! c (voice-messages/current-frame))))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell])
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell :sound])
                                    (msg-id f))]
            (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)

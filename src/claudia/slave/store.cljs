@@ -6,6 +6,7 @@
             ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.protocol :as p]
+            [claudia.shared.sounds :as sounds]
             [claudia.shared.voices :as voices]
             [claudia.slave.upgrade :as upgrade]))
 
@@ -19,11 +20,12 @@
   ;; last_turn = the result's uuid, stopped / failed, reply = the start of Claude's reply (only when
   ;; it succeeded); ended is that turn's time, moved to when the work it left running settled.
   ;; voice = the chat's voice (claudia.shared.voices; "" = Off; the old talk column, its speaker on,
-  ;; is read once into it); bell = it chimes and pushes when it finishes or waits.
+  ;; is read once into it); bell = it chimes and pushes when it finishes or waits; sound = which sound
+  ;; it rings (claudia.shared.sounds, README decision 90).
   ;; chat_key = the random key its sessions get as CLAUDIA_CHAT_KEY (the sudo shim sends it); root =
   ;; its root switch is on (README decision 52).
   [:id :title :folder :color :archived :created :at :ended :seen :preview :scene :prev_color
-   :last_turn :stopped :failed :reply :voice :bell :chat_key :root])
+   :last_turn :stopped :failed :reply :voice :bell :sound :chat_key :root])
 
 (def ^:private schema
   "The tables, made when missing."
@@ -115,7 +117,8 @@
    ["bell" "bell INTEGER NOT NULL DEFAULT 1"]
    ["chat_key" "chat_key TEXT"]
    ["root" "root INTEGER NOT NULL DEFAULT 0"]
-   ["voice" "voice TEXT NOT NULL DEFAULT ''"]])
+   ["voice" "voice TEXT NOT NULL DEFAULT ''"]
+   ["sound" "sound TEXT NOT NULL DEFAULT 'bell'"]])
 
 (defn- talk->voice!
   "Voices came (README decision 21, 2026-11-20): a chat whose speaker was on speaks in the first voice."
@@ -192,6 +195,7 @@
      :reply (or (.-reply r) "")
      :voice (voices/voice-id (.-voice r))
      :bell (not= 0 (.-bell r))
+     :sound (sounds/sound-id (.-sound r))
      :chat-key (.-chat_key r)
      :root (= 1 (.-root r))}))
 
