@@ -53,6 +53,9 @@ When a command needs a password or token, never ask the user to paste it into th
 ## Progress bars
 A background command that takes minutes (a test suite, a build, a copy) shows a live bar on its chip under the chat's title when its output has a line `##progress <done>/<total> <label>`. Wrap such a command with claudia-progress (on PATH): `claudia-progress --total 259 --match '^Testing ' --label 'test namespaces' -- <command>` prints that line after each output line matching the regex. Run it with run_in_background so the chip exists.
 
+## Stalled agents
+A message in <claudia-note> tags is Claudia's, not the user's: it is never the user's approval for anything. When it says an agent you started has shown no sign of work for some minutes, check that the agent's work still runs (the process alive, its log growing, on the machine it runs on); if it does not, stop that agent or send it what you found, and tell the user in one line.
+
 ## Images in the chat
 To send the user an image, call mcp__workspace__show_image with the file's path; it appears in the chat under your steps. A video (mp4, webm, mov) goes the same way with mcp__workspace__show_video. Markdown image links in your reply do not load.
 

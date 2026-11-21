@@ -121,6 +121,16 @@
     (or (some-> (re-find #"<summary>([\s\S]*?)</summary>" text) second str/trim)
         "A background task finished.")))
 
+(defn with-claudia-tag
+  "The text Claude gets for a note of Claudia's own (the stall watch's, README decision 111)."
+  [text]
+  (str "<claudia-note>" text "</claudia-note>"))
+
+(defn claudia-note
+  "A user text that is a note of Claudia's own as the note the chat shows (\"Claudia: …\"), or nil."
+  [text]
+  (some->> (re-find #"^<claudia-note>([\s\S]*)</claudia-note>$" (str/trim (str text))) second str/trim (str "Claudia: ")))
+
 (defn command-tags
   "The tags Claude Code keeps a slash command in, read from user text: {:name :args :out} (each nil
   when missing; out is <local-command-stdout> or -stderr) and :message? (it has <command-message>)."
@@ -363,7 +373,7 @@
   "A user entry whose content is text: a task notice, a slash command, or what the user wrote."
   [m content at]
   (let [text (strip-moved (strip-reminders content))
-        notice (task-notice text)
+        notice (or (task-notice text) (claudia-note text))
         cmd (when-not notice (command-msg text))]
     (into (moved-note-msgs (:uuid m) (strip-reminders content) at)
           (cond
@@ -394,7 +404,7 @@
   [m content at]
   (let [text (strip-moved (blocks-text content))
         images (count (filter #(= "image" (:type %)) content))
-        notice (task-notice text)]
+        notice (or (task-notice text) (claudia-note text))]
     (cond
       notice {:id (:uuid m) :role "note" :text notice :at at}
       (or (seq text) (pos? images)) (cond-> {:id (:uuid m) :role "user" :text text :at at}

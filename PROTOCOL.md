@@ -522,8 +522,10 @@ The `chat` frame also carries `agents`, `settings`, `model`, `commands` and `con
 `Agent` (a subagent or a background shell; an agent's own shells and agents are part of it, counted in
 `children`, while it runs: one that outlives it, still running or ending after it, is an Agent of its own): `{ id, kind: "agent" | "shell", name, status: "running" | "completed" | "failed" | "stopped",
 start, end, tools, tokens, step (what it is on: "Edit src/x.cljs", "$ npm test"), task (id to stop it,
-while it runs), type, background, model, active, children, progress: { done, total, label } | null }`,
-running ones first. `progress` is the last `##progress <done>/<total> <label>` line of a shell's output
+while it runs), type, background, model, active, children, progress: { done, total, label } | null,
+stalled: ms | null }`, running ones first. `stalled`: when a running agent and all its running work
+last showed a sign of work (a step, progress, a shell's output written), once that is 12 minutes or
+more ago (the stall watch, README decision 111); null otherwise. `progress` is the last `##progress <done>/<total> <label>` line of a shell's output
 (`bin/claudia-progress` prints them; it is on the PATH of every chat's commands).
 
 `Context`: `{ used, max, percent, model }` (the chat's context window, read after each turn).

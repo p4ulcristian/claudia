@@ -154,3 +154,14 @@
     (is (= {:status "stopped" :end 70} (select-keys (after "sh") [:status :end])))
     (is (empty? (tasks/running-tops after)))
     (is (= "running" (get-in (tasks/with-live-set saved {"sh" {:task_id "sh"}} 70) ["sh" :status])))))
+
+(deftest a-stalled-top-counts-its-running-work
+  (let [m {"a" {:id "a" :type "general-purpose" :status "running" :start 0 :active 60000}
+           "s" {:id "s" :type "local_bash" :status "running" :start 60000 :parent "a"}
+           "done" {:id "done" :type "local_bash" :status "completed" :start 0 :end 1000 :parent "a"}}]
+    (is (= ["s"] (map :id (tasks/running-kids (get m "a") m))) "only its running work")
+    (is (= 60000 (tasks/stalled-since (get m "a") m (* 13 60000))))
+    (is (nil? (tasks/stalled-since (get m "a") (assoc-in m ["s" :heard] (* 12 60000)) (* 13 60000)))
+        "its shell wrote a minute ago")
+    (is (= {:shell true :name "ssh box 'sleep 1'"} (tasks/stall-kid (get m "s") {:input {:command "ssh box 'sleep 1'\nmore"}})))
+    (is (= {:shell false :name "Tests"} (tasks/stall-kid {:id "t" :type "general-purpose" :name "Tests"} nil)))))

@@ -50,15 +50,14 @@
   "One agent's chip; now: the time its clock shows, passed in so the parent's tick redraws it (a
   Reagent component given the same arguments is not drawn again)."
   [ck a read-only? now]
-  [:div.ag-chip {:class (:status a) :role "button" :tab-index 0 :title (:name a)
+  [:div.ag-chip {:class [(:status a) (when (pure/stalled? a) "stalled")] :role "button" :tab-index 0 :title (:name a)
                  :on-click #(rf/dispatch [:agents/open ck (:id a)])
                  :on-key-down #(when (#{"Enter" " "} (.-key %))
                                  (.preventDefault %)
                                  (rf/dispatch [:agents/open ck (:id a)]))}
    [:span.ag-l1 [status-mark a] [:b.ag-name (:name a)] [facts-line a now]]
    (when (:progress a) [bar (:progress a) (:status a)])
-   [:span.ag-l2 (str (or (:step a) (when (= "agent" (:kind a)) "starting…"))
-                     (when (pos? (:children a)) (str " · +" (:children a))))]
+   [:span.ag-l2 (pure/chip-line a now)]
    (when (and (not read-only?) (:task a) (running? a))
      [:button.ag-stop {:title "Stop this agent"
                        :on-click (fn [e] (.stopPropagation e) (rf/dispatch [:agents/stop ck (:task a)]))}

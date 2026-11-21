@@ -64,6 +64,20 @@
                 (when (= "agent" (:kind a)) (str (:tools a) (if (= 1 (:tools a)) " tool" " tools")))
                 (when (:tokens a) (tokens (:tokens a)))]))
 
+(defn stalled?
+  "A running agent the stall watch found quiet (README decision 111): it and its work showed no sign
+  for a while (its :stalled says since when, ms)."
+  [a]
+  (boolean (and (running? a) (:stalled a))))
+
+(defn chip-line
+  "A chip's second line: what it is on and its running work (+N); a stalled one says so instead."
+  [a now]
+  (if (stalled? a)
+    (str "waiting on nothing · quiet " (dur (- now (:stalled a))))
+    (str (or (:step a) (when (= "agent" (:kind a)) "starting…"))
+         (when (pos? (:children a)) (str " · +" (:children a))))))
+
 (defn tabs
   "One agent's tabs [id label]: a shell's Output and Command; a subagent's Steps, Files, Prompt,
   Report."

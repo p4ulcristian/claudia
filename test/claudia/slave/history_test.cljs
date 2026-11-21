@@ -123,3 +123,7 @@
     (is (= {:word "GitHub" :heard "get hub"} (:word m)))
     (is (= "offer word: GitHub" (:summary m))))
   (is (= {:word "" :heard ""} (history/offered-word nil)) "nothing given: blank, no card"))
+
+(deftest claudias-own-notes-show-as-hers
+  (is (= "Claudia: The agent stalled." (history/claudia-note (history/with-claudia-tag "The agent stalled."))))
+  (is (nil? (history/claudia-note "The agent stalled.")) "the person's own words are not hers"))

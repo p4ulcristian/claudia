@@ -36,6 +36,7 @@
             [claudia.slave.secrets-list :as secrets-list]
             [claudia.slave.sentinel-key :as sentinel-key]
             [claudia.slave.shown :as shown]
+            [claudia.slave.stall :as stall]
             [claudia.slave.steps :as steps]
             [claudia.slave.prompts :as prompts]
             [claudia.slave.store :as store]
@@ -948,14 +949,18 @@
                        (meta/plans-changed!))))
          (catch :default e (js/console.error "token watch:" (text/error-text e))))))
 
+(declare stall-watch!)
+
 (defn init!
   "Called once by the runner: agent lists follow their tasks, running agents' steps and shells'
-  progress are read every 2 s, the models and commands are probed, and titles are read."
+  progress are read every 2 s and the stall watch looks (README decision 111), the models and
+  commands are probed, and titles are read."
   []
   (reset! tasks/on-change emit-agents!)
   (js/setInterval (fn []
                     (doseq [id (tasks/chats-running)]
-                      (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))))
+                      (when (tasks/refresh! cwd id (folder-of id)) (emit-agents! id))
+                      (stall-watch! id)))
                   2000)
   (refresh-titles!)
   (try (meta/probe! cwd (run-env) @newest-sdk)
@@ -1380,6 +1385,18 @@
   (emit! id {:type "msg" :msg {:id pending-note-id :role "note" :gone true}})
   (note-msg! id {:id (str (:id msg) ":moved") :role "note" :text note :at (:at msg)}))
 
+(defn- send-msg!
+  "The sent Msg msg into the live session as text (what Claude gets) with images; shown in the chat
+  before it goes (show!: a step shown first, e.g. a server move's note)."
+  [id msg text images show!]
+  (swap-chat! id turns/with-sent msg)
+  (store/kv! id "turn" (:id msg))
+  (show!)
+  (note-msg! id msg)
+  (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
+                    (seq images) (assoc :images images)))
+  (set-running! id true))
+
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
   msg-id: the id the page made for it (nil: one is made here); reminder: said to Claude after the
@@ -1389,13 +1406,7 @@
         ;; The forms news and a folder move's note go as reminders the chat doesn't show (the forms
         ;; only to a session that ran with the old tools); a server move's note shows.
         [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id (text/with-reminder message reminder) was-live?)))]
-    (swap-chat! id turns/with-sent msg)
-    (store/kv! id "turn" (:id msg))
-    (when note (show-server-note! id msg note))
-    (note-msg! id msg)
-    (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
-                      (seq images) (assoc :images images)))
-    (set-running! id true)))
+    (send-msg! id msg text images #(when note (show-server-note! id msg note)))))
 
 (defn send-text!
   "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames);
@@ -1411,6 +1422,35 @@
                    (.then (ensure-session! id) (fn [] live?)))))
         (.then #(send-now! id message images msg-id reminder %))
         (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+;; The stall watch (README decision 111) ----------------------------------------------------------
+
+;; chat -> the ids of its agents shown stalled on the page now.
+(defonce ^:private shown-stalled (atom {}))
+
+(defn- send-stall-note!
+  "The chat is told that its agent stalled (claudia.slave.stall/note-text), as Claudia's note; sent
+  while a turn runs, Claude takes it in mid-turn, else it starts a turn."
+  [id {agent-name :name :keys [kids since]}]
+  (let [tagged (history/with-claudia-tag (stall/note-text agent-name kids (stall/minutes (- (js/Date.now) since))))]
+    (-> (ensure-session! id)
+        (.then #(send-msg! id {:id (str (random-uuid)) :role "note" :text (history/claudia-note tagged) :at (js/Date.now)}
+                           tagged nil (fn [])))
+        (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+(defn- stall-watch!
+  "Every 2 s for a chat with running tasks: an agent that stalled turns red on the page (and back
+  once it shows a sign), and the chat is told once per stall, unless it is archived or moving."
+  [id]
+  (let [found (tasks/stalls id (js/Date.now))
+        ids (set (map :id found))]
+    (when (not= ids (get @shown-stalled id #{}))
+      (swap! shown-stalled assoc id ids)
+      (emit-agents! id))
+    (doseq [s found :when (not (:noted? s))]
+      (tasks/stall-noted! id (:id s) (:since s))
+      (when-not (or (archived? id) (moving? id))
+        (send-stall-note! id s)))))
 
 (defn new-chat-colour
   "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."
