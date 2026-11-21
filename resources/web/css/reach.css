@@ -26,10 +26,9 @@
   .rail-chat { min-height: 64px; justify-content: center; }
 
 
-  /* The mic rail (README decisions 73, 92): a column on the right wall, the page beside it, the mic
-     exactly at its middle height (the same padding over and under), four slots of one size over it
-     ending at it and four under it starting at it; the gaps shrink on short screens so the foot
-     keeps its room (half the rail: padding, half the mic, four slots of 64 px, the foot's ~64 px). */
+  /* The rail (README decisions 73, 92, 94): a column on the right wall, the page beside it, four
+     slots of one size over its middle and four under it (the mic floats over the page since 94);
+     the gaps shrink on short screens so the foot keeps its room. */
   :root { --mic-rail-w: 88px; --edge-pad: max(calc(var(--edge-t) + env(safe-area-inset-top)), var(--edge-b));
     --edge-gap: clamp(0px, calc((50dvh - var(--edge-pad) - 32px - 256px - 64px) / 5), 12px); }
   .app { padding-right: calc(var(--mic-rail-w) + env(safe-area-inset-right)); }
@@ -45,27 +44,22 @@
   .edge-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
   .edge-foot .mn-gear { margin: 4px auto; }
   .thumb-edge .up-panel { left: auto; right: calc(var(--mic-rail-w) + 8px + env(safe-area-inset-right)); }
-  /* The mic's circle: one slot's size whether the mic shows, cannot work here or has moved out. */
-  .edge-mic { width: 64px; height: 64px; flex: none; display: grid; place-items: center; }
+  /* The mic floats over the page (README decision 94): it takes no room in the rail. */
+  .edge-mic { position: absolute; width: 0; height: 0; }
   .thumb-edge .mic-core, .thumb-edge .mic-button { width: 64px; height: 64px; }
   .thumb-edge .mic-button svg { width: 30px; height: 30px; }
   .edge-gap { width: 64px; height: 64px; flex: none; }
-  /* Dragged out of the rail, the mic sits where it was let go (its centre there) and its slot
-     stays as a dashed ring saying "↺ mic back", a press bringing it home (claudia.web.views.mic). */
-  .mic-slot { box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--line); padding: 0; background: none;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--muted); }
-  .mic-back-mark { font-size: 20px; line-height: 1; }
+  /* The floating mic sits where it was put, its centre there (claudia.web.views.mic). */
   .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
-  .thumb-edge .mic.moved .mic-clips, .thumb-edge .mic.moved .mic-hint { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
-  .thumb-edge .edge-step:not(:disabled), .thumb-edge .mic-slot { opacity: 0.7; transition: opacity 0.15s; }
+  .thumb-edge .edge-step:not(:disabled) { opacity: 0.7; transition: opacity 0.15s; }
   /* The mic only a little (2026-11-21, the user: less transparent). */
   .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
-  .thumb-edge .edge-step:active:not(:disabled), .thumb-edge .mic-slot:active { opacity: 1; }
+  .thumb-edge .edge-step:active:not(:disabled) { opacity: 1; }
+  /* The speaker's name, the hint and the clips: to the mic's left, past its ring of voice messages
+     (76 px out, circles up to 40 px: 96 px from its centre), so none covers a circle. */
   .thumb-edge .mic-clips { align-items: flex-end; }
-  .thumb-edge .mic.moved .mic-clips { align-items: center; }
-  .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 12px); bottom: auto; top: 50%; transform: translateY(-50%); }
-  .thumb-edge .mic.moved .mic-speaker { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
+  .thumb-edge .mic-clips, .thumb-edge .mic-hint, .thumb-edge .mic-speaker { left: auto; right: calc(100% + 72px); bottom: auto; top: 50%; transform: translateY(-50%); }
 
   /* A slot: its icon with its name under it. Passive (it cannot act now) it stays, greyed; Stop is
      filled red while a turn runs. */

@@ -149,11 +149,20 @@
 
 (defn play-chat!
   "items (one chat's voice messages, oldest first, each {:id :k :voice :text :msg}) are read one after
-  the other from now; whatever was playing stops."
+  the other from now (a tap on its circle); whatever was playing stops, and what waited from other
+  chats comes after them."
   [items]
   (when (seq items)
     (silence!)
-    (reset! line (reduce talk/with-item talk/empty-line items))
+    (swap! line talk/with-chat-first items)
+    (pump!)))
+
+(defn enqueue!
+  "item (a voice message just come, README decision 94) is read as soon as nothing else is and the
+  mic is not held: after the ones already waiting."
+  [item]
+  (when (visible?)
+    (swap! line talk/with-item item)
     (pump!)))
 
 (defn say-now!
@@ -166,15 +175,19 @@
 
 (defn hold!
   "The mic is held: the reply being read stops and the rest of its chat's line is dropped (a hold
-  then replies to that chat; its messages not heard stay)."
+  then replies to that chat; its messages not heard stay); other chats' wait until let-go!."
   []
-  (stop!)
-  (swap! line talk/held true))
+  (let [k (:k (:current @line))]
+    (sound/release! ::reply)
+    (silence!)
+    (swap! line #(cond-> (-> % talk/without-current (talk/held true)) k (talk/without-chat k)))
+    (shown! nil)))
 
 (defn let-go!
-  "The mic is let go."
+  "The mic is let go: what waits comes."
   []
-  (swap! line talk/held false))
+  (swap! line talk/held false)
+  (pump!))
 
 (defn reading?
   "Whether a reply is being read now."
@@ -185,6 +198,11 @@
   "The chat whose reply is being read now ([server chat]), or nil."
   []
   (:k (:current @line)))
+
+(defn reading-msg
+  "The voice message being read now (its id), or nil (none, or a reply's play button)."
+  []
+  (:msg (:current @line)))
 
 (defn drop-chat!
   "Chat k's voice is Off: its waiting replies go, and it stops if it is being read."

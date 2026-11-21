@@ -87,6 +87,16 @@
   (cond-> (update st :queue #(filterv (fn [q] (not= k (:k q))) %))
     (= k (:k (:current st))) without-current))
 
+(defn with-chat-first
+  "The line with items (one chat's, its circle tapped) read from now: that chat's own waiting ones
+  give way to them, other chats' wait after them, and they are read even when they were before."
+  [st items]
+  (let [k (:k (first items)) ids (set (map :id items))]
+    (-> st
+        without-current
+        (assoc :queue (into (vec items) (remove #(= k (:k %))) (:queue st))
+               :said (vec (remove ids (:said st)))))))
+
 (defn spoken
   "What is said for a reply {:k :colour-name :text}: its chat's colour name first (\"Red here.\",
   decision 89), unless that chat is the open one (k = open): the person already sees who speaks."

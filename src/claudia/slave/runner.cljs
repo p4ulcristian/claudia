@@ -65,16 +65,22 @@
     (count cs)))
 
 (defn- voices-changed!
-  "Every page that may answer gets the voice messages as they are now (README decision 93)."
-  []
-  (send-pages! (voice-messages/current-frame)))
+  "Every page that may answer gets the voice messages as they are now (README decision 93); with
+  play ({:chat :id}, a message just kept), the page its person touched last is told to play it as
+  soon as it can (README decision 94), so one device talks, not all of them."
+  ([] (voices-changed! nil))
+  ([play]
+   (let [frame (voice-messages/current-frame)
+         cs (answering-pages)
+         here (when play (p/last-touched cs #(deref (:here %))))]
+     (doseq [c cs] (send! c (cond-> frame (identical? c here) (assoc :play play)))))))
 
 (defn- speak-to!
-  "A chat's reply or ask to say aloud is kept as a voice message, and every page hears of it
-  (README decision 93; before: read at once on the page touched last)."
+  "A chat's reply or ask to say aloud is kept as a voice message, every page hears of it, and the
+  page touched last plays it (README decisions 93 and 94)."
   [frame]
   (voice-messages/keep! frame)
-  (voices-changed!))
+  (voices-changed! {:chat (:chat frame) :id (str (:id frame))}))
 
 (defn- chats-changed []
   (let [frame {:type "chats" :chats (chats/rows)}]

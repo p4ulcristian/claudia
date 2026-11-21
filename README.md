@@ -1637,7 +1637,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/shared/sounds.cljc`, `src/claudia/web/move.cljs`, `src/claudia/slave/store.cljs`,
     `resources/web/css/claudia.css`.
 
-93. Voice messages (2026-11-21, the user's design, one call at a time). A chat with a voice that
+93. Voice messages (2026-11-21, the user's design, one call at a time; the mic, the circles' gestures
+    and playing by themselves changed by decision 94). A chat with a voice that
     ends a turn by itself (not stopped, not failed) or asks no longer talks at once on the page
     touched last (decision 21): it leaves a voice message. The runner keeps it (table
     `voice_messages`: its reply or ask, voice, time) and sends every page of its person the whole
@@ -1664,6 +1665,33 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/slave/runner.cljs`, `src/claudia/web/views/voice_circles.cljs`,
     `src/claudia/web/views/pure/voicemail.cljs`, `src/claudia/web/speech.cljs`,
     `src/claudia/web/events.cljs`, `src/claudia/web/views/mic.cljs`.
+
+94. The mic floats with its little mics, and new messages play by themselves (2026-11-21, the
+    user's calls one at a time, after decision 93 was in use). On a touch tablet the mic leaves the
+    rail ("the microphone should not be a part of the rail anymore so it can stay with the circles
+    with the petals"): it floats over the page, bottom right beside the rail until dragged through
+    its move ring (decision 73's spring), its spot kept on this device, always the whole flower,
+    four petals; the rail keeps its eight slots without it (decision 92) and the "mic back" circle
+    is gone. The big mic is the open chat; every other chat with voice messages waiting is a little
+    mic round it, a full ring of up to eight (a fan of six above the mic on phones and desktops),
+    half a step off straight up so the speaker's name, the hint and the clips sit to the mic's left
+    past the ring. A tap on a little mic plays that chat's messages; a tap on the one playing skips
+    to the next (the one cut off counts as heard; no previous: the user's call). A hold opens the
+    same flower round that circle, in its chat's colour, and the words go to that chat without
+    opening it (the user: "from the circle we just talk back to them"); chats open from the rail.
+    While one plays or is held, the other circles step away. A swipe no longer takes messages away
+    and a long press no longer opens the chat (a hold talks now). New messages play by themselves
+    as soon as their sound is ready (the user: "I want the voices to start talking whenever they're
+    ready"), on the one page its person touched last (`here`; the runner adds `play` to that page's
+    `voices`), so one device talks: a message that comes while another plays, or while the mic is
+    held, waits its turn and plays after (the queue is only for those). A tap on a circle plays
+    that chat first; what waited from other chats comes after it. A hold while one plays stops it
+    and drops only that chat's rest. Instead of: nothing playing until a tap (decision 93), the mic
+    in the rail with a half flower, long press opening a chat, previous as well as next. Files:
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/voice_circles.cljs`,
+    `src/claudia/web/views/pure/voicemail.cljs`, `src/claudia/web/views/pure/talk.cljs`,
+    `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
+    `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 
@@ -1696,7 +1724,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/sheets.cljs`, `src/claudia/web/views/picture.cljs`,
     `src/claudia/hub/ops.cljs`, `resources/web/css/right.css`, `PROTOCOL.md`.
 
-92. The mic rail: four slots over the mic, four under it, and none comes or goes (2026-11-21, the
+92. The mic rail: four slots over the mic, four under it, and none comes or goes (since decision 94
+    the mic floats over the page and the rail keeps the eight without it) (2026-11-21, the
     user's design). Decision 73's rail on a touch tablet holds eight buttons of one size (64 px, at
     least 12 mm), each its icon with a short name under it, see-through at rest: top to bottom
     Search, Machines, Prompts, My words, then the mic, then Stop, New chat, ‹ (Previous picture),

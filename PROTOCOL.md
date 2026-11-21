@@ -354,7 +354,7 @@ Page → runner:
 | type | fields | effect |
 |---|---|---|
 | `hello` | | runner answers `chats` |
-| `here` | `ago` (ms since the person last touched this page) | this page is where its person is (README decision 21). Since decision 93 it chooses nothing (every page gets `voices`); still accepted so older pages get no error. Read-only pages may send it |
+| `here` | `ago` (ms since the person last touched this page) | this page is where its person is (README decisions 21, 94): a new voice message's `play` goes only to the page touched last. Sent on a touch, click or key (`ago` 0, at most every 5 s) and right after `hello` when the page was touched within a day; a missing or out-of-range `ago` never wins. Read-only pages may send it (they never get `voices`) |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `prompt?`, `color?`, `voice?`, `bell?`, `sound?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its voice, bell and sound as picked (else voice Off, bell on, the Bell); runner answers `created { chat, id }` then events |
@@ -397,7 +397,7 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `keys_ask` | `chat`, `ask` (an id): Claude called `list_secrets`. Sent to every page on this runner that sent `hello` and is not read-only, whether or not it has the chat open; the page fetches `GET /hub/keys/mine` and answers `keys` at once, with no card |
-| `voices` | `messages`: every voice message this runner keeps for its person, oldest first, each `{ chat, id, voice, text \| ask, at }` (id: the turn's result uuid, or `ask-<ask id>`; at: ms) | the chats' voice messages (README decision 93): sent after `hello` (not to read-only pages) and to every page that may answer whenever they change (a chat with a voice ended a turn by itself or asks; one was heard; a voice went Off; a chat was archived). Messages a day old are dropped. The page shows one circle per chat round the mic and plays them only on a tap. Replaces `speak` |
+| `voices` | `messages`: every voice message this runner keeps for its person, oldest first, each `{ chat, id, voice, text \| ask, at }` (id: the turn's result uuid, or `ask-<ask id>`; at: ms) | the chats' voice messages (README decision 93): sent after `hello` (not to read-only pages) and to every page that may answer whenever they change (a chat with a voice ended a turn by itself or asks; one was heard; a voice went Off; a chat was archived). Messages a day old are dropped. The page shows one circle per chat round the mic and plays them only on a tap. `play` (`{ chat, id }`, only to the page its person touched last, `here`): that message was just kept, and that page plays it as soon as nothing else plays and the mic is not held (README decision 94). Replaces `speak` |
 | `error` | `chat?`, `text` |
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |
