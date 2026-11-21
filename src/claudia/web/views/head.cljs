@@ -2,10 +2,10 @@
   "The chat's header (README decisions 22, 90): one panel lightly tinted with the chat's colour,
   three rows, the same for a new chat and a started one. Row 1: the title (a click renames it) and
   the server's state when it is off or unreached. Row 2: pills of one look (claudia.web.views.head-pill):
-  the server and the project (claudia.web.views.head-place), whose Claude subscription, model ·
-  effort, the prompt profile, the voice that reads its replies (decision 21), the notify sound
-  (claudia.web.views.notify) and the colour. Row 3: the rings (context, 5-hour, week) on the left;
-  on the right buttons with words: Files, System (decision 96), Fork, Sudo (its owner), Archive. A new chat picks all of them
+  the server and the project (claudia.web.views.head-place), model · effort, the prompt profile, the
+  voice that reads its replies (decision 21), the notify sound (claudia.web.views.notify) and the
+  colour. Row 3 (decision 116): on the left the Compact button (the context ring) and whose Claude
+  subscription, one pill with the plan's 5-hour and week rings; on the right buttons with words: Files, System (decision 96), Fork, Sudo (its owner), Archive. A new chat picks all of them
   here before its first message (they go with `new`); once it has started a server pick moves it
   (decision 82) and every other pick changes the chat."
   (:require [re-frame.core :as rf]
@@ -88,7 +88,7 @@
 (defn- row-1 [hc]
   [:div.head-row.r1 [:f> head-names hc]])
 
-;; ---- row 2: server, project, subscription, model · effort, prompt, voice, notify, colour ----
+;; ---- row 2: server, project, model · effort, prompt, voice, notify, colour ----
 
 (defn- plan-limit [label l now]
   [:span.plan-limit {:class (when (and l (not (usage-pure/reset-since? l now))) (usage-pure/level (:percent l)))}
@@ -111,17 +111,6 @@
         [:span.plan-name n]
         (plan-limit "Week" week now)
         (plan-limit "5-hour" five now)])]))
-
-(defn- account-pick
-  "Whose Claude subscription the chat runs on (README decision 16): a click opens the saved plans;
-  a pick applies at once, and becomes the person's own last pick (README decision 57). None yet:
-  it asks for one."
-  [{:keys [plans on put! ro]}]
-  (when (seq plans)
-    [:f> hp/popped {:k :account :label "Claude subscription" :value (or (:name on) "Pick one") :ro ro}
-     (fn [close!]
-       [:div.head-pop
-        [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))]])]))
 
 (defn- swatch [c color pick taken]
   (let [off? (and (taken c) (not= c color))
@@ -191,7 +180,6 @@
   [:div.head-row.r2
    [place/server-pick hc]
    [place/project-pick hc]
-   [:f> account-pick hc]
    [:f> model-pick hc]
    [:f> prompt-pick hc]
    [:f> voice-pick hc]
@@ -271,21 +259,36 @@
       {:five (usage-pure/limit-of (:limits live) "five_hour")
        :week (usage-pure/limit-of (:limits live) "seven_day")})))
 
-(defn- limit-ring [label l now]
+(defn- limit-ring [label sym l now]
   (when-let [p (usage-pure/ring-percent l now)]
-    [usage/mini-ring {:percent p :tip (usage-pure/limit-text label l now)}]))
+    [usage/mini-ring {:percent p :sym sym :tip (usage-pure/limit-text label l now)}]))
+
+(defn- plan-rings [five week now]
+  [:<> (limit-ring "5-hour" "5h" five now) (limit-ring "Week" "7d" week now)])
+
+(defn- plan-button
+  "Whose Claude subscription the chat runs on (README decisions 16, 116): one pill, clickable
+  anywhere, with the plan's 5-hour and week rings and its owner's name; a click opens the saved
+  plans, a pick applies at once and becomes the person's own last pick (decision 57). No plans
+  saved: the server's own plan's rings, nothing to pick."
+  [{:keys [plans on put! ro]} five week now]
+  (if (seq plans)
+    [:f> hp/popped {:k :account :label "Claude subscription" :class "plan-pill" :ro ro
+                    :body [:<> [plan-rings five week now] [:span.pill-val (or (:name on) "Pick one")]]}
+     (fn [close!]
+       [:div.head-pop
+        [:f> plan-list plans on (fn [k] (put! {:plan k}) (rf/dispatch [:ops/token-picked k]) (close!))]])]
+    [:span.plan-rings [plan-rings five week now]]))
 
 (defn- row-3
-  "The rings on the left (context for a started chat, 5-hour, week: each a small ring and its %),
-  the buttons on the right."
-  [{:keys [new? oc plans on] :as hc}]
+  "On the left the Compact button (a started chat) and the subscription pill, the buttons on the right."
+  [{:keys [new? oc plans on ro] :as hc}]
   (let [now (hooks/use-now)
         {:keys [five week]} (plan-limits on plans)]
     [:div.head-row.r3
      [:span.head-rings
-      (when-not new? [usage/context-ring (assoc oc :pending? true)])
-      (limit-ring "5-hour" five now)
-      (limit-ring "Week" week now)]
+      (when-not new? [usage/compact-button oc ro])
+      [plan-button hc five week now]]
      (actions hc)]))
 
 ;; ---- the header ----

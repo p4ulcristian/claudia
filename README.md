@@ -141,7 +141,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     on the WebGL 2 path).
 
 16. Each chat has its own Claude subscription (2026-11-11): the chat's header shows whose plan it
-    runs on (row 2, decision 22) and a click on it picks another saved one; the pick is
+    runs on (row 3's subscription pill since decision 116; row 2 before) and a click on it picks
+    another saved one; the pick is
     kept with the chat and applies on its next message (its Claude Code starts again on that
     token). For that the hub sends every saved token to each server (`<token file>.d/<key>`, names
     in `<token file>.saved.json`). What a new chat and a chat without a pick run on: decision 57 (the
@@ -297,13 +298,12 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     reconnecting; nothing else. Row 2: pills, one component and one look (rounded, a 1 px line,
     a 16 px icon in the muted colour before the value, ▾ after it when it can be changed),
     wrapping on a narrow column: the server and the project (decision 90; a started chat without
-    a folder shows its server's work folder, `CLAUDIA_CWD` as `GET /api/folders` answers it); whose
-    Claude subscription (decision 16; only when tokens are saved); model · effort in one pill
+    a folder shows its server's work folder, `CLAUDIA_CWD` as `GET /api/folders` answers it); model · effort in one pill
     ("Opus 5.5 · high"; its popup lists the models and the efforts, no native selects); the
     prompt profile (decision 60); the voice (Off or a name, decision 21); notify and the colour
-    (decision 90). All their popups share one style. Row 3: on the left the rings (the context for a started chat, a click
-    compacting it; the plan's 5-hour; its week), each an 18 px ring followed by its percent, its
-    tip naming it; on the right buttons with words (decision 90): Files, Sudo (its owner, a
+    (decision 90). All their popups share one style. Row 3: on the left the Compact button (the context ring, a started
+    chat) and whose Claude subscription with its 5-hour and week rings (decision 116; only when
+    tokens are saved, else the rings alone); on the right buttons with words (decision 90): Files, Sudo (its owner, a
     started chat, decision 52) and Archive (a started chat). A read-only view has no buttons and
     its pills change nothing. A new chat picks them before its first message, and they go with the `new` frame, so
     the first
@@ -1971,6 +1971,24 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     change of text or width, so no reply grows a line for its time; a reply ending in a code block
     or a full line shows none. Not while it streams. Files: `src/claudia/web/views/chat.cljs`,
     `src/claudia/web/views/pure/chat.cljs`, `resources/web/css/claudia.css`.
+116. The header's left of row 3: a Compact button and whose subscription, rings with letters
+    (2026-11-21, the user's design: "instead of the subscription chooser, the bottom left context
+    manager should say who has the subscription and that should be the button"; then "the context
+    should be in another button which would say compact. Also the whole pill should be clickable",
+    and letters over pictures and shapes for the rings). Row 2 no longer has the subscription pill.
+    Row 3's left holds two controls: Compact, a row-3 button with the chat's context ring and its
+    percent and the word Compact (a started chat only; a click runs /compact, disabled while a turn
+    runs, while pending and in a read-only view; a right click opens the chat menu as the ring did;
+    the header's ring itself had been passive: it was always handed a pending chat), and the
+    subscription pill, one button clickable anywhere: the plan's 5-hour ring, its week ring, each
+    with its percent, then the plan's name ("Pick one" with none) and ▾; a click opens the saved
+    plans as the row-2 pill did (decisions 16, 57). With no plans saved the server's own plan's
+    rings show there without a pill. Every ring is 20 px with a letter inside in the foreground
+    colour: C (context), 5h, 7d. Row 3 wraps: on a narrow column the worded buttons go to the next
+    line, the pill never shrinks. The two controls keep row 3's two looks: Compact an action (a
+    rounded rectangle, as Files), the subscription a setting with a popup (a pill, as row 2's).
+    Files: `src/claudia/web/views/head.cljs`, `src/claudia/web/views/head_pill.cljs` (a pill's
+    `body`), `src/claudia/web/views/usage.cljs`, `resources/web/css/claudia.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

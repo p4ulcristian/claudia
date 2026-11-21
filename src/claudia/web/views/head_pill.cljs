@@ -31,13 +31,12 @@
 (def bell-path "M6 9.5a6 6 0 0 1 12 0c0 4.6 1.8 6.2 1.8 6.2H4.2S6 14.1 6 9.5M10 19a2 2 0 0 0 4 0")
 
 (def icons
-  "The pills' icons in place of words: the computer (the server), the folder (the project), Claude's
-  spark (whose Claude plan), a sparkle (model · effort), a page (the prompt profile), a speaker (the
+  "The pills' icons in place of words: the computer (the server), the folder (the project), a
+  sparkle (model · effort), a page (the prompt profile), a speaker (the
   voice), the bell (notify) and the bell struck through (notify Off); row 3's pulse (System), fork
   and shield (sudo)."
   {:server "M3.5 5h17v11h-17zM8.5 20h7M12 16v4"
    :folder "M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18V9a1.5 1.5 0 0 0-1.5-1.5h-7.7L9.5 5H4.5A1.5 1.5 0 0 0 3 6.5z"
-   :account "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"
    :model "M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"
    :prompt "M6 3.5h9l3.5 3.5v13.5H6zM15 3.5V7h3.5M9 11h6M9 14.5h6M9 18h4"
    :voice "M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"
@@ -59,13 +58,12 @@
 
 (defn pill
   "One setting of row 2, every one the same: its icon (icons, named by k; dot: the chat's colour as
-  a filled dot instead), the value and a ▾ when it can be changed. label names it for the tip and
-  screen readers."
-  [{:keys [k dot label value open on-click ro class]}]
+  a filled dot instead), the value and a ▾ when it can be changed; body: markup in place of the icon
+  and the value (row 3's subscription pill). label names it for the tip and screen readers."
+  [{:keys [k dot body label value open on-click ro class]}]
   [:button.head-pill {:type "button" :class class :disabled ro :data-tip label
                       :aria-label label :aria-haspopup "true" :aria-expanded (boolean open) :on-click on-click}
-   (if dot [colour-dot dot] [icon k])
-   [:span.pill-val value]
+   (or body [:<> (if dot [colour-dot dot] [icon k]) [:span.pill-val value]])
    (when-not ro [:span.pill-caret "▾"])])
 
 (defn- use-inside-panel!
