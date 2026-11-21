@@ -2,11 +2,12 @@
   (:require [cljs.test :refer [deftest is]]
             [claudia.web.views.pure.edge :as edge]))
 
-(def ^:private idle {:running? false :new? true :folded? false :index 1 :n 3})
+(def ^:private idle {:running? false :new? true})
 
-(deftest four-slots-over-the-middle-and-five-under-it-archive-under-new-chat
-  (is (= [:search :system :prompts :settings] edge/over))
-  (is (= [:stop :new :archive :prev :next] edge/under)))
+(deftest five-slots-over-the-middle-and-four-under-it-fork-and-archive-under-new-chat
+  (is (= [:search :system :files :prompts :settings] edge/over))
+  (is (= [:stop :new :fork :archive] edge/under))
+  (is (= 9 (count (concat edge/over edge/under))) "nine slots, as before the picture steps left"))
 
 (deftest every-slot-has-a-state-always
   (is (= (set (concat edge/over edge/under)) (set (keys (edge/slot-states {})))))
@@ -19,27 +20,25 @@
 (deftest new-chat-is-passive-where-a-new-chat-cannot-be-written
   (is (= :passive (:new (edge/slot-states (assoc idle :new? false))))))
 
-(deftest the-steps-act-only-towards-a-picture-that-is-there
-  (is (= [:shown :shown] ((juxt :prev :next) (edge/slot-states idle))))
-  (is (= [:passive :shown] ((juxt :prev :next) (edge/slot-states (assoc idle :index 0)))))
-  (is (= [:shown :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :index 2)))))
-  (is (= [:passive :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :index 0 :n 1)))))
-  (is (= [:passive :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :index nil :n 0))))))
+(deftest search-system-files-profiles-and-settings-act
+  (is (= [:shown :shown :shown :shown :shown]
+         ((juxt :search :system :files :prompts :settings) (edge/slot-states {})))))
 
-(deftest a-folded-picture-makes-both-steps-passive
-  (is (= [:passive :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :folded? true))))))
-
-(deftest search-system-prompts-and-settings-always-act
-  (is (= [:shown :shown :shown :shown] ((juxt :search :system :prompts :settings) (edge/slot-states {})))))
+(deftest files-is-passive-in-a-read-only-view
+  (is (= :passive (:files (edge/slot-states {:read-only? true})))))
 
 (deftest a-sheet-slot-is-lit-while-its-sheet-is-on-top
   (is (= :on (:system (edge/slot-states {:view :system}))))
+  (is (= :on (:files (edge/slot-states {:view :files}))))
   (is (= [:shown :shown :shown] ((juxt :search :prompts :settings) (edge/slot-states {:view :system}))))
   (is (= :on (:search (edge/slot-states {:view :search}))))
-  (is (= [:shown :shown :shown :shown]
-         ((juxt :search :system :prompts :settings) (edge/slot-states {:view :picture})))
+  (is (= [:shown :shown :shown :shown :shown]
+         ((juxt :search :system :files :prompts :settings) (edge/slot-states {:view :picture})))
       "the Drawing board lights none"))
 
-(deftest archive-acts-only-on-an-open-chat-of-ones-own
-  (is (= :passive (:archive (edge/slot-states idle))))
-  (is (= :shown (:archive (edge/slot-states (assoc idle :archivable? true))))))
+(deftest archive-and-fork-act-only-on-an-open-chat-of-ones-own
+  (is (= [:passive :passive] ((juxt :fork :archive) (edge/slot-states idle))))
+  (is (= [:shown :shown] ((juxt :fork :archive) (edge/slot-states (assoc idle :archivable? true))))))
+
+(deftest fork-is-lit-while-the-server-makes-the-fork
+  (is (= :on (:fork (edge/slot-states (assoc idle :archivable? true :forking? true))))))

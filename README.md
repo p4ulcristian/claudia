@@ -2172,3 +2172,33 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
       brought back stays an ordinary chat.
     Instead of: keeping her chat unused (code and tools nobody calls), or deleting her chat's rows
     (its conversation stays readable among the archived chats).
+
+117. The header shrinks to two rows; the rest moves to the rail and over the message box (2026-11-21,
+    the user's design, one call at a time, dictated and lightly cleaned: "Files and System leave the header", "Archive is there
+    too", "remove previous and next buttons from the right rail and put there the fork button",
+    "Files should be under System", "prompts and profiles should be in the rail button under one
+    button called Profiles", "put some pills over the message box: the model chooser, the compact,
+    and the subscription chooser", "move colour next to Sudo… colour just needs a circle… colour
+    bottom right, Sudo top right", "I want logos for the project"). Doubles went: System and Archive
+    were in the header and on the rail, Fork and Archive in the header and the chat's menu.
+    - Header row 1: the title and the server's state; Sudo (its owner, a started chat) on the right.
+    - Header row 2: one where pill (the project's logo, the folder icon without one; then
+      server › project; its popup holds the server pick, left out when the server cannot change,
+      and the projects on it, each with its logo), voice, notify, and on the right the chat's
+      colour as a filled circle alone (no word, no ▾; a click opens the palette).
+    - The strip right over the message box: model · effort, Compact (a started chat) and the
+      subscription pill (decisions 16, 57, 116); their popups open upwards. Not shown in a
+      read-only view, which has no composer.
+    - The right rail keeps nine slots: Search, System, Files (new, under System), Profiles (was
+      Prompts), Settings; Stop, New chat, Fork (new; Forking… lit while the server makes it),
+      Archive. ‹ and › left the rail: the picture has its own step row under it. Files is passive
+      in a read-only view.
+    - Profiles (the sheet Prompts was): the open chat's (or the new chat's) profile on top, picked
+      there and applied at once, then the server's profiles to add, edit and delete. The header's
+      prompt pill is gone.
+    - Phones (no rail): the profile menu gains Files under System, its Prompts becomes Profiles;
+      Fork and Archive stay in the chat's long-press menu.
+    Files: `src/claudia/web/views/head.cljs`, `head_place.cljs`, `head_pill.cljs`,
+    `chat_context.cljs` (what the header and the strip share), `chat_strip.cljs`, `chat.cljs`,
+    `thumb_edge.cljs`, `pure/edge.cljs`, `prompts.cljs`, `menu.cljs`, `src/claudia/shared/views.cljc`,
+    `resources/web/css/claudia.css`, `bin/smoke.mjs`.

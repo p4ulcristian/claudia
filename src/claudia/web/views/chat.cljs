@@ -1,7 +1,8 @@
 (ns claudia.web.views.chat
   "The chat column (web/app.tsx and web/chat.tsx of the TypeScript Claudia): the header
   (claudia.web.views.head), the messages (Markdown, tool steps folded into groups, streamed text,
-  the working line) and the composer (Attach, the message and one Send). The mic floats over the
+  the working line) and the composer (the strip of model · effort, Compact and the subscription,
+  claudia.web.views.chat-strip, over Attach, the message and one Send). The mic floats over the
   page instead (claudia.web.views.mic/floating, README decisions 94, 109, 110)."
   (:require [claudia.web.views.asks :as asks]
             [claudia.web.db :as db]
@@ -17,6 +18,7 @@
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
+            [claudia.web.views.chat-strip :as chat-strip]
             [claudia.web.views.head :as head]
             [claudia.web.views.msgmenu :as msgmenu]
             [claudia.web.views.my-words :as my-words]
@@ -454,6 +456,7 @@
      [my-words/raw-chip draft-key]
      [attach/chips draft-key]
      [usage/slash-menu draft-key items pick]
+     [chat-strip/strip oc]
      [:div.talk-row
       [:div.input-row
        (attach-button parts)

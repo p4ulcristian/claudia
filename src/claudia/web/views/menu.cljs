@@ -3,9 +3,10 @@
   at the foot of the edge column on the right, its menu opening to the left (README decisions 73,
   105; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
-  plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
-  Settings, where the plans are), System, Archived chats, Forms, Prompts, the Desktop popups
-  switch, More settings (System, Forms, Prompts and Settings open in the right half, README
+  plan's 5-hour and week use (your last pick in a chat's strip, README decision 57; a click opens
+  Settings, where the plans are), System, Files (under System: on a phone, which has no rail, the
+  only way to the File Browser, README decision 117), Archived chats, Forms, Profiles, the Desktop popups
+  switch, More settings (System, Files, Forms, Profiles and Settings open in the right half, README
   decisions 75, 92 and 96; your dictation words are in Settings, decision 95), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
@@ -13,6 +14,7 @@
             [claudia.web.alerts :as alerts]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.chatmenu :as chatmenu]
+            [claudia.web.views.head-pill :as hp]
             [claudia.web.views.icons :as icons]
             [claudia.web.views.pure.menu :as menu-pure]
             [claudia.web.views.pure.settings :as settings-pure]
@@ -32,6 +34,8 @@
 (defn- open-system! [] (rf/dispatch [:right/view :system]))
 
 (defn- open-prompts! [] (rf/dispatch [:right/view :prompts]))
+
+(defn- open-files! [] (rf/dispatch [:right/view :files]))
 
 
 ;; ---- the parts ----
@@ -111,9 +115,10 @@
    [whose act]
    [:f> plan-card act]
    (item [systems/system-icon] "System" "servers: health, ports, services" (act open-system!))
+   (item [hp/icon :folder] "Files" "the File Browser" (act open-files!))
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
-   (item icons/prompts-icon "Prompts" "profiles a chat can pick" (act open-prompts!))
+   (item icons/prompts-icon "Profiles" "this chat's prompt profile" (act open-prompts!))
    [:div.mn-sep]
    [:div.mn-switches [alerts/popups-switch]]
    [:div.mn-sep]
