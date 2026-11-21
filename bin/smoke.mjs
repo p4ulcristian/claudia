@@ -134,6 +134,26 @@ async function visit(browser, hubUrl, screen) {
       await page.getByText(question).first().waitFor({ timeout: waitMs });
       await page.getByText(reply).first().waitFor({ timeout: waitMs });
     });
+    if (engine === 'chromium' && screen.name === 'desktop') {
+      await step('a wheel past the end stretches the messages and they spring back (README decision 118)', async () => {
+        const col = page.locator('.messages');
+        await col.hover();
+        const seenBand = col.evaluate((el) => new Promise((done) => {
+          el.scrollTop = el.scrollHeight;
+          const marks = [];
+          const mo = new MutationObserver(() => {
+            marks.push(el.classList.contains('stretch'));
+            if (marks.includes(true) && !el.classList.contains('stretch')) { mo.disconnect(); done(marks); }
+          });
+          mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+          setTimeout(() => { mo.disconnect(); done(marks); }, 3000);
+        }));
+        await page.mouse.wheel(0, 300);
+        const marks = await seenBand;
+        if (!marks.includes(true)) throw new Error('the messages never stretched');
+        if (marks[marks.length - 1]) throw new Error('the messages did not spring back');
+      });
+    }
     await step('the page tells the hub it works (README decision 35)', () => until('POST /hub/health {ok: true}',
       () => seen.health.length > 0).then(() => {
         if (seen.health.length !== 1 || seen.health[0].ok !== true) throw new Error(`it said ${JSON.stringify(seen.health)}`);

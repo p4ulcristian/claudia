@@ -23,6 +23,7 @@
             [claudia.web.views.talk :as talk]
             [claudia.web.views.pure.chat :as pure]
             [claudia.web.views.steps :as steps]
+            [claudia.web.views.stretch :as stretch]
             [claudia.web.views.usage :as usage]))
 
 (defn server-mark [server]
@@ -363,6 +364,7 @@
     (use-follow-on-resize! scroll)
     (use-follow-growth! scroll)
     (use-load-older! scroll ck state (count msgs))
+    (stretch/use-stretch! box [ck])
     (messages-column (assoc oc :scroll scroll :feed feed :since since :marks marks :first-id first-id))))
 
 ;; ---- composer ----
