@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.edge
-  "The touch tablet's mic rail (README decisions 40, 73, 90) as data: eight slots of one size, four
+  "The touch tablet's mic rail (README decisions 40, 73, 92) as data: eight slots of one size, four
   over the mic and four under it, so the mic sits at the rail's middle height. A slot never comes or
   goes: one that cannot act now is passive (greyed), Stop is red while a turn runs.")
 

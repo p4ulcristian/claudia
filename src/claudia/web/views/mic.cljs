@@ -14,7 +14,7 @@
   and overshoots a little), its button kept on the screen; let go, the clip is heard and sent as
   when let go in place, and the mic glides there and stays (its spot kept on this device), or,
   covering half its slot or more (pure/home?), it glides home; its empty slot meanwhile is a
-  \"↺ mic back\" button that forgets the spot and glides it home (README decision 90). Out
+  \"↺ mic back\" button that forgets the spot and glides it home (README decision 92). Out
   of the rail its flower is whole, four ways.
   While a chat's reply is read aloud (README decision 21) the mic is that chat: its colour, its
   name and voice, bars that move. A tap then stops that one reply (the next one comes); a hold

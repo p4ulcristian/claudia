@@ -305,7 +305,7 @@
      [gaze/settings-section]]))
 
 (defn pane
-  "Settings in the right half (README decisions 58, 75 and 90): the Claude subscriptions, GitHub and
+  "Settings in the right half (README decisions 58, 75 and 91): the Claude subscriptions, GitHub and
   passkeys (opened from the menu's plan card and More settings and the thumb edge's cog)."
   []
   (let [server @(rf/subscribe [:settings-server])]

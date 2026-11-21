@@ -1,7 +1,7 @@
 (ns claudia.web.right
   "What the right half shows (README decision 91): the Drawing board, with a pile of sheets on it
-  (claudia.shared.views), opened by the buttons that open a view (the header's place pill, the edge's
-  search, the cog, ⌘K, the menu's items) and closed by a sheet's ×. The pile is the person's: loaded
+  (claudia.shared.views), opened by the buttons that open a view (the header's Files button, the edge's
+  rail, ⌘K, the menu's items) and closed by a sheet's ×. The pile is the person's: loaded
   from the hub (GET /hub/right-view) at start and whenever the page comes back to the front, kept at
   once on the page and sent (PUT), so every device of theirs shows the same pile."
   (:require [re-frame.core :as rf]

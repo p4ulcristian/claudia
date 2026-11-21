@@ -1,5 +1,5 @@
 (ns claudia.web.views.systems
-  "Machines (README decisions 12, 75 and 90), a sheet on the right half's Drawing board opened from
+  "Machines (README decisions 12, 75 and 91), a sheet on the right half's Drawing board opened from
   the profile menu (claudia.web.views.menu): a card per server the person may use (and the gate, for admins), each asking its own numbers every
   2 s while open: every core's use split into user, system, steal and waiting on disk, memory,
   swap, disks, disk and network speed, temperatures, NVIDIA cards and Claudia's own processes. A

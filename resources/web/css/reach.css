@@ -26,7 +26,7 @@
   .rail-chat { min-height: 64px; justify-content: center; }
 
 
-  /* The mic rail (README decisions 73, 90): a column on the right wall, the page beside it, the mic
+  /* The mic rail (README decisions 73, 92): a column on the right wall, the page beside it, the mic
      exactly at its middle height (the same padding over and under), four slots of one size over it
      ending at it and four under it starting at it; the gaps shrink on short screens so the foot
      keeps its room (half the rail: padding, half the mic, four slots of 64 px, the foot's ~64 px). */

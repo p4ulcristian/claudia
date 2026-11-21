@@ -1,5 +1,5 @@
 (ns claudia.web.views.thumb-edge
-  "The right edge of a touch tablet (README decisions 40, 73, 90): a big tablet held in two hands is
+  "The right edge of a touch tablet (README decisions 40, 73, 92): a big tablet held in two hands is
   held at its sides partway up, so the right thumb rests on the right edge at middle height. There a
   rail on the right wall, one column with the mic exactly at its middle height and four slots of one
   size over it and four under it: Search, Machines, Prompts, My words | mic | Stop, New chat,

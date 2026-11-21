@@ -6,7 +6,7 @@
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
   Settings, where the plans are), Machines, Archived chats, Forms, Prompts, My words, the Desktop
   popups switch, More settings (Machines, Forms, Prompts, My words and Settings open in the right
-  half, README decisions 75 and 90), and the
+  half, README decisions 75 and 92), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]

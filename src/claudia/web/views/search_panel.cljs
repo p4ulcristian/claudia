@@ -1,5 +1,5 @@
 (ns claudia.web.views.search-panel
-  "Search (README decisions 45, 75 and 90): one search for every chat, open and archived (titles,
+  "Search (README decisions 45, 75 and 91): one search for every chat, open and archived (titles,
   projects, what was said), on every screen, a sheet on the right half's Drawing board: the field on top (focused),
   the project chips under it, then before a word is typed the ten archived chats last active, else
   the finds newest first under time sections, each with the lines that matched lit. A tap on a find
