@@ -36,7 +36,8 @@
   (let [errors (count (filter :error tools))]
     [:button.steps-head {:on-click #(swap! open not)}
      [:span.chev {:class (when @open "open")} "›"]
-     [:span (pure/group-count tools)]
+     ;; Keyed by its words, so each new count is a new element and its pop plays (claudia.css).
+     (let [n (pure/group-count tools)] (with-meta [:span.steps-n n] {:key n}))
      [:span.muted (if current
                     (str (tool-label (:tool current)) " " (pure/step-summary current))
                     (pure/group-names tools))]

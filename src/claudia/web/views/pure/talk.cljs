@@ -81,10 +81,15 @@
   [st on]
   (cond-> (assoc st :held on) on without-current))
 
+(defn without-waiting
+  "The line without chat k's waiting replies; its item being read stays."
+  [st k]
+  (update st :queue #(filterv (fn [q] (not= k (:k q))) %)))
+
 (defn without-chat
   "The line without chat k's waiting replies, and without its item being read (its voice is Off)."
   [st k]
-  (cond-> (update st :queue #(filterv (fn [q] (not= k (:k q))) %))
+  (cond-> (without-waiting st k)
     (= k (:k (:current st))) without-current))
 
 (defn with-chat-first

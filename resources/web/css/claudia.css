@@ -344,6 +344,11 @@ code, pre { font-family: var(--mono); }
 .steps.busy { border-left-color: var(--blue); }
 .steps-head { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; text-align: left; width: 100%; color: var(--muted); }
 .steps-head > span:nth-child(2) { color: var(--fg); font-weight: 500; white-space: nowrap; }
+/* While the group runs, its count pops each time it changes (a new element per count, views/steps.cljs). */
+.steps-n { display: inline-block; }
+.steps.busy .steps-n { animation: steps-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes steps-pop { 0% { transform: scale(1.6); color: var(--accent); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .steps.busy .steps-n { animation: none; } }
 .steps-head .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .chev { display: inline-block; transition: transform 0.15s; width: 8px; }
 .chev.open { transform: rotate(90deg); }

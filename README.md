@@ -1872,6 +1872,21 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     keeping the nudge as a safety net. Files: `src/claudia/slave/chats.cljs`,
     `src/claudia/slave/chats/turns.cljs`.
 
+110. Opening the chat that is talking lets it finish (2026-11-21, the user: "when a chat is talking
+    and I change to that chat ... the sound stops. This is not okay"). Decision 105's "read is
+    heard" stopped the chat's reading on open. Now opening a chat marks its waiting voice messages
+    heard, here and on every device, except the one sounding now: it plays on to its end and is
+    marked heard there; the chat's other waiting messages leave the line (they are read on the
+    screen). A hold on the mic or a circle still stops at once (decision 105). Files:
+    `src/claudia/web/events.cljs`, `src/claudia/web/speech.cljs`,
+    `src/claudia/web/views/pure/talk.cljs`, `src/claudia/web/fx.cljs`.
+
+111. A running step group's count pops when it changes (2026-11-21, the user: "I want the counter to
+    pop up like an animation when it changes"). While a folded group of tool steps runs, each new
+    count ("12 steps") comes in big in the accent colour and springs to its size (0.4 s; none with
+    reduced motion); a finished group never moves. Files: `src/claudia/web/views/steps.cljs`,
+    `resources/web/css/claudia.css`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.
