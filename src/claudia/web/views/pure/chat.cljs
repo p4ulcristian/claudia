@@ -33,13 +33,6 @@
   (let [acc (reduce turn-step {:out {}} msgs)]
     (:out (if running? acc (close-turn acc)))))
 
-(defn reply-steps
-  "Which reply wears which picture's step number (1-based, the slider's numbers): {reply id -> n}.
-  A picture whose turn has no reply among msgs (imported, not loaded yet, still running) has none."
-  [pictures msgs running?]
-  (let [replies (turn-replies msgs running?)]
-    (into {} (keep-indexed (fn [i p] (when-let [r (get replies (:turn p))] [r (inc i)]))) pictures)))
-
 (defn step-reply
   "The id of the reply that closed the turn which drew picture i, or nil."
   [pictures msgs running? i]

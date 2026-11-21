@@ -1682,7 +1682,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/speech.cljs`, `src/claudia/web/events.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/web/views/thumb_edge.cljs`, `resources/web/css/reach.css`.
 
-98. The person writes in white, Claude in the chat's colour (2026-11-21, the user's call). The
+98. The person writes in white, Claude in the chat's colour (since decision 103 both write in the
+    same near-white, and shape and side tell them apart) (2026-11-21, the user's call). The
     person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
     longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
     with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
@@ -1703,14 +1704,14 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     own selection does not cancel the press (Claude's replies still select). A fork's state is its
     own (`:fork {:k :busy :error}`, `pure.menu/fork-state`): an error shows in the open menu, with
     none open (the header) on the error line. Instead of: the "fork from here" link under each
-    message (shown on hover) and the "picture · N files" link beside it (the slider and the step
-    chips of decision 100 show a turn's picture). Files: `src/claudia/web/views/head.cljs`,
+    message (shown on hover) and the "picture · N files" link beside it (the slider of decision
+    100 shows a turn's picture; its step chips too until decision 103). Files: `src/claudia/web/views/head.cljs`,
     `src/claudia/web/views/head_pill.cljs`, `src/claudia/web/views/msgmenu.cljs`,
     `src/claudia/web/views/chatmenu.cljs`, `src/claudia/web/chatops.cljs`,
     `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/menu.cljs`,
     `resources/web/css/claudia.css`.
-100. The pictures are numbered steps, and the chat and the slider find each other (2026-11-21, the
-    user's call). The slider under the picture shows each picture's number, 1..N, the one shown
+100. The pictures are numbered steps, and the chat and the slider find each other (the step chips
+    on replies removed by decision 103) (2026-11-21, the user's call). The slider under the picture shows each picture's number, 1..N, the one shown
     filled in the chat's colour with dark text (pulsing while an older one loads); when the numbers
     do not fit (a number takes 12 px plus 7 per digit), every 5th or 10th (20th, 50th … for very
     many) shows, always with the first, the last and the shown one, and a number too close to one
@@ -1762,6 +1763,26 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/runner.cljs`,
     `src/claudia/slave/codeforms.cljs`, `src/claudia/slave/history.cljs`,
     `src/claudia/shared/text.cljc`, `src/claudia/web/events.cljs`.
+103. Whose message is which shows by shape and side, not text colour (2026-11-21, the user's list,
+    items 22-24). The person's messages and Claude's replies are written alike: the same font, size
+    (15 px), weight and colour, the window's near-white `--fg` (tinted 8% by the chat colour, light
+    on every chat, gradient and Claudia's own green). The person's messages sit on the right in a
+    soft bubble (`--fg` at 9% over the window, so it follows every tint and gradient; 14 px corners,
+    the bottom right 4 px; at most 82% of the column; text left-aligned inside); sent photos, file
+    chips and code chips sit in the bubble, the queued tag and its × under it. Claude's replies run
+    the column's full width with no bubble and a 3 px line on their left in the chat's chalk
+    (`--claude-line`: the chat colour 75% with white, the old `--reply`; an ash chat's is grey, since
+    that mix of grey is grey; Claudia's own chat her green; no chat colour, `--muted` grey). The
+    line is a layer of its own (`::before`), so the search jump's rounded flash does not bend it,
+    and its edges and the text's line up with a step group's line. In a subagent's transcript (the
+    agents screen) the line is 2 px at 55%, like the step lines between its replies there: that view
+    is small and dense, and a full chalk line on each short line would outshout the chat beside it.
+    Code, tables and quotes keep their look. The step chip on the reply that closed a picture's turn
+    (decision 100) is gone; the numbered slider stays, and picking a number still scrolls the chat to
+    that reply and lights it (`pure.chat/seek-goal`, `step-reply`). Instead of: the person's lines
+    in a near-white weight 500 right-aligned without a bubble and Claude's in the chat's chalk
+    colour (decision 98), and the step chips. Files: `resources/web/css/claudia.css`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`, `DESIGN.md`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

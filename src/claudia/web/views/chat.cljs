@@ -13,7 +13,6 @@
             [reagent.hooks :as h]
             [claudia.shared.files :as files]
             [claudia.web.md :as md]
-            [claudia.web.pictures :as pictures]
             [claudia.web.views.agents :as agents]
             [claudia.web.views.attach :as attach]
             [claudia.web.views.codesend :as codesend]
@@ -33,12 +32,6 @@
     [:span.server-mark {:class (when (= :closed status) "off") :title (if (= :closed status) (str label " is off") label)
                         :aria-label label}
      @(rf/subscribe [:server-mark server])]))
-
-;; ---- the pictures of a chat, and the one looked at ----
-
-(rf/reg-sub :pictures-of (fn [db [_ k]] (get-in db [:pictures k] [])))
-
-(rf/reg-sub :viewing-turn (fn [db [_ k]] (get-in db [:viewing k])))
 
 ;; ---- messages ----
 
@@ -231,24 +224,10 @@
 (def ^:private hello
   [:div.hello [:h2 "What are we working on?"] [:p.muted "Claude answers short here and explains on the right."]])
 
-(defn- step-chip
-  "On the reply that closed a turn which drew a picture: that picture's number n, the slider's
-  (README decision 100). A tap shows it on the board (on a phone, the picture screen too); a tap
-  while it is shown goes back to live."
-  [n shown?]
-  [:button.step-chip {:type "button" :class (when shown? "on") :aria-pressed shown?
-                      :title (if shown? "Back to the live picture" (str "Show picture " n " of this turn"))
-                      :on-click (fn []
-                                  (rf/dispatch (if shown? [:picture/live] [:picture/pick (dec n)]))
-                                  (when (and (not shown?) (db/phone?)) (rf/dispatch [:nav/screen :picture])))}
-   n])
-
-(defn- claude-msg [ck {:keys [id text streaming]} {:keys [steps shown-step]}]
-  (let [n (get steps id)]
-    [:div.msg.claude {:data-at (pure/msg-anchor id) :class (when streaming "streaming")}
-     [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
-     (when-not streaming
-       [:<> (when n [step-chip n (= n shown-step)]) [talk/say-button ck text]])]))
+(defn- claude-msg [ck {:keys [id text streaming]}]
+  [:div.msg.claude {:data-at (pure/msg-anchor id) :class (when streaming "streaming")}
+   [:div.md {:dangerouslySetInnerHTML (r/unsafe-html (md/html text))}]
+   (when-not streaming [talk/say-button ck text])])
 
 (defn- msg-row
   "One message of the feed: the user's, a note, or Claude's."
@@ -256,7 +235,7 @@
   (case role
     "user" ^{:key id} [user-msg ck m (pure/user-marks m marks)]
     "note" ^{:key (str "note-" id "-" i)} [:pre.note-line text]
-    ^{:key id} [claude-msg ck m marks]))
+    ^{:key id} [claude-msg ck m]))
 
 (defn- feed-row
   "One block of the feed: a run of steps, a picture a step showed, or a message."
@@ -326,11 +305,7 @@
         running (:running state)
         first-id (:id (first msgs))
         since @(rf/subscribe [:turn-since ck])
-        pictures @(rf/subscribe [:pictures-of ck])
-        viewing @(rf/subscribe [:viewing-turn ck])
-        marks {:steps (pure/reply-steps pictures (remove :queued msgs) running)
-               :shown-step (when viewing (inc (pictures/shown-index pictures viewing)))
-               :read-only? @(rf/subscribe [:read-only?])
+        marks {:read-only? @(rf/subscribe [:read-only?])
                :last-user last-user :running running :last-i (dec (count blocks))}]
     (jump! ck (:more state))
     (use-find! scroll ck)

@@ -16,10 +16,11 @@
   (is (= {"u1" "m2:0" "u2" "m4:0"} (chat/turn-replies turns true)) "the running turn has none yet")
   (is (= {} (chat/turn-replies [{:id "u1" :role "user"} {:id "t" :role "tool"}] false)) "a turn without a text"))
 
-(deftest reply-steps-number-pictures-from-one
+(deftest step-reply-is-the-reply-that-closed-the-pictures-turn
   (let [pictures [{:turn "imported"} {:turn "u1"} {:turn "gone"} {:turn "u2"}]]
-    (is (= {"m2:0" 2 "m4:0" 4} (chat/reply-steps pictures turns false)))
+    (is (= "m2:0" (chat/step-reply pictures turns false 1)))
     (is (= "m4:0" (chat/step-reply pictures turns false 3)))
+    (is (nil? (chat/step-reply pictures turns false 2)) "its turn is not on the page")
     (is (nil? (chat/step-reply pictures turns false 0)) "imported: no reply")
     (is (nil? (chat/step-reply pictures turns false 9)))))
 
