@@ -87,6 +87,12 @@
   (cond-> (update st :queue #(filterv (fn [q] (not= k (:k q))) %))
     (= k (:k (:current st))) without-current))
 
+(defn spoken
+  "What is said for a reply {:k :colour-name :text}: its chat's colour name first (\"Red here.\",
+  decision 89), unless that chat is the open one (k = open): the person already sees who speaks."
+  [{:keys [k colour-name text]} open]
+  (if (and colour-name (not= k open)) (str colour-name " here. " text) text))
+
 (def ^:private hungarian-words
   #"(?i)(^|\s)(és|hogy|nem|egy|az|ez|van|igen|már|csak|meg|kell|vagy|mert|még)(?=\s|[.,!?]|$)")
 

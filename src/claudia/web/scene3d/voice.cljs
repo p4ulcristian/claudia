@@ -4,6 +4,7 @@
   length is known exactly and pausing pauses the voice with the story. A video made off screen has
   a narrator that only notes what it says and when (given)."
   (:require [claudia.web.scene3d.clock :as clock]
+            [claudia.web.sound :as sound]
             [claudia.web.voice :as voice]))
 
 (defn available? [] (voice/available?))
@@ -30,6 +31,7 @@
         (let [p (fetch-clip narrator text instruction language)] (swap! clips assoc k p) p))))
 
 (defn- stop! [{:keys [source]}]
+  (sound/release! source)
   (when-let [^js s @source] (try (.stop s) (catch :default _ nil)))
   (reset! source nil))
 
@@ -41,6 +43,7 @@
                  (let [^js src (.createBufferSource c)]
                    (set! (.-buffer src) buffer)
                    (.connect src (.-destination c))
+                   (sound/claim! source #(stop! narrator))
                    (.start src)
                    (reset! source src)))))))
 

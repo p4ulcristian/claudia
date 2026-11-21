@@ -38,7 +38,7 @@
 
 (def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now"})
 
-(defn- css [^js el v] (.trim (.getPropertyValue (js/getComputedStyle el) v)))
+(defn css "Custom property v of element el, resolved." [^js el v] (.trim (.getPropertyValue (js/getComputedStyle el) v)))
 
 (defn- rad [d] (* d (/ js/Math.PI 180)))
 

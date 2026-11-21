@@ -266,7 +266,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     every 15 s, and a socket that opens says how long ago, so a restarted runner still knows), so
     not every open device talks at once. That page reads the replies one at a time in arrival
     order, each once, each in its chat's voice, its colour's short name first ("Red here.",
-    decision 89), a Hungarian reply in Hungarian
+    decision 89; not when that chat is open), a Hungarian reply in Hungarian
     (`pure/talk.cljs`'s line and `language-of`), without code, tables, links or Markdown marks
     ("There's code in the chat." instead). While a reply is read the mic is that chat (decision
     73): the chat's colour, bars that move, its name and voice over it. A tap on it stops that
@@ -275,7 +275,14 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     and what arrives meanwhile waits and comes after it is let go. A voice turned Off drops that
     chat's waiting replies; the page going to the background drops them all (nothing is said
     late). It never listens: answers go through the mic. A reply's play button (while the chat has
-    a voice) reads it at once. Instead of: a separate speaker button by the mic (the mic already
+    a voice) reads it at once. While a reply is read, the chat's circle on the rail and in the list
+    wears the voice's bars round it in its colour, following the voice as the held mic's bars follow
+    yours (2026-11-21, the user's pick of four: bars round it, ripples, bars inside, sound waves;
+    `src/claudia/web/views/voice_ring.cljs`, the reply played through an AnalyserNode). One sound at a
+    time (2026-11-21, the user's call): a reply read aloud, your voice played back (decision 20's
+    Listen back) and a 3D story's narrator each claim the sound as they start, and the one playing
+    before stops (a reply stopping that way drops the replies waiting after it, as the page going
+    to the background does; `src/claudia/web/sound.cljs`). Instead of: a separate speaker button by the mic (the mic already
     sits under the thumb, and the person talking must silence the tablet anyway), every device
     talking at once, cutting a reply off with the next. Files: `src/claudia/shared/voices.cljc`,
     `src/claudia/web/speech.cljs`, `src/claudia/web/here.cljs`, `src/claudia/web/views/talk.cljs`,
@@ -1569,7 +1576,9 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     (ocean→grape), orchid (plum→bubblegum), their middles still at least 0.1 apart in OKLab (the
     closest now tide and lagoon, 0.108; the first picks Frost jade→periwinkle and Coral peach→cherry
     looked like lagoon and ember). Every colour has a short name, shown in the palettes' tips and
-    said by its voice before each reply ("Red here. …", decision 21): Red, Brown, Peach, Orange,
+    said by its voice before each reply ("Red here. …", decision 21) unless that chat is the one
+    open when the reply is read (2026-11-21, the user's call: "when we are already on that chat, it
+    shouldn't"; `talk/spoken`): Red, Brown, Peach, Orange,
     Gold, Yellow, Olive, Lime, Green, Mint, Jade, Aqua, Sky, Blue, Indigo, Lilac, Purple, Plum, Pink,
     Rose; Berry, Coral, Ember, Rust, Sunset, Citrus, Moss, Meadow, Spring, Tide, Teal, Lagoon, Storm,
     Dusk, Orchid, Candy; Grey for ash (`colours/names`). The stored ids stay (cherry, ocean, reef …),
