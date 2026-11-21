@@ -9,7 +9,9 @@
   to bottom cancel, add, send, now. A mic that moves (:movable) has a ring round the petals, all the
   way round, saying move: the finger in it keeps recording, and while the mic follows the finger the
   ring shows lit round the whole flower, still recording; when the finger rests, the mic is put
-  down under it and the petals choose again from there."
+  down under it and the petals choose again from there. The ring's word is written along it,
+  upright. Round a voice message's circle (:circle) the left petal is skip all instead of add
+  (README decision 105)."
   (:require [claudia.web.views.pure.mic :as pure]))
 
 (def size "The canvas, CSS px (square, centred on the button): the move ring fits." 300)
@@ -29,6 +31,10 @@
    [:now 55 125 :now "now" "--amber"]
    [:add 145 215 "+" "add" "--blue"]])
 
+(def ^:private circle-petals
+  ;; Round a voice message's circle: left skips all of that chat's waiting messages.
+  (assoc petals 3 [:skip 145 215 "\u00bb" "skip all" "--blue"]))
+
 (def ^:private half-petals
   ;; The half flower's: the left half in four, 4 degrees apart.
   [[:cancel -133 -92 "✕" "cancel" "--red"]
@@ -36,7 +42,7 @@
    [:send 137 178 "➤" "send" "--green"]
    [:now 92 133 :now "now" "--amber"]])
 
-(def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now"})
+(def ^:private words {:send "send" :add "add" :cancel "cancel" :now "now" :skip "skip all"})
 
 (defn css "Custom property v of element el, resolved." [^js el v] (.trim (.getPropertyValue (js/getComputedStyle el) v)))
 
@@ -144,6 +150,19 @@
   ;; Where the ring says move: the four gaps between the petals (degrees), so a half flower shows two.
   [-135 -45 45 135])
 
+(defn- arc-text!
+  "Word written along the circle of radius r, centred on angle a (radians), upright
+  (pure/arc-letters), in the context's font and fill."
+  [^js g word r a]
+  (let [letters (vec word)
+        spots (pure/arc-letters (mapv #(+ 1 (.-width (.measureText g %))) letters) r a)]
+    (doseq [[ch {:keys [angle turn]}] (map vector letters spots)]
+      (.save g)
+      (.translate g (* r (js/Math.cos angle)) (* r (js/Math.sin angle)))
+      (.rotate g turn)
+      (.fillText g ch 0 0)
+      (.restore g))))
+
 (defn- ring!
   "The move ring round the petals, all the way round, saying move in the gaps between them: faint,
   or lit (on) while the mic moves."
@@ -160,8 +179,7 @@
     (set! (.-textAlign g) "center")
     (set! (.-textBaseline g) "middle")
     (set! (.-font g) (str "600 11px " (css el "--sans")))
-    (doseq [a ring-words]
-      (.fillText g "move" (* r (js/Math.cos (rad a))) (* r (js/Math.sin (rad a)))))
+    (doseq [a ring-words] (arc-text! g "move" r (rad a)))
     (set! (.-textBaseline g) "alphabetic")))
 
 (defn- ground-half!
@@ -175,15 +193,16 @@
 
 (defn- flower!
   "The petals, their ground and the bars: whole (side nil), or half to the left (side :left)."
-  [^js g ^js canvas {:keys [side way levels]}]
-  (doseq [p (if side half-petals petals)] (petal! g canvas way p))
+  [^js g ^js canvas {:keys [side way levels circle]}]
+  (doseq [p (cond side half-petals circle circle-petals :else petals)] (petal! g canvas way p))
   (if side (ground-half! g canvas) (ground! g canvas))
   (bars! g canvas levels side))
 
 (defn draw!
   "One frame: the move ring (a mic that moves), the petals, the ground inside them, the bars, the
   disc (while moving too: the ring lit, the petals and the disc still recording). state: {:phase (:starting :recording :moving)
-  :levels (one 0-1 per bar) :secs :way :side (nil: whole; :left: half) :movable}."
+  :levels (one 0-1 per bar) :secs :way :side (nil: whole; :left: half) :movable :circle (round a
+  voice message's circle)}."
   [^js canvas state]
   (let [g (.getContext canvas "2d") dpr (or js/devicePixelRatio 1)]
     (.setTransform g 1 0 0 1 0 0)

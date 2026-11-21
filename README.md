@@ -1818,6 +1818,43 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
+105. The big mic is the open chat's; other chats talk from their circles (2026-11-21, the user's
+    calls one at a time). The mic never takes another chat's colour, name, voice or bars ("they
+    are hijacking the main microphone button ... the main microphone should be always about the
+    main chat"): a hold always talks to the open chat. A chat read aloud shows on its own circle,
+    the bars moving on it (dots while its sound is made), its name and voice beside the mic in its
+    colour; only the open chat's own reply moves the bars on the mic, and a tap there stops it. A
+    tap on the mic while another chat reads starts that chat's cut message again and says to hold.
+    A hold on the circle of the chat reading talks back to it. Skipping: a tap on the playing
+    circle skips to that chat's next message (as before), and a held circle's left petal is skip
+    all instead of add: let go there and the clip is thrown away and all that chat's waiting
+    messages are marked heard. Stop and drop: a hold (not a tap) on the mic or a circle stops the
+    reading at once and marks all of the stopped chat's waiting messages heard, so its circle goes
+    ("only the new message will be relevant"). Read is heard: opening a chat marks its waiting
+    voice messages heard, here and on every device through its runner, and stops its reading; a
+    reply that comes while the chat is open is still read aloud. The move ring's word is written
+    along the ring, upright. Instead of: the mic wearing the chat being read (decision 21) and a
+    hold replying to it (decision 93), stopped messages staying unheard on their circle, a chat
+    opened keeping its voice messages, "move" written flat. Files:
+    `src/claudia/web/views/mic.cljs`, `src/claudia/web/views/mic_flower.cljs`,
+    `src/claudia/web/views/voice_circles.cljs`, `src/claudia/web/views/pure/mic.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/speech.cljs`, `resources/web/css/claudia.css`.
+
+106. Claude's first output in a turn is one line in the chat, before any tool call (2026-11-21, the
+    user: "Could we make Claudia answer very fast? It doesn't have to act very fast, but now it
+    can't answer for a while; it thinks a lot, then it talks."). Measured over the last seven
+    days' session files (3840 turns): the first spoken line came after 12 s at the median and 43 s
+    at the 90th percentile; turns that spoke before any tool took 4.6 s, turns that ran tools first
+    (60% of all) 21 s. The wait is the work before the first word, not the thinking (94% of
+    thinking blocks are empty: the API hides the text on these models). So the system prompt's
+    chat section says: the first output of every turn is one short line saying what was heard and
+    what comes next, before any tool call and before any drawing; the thinking and the tools
+    follow it; small talk and a known answer are that one line and nothing else. The request
+    start itself (about 4 s to the first block, the context's size) stays. Rejected: a fast-mode
+    switch per chat (2x plan usage, and the tools would still come before the line; it may come
+    later as an addition), a thinking-progress counter on the Thinking chip (nothing gets faster),
+    a cheap model's greeting ahead of the real reply (its own start eats the gain and it can
+    contradict the answer). Measured again the same way after a week of use.
 
 105. A turn Claude Code starts by itself runs, so nothing closes its session under it (2026-11-21,
     the user's "it happened again"). Decision 104 was built on a wrong reading: every "No response

@@ -368,3 +368,7 @@
         "a changed plan starts again even with work running")
     (is (false? (turns/stale-restart? (assoc idle :live false) false)) "no session held: nothing to close")))
 
+
+(deftest the-prompt-asks-for-a-first-line-before-any-tool
+  (is (str/includes? tools/system-append "before any tool call and before any drawing"))
+  (is (str/includes? tools/system-append "the first line is the whole reply")))

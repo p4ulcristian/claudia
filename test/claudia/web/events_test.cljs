@@ -341,7 +341,12 @@
     (is (= [(first msgs) (last msgs)] (ev/without-heard msgs "c" ["t0"])) "only that chat's id goes")
     (let [fx (ev/voice-heard-fx vdb ["s" "c"] ["t1" "t0"])]
       (is (= [{:chat "d" :id "t1" :voice "otto" :text "Other." :at 3}] (get-in fx [:db :voice-msgs "s"])))
-      (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx))))))
+      (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx))))
+    (is (= ["t1" "t0"] (ev/chat-msg-ids vdb ["s" "c"])))
+    (let [fx (ev/voice-done-fx vdb ["s" "c"])]
+      (is (= ["s" {:type "heard" :chat "c" :ids ["t1" "t0"]}] (:ws/send fx)) "every waiting message of the chat")
+      (is (= [[:speech/drop ["s" "c"]]] (:fx fx)) "and its line stops"))
+    (is (= {:fx [[:speech/drop ["s" "x"]]]} (ev/voice-done-fx vdb ["s" "x"])) "none waiting: only the stop")))
 
 (deftest the-page-touched-last-plays-a-new-message
   (let [msgs [{:chat "c" :id "t1" :voice "nora" :text "Done." :at 1}]

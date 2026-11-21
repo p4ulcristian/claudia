@@ -14,12 +14,16 @@
   going while the mic follows the finger on a spring (motion's useSpring: it trails and overshoots
   a little), its button kept on the screen; let go, the clip is heard and sent as when let go in
   place, and the mic stays there. Its flower is always whole, four ways.
-  While a chat's reply is read aloud (README decision 21) the mic is that chat: its colour, its
-  name and voice, bars that move. The chats' voice messages wait as circles round it (README
-  decisions 93 and 94, views/voice_circles.cljs), each a little mic: a tap plays that chat's
-  messages (on the one playing: the next), a hold opens this same flower round the circle, in its
-  chat's colour, and the words go to that chat. A tap on the mic stops the one playing; a hold
-  while one plays replies to that chat. Nothing is read while the mic is held."
+  The mic is always the open chat's (README decision 105): its colour, its words. While the open
+  chat's own reply is read aloud (README decision 21) its bars move on the mic and a tap stops it.
+  The chats' voice messages wait as circles round it (README decisions 93 and 94,
+  views/voice_circles.cljs), each a little mic: a tap plays that chat's messages (on the one playing:
+  the next), a hold opens this same flower round the circle, in its chat's colour, and the words go
+  to that chat; its left petal there skips all of that chat's waiting messages. Another chat read
+  aloud shows on its own circle (the bars) and by its name beside the mic. Nothing is read while the
+  mic is held: a hold stops the reading at once, and once it is a hold (not a tap) that chat's
+  waiting messages are all marked heard (stop and drop); a tap on the mic while another chat reads
+  starts that chat's message again."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
             [claudia.shared.voices :as voices]
@@ -38,8 +42,8 @@
   "What the flower shows now: the phase, the bars' levels (eased), seconds spoken, the way letting
   go goes."
   [phase ^js live hold levels]
-  (let [{:keys [dir rec-at movable]} (.-current hold)]
-    {:phase phase :levels levels :way (or dir :send) :movable movable
+  (let [{:keys [dir rec-at movable circle]} (.-current hold)]
+    {:phase phase :levels levels :way (or dir :send) :movable movable :circle (some? circle)
      :secs (if rec-at (/ (- (js/performance.now) rec-at) 1000) 0)
      :live live}))
 
@@ -125,12 +129,6 @@
   (pure/clamp-spot {:x (- js/innerWidth (rail-width) 110) :y (- js/innerHeight 110)}
                    js/innerWidth js/innerHeight (button-r)))
 
-(defn- reply-to
-  "The chat a hold replies to: the one being read aloud at the press, when it is not draft-key's."
-  [draft-key]
-  (let [k (speech/reading-chat)]
-    (when (and k (not= k draft-key)) k)))
-
 (defn- recording!
   "The microphone records session s: the hold, if still held, records from now."
   [s {:keys [hold live set-phase set-mic]}]
@@ -144,13 +142,13 @@
   "Pointer down on the mic, or on a voice message's circle (target {:k its chat :at {:x :y} its
   offset from the mic}): the clip starts (the microphone opens if it is cold; the first time the
   browser asks for it), its flower round what was pressed. The words go to the circle's chat, else
-  to the chat whose reply is being read (README decision 93), else to draft-key's."
+  to draft-key's (README decision 105)."
   [^js e {:keys [hold set-phase set-dir set-reply set-aim draft-key floating?] :as parts} & [target]]
   (when (and (zero? (.-button e)) (nil? (.-current hold)))
     (.preventDefault e)
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (let [reading (speech/reading-chat)
-          reply (or (:k target) (reply-to draft-key))
+          reply (:k target)
           t0 (js/performance.now) warm (mic/warm?)
           p (.then (mic/start!) #(started! t0 warm %))]
       (speech/hold!)   ; it never talks over you
@@ -229,7 +227,7 @@
     (if (:moving (.-current hold))
       (do (follow! e parts) (watch-rest! e parts))
       (let [dx (- (.-clientX e) x0) dy (- (.-clientY e) y0)
-            dir (pure/gesture dx dy)]
+            dir (cond-> (pure/gesture dx dy) (:circle (.-current hold)) pure/circle-way)]
         (set! (.-current hold) (assoc (.-current hold) :dir dir))
         (set-dir dir)))))
 
@@ -250,18 +248,26 @@
 
 (defn- tapped!
   "A tap: on a circle it plays that chat's messages, or, on the chat being read, the next one (the
-  one cut off counts as heard); on the mic, while a reply was read it only stopped it, else it says
-  to hold."
-  [{circle-k :circle :keys [reading reading-msg]} set-phase]
-  (set-phase (if (or circle-k reading) :idle :tap))
-  (when circle-k
-    (speech/unlock!)
-    (when (and (= circle-k reading) reading-msg) (rf/dispatch [:voice/heard circle-k [reading-msg]]))
-    (rf/dispatch [:voice/play circle-k])))
+  one cut off counts as heard); on the mic, while its own chat's reply was read it only stopped it,
+  else it says to hold, and another chat's message cut off by the press starts again."
+  [{circle-k :circle :keys [reading reading-msg k]} set-phase]
+  (set-phase (if (or circle-k (= reading k)) :idle :tap))
+  (cond
+    circle-k (do (speech/unlock!)
+                 (when (and (= circle-k reading) reading-msg) (rf/dispatch [:voice/heard circle-k [reading-msg]]))
+                 (rf/dispatch [:voice/play circle-k]))
+    (and reading reading-msg (not= reading k)) (rf/dispatch [:voice/play reading])))
+
+(defn- dropped!
+  "After a hold (not a tap): the chat whose reading it stopped is done with (stop and drop: its
+  waiting messages marked heard), and so is the circle's chat when its skip petal was chosen."
+  [{:keys [reading dir] circle-k :circle}]
+  (when reading (rf/dispatch [:voice/done reading]))
+  (when (and circle-k (= dir :skip)) (rf/dispatch [:voice/done circle-k])))
 
 (defn- heard!
-  "A hold let go in place or on a petal: a tap plays, stops or says to hold (tapped!), cancel drops
-  the clip, else it is heard."
+  "A hold let go in place or on a petal: a tap plays, stops or says to hold (tapped!), cancel and
+  skip drop the clip, else it is heard; a hold stops and drops what it cut off (dropped!)."
   [p {:keys [t0 dir k rec-at] :as held} live set-phase]
   (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)
         secs (js/Math.round (/ (- (js/performance.now) (or rec-at t0)) 1000))]
@@ -269,8 +275,9 @@
                (set! (.-current live) nil)
                (cond
                  tap? (do (mic/discard! s) (tapped! held set-phase))
-                 (= dir :cancel) (do (mic/discard! s) (set-phase :idle))
+                 (#{:cancel :skip} dir) (do (mic/discard! s) (set-phase :idle) (dropped! held))
                  :else (do (set-phase :idle)
+                           (dropped! held)
                            (clips/spoken! k dir secs (mic/stop! s))))))))
 
 (defn- release!
@@ -299,18 +306,11 @@
        (let [t (js/setTimeout #(set-phase :idle) 1600)] #(js/clearTimeout t))))
    [phase]))
 
-(def ^:private speaker-bars
-  "The bars on a mic that reads a reply aloud (they move by CSS)."
-  [:span.mic-speak-bars {:aria-hidden true} [:i] [:i] [:i] [:i] [:i]])
-
-(def ^:private speaker-loading
-  "On a mic whose reply's sound is still being made: three dots in turn (they move by CSS)."
-  [:span.mic-speak-loading {:aria-hidden true} [:i] [:i] [:i]])
-
 (defn- speaker-label
-  "Under a mic that reads a reply aloud: whose reply, in which voice (getting ready while loading)."
-  [{:keys [title voice loading]}]
-  [:span.mic-speaker [:b title]
+  "Beside the mic while a reply is read aloud: whose reply (in its chat's colour), in which voice
+  (getting ready while loading)."
+  [{:keys [title voice loading colour]}]
+  [:span.mic-speaker {:style {"--chat" colour}} [:b title]
    (when (or voice loading) [:small (str voice (when (and voice loading) " \u00b7 ") (when loading "getting ready"))])])
 
 (defn- flower-canvas
@@ -327,12 +327,12 @@
   {:down #(press! %1 parts %2) :move #(drag! % parts) :up #(release! % parts)})
 
 (defn- core
-  "The button with its bars (a reply being read: its chat's bars and name), the hint after a tap, and
-  the voice messages' circles round it."
-  [{:keys [phase canvas speaker floating? aim reply] :as parts}]
+  "The button (the open chat's reply being read: its bars), the name of the chat being read, the
+  hint after a tap, and the voice messages' circles round it."
+  [{:keys [phase canvas speaker own? floating? aim reply] :as parts}]
   [:div.mic-core
    [flower-canvas canvas aim]
-   [:button.mic-button {:type "button" :aria-label (if speaker
+   [:button.mic-button {:type "button" :aria-label (if own?
                                                      (str (:title speaker) " is speaking: tap to stop this reply, hold to talk")
                                                      "Hold to talk; let go or drag up to send, drag left to add to the message, drag right to cancel, drag down to send now")
                         :data-tip "Hold to talk: let go or drag up sends, left adds to the message, right cancels, down sends now"
@@ -341,7 +341,7 @@
                         :on-pointer-up #(release! % parts)
                         :on-pointer-cancel #(release! % parts)
                         :on-context-menu #(.preventDefault %)}
-    (cond (:loading speaker) speaker-loading speaker speaker-bars :else icon)]
+    (cond (and own? (:loading speaker)) voice-circles/speaker-loading own? voice-circles/speaker-bars :else icon)]
    (when speaker [speaker-label speaker])
    (when (= phase :tap) [:span.mic-hint "Hold to talk"])
    [:f> voice-circles/circles {:side (if floating? :ring :up) :hands (circle-hands parts)
@@ -362,7 +362,7 @@
   [speaking phase]
   (when (and speaking (= :idle phase))
     (let [row (some-> (:k speaking) row-of)]
-      {:title (or (not-empty (:title row)) "Claudia") :colour (some-> (:color row) words/colour-var)
+      {:k (:k speaking) :title (or (not-empty (:title row)) "Claudia") :colour (some-> (:color row) words/colour-var)
        :voice (some-> (:voice speaking) voices/by-id :name) :loading (:loading speaking)})))
 
 (defn- reply-label
@@ -384,14 +384,15 @@
   "The mic; floating (a touch tablet) it is drawn at its spring's point. A motion div always."
   [{:keys [phase draft-key mic floating? sx sy speaking reply] :as parts}]
   (let [speaker (speaker-of speaking phase)
+        own? (and speaker (= (:k speaker) draft-key))
         to (some-> reply row-of)]
     [:<>
-     [:> (.-div motion) {:class (str "mic " (name phase) (when floating? " moved") (when speaker " speaking") (when reply " replying"))
-                         :style (cond-> {"--chat" (or (:colour speaker) (colour-of draft-key))
+     [:> (.-div motion) {:class (str "mic " (name phase) (when floating? " moved") (when own? " speaking") (when reply " replying"))
+                         :style (cond-> {"--chat" (colour-of draft-key)
                                          :left (if floating? sx "auto") :top (if floating? sy "auto")}
                                   reply (assoc "--rec" (words/colour-var (:color to))))}
       [clips/clip-list]
-      (core (assoc parts :speaker speaker))
+      (core (assoc parts :speaker speaker :own? own?))
       (when (and reply (not= :idle phase)) [reply-label to])
       (when (= phase :recording) [speak-here mic])]]))
 
