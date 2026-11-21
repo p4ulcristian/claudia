@@ -76,22 +76,25 @@ async function visit(browser, hubUrl, screen) {
       await page.getByRole('menuitemradio', { name: /Drawing board/ }).click({ timeout: waitMs });
       await page.locator('.settings-pane').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill and the model · effort popup, no project pill and no select; the colour button first among the round buttons (README decision 22)', async () => {
+    if (screen.name === 'desktop') await step('the header has three rows: the title; one look for every pill (server, project, notify and colour among them) and the model · effort popup, no select; Files first among the worded buttons (README decisions 22, 90)', async () => {
       const head = page.locator('.chat-head');
       await head.locator('.head-row.r2 .head-pill').first().waitFor({ timeout: waitMs });
-      if (await head.locator('select, .proj-btn, .r1 .icon').count()) throw new Error('a select, the project pill or a row-1 button is still there');
-      const acts = await head.locator('.head-acts > *').evaluateAll((els) => els.map((e) => e.className));
-      if (!/head-act/.test(acts[0] ?? '')) throw new Error(`the first button is ${acts[0]}`);
+      if (await head.locator('select, .proj-btn, .r1 .icon, .r3 .icon').count()) throw new Error('a select, the old project button or a round button is still there');
+      for (const name of ['Server', 'Notify', 'Colour']) {
+        if (!(await head.locator(`.r2 .head-pill[aria-label="${name}"]`).count())) throw new Error(`no ${name} pill in row 2`);
+      }
+      const acts = await head.locator('.head-acts > *').evaluateAll((els) => els.map((e) => `${e.className} ${e.textContent}`));
+      if (!/head-btn/.test(acts[0] ?? '') || !/Files/.test(acts[0] ?? '')) throw new Error(`the first button is ${acts[0]}`);
       await head.locator('.head-pill[aria-label="Model · effort"]').click({ timeout: waitMs });
       await head.locator('.head-pop.model-pop').getByText('Model', { exact: true }).waitFor({ timeout: waitMs });
       await page.keyboard.press('Escape');
       await head.locator('.head-pop').waitFor({ state: 'detached', timeout: waitMs });
     });
-    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70, 71)', async () => {
+    if (screen.name === 'desktop') await step('a new chat starts with no folder: Send opens Files in the right half and keeps the draft, a bookmark\'s Select picks the folder, sends and brings the picture back (README decisions 61 to 65, 70, 90)', async () => {
       const row = (n) => page.locator('.fd-node').filter({ has: page.locator('.fd-name', { hasText: new RegExp(`^${n}$`) }) });
-      const pill = page.locator('.chat-head .folder-pill');
-      await pill.locator('.pill-empty', { hasText: 'Pick a folder' }).waitFor({ timeout: waitMs });
-      if (!(await pill.locator('.place-server').count())) throw new Error('the place pill has no computer name (README decision 71)');
+      const pill = page.locator('.chat-head .project-pill');
+      await pill.locator('.pill-empty', { hasText: 'Pick a project' }).waitFor({ timeout: waitMs });
+      if (!(await page.locator('.chat-head .head-pill[aria-label="Server"] .pill-val').innerText()).trim()) throw new Error('the server pill names no server (README decision 90)');
       const box = page.getByPlaceholder('Message Claude…');
       await box.fill('Start here please');
       await page.getByRole('button', { name: 'Send' }).click({ timeout: waitMs });

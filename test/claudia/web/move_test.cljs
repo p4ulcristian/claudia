@@ -10,8 +10,13 @@
 
 (deftest ask-state-starts-on-the-first-other-server-and-the-same-folder
   (is (= {:k ["home" "c1"] :to "work" :folder "~/Work/app"}
-         (move/ask-state ["home" "c1"] {:folder "/home/paul-claudia-agent/Work/app"} servers)))
-  (is (= "" (:folder (move/ask-state ["home" "c1"] {:folder nil} servers))) "no folder: the target's work folder"))
+         (move/ask-state ["home" "c1"] {:folder "/home/paul-claudia-agent/Work/app"} servers nil)))
+  (is (= "" (:folder (move/ask-state ["home" "c1"] {:folder nil} servers nil))) "no folder: the target's work folder"))
+
+(deftest ask-state-takes-the-server-the-header-picked
+  (is (= "mac" (:to (move/ask-state ["home" "c1"] {} servers "mac"))))
+  (is (= "work" (:to (move/ask-state ["home" "c1"] {} servers "home"))) "its own server: the first other")
+  (is (= "work" (:to (move/ask-state ["home" "c1"] {} servers "gone")))))
 
 (deftest request-body-names-the-chat-both-servers-and-the-folder
   (is (= {:chat "c1" :from "home" :to "mac" :folder "~/x"}

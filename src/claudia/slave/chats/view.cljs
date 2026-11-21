@@ -1,7 +1,8 @@
 (ns claudia.slave.chats.view
   "What the page and the hub see of the chats, from the store's rows and the runner's live state:
   the chat list's rows, a new chat's colour, and a chat's messages with its live turn laid over."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [claudia.shared.sounds :as sounds]))
 
 (defn keeps-session?
   "An open chat keeps its Claude Code process, so other sessions can always message it: one in the
@@ -51,9 +52,11 @@
         working (or (boolean (:running s)) (pos? agents))
         ended (or (:ended r) 0)]
     {:id (:id r) :title (:title r) :folder (:folder r) :color (:color r)
-     ;; The chat's voice ("" = Off) and bell (README decision 21), its root switch (decision 52): kept with the chat.
+     ;; The chat's voice ("" = Off), bell (README decision 21) and its sound (decision 90), its root
+     ;; switch (decision 52): kept with the chat.
      :voice (or (:voice r) "")
      :bell (not (false? (:bell r)))
+     :sound (sounds/sound-id (:sound r))
      :root (boolean (:root r))
      :running (boolean (:running s))
      :waiting (boolean (seq asks))
