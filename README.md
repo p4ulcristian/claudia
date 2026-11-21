@@ -1926,6 +1926,30 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/shell.cljs`, `src/claudia/web/views/chat.cljs`,
     `resources/web/css/reach.css`.
 
+111. The stall watch: an agent waiting on work that no longer moves turns red, and its chat is told
+    (2026-11-21, the user's pick of three: "How can we make it so in the future Claudia can see
+    these problems?"). That day an agent waited 16 minutes on a background shell running
+    `ssh … 'while pgrep -f "…"; do sleep 15; done'`: `pgrep -f` matched the loop's own command line,
+    so the shell never ended and never printed, and nobody saw it until the user asked. Now every
+    2 s the runner looks at each chat's running agents: an agent is stalled when neither it (a
+    step, progress) nor any of its running work (an agent's step, a shell's output file written)
+    has shown a sign for 12 minutes, over the 10 minutes one foreground command may run, so a long
+    command alone never trips it; a shell alone is never stalled (a server may print nothing for
+    hours). A stalled agent's chip turns red, its line says "waiting on nothing · quiet 16m", and
+    it turns back the moment a sign comes (Agent `stalled` in PROTOCOL.md). The chat that started
+    it is told once per stall, as Claudia's note ("Claudia: The agent "…" has shown no sign of work
+    for 12 min: no step of its own, and its shell `…` still runs but has printed nothing. Check
+    that its work still runs …"), in `<claudia-note>` tags the system prompt names as Claudia's,
+    never the user's approval; sent mid-turn it is taken in mid-turn, else it starts a turn. The
+    stall told of is kept with the task, so a runner restart tells it no second time; an archived
+    or moving chat is not told. Instead of: heartbeats from remote jobs (every job through one
+    wrapper; can come later for work on other machines), or only a rule for agents (the failure
+    was an agent not checking). Files: `src/claudia/slave/stall.cljs`,
+    `src/claudia/slave/tasks.cljs`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/slave/history.cljs`, `src/claudia/slave/tools.cljs`,
+    `src/claudia/web/views/agents.cljs`, `src/claudia/web/views/pure/agents.cljs`,
+    `resources/web/css/agents.css`, `PROTOCOL.md`.
+
 ## Back from the TypeScript Claudia (2026-11-03)
 
 - Picture history: a picture per turn (SQLite `pictures`); the bar under the picture steps through them (‹ › ←/→, a scrubber), the newest is live, older ones read only; fold (Alt+P); the timeline view was removed 2026-11-14 (picture only); the camera copies or saves the picture as PNG.

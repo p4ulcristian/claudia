@@ -138,3 +138,7 @@
          (history/task-card {:summary "It broke." :status "failed" :task-name "Fix it"}))
       "live, the summary is the agent's answer; the title its description")
   (is (nil? (history/task-notice-card "plain words")) "not a notice"))
+
+(deftest claudias-own-notes-show-as-hers
+  (is (= "Claudia: The agent stalled." (history/claudia-note (history/with-claudia-tag "The agent stalled."))))
+  (is (nil? (history/claudia-note "The agent stalled.")) "the person's own words are not hers"))
