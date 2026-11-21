@@ -121,20 +121,6 @@
     (or (some-> (re-find #"<summary>([\s\S]*?)</summary>" text) second str/trim)
         "A background task finished.")))
 
-;; Claudia's nudge after an empty turn (README decision 104) goes to Claude as a message of its own
-;; inside <claudia-nudge>; the chat shows it as Claudia's note, never as the person's message.
-(def ^:private nudge-re #"^<claudia-nudge>([\s\S]*?)</claudia-nudge>$")
-
-(defn with-nudge-tag
-  "The text Claude gets for Claudia's nudge."
-  [text]
-  (str "<claudia-nudge>" text "</claudia-nudge>"))
-
-(defn nudge-note
-  "A user text that is Claudia's nudge as the note the chat shows, or nil."
-  [text]
-  (some->> (re-find nudge-re (str/trim (str text))) second str/trim (str "Claudia: ")))
-
 (defn command-tags
   "The tags Claude Code keeps a slash command in, read from user text: {:name :args :out} (each nil
   when missing; out is <local-command-stdout> or -stderr) and :message? (it has <command-message>)."
@@ -374,11 +360,10 @@
             msgs)))
 
 (defn- text-user-msgs
-  "A user entry whose content is text: a task notice or Claudia's nudge, a slash command, or what
-  the user wrote."
+  "A user entry whose content is text: a task notice, a slash command, or what the user wrote."
   [m content at]
   (let [text (strip-moved (strip-reminders content))
-        notice (or (task-notice text) (nudge-note text))
+        notice (task-notice text)
         cmd (when-not notice (command-msg text))]
     (into (moved-note-msgs (:uuid m) (strip-reminders content) at)
           (cond
@@ -405,12 +390,11 @@
   (str/join "\n" (filter seq (keep #(when (= "text" (:type %)) (strip-reminders (:text %))) content))))
 
 (defn- blocks-user-msg
-  "A user entry's text and image blocks as one Msg (a task notice or Claudia's nudge as a note), or
-  nil."
+  "A user entry's text and image blocks as one Msg (a task notice as a note), or nil."
   [m content at]
   (let [text (strip-moved (blocks-text content))
         images (count (filter #(= "image" (:type %)) content))
-        notice (or (task-notice text) (nudge-note text))]
+        notice (task-notice text)]
     (cond
       notice {:id (:uuid m) :role "note" :text notice :at at}
       (or (seq text) (pos? images)) (cond-> {:id (:uuid m) :role "user" :text text :at at}

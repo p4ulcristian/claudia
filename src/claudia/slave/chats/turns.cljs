@@ -85,10 +85,9 @@
 
 (defn with-sent
   "The chat's live state with a sent Msg: the turn's name, kept aside until the session file has
-  it, when the last message went in (:sent-at); a message sent between turns starts a new turn, not
-  begun until Claude Code says so."
+  it; a message sent between turns starts a new turn, not begun until Claude Code says so."
   [s msg]
-  (cond-> (-> s (assoc :turn-id (:id msg) :sent-at (:at msg)) (assoc-in [:unsaved (:id msg)] msg))
+  (cond-> (-> s (assoc :turn-id (:id msg)) (assoc-in [:unsaved (:id msg)] msg))
     (not (:queued msg)) (assoc :turn [] :begun false)))
 
 (defn taken-in
@@ -139,3 +138,20 @@
   (when (number? (:totalTokens c))
     {:used (:totalTokens c) :max (:maxTokens c)
      :percent (js/Math.round (or (:percentage c) 0)) :model (:model c)}))
+
+(defn init-starts-running?
+  "Whether a turn's init message m (running: the chat already counts a turn running) makes the
+  chat's turn run from now: a top-level init of a turn not yet counted, also one Claude Code started
+  by itself after a background task's end, whose first answer may be slow (README decision 105)."
+  [m running]
+  (and (nil? (:parent_tool_use_id m)) (not running)))
+
+(defn stale-restart?
+  "Whether a chat's session (s: its live state; work-running?: background work it started still
+  runs) starts again now: held, no turn running, not settling (the last background task just ended
+  and its notice may be starting a turn, README decision 105), and its plan changed, or it is stale
+  (other tools or instructions) with no work left running."
+  [{:keys [live running settling plan-changed stale]} work-running?]
+  (boolean (and live (not running) (not settling)
+                (or plan-changed (and stale (not work-running?))))))
+

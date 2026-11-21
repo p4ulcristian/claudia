@@ -539,10 +539,6 @@ with it as this one message, their texts joined by line breaks; the message's ow
 send's, README decision 83); a `show_image` step has `image: true` and a `show_video` step `video: true`
 (both from `GET /api/chats/:chat/shown/<id>`); an `offer_word` step has `word: { word, heard }` (the
 page shows its card, README decision 95).
-A `note` may be Claudia's nudge after a turn a background task's end started and that ended with
-no real reply (README decision 104): text `Claudia: <what Claude was told>`, its id the uuid it was
-sent with. Claude gets it as `<claudia-nudge>…</claudia-nudge>`, a message of its own, and the
-session file's copy reads back as the same note.
 An assistant message has `aside: true` when it was the turn's final reply and went over the chat's
 limit (`claudia.slave.tools/reply-limit` characters): the Stop hook handed it back to Claude to
 shorten, and the page folds it into the steps. Once a turn has ended the page folds every text of
