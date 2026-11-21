@@ -101,12 +101,34 @@
         avail (apply max 0 (map :avail spaces))]
     {:size size :used (max 0 (- size avail)) :avail avail}))
 
+(defn cpu-time
+  "ps's cumulative CPU time (`[[dd-]hh:]mm:ss.cc`) in hundredths of a second (the ticks
+  claudia.node.proc/proc-cores counts), 0 when it is not one."
+  [text]
+  (let [[_ days rest-part] (re-matches #"^(?:(\d+)-)?(.+)$" (str/trim (str text)))
+        secs (reduce (fn [acc part] (+ (* acc 60) (num-of part))) 0 (str/split (or rest-part "") #":"))]
+    (js/Math.round (* 100 (+ secs (* 86400 (num-of days)))))))
+
 (defn ps-rows
-  "ps -axo pid=,ppid=,rss=,command= as [{:pid :ppid :rss (bytes) :kind}], kind as
-  claudia.node.proc/claudia-kind names it."
+  "ps -axo pid=,ppid=,rss=,time=,command= as [{:pid :ppid :rss (bytes) :ticks (CPU, hundredths of
+  a second) :kind}], kind as claudia.node.proc/claudia-kind names it; the command itself is read for
+  the kind only, never kept."
   [text]
   (vec (for [line (str/split-lines text)
-             :let [[_ pid ppid rss command] (re-matches #"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$" line)]
+             :let [[_ pid ppid rss t command] (re-matches #"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$" line)]
              :when pid]
-         {:pid (js/parseInt pid 10) :ppid (js/parseInt ppid 10) :rss (* 1024 (num-of rss))
+         {:pid (js/parseInt pid 10) :ppid (js/parseInt ppid 10) :rss (* 1024 (num-of rss)) :ticks (cpu-time t)
           :kind (second (re-find #"(?:^|[/\s])(front|runner|host|hub)\.js(?:\s|$)" command))})))
+
+(defn ps-names
+  "ps -axo pid=,comm= as {pid program name} (the executable's last path part)."
+  [text]
+  (into {} (for [line (str/split-lines text)
+                 :let [[_ pid comm] (re-matches #"^\s*(\d+)\s+(.+)$" line)]
+                 :when pid]
+             [(js/parseInt pid 10) (last (str/split (str/trim comm) #"/"))])))
+
+(defn named-rows
+  "ps-rows with each process's program name from ps-names (\"?\" when it ended between the two)."
+  [rows names]
+  (mapv #(assoc % :name (get names (:pid %) "?")) rows))

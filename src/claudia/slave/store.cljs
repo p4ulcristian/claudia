@@ -97,6 +97,18 @@
                 at INTEGER NOT NULL,
                 PRIMARY KEY (chat, id)
               );
+              -- A chat's proposed System label (README decision 95, its system_label tool): nothing
+              -- applies until the person accepts it on System (the hub's labels) or says no.
+              CREATE TABLE IF NOT EXISTS system_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat TEXT NOT NULL,
+                server TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                match TEXT NOT NULL,
+                project TEXT NOT NULL,
+                why TEXT NOT NULL DEFAULT '',
+                at INTEGER NOT NULL
+              );
               CREATE TABLE IF NOT EXISTS trash (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL,
@@ -445,3 +457,23 @@
       (insert-copied! id kvs pics chs)
       (.exec ^js @db "COMMIT")
       (catch :default e (.exec ^js @db "ROLLBACK") (throw e)))))
+
+;; System proposals (README decision 95) -----------------------------------------------------------
+
+(defn add-proposal!
+  "Keeps a chat's proposed label; its id."
+  [{chat-id :chat :keys [server kind match project why at]}]
+  (.-lastInsertRowid (.run (stmt "INSERT INTO system_proposals (chat, server, kind, match, project, why, at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                           chat-id server kind match project why at)))
+
+(defn proposals
+  "Every kept proposal, oldest first, as {:id :chat :server :kind :match :project :why :at}."
+  []
+  (mapv (fn [^js r] {:id (.-id r) :chat (.-chat r) :server (.-server r) :kind (.-kind r) :match (.-match r)
+                     :project (.-project r) :why (.-why r) :at (.-at r)})
+        (.all (stmt "SELECT * FROM system_proposals ORDER BY at, id"))))
+
+(defn drop-proposal!
+  "Takes a proposal away; how many went (0 or 1)."
+  [id]
+  (.-changes (.run (stmt "DELETE FROM system_proposals WHERE id = ?") id)))

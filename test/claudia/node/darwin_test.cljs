@@ -59,10 +59,15 @@
                                   {:bsize 4096 :blocks 36210896 :bfree 30022054 :bavail 23856453}]))))
 
 (deftest claudia-processes-from-ps
-  (let [rows (darwin/ps-rows (str "  10     1  20000 node /Users/x/claudia/out/front.js\n"
-                                  "  11     1  30000 /usr/local/bin/node /Users/x/claudia/out/host.js\n"
-                                  "  12    11  50000 claude --output-format stream-json\n"
-                                  "  13     1   1000 /bin/zsh\n"))]
+  (let [rows (darwin/ps-rows (str "  10     1  20000   0:01.50 node /Users/x/claudia/out/front.js\n"
+                                  "  11     1  30000 1:02:03.04 /usr/local/bin/node /Users/x/claudia/out/host.js\n"
+                                  "  12    11  50000   2-00:00:01.00 claude --output-format stream-json\n"
+                                  "  13     1   1000   0:00.00 /bin/zsh\n"))]
     (is (= "front" (:kind (first rows))))
+    (is (= [150 372304 17280100 0] (mapv :ticks rows)))
     (is (= [{:kind "front" :count 1 :rss 20480000} {:kind "host" :count 1 :rss 30720000} {:kind "chats" :count 1 :rss 51200000}]
-           (system/darwin-memory rows)))))
+           (system/claudia-memory rows)))))
+
+(deftest program-names-from-ps
+  (is (= {1 "launchd" 220 "Google Chrome"}
+         (darwin/ps-names "    1 /sbin/launchd\n  220 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n"))))

@@ -507,11 +507,25 @@
         :else (pictures/put! req res (.get (.-searchParams (js/URL. (.-url req) "http://hub")) "email"))))
 
 (defn- gate-system-call
-  "GET /hub/gate/system: the gate's own numbers, for admins."
-  [^js req ^js res admin?]
+  "GET /hub/gate/system: the gate's own numbers, and /hub/gate/system/<details|history> its System
+  (README decision 95), for admins."
+  [^js req ^js res pathname admin?]
   (cond (not admin?) (fail res 403 "admins only")
         (not= "GET" (.-method req)) (fail res 405 "GET only")
-        :else (systems/gate-sample res)))
+        (= pathname "/hub/gate/system") (systems/gate-sample res)
+        :else (systems/gate-system (subs pathname (count "/hub/gate/system/"))
+                                   (or (second (str/split (.-url req) #"\?" 2)) "") res)))
+
+(defn- system-path?
+  "The gate's numbers and System (/hub/gate/system…) and System's labels (/hub/system/labels…)."
+  [pathname]
+  (boolean (or (#{"/hub/gate/system" "/hub/gate/system/details" "/hub/gate/system/history" "/hub/system/labels"} pathname)
+               (str/starts-with? pathname "/hub/system/labels/"))))
+
+(defn- system-call [^js req ^js res pathname email admin?]
+  (if (str/starts-with? pathname "/hub/gate/")
+    (gate-system-call req res pathname admin?)
+    (systems/labels-call req res pathname email admin? #(io/read-json % max-body))))
 
 (defn call
   "A signed-in caller's /hub/… call other than /hub/me and server state: admin? decides the admin
@@ -531,7 +545,7 @@
                  (= pathname "/hub/listen") (listen/call req res email)
                  (= pathname "/hub/listen/words") (listen-words/call req res email)
                  (= pathname "/hub/listen/log") (listen/log req res email)
-                 (= pathname "/hub/gate/system") (gate-system-call req res admin?)
+                 (system-path? pathname) (system-call req res pathname email admin?)
                  (str/starts-with? pathname "/hub/claude-token")
                  (token-call req res pathname email)
                  (= pathname "/hub/github-login") (github-login-call req res email)

@@ -17,6 +17,7 @@
             [claudia.slave.rootfront :as rootfront]
             [claudia.slave.sdk-store :as sdk-store]
             [claudia.slave.sshfront :as sshfront]
+            [claudia.slave.system-front :as system-front]
             [claudia.slave.tokens :as tokens]))
 
 (def ^:private env (.-env js/process))
@@ -300,11 +301,13 @@
       (= url "/api/claude-token/saved") (token-saved req res)
       (= url "/api/claude-token/limits") (token-limits req res)
       (= url "/api/system") (system-sample req res)
+      (system-front/handle profiles url req res) nil
       (= url "/api/github/service-token") (github-services/handle req res)
       ;; The commit this machine runs (the update pill follows each one after a release).
       (= url "/api/version") (io/send-json res 200 {:commit h/commit :version h/version :sdk (new-session-sdk)})
       status (io/send-json res status {:error error})
       (= :refuse (root-call (.-method req) url)) (io/send-json res 403 {:error "Not passed on: the runner's root and SSH routes are the front's own."})
+      (= url "/api/system/chats") (io/send-json res 403 {:error "Not passed on: the runner's System chats are the front's own."})
       (and (= url "/api/me") (= "GET" (.-method req))) (me res (.-headers req) r)
       (not (:target r)) (io/send-json res 403 {:error "No profile on this server for this person."})
       (and read-only (not= "GET" (.-method req))) (io/send-json res 403 {:error "Read only."})
@@ -358,6 +361,7 @@
     (reset! hub-key (read-hub-key (.-FRONT_HUB_KEY_FILE env)))
     (rootfront/listen! profiles)
     (sshfront/start! @profiles)
+    (system-front/start! profiles)
     (let [server (doto (http/createServer on-request)
                    ;; Uploads take up to 100 MB: no 5-minute cap on a request.
                    (aset "requestTimeout" 0))

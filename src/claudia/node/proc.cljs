@@ -146,13 +146,58 @@
 
 ;; ---- processes ----
 
-(defn proc-stat
-  "/proc/<pid>/stat as {:comm :ppid}; the name is in parentheses and may hold spaces or parentheses."
+(defn pid-stat
+  "/proc/<pid>/stat as {:comm :ppid :ticks (CPU time in user and system mode) :start (when it
+  started, after boot) :rss (resident pages)}; times in clock ticks (USER_HZ). The name is in
+  parentheses and may hold spaces or parentheses."
   [text]
   (let [open (str/index-of text "(") close (str/last-index-of text ")")]
     (when (and open close)
-      {:comm (subs text (inc open) close)
-       :ppid (js/parseInt (nth (words (subs text (inc close))) 1) 10)})))
+      (let [ws (vec (words (subs text (inc close))))
+            field #(num-of (get ws (- % 3)))]
+        {:comm (subs text (inc open) close)
+         :ppid (field 4) :ticks (+ (field 14) (field 15)) :start (field 22) :rss (field 24)}))))
+
+(def user-hz
+  "Clock ticks a second in /proc's times: the kernel reports USER_HZ, 100 on every architecture."
+  100)
+
+(defn proc-cores
+  "A process's CPU between two pid-stat reads secs apart, in cores (1.0 = one core all the time),
+  rounded to 0.01; 0 when the counter went back (another process took the pid)."
+  [a b secs]
+  (if (and a b (pos? secs))
+    (/ (js/Math.round (* 100 (/ (max 0 (- (:ticks b) (:ticks a))) user-hz secs))) 100)
+    0))
+
+(defn top-procs
+  "The n busiest by cores and the n biggest by rss of procs ({:pid :cores :rss …}), each once,
+  busiest first."
+  [procs n]
+  (let [busy (take n (sort-by (comp - :cores) (filter #(pos? (:cores %)) procs)))
+        big (take n (sort-by (comp - :rss) procs))]
+    (->> (concat busy big) (reduce (fn [m p] (assoc m (:pid p) p)) {}) vals
+         (sort-by (juxt (comp - :cores) (comp - :rss))) vec)))
+
+;; ---- pressure (PSI) ----
+
+(defn psi
+  "/proc/pressure/<resource>'s text as {\"some\" {:avg10 :avg60} \"full\" {…}} in percent, nil
+  when there is no such line (no PSI)."
+  [text]
+  (not-empty
+   (into {} (for [line (str/split-lines (str text))
+                  :let [[_ k a10 a60] (re-find #"^(some|full) avg10=([\d.]+) avg60=([\d.]+)" line)]
+                  :when k]
+              [k {:avg10 (num-of a10) :avg60 (num-of a60)}]))))
+
+(defn pressure
+  "The Sample's pressure from the three psi reads ({:cpu :memory :io}) over avg (:avg10 or :avg60):
+  {:cpu {:some :full} …}, cpu's full null (the kernel's is not meaningful); nil without PSI."
+  [{cpu :cpu mem :memory io :io} avg]
+  (when (and cpu mem io)
+    (let [one (fn [m full?] {:some (get-in m ["some" avg]) :full (when full? (get-in m ["full" avg]))})]
+      {:cpu (one cpu false) :memory (one mem true) :io (one io true)})))
 
 (defn claudia-kind
   "Which Claudia program a /proc/<pid>/cmdline (NUL-separated) runs: \"front\", \"runner\", \"host\",
@@ -169,11 +214,6 @@
         (let [kids (remove seen (get children p))]
           (recur (into (pop todo) kids) (into seen kids)))
         seen))))
-
-(defn vm-rss
-  "/proc/<pid>/status's resident memory in bytes (VmRSS), 0 when absent (a kernel thread)."
-  [text]
-  (* 1024 (num-of (second (re-find #"(?m)^VmRSS:\s+(\d+)" text)))))
 
 (defn group-rss
   "[[kind rss] …] as [{:kind :count :rss}] in the order front, runner, host, chats, hub."

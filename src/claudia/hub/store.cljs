@@ -179,6 +179,18 @@
      view TEXT NOT NULL,
      at INTEGER NOT NULL
    );
+   -- What a page calls a project on System (README decision 95): a label for a unit, container,
+   -- port or program, per server or for every one (server '*'), written by admins.
+   CREATE TABLE IF NOT EXISTS system_labels (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     server TEXT NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('unit', 'container', 'port', 'process')),
+     match TEXT NOT NULL,
+     project TEXT NOT NULL,
+     by TEXT NOT NULL,
+     at INTEGER NOT NULL,
+     UNIQUE (server, kind, match)
+   );
    -- The release builder (claudia.hub.releases, README decision 29): one at a time, the host its
    -- builder key named and the SHA-256 of its secret (its bearer token; the secret is never kept).
    CREATE TABLE IF NOT EXISTS release_builder (
@@ -198,6 +210,12 @@
     (reset! db d)))
 
 (defn close! [] (some-> ^js @db .close) (reset! db nil))
+
+(defn database
+  "The open store, for a part that keeps a table of its own in it (System's history of the gate,
+  claudia.node.history)."
+  ^js []
+  @db)
 
 (defn- now [] (js/Date.now))
 
@@ -595,3 +613,19 @@
          host token-hash (now)))
 
 (defn release-builder-seen! [] (exec! "UPDATE release_builder SET seen_at = ? WHERE id = 1" (now)))
+
+;; System labels (README decision 95) ------------------------------------------------------------
+
+(defn system-labels []
+  (all "SELECT id, server, kind, match, project, by, at FROM system_labels ORDER BY server, kind, match"))
+
+(defn save-system-label!
+  "Adds a label, or replaces the one with the same server, kind and match; the label."
+  [{label-server :server :keys [kind match project by]}]
+  (exec! "INSERT INTO system_labels (server, kind, match, project, by, at) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT (server, kind, match) DO UPDATE SET project = excluded.project, by = excluded.by, at = excluded.at"
+         label-server kind match project by (now))
+  (one "SELECT id, server, kind, match, project, by, at FROM system_labels WHERE server = ? AND kind = ? AND match = ?"
+       label-server kind match))
+
+(defn drop-system-label! [id] (exec! "DELETE FROM system_labels WHERE id = ?" id))

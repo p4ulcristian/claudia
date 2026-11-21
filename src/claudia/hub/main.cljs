@@ -107,6 +107,8 @@
     (not (safe-rest? rest-path)) {:status 400 :error "bad path"}
     ;; The hub's own calls to the front (the update poke; the Claude token in use; its limits; its numbers), never a page's.
     (#{"/api/update-check" "/api/claude-token/picks" "/api/claude-token/saved" "/api/claude-token/limits" "/api/system"} rest-path) {:status 404 :error "not found"}
+    ;; System's machine reads (README decision 95): the hub's own, passed on by /hub/servers/<name>/system/….
+    (#{"/api/system/details" "/api/system/history" "/api/system/unit-log"} rest-path) {:status 404 :error "not found"}
     ;; GitHub logins: the hub hands them out and takes one in (README decision 23), never a page.
     ;; A service's app token (README decision 78): the hub's own, never a page's.
     ;; A person's Sentinel key (README decision 85): the hub hands it out, never a page.
@@ -166,13 +168,15 @@
    :viewServers (mapv #(select-keys % [:name :label]) (config/view-servers person))})
 
 (defn- server-call
-  "/hub/servers/<name>/state (does its front answer) and /hub/servers/<name>/system (its numbers),
-  for a server this person may use."
-  [^js res person email server-name what]
+  "/hub/servers/<name>/state (does its front answer), /hub/servers/<name>/system (its numbers) and
+  /hub/servers/<name>/system/<details|history|unit-log> (System, README decision 95, the query
+  passed on), for a server this person may use."
+  [^js req ^js res person email server-name what]
   (if-let [server (config/server-of person server-name)]
-    (if (= what "state")
-      (pass/up? server email #(io/send-json res 200 {:up %}))
-      (systems/server-sample server res))
+    (case what
+      "state" (pass/up? server email #(io/send-json res 200 {:up %}))
+      "system" (systems/server-sample server res)
+      (systems/server-system server (subs what (count "system/")) (some->> (second (split-url (.-url req))) (str "?")) res))
     (io/send-json res 403 {:error (str "no access to " server-name)})))
 
 ;; Set once the hub is stopping: /hub/alive then says so, and the gate's proxy sends new calls to
@@ -190,7 +194,7 @@
   {"/hub/videos" videos/call "/hub/health" health/call "/hub/chat-move" move/call})
 
 (defn- hub-api [^js req ^js res pathname]
-  (let [[_ server-name what] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/(state|system)$" pathname)
+  (let [[_ server-name what] (re-matches #"^/hub/servers/([a-z][a-z0-9-]{0,30})/(state|system|system/details|system/history|system/unit-log)$" pathname)
         email (caller req)
         group-admin (admin-group? req)
         person (or (some-> email config/person)
@@ -217,7 +221,7 @@
       (broker/call? pathname) (broker/call req res pathname email)
       (not own?) (ops/call req res pathname email admin?)
       (= pathname "/hub/me") (io/send-json res 200 (me person admin?))
-      :else (server-call res person email server-name what))))
+      :else (server-call req res person email server-name what))))
 
 (defn- on-request [{:keys [web-root data-dir]} ^js req ^js res]
   (let [[pathname query] (split-url (.-url req))]
@@ -281,7 +285,8 @@
   (github-login/start!)
   (sentinel-key/start!)
   (github-app/start!)
-  (github-services/start!))
+  (github-services/start!)
+  (systems/start-history!))
 
 (defn- exit!
   "The store closes last, once no request can reach it any more, then the process exits."
