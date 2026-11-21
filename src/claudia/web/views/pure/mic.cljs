@@ -117,6 +117,25 @@
       (str s "." milli)
       (str (quot s 60) ":" (.padStart (str (mod s 60)) 2 "0") "." milli))))
 
+(def context-chars
+  "How much of a chat's last words goes with a clip as context for the listen service (it keeps the
+  last 200 words of it)."
+  2000)
+
+(defn listen-context
+  "The chat's last words as context for hearing a clip: the person's and Claude's messages, oldest
+  first, one per line, cut to their last context-chars at a word's start (\"\" for none)."
+  [messages]
+  (let [text (->> messages
+                  (filter #(#{"user" "assistant"} (:role %)))
+                  (keep #(not-empty (str/trim (str (:text %)))))
+                  (take-last 6)
+                  (str/join "\n"))
+        cut (- (count text) context-chars)]
+    (if (pos? cut)
+      (str/triml (str/replace-first (subs text cut) #"^\S*" ""))
+      text)))
+
 (defn with-heard
   "The draft with heard text added at its end, one space between (a new line kept as it is)."
   [draft heard]

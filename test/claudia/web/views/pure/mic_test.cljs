@@ -141,3 +141,19 @@
   (is (= "Clip 1, 4 s, send: heard, waits its turn" (mic/clip-label {:n 0 :secs 4 :dir :send :state :heard} 0)))
   (is (= "Clip 3, 6 s, add: didn't come through" (mic/clip-label {:n 2 :secs 6 :dir :add :state :failed} 0)))
   (is (re-find #"^Clip 2, 2 s, now: hearing " (mic/clip-label {:n 1 :secs 2 :dir :now :state :hearing :t0 0} 3000))))
+
+(deftest a-chat-s-last-words-go-with-a-clip
+  (let [msgs [{:role "user" :text "Is PostHog slow?"}
+              {:role "tool" :text "ran: grep posthog"}
+              {:role "assistant" :text " The PostHog replay keeps a frame loop running. "}
+              {:role "assistant" :text ""}]]
+    (is (= "Is PostHog slow?\nThe PostHog replay keeps a frame loop running." (mic/listen-context msgs))
+        "people's and Claude's words, oldest first; tool steps and empty ones left out")
+    (is (= "" (mic/listen-context nil)) "a new chat has none")
+    (is (= "m3\nm4\nm5\nm6\nm7\nm8" (mic/listen-context (for [i (range 1 9)] {:role "user" :text (str "m" i)})))
+        "the last six messages"))
+  (let [long (apply str (repeat 500 "word "))
+        out (mic/listen-context [{:role "user" :text (str "START " long "END")}])]
+    (is (<= (count out) mic/context-chars) "cut to its last context-chars")
+    (is (re-find #"^word " out) "starting at a whole word")
+    (is (re-find #"END$" out) "the newest words kept")))

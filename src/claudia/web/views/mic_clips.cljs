@@ -10,6 +10,7 @@
             [claudia.web.mic :as mic]
             [claudia.web.views.pure.mic :as pure]
             [re-frame.core :as rf]
+            [re-frame.db :as rdb]
             [reagent.core :as r]))
 
 (def ^:private retry-ms "How long after a failure the clip is heard once more by itself." 2500)
@@ -46,7 +47,7 @@
   [n]
   (when-let [{:keys [id k dir secs t0]} (get @rows n)]
     (swap! rows #(-> % (assoc-in [n :state] :hearing) (update-in [n :tries] inc)))
-    (-> (mic/hear (get @blobs id))
+    (-> (mic/hear (get @blobs id) (pure/listen-context (get-in @rdb/app-db [:chats k :messages])))
         (.then (fn [{:keys [text raw]}]
                  (mic/report! {:event "heard" :bytes (.-size (get @blobs id)) :chars (count text)})
                  (store/heard! {:id id :at t0 :secs secs :blob (get @blobs id)} text raw)
