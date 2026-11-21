@@ -318,11 +318,11 @@
     (is (= {:chats {}} (:db fx)) "no ask card is added")))
 
 (deftest a-speak-frame-is-a-reply-to-read
-  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "Red here. It works."}
+  (is (= {:id "s/c/t1" :k ["s" "c"] :voice "nora" :text "It works." :colour-name "Red"}
          (ev/speak-item "s" {:chat "c" :id "t1" :voice "nora" :text "**It works.**"} "cherry")))
-  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Lagoon here. Which one?"}
+  (is (= {:id "s/c/ask-a" :k ["s" "c"] :voice "otto" :text "Which one?" :colour-name "Lagoon"}
          (ev/speak-item "s" {:chat "c" :id "ask-a" :voice "otto" :ask {:questions [{:question "Which one?"}]}} "lagoon")))
-  (is (= "It works." (:text (ev/speak-item "s" {:chat "c" :id "t3" :voice "nora" :text "It works."} nil))) "no colour: no name")
+  (is (nil? (:colour-name (ev/speak-item "s" {:chat "c" :id "t3" :voice "nora" :text "It works."} nil))) "no colour: no name")
   (is (nil? (ev/speak-item "s" {:chat "c" :id "t2" :voice "nora" :text "  "} "cherry")) "nothing to say"))
 
 (def ^:private two-servers

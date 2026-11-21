@@ -54,3 +54,10 @@
   (is (= "hu" (talk/language-of "Ez van, és nem kell semmi.")))
   (is (nil? (talk/language-of "Done, the tests pass.")))
   (is (nil? (talk/language-of nil))))
+
+(deftest the-colour-name-is-said-unless-the-chat-is-open
+  (let [item {:k ["s" "c"] :colour-name "Red" :text "It works."}]
+    (is (= "Red here. It works." (talk/spoken item ["s" "other"])) "another chat open")
+    (is (= "Red here. It works." (talk/spoken item nil)) "no chat open")
+    (is (= "It works." (talk/spoken item ["s" "c"])) "its own chat open")
+    (is (= "It works." (talk/spoken (dissoc item :colour-name) nil)) "no colour: no name")))

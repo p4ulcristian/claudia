@@ -402,12 +402,13 @@
      :fx [[:dispatch [:chat/check-seen]]]}))
 
 (defn speak-item
-  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text}, the
-  chat's colour said first (\"Red here.\": colour, its id), or nil when nothing in it can be said."
+  "A `speak` frame from server (README decision 21) as a reply to read: {:id :k :voice :text
+  :colour-name}, the name of the chat's colour (colour, its id) to say first unless the chat is open
+  when it is read (talk/spoken), or nil when nothing in it can be said."
   [server {:keys [chat id voice text ask]} colour]
   (when-let [said (talk/speakable (if ask (talk/ask-text ask) text))]
-    {:id (str server "/" chat "/" id) :k [server chat] :voice voice
-     :text (if-let [n (colours/name-of colour)] (str n " here. " said) said)}))
+    (cond-> {:id (str server "/" chat "/" id) :k [server chat] :voice voice :text said}
+      (colours/name-of colour) (assoc :colour-name (colours/name-of colour)))))
 
 (defmethod on-frame "speak" [db server f]
   (if-let [item (speak-item server f (get-in db [:servers server :rows (:chat f) :color]))]

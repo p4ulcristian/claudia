@@ -9,7 +9,8 @@
             [claudia.web.chatops :as ops]
             [claudia.web.hooks :as hooks]
             [claudia.web.views.pure.sidebar :as sidebar-pure]
-            [claudia.web.views.agents :as agents]))
+            [claudia.web.views.agents :as agents]
+            [claudia.web.views.voice-ring :as voice-ring]))
 
 (defn- state-badge [state]
   (case state
@@ -89,18 +90,23 @@
 (defn chat-dot
   "row: a list row with :server. done?: finished since you looked (never in a read-only view, never
   the open chat). plain?: the rail's circle (README decision 46): no badges, only the ticking
-  dotted ring while the chat works; its line under the name says the rest. badge: drawn on the
+  dotted ring while the chat works; its line under the name says the rest. Both show the voice's
+  bars round the circle while its reply is read aloud (claudia.web.views.voice-ring). badge: drawn on the
   circle too (the server's mark, README decision 81)."
-  [{:keys [server folder waiting running agents runningSince agentsSince root]} done? & [plain? badge]]
+  [{:keys [server id folder waiting running agents runningSince agentsSince root]} done? & [plain? badge]]
   (let [agents (or agents 0)
-        state (cond waiting :waiting running :thinking done? :done)]
+        state (cond waiting :waiting running :thinking done? :done)
+        speaking @(rf/subscribe [:speaking])
+        talking? (and (= [server id] (:k speaking)) (not (:loading speaking)))]
     (if plain?
       [:span.rail-dot
+       (when talking? [:f> voice-ring/ring])
        [project-face server folder]
        (when (or running (pos? agents)) [:f> work-ring (if (and running runningSince) runningSince agentsSince)])
        (when root root-badge)
        badge]
       [:span.rail-dot
+       (when talking? [:f> voice-ring/ring])
        [project-face server folder]
        (if (and (not waiting) (not running) (pos? agents))
          [agents/agents-ring agents]

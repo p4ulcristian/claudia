@@ -3,14 +3,17 @@
   in arrival order (claudia.web.views.pure.talk's line), each in its chat's voice by the hub's
   voice service. Holding the mic drops the reply being read and holds the rest until it is let go;
   a chat turned Off leaves the line; the page going to the background drops it all, so nothing is
-  said late. The reply being read is in app-db as :speaking (the mic shows it)."
+  said late. The reply being read is in app-db as :speaking (the mic shows it), with :loading until
+  its sound is ready and plays."
   (:require [claudia.shared.voices :as voices]
+            [claudia.web.sound :as sound]
             [claudia.web.views.pure.talk :as talk]
             [claudia.web.voice :as voice]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [re-frame.db :as rdb]))
 
 (defonce ^:private line (atom talk/empty-line))
-(defonce ^:private audio (atom {:ctx nil :source nil}))
+(defonce ^:private audio (atom {:ctx nil :source nil :analyser nil}))
 
 (defn- visible? [] (= "visible" (.-visibilityState js/document)))
 
@@ -30,14 +33,36 @@
     (try (.stop src) (catch :default _ nil)))
   (swap! audio assoc :source nil))
 
-(defn- shown! [item] (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :voice]))]))
+(defn- analyser!
+  "The node every reply plays through on its way out, so its spectrum can be drawn (the rail's bars)."
+  []
+  (or (:analyser @audio)
+      (let [^js c (context!) ^js a (.createAnalyser c)]
+        (set! (.-fftSize a) 512)
+        (.connect a (.-destination c))
+        (:analyser (swap! audio assoc :analyser a)))))
 
-(declare pump!)
+(defn spectrum
+  "The reply being read now as {:spectrum (256 bytes 0-255, low to high) :rate}, nil when none plays."
+  []
+  (let [{:keys [^js source ^js analyser ^js ctx]} @audio]
+    (when (and source analyser)
+      (let [a (js/Uint8Array. (.-frequencyBinCount analyser))]
+        (.getByteFrequencyData analyser a)
+        {:spectrum (vec (array-seq a)) :rate (.-sampleRate ctx)}))))
+
+(defn- shown!
+  "The mic shows item (nil: none); :loading while its sound is still being made."
+  [item]
+  (rf/dispatch [:speech/now (some-> item (select-keys [:id :k :voice :loading]))]))
+
+(declare pump! stop!)
 
 (defn- finished!
   "The reply with this id is over (read to its end or failed): the next one, if it still is this one."
   [id]
   (when (= id (:id (:current @line)))
+    (sound/release! ::reply)
     (swap! line talk/without-current)
     (shown! nil)
     (pump!)))
@@ -46,13 +71,18 @@
   (let [^js c (context!)
         ^js src (.createBufferSource c)]
     (set! (.-buffer src) (voice/audio-buffer c buf))
-    (.connect src (.-destination c))
+    (.connect src (analyser!))
     (set! (.-onended src) #(finished! (:id item)))
+    (sound/claim! ::reply stop!)
     (.start src)
-    (swap! audio assoc :source src)))
+    (swap! audio assoc :source src)
+    (shown! item)))
 
-(defn- read! [{:keys [id voice text] :as item}]
-  (-> (voice/fetch-pcm text (:description (voices/by-id voice)) (talk/language-of text))
+(defn- read!
+  "Reads item; its colour name is said only when its chat is not the one open now."
+  [{:keys [id voice text] :as item}]
+  (-> (voice/fetch-pcm (talk/spoken item (:open @rdb/app-db))
+                       (:description (voices/by-id voice)) (talk/language-of text))
       (.then #(if (and (= id (:id (:current @line))) (visible?)) (play! item %) (finished! id)))
       (.catch (fn [e] (js/console.warn "voice:" (.-message e)) (finished! id)))))
 
@@ -62,7 +92,7 @@
   (let [[before after] (swap-vals! line talk/next-up)
         item (:current after)]
     (when (and item (not= item (:current before)))
-      (shown! item)
+      (shown! (assoc item :loading true))
       (read! item))))
 
 (defn say!
@@ -114,9 +144,11 @@
   (pump!))
 
 (defn stop!
-  "Silence now; whatever waits is dropped."
+  "Silence now; whatever waits is dropped (another sound started, or the page went to the background)."
   []
+  (sound/release! ::reply)
   (silence!)
+  (shown! nil)
   (swap! line #(assoc talk/empty-line :said (:said %) :held (:held %)))
   (shown! nil))
 

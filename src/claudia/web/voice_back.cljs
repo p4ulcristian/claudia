@@ -6,6 +6,7 @@
   (:require [re-frame.core :as rf]
             [reagent.core :as r]
             [claudia.web.clip-store :as store]
+            [claudia.web.sound :as sound]
             [claudia.web.views.pure.voice-back :as pure]))
 
 ;; id -> the clip's sound (a Blob), for the sounds still in time.
@@ -34,6 +35,7 @@
 (rf/reg-fx :voice-back/tag (fn [[ids msg]] (.then (store/tag! ids msg) refresh!)))
 
 (defn stop! []
+  (sound/release! ::listen-back)
   (when-let [{:keys [^js audio url]} @playing]
     (.pause audio)
     (js/URL.revokeObjectURL url)
@@ -45,6 +47,7 @@
   (if-let [blob (some->> (first ids) (get @blobs))]
     (let [url (js/URL.createObjectURL blob)
           audio (js/Audio. url)]
+      (sound/claim! ::listen-back stop!)
       (reset! playing {:msg msg :audio audio :url url})
       (set! (.-onended audio) (fn [] (js/URL.revokeObjectURL url) (play-from! msg (rest ids))))
       (.catch (.play audio) (fn [_] (stop!))))
