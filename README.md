@@ -1818,7 +1818,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Files: `src/claudia/slave/tools.cljs`, `src/claudia/slave/chats/nudge.cljs`,
     `src/claudia/slave/chats.cljs`, `src/claudia/slave/chats/turns.cljs`,
     `src/claudia/slave/history.cljs`, `src/claudia/slave/tasks.cljs`, `PROTOCOL.md`.
-105. The big mic is the open chat's; other chats talk from their circles (2026-11-21, the user's
+107. The big mic is the open chat's; other chats talk from their circles (2026-11-21, the user's
     calls one at a time). The mic never takes another chat's colour, name, voice or bars ("they
     are hijacking the main microphone button ... the main microphone should be always about the
     main chat"): a hold always talks to the open chat. A chat read aloud shows on its own circle,
@@ -1871,6 +1871,20 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     104's nudge (it watched for a reply Claude never writes) and its prompt paragraph. Instead of:
     keeping the nudge as a safety net. Files: `src/claudia/slave/chats.cljs`,
     `src/claudia/slave/chats/turns.cljs`.
+108. A background task's end is a card (2026-11-21, the user: "these cards in the chat look pretty
+    bad ... the ones which say that background agent finished, we need those styles"). The note a
+    finished background task leaves in the chat was a dashed code box with Claude Code's raw line,
+    and an agent's whole answer showed there as monospace with its Markdown marks. Now it is a card:
+    a coloured edge and mark for how it went (green done, red failed or a command's exit code not
+    0, grey stopped or killed), the agent's name or "Background command" with its state in words
+    ("finished", "completed (exit code 0)"), a command on one mono line, and the agent's answer as
+    Markdown, folded to four lines with More. The runner reads the card from the session file's
+    notice (`<status>`, `<summary>`, `<result>`, unescaped) and from the live `task_notification`
+    (its status, its summary, the task's description); other notes (slash command output, move
+    notes, Claudia's nudge) keep the code box. Instead of: every note in the dashed mono box.
+    Files: `src/claudia/slave/history.cljs`, `src/claudia/slave/chats.cljs`,
+    `src/claudia/web/views/chat.cljs`, `src/claudia/web/views/pure/chat.cljs`,
+    `resources/web/css/claudia.css`, `PROTOCOL.md`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

@@ -530,7 +530,10 @@ running ones first. `progress` is the last `##progress <done>/<total> <label>` l
 `Limit`: `{ key: "five_hour" | "seven_day" | …, label, percent, resetsAt (ms) | null }`, from the SDK's
 `rate_limit_event`, kept per Claude token (by a hash of it).
 
-`Msg`: `{ id, role: "user" | "assistant" | "tool" | "note", text?, at }`; a tool step has
+`Msg`: `{ id, role: "user" | "assistant" | "tool" | "note", text?, at }`; a note that is a background
+task's end has `card: { title, state, status?, code?, body? }` (README decision 108: its name or "Background
+command", how it ended in words, completed/failed/stopped/killed, the command, the agent's answer in
+Markdown) and `text` its summary for pages without cards; a tool step has
 `tool` (name) and `summary` (one line: `Edit src/x.cljs`, `$ npm test`, `draw`), and `error?` (bool).
 A user message has `images?` (how many it sent: `GET /api/chats/:chat/sent/<id>/<n>`) and
 `queued: true` while Claude Code hasn't taken it in (sent during a turn; the `msg` without it, or

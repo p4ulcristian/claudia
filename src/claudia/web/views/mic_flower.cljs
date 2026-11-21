@@ -11,7 +11,7 @@
   ring shows lit round the whole flower, still recording; when the finger rests, the mic is put
   down under it and the petals choose again from there. The ring's word is written along it,
   upright. Round a voice message's circle (:circle) the left petal is skip all instead of add
-  (README decision 105)."
+  (README decision 107)."
   (:require [claudia.web.views.pure.mic :as pure]))
 
 (def size "The canvas, CSS px (square, centred on the button): the move ring fits." 300)

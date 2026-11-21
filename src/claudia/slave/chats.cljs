@@ -1084,7 +1084,8 @@
   [id m]
   (let [c (get-in m [:message :content])]
     (when-let [notice (history/task-notice (history/strip-reminders (turns/user-text c)))]
-      (note-msg! id {:id (or (:uuid m) (str "notice-" (js/Date.now))) :role "note" :text notice :at (js/Date.now)}))
+      (note-msg! id (history/notice-msg (or (:uuid m) (str "notice-" (js/Date.now)))
+                                        (history/strip-reminders (turns/user-text c)) notice (js/Date.now))))
     (doseq [b (turns/tool-results c)
             :let [msg (some #(when (= (:id %) (:tool_use_id b)) %) (:turn (st id)))]
             :when msg]
@@ -1113,7 +1114,9 @@
              (not (tasks/child? id (:task_id m)))
              ;; A foreground agent's answer is its tool result, not a notice.
              (tasks/background? id (:task_id m)))
-    (note-msg! id {:id (str "task-" (:task_id m) "-" (js/Date.now)) :role "note" :text (:summary m) :at (js/Date.now)})))
+    (note-msg! id {:id (str "task-" (:task_id m) "-" (js/Date.now)) :role "note" :text (:summary m) :at (js/Date.now)
+                   :card (history/task-card {:summary (:summary m) :status (:status m)
+                                             :task-name (tasks/task-name id (:task_id m))})})))
 
 (defn- on-system-msg! [id m]
   (case (:subtype m)

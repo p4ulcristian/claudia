@@ -123,3 +123,18 @@
     (is (= {:word "GitHub" :heard "get hub"} (:word m)))
     (is (= "offer word: GitHub" (:summary m))))
   (is (= {:word "" :heard ""} (history/offered-word nil)) "nothing given: blank, no card"))
+
+(deftest a-background-task-end-is-a-card
+  (is (= {:title "Background command" :code "cd a && npm test" :state "completed (exit code 0)" :status "completed"}
+         (history/task-notice-card (str "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n"
+                                        "<summary>Background command \"cd a &amp;&amp; npm test\" completed (exit code 0)</summary>\n"
+                                        "</task-notification>")))
+      "a command: its line unescaped, the state after it")
+  (is (= {:title "Fix it" :state "finished" :status "completed" :body "Done: **PR #1**."}
+         (history/task-notice-card (str "<task-notification>\n<status>completed</status>\n<summary>Agent \"Fix it\" finished</summary>\n"
+                                        "<note>x</note>\n<result>Done: **PR #1**.</result>\n</task-notification>")))
+      "an agent: its name, and its answer as the body")
+  (is (= {:title "Fix it" :state "failed" :status "failed" :body "It broke."}
+         (history/task-card {:summary "It broke." :status "failed" :task-name "Fix it"}))
+      "live, the summary is the agent's answer; the title its description")
+  (is (nil? (history/task-notice-card "plain words")) "not a notice"))

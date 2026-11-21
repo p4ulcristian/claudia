@@ -114,12 +114,43 @@
   (vec (map-indexed (fn [i note] {:id (str entry-id ":moved" (when (pos? i) i)) :role "note" :text note :at at})
                     (moved-notes s))))
 
+(defn- unescaped
+  "XML text as it was: Claude Code escapes a notice's tags' text (&amp; for &)."
+  [s]
+  (-> s (str/replace "&lt;" "<") (str/replace "&gt;" ">") (str/replace "&quot;" "\"")
+      (str/replace "&apos;" "'") (str/replace "&amp;" "&")))
+
+(defn- tag
+  "The text inside <t>…</t> in text, unescaped and trimmed, or nil."
+  [text t]
+  (some-> (re-find (re-pattern (str "<" t ">([\\s\\S]*?)</" t ">")) text) second unescaped str/trim not-empty))
+
 (defn task-notice
   "Claude Code stores \"background task finished\" notices as user messages: their summary, or nil."
   [text]
   (when (str/starts-with? text "<task-notification>")
-    (or (some-> (re-find #"<summary>([\s\S]*?)</summary>" text) second str/trim)
-        "A background task finished.")))
+    (or (tag text "summary") "A background task finished.")))
+
+(defn task-card
+  "A background task's end as the chat's card (README decision 108): {:title :state :status, :code
+  (a command), :body (what it said back)}. summary: Claude Code's line, like Background command
+  \"npm test\" completed (exit code 0), or Agent \"Fix it\" finished, or (live) an agent's whole
+  answer; result: the agent's answer when apart; task-name: the task's description; status:
+  completed, failed, stopped or killed."
+  [{:keys [summary result task-name status]}]
+  (let [cmd (re-find #"^Background command \"([\s\S]*)\" ([^\"]*)$" (str summary))
+        agent (re-find #"^Agent \"([^\"]*)\" ([^\n]*)$" (str summary))]
+    (cond
+      cmd {:title "Background command" :code (str/trim (second cmd)) :state (nth cmd 2) :status status}
+      agent {:title (second agent) :state (nth agent 2) :status status :body result}
+      :else {:title (or (not-empty task-name) "Background task") :state (or status "finished") :status status
+             :body (or result (not-empty summary))})))
+
+(defn task-notice-card
+  "A task notice's user text as its card, or nil when it is not one."
+  [text]
+  (when (str/starts-with? text "<task-notification>")
+    (task-card {:summary (tag text "summary") :result (tag text "result") :status (tag text "status")})))
 
 (defn command-tags
   "The tags Claude Code keeps a slash command in, read from user text: {:name :args :out} (each nil
@@ -359,6 +390,12 @@
             (assoc acc :counts counts)
             msgs)))
 
+(defn notice-msg
+  "A notice's note Msg: a background task's end carries its card."
+  [id text notice at]
+  (cond-> {:id id :role "note" :text notice :at at}
+    (task-notice-card text) (assoc :card (task-notice-card text))))
+
 (defn- text-user-msgs
   "A user entry whose content is text: a task notice, a slash command, or what the user wrote."
   [m content at]
@@ -367,7 +404,7 @@
         cmd (when-not notice (command-msg text))]
     (into (moved-note-msgs (:uuid m) (strip-reminders content) at)
           (cond
-            notice [{:id (:uuid m) :role "note" :text notice :at at}]
+            notice [(notice-msg (:uuid m) text notice at)]
             cmd (mapv #(-> % (dissoc :out) (assoc :id (if (:out %) (str (:uuid m) ":out") (:uuid m)) :at at)) cmd)
             (seq text) [{:id (:uuid m) :role "user" :text text :at at}]
             :else []))))
@@ -396,7 +433,7 @@
         images (count (filter #(= "image" (:type %)) content))
         notice (task-notice text)]
     (cond
-      notice {:id (:uuid m) :role "note" :text notice :at at}
+      notice (notice-msg (:uuid m) text notice at)
       (or (seq text) (pos? images)) (cond-> {:id (:uuid m) :role "user" :text text :at at}
                                       ;; GET /api/chats/:id/sent/<this id>/<n> for each
                                       (pos? images) (assoc :images images)))))
