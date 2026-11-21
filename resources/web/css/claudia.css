@@ -174,6 +174,8 @@ code, pre { font-family: var(--mono); }
 .where-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 4px; }
 .where-row .where-face { justify-self: center; }
 .head-pop.where-pop { min-width: 260px; }
+.where-sub { padding: 6px 8px 2px; color: var(--muted); font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: 0.04em; }
+.where-other .pop-row-name { color: var(--accent); }
 /* The colour: a filled circle alone, no word, no caret. */
 .head-pill.colour-pill { padding: 3px; gap: 0; }
 .head-pill.colour-pill .colour-dot { width: 18px; height: 18px; margin: 0; }

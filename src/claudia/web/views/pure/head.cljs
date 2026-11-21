@@ -1,7 +1,8 @@
 (ns claudia.web.views.pure.head
-  "The chat header's server and project pills on plain data (README decision 90): the person's
-  servers to pick from, their bookmarks as the server's projects, what each pill shows and what a
-  pick does."
+  "The chat header's where pill on plain data (README decisions 90, 117, 119): the person's servers
+  to pick from, the server's projects (their bookmarks, then the folders their chats there use),
+  each named by its bookmark label, else the project the server found in it, else its last folder;
+  what the pill shows and what a pick does."
   (:require [clojure.string :as str]
             [claudia.shared.bookmarks :as bm]
             [claudia.web.format :as format]))
@@ -14,21 +15,48 @@
   [{:keys [label folder]}]
   (or (not-empty label) (last-part folder)))
 
+(defn- named
+  "An entry's name: its bookmark label, else the project the server found in the folder (projects:
+  [server folder] -> {:name}), else the folder's last part."
+  [projects server {:keys [label folder]}]
+  (or (not-empty label) (not-empty (:name (get projects [server folder]))) (last-part folder)))
+
+(def used-max "How many folders the chats use the project popup lists at most." 12)
+
+(defn chat-folders
+  "The folders the chats on server use (rows: [{:server :folder :at}]), the latest used first, each
+  once, none of skip, at most used-max."
+  [rows server skip]
+  (->> rows
+       (filter #(= server (:server %)))
+       (sort-by #(- (or (:at %) 0)))
+       (map :folder)
+       (remove str/blank?)
+       distinct
+       (remove skip)
+       (take used-max)
+       vec))
+
 (defn project-rows
-  "The project popup's rows for server: one per bookmark of it, in order, {:folder :title (its
-  name) :line (the path, ~ for the home) :on? (folder is the chat's)}."
-  [bookmarks server folder]
-  (mapv (fn [b] {:folder (:folder b) :title (project-name b) :line (format/tilde (:folder b))
-                 :on? (= folder (:folder b))})
-        (bm/on-server bookmarks server)))
+  "The project popup's rows for server: its bookmarks in order, then the folders the chats there use
+  (chat-folders), then the chat's own folder when neither has it. Each {:folder :title (named) :line
+  (the path, ~ for the home) :on? (the chat's folder) :pinned? (a bookmark)}."
+  [bookmarks rows projects server folder]
+  (let [marks (bm/on-server bookmarks server)
+        marked (set (map :folder marks))
+        used (chat-folders rows server marked)
+        own (when (and (seq folder) (not (marked folder)) (not (some #{folder} used))) [folder])]
+    (mapv (fn [b] {:folder (:folder b) :title (named projects server b) :line (format/tilde (:folder b))
+                   :on? (= folder (:folder b)) :pinned? (contains? marked (:folder b))})
+          (concat marks (map (fn [f] {:folder f}) (concat used own))))))
 
 (defn project-value
-  "The project pill's value for the folder shown (nil while unknown): the name of server's bookmark
-  of that folder, else the path with ~ for the home; nil when no folder is shown."
-  [bookmarks server folder]
+  "The where pill's project for the folder shown (nil while unknown): named as in project-rows; nil
+  when no folder is shown."
+  [bookmarks projects server folder]
   (when (seq folder)
-    (or (some #(when (= folder (:folder %)) (project-name %)) (bm/on-server bookmarks server))
-        (format/tilde folder))))
+    (named projects server (or (some #(when (= folder (:folder %)) %) (bm/on-server bookmarks server))
+                               {:folder folder}))))
 
 (defn server-rows
   "The server popup's rows: every server of the person (servers: [{:name :label}]), {:name :title
