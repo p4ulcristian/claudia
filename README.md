@@ -344,7 +344,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     over it (Claudia's face top left, Ctrl+B) is gone there; a phone keeps its full-screen list.
     Archived chats open in the chat column, full height, and Back (or Escape) returns to the chat
     that was open (Settings: a popup since decision 58). The rail's top holds Claudia's face, bigger and with no frame
-    round her, so her animations show whole (a click opens her chat, decision 48), and under it 2D and
+    round her, so her animations show whole (a click opens the chat her lenses talk about, decision 112), and under it 2D and
     3D as two small circles; then, where there is no right-edge column, search and New chat.
     Instead of: a second, wide list beside the rail, and Settings squeezed into a 380 px drawer.
     The window is one grid: the chalk lines run from the top to the bottom between the safe areas
@@ -640,7 +640,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     gone. Instead of: one shared key for every server (a server's root would hold every front's key),
     or mutual TLS (certificates to issue and renew per server for the same proof).
 
-48. Claudia's own chat (2026-11-18, the user's picks one by one): her face at the rail's top opens a
+48. Claudia's own chat (removed by decision 112, 2026-11-21; 2026-11-18, the user's picks one by one): her face at the rail's top opens a
     chat with Claudia herself, one per profile, kept out of every chat list. She manages the
     person's chats (the user calls them agents) on every server they have a profile on: lists,
     starts, writes to, archives and stops them (and since decision 88 renames, recolours, groups
@@ -667,8 +667,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     hops, squashes or turning, the spark never spins; only her sunglasses talk
     (`claudia.web.face.lens`): code rain while chats work (faster when busy), a symbol (! ? z), and
     words typed out in green instead of speech bubbles. A chat's news names the chat ("IRIS DONE ✓",
-    "IR ASKS YOU ?", "SENTINEL FAILED ✗") for 7 s; a click on her then opens that chat (otherwise her own
-    chat, decision 48). While words are on her lenses she leans out of the rail three times bigger
+    "IR ASKS YOU ?", "SENTINEL FAILED ✗") for 7 s; a click on her then opens that chat (otherwise nothing; her own
+    chat before decision 112). While words are on her lenses she leans out of the rail three times bigger
     so they can be read. Her day (her own clip `:daytime`): COFFEE in the morning, LUNCH, FOCUS, GG
     TODAY, GO TO BED at night. Her brain (moods, events, idle clips: `claudia.web.face.mind`,
     `clips`) stayed; the cute effects (hearts, sparkles, notes) show nothing now. Instead of: a
@@ -677,7 +677,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     image-to-3D tool is the way if it comes back), words in bubbles beside her, a spark drawn by the
     image model (it never got the logo's shape; the real path is drawn on top).
 
-50. Claudia's own chat wears her look (2026-11-18, the user's call): every chat has a colour; hers
+50. Claudia's own chat wears her look (removed by decision 112, 2026-11-21; 2026-11-18, the user's call): every chat has a colour; hers
     is a gradient instead, deep green at the top to near black at the bottom, over the whole window
     (the rail, the chat and the picture are see-through over it), with her own green theme whatever
     colour her row has (`:root[data-claudia]`, set while `:open-claudia?`). Behind everything a few
@@ -784,7 +784,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     being made and keeps it, so a later pick elsewhere moves only chats without one; it no longer
     carries the last chat's subscription. One person's pick never changes another person's chats:
     a pick in another person's chat (a write tick) moves only that chat. Work without a chat (the
-    limits probe, Claudia's own chat) runs on the runner's profile's person's pick. Saving a token
+    limits probe) runs on the runner's profile's person's pick. Saving a token
     switches nothing; any saved token may be removed. On the first start of this hub nobody's old
     default is carried over: the shared one (`claude_token_use`) is dropped, and each person starts
     on their profile-named token if saved. Each server's old shared token file goes on the first
@@ -855,8 +855,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     the locked built-in part on top (a summary; Show full text gives its exact words), then None
     and the profiles with their first lines, then Edit profiles… (`settings.prompt`; a new chat carries the last chat's pick like its model). The
     profile's text goes after Claudia's part of the system prompt (headed `# Prompt profile:
-    <name>`), so the picture, secrets and folder rules stay; Claudia's own chat still gets her
-    part last. A live chat takes a new pick, or a change to its profile's text, after its turn and
+    <name>`), so the picture, secrets and folder rules stay. A live chat takes a new pick, or a change to its profile's text, after its turn and
     the work it started: its session starts again resumed, same conversation (the prompt's
     version is per chat). A deleted profile leaves its chats on no profile. Instead of: a profile
     that replaces Claudia's part (a profile without the drawing rules leaves the picture empty
@@ -979,8 +978,9 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     Next, not built here: the gate's SSH login as `core` by a 5-minute certificate the broker
     signs after a passkey (after a tested `break-glass` user on the gate, decision 55).
 67. Agents keep bookmarks too (2026-11-19, the user's call: "build it"). Every chat on a runner
-    that reaches the hub as its owner (the settings of Claudia's own chat, decision 48:
-    `CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`, `CLAUDIA_HUB_KEY_FILE`, `CLAUDIA_OWNER_EMAIL`) gets
+    that reaches the hub as its owner (`CLAUDIA_HUB_URL`, `CLAUDIA_SERVER_NAME`,
+    `CLAUDIA_HUB_KEY_FILE`, `CLAUDIA_OWNER_EMAIL`: first the settings of Claudia's own chat, decision
+    48, which decision 112 removed; the bookmark tools keep them) gets
     two workspace tools: `list_bookmarks` and `bookmark_folder { folder?, server?, label?, remove? }`
     (`claudia.slave.bookmarks`). They change the same per-person list the Folders modal pins
     (decision 61), through `POST /hub/server/claudia` ops `bookmarks` and `bookmark`, so the gate
@@ -1141,8 +1141,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     fetches the list and answers `keys` with no card to press. No page connected, or none answering
     in 60 seconds, no key broker, or a broker without a token: the agent gets a refusal that says
     which. The prompt's Secrets section tells agents to call `list_secrets` before
-    `run_with_secret`. Instead of: the runner calling the hub itself (it has a hub key only on the
-    server with Claudia's own chat, decision 48, and no person's login), or the agent reading the
+    `run_with_secret`. Instead of: the runner calling the hub itself (it has a hub key only where the
+    bookmark tools are on, decision 67, and no person's login), or the agent reading the
     vault with `op` (decision 66 took the token off the servers).
 
 78. GitHub for services through the hub's GitHub App (2026-11-19, the user's call: "move all
@@ -1188,8 +1188,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     sunset (tangerine→magenta), citrus (sunflower→kiwi), meadow (kiwi→jade), lagoon (aqua→ocean),
     dusk (sapphire→magenta), candy (bubblegum→periwinkle); picked so their middles are at least 0.1
     apart in OKLab (the closest, ember and sunset, 0.114). A gradient chat's window background runs between its two crayons, each as dark as a
-    solid chat's background, with the rail, the list and the picture see-through over it (as in
-    Claudia's own chat, decision 50). Its circle (rail, list, group stack, swatch, header dot) is
+    solid chat's background, with the rail, the list and the picture see-through over it. Its circle (rail, list, group stack, swatch, header dot) is
     chalked in the gradient (`--g-<name>`). The theme (chalk, accent, text, panels, lines) is mixed
     from one stand-in colour, the gradient's middle in OKLCH (`--c-<name>`), the same way a solid
     colour mixes it, so text keeps a solid chat's contrast; the stand-in also paints the robot in
@@ -1249,8 +1248,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     `resources/web/css/claudia.css`, `resources/web/css/chatops.css`.
 
 82. A chat moves to another server (2026-11-20, the user's design). The chat menu's Move to
-    server… (only on the person's own chats, not on a view or a write tick, not on Claudia's own
-    chat, and only with another server where they have a profile) opens the confirm card: the
+    server… (only on the person's own chats, not on a view or a write tick, and only with another server where they have a profile) opens the confirm card: the
     server it goes to, the folder there (the chat's folder from the home folder, `~/…`, so it lands
     in the same place by default; empty: that server's work folder), and what stays: the working
     folder's files, running helpers and background work. The hub (`POST /hub/chat-move`,
@@ -1448,7 +1446,7 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     one list of signers).
 
 88. Agents rename and recolour chats themselves, and Claudia's own chat cleans up all of them
-    (2026-11-20, the user's calls: the user should not have to tidy chats by hand; "rename_chat" and
+    (the second part removed by decision 112, 2026-11-21; 2026-11-20, the user's calls: the user should not have to tidy chats by hand; "rename_chat" and
     "set_chat_colour" as two tools). Two parts:
     - Every chat's agent has two workspace tools that act only on the chat it runs in:
       `rename_chat { title }` (1-200 characters, trimmed) and `set_chat_colour { color }` (a solid,
@@ -1458,7 +1456,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
       chat id to pass or to get wrong; it makes the same change as the chat menu's `PATCH
       /api/chats/:id` (`claudia.slave.chats/edit!`), and a title or colour outside those bounds is
       refused, not cut (`claudia.shared.chat-edit`).
-    - Only Claudia's own chat (decision 48) acts on every chat of its person on every server.
+    - (Removed by decision 112 with Claudia's own chat.) Only Claudia's own chat (decision 48) acts
+      on every chat of its person on every server.
       `list_chats` now also gives each chat's reference (`<server>/<id>`), colour, folder, last
       activity and start, and the person's chat order and groups (decision 38). The new
       `organize_chats { steps }` (at most 200) does, in turn: `edit` (one chat's title, colour,
@@ -1596,7 +1595,7 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     an off one dimmed: a new chat's pick is where it starts, as Files' computer toggle; a started
     chat's pick opens the move card of decision 82 with that server as where it goes; passive in a
     read-only view, for a new chat with one server, and where a move is not allowed: a view, a
-    write tick, Claudia's own chat); the project (a folder and the name of the person's bookmark of
+    write tick); the project (a folder and the name of the person's bookmark of
     the chat's folder on that server, decision 61, else the path with `~` for the home; a new chat
     with none: "Pick a project"; the popup lists that server's bookmarks, the name bold and the
     path in mono under it, the chat's ticked: a new chat's folder pick, a started chat's folder
@@ -1686,8 +1685,8 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     same near-white, and shape and side tell them apart) (2026-11-21, the user's call). The
     person's own messages are one near-white in every chat (`--mine`, right-aligned as before), no
     longer the chat's chalk; Claude's replies are written in the chat's chalk (`--reply`: the hue 75%
-    with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour,
-    Claudia's own chat from her green. An ash (grey, passive) chat and a page with no chat colour
+    with white, the old `--accent` of a chat), a gradient chat's mixed from its middle colour.
+    An ash (grey, passive) chat and a page with no chat colour
     keep Claude's replies plain (`--fg`). Code, tables and quotes in a reply stay in the plain text
     colour, links blue, so they read as before. The window's tint by chat colour does not change
     (decisions 26, 80). Instead of: the person's lines in the chat's colour and Claude's in plain
@@ -1766,13 +1765,13 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
 103. Whose message is which shows by shape and side, not text colour (2026-11-21, the user's list,
     items 22-24). The person's messages and Claude's replies are written alike: the same font, size
     (15 px), weight and colour, the window's near-white `--fg` (tinted 8% by the chat colour, light
-    on every chat, gradient and Claudia's own green). The person's messages sit on the right in a
+    on every chat and gradient). The person's messages sit on the right in a
     soft bubble (`--fg` at 9% over the window, so it follows every tint and gradient; 14 px corners,
     the bottom right 4 px; at most 82% of the column; text left-aligned inside); sent photos, file
     chips and code chips sit in the bubble, the queued tag and its × under it. Claude's replies run
     the column's full width with no bubble and a 3 px line on their left in the chat's chalk
     (`--claude-line`: the chat colour 75% with white, the old `--reply`; an ash chat's is grey, since
-    that mix of grey is grey; Claudia's own chat her green; no chat colour, `--muted` grey). The
+    that mix of grey is grey; no chat colour, `--muted` grey). The
     line is a layer of its own (`::before`), so the search jump's rounded flash does not bend it,
     and its edges and the text's line up with a step group's line. In a subagent's transcript (the
     agents screen) the line is 2 px at 55%, like the step lines between its replies there: that view
@@ -2043,3 +2042,28 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `system_lists.cljs`, `system_chart.cljs`, `src/claudia/shared/views.cljc` (`machines` read as
     `system`), `src/claudia/web/views/head.cljs`, `resources/web/css/system.css`.
 
+112. Claudia's own chat is removed (2026-11-21, the user: "I want to remove Claudia's chat because
+    it's stupid. I don't even use it."). Decisions 48 and 50 and the second part of decision 88 go.
+    - Gone: her chat (`claudia.slave.claudia`) with its tools (`list_chats`, `start_chat`,
+      `send_to_chat`, `archive_chat`, `stop_chat`, `organize_chats`), its prompt and its
+      no-background settings; the runners' `/api/chat-ops/…` (`claudia.slave.chat-ops`); the hub's
+      ops `chats`, `new`, `send`, `archive`, `stop` and `organize` (`claudia.hub.organize`, and the
+      `claudia.shared.order` helpers only it used: `place-group`, `top-key?`, `new-group`); the
+      `claudia` frame both ways, the meta frame's `claudia` and the rows' `claudia` flag; the page's
+      `:claudia/open` and `:open-claudia?` (`claudia.web.claudia-chat`), her green gradient
+      (`:root[data-claudia]`) and the falling code behind it (`claudia.web.views.claudia-rain`);
+      Move to server's exception for her chat.
+    - Stayed: her face at the rail's top with its animations, and the 2D/3D switch under it; a
+      click on her opens the chat her lenses talk about, else does nothing. Every chat's own
+      `rename_chat` and `set_chat_colour` (decision 88's first part). The bookmark tools (decision
+      67) keep the hub link and `CLAUDIA_OWNER_EMAIL` (now read by `claudia.slave.bookmarks`) and
+      `POST /hub/server/claudia`, now with only the ops `bookmarks` and `bookmark`
+      (`claudia.hub.agent-bookmarks`, before `claudia.hub.claudia`); the path keeps its name, so the
+      gate's rule for it stays as it is.
+    - Her chat on a server: on the runner's first start with this, its store archives the chat its
+      kv `claudia-chat` names and drops that kv, in one transaction
+      (`claudia.slave.store/claudia-chat-gone`). It then shows once among the archived chats as an
+      ordinary chat (titled Claudia); later starts find no kv and change nothing, and a chat
+      brought back stays an ordinary chat.
+    Instead of: keeping her chat unused (code and tools nobody calls), or deleting her chat's rows
+    (its conversation stays readable among the archived chats).

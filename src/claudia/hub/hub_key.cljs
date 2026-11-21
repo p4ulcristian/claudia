@@ -2,7 +2,7 @@
   "How the hub proves itself to a server's front (README decision 47): every call it makes carries
   X-Claudia-Hub-Key, that server's key (claudia.node.crypto/server-key) under the hub's secret in
   HUB_KEY_FILE. A front answers no call without its key, so reaching its port is not enough. The
-  same key proves a server to the hub (server-caller: Claudia's chat, SSH certificates)."
+  same key proves a server to the hub (server-caller: agents' bookmark tools, SSH certificates)."
   (:require ["node:fs" :as fs]
             [clojure.string :as str]
             [claudia.hub.store :as store]

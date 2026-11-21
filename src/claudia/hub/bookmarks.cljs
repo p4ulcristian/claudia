@@ -1,7 +1,7 @@
 (ns claudia.hub.bookmarks
   "A person's bookmarked folders in the hub's store (README decisions 61 and 67): read and kept for
   the page (GET/PUT /hub/bookmarks, claudia.hub.ops) and for an agent's bookmark tools (POST
-  /hub/server/claudia ops bookmarks and bookmark, claudia.hub.claudia), always cleaned by
+  /hub/server/claudia ops bookmarks and bookmark, claudia.hub.agent-bookmarks), always cleaned by
   claudia.shared.bookmarks."
   (:require [claudia.hub.store :as store]
             [claudia.shared.bookmarks :as bm]

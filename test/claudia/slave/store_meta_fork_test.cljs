@@ -50,6 +50,31 @@
     (is (= "" (:voice (store/chat "on"))) "only once: Off stays Off")
     (fs/rmSync dir #js {:recursive true :force true})))
 
+;; Claudia's own chat is removed (README decision 112): archived once, its kv gone.
+
+(deftest claudia-chat-gone-archives-her-chat-and-drops-the-kv
+  (is (= [["UPDATE chats SET archived = 1 WHERE id = ?" ["c1"]]
+          ["DELETE FROM kv WHERE chat = '' AND key = ?" ["claudia-chat"]]]
+         (store/claudia-chat-gone "c1")))
+  (is (nil? (store/claudia-chat-gone nil)) "she never had a chat here")
+  (is (nil? (store/claudia-chat-gone "")))
+  (is (nil? (store/claudia-chat-gone 5)) "not a chat id"))
+
+(deftest her-chat-is-archived-once-on-open
+  (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "claudia-store-"))]
+    (store/open! dir)
+    (store/add! {:id "her" :title "Claudia" :folder nil :color "violet" :at 1})
+    (store/add! {:id "other" :title "Other" :folder nil :color "jade" :at 1})
+    (store/kv! "" "claudia-chat" "her")
+    (store/open! dir)
+    (is (:archived (store/chat "her")))
+    (is (not (:archived (store/chat "other"))) "only her chat")
+    (is (nil? (store/kv "" "claudia-chat")))
+    (store/update! "her" {:archived false})
+    (store/open! dir)
+    (is (not (:archived (store/chat "her"))) "only once: brought back, it stays")
+    (fs/rmSync dir #js {:recursive true :force true})))
+
 ;; Saved pictures rewritten once (README decision 39).
 
 (defn- old-store!

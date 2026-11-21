@@ -1,14 +1,13 @@
 (ns claudia.slave.bookmarks
   "An agent's bookmark tools (README decision 67): list_bookmarks and bookmark_folder in the workspace
   server read and change the runner owner's bookmarked folders, the list the Folders modal pins
-  (README decision 61). They go to the hub as Claudia's own chat's tools do (POST
-  /hub/server/claudia, this server's hub key, as CLAUDIA_OWNER_EMAIL: ops bookmarks and bookmark),
-  so only a runner with Claudia's own chat (claudia.slave.claudia/on?) offers them."
+  (README decision 61). They go to the hub as this server (POST /hub/server/claudia, this server's
+  hub key, as CLAUDIA_OWNER_EMAIL: ops bookmarks and bookmark, claudia.hub.agent-bookmarks), so only
+  a runner with the hub link and its owner's email (config) offers them."
   (:require ["node:path" :as path]
             [clojure.string :as str]
             [claudia.shared.bookmarks :as bm]
             [claudia.shared.protocol :as protocol]
-            [claudia.slave.claudia :as claudia]
             [claudia.slave.hub-call :as hub-call]))
 
 (def mcp
@@ -34,7 +33,15 @@
   "## Bookmarks
 The user's bookmarked folders (pinned in the Folders window, the same on every device) are listed by mcp__workspace__list_bookmarks and changed by mcp__workspace__bookmark_folder (add, relabel, remove). Bookmark only when the user asks.")
 
-(defn on? [] (claudia/on?))
+(defn config
+  "The settings from env (a JS object): the hub link (claudia.slave.hub-call/settings) and :email
+  (CLAUDIA_OWNER_EMAIL, the runner's owner), or nil when one is missing."
+  [^js env]
+  (let [link (hub-call/settings env)
+        email (.-CLAUDIA_OWNER_EMAIL env)]
+    (when (and link (seq email)) (assoc link :email email))))
+
+(defn on? [] (some? (config (.-env js/process))))
 
 (defn target
   "The bookmark a bookmark_folder call names: {:server :folder}, or {:error}. here: this server's
@@ -67,7 +74,7 @@ The user's bookmarked folders (pinned in the Folders window, the same on every d
     (if ok {:items (bm/clean-items (:items body))} {:error (or (:error body) (str "The hub said: " text))})))
 
 (defn- hub! [op args]
-  (let [{:keys [email]} (claudia/config (.-env js/process))]
+  (let [{:keys [email]} (config (.-env js/process))]
     (-> (hub-call/post! (hub-call/settings (.-env js/process)) "/hub/server/claudia" {:as email :op op :args args})
         (.then answer)
         (.catch #(do {:error (str "Could not reach the hub: " (.-message %))})))))

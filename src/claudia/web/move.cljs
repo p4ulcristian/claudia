@@ -60,9 +60,8 @@
 
 (rf/reg-sub
  :can-move?
- ;; The chat menu's Move to server…: the person's own chat (not a view, not a write tick), not
- ;; Claudia's, and another server with their profile to go to.
- (fn [db [_ [s c]]]
+ ;; The chat menu's Move to server…: the person's own chat (not a view, not a write tick) and
+ ;; another server with their profile to go to.
+ (fn [db [_ [s]]]
    (boolean (and (nil? (:view db))
-                 (not (get-in db [:servers s :rows c :claudia]))
                  (seq (other-servers (get-in db [:me :servers]) s))))))

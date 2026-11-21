@@ -1,6 +1,6 @@
 (ns claudia.web.views.rail
   "The rail, the one chat list wider than a phone (README decision 24; web/app.tsx of the
-  TypeScript Claudia): at its top Claudia's face, bare (a click: :claudia/open), and under it the 2D/3D switch as two small circles
+  TypeScript Claudia): at its top Claudia's face, bare (a click opens the chat her lenses talk about), and under it the 2D/3D switch as two small circles
   (claudia.web.views.logotools); then a circle per chat with its title under it; passive (ash)
   chats last, after a chalk line, with the same spacing. At its foot: your profile circle
   (claudia.web.views.menu). Circles
@@ -205,7 +205,7 @@
 
 (defn- rail-head
   "Claudia's face, no frame round her so her animations show whole (a click opens the chat her
-  lenses talk about, else her own chat), and the 2D/3D switch under it."
+  lenses talk about, else nothing), and the 2D/3D switch under it."
   []
   [:div.rail-head
    [:button.rail-face {:aria-label "Claudia" :data-tip "Claudia" :on-click face/click!}

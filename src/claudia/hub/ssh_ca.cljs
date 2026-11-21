@@ -1,7 +1,7 @@
 (ns claudia.hub.ssh-ca
   "The hub's SSH certificate authority (README decision 53): servers reach each other as agent
   users with one-hour certificates the hub signs. A runner calls POST /hub/server/ssh-cert with its
-  server's name and hub key (claudia.hub.hub-key/server-caller, as for Claudia's chat) and
+  server's name and hub key (claudia.hub.hub-key/server-caller, as for the agents' bookmark tools) and
   {user, publicKey}; the hub signs only for `<profile>-claudia-agent` where that profile is a
   person's (the store's profile names) and that person has a profile on that server. GET
   /hub/ssh-ca.pub gives the authority's public key, for the servers' TrustedUserCAKeys.
