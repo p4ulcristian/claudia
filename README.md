@@ -2230,3 +2230,26 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     Browser for the chat (a new chat's Select picks its folder, decision 70; a started chat's moves
     it). Files: `src/claudia/web/views/pure/head.cljs`, `src/claudia/web/views/head_place.cljs`,
     `resources/web/css/claudia.css`.
+
+120. A tap skips the message being read; bookmarks get a worded button (2026-11-21, the user, dictated: "the
+    small tap doesn't work, it just replays the same message over and over again… it should skip,
+    both the big microphone"; and "when I open Peter's box there is no bookmark… I don't see a button
+    to add a bookmark"; "I have no hover. I use this on Apple").
+    - The bug: a press on a chat's circle stopped the reading (speech/hold!) before it asked which
+      message was being read, so it always heard nil; the tap then marked nothing heard and played
+      the chat's messages from the same one again. The message is now read before the hold.
+    - While a reply is read, a short tap on the mic or on that chat's circle skips it: the message
+      counts as heard and the chat's next waiting one plays (none waiting: quiet). A tap on the mic
+      no longer restarts another chat's message, nor only stops the open chat's reply. A tap on
+      another chat's circle plays that chat, as before; with nothing read the mic says to hold.
+      `pure/mic.cljs` `tap-plan` holds the rule.
+    - Bookmarks: over a folder's contents in the File Browser a worded ☆ Bookmark (★ Bookmarked once
+      pinned, a click unpins), always on screen; the row's ☆ in the tree is always shown, faint (a
+      touch screen with a trackpad counts as hover-capable, so the hover-only star never showed).
+      With no bookmark on the server the bookmark row says how to add one, and the where pill's
+      popup has Add a bookmark…, which opens the File Browser.
+    - The rail's Settings moves to its bottom slot, under Archive (the user: "settings is not that
+      important in the right rail. It should be at the bottom"): over the mic Search, System, Files,
+      Profiles; under it Stop, New chat, Fork, Archive, Settings.
+    Files: `src/claudia/web/views/mic.cljs`, `pure/mic.cljs`, `folder_contents.cljs`, `folders.cljs`,
+    `head_place.cljs`, `pure/edge.cljs`, `thumb_edge.cljs`, `resources/web/css/folders.css`.

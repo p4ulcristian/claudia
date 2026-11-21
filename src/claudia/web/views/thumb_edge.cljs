@@ -3,10 +3,10 @@
   105): a big tablet held in two hands is held at its sides partway up, so the right thumb rests on
   the right edge at middle height; a desktop gets the same column, its buttons mouse-sized
   (reach.css), so every device keeps the same places. There a rail on the right wall, one column
-  of nine slots of one size: Search, System, Files, Profiles, Settings (toggles: lit while their
-  sheet is on top, a press then closes it), Stop, New chat, Fork (the open chat up to its last
-  finished turn, README decision 99) and Archive (the open chat, asked first; Unarchive for an
-  archived one); README decision 117 moved Files, Fork and Archive here from the chat's header and
+  of nine slots of one size: Search, System, Files, Profiles (toggles: lit while their sheet is on
+  top, a press then closes it), Stop, New chat, Fork (the open chat up to its last finished turn,
+  README decision 99), Archive (the open chat, asked first; Unarchive for an archived one) and
+  Settings at the bottom (a toggle too; README decision 120); README decision 117 moved Files, Fork and Archive here from the chat's header and
   took the picture steps off (the picture has its own). Each a button with its name
   under its icon, at least 12 mm on a touch screen, see-through at rest. A button never comes or goes, so nothing
   shifts: one that cannot act now is passive (greyed and disabled), Stop is red while the open

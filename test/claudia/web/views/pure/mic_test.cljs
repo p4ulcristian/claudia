@@ -152,3 +152,20 @@
     (is (every? true? (map near (map :turn top) [-0.05 0.05])) "each letter turned along the ring, its top outwards")
     (is (every? true? (map near (map :angle bottom) [(+ (/ pi 2) 0.05) (- (/ pi 2) 0.05)])) "under it: left to right, counterclockwise")
     (is (every? true? (map near (map :turn bottom) [0.05 -0.05])) "its top inwards, so it reads upright")))
+
+(deftest a-tap-while-a-chat-is-read-skips-its-message
+  (let [blue ["s" "blue"] red ["s" "red"]]
+    (is (= {:phase :idle :heard [blue ["m1"]] :play blue}
+           (mic/tap-plan {:circle blue :reading blue :reading-msg "m1"}))
+        "on the chat's own circle: m1 heard, the next of blue plays (it used to replay m1)")
+    (is (= {:phase :idle :heard [blue ["m1"]] :play blue}
+           (mic/tap-plan {:circle nil :reading blue :reading-msg "m1"}))
+        "on the mic: the same skip")
+    (is (= {:phase :idle :play red} (mic/tap-plan {:circle red :reading blue :reading-msg "m1"}))
+        "another chat's circle: that chat plays, nothing is marked heard")
+    (is (= {:phase :idle :play blue} (mic/tap-plan {:circle nil :reading blue :reading-msg nil}))
+        "a reply's play button (no message id): skipped, nothing to mark")
+    (is (= {:phase :tap} (mic/tap-plan {:circle nil :reading nil}))
+        "nothing read: the hint to hold")
+    (is (= {:phase :idle :play red} (mic/tap-plan {:circle red :reading nil}))
+        "a circle with nothing read plays it")))

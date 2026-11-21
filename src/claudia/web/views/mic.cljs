@@ -15,15 +15,15 @@
   a little), its button kept on the screen; let go, the clip is heard and sent as when let go in
   place, and the mic stays there. Its flower is always whole, four ways.
   The mic is always the open chat's (README decision 107): its colour, its words. While the open
-  chat's own reply is read aloud (README decision 21) its bars move on the mic and a tap stops it.
+  chat's own reply is read aloud (README decision 21) its bars move on the mic. While any reply is
+  read, a tap on the mic or on that chat's circle skips it to the chat's next message (decision 120).
   The chats' voice messages wait as circles round it (README decisions 93 and 94,
   views/voice_circles.cljs), each a little mic: a tap plays that chat's messages (on the one playing:
-  the next), a hold opens this same flower round the circle, in its chat's colour, and the words go
+  the next: the one cut off counts as heard), a hold opens this same flower round the circle, in its chat's colour, and the words go
   to that chat; its left petal there skips all of that chat's waiting messages. Another chat read
   aloud shows on its own circle (the bars) and by its name beside the mic. Nothing is read while the
   mic is held: a hold stops the reading at once, and once it is a hold (not a tap) that chat's
-  waiting messages are all marked heard (stop and drop); a tap on the mic while another chat reads
-  starts that chat's message again."
+  waiting messages are all marked heard (stop and drop)."
   (:require ["motion/react" :refer [motion useMotionValue useSpring]]
             ["react-dom" :as react-dom]
             [claudia.shared.voices :as voices]
@@ -152,6 +152,7 @@
     (some-> (js/getSelection) .removeAllRanges)   ; nothing stays selected under the flower
     (.setPointerCapture (.-currentTarget e) (.-pointerId e))
     (let [reading (speech/reading-chat)
+          reading-msg (speech/reading-msg)   ; read before hold! stops it, or it is always nil
           reply (:k target)
           t0 (js/performance.now) warm (mic/warm?)
           p (.then (mic/start!) #(started! t0 warm %))]
@@ -162,7 +163,7 @@
       ;; is open by the time the words are heard.
       (set! (.-current hold) {:t0 (js/performance.now) :x0 (.-clientX e) :y0 (.-clientY e) :dir :send :p p
                               :k (or reply draft-key)
-                              :reading reading :reading-msg (speech/reading-msg) :circle (:k target)
+                              :reading reading :reading-msg reading-msg :circle (:k target)
                               :movable (and floating? (not target)) :from (circle (.-currentTarget e))})
       (set-dir :send)
       (set-phase :starting)
@@ -250,16 +251,16 @@
   (park! (.-clientX e) (.-clientY e) parts held))
 
 (defn- tapped!
-  "A tap: on a circle it plays that chat's messages, or, on the chat being read, the next one (the
-  one cut off counts as heard); on the mic, while its own chat's reply was read it only stopped it,
-  else it says to hold, and another chat's message cut off by the press starts again."
-  [{circle-k :circle :keys [reading reading-msg k]} set-phase]
-  (set-phase (if (or circle-k (= reading k)) :idle :tap))
-  (cond
-    circle-k (do (speech/unlock!)
-                 (when (and (= circle-k reading) reading-msg) (rf/dispatch [:voice/heard circle-k [reading-msg]]))
-                 (rf/dispatch [:voice/play circle-k]))
-    (and reading reading-msg (not= reading k)) (rf/dispatch [:voice/play reading])))
+  "A tap does pure/tap-plan (README decision 120): while a reply is read, a tap on the mic or on that
+  chat's circle skips it to that chat's next message; another chat's circle plays that chat; with
+  nothing read the mic says to hold."
+  [held set-phase]
+  (let [{:keys [phase heard play]} (pure/tap-plan held)]
+    (set-phase phase)
+    (when heard (rf/dispatch (into [:voice/heard] heard)))
+    (when play
+      (speech/unlock!)
+      (rf/dispatch [:voice/play play]))))
 
 (defn- dropped!
   "After a hold (not a tap): the chat whose reading it stopped is done with (stop and drop: its
@@ -269,7 +270,7 @@
   (when (and circle-k (= dir :skip)) (rf/dispatch [:voice/done circle-k])))
 
 (defn- heard!
-  "A hold let go in place or on a petal: a tap plays, stops or says to hold (tapped!), cancel and
+  "A hold let go in place or on a petal: a tap skips, plays or says to hold (tapped!), cancel and
   skip drop the clip, else it is heard; a hold stops and drops what it cut off (dropped!)."
   [p {:keys [t0 dir k rec-at] :as held} live set-phase]
   (let [tap? (< (- (js/performance.now) t0) pure/min-hold-ms)
@@ -348,7 +349,7 @@
   [:div.mic-core
    [flower-canvas canvas aim]
    [:button.mic-button {:type "button" :aria-label (if own?
-                                                     (str (:title speaker) " is speaking: tap to stop this reply, hold to talk")
+                                                     (str (:title speaker) " is speaking: tap to skip this message, hold to talk")
                                                      "Hold to talk; let go or drag up to send, drag left to add to the message, drag right to cancel, drag down to send now")
                         :data-tip "Hold to talk: let go or drag up sends, left adds to the message, right cancels, down sends now"
                         :on-pointer-down #(press! % parts)
