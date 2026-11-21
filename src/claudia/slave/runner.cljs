@@ -177,7 +177,7 @@
 (defmethod on-chat-frame "seen" [_ _ chat] (store/update! chat {:seen (js/Date.now)}) (chats-changed))
 (defmethod on-chat-frame "stop_task" [_ f chat] (chats/stop-task! chat (str (:task f))))
 (defmethod on-chat-frame "settings" [_ f chat]
-  (chats/set-flags! chat (select-keys f [:voice :bell]))
+  (chats/set-flags! chat (select-keys f [:voice :bell :sound]))
   (when (some #(contains? f %) [:model :effort :plan :prompt])
     (chats/set-settings! chat (select-keys f [:model :effort :plan :prompt]))))
 
@@ -213,7 +213,7 @@
                (send! c {:type "chats" :chats (chats/rows)})
                (send! c (meta/frame profile)))
     :new (let [id (chats/new-chat! (uploads/with-files (str (:text f)) (uploads/own-files (:files f)))
-                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell])
+                                   (:folder f) (sent-images f) (select-keys f [:model :effort :plan :prompt :color :voice :bell :sound])
                                    (msg-id f))]
            (activity/note-message! id (:profile c) c)
            (swap! (:open c) conj id)

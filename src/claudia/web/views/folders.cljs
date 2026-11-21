@@ -1,6 +1,6 @@
 (ns claudia.web.views.folders
   "The File Browser in the right half (README decisions 61 to 64, 68 to 72), in place of the picture
-  while the header's place pill has it on, on the open chat's server; the top bar's computer toggle
+  while the header's Files button has it on, on the open chat's server; the top bar's computer toggle
   picks a new chat's computer (README decision 71) and, for a started chat, only which computer is
   browsed (decision 72: on another one Select is gone): on top the server's bookmarks as cards (the
   project's logo as the chats show it, else a folder; name, path, ★ to unpin, \"missing\" greyed;

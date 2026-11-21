@@ -312,10 +312,10 @@
 
 (def carried-keys
   "What a new chat takes over from the last chat: the model, effort, prompt profile, folder (README
-  decision 74: it starts where the last chat works, on its computer), speaker and bell (not the
+  decision 74: it starts where the last chat works, on its computer), voice, bell and sound (not the
   colour: each chat gets its own; not the subscription: a new chat runs on its person's last pick,
   README decision 57)."
-  [:model :effort :prompt :folder :voice :bell])
+  [:model :effort :prompt :folder :voice :bell :sound])
 
 (defn carried-picks
   "The picks a new chat starts with after the chat k: that chat's settings, switches and folder (its
@@ -325,7 +325,7 @@
   (if-let [{:keys [settings folder]} (when k (get-in db [:chats k]))]
     (let [row (get-in db [:servers (first k) :rows (second k)])]
       (into {} (filter (comp some? val))
-            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:voice :bell])
+            (merge (select-keys settings [:model :effort :prompt]) (select-keys row [:voice :bell :sound])
                    {:folder (or (not-empty (:folder row)) (not-empty folder) (get-in db [:work-folders (first k)]))})))
     (select-keys (:new-settings db) carried-keys)))
 
@@ -349,10 +349,10 @@
 
 (defn new-picks
   "What a new chat's header picked, as `new` carries it: model, effort, plan, prompt profile, folder,
-  colour, speaker and bell, those set."
+  colour, voice, bell and sound, those set."
   [new-settings]
   (into {} (filter (comp some? val))
-        (update (select-keys new-settings [:model :effort :plan :prompt :folder :color :voice :bell]) :folder not-empty)))
+        (update (select-keys new-settings [:model :effort :plan :prompt :folder :color :voice :bell :sound]) :folder not-empty)))
 
 (defmethod on-frame "created" [db server {:keys [chat id]}]
   (if-let [{:keys [text group picks]} (get-in db [:pending-new id])]
@@ -518,7 +518,7 @@
 
 (rf/reg-event-fx
  :chat/switches
- ;; The chat's voice and/or bell (m: {:voice :bell}, those set), kept with the chat; k nil: the new
+ ;; The chat's voice, bell and/or sound (m: {:voice :bell :sound}, those set), kept with the chat; k nil: the new
  ;; chat's picks, which go with `new`. A voice turned Off is that chat's silence at once.
  (fn [{:keys [db]} [_ [s c :as k] m]]
    (cond-> {:db (switches/with-switches db k m)}

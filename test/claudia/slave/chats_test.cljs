@@ -127,6 +127,10 @@
     (testing "voice Off and bell on unless the chat says otherwise"
       (is (= ["" true] ((juxt :voice :bell) (view/row r {} 0 400))))
       (is (= ["nora" false] ((juxt :voice :bell) (view/row (assoc r :voice "nora" :bell false) {} 0 400)))))
+    (testing "the Bell's sound unless the chat names another (README decision 90)"
+      (is (= "bell" (:sound (view/row r {} 0 400))))
+      (is (= "drop" (:sound (view/row (assoc r :sound "drop") {} 0 400))))
+      (is (= "bell" (:sound (view/row (assoc r :sound "gong") {} 0 400)))))
     (testing "work still running is not done yet"
       (is (false? (:unseen (view/row r {} 1 400)))))
     (testing "an open ask is the preview and goes to the hub"
@@ -259,7 +263,9 @@
   (is (= {} (session/flags-of {:model "m"})))
   (is (= {:voice "nora"} (session/flags-of {:voice "nora" :model "m"})))
   (is (= {:voice "" :bell false} (session/flags-of {:voice "nobody" :bell false})) "an unknown voice is Off")
-  (is (= {} (session/flags-of {:talk true})) "the old speaker switch is not a voice"))
+  (is (= {} (session/flags-of {:talk true})) "the old speaker switch is not a voice")
+  (is (= {:bell true :sound "knock"} (session/flags-of {:bell true :sound "knock"})))
+  (is (= {:sound "bell"} (session/flags-of {:sound "gong"})) "an unknown sound is the Bell"))
 
 (deftest session-names-and-spec
   (is (re-matches #"token-[0-9a-f]{8}" (session/account-of "t")))

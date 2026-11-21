@@ -1,6 +1,6 @@
 (ns claudia.web.folders
-  "Files in the right half (README decisions 61 to 64, 68 to 70, 75): the place pill in a chat's
-  header (row 2) toggles the right half between the Drawing board and the File Browser
+  "Files in the right half (README decisions 61 to 64, 68 to 70, 75, 90): the Files button in a chat's
+  header (row 3) toggles the right half between the Drawing board and the File Browser
   (claudia.web.right), the folder browser of the open
   chat's server with its folder selected; the chat menu's Folders… opens that chat and its Files.
   Select (a bookmark card's, or Use for this chat) sets the chat's folder: a new chat's folder pick,
