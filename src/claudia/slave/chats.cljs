@@ -1,7 +1,7 @@
 (ns claudia.slave.chats
   "Every chat of this profile: starting and resuming its session in the host, turning the SDK's
   messages into page events, the draw and workspace tools, questions and secret asks. The pure
-  parts are in claudia.slave.chats.* (titles, view, turns, answers, session)."
+  parts are in claudia.slave.chats.* (titles, view, turns, answers, session, nudge)."
   (:require ["@anthropic-ai/claude-agent-sdk" :as sdk]
             ["node:fs" :as fs]
             ["node:fs/promises" :as fsp]
@@ -15,6 +15,7 @@
             [claudia.shared.text :as text]
             [claudia.slave.activity :as activity]
             [claudia.slave.chats.answers :as answers]
+            [claudia.slave.chats.nudge :as nudge]
             [claudia.slave.chats.session :as session]
             [claudia.slave.chats.titles :as titles]
             [claudia.slave.chats.turns :as turns]
@@ -69,6 +70,8 @@
 ;;   Claude starts itself) :unsaved {uuid -> Msg} (sent, not in the session file yet)
 ;;   :settling :settle (timer) :stale (restart after this turn: other tools or instructions)
 ;;   :sdk (the Agent SDK version its session runs on, as the host said)
+;;   :sent-at (when the last message went in) :notice (the newest background task's end not yet
+;;   answered by a turn: claudia.slave.chats.nudge/notice-of)
 (defonce state (atom {}))
 
 ;; The Agent SDK version a session started now runs on, as the host said (README decision 86).
@@ -982,7 +985,7 @@
                               (emit! id {:type "msg" :msg m}))
         (turns/dropped-phases phase) (drop-sent! id sent-id)))))
 
-(declare stop! stop-turn!)
+(declare stop! stop-turn! nudge-after!)
 
 (defn- stop-for-now!
   "A now press stops the running turn once turns/now-stop? says so; what is queued then (the now
@@ -1043,6 +1046,7 @@
     (doseq [[sent-id msg] (:unsaved (st id)) :when (:queued msg)] (take-in! id sent-id "started"))
     (set-running! id false)
     (swap-chat! id #(-> % (assoc :stopping false :begun false) (dissoc :now :unqueue)))
+    (nudge-after! id m stopped)
     (changed!)
     (read-context! id)
     (refresh-title! id)
@@ -1110,6 +1114,7 @@
              (not (tasks/child? id (:task_id m)))
              ;; A foreground agent's answer is its tool result, not a notice.
              (tasks/background? id (:task_id m)))
+    (swap-chat! id assoc :notice (nudge/notice-of m (tasks/task-name id (:task_id m)) (js/Date.now)))
     (note-msg! id {:id (str "task-" (:task_id m) "-" (js/Date.now)) :role "note" :text (:summary m) :at (js/Date.now)})))
 
 (defn- on-system-msg! [id m]
@@ -1377,6 +1382,18 @@
   (emit! id {:type "msg" :msg {:id pending-note-id :role "note" :gone true}})
   (note-msg! id {:id (str (:id msg) ":moved") :role "note" :text note :at (:at msg)}))
 
+(defn- send-msg!
+  "The sent Msg msg into the live session as text (what Claude gets) with images; shown in the chat
+  before it goes (show!: a step shown first, e.g. a server move's note)."
+  [id msg text images show!]
+  (swap-chat! id turns/with-sent msg)
+  (store/kv! id "turn" (:id msg))
+  (show!)
+  (note-msg! id msg)
+  (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
+                    (seq images) (assoc :images images)))
+  (set-running! id true))
+
 (defn- send-now!
   "The message into the live session; sent while a turn runs, it is queued until Claude takes it in.
   msg-id: the id the page made for it (nil: one is made here); reminder: said to Claude after the
@@ -1386,13 +1403,7 @@
         ;; The forms news and a folder move's note go as reminders the chat doesn't show (the forms
         ;; only to a session that ran with the old tools); a server move's note shows.
         [text note] (take-server-note! id (take-moved-note! id (codeforms/take-note! id (text/with-reminder message reminder) was-live?)))]
-    (swap-chat! id turns/with-sent msg)
-    (store/kv! id "turn" (:id msg))
-    (when note (show-server-note! id msg note))
-    (note-msg! id msg)
-    (hostlink/send! (cond-> {:op "send" :id id :text text :uuid (:id msg)}
-                      (seq images) (assoc :images images)))
-    (set-running! id true)))
+    (send-msg! id msg text images #(when note (show-server-note! id msg note)))))
 
 (defn send-text!
   "A message into the chat; images: [{media_type data}] sent before the text (photos, video frames);
@@ -1408,6 +1419,30 @@
                    (.then (ensure-session! id) (fn [] live?)))))
         (.then #(send-now! id message images msg-id reminder %))
         (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+(defn- send-nudge!
+  "Claudia's nudge (text) into the chat's session, shown as Claudia's note (README decision 104);
+  dropped when a turn started or a message went in while the session was made ready."
+  [id text]
+  (let [before (st id)
+        tagged (history/with-nudge-tag text)]
+    (-> (ensure-session! id)
+        (.then #(when (nudge/still-quiet? before (st id))
+                  (send-msg! id {:id (str (random-uuid)) :role "note" :text (history/nudge-note tagged) :at (js/Date.now)}
+                             tagged nil (fn []))))
+        (.catch (fn [e] (emit! id {:type "error" :text (text/error-text e)}))))))
+
+(defn- nudge-after!
+  "A turn ended (the result message m; stopped: the person stopped it): one a background task's end
+  started that said nothing wakes Claude once (claudia.slave.chats.nudge/nudge?). The waiting notice
+  goes unless it came during this turn."
+  [id m stopped]
+  (let [s (st id)
+        go? (nudge/nudge? {:result m :stopped stopped :archived (archived? id) :moving (moving? id)
+                           :working (tasks/working id) :notice (:notice s) :since (:since s)
+                           :sent-at (:sent-at s)})]
+    (swap-chat! id update :notice nudge/kept-notice (:since s))
+    (when go? (send-nudge! id (nudge/nudge-text (get-in s [:notice :task]))))))
 
 (defn new-chat-colour
   "A new chat's colour: the one its header showed (picked), when it is a chat colour; else least-used-colour."
