@@ -1729,6 +1729,12 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     labels are written by admins. Instead of: a second sheet beside Machines (the same numbers
     twice), a hand-written list only (anything new invisible), live numbers only (nothing to trace
     back), sudo taps per read (a tap a minute), history on the hub (gone when the hub is down).
+    Files (the page): `src/claudia/web/views/systems.cljs` (the sheet and what it asks),
+    `src/claudia/web/views/system_tiles.cljs`, `system_look.cljs`, `system_tabs.cljs`,
+    `system_lists.cljs`, `system_history.cljs`, `system_bits.cljs`, `system_machine.cljs` (the old
+    card), `src/claudia/web/views/pure/system_feed.cljs`, `system_look.cljs`, `system_tiles.cljs`,
+    `system_lists.cljs`, `system_chart.cljs`, `src/claudia/shared/views.cljc` (`machines` read as
+    `system`), `src/claudia/web/views/head.cljs`, `resources/web/css/system.css`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

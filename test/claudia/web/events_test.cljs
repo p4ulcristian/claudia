@@ -377,3 +377,11 @@
 (deftest a-chat-back-from-the-archive-keeps-its-colour-unless-taken
   (is (some? (ev/back-colour two-servers ["a" "3"])) "ocean is worn by an open chat")
   (is (nil? (ev/back-colour (assoc-in two-servers [:servers "a" :rows "3" :color] "jade") ["a" "3"]))))
+
+(deftest text-put-in-the-composer-goes-under-the-draft
+  (is (= :new (ev/draft-key {})))
+  (is (= ["s" "c"] (ev/draft-key {:open ["s" "c"]})))
+  (is (= :new (ev/draft-key {:open ["s" "c"] :pending-new {"c" {}}})) "a chat on its way writes the new draft")
+  (is (= "facts" (ev/draft-with nil "facts")))
+  (is (= "facts" (ev/draft-with "  " "facts")))
+  (is (= "hi\n\nfacts" (ev/draft-with "hi \n" "facts"))))

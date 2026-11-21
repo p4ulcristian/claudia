@@ -1,7 +1,7 @@
 (ns claudia.web.views.thumb-edge
   "The right edge of a touch tablet (README decisions 40, 73, 92): a big tablet held in two hands is
   held at its sides partway up, so the right thumb rests on the right edge at middle height. There a
-  rail on the right wall, one column of eight slots of one size: Search, Machines, Prompts, My
+  rail on the right wall, one column of eight slots of one size: Search, System, Prompts, My
   words, Stop, New chat, ‹ (the previous picture), › (the next picture). Each a button with its name
   under its icon, at least 12 mm, see-through at rest. A button never comes or goes, so nothing
   shifts: one that cannot act now is passive (greyed and disabled), Stop is red while the open
@@ -26,8 +26,8 @@
   "Each slot: its name under the icon, its tip, its icon and what a press does."
   {:search {:label "Search" :tip "Search chats" :act search-open/open!
             :icon (svg-of [:circle {:cx 11 :cy 11 :r 6}] [:path {:d "M20 20l-4.5-4.5"}])}
-   :machines {:label "Machines" :tip "Machines: CPU, memory, disks" :icon [systems/computer-icon]
-              :act #(rf/dispatch [:right/view :machines])}
+   :system {:label "System" :tip "System: health, ports, services" :icon [systems/system-icon]
+            :act #(rf/dispatch [:right/view :system])}
    :prompts {:label "Prompts" :tip "Prompt profiles" :icon icons/prompts-icon
              :act #(rf/dispatch [:right/view :prompts])}
    :words {:label "My words" :tip "My words" :icon icons/words-icon :act #(rf/dispatch [:right/view :words])}

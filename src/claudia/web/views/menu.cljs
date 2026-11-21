@@ -4,9 +4,9 @@
   opening to the left, README decision 73; 2026-11-18, it was a gear) shows whose chats
   show and opens a small menu: Whose chats (yours, or another person's, read only), your own
   plan's 5-hour and week use (your last pick in a chat's header, README decision 57; a click opens
-  Settings, where the plans are), Machines, Archived chats, Forms, Prompts, My words, the Desktop
-  popups switch, More settings (Machines, Forms, Prompts, My words and Settings open in the right
-  half, README decisions 75 and 92), and the
+  Settings, where the plans are), System, Archived chats, Forms, Prompts, My words, the Desktop
+  popups switch, More settings (System, Forms, Prompts, My words and Settings open in the right
+  half, README decisions 75, 92 and 95), and the
   version (the sounds switch is the bell in the chat's header)."
   (:require [re-frame.core :as rf]
             [reagent.hooks :as h]
@@ -29,7 +29,7 @@
 
 (defn- open-forms! [] (rf/dispatch [:right/view :forms]))
 
-(defn- open-machines! [] (rf/dispatch [:right/view :machines]))
+(defn- open-system! [] (rf/dispatch [:right/view :system]))
 
 (defn- open-prompts! [] (rf/dispatch [:right/view :prompts]))
 
@@ -117,7 +117,7 @@
   [:<>
    [whose act]
    [:f> plan-card act]
-   (item [systems/computer-icon] "Machines" "CPU, memory, disks" (act open-machines!))
+   (item [systems/system-icon] "System" "servers: health, ports, services" (act open-system!))
    (item archive-icon "Archived chats" nil (act open-archived!))
    (item forms-icon "Forms" "everything Claude can draw" (act open-forms!))
    (item icons/prompts-icon "Prompts" "profiles a chat can pick" (act open-prompts!))

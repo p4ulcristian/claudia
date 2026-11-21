@@ -5,7 +5,7 @@
 
 (def over
   "The slots over the mic, top to bottom."
-  [:search :machines :prompts :words])
+  [:search :system :prompts :words])
 
 (def under
   "The slots under the mic, top to bottom."
@@ -20,7 +20,7 @@
   folded? (the picture is folded), index and n (the picture shown, of how many)."
   [{:keys [words? running? new? folded? index n]}]
   (let [i (or index 0) n (or n 0)]
-    {:search :shown :machines :shown :prompts :shown
+    {:search :shown :system :shown :prompts :shown
      :words (shown-if words?)
      :stop (if running? :red :passive)
      :new (shown-if new?)
