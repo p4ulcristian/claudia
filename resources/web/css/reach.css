@@ -58,7 +58,9 @@
   .mic.moved { position: fixed; z-index: 36; transform: translate(-50%, -50%); }
   .thumb-edge .mic.moved .mic-clips, .thumb-edge .mic.moved .mic-hint { left: 50%; right: auto; top: auto; bottom: calc(100% + 12px); transform: translateX(-50%); }
   /* At rest every edge button lets the page show through; pressed or held, it is solid. */
-  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button, .thumb-edge .edge-step:not(:disabled), .thumb-edge .mic-slot { opacity: 0.7; transition: opacity 0.15s; }
+  .thumb-edge .edge-step:not(:disabled), .thumb-edge .mic-slot { opacity: 0.7; transition: opacity 0.15s; }
+  /* The mic only a little (2026-11-21, the user: less transparent). */
+  .thumb-edge .mic:not(.starting):not(.recording):not(.moving):not(.speaking) .mic-button { opacity: 0.92; transition: opacity 0.15s; }
   .thumb-edge .edge-step:active:not(:disabled), .thumb-edge .mic-slot:active { opacity: 1; }
   .thumb-edge .mic-clips { align-items: flex-end; }
   .thumb-edge .mic.moved .mic-clips { align-items: center; }

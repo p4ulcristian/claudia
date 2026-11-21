@@ -261,7 +261,8 @@ The wire between them is in [PROTOCOL.md](PROTOCOL.md).
     decision 90 the bell is the notify pill, which also picks the sound it rings. A new chat
     takes the last chat's voice and bell (its header's picks go with `new`); a chat only looked at
     (another profile's) shows both and changes neither. Chats whose speaker was on got the first voice (Nora).
-    Every chat with a voice speaks, open or not: when its turn ends by itself (not stopped, not
+    Since decision 93 a chat's reply is a voice message that plays only on a tap; what follows is
+    how it was before. Every chat with a voice speaks, open or not: when its turn ends by itself (not stopped, not
     failed) the runner sends `speak` with the whole final reply (or a new ask's questions) to the
     one page its person touched last (`here`: a touch, click or key tells every server, at most
     every 15 s, and a socket that opens says how long ago, so a restarted runner still knows), so
@@ -1628,6 +1629,34 @@ npx shadow-cljs release host runner front hub broker root sudo web sdk
     `src/claudia/web/views/pure/head.cljs`, `src/claudia/web/alerts.cljs`,
     `src/claudia/shared/sounds.cljc`, `src/claudia/web/move.cljs`, `src/claudia/slave/store.cljs`,
     `resources/web/css/claudia.css`.
+
+93. Voice messages (2026-11-21, the user's design, one call at a time). A chat with a voice that
+    ends a turn by itself (not stopped, not failed) or asks no longer talks at once on the page
+    touched last (decision 21): it leaves a voice message. The runner keeps it (table
+    `voice_messages`: its reply or ask, voice, time) and sends every page of its person the whole
+    list (`voices`, PROTOCOL.md) after `hello` and whenever it changes, so every device shows the
+    same. Round the mic, one circle per chat with messages waiting (the user: "round mic only"; the
+    chats' rail adds nothing: its circles already show the talking bars), in the chat's colour, the
+    count on it when more than one, a little bigger for more to say (30 to 40 px), the chat waiting
+    longest first, up to six; on the tablet's rail they fan out above and below the mic's left,
+    elsewhere above it, leaving straight out free for the speaker's name, the hint and the clips.
+    Nothing plays by itself: only a tap on a circle plays (the user: "full control"; a tap on the
+    mic stops what plays, else says to hold, as before). A tap plays that chat's messages one after
+    the other, oldest first, then stops: another chat's wait for their own tap. One read to its end
+    is heard: the page sends `heard` and it goes on every device; a swipe on a circle takes the
+    chat's messages away unheard the same way; a long press opens the chat; a tap on the circle
+    playing stops it (it stays). Holding the mic hides the circles; they come back, still unheard.
+    A hold while a message plays stops it and replies to that chat, not the one open: the flower's
+    bars and disc wear that chat's colour (`--rec`) and "→ <title>, your reply" sits over the mic;
+    the rest of its line is dropped (unheard ones stay). A message waits at most a day; a chat whose
+    voice goes Off, or that is archived, drops its own. Instead of: auto-play on one device (decision
+    21), circles on the chats' rail or both places, a tap on the mic playing the chat waiting
+    longest, a circle per message, playing every chat's messages in a row. The `here` frame chooses
+    nothing now and is still accepted so older pages get no error. Files:
+    `src/claudia/slave/voice_messages.cljs`, `src/claudia/slave/store.cljs`,
+    `src/claudia/slave/runner.cljs`, `src/claudia/web/views/voice_circles.cljs`,
+    `src/claudia/web/views/pure/voicemail.cljs`, `src/claudia/web/speech.cljs`,
+    `src/claudia/web/events.cljs`, `src/claudia/web/views/mic.cljs`.
 
 ## Back from the TypeScript Claudia (2026-11-03)
 

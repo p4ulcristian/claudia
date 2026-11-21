@@ -1,10 +1,10 @@
 (ns claudia.web.speech
-  "The chats' voices (README decision 21): replies of chats with a voice, read aloud one at a time
-  in arrival order (claudia.web.views.pure.talk's line), each in its chat's voice by the hub's
-  voice service. Holding the mic drops the reply being read and holds the rest until it is let go;
-  a chat turned Off leaves the line; the page going to the background drops it all, so nothing is
-  said late. The reply being read is in app-db as :speaking (the mic shows it), with :loading until
-  its sound is ready and plays."
+  "The chats' voices (README decisions 21 and 93): a tap on a chat's voice message plays that chat's
+  waiting messages one after the other (claudia.web.views.pure.talk's line), each in its chat's voice
+  by the hub's voice service; one heard to its end is told to its runner (:voice/heard). Holding the
+  mic stops it and drops the rest of the line (the messages stay, unheard); the page going to the
+  background drops it too, so nothing is said late. The reply being read is in app-db as :speaking
+  (the mic shows it), with :loading until its sound is ready and plays."
   (:require [claudia.shared.voices :as voices]
             [claudia.web.sound :as sound]
             [claudia.web.views.pure.talk :as talk]
@@ -58,6 +58,11 @@
 
 (declare pump! stop!)
 
+(defn- heard!
+  "A voice message read to its end: its runner hears of it, so it goes on every device."
+  [{:keys [k msg]}]
+  (when msg (rf/dispatch [:voice/heard k [msg]])))
+
 (defn- finished!
   "The reply with this id is over (read to its end or failed): the next one, if it still is this one."
   [id]
@@ -72,7 +77,7 @@
         ^js src (.createBufferSource c)]
     (set! (.-buffer src) (voice/audio-buffer c buf))
     (.connect src (analyser!))
-    (set! (.-onended src) #(finished! (:id item)))
+    (set! (.-onended src) #(do (heard! item) (finished! (:id item))))
     (sound/claim! ::reply stop!)
     (.start src)
     (swap! audio assoc :source src)
@@ -95,11 +100,13 @@
       (shown! (assoc item :loading true))
       (read! item))))
 
-(defn say!
-  "item {:id :k :voice :text} joins the line (a reply already waiting, read or being read does not)."
-  [item]
-  (when (and (seq (:text item)) (visible?))
-    (swap! line talk/with-item item)
+(defn play-chat!
+  "items (one chat's voice messages, oldest first, each {:id :k :voice :text :msg}) are read one after
+  the other from now; whatever was playing stops."
+  [items]
+  (when (seq items)
+    (silence!)
+    (reset! line (reduce talk/with-item talk/empty-line items))
     (pump!)))
 
 (defn say-now!
@@ -110,31 +117,27 @@
     (swap! line #(-> % talk/without-current (talk/with-item-first item)))
     (pump!)))
 
-(defn skip!
-  "The reply being read stops; the next one comes."
-  []
-  (silence!)
-  (swap! line talk/without-current)
-  (shown! nil)
-  (pump!))
-
 (defn hold!
-  "The mic is held: the reply being read stops and nothing is read until let-go!."
+  "The mic is held: the reply being read stops and the rest of its chat's line is dropped (a hold
+  then replies to that chat; its messages not heard stay)."
   []
-  (silence!)
-  (swap! line talk/held true)
-  (shown! nil))
+  (stop!)
+  (swap! line talk/held true))
 
 (defn let-go!
-  "The mic is let go: the waiting replies come again."
+  "The mic is let go."
   []
-  (swap! line talk/held false)
-  (pump!))
+  (swap! line talk/held false))
 
 (defn reading?
   "Whether a reply is being read now."
   []
   (some? (:current @line)))
+
+(defn reading-chat
+  "The chat whose reply is being read now ([server chat]), or nil."
+  []
+  (:k (:current @line)))
 
 (defn drop-chat!
   "Chat k's voice is Off: its waiting replies go, and it stops if it is being read."
@@ -148,7 +151,6 @@
   []
   (sound/release! ::reply)
   (silence!)
-  (shown! nil)
   (swap! line #(assoc talk/empty-line :said (:said %) :held (:held %)))
   (shown! nil))
 

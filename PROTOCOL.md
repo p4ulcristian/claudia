@@ -354,7 +354,7 @@ Page → runner:
 | type | fields | effect |
 |---|---|---|
 | `hello` | | runner answers `chats` |
-| `here` | `ago` (ms since the person last touched this page) | this page is where its person is (README decision 21): `speak` goes to the page touched last. Sent on a touch, click or key (`ago` 0, at most every 5 s) and right after `hello` when the page was touched within a day; a missing or out-of-range `ago` never wins. Read-only pages may send it (they never get `speak`) |
+| `here` | `ago` (ms since the person last touched this page) | this page is where its person is (README decision 21). Since decision 93 it chooses nothing (every page gets `voices`); still accepted so older pages get no error. Read-only pages may send it |
 | `open` | `chat` | runner answers `chat` (full state) and sends that chat's live events from then on (several open chats per socket are fine) |
 | `close` | `chat` | stop sending that chat's live events |
 | `new` | `text`, `folder?`, `id` (a uuid the page made), `files?`, `images?`, `model?`, `effort?`, `plan?`, `prompt?`, `color?`, `voice?`, `bell?`, `sound?`, `msg?` | starts a chat with that first message, on the model, effort and plan picked before it was made (else the defaults and the person's last pick, README decision 57), in the colour its header wore (else one of the least worn; every chat has a colour) and with its voice, bell and sound as picked (else voice Off, bell on, the Bell); runner answers `created { chat, id }` then events |
@@ -370,6 +370,7 @@ Page → runner:
 | `rename` | `chat`, `title` | |
 | `archive` | `chat`, `archived` (bool) | |
 | `folder` | `chat`, `folder` (absolute, `~/…`, or relative to the runner's working folder; empty or null: no project) | the chat's working folder; Claude hears of it with the next message; `error` when no folder is there |
+| `heard` | `chat`, `ids` (its voice messages' ids) | those voice messages were heard to their end or swiped away (README decision 93): the runner drops them and sends `voices` to every page |
 | `seen` | `chat` | the person looked at its last turn |
 | `code_edit` | `chat`, `block`, `file`, `text`, `base` | the user's typing in an editor block, saved into the picture (`base` = the version `v` of Claude's code the text starts from; a save on an older version is dropped) |
 | `code_send` | `chat`, `block`, `note` | the editor's Send: every file with unsent edits goes to Claude as one message (`<claudia-code>` per file: diff and full code) |
@@ -396,7 +397,7 @@ Runner → page:
 | `ask` | `chat`, `ask: Ask` |
 | `asked` | `chat`, `ask` (id: answered, denied or expired; remove the card) |
 | `keys_ask` | `chat`, `ask` (an id): Claude called `list_secrets`. Sent to every page on this runner that sent `hello` and is not read-only, whether or not it has the chat open; the page fetches `GET /hub/keys/mine` and answers `keys` at once, with no card |
-| `speak` | `chat`, `id` (the turn's result uuid, or `ask-<ask id>`), `voice` (the chat's voice id), `text` (its whole final reply) or `ask` (a new ask): a chat with a voice ended a turn by itself or asks (README decision 21). Sent only to the page that may answer and was touched last (`here`); the page reads it aloud in that voice, once, after the ones already waiting |
+| `voices` | `messages`: every voice message this runner keeps for its person, oldest first, each `{ chat, id, voice, text \| ask, at }` (id: the turn's result uuid, or `ask-<ask id>`; at: ms) | the chats' voice messages (README decision 93): sent after `hello` (not to read-only pages) and to every page that may answer whenever they change (a chat with a voice ended a turn by itself or asks; one was heard; a voice went Off; a chat was archived). Messages a day old are dropped. The page shows one circle per chat round the mic and plays them only on a tap. Replaces `speak` |
 | `error` | `chat?`, `text` |
 | `agents` | `chat`, `agents: [Agent]` (the chat's whole list, on every change) |
 | `changes` | `chat`, `changes: [Change]` (new ones, appended to the chat's list) |

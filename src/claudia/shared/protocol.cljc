@@ -23,8 +23,11 @@
     "keys"
     ;; A queued message taken back with its × (README decision 83).
     "unqueue"
-    ;; The person touched this page (README decision 21): replies are read aloud only there.
-    "here"})
+    ;; The person touched this page (README decision 21); since decision 93 it chooses nothing,
+    ;; kept so older pages get no error.
+    "here"
+    ;; Voice messages heard to their end or swiped away (README decision 93).
+    "heard"})
 
 (def runner->page
   #{"chats" "chat" "created" "claudia" "msg" "delta" "scene" "turn" "ask" "asked" "error"
@@ -33,8 +36,8 @@
     "status"
     ;; list_secrets wants the person's keys: the page fetches them and answers with keys.
     "keys_ask"
-    ;; A reply or question of a chat with a voice, to read aloud (README decision 21).
-    "speak"})
+    ;; The chats' voice messages, every one waiting (README decision 93; replaces speak).
+    "voices"})
 
 (def read-only-ok
   "What a read-only viewer may send on the socket."
