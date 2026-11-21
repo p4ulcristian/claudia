@@ -1,5 +1,5 @@
 (ns claudia.web.views.pure.systems
-  "The Systems popup's words and numbers (README decision 12), pure: sizes in binary units (GiB, as
+  "A machine's card's words and numbers (README decision 12; System's Machine tab, decision 95), pure: sizes in binary units (GiB, as
   the kernel counts, claudia.web.format/bytes-text), rates, ages and which colour a share gets."
   (:require [claudia.web.format :as format]))
 

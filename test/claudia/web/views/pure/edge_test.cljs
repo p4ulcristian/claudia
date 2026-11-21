@@ -6,7 +6,7 @@
 
 (deftest four-slots-over-the-mic-and-four-under-it
   (is (= 4 (count edge/over) (count edge/under)))
-  (is (= [:search :machines :prompts :words] edge/over))
+  (is (= [:search :system :prompts :words] edge/over))
   (is (= [:stop :new :prev :next] edge/under)))
 
 (deftest every-slot-has-a-state-always
@@ -34,5 +34,5 @@
 (deftest a-folded-picture-makes-both-steps-passive
   (is (= [:passive :passive] ((juxt :prev :next) (edge/slot-states (assoc idle :folded? true))))))
 
-(deftest search-machines-and-prompts-always-act
-  (is (= [:shown :shown :shown] ((juxt :search :machines :prompts) (edge/slot-states {})))))
+(deftest search-system-and-prompts-always-act
+  (is (= [:shown :shown :shown] ((juxt :search :system :prompts) (edge/slot-states {})))))
